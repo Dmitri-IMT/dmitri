@@ -29,7 +29,7 @@ infra/                 docker-compose, env.example, instruções de infraestrutu
 LICENSE, README.md, .gitignore
 ```
 
-## Fluxo de alto n�vel
+## Fluxo de alto nível
 1. O agente de hardware agenda e executa scans (quick/full) usando o Nmap na sub-rede configurada.
 2. Os resultados são normalizados em JSON conforme `contracts/schemas/scan_result.schema.json`.
 3. O backend recebe os payloads, persiste no PostgreSQL e prepara dados agregados.
