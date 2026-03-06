@@ -1,0 +1,18 @@
+[project]
+name = "backend-api"
+version = "0.1.0"
+description = "FastAPI backend for the vulnerability scanner device (skeleton)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110.0",
+  "uvicorn>=0.23.2",
+  "pydantic>=2.6.0",
+  "psycopg[binary]>=3.1.12"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api"]

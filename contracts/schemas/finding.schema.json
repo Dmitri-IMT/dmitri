@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tcc.local/contracts/schemas/finding.schema.json",
+  "title": "Finding",
+  "type": "object",
+  "description": "Represents a vulnerability observation discovered during a network scan.",
+  "required": [
+    "severity",
+    "title",
+    "description",
+    "recommendation",
+    "evidence"
+  ],
+  "properties": {
+    "severity": {
+      "type": "string",
+      "description": "Impact level of the finding",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Short label summarizing the issue"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed explanation of why the finding matters"
+    },
+    "recommendation": {
+      "type": "string",
+      "description": "Next actions or remediation guidance"
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Snippet of scan output, banner, or proof that supports the finding"
+    }
+  },
+  "additionalProperties": false
+}

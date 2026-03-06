@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: Vulnerability Scanner Device API
+  version: 0.1.0
+  description: >-
+    Contract-first specification for the backend REST API. Routes are placeholders
+    until business logic is implemented in later phases.
+servers:
+  - url: https://api.example.com
+    description: Production (placeholder)
+  - url: http://localhost:8000
+    description: Local development
+paths:
+  /api/v1/scans:
+    post:
+      summary: Ingest scan results from hardware agents
+      description: Accepts payloads that conform to `scan_result.schema.json`.
+      operationId: ingestScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ../schemas/scan_result.schema.json
+      responses:
+        '202':
+          description: Scan accepted for processing
+        '400':
+          description: Payload validation failed
+    get:
+      summary: List scans
+      description: Placeholder listing endpoint for future implementation.
+      operationId: listScans
+      responses:
+        '200':
+          description: OK
+  /api/v1/scans/{scan_id}:
+    get:
+      summary: Retrieve scan details
+      parameters:
+        - in: path
+          name: scan_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+components:
+  schemas:
+    ScanResult:
+      $ref: ../schemas/scan_result.schema.json
+    Device:
+      $ref: ../schemas/device.schema.json
+    Finding:
+      $ref: ../schemas/finding.schema.json
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

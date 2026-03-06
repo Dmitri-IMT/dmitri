@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: ../backend
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - DATABASE_URL=postgresql+psycopg://scanner:scanner@db:5432/scanner
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=scanner
+      - POSTGRES_USER=scanner
+      - POSTGRES_PASSWORD=changeme
+    volumes:
+      - db_data:/var/lib/postgresql/data
+volumes:
+  db_data:

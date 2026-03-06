@@ -1,0 +1,58 @@
+{
+  "scan_id": "a4e2d4b0-8f4d-4a4b-9b7c-2238cfe91234",
+  "timestamp": "2026-03-01T18:24:12Z",
+  "subnet": "192.168.10.0/24",
+  "scan_mode": "quick",
+  "metadata": {
+    "agent_version": "0.1.0",
+    "nmap_arguments": "-sS -T4"
+  },
+  "devices": [
+    {
+      "ip": "192.168.10.20",
+      "mac": "B8:27:EB:11:22:33",
+      "hostname": "iot-camera",
+      "vendor": "Raspberry Pi Trading Ltd",
+      "ports": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "ssh",
+          "version": "OpenSSH 8.4p1"
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "http",
+          "version": "lighttpd 1.4.59"
+        }
+      ],
+      "findings": [
+        {
+          "severity": "medium",
+          "title": "Default credentials suspected",
+          "description": "Device responded with a vendor banner known to ship with default admin credentials.",
+          "recommendation": "Change factory credentials and disable remote HTTP admin.",
+          "evidence": "Server banner matches CVE-2024-12345 signature."
+        }
+      ]
+    },
+    {
+      "ip": "192.168.10.50",
+      "mac": "00:1C:B3:AA:BB:CC",
+      "hostname": "office-router",
+      "vendor": "Cisco Systems",
+      "ports": [
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "https",
+          "version": "nginx 1.20.2"
+        }
+      ]
+    }
+  ]
+}

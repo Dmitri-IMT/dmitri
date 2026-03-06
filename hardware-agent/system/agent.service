@@ -1,0 +1,15 @@
+[Unit]
+Description=Vulnerability Scanner Hardware Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/vuln-agent
+ExecStart=/usr/bin/python3 -m agent.main
+Restart=on-failure
+EnvironmentFile=/etc/vuln-agent/agent.env
+
+[Install]
+WantedBy=multi-user.target
