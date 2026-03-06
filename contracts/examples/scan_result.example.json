@@ -1,17 +1,18 @@
 {
-  "scan_id": "a4e2d4b0-8f4d-4a4b-9b7c-2238cfe91234",
-  "timestamp": "2026-03-01T18:24:12Z",
-  "subnet": "192.168.10.0/24",
-  "scan_mode": "quick",
+  "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
+  "timestamp": "2026-03-05T14:12:45Z",
+  "subnet": "192.168.1.0/24",
+  "scan_mode": "full",
   "metadata": {
-    "agent_version": "0.1.0",
-    "nmap_arguments": "-sS -T4"
+    "agent_version": "0.2.0",
+    "nmap_arguments": "-sS -sV -O --top-ports 200",
+    "elapsed_seconds": 187
   },
   "devices": [
     {
-      "ip": "192.168.10.20",
-      "mac": "B8:27:EB:11:22:33",
-      "hostname": "iot-camera",
+      "ip": "192.168.1.10",
+      "mac": "B8:27:EB:44:55:66",
+      "hostname": "lab-camera",
       "vendor": "Raspberry Pi Trading Ltd",
       "ports": [
         {
@@ -19,7 +20,7 @@
           "protocol": "tcp",
           "state": "open",
           "service": "ssh",
-          "version": "OpenSSH 8.4p1"
+          "version": "OpenSSH 7.2p2"
         },
         {
           "port": 80,
@@ -28,31 +29,45 @@
           "service": "http",
           "version": "lighttpd 1.4.59"
         }
-      ],
-      "findings": [
-        {
-          "severity": "medium",
-          "title": "Default credentials suspected",
-          "description": "Device responded with a vendor banner known to ship with default admin credentials.",
-          "recommendation": "Change factory credentials and disable remote HTTP admin.",
-          "evidence": "Server banner matches CVE-2024-12345 signature."
-        }
       ]
     },
     {
-      "ip": "192.168.10.50",
+      "ip": "192.168.1.40",
       "mac": "00:1C:B3:AA:BB:CC",
-      "hostname": "office-router",
-      "vendor": "Cisco Systems",
+      "hostname": "office-nas",
+      "vendor": "Synology",
       "ports": [
         {
-          "port": 443,
+          "port": 445,
           "protocol": "tcp",
           "state": "open",
-          "service": "https",
-          "version": "nginx 1.20.2"
+          "service": "smb",
+          "version": "Samba smbd 4.13.14"
+        },
+        {
+          "port": 548,
+          "protocol": "tcp",
+          "state": "filtered",
+          "service": "afp",
+          "version": null
         }
       ]
+    }
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Outdated SSH service exposed",
+      "description": "The camera at 192.168.1.10 runs OpenSSH 7.2p2, which lacks multiple security fixes.",
+      "recommendation": "Upgrade the firmware or disable remote SSH access from untrusted networks.",
+      "evidence": "Banner from 192.168.1.10: OpenSSH_7.2p2 Raspbian-5."
+    },
+    {
+      "severity": "medium",
+      "title": "SMB signing disabled",
+      "description": "The NAS at 192.168.1.40 allows SMB connections without message signing, enabling MITM tampering.",
+      "recommendation": "Enable SMB signing (server signing = mandatory) and restrict SMB exposure.",
+      "evidence": "Nmap smb2-security-mode: Message signing disabled but supported."
     }
   ]
 }

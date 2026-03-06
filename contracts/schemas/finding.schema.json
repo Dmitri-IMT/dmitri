@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tcc.local/contracts/schemas/finding.schema.json",
   "title": "Finding",
   "type": "object",
   "description": "Represents a vulnerability observation discovered during a network scan.",
@@ -15,7 +14,7 @@
     "severity": {
       "type": "string",
       "description": "Impact level of the finding",
-      "enum": ["info", "low", "medium", "high", "critical"]
+      "enum": ["low", "medium", "high", "critical"]
     },
     "title": {
       "type": "string",
