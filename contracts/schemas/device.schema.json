@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tcc.local/contracts/schemas/device.schema.json",
   "title": "Device",
   "type": "object",
   "description": "Normalized representation of a host detected during scanning.",
@@ -29,12 +28,6 @@
       "description": "Open or filtered ports observed during the scan",
       "items": { "$ref": "#/$defs/port" },
       "minItems": 0
-    },
-    "findings": {
-      "type": "array",
-      "description": "Optional list of findings specific to this device",
-      "items": { "$ref": "finding.schema.json" },
-      "default": []
     }
   },
   "$defs": {
@@ -55,7 +48,7 @@
         },
         "state": {
           "type": "string",
-          "enum": ["open", "closed", "filtered", "unfiltered", "unknown"],
+          "enum": ["open", "closed", "filtered"],
           "description": "State reported by Nmap"
         },
         "service": {
