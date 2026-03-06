@@ -108,7 +108,7 @@ def nmap_discovery(network, local_ip):
     try:
 
         result = subprocess.run(
-            [r"C:\Program Files (x86)\Nmap\nmap.exe", "-sn", network],
+            [r"C:\Program Files (x86)\Nmap\nmap.exe", "-sn","-T3", network],
             capture_output=True,
             text=True
         )
