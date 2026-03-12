@@ -25,3 +25,11 @@ Nosso scanner coleta dados de scripts que ferramentas de pentest, correlaciona o
 | Curva de aprendizado | Mais suave para quem conhece Python síncrono | Um pouco mais íngreme, por causa de tipagem e async | Moderada a mais alta, por trazer mais convenções e estrutura  |
 
 O maior impeditivo de utilizar frameworks como Django e Flask, é a falta de conhecimento do time diante dessas ferramentas. Diferentemente do FastAPI, que gera documentos OpenAPI e faz tipagem de dados automaticamente, os outros frameworks demandam bibliotecas externas e/ou código próprio. Nos baseando na facilidade de uso, tanto como na qualidade técnica da ferramenta, optaremos pelo FastAPI.
+
+## Referências
+
+BRATSLAVSKY, P. **FastAPI vs Flask 2025: Performance, Speed & When to Choose**. Disponível em: <https://strapi.io/blog/fastapi-vs-flask-python-framework-comparison>. Acesso em: 12 mar. 2026. 
+
+CHRISTIE, T. **Django REST Framework**. Disponível em: <https://www.django-rest-framework.org/>. Acesso em: 12 mar. 2026. 
+
+FASTAPI; RAMIREZ, S. **FastAPI**. Disponível em: <https://fastapi.tiangolo.com/>. Acesso em: 12 mar. 2026.
