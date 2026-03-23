@@ -24,7 +24,7 @@ Cada ferramenta considerada aqui deve passar por três critérios:
 | **Critério de valor** | LinPEAS/WinPEAS exigem uma sessão shell no host-alvo. A príncipio este scanner não possui acesso shell a alvos. Seria necessário um Reverse Shell ou garantir esse acesso. |
 | **Critério ético/legal** | Se for em uma rede que o operador possui, se os hosts-alvo não forem de sua propriedade ou se nenhuma autorização escrita explícita cobrir atividades de pós-exploração, essa prática é proibida. |
 | **Critério de hardware** | N/A — os scripts rodam nos alvos, não no Pi. |
-| **Decisão** | **FUTURO** |
+| **Decisão** | **REVALIDAR - Futuro(v3)** |
 | **Justificativa** | Fora do escopo atual. Porém pode ser possível melhoria para o futuro. |
 
 ---
@@ -156,9 +156,10 @@ Se o scanner descobrir uma vulnerabilidade crítica em um host que o operador n�
  ## Consequências
  
 - **O escopo da v1 está fixo**: Apenas Nmap + NSE. Nenhuma ferramenta ativa adicional.
-- **F-02 (Descobertas estendidas)** pode referenciar enum4linux-ng e testssl.sh como fontes futuras de dados, mas não deve depender deles para a entrega da v1.
+- **Nova proposta de futuro** pode referenciar enum4linux-ng e testssl.sh como fontes futuras de dados, mas não deve depender deles para a entrega da v1.
 - **Qualquer adição de ferramenta na v2 ou v3 requer seu próprio card de implementação** no backlog e deve estar em conformidade com a arquitetura do pipeline de varredura (A-04) e o contrato de API (A-03).
 - **As ferramentas "EXCLUIR" não devem ser adicionadas ao projeto sob nenhuma circunstância** sem um novo ADR, uma revisão legal e aprovação explícita do instrutor/stakeholder.
+- **Vamos fazer uma diferenciação entre versões de projeto**: a v1 vai ser o scanner principal, v2 um scanner mais potente com scripts de penetração basicos somente para verificação, v3 uma solução mais personalizada com possibilidade de rodar scripts avançados usando credenciais da empresa.
  
 ---
 
