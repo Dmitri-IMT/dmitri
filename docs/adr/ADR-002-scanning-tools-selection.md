@@ -1,262 +1,273 @@
-# ADR-002: Scanning Tools Selection
+# ADR-002: Seleção de Ferramentas de Varredura
 
-## Context
-
-The proposed system aims to perform network discovery, identification of open ports, running services, and potential vulnerabilities within local networks, focusing on small and medium-sized businesses.
-
-Due to the constraints of embedded hardware environments (such as Raspberry Pi), including limitations in CPU, memory, and storage, it is necessary to select tools that are efficient, lightweight, and capable of providing meaningful security insights.
-
-Additionally, the solution must be modular, allowing future expansion without compromising system performance.
+**Sprint 1 · R-02**
 
 ---
 
-## Context
+## 1. Contexto
 
-The proposed system is not limited to network scanning, but aims to perform **comprehensive vulnerability discovery and analysis** across devices connected to local networks, with a focus on small and medium-sized environments.
+O escopo de operação é fundamental: o scanner opera **externamente aos hosts-alvo** — posicionado na rede local e sondando outros hosts pela rede. Ele não possui acesso shell aos alvos, não realiza pós-exploração e não conduz operações autenticadas, salvo configuração explícita.
 
-Vulnerability scanning is a multi-domain activity and cannot be addressed by a single type of tool. Different components of an IT environment require distinct approaches, including:
+A solução é projetada como uma **plataforma modular de varredura**, onde cada etapa constrói sobre a anterior:
 
-- **Network scanners**, which identify active hosts, open ports, exposed services, and misconfigurations in network infrastructure;
-- **Web application scanners**, which detect vulnerabilities such as SQL injection, cross-site scripting (XSS), and broken authentication mechanisms;
-- **Database scanners**, which assess weaknesses in database configurations, access controls, and patch levels;
-- **Cloud and container scanners**, which evaluate misconfigurations and vulnerabilities in modern infrastructure environments;
-- **Code analysis tools (SAST/DAST)**, which identify vulnerabilities during development and runtime.
-
-Within this context, the proposed solution focuses primarily on **network-based vulnerability discovery**, serving as the foundation for identifying exposed services and potential entry points. From this foundation, specialized scanning modules can be applied depending on the detected services (e.g., web, database, SMB).
-
-The system is designed as a **modular vulnerability scanning platform**, where each stage builds upon the previous one:
-
-1. Network discovery (hosts and topology)
-2. Port discovery (attack surface identification)
-3. Service and version detection
-4. Targeted vulnerability analysis (based on detected services)
-
-Due to the constraints of embedded hardware environments (such as Raspberry Pi), including limited CPU, memory, and storage, the selection of tools must balance:
-
-- Resource efficiency
-- Detection coverage
-- Ease of integration
-- Output standardization for processing and reporting
-
-Therefore, the goal is not to replicate full-scale enterprise vulnerability scanners (such as Nessus or Qualys), but to design a **lightweight, extensible, and efficient vulnerability scanning solution** that provides meaningful security insights within constrained environments.
+1. Descoberta de rede (hosts e topologia)
+2. Descoberta de portas (identificação de superfície de ataque)
+3. Detecção de serviços e versões
+4. Análise direcionada de vulnerabilidades (baseada nos serviços detectados)
 
 ---
 
-## Evaluated Tools
+## 2. Critérios de Avaliação
 
-### Nmap
+Cada ferramenta avaliada deve satisfazer três critérios obrigatórios, alinhados com o R-06:
 
-A widely used open-source tool for network exploration and security auditing.
-
-#### Capabilities
-
-- Host discovery (`-sn`)
-- Port scanning:
-  - SYN Scan (`-sS`)
-  - TCP Connect (`-sT`)
-  - UDP Scan (`-sU`)
-- Service/version detection (`-sV`)
-- OS detection (`-O`)
-
-#### Advantages
-
-- Low resource usage
-- Highly flexible
-- Cross-platform
-- Easy integration with scripts
-
-#### Disadvantages
-
-- Requires networking knowledge
-- Advanced features may be complex
+1. **Critério de Valor** — Produz descobertas que o Nmap/NSE não consegue produzir?
+2. **Critério Ético/Legal** — Pode ser usada de forma responsável em varredura autorizada? Apresenta riscos inerentes que a tornam inadequada para um scanner de uso geral?
+3. **Critério de Hardware** — Pode rodar adequadamente no Raspberry Pi 4 (4 GB RAM, ARM64) dentro das restrições do pipeline de varredura?
 
 ---
 
-### Nmap Scripting Engine (NSE)
+## 3. Ferramentas Avaliadas
 
-An extension of Nmap that allows execution of scripts for vulnerability detection and enumeration.
+### 3.1 Nmap
 
-#### Categories
 
-- `default`
-- `safe`
-- `vuln`
-- `auth`
-- `discovery`
+| Atributo                 | Avaliação                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Motor principal de varredura de rede — descoberta de hosts, varredura de portas, detecção de serviços e SO. |
+| **Critério de Valor**    | Cobertura abrangente com baixo consumo de recursos. Altamente configurável e extensível via NSE.            |
+| **Critério Ético/Legal** | Ferramenta de auditoria padrão da indústria. Uso ético em redes autorizadas é inequívoco.                   |
+| **Critério de Hardware** | Consumo mínimo de CPU e memória. Roda perfeitamente no Pi 4.                                                |
+| **Decisão**              | ✅ **INCLUIR — v1**                                                                                          |
 
-#### Relevant Scripts
 
-- `vulners`
-- `vulscan`
-- `http-enum`
-- `ssh-auth-methods`
-- `smb-vuln*`
+**Capacidades:**
 
-#### Advantages
-
-- Extends Nmap capabilities significantly
-- Enables vulnerability detection without heavy tools
+- Descoberta de hosts (`-sn`)
+- Varredura de portas: SYN Scan (`-sS`), TCP Connect (`-sT`), UDP Scan (`-sU`)
+- Detecção de serviços/versões (`-sV`)
+- Detecção de SO (`-O`)
 
 ---
 
-### CrackMapExec
+### 3.2 Nmap Scripting Engine (NSE)
 
-A tool focused on post-exploitation and enumeration in Windows/SMB environments.
 
-#### Capabilities
+| Atributo                 | Avaliação                                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Estende o Nmap com scripts Lua para detecção de vulnerabilidades, enumeração e análise de serviços. |
+| **Critério de Valor**    | Expande dramaticamente as capacidades do Nmap sem nenhuma dependência adicional.                    |
+| **Critério Ético/Legal** | Parte integrante do Nmap. Mesmo contexto ético.                                                     |
+| **Critério de Hardware** | Scripts Lua executados dentro do processo Nmap. Sem overhead adicional.                             |
+| **Decisão**              | ✅ **INCLUIR — v1**                                                                                  |
 
-- User and group enumeration
-- Credential validation
-- Remote command execution
-- Share and permission analysis
 
-#### Advantages
-
-- Lightweight compared to Metasploit
-- Highly effective in corporate environments
-
-#### Disadvantages
-
-- Does not perform network discovery
-- Requires credentials or context
+**Categorias e scripts relevantes:** `default`, `safe`, `vuln`, `auth`, `discovery` — incluindo `http-enum`, `ssh-auth-methods`, `smb-vuln-`*.
 
 ---
 
-### Nikto
+### 3.3 vulners NSE
 
-A web vulnerability scanner.
 
-#### Capabilities
+| Atributo                 | Avaliação                                                                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Após detecção de versão (`-sV`), envia o CPE de cada serviço para a API Vulners e retorna CVEs com pontuação CVSS.                                                                                                          |
+| **Critério de Valor**    | Preenche a lacuna mais crítica do Nmap NSE puro: o script `vuln` nativo verifica ~150 vulnerabilidades fixas; o vulners NSE mapeia qualquer serviço contra toda a base Vulners (250+ GB de CVEs). Suporta filtro `mincvss`. |
+| **Critério Ético/Legal** | Passivo: não explora vulnerabilidades, apenas consulta nome e versão de software via API. Em redes com restrição de saída, simplesmente não retorna resultados.                                                             |
+| **Critério de Hardware** | Script Lua executado pelo Nmap. Sem overhead além da latência de rede para a API.                                                                                                                                           |
+| **Decisão**              | ✅ **INCLUIR — v1**                                                                                                                                                                                                          |
 
-- Detection of insecure configurations
-- Identification of known web server vulnerabilities
-
-#### Advantages
-
-- Lightweight
-- Easy to integrate
-
-#### Disadvantages
-
-- Limited to web services
 
 ---
 
-### testssl.sh
+### 3.4 CrackMapExec / NetExec
 
-A tool for SSL/TLS security analysis.
 
-#### Capabilities
+| Atributo                 | Avaliação                                                                                                                                                                                                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Ferramenta de pós-exploração e movimento lateral — enumera SMB/RDP/LDAP/WMI em múltiplos hosts, executa comandos, extrai credenciais, realiza password spraying.                                                                                                                  |
+| **Critério de Valor**    | Na melhor hipótese, os recursos de enumeração SMB passiva se sobrepõem ao enum4linux-ng. O restante do conjunto de recursos (execução de comandos, extração de credenciais, pass-the-hash, movimento lateral) é pós-exploração pura.                                              |
+| **Critério Ético/Legal** | Desenvolvida primariamente para movimento lateral pós-exploração. Implantá-la como componente automatizado gera logs de Segurança do Windows consistentes com comprometimento, pode disparar EDR/AV e poderia ser mal utilizada se o Pi for acessado por terceiro não autorizado. |
+| **Critério de Hardware** | NetExec roda em ARM64, mas seu modelo de conexões concorrentes é intensivo em memória em escala.                                                                                                                                                                                  |
+| **Decisão**              | ❌ **REVALIDAR - Futuro(v3)**                                                                                                                                                                                                                                                      |
 
-- Protocol analysis
-- Detection of weak ciphers
-- Identification of insecure configurations
-
----
-
-### sqlmap
-
-Scan databases. An automated SQL injection detection and exploitation tool.
-
-#### Capabilities
-
-- Detects SQL injection vulnerabilities
-- Identifies database types
-- Extracts database information
-
-#### Disadvantages
-
-- Limited to web applications
-- Can be intrusive
 
 ---
 
-### masscan
+### 3.5 testssl.sh
 
-A high-performance port scanner.
 
-#### Advantages
+| Atributo                 | Avaliação                                                                                                                                                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Auditoria abrangente de configuração SSL/TLS — conjuntos de cifras, versões de protocolo, validade de certificados, vulnerabilidades conhecidas (Heartbleed, POODLE, BEAST, ROBOT, etc.).                                                                                             |
+| **Critério de Valor**    | Os scripts `ssl-`* do Nmap cobrem as verificações mais críticas, mas o testssl.sh fornece auditoria TLS substancialmente mais profunda, melhor suporte a TLS 1.3 e saída estruturada mais rica. Configuração incorreta de TLS é uma das descobertas de maior valor em redes internas. |
+| **Critério Ético/Legal** | A inspeção de handshake TLS é técnica de observação passiva — completa o handshake para ler a configuração do servidor, sem explorar. Equivalente ao que qualquer cliente HTTPS faz.                                                                                                  |
+| **Critério de Hardware** | Script bash sem dependências pesadas (bash, openssl, ferramentas Unix padrão — todas presentes no Raspberry Pi OS). Deve ter taxa limitada em escala de rede.                                                                                                                         |
+| **Decisão**              | 🔵 **INCLUIR - v2** Ativar apenas quando portas TLS (443, 8443, 993, 995, 465, etc.) estiverem confirmadamente abertas.                                                                                                                                                               |
 
-- Extremely fast
-- Suitable for large-scale scanning
-
-#### Disadvantages
-
-- Does not detect services
-- Does not identify vulnerabilities
 
 ---
 
-### Metasploit
+### 3.6 Nikto
 
-A full exploitation framework.
 
-#### Disadvantages
+| Atributo                 | Avaliação                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **Propósito**            | Scanner de vulnerabilidades web — detecta configurações inseguras e vulnerabilidades conhecidas em servidores web. |
+| **Critério de Valor**    | Limitado a serviços web. Complementar ao Nmap para hosts com HTTP/HTTPS detectados.                                |
+| **Critério Ético/Legal** | Ferramenta de auditoria web padrão. Uso responsável em redes autorizadas.                                          |
+| **Critério de Hardware** | Leve. Roda sem problemas no Pi 4.                                                                                  |
+| **Decisão**              | 🟡 **REVALIDAR — v2.** Ativar apenas quando portas HTTP/HTTPS detectadas.                                          |
 
-- High resource consumption
-- Complex setup
-- Not suitable for embedded environments
-
----
-
-### OpenVAS / Greenbone
-
-A comprehensive vulnerability scanner.
-
-#### Disadvantages
-
-- Very resource-intensive
-- Complex setup
-- High CPU and memory usage
 
 ---
 
-## Scoring Rubric
+### 3.7 enum4linux-ng
 
-| Tool            | Resource Usage | Detection Coverage | Integration | Output Parsing | Use Case Fit | Final Score |
-|----------------|---------------|--------------------|-------------|----------------|--------------|-------------|
-| Nmap           | 9             | 9                  | 10          | 9              | 10           | 9.5         |
-| Nmap NSE       | 8             | 10                 | 9           | 9              | 10           | 9.5         |
-| CrackMapExec   | 8             | 7                  | 8           | 7              | 8            | 7.6         |
-| Nikto          | 7             | 7                  | 8           | 7              | 7            | 7.2         |
-| testssl.sh     | 7             | 7                  | 8           | 7              | 7            | 7.2         |
-| sqlmap         | 7             | 8                  | 6           | 7              | 7            | 7.0         |
-| masscan        | 10            | 5                  | 7           | 7              | 6            | 7.0         |
-| Metasploit     | 3             | 10                 | 6           | 6              | 4            | 5.8         |
-| OpenVAS        | 2             | 10                 | 5           | 6              | 3            | 5.2         |
+
+| Atributo                 | Avaliação                                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Propósito**            | Enumeração SMB/NetBIOS — extrai compartilhamentos, usuários, grupos, informações de SO e políticas de senha via chamadas MSRPC não autenticadas.                                                             |
+| **Critério de Valor**    | Os scripts `smb-`* do Nmap cobrem sobreposição significativa, mas o enum4linux-ng fornece saída estruturada mais rica e lida melhor com SMBv3. Em redes mistas Windows/Linux/NAS, preenche lacunas genuínas. |
+| **Critério Ético/Legal** | Enumeração SMB não autenticada consulta serviços publicamente anunciados — dados que clientes Windows trocam durante navegação normal. Baixo risco em varredura interna autorizada.                          |
+| **Critério de Hardware** | Script Python 3 leve com dependências mínimas (impacket, ldap3). Roda confortavelmente no Pi 4.                                                                                                              |
+| **Decisão**              | 🔵 **INCLUIR — v2.** Ativar apenas quando portas 139/445 confirmadamente abertas.                                                                                                                            |
+
 
 ---
 
-## Decision
+### 3.8 sqlmap
 
-The selected toolset for the embedded system consists of:
 
-- **Nmap** as the core network scanning engine
-- **Nmap NSE** for vulnerability detection
-- **CrackMapExec** for SMB/Windows environment analysis
-- **Nikto** and **testssl.sh** for web service analysis
-- **sqlmap** for future expansion in web vulnerability analysis
+| Atributo                 | Avaliação                                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Propósito**            | Ferramenta automatizada de detecção e exploração de SQL injection em aplicações web.                |
+| **Critério de Valor**    | Detecta SQL injection, identifica tipos de banco de dados. Limitado a aplicações web.               |
+| **Critério Ético/Legal** | Pode ser intrusivo. Requer escopo e autorização explícita para uso em testes.                       |
+| **Critério de Hardware** | Leve. Roda no Pi 4.                                                                                 |
+| **Decisão**              | 🟡 **REVALIDAR — v2.** Expansão futura para análise de SQL injection em serviços web identificados. |
 
----
-
-## Justification
-
-Nmap was selected as the core scanning tool due to its efficiency, flexibility, and low resource consumption, making it ideal for embedded environments.
-
-The Nmap Scripting Engine (NSE) significantly enhances its capabilities by enabling automated vulnerability detection without requiring heavy external tools.
-
-More comprehensive solutions such as OpenVAS and Metasploit were excluded from the core architecture due to their high resource consumption and complexity, which make them unsuitable for embedded hardware.
-
-Complementary tools such as CrackMapExec, Nikto, and testssl.sh were included to provide specialized analysis capabilities in specific contexts, such as SMB environments and web services.
-
-This combination ensures a balance between performance, detection coverage, and feasibility within constrained environments.
 
 ---
 
-## Consequences
+### 3.9 masscan
 
-- Low resource consumption on embedded devices
-- High flexibility and modularity
-- Good coverage of network and vulnerability detection
-- Easy integration with backend systems
-- Scalable architecture for future enhancements
+
+| Atributo                 | Avaliação                                                                   |
+| ------------------------ | --------------------------------------------------------------------------- |
+| **Propósito**            | Scanner de portas de alta performance para redes grandes.                   |
+| **Critério de Valor**    | Velocidade superior ao Nmap, mas não detecta serviços nem vulnerabilidades. |
+| **Critério Ético/Legal** | Velocidade pode causar alertas de IDS em redes monitoradas.                 |
+| **Critério de Hardware** | Alta velocidade pode saturar a NIC do Pi.                                   |
+| **Decisão**              | ❌ **EXCLUIR da v1.** Nmap cobre o caso de uso com melhor integração.        |
+
+
+---
+
+### 3.10 Metasploit
+
+
+| Atributo                 | Avaliação                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| **Propósito**            | Framework completo de exploração — varredura, exploração, pós-exploração.                 |
+| **Critério de Valor**    | Capacidades avançadas de exploração, muito além do escopo desta plataforma de descoberta. |
+| **Critério Ético/Legal** | Framework ofensivo. Requer autorização explícita de pentest para uso legal.               |
+| **Critério de Hardware** | Alto consumo de recursos. Incompatível com ambiente embarcado no Pi 4.                    |
+| **Decisão**              | ❌ **EXCLUIR.** Incompatível com hardware e escopo.                                        |
+
+
+---
+
+### 3.11 OpenVAS / Greenbone
+
+
+| Atributo                 | Avaliação                                                                                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Propósito**            | Scanner de vulnerabilidades completo baseado em feed — executa mais de 100.000 NVTs contra hosts-alvo, com correlação CVSS.                                                                                        |
+| **Critério de Valor**    | Profundidade de verificação de CVE muito superior ao Nmap NSE, com feed atualizado diariamente. Porém o vulners NSE cobre os casos mais relevantes sem a sobrecarga arquitetural.                                  |
+| **Critério Ético/Legal** | Ferramenta legítima para gestão de vulnerabilidades em redes autorizadas.                                                                                                                                          |
+| **Critério de Hardware** | Stack de múltiplos serviços (openvas-scanner, gvmd, ospd-openvas, Redis, PostgreSQL, servidor web). Exige mínimo de 4 GB de RAM só para a sincronização do feed — sem sobra para o agente Python e demais módulos. |
+| **Decisão**              | ❌ **EXCLUIR.** Barreira de hardware intransponível no contexto deste projeto.                                                                                                                                      |
+
+
+---
+
+## 4. Matriz de Pontuação
+
+
+| Ferramenta   | Uso de Recursos | Cobertura | Integração | Parsing | Adequação | Score   |
+| ------------ | --------------- | --------- | ---------- | ------- | --------- | ------- |
+| Nmap         | 9               | 9         | 10         | 9       | 10        | **9.5** |
+| Nmap NSE     | 8               | 10        | 9          | 9       | 10        | **9.5** |
+| vulners NSE  | 10              | 9         | 10         | 9       | 10        | **9.6** |
+| Nikto        | 7               | 7         | 8          | 7       | 7         | **7.2** |
+| testssl.sh   | 7               | 7         | 8          | 7       | 7         | **7.2** |
+| sqlmap       | 7               | 8         | 6          | 7       | 7         | **7.0** |
+| masscan      | 10              | 5         | 7          | 7       | 6         | **7.0** |
+| CrackMapExec | 8               | 7         | 8          | 7       | 8         | **7.6** |
+| Metasploit   | 3               | 10        | 6          | 6       | 4         | **5.8** |
+| OpenVAS      | 2               | 10        | 5          | 6       | 3         | **5.2** |
+
+
+---
+
+## 5. Distinção Passivo vs. Ativo
+
+As ferramentas incluídas situam-se na **extremidade de observação passiva do espectro**: leem informações que os serviços anunciam publicamente. Não se autenticam, não executam código nos alvos e não tentam explorar vulnerabilidades.
+
+Ferramentas que cruzam para o território de ataque ativo estão **categoricamente fora do escopo da v1**:
+
+- **Força bruta de credenciais** — causa bloqueios de conta e interrupções de serviço
+- **Execução de código remoto** — requer autorização explícita de pentest por escrito
+- **Reverse shells e movimento lateral** — incompatíveis com o propósito declarado do sistema
+
+---
+
+## 6. Decisão
+
+
+| Ferramenta    | Versão | Decisão                    | Justificativa                                                                         |
+| ------------- | ------ | -------------------------- | ------------------------------------------------------------------------------------- |
+| Nmap          | v1     | INCLUIR                    | Motor principal — baixo consumo, altamente flexível.                                  |
+| Nmap NSE      | v1     | INCLUIR                    | Estende o Nmap com detecção de vulnerabilidades sem overhead extra.                   |
+| vulners NSE   | v1     | INCLUIR                    | Correlação de CVE passiva via API Vulners. Cobertura muito superior ao `vuln` nativo. |
+| enum4linux-ng | v2     | INCLUIR (v2)               | Enumeração SMB rica. Ativar apenas quando portas 139/445 abertas.                     |
+| testssl.sh    | v2     | INCLUIR (v2)               | Auditoria TLS profunda. Ativar apenas em portas TLS confirmadas.                      |
+| Nikto         | v2     | REVALIDAR (v2)             | Scanner web leve. Útil quando HTTP/HTTPS detectados.                                  |
+| sqlmap        | v2     | REVALIDAR (v2)             | Expansão futura para análise de SQL injection em serviços web.                        |
+| CrackMapExec  | —      | **REVALIDAR - Futuro(v3)** | Ferramenta ofensiva de pós-exploração.                                                |
+| masscan       | —      | ❌ EXCLUIR                  | Nmap cobre o caso de uso com melhor integração.                                       |
+| Metasploit    | —      | ❌ EXCLUIR                  | Consumo de recursos proibitivo. Incompatível com ambiente embarcado.                  |
+| OpenVAS       | —      | ❌ EXCLUIR                  | Stack muito pesada para Pi 4. Inviável no contexto do agente.                         |
+
+
+---
+
+## 7. Versões do Projeto
+
+- **v1** — Scanner principal: Nmap + NSE + vulners NSE. Apenas ferramentas passivas, sem dependências adicionais.
+- **v2** — Scanner estendido: adiciona enum4linux-ng, testssl.sh, Nikto e possibilidade de verificações de credenciais limitadas (ex.: admin/admin) com número controlado de tentativas.
+- **v3** — Solução personalizada: scripts avançados usando credenciais da empresa, possibilidade de Vuls para inventário de patches em infraestrutura gerenciada, revalidação de LinPEAS/WinPEAS com autorização explícita.
+
+---
+
+## 8. Consequências
+
+- O escopo da v1 está fixo: apenas Nmap + NSE + vulners NSE. Nenhuma ferramenta ativa adicional.
+- Qualquer funcionalidade futura pode referenciar enum4linux-ng e testssl.sh, mas não deve depender deles para a entrega da v1.
+- Qualquer adição de ferramenta na v2 ou v3 requer seu próprio card de implementação no backlog e deve estar em conformidade com a arquitetura do pipeline (A-04) e o contrato de API (A-03).
+- As ferramentas **EXCLUIR** não devem ser adicionadas ao projeto sob nenhuma circunstância sem um novo ADR, revisão legal e aprovação explícita do instrutor/stakeholder.
+- Os resultados de varredura podem conter informações sensíveis (portas abertas, banners de serviço, certificados TLS, nomes SMB). O backend deve impor controles de acesso apropriados e as descobertas não devem ser transmitidas por canais não criptografados.
+
+---
+
+## 9. Referências
+
+- [Documentação Nmap NSE](https://nmap.org/nsedoc/)
+- [nmap-vulners GitHub](https://github.com/vulnersCom/nmap-vulners)
+- [enum4linux-ng GitHub](https://github.com/cddmp/enum4linux-ng)
+- [testssl.sh GitHub](https://github.com/drwetter/testssl.sh)
+- [OpenVAS / Greenbone Community Edition](https://greenbone.github.io/docs/latest/)
+- OWASP Testing Guide — Testes de Infraestrutura de Rede
+- ADR R-06 — Ferramentas Adicionais de Pentest e Enumeração (referência interna)
+
