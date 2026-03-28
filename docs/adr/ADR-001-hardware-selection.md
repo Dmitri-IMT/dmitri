@@ -1,206 +1,191 @@
-# Selecao de Hardware
+# R-01 — Seleção de Hardware
 
 ## Contexto
 
-Este ADR define a plataforma de hardware do agente embarcado do scanner de vulnerabilidades. O dispositivo executara um Linux headless, rodara ferramentas locais de descoberta e enumeracao de servicos, normalizara os resultados e enviara os payloads para a API do backend.
+O dispositivo executará um Linux headless, rodará ferramentas locais de descoberta e enumeração de serviços, normalizará os resultados e enviará os payloads para a API do backend.
 
-Esta decisao precisa equilibrar:
+Esta decisão precisa equilibrar:
 
-- custo por unidade implantada
+- custo por unidade dentro do orçamento de **R$ 1.250**
 - folga de CPU e RAM para scans paralelos e processamento de resultados
-- suporte Linux estavel para ferramentas da classe do Nmap
-- disponibilidade de acessorios para implantacoes repetiveis
-- familiaridade do time e manutencao de longo prazo
+- suporte Linux estável para ferramentas da classe do Nmap
+- disponibilidade de acessórios em território nacional para implantações repetíveis
+- familiaridade do time e manutenção de longo prazo
 
 ## Escopo e premissas
 
-- Como a task cita familias de hardware, e nao SKUs exatos, esta comparacao usa as placas mais proximas em cada linha: Raspberry Pi 3 Model B+, Raspberry Pi 4 Model B, Raspberry Pi 5, Orange Pi 5B e Banana Pi BPI-M5.
-- Os precos abaixo refletem valores observados em 24 de marco de 2026 nas fontes linkadas.
-- Para Raspberry Pi 4 e Raspberry Pi 5, o alvo base considerado foi a variante de 4GB, pois ela atende o MVP do agente sem inflar o BOM.
-- Para captura via Wi-Fi, conectividade de gerenciamento e captura de pacotes sao tratadas como necessidades separadas.
+- O orçamento máximo aprovado para o BOM completo (placa + refrigeração + fonte + armazenamento + adaptador Wi-Fi) é de **R$ 1.250**, referência de março de 2026.
+- Todas as fontes de preço são distribuidores com operação no Brasil e emissão de nota fiscal: RoboCore (distribuidora oficial da Raspberry Pi no Brasil), FilipeFlop, MakerHero e NextPi — conforme a disponibilidade por item.
+- Os preços refletem valores de varejo observados em 28 de março de 2026 com pagamento via Pix/boleto, quando aplicável.
+- O contexto de alta de preços da DRAM em 2026 — documentado pelo portal SempreUpdate — pressiona significativamente o custo do Raspberry Pi 5, cujo kit completo (placa + case + fonte) supera R$ 950 nos distribuidores nacionais, tornando inviável encaixar os demais componentes no orçamento de R$ 1.250.
+- Para captura via Wi-Fi, conectividade de gerenciamento e captura de pacotes são tratadas como necessidades separadas.
 
-## Comparacao tecnica
+## Restrição orçamentária: por que o Raspberry Pi 5 não cabe no limite
 
-| Plataforma | CPU | RAM | USB | Rede | Observacao de mercado |
-| --- | --- | --- | --- | --- | --- |
-| Raspberry Pi 3 Model B+ | Broadcom BCM2837B0, quad-core Cortex-A53 1.4GHz | 1GB | 4 x USB 2.0 | Ethernet 300Mb, Wi-Fi dual-band 802.11ac, BT 4.2 | Menor custo de entrada, mas ja limitado para cargas modernas de scan |
-| Raspberry Pi 4 Model B | Broadcom BCM2711, quad-core Cortex-A72 1.8GHz | 1GB/2GB/4GB/8GB | 2 x USB 3.0, 2 x USB 2.0 | Gigabit Ethernet, Wi-Fi dual-band 802.11ac, BT 5.0 | Plataforma madura e suportada ate pelo menos janeiro de 2034 |
-| Raspberry Pi 5 | Broadcom BCM2712, quad-core Cortex-A76 2.4GHz | 1GB/2GB/4GB/8GB/16GB | 2 x USB 3.0, 2 x USB 2.0 | Gigabit Ethernet, Wi-Fi 5 dual-band 802.11ac, BT 5.0, PCIe 2.0 x1 | Melhor desempenho dentro do ecossistema Raspberry Pi; suporte ate pelo menos janeiro de 2036 |
-| Orange Pi 5B | Rockchip RK3588S, 8-core (4 x A76 + 4 x A55) ate 2.4GHz | 4GB/8GB/16GB | 1 x USB 3.0, 2 x USB 2.0 | Gigabit LAN, Wi-Fi 6, BT 5.3 | Desempenho bruto muito forte, mas com menos consistencia de software e acessorios |
-| Banana Pi BPI-M5 | Amlogic S905X3, quad-core Cortex-A55 2.0GHz | 4GB | 4 x USB 3.0 | 1GbE, sem Wi-Fi onboard, 16GB eMMC | Preco competitivo, mas com SoC mais antigo e menos conveniencia de rede |
+A NextPi — revendedora com operação nacional e estoque regular — lista o **Kit Raspberry Pi 5 4GB com case oficial e fonte original por R$ 959,89** (com desconto de 5% no Pix, R$ 911,90). Somados os itens restantes do BOM (cartão microSD e adaptador Wi-Fi), o total ultrapassaria R$ 1.250 com facilidade. Essa restrição é a principal razão pela qual o Raspberry Pi 5 é descartado como alvo de produção nesta iteração do projeto.
 
-## Acessorios e observacoes de implantacao
+## Comparação técnica
 
-### Refrigeracao
+| Plataforma | CPU | RAM | USB | Rede | Observação de mercado |
+|---|---|---|---|---|---|
+| Raspberry Pi 3 Model B+ | Broadcom BCM2837B0, quad-core Cortex-A53 1.4 GHz | 1 GB | 4 × USB 2.0 | Ethernet 300 Mb, Wi-Fi dual-band 802.11ac, BT 4.2 | Menor custo de entrada, mas já limitado para cargas modernas de scan |
+| Raspberry Pi 4 Model B | Broadcom BCM2711, quad-core Cortex-A72 1.8 GHz | 1 GB / 2 GB / 4 GB / 8 GB | 2 × USB 3.0, 2 × USB 2.0 | Gigabit Ethernet, Wi-Fi dual-band 802.11ac, BT 5.0 | Plataforma madura e com ampla disponibilidade nacional nos distribuidores oficiais |
+| Raspberry Pi 5 | Broadcom BCM2712, quad-core Cortex-A76 2.4 GHz | 1 GB / 2 GB / 4 GB / 8 GB / 16 GB | 2 × USB 3.0, 2 × USB 2.0 | Gigabit Ethernet, Wi-Fi 5 dual-band 802.11ac, BT 5.0, PCIe 2.0 ×1 | Melhor desempenho dentro do ecossistema; inviável no orçamento de R$ 1.250 em março de 2026 |
+| Orange Pi 5B | Rockchip RK3588S, 8 núcleos (4 × A76 + 4 × A55) até 2.4 GHz | 4 GB / 8 GB / 16 GB | 1 × USB 3.0, 2 × USB 2.0 | Gigabit LAN, Wi-Fi 6, BT 5.3 | Desempenho bruto elevado, mas suporte de software e ecossistema de acessórios nacionais é fragmentado |
+| Banana Pi BPI-M5 | Amlogic S905X3, quad-core Cortex-A55 2.0 GHz | 4 GB | 4 × USB 3.0 | 1 GbE, sem Wi-Fi onboard, 16 GB eMMC | SoC mais antigo; sem distribuidor oficial no Brasil com suporte estruturado |
 
-- O Raspberry Pi 5 deve ser implantado com refrigeracao ativa. A Raspberry Pi e a PiShop apontam o case oficial do Pi 5 com ventoinha integrada ou o Active Cooler oficial para carga sustentada.
-- O Raspberry Pi 4 consegue rodar o agente, mas refrigeracao ativa tambem e recomendada para janelas longas de scan ou ambientes quentes.
-- O Orange Pi 5B tambem se beneficia de refrigeracao adicional, mas o ecossistema e mais fragmentado e dependente da revisao da placa.
-- Banana Pi M5 e Raspberry Pi 3 B+ suportam cenarios mais leves, mas perdem folga de desempenho antes das placas mais novas.
+## Acessórios e observações de implantação
 
-### Alimentacao
+### Refrigeração
 
-- O Raspberry Pi 5 precisa de fonte USB-C PD de 5V/5A para evitar limitacoes de desempenho e corrente nas portas USB.
-- O Raspberry Pi 4 usa fonte USB-C de 5V/3A.
-- O Raspberry Pi 3 B+ usa fonte micro-USB de 2.5A.
-- A familia Raspberry Pi tem o caminho mais claro de fonte oficial para implantacoes repetiveis.
+- O Raspberry Pi 4 suporta operação headless com dissipador passivo para cargas leves, mas refrigeração ativa é recomendada para janelas longas de scan ou ambientes quentes.
+- Cases com cooler integrado para Raspberry Pi 4 estão amplamente disponíveis nos distribuidores nacionais (RoboCore, FilipeFlop, MakerHero) por valores entre R$ 50 e R$ 100.
+- Orange Pi e Banana Pi têm ecossistema de acessórios mais fragmentado e menos disponível no varejo brasileiro.
+
+### Alimentação
+
+- O Raspberry Pi 4 usa fonte USB-C de 5 V / 3 A. Fontes compatíveis estão disponíveis nos distribuidores nacionais por valores entre R$ 50 e R$ 80.
+- O Raspberry Pi 3 B+ usa fonte micro-USB de 2,5 A.
 
 ### Dimensionamento de armazenamento
 
-Para o MVP do scanner, a demanda realista de armazenamento e:
+Para o MVP do scanner, a demanda realista de armazenamento é:
 
-| Componente | Espaco estimado |
-| --- | --- |
-| Raspberry Pi OS Lite + updates + margem de recuperacao | 6GB |
-| Runtime Python, virtualenv, Nmap, pacotes de suporte e logs | 4GB |
-| Saida temporaria de scans, JSON normalizado, logs rotacionados e pequenos pcaps | 8GB a 12GB |
-| Espaco livre para upgrades, wear leveling e margem de rollback | 20GB+ |
+| Componente | Espaço estimado |
+|---|---|
+| Raspberry Pi OS Lite + updates + margem de recuperação | 6 GB |
+| Runtime Python, virtualenv, Nmap, pacotes de suporte e logs | 4 GB |
+| Saída temporária de scans, JSON normalizado, logs rotacionados | 8 GB a 12 GB |
+| Espaço livre para upgrades, wear leveling e margem de rollback | 20 GB+ |
 
-Decisao: usar microSD de 64GB A2/V30 como minimo de producao. Cartao de 32GB fica aceitavel apenas para laboratorio com baixa retencao.
+Decisão: usar cartão microSD de 64 GB classe A2/V30 como mínimo de produção. Cartões nessa especificação estão disponíveis nas lojas de eletrônicos e grandes varejistas nacionais (Kabum, Amazon.com.br, Magazine Luiza) por valores entre R$ 50 e R$ 80.
 
-## Decisao sobre Wi-Fi e modo promiscuo
+## Decisão sobre Wi-Fi e modo promíscuo
 
-O Wi-Fi onboard e suficiente para conectividade do agente, atualizacoes e telemetria, mas nao deve ser a interface principal para scans em modo promiscuo ou monitor mode.
+O Wi-Fi onboard é suficiente para conectividade do agente, atualizações e telemetria, mas não deve ser a interface principal para scans em modo promíscuo ou monitor mode.
 
 Motivos:
 
-- A documentacao do Linux Wireless trata monitor mode como capacidade dependente de hardware e driver, deixando claro que nem todo dispositivo suporta isso de forma completa.
-- O Aircrack-ng informa que drivers de fabricante em geral nao oferecem bom suporte a monitor mode, enquanto drivers alinhados ao ecossistema mac80211 tendem a ser mais previsiveis.
-- Para um scanner implantavel em campo, precisamos de um adaptador USB repetivel e substituivel, em vez de depender do comportamento do Wi-Fi onboard de cada placa.
+- A documentação do Linux Wireless trata monitor mode como capacidade dependente de hardware e driver, deixando claro que nem todo dispositivo suporta isso de forma completa.
+- O Aircrack-ng informa que drivers de fabricante em geral não oferecem bom suporte a monitor mode, enquanto drivers alinhados ao ecossistema mac80211 tendem a ser mais previsíveis.
+- Para um scanner implantável em campo, precisamos de um adaptador USB repetível e substituível, em vez de depender do comportamento do Wi-Fi onboard de cada placa.
 
-Decisao: usar um adaptador USB Wi-Fi dedicado para cenarios de monitor mode ou captura de pacotes, deixando o Wi-Fi onboard para trafego de gerenciamento.
+Decisão: usar um adaptador USB Wi-Fi dedicado para cenários de monitor mode ou captura de pacotes, deixando o Wi-Fi onboard para tráfego de gerenciamento.
 
-Adaptador recomendado para o BOM base:
-
-- ALFA AWUS036ACM, porque a ALFA documenta suporte Linux para o MT7612U, incluindo compatibilidade com Raspberry Pi OS, e o produto aparece com preco de varejo estavel.
+**Adaptador para o BOM base:** O ALFA AWUS036ACM está disponível na Amazon.com.br, com chipset MediaTek MT7612U e suporte documentado à família de drivers mac80211 no Linux. É a mesma especificação de chipset usada na análise original, agora adquirível com nota fiscal nacional.
 
 ## BOM da plataforma selecionada
 
-Plataforma selecionada: Raspberry Pi 5 4GB
+**Plataforma selecionada: Raspberry Pi 4 Model B 4 GB**
 
-| Item | Qtd | Preco unitario | Fonte |
-| --- | --- | --- | --- |
-| Raspberry Pi 5 4GB | 1 | $85.00 | [PiShop](https://www.pishop.us/product/raspberry-pi-5-4gb/) |
-| Case do Raspberry Pi 5 com ventoinha integrada | 1 | $10.95 | [PiShop](https://www.pishop.us/product/raspberry-pi-case-for-pi-5-red-white/) |
-| Fonte Raspberry Pi 27W USB-C | 1 | $12.95 | [PiShop](https://www.pishop.us/product/raspberry-pi-27w-usb-c-power-supply-black-us/) |
-| microSD oficial Raspberry Pi 64GB, A2/V30 | 1 | $19.95 | [PiShop](https://www.pishop.us/product/official-raspberry-pi-microsd-card-with-raspberry-pi-os-64-bit-64gb/) |
-| Adaptador USB Wi-Fi ALFA AWUS036ACM | 1 | $46.97 | [Rokland](https://store.rokland.com/collections/all-alfa-network-products/802-11ac) |
-| Adaptador USB 3.0 para gigabit Ethernet (opcional) | 1 | $24.99 | [Best Buy](https://www.bestbuy.com/site/j5create-usb-3-0-gigabit-ethernet-adapter-silver/2001047.p) |
+| Item | Qtd | Preço estimado (Pix) | Fonte sugerida |
+|---|---|---|---|
+| Raspberry Pi 4 Model B 4 GB (homologado ANATEL) | 1 | R$ 490,00 | [RoboCore](https://www.robocore.net/placa-raspberry-pi/raspberry-pi-4-4gb) / [FilipeFlop](https://www.filipeflop.com) / [MakerHero](https://www.makerhero.com/produto/raspberry-pi-4-model-b/) |
+| Case com cooler ativo para Raspberry Pi 4 | 1 | R$ 70,00 | RoboCore / FilipeFlop / MakerHero |
+| Fonte USB-C 5 V / 3 A para Raspberry Pi 4 | 1 | R$ 60,00 | RoboCore / FilipeFlop / MakerHero |
+| Cartão microSD 64 GB A2/V30 | 1 | R$ 65,00 | Amazon.com.br / Kabum / Magazine Luiza |
+| Adaptador USB Wi-Fi ALFA AWUS036ACM | 1 | R$ 350,00 | [Amazon.com.br](https://www.amazon.com.br/Adaptador-AC1200-alcance-antenas-externas/dp/B08BJS8FXD) |
 
-Total do BOM base (sem a segunda Ethernet opcional): $175.82
+**Total estimado do BOM base: R$ 1.035,00**
 
-Total do BOM expandido (com a segunda Ethernet opcional): $200.81
+**Folga orçamentária: ~R$ 215,00** (cabos, frete, eventuais variações de preço)
 
-Observacoes:
+> **Nota sobre preços:** Os valores acima são estimativas de varejo observadas em março de 2026. Preços de Raspberry Pi estão em alta desde o final de 2025 devido à escassez de DRAM LPDDR4 globalmente. Recomenda-se confirmar os valores atuais diretamente nos distribuidores antes da aquisição.
 
-- O adaptador USB-to-Ethernet opcional so e necessario se quisermos implantacao dual-homed, espelhamento de trafego ou um uplink de gerenciamento dedicado.
-- O case do Pi 5 ja inclui refrigeracao ativa, entao nao e necessario adicionar um cooler separado no BOM base.
+> **Nota sobre o ALFA AWUS036ACM:** O produto é importado e vendido por terceiros na Amazon.com.br. O preço pode variar. Caso não esteja disponível, alternativas com chipset MT7612U (mesmo driver) podem ser consideradas — o critério é o chipset, não o fabricante. Essa substituição não requer um novo ADR, apenas confirmação técnica de que o chipset é idêntico.
 
-## Rubrica de pontuacao
+## Rubrica de pontuação
 
-Pesos:
+**Pesos:**
 
 - Desempenho: 30
 - Suporte da comunidade e maturidade de software: 25
-- Custo: 20
-- Disponibilidade e ciclo de vida: 15
+- Custo (dentro do orçamento de R$ 1.250): 20
+- Disponibilidade nacional e ciclo de vida: 15
 - Familiaridade do time: 10
 
-Escala:
+**Escala:** 1 = ruim, 3 = aceitável, 5 = excelente
 
-- 1 = ruim
-- 3 = aceitavel
-- 5 = excelente
+## Matriz de pontuação
 
-## Matriz de pontuacao
+| Plataforma | Desempenho (30) | Comunidade (25) | Custo no BR (20) | Disponibilidade (15) | Familiaridade (10) | Nota ponderada / 100 |
+|---|---|---|---|---|---|---|
+| Raspberry Pi 4 4 GB | 3 | 5 | 5 | 5 | 5 | **88** |
+| Raspberry Pi 5 4 GB | 5 | 5 | 1 | 4 | 5 | **77** |
+| Orange Pi 5B | 5 | 2 | 3 | 2 | 1 | **56** |
+| Raspberry Pi 3 Model B+ | 1 | 4 | 5 | 3 | 4 | **55** |
+| Banana Pi BPI-M5 | 2 | 2 | 3 | 1 | 1 | **36** |
 
-| Plataforma | Desempenho (30) | Comunidade (25) | Custo (20) | Disponibilidade (15) | Familiaridade (10) | Nota ponderada / 100 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Raspberry Pi 5 4GB | 5 | 5 | 4 | 5 | 5 | 96 |
-| Raspberry Pi 4 4GB | 3 | 5 | 5 | 4 | 5 | 85 |
-| Orange Pi 5B | 5 | 2 | 3 | 2 | 1 | 56 |
-| Raspberry Pi 3 Model B+ | 1 | 4 | 5 | 2 | 4 | 52 |
-| Banana Pi BPI-M5 | 2 | 2 | 4 | 2 | 1 | 44 |
+> O Raspberry Pi 5 cai para nota 77 neste contexto porque o critério de custo é avaliado em relação ao orçamento de R$ 1.250 — e o Pi 5 simplesmente não cabe. Se o orçamento fosse flexível, ele pontuaria mais alto que o Pi 4, como demonstrado na análise original.
 
-## Decisao
+## Decisão
 
-Adotar o Raspberry Pi 5 4GB como plataforma padrao de hardware para o MVP e para os primeiros pilotos.
+Adotar o **Raspberry Pi 4 Model B 4 GB** como plataforma padrão de hardware para o MVP.
 
 Motivos:
 
-- Ele entrega a melhor nota total quando desempenho, ciclo de vida, maturidade de software e familiaridade do time sao avaliados em conjunto.
-- A diferenca de custo em relacao ao Raspberry Pi 4 4GB e pequena o bastante para justificar a folga extra de CPU, I/O mais rapido e ciclo de vida maior.
-- Ele preserva o ecossistema Raspberry Pi ja assumido no repositorio, reduzindo risco operacional frente a Orange Pi ou Banana Pi.
-- Ele mantem um caminho limpo de evolucao para NVMe, pipelines de scan mais pesados ou cache local sem precisar trocar de familia de placa.
-- Com o case oficial e a fonte de 27W, a receita de implantacao fica repetivel e simples de repassar ao time.
+- É a única plataforma que entrega desempenho adequado para o agente de scan, permanece dentro do orçamento de R$ 1.250, e está disponível com nota fiscal e suporte nos distribuidores oficiais no Brasil (RoboCore, FilipeFlop, MakerHero).
+- O ecossistema Raspberry Pi preserva a familiaridade do time e o suporte de longo prazo — a placa segue em produção e com suporte de software ativo.
+- O adaptador ALFA AWUS036ACM com chipset MT7612U está disponível na Amazon.com.br, mantendo a mesma decisão técnica do documento original quanto ao driver de captura sem fio.
+- A folga orçamentária de aproximadamente R$ 215 cobre variações de frete e eventuais oscilações de preço.
+
+## Caminho de upgrade
+
+Se o projeto crescer para pipelines de scan mais pesados ou o orçamento for revisado em iterações futuras, o Raspberry Pi 5 4 GB é o upgrade natural dentro do mesmo ecossistema — sem troca de família de placa, sistema operacional ou receita de implantação. Essa migração exigirá um novo ADR no momento em que a necessidade for identificada.
 
 ## Alternativas rejeitadas
 
-### Raspberry Pi 4 4GB
+### Raspberry Pi 5 4 GB
 
-Rejeitado como alvo principal, mas mantido como fallback.
+Rejeitado por inviabilidade orçamentária nesta iteração.
 
-Motivos para nao selecionar:
-
-- Continua viavel, mas tem folga de CPU claramente inferior ao Raspberry Pi 5.
-- Nao oferece a mesma margem para expansao de armazenamento e processamento local futuro.
-- O lado do hardware-agent tende a crescer, entao comprar a placa mais antiga para producao encurta demais a vida util da decisao.
+- O kit completo (placa + case + fonte oficial) custa R$ 959,89 na NextPi em março de 2026 — restando menos de R$ 300 para cartão microSD e adaptador Wi-Fi, o que não é suficiente para cobrir o ALFA AWUS036ACM (~R$ 350).
+- Tecnicamente é a escolha superior (CPU A76, PCIe, maior ciclo de vida), mas o critério orçamentário é uma restrição de projeto, não de preferência.
+- Mantido como fallback explícito para versões futuras caso o orçamento seja aumentado.
 
 ### Orange Pi 5B
 
-Rejeitado por risco operacional, nao por falta de desempenho.
+Rejeitado por risco operacional e falta de distribuidor nacional.
 
-Motivos para nao selecionar:
-
-- O silicio e excelente, mas a consistencia de distro, a qualidade da documentacao e o suporte de longo prazo sao inferiores aos do Raspberry Pi.
-- O sourcing de acessorios e mais fragmentado e mais sujeito a mudar conforme revisao da placa ou regiao.
-- A familiaridade do time e baixa, o que aumenta esforco de setup e suporte durante a sprint e na implantacao.
+- Não há distribuidor oficial com estoque regular e nota fiscal no Brasil. A aquisição depende de importação direta, o que reduz repetibilidade e aumenta risco logístico.
+- A familiaridade do time é baixa, o que aumenta o esforço de setup e suporte durante a sprint.
 
 ### Banana Pi BPI-M5
 
-Rejeitado por oferecer pouco ganho frente a Raspberry Pi 4 e Raspberry Pi 5.
+Rejeitado por ausência de ecossistema nacional e SoC mais antigo.
 
-Motivos para nao selecionar:
-
-- A folga de CPU e modesta para um dispositivo que deve executar scans repetidos, normalizacao, logs e transporte seguro.
-- Nao traz a mesma profundidade de ecossistema do Raspberry Pi.
-- A ausencia de Wi-Fi onboard adiciona mais partes moveis antes mesmo de considerar monitor mode.
+- Sem distribuidor oficial no Brasil com suporte estruturado.
+- A ausência de Wi-Fi onboard adiciona componentes extras antes mesmo de considerar monitor mode.
+- Folga de CPU modesta para scans repetidos, normalização e transporte.
 
 ### Raspberry Pi 3 Model B+
 
-Rejeitado por ficar apertado demais para o baseline do MVP.
+Rejeitado por insuficiência técnica para o baseline do MVP.
 
-Motivos para nao selecionar:
-
-- 1GB de RAM e muito pouco para updates modernos de Linux, ferramental de scan e buffering de resultados.
+- 1 GB de RAM é muito pouco para updates modernos de Linux, ferramental de scan e buffering de resultados.
 - I/O limitado a USB 2.0 vira gargalo assim que entram adaptadores externos.
-- Pode funcionar para demos ou laboratorios muito pequenos, mas nao e uma base segura para producao.
 
-## Consequencias
+## Consequências
 
-- Futuras tasks de implementacao devem alinhar a documentacao que ainda referencia Raspberry Pi 4 como dispositivo padrao.
-- A aquisicao deve padronizar Raspberry Pi 5 4GB, armazenamento 64GB A2/V30 e adaptador USB Wi-Fi dedicado para fluxos de captura.
-- Se o projeto crescer para grandes capturas de pacotes ou bases locais de enriquecimento, devemos revisitar o Raspberry Pi 5 com NVMe em vez de trocar novamente de familia de placa.
+- A aquisição deve padronizar Raspberry Pi 4 Model B 4 GB, cartão microSD 64 GB A2/V30 e adaptador USB Wi-Fi com chipset MT7612U.
+- Distribuidores oficiais no Brasil (RoboCore, FilipeFlop, MakerHero) emitem nota fiscal e garantem compatibilidade com homologação ANATEL — a aquisição deve priorizar esses canais.
+- Futuras tasks de implementação devem referenciar o Raspberry Pi 4 como dispositivo padrão desta iteração.
+- Se o projeto crescer ou o orçamento for revisado, a migração para Raspberry Pi 5 deve ser formalizada com um novo ADR antes de qualquer aquisição.
 
-## Referencias
+## Referências
 
-- Raspberry Pi. [Raspberry Pi 5](https://www.raspberrypi.com/products//raspberry-pi-5/). Acesso em 24 de marco de 2026.
-- Raspberry Pi. [Raspberry Pi 4 Model B specifications](https://www.raspberrypi.com/products//raspberry-pi-4-model-b/specifications/?variant=raspberry-pi-4-model-b-8gb). Acesso em 24 de marco de 2026.
-- Raspberry Pi Documentation. [Raspberry Pi computer hardware](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html). Acesso em 24 de marco de 2026.
-- PiShop US. [Raspberry Pi 5 4GB](https://www.pishop.us/product/raspberry-pi-5-4gb/). Acesso em 24 de marco de 2026.
-- PiShop US. [Raspberry Pi Case for Pi 5](https://www.pishop.us/product/raspberry-pi-case-for-pi-5-red-white/). Acesso em 24 de marco de 2026.
-- PiShop US. [Raspberry Pi 27W USB-C Power Supply](https://www.pishop.us/product/raspberry-pi-27w-usb-c-power-supply-black-us/). Acesso em 24 de marco de 2026.
-- PiShop US. [Official Raspberry Pi microSD Card with Raspberry Pi OS 64-bit - 64GB](https://www.pishop.us/product/official-raspberry-pi-microsd-card-with-raspberry-pi-os-64-bit-64gb/). Acesso em 24 de marco de 2026.
-- PiShop US. [Raspberry Pi boards price list](https://www.pishop.us/first-look-at-raspberry-pi-4/). Acesso em 24 de marco de 2026.
-- PiShop US. [Raspberry Pi 3 Model B+ bulk listing](https://www.pishop.us/product/raspberry-pi-3-model-b-plus-bulk-purchase/). Acesso em 24 de marco de 2026.
-- Orange Pi. [Orange Pi 5B](https://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5B.html). Acesso em 24 de marco de 2026.
-- ProE. [Orange Pi 5B 8GB RAM 64GB eMMC](https://www.proe.vn/orange-pi-5b-8gb-ram-64gb-emmc). Acesso em 24 de marco de 2026.
-- Banana Pi Wiki. [Getting Started with M5/M2Pro](https://wiki.banana-pi.org/Getting_Started_with_M5/M2Pro). Acesso em 24 de marco de 2026.
-- 52Pi Store. [Banana Pi BPI-M5](https://52pi.com/products/banana-pi-bpi-m5-amlogic-s905x3-quad-core-arm-mali-g31-4gb-lpddr4-ram-16gb-emmc-flash-support-linux-ubuntu-debian-single-board). Acesso em 24 de marco de 2026.
-- Linux Wireless Documentation. [Wireless modes](https://wireless.docs.kernel.org/en/latest/en/users/documentation/modes.html). Acesso em 24 de marco de 2026.
-- Linux Wireless Documentation. [MediaTek driver family](https://wireless.docs.kernel.org/en/latest/en/users/drivers/mediatek.html). Acesso em 24 de marco de 2026.
-- Aircrack-ng. [compatibility_drivers](https://aircrack-ng.org/doku.php?id=compatibility_drivers). Acesso em 24 de marco de 2026.
-- ALFA Network. [AWUS036ACM](https://www.alfa.com.tw/products/awus036acm_1). Acesso em 24 de marco de 2026.
-- ALFA Network Docs. [Linux support for MT7612U based products](https://docs.alfa.com.tw/Support/Linux/MT7612U/). Acesso em 24 de marco de 2026.
-- Rokland. [ALFA products collection](https://store.rokland.com/collections/all-alfa-network-products/802-11ac). Acesso em 24 de marco de 2026.
-- Best Buy. [j5create USB 3.0 Gigabit Ethernet Adapter](https://www.bestbuy.com/site/j5create-usb-3-0-gigabit-ethernet-adapter-silver/2001047.p). Acesso em 24 de marco de 2026.
+- NextPi. [Kit Raspberry Pi 5 4GB c/ Case Oficial e Fonte Original](https://www.nextpi.com.br/loja/kit-raspberry-pi-5-4gb-c-case-oficial-e-fonte-original/). Acesso em 28 de março de 2026.
+- NextPi. [Raspberry Pi 5 4GB Anatel](https://www.nextpi.com.br/loja/raspberry-pi-5-4gb/). Acesso em 28 de março de 2026.
+- RoboCore. [Raspberry Pi 5 4GB](https://www.robocore.net/placa-raspberry-pi/raspberry-pi-5-4gb). Acesso em 28 de março de 2026.
+- RoboCore. [Raspberry Pi 4 4GB — Model B Anatel](https://www.robocore.net/placa-raspberry-pi/raspberry-pi-4-4gb). Acesso em 28 de março de 2026.
+- RoboCore. [Raspberry Pi — Página da categoria](https://www.robocore.net/raspberry-pi). Acesso em 28 de março de 2026.
+- MakerHero. [Raspberry Pi 4 Model B Anatel](https://www.makerhero.com/produto/raspberry-pi-4-model-b/). Acesso em 28 de março de 2026.
+- FilipeFlop. [Categoria Raspberry Pi](https://www.filipeflop.com). Acesso em 28 de março de 2026.
+- SempreUpdate. [Preço Raspberry Pi 2026: Crise da IA e DRAM encarece modelos em 70%](https://sempreupdate.com.br/aumento-preco-raspberry-pi-2026-crise-ia-dram/). Acesso em 28 de março de 2026.
+- CNX Software. [Raspberry Pi 4 dual RAM variant introduced to mitigate RAM price increases](https://www.cnx-software.com/2026/02/05/raspberry-pi-4-dual-ram-variant-introduced-to-mitigate-ram-price-increases-and-supply-challenges/). Acesso em 28 de março de 2026.
+- Amazon.com.br. [ALFA Network AWUS036ACM Adaptador Wi-Fi AC1200](https://www.amazon.com.br/Adaptador-AC1200-alcance-antenas-externas/dp/B08BJS8FXD). Acesso em 28 de março de 2026.
+- Linux Wireless Documentation. [Wireless modes](https://wireless.docs.kernel.org/en/latest/en/users/documentation/modes.html). Acesso em 28 de março de 2026.
+- Aircrack-ng. [compatibility_drivers](https://aircrack-ng.org/doku.php?id=compatibility_drivers). Acesso em 28 de março de 2026.
+- ALFA Network Docs. [Linux support for MT7612U based products](https://docs.alfa.com.tw/Support/Linux/MT7612U/). Acesso em 28 de março de 2026.
+- Raspberry Pi Documentation. [Raspberry Pi 4 Model B specifications](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/specifications/). Acesso em 28 de março de 2026.
+- Orange Pi. [Orange Pi 5B](https://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5B.html). Acesso em 28 de março de 2026.
