@@ -1,198 +1,195 @@
-# ADR-004: Scan Methodology and Vulnerability Detection Workflow
+## Contexto
 
-## Context
+O sistema visa realizar **varreduras de vulnerabilidades ponta a ponta** em redes locais usando um dispositivo embutido.
 
-The system aims to perform **end-to-end vulnerability scanning** within local networks using an embedded device.
+Para alcançar isso, é necessário definir o que uma "varredura" representa no sistema, incluindo:
 
-To achieve this, it is necessary to define what a "scan" represents in the system, including:
+- Entradas (alvos, escopo, configuração)
+- Estágios de processamento (pipeline)
+- Saídas (descobertas estruturadas)
+- Como vulnerabilidades são identificadas e correlacionadas
 
-- Inputs (targets, scope, configuration)
-- Processing stages (pipeline)
-- Outputs (structured findings)
-- How vulnerabilities are identified and correlated
 
-Unlike simple network scanners, this system must transform raw scan data into **actionable security findings**, combining network discovery, service identification, and vulnerability intelligence.
+---
+## Definição de uma Varredura
+
+Uma **varredura** é definida como um processo estruturado que:
+
+1. Recebe um alvo (um IP, lista de hosts ou subnet)
+2. Executa múltiplos estágios de varredura
+3. Correlaciona dados coletados
+4. Produz um conjunto de **descobertas**
 
 ---
 
-## Definition of a Scan
+## Estágios do Pipeline de Varredura
 
-A **scan** is defined as a structured process that:
+O fluxo de trabalho de varredura é dividido em estágios modulares:
 
-1. Receives a target (single IP, host list, or subnet)
-2. Executes multiple scanning stages
-3. Correlates collected data
-4. Produces a set of **findings**
+### 1. Descoberta de Hosts
 
----
+Objetivo:
+Identificar dispositivos ativos na rede.
 
-## Scan Pipeline Stages
-
-The scanning workflow is divided into modular stages:
-
-### 1. Host Discovery
-
-Objective:
-Identify active devices in the network.
-
-Techniques:
+Técnicas:
 - ICMP (ping sweep)
-- ARP requests
+- Requisições ARP
 - Nmap (`-sn`)
 
-Output:
-List of active hosts (IPs)
+Saída:
+Lista de hosts ativos (IPs)
 
 ---
 
-### 2. Port Enumeration
+### 2. Enumeração de Portas
 
-Objective:
-Identify exposed ports (attack surface).
+Objetivo:
+Identificar portas expostas (superfície de ataque).
 
-Techniques:
-- TCP SYN scan (`-sS`)
-- Fast scan (`-F`)
-- Full scan (`-p-`)
+Técnicas:
+- Varredura TCP SYN (`-sS`)
+- Varredura rápida (`-F`)
+- Varredura completa (`-p-`)
 
 Tradeoffs:
 
-| Mode        | Speed | Coverage | Use Case |
-|------------|------|----------|----------|
-| -F         | High | Low      | Quick scan |
-| -p-        | Low  | Full     | Deep scan |
-| Custom     | Medium | Medium | Targeted scan |
+| Modo        | Velocidade | Cobertura | Caso de Uso |
+|------------|-----------|-----------|-------------|
+| -F         | Alta      | Baixa     | Varredura rápida |
+| -p-        | Baixa     | Completa  | Varredura profunda |
+| Customizado| Média     | Média     | Varredura direcionada |
 
-Output:
-List of open ports per host
+Saída:
+Lista de portas abertas por host
 
 ---
 
-### 3. Service & Version Detection
+### 3. Detecção de Serviços e Versão
 
-Objective:
-Identify services running on open ports.
+Objetivo:
+Identificar serviços em execução nas portas abertas.
 
-Techniques:
+Técnicas:
 - Nmap `-sV`
 - Banner grabbing
 
 Tradeoffs:
 
-| Mode              | Accuracy | Speed |
-|-------------------|----------|------|
-| --version-light   | Medium   | Fast |
-| -sV (default)     | High     | Medium |
-| --version-all     | Very High| Slow |
+| Modo              | Precisão  | Velocidade |
+|-------------------|-----------|-----------|
+| --version-light   | Média     | Rápida    |
+| -sV (padrão)      | Alta      | Média     |
+| --version-all     | Muito Alta| Lenta     |
 
-Output:
-- Service name
-- Product
-- Version (if available)
-
----
-
-### 4. Vulnerability Identification
-
-Objective:
-Map detected services to known vulnerabilities.
-
-Techniques:
-
-- Nmap NSE scripts (`-sC`, `--script vuln`)
-- CVE lookup (external databases)
-- Service fingerprint correlation
-
-Examples:
-- MySQL → check CVEs
-- SMB → check known exploits
-- HTTP → run Nikto
-
-Output:
-List of vulnerabilities per service
+Saída:
+- Nome do serviço
+- Produto
+- Versão (se disponível)
 
 ---
 
-## Nmap Scan Modes and Tradeoffs
+### 4. Identificação de Vulnerabilidades
 
-| Mode | Description | Use Case |
-|------|------------|----------|
-| -T4 | Faster execution | Default scanning |
-| -F | Top ports only | Quick scan |
-| -p- | All ports | Deep scan |
-| -sV | Service detection | Required for vuln mapping |
-| -sC | Default scripts | Basic enumeration |
-| -A | Aggressive scan | High detail, high cost |
+Objetivo:
+Mapear serviços detectados para vulnerabilidades conhecidas.
 
-Decision:
-- Use **-T4 + -F** for initial scans
-- Use **-sV** for service detection
-- Use **NSE selectively**, not `-A`, to reduce resource usage
+Técnicas:
+
+- Scripts NSE do Nmap (`-sC`, `--script vuln`)
+- Busca de CVE (bancos de dados externos)
+- Correlação de fingerprint de serviço
+
+Exemplos:
+- MySQL → verificar CVEs
+- SMB → verificar exploits conhecidos
+- HTTP → executar Nikto
+
+Saída:
+Lista de vulnerabilidades por serviço
 
 ---
 
-## Vulnerability Data Correlation
+## Modos de Varredura Nmap e Tradeoffs
 
-Vulnerabilities are not directly discovered in all cases. They are derived by:
+| Modo | Descrição | Caso de Uso |
+|------|-----------|-------------|
+| -T4 | Execução mais rápida | Varredura padrão |
+| -F | Apenas portas principais | Varredura rápida |
+| -p- | Todas as portas | Varredura profunda |
+| -sV | Detecção de serviços | Obrigatório para mapeamento de vuln |
+| -sC | Scripts padrão | Enumeração básica |
+| -A | Varredura agressiva | Alto detalhe, alto custo |
 
-### 1. NSE Output Parsing
+Decisão:
+- Use **-T4 + -F** para varreduras iniciais
+- Use **-sV** para detecção de serviços
+- Use **NSE seletivamente**, não `-A`, para reduzir uso de recursos
 
-Extract:
+---
 
-CVE ID
-Description
-Severity (if available)
-### 2. CVE Correlation
+## Correlação de Dados de Vulnerabilidades
 
-Process:
+Vulnerabilidades não são diretamente descobertas em todos os casos. Elas são derivadas por:
 
-Identify service + version
-Query vulnerability databases (future feature)
+### 1. Análise de Saída NSE
 
-Sources:
+Extrair:
+
+ID da CVE
+Descrição
+Severidade (se disponível)
+
+### 2. Correlação de CVE
+
+Processo:
+
+Identificar serviço + versão
+Consultar bancos de dados de vulnerabilidades (recurso futuro)
+
+Fontes:
 
 NVD (National Vulnerability Database)
 CVE
-Vulners API
+API Vulners
 
-## 3. Heuristic Mapping
+### 3. Mapeamento Heurístico
 
-Examples of heuristic correlations:
+Exemplos de correlações heurísticas:
 
-- Open SMB + no authentication → Potential misconfiguration
-- HTTP + outdated version → Likely vulnerable
-
----
-
-## Scan Scheduling Strategy
-
-Two main modes are defined:
-
-### 1. On-Demand Scan
-- Triggered manually
-- Used for testing or investigation
-
-### 2. Periodic Scan
-- Scheduled execution (e.g., daily)
-- Detects new devices and vulnerabilities
+- SMB aberto + sem autenticação → Potencial misconfigurção
+- HTTP + versão desatualizada → Provável vulnerabilidade
 
 ---
 
-## Scan Scope
+## Estratégia de Agendamento de Varreduras
 
-Supported targets:
+Dois modos principais são definidos:
 
-- Single host (e.g., 192.168.1.10)
-- Multiple hosts
-- Subnet (e.g., 192.168.1.0/24)
+### 1. Varredura sob Demanda
+- Acionada manualmente
+- Usada para testes ou investigação
+
+### 2. Varredura Periódica
+- Execução agendada (ex: diariamente)
+- Detecta novos dispositivos e vulnerabilidades
 
 ---
 
-## Definition of a Finding
+## Escopo da Varredura
 
-A finding represents a security-relevant issue identified during scanning.
+Alvos suportados:
 
+- Host único (ex: 192.168.1.10)
+- Múltiplos hosts
+- Subnet (ex: 192.168.1.0/24)
 
+---
+
+## Definição de uma Descoberta
+
+Uma descoberta representa um problema relevante para segurança identificado durante a varredura.
+
+```json
 {
   "host": "192.168.15.10",
   "hostname": "",
@@ -203,76 +200,82 @@ A finding represents a security-relevant issue identified during scanning.
   "version": "8.x",
   "vulnerability": {
     "cve_id": "CVE-XXXX-XXXX",
-    "name": "Example vulnerability",
-    "description": "Description of the issue",
+    "name": "Exemplo de vulnerabilidade",
+    "description": "Descrição do problema",
     "severity": "high",
     "cvss_score": 8.5
   },
   "source": "nmap_nse",
   "timestamp": "2026-03-31T18:00:00Z"
 }
+```
 
-## Decision
+## Decisão
 
-### The system will implement a multi-stage scanning pipeline composed of:
+### O sistema implementará um pipeline de varredura de múltiplos estágios composto por:
 
-- Host discovery
-- Port enumeration
-- Service detection
-- Vulnerability correlation
+- Descoberta de hosts
+- Enumeração de portas
+- Detecção de serviços
+- Correlação de vulnerabilidades
 
-Each stage feeds the next and progressively enriches the dataset.
+Cada estágio alimenta o próximo e progressivamente enriquece o conjunto de dados.
 
-## Justification
+## Justificativa
 
-This pipeline-based approach:
+Esta abordagem baseada em pipeline:
 
-- Ensures modularity and scalability
-- Reduces unnecessary processing
-- Enables targeted scanning (only scan what matters)
-- Aligns with industry-standard vulnerability scanning workflows
+- Garante modularidade e escalabilidade
+- Reduz processamento desnecessário
+- Permite varredura direcionada (apenas varrer o que importa)
+- Se alinha com fluxos de trabalho padrão da indústria de varredura de vulnerabilidades
 
+## Consequências
 
-## Consequences
-- Efficient use of embedded resources
-- Clear separation of responsibilities per module
-- Easy integration with backend and reporting systems
-- Enables future expansion (web, cloud, database scanning)
+- Uso eficiente de recursos de dispositivos embutidos
+- Clara separação de responsabilidades por módulo
+- Fácil integração com sistemas de backend e relatórios
+- Permite expansão futura (varredura web, nuvem, banco de dados)
 
-## Scan Pipeline
-[ INPUT ]
+## Pipeline de Varredura
+
+```
+[ ENTRADA ]
    |
    |  (IP / Subnet)
    v
 +----------------------+
-|   Host Discovery     |
+|  Descoberta de Hosts |
 | (Ping / ARP / Nmap)  |
 +----------------------+
            |
            v
 +----------------------+
-|   Port Enumeration   |
-| (Fast / Full Scan)   |
+| Enumeração de Portas |
+| (Varredura Rápida /  |
+|  Completa)           |
 +----------------------+
            |
            v
 +----------------------+
-| Service Detection    |
+| Detecção de Serviços |
 | (Nmap -sV)           |
 +----------------------+
            |
            v
 +----------------------+
-| Vulnerability        |
-| Identification       |
+| Identificação de     |
+| Vulnerabilidades     |
 | (NSE / CVE / Tools)  |
 +----------------------+
            |
            v
 +----------------------+
-| Findings Generation  |
-| (JSON Structured)    |
+| Geração de           |
+| Descobertas          |
+| (JSON Estruturado)   |
 +----------------------+
            |
            v
-        [ OUTPUT ]
+        [ SAÍDA ]
+```
