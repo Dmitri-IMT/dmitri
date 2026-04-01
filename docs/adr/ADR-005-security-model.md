@@ -1,92 +1,125 @@
-# ADR-005: Modelo de Segurança — Autenticação de Agent, API e Frontend
+# ADR-005: Modelo de Seguranca v1
 
 ## Contexto
-O sistema possui estas interfaces principais que precisam de autenticação:
-- **Agent (dispositivo embarcado)** → Backend API (envio de scans de rede/vulnerabilidades).
-- **Frontend React** → Backend API (acesso ao dashboard e gerenciamento).
 
-## Threat Model
-**Ativos sensíveis**: 
-- Lista de dispositivos na rede local + vulnerabilidades detectadas.
-- Credenciais de acesso ao dashboard (usuário final).
-- Chaves/tokens do dispositivo (para envio de dados).
+O produto precisa de um modelo de seguranca unico para evitar drift entre arquitetura e implementacao.
+Hoje existiam duas fontes com divergencia:
 
-**Atores/ameaças principais**
-- **Atacantes externos na internet** (principal ameaça em cloud): interceptação MITM, brute-force em API, credential stuffing, XSS/CSRF no frontend, API abuse (DDoS, data exfiltration).
-- **Usuários maliciosos na mesma LAN** (se device exposto localmente): sniffing de tráfego não-encriptado, spoofing de device.
-- **Acesso físico ao dispositivo** (Pi): extração de chaves/firmware, tampering (debug ports).
-- **Ataques no backend cloud**: misconfig (open buckets, weak IAM), supply-chain (dependências vulneráveis), insider threats.
+- o ADR apontava HMAC para o agente e JWT com suporte a cookie para o frontend
+- o OpenAPI ainda modelava o agente principalmente com `X-API-Key` e aceitava bearer ou session cookie como alternativa nos endpoints atuais
 
-**Prioridades**: Proteger confidencialidade/integridade dos scans (dados sensíveis nunca expostos sem auth), disponibilidade do dashboard, integridade do envio de dados do device.
+Escopo confirmado para v1:
 
-## Opções de autenticação de agente para backend: API key in header, mutual TLS, HMAC-signed requests — vantagens e desvantagens para um contexto incorporado
-**Opções avaliadas**:
-- **API Key simples (header)**: fácil implementação, baixo overhead no Pi → mas vulnerável a leakage se a key for exposta.
-- **Mutual TLS (mTLS)**: altíssima segurança (certificados mútuos) → complexo para embedded (gerenciamento de certificados e revogação no Pi).
-- **HMAC-signed requests**: integridade + autenticação (cada request assinado com secret compartilhado) → leve, previne tampering, ideal para IoT.
+- um unico device no inicio
+- frontend hospedado na cloud
+- sem VPN/Tailscale como requisito de v1
+- desenvolvimento local pode usar HTTP
+- producao deve usar HTTPS
 
-**Decisão para MVP**: HMAC com secret único por device (provisionado na manufatura ou admin cloud).  
-**Alternativa escalável**: JWT via client credentials (OAuth2 M2M).  
-**Trade-offs**: HMAC é o melhor equilíbrio para contexto embedded (leve, seguro, sem necessidade de browser).
+## Decisao
 
-## Opções de autenticação para frontend
-- **JWT (ideal para cloud)**: escalável, não requer sessão no servidor, perfeito para SPA React e múltiplos dispositivos.  
-  **Decisão**: Escolhido como principal para Opção A (cloud). Fluxo: login → JWT access token (short-lived) + refresh token.
+### 1. Agent -> API na v1
 
-- **Session cookies (ideal para LAN)**: mais simples em ambientes controlados, mas exige estado no backend (menos escalável em cloud).  
-  **Decisão**: Não escolhido para MVP (cloud), mas viável em cenários LAN puro (não priorizado).
+A autenticacao do agente para a API sera feita por **HMAC-SHA256 por device**.
+`X-API-Key` simples nao faz parte da v1.
 
-- **No auth (VPN-only)**: rede privada atua como autenticação (Tailscale ACLs + magicDNS).  
-  **Decisão**: Aceitável apenas para Opção C (VPN-gated futura), onde a rede mesh privada serve como camada de proteção primária.
+Headers obrigatorios em `POST /api/v1/scans`:
 
-## Se cloud-deployed, autenticação de frontend é obrigatória? — documentação dos requisitos mínimos
-**Cloud (Opção A - principal)**: Autenticação frontend é **obrigatória**.  
-**Requisitos mínimos**:
-- JWT Bearer token.
-- HTTPS obrigatório.
-- Login com email/senha ou OAuth SSO.
-- Sem opção de "no auth".
+- `X-Device-Id`: identificador unico do dispositivo
+- `X-Timestamp`: timestamp UTC em ISO 8601
+- `X-Nonce`: valor unico por request para anti-replay
+- `X-Body-SHA256`: hash SHA-256 do corpo bruto da requisicao em hex lowercase
+- `X-Signature`: HMAC-SHA256 da string canonica em hex lowercase
 
-## Se VPN/LAN-only, documentação se a proteção em nível de rede é suficiente
-**VPN-gated (Opção C: futura)**: Sim, a proteção de rede é suficiente.  
-- Tailscale ACLs + SSO no app atuam como autenticação primária.  
-- Auth adicional na API (JWT ou session) é opcional.  
-- Rede mesh privada elimina necessidade de auth forte na camada de aplicação.
+String canonica da v1:
 
-## CORS: com o que o FastAPI precisa ser configurado em cada cenário de implantação?
-**Configuração recomendada no FastAPI**:
-- **Cloud (A)**: `allow_origins = ["https://app.seudominio.com"]` (restrito ao domínio do frontend).
-- **Local/dev**: incluir `["http://localhost:3000", "http://localhost:5173"]`.
-- **VPN (C)**: `allow_origins = ["*.ts.net"]` (magicDNS do Tailscale).
+```text
+METHOD
+PATH
+X-Device-Id
+X-Timestamp
+X-Nonce
+X-Body-SHA256
+```
 
-## HTTPS: self-signed cert (LAN), Let's Encrypt (cloud), Cloudflare proxy
-Decisão por cenário:
+Regras da v1:
 
-- **Cloud (A)**: Automático via provider (Render/Railway/Vercel) + Let's Encrypt (gratuito, auto-renew).
-- **VPN (C)**: Tailscale magicDNS + HTTPS interno (self-signed ou Let's Encrypt no backend local).
-- **Local/dev** ou LAN puro: Self-signed com mkcert (para trust local) ou HTTP em testes.
+- algoritmo: HMAC-SHA256
+- tolerancia de relogio: 5 minutos
+- nonce deve ser unico por device dentro da janela de validacao
+- `401 Unauthorized`: assinatura ausente, invalida, expirada ou replay detectado
+- `403 Forbidden`: device revogado, desconhecido ou sem permissao para envio
 
-## Armazenamento de tokens no navegador: localStorage vs cookie httpOnly — implicações de segurança de cada um.
-Decisão: Refresh token em httpOnly + Secure cookie, access token em memory (React state) ou httpOnly cookie.
-Comparação:
+Provisionamento e rotacao:
 
-- localStorage: fácil de usar, mas vulnerável a XSS (JavaScript consegue ler o token).
-- httpOnly cookie: protege contra XSS (não acessível por JS), vulnerável a CSRF (mitigado com SameSite=Strict + CSRF token).
+- cada device recebe um segredo proprio
+- o segredo e provisionado por processo administrativo/backend antes da operacao
+- rotacao ocorre emitindo novo segredo por device e invalidando o anterior
+- o segredo deve ser armazenado no dispositivo fora do codigo-fonte e fora de artefatos versionados
 
-**Melhor prática: httpOnly cookies + HTTPS = padrão de segurança para SPAs.**
+### 2. Frontend -> API na v1
 
-## Decisão Final
+Os endpoints atuais do frontend usarao **JWT Bearer** no header `Authorization`.
 
-- MVP/TCC (Cloud A): HMAC/JWT para agent, JWT + httpOnly cookies para frontend, CORS restrito, HTTPS automático.
-- Feature futura (C - VPN): Network-level protection via Tailscale (auth opcional na API).
-- Privacidade adicional: encriptação em trânsito/repouso, minimização de dados, revogação de tokens/keys.
+Decisao de v1:
 
-## Referências
+- endpoints de leitura e operacao ja documentados no OpenAPI usam apenas `Authorization: Bearer <token>`
+- session-cookie-only auth nao faz parte da v1
+- refresh token em cookie `httpOnly` pode existir apenas quando os endpoints de login/refresh forem adicionados
+- esse cookie de refresh nao substitui o Bearer token nos endpoints atuais de negocio
 
-- Frontiers: Threat Modelling in IoT Environments. Disponível em: https://www.frontiersin.org/journals/the-internet-of-things/articles/10.3389/friot.2024.1306465/full. Acesso em: 21 mar. 2026.
+Flags previstas para cookie de refresh quando o fluxo de auth for implementado:
 
-- FastAPI Docs: CORS e HTTPS. Disponível em: https://fastapi.tiangolo.com/tutorial/cors/ e https://fastapi.tiangolo.com/deployment/https/. Acesso em: 21 mar. 2026.
+- producao: `HttpOnly`, `Secure`, `SameSite=Lax` ou mais restritivo
+- desenvolvimento local HTTP: excecao documentada para `Secure=false`
+- se houver mutacoes autenticadas por cookie no futuro, CSRF devera ser tratado explicitamente
 
-- Tailscale Docs: Auth Keys e Security Best Practices. Disponível em: https://tailscale.com/docs/features/access-control/auth-keys e https://tailscale.com/docs/reference/best-practices/security. Acesso em: 21 mar. 2026.
+### 3. CORS e transporte na v1
 
-- Zuplo: Top 7 API Authentication Methods Compared. Disponível em: https://zuplo.com/learning-center/top-7-api-authentication-methods-compared. Acesso em: 21 mar. 2026.
+CORS da v1 fica fechado para dois cenarios:
+
+- desenvolvimento: `http://localhost:5173`
+- producao: `https://app.vscanner.example.com`
+
+Regras da v1:
+
+- sem wildcard em `allow_origins`
+- sem referencia normativa a VPN/Tailscale na v1
+- producao: HTTPS obrigatorio
+- desenvolvimento local: HTTP permitido apenas em ambiente local
+
+### 4. VPN/Tailscale ficam fora da v1
+
+VPN/Tailscale podem aparecer como evolucao futura, mas nao sao requisito, pre-condicao nem atalho de autenticacao da v1.
+
+## Consequencias
+
+- o OpenAPI deve modelar HMAC no agente, nao `X-API-Key`
+- os endpoints atuais do frontend devem exigir apenas JWT Bearer
+- a documentacao de cookie fica restrita ao fluxo futuro de refresh/login, nao como alternativa generica de auth para os endpoints atuais
+- CORS e `servers` do OpenAPI devem deixar explicito: HTTPS em producao, HTTP apenas local
+
+## Evolucao planejada (v2+)
+
+Itens que podem ser adicionados depois, sem reabrir a decisao da v1:
+
+- endpoints dedicados de login, refresh e logout
+- refresh token em cookie `httpOnly` com contrato OpenAPI proprio
+- mTLS para agente
+- VPN/Tailscale como camada adicional de protecao
+- rotacao automatica de segredo do device e onboarding mais forte
+
+## Resumo executivo da v1
+
+- **Agent -> API**: HMAC-SHA256 por device
+- **Frontend -> API**: JWT Bearer nos endpoints atuais
+- **Cookie de refresh**: somente fluxo futuro de auth, nao como auth alternativa do contrato atual
+- **CORS**: apenas localhost dev + dominio web de producao
+- **Transporte**: HTTPS em producao, HTTP apenas local
+
+## Referencias
+
+- FastAPI Docs: CORS e HTTPS.
+- OWASP REST Security Cheat Sheet.
+- OWASP Session Management Cheat Sheet.
+- RFC 2104: HMAC.

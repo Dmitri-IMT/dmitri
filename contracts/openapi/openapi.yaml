@@ -2,17 +2,21 @@ openapi: 3.1.0
 info:
   title: Vulnerability Scanner Backend API
   version: 1.0.0
-  summary: Contract-first OpenAPI specification for the backend consumed by the agent and frontend.
+  summary: Contract-first OpenAPI specification for the backend consumed by the 
+    agent and frontend.
   description: |
     This specification defines the backend API before implementation.
     It is the integration contract between the embedded scanning agent, the backend,
     and the frontend application.
 
-    Assumptions documented in this spec:
+    Security v1 documented in this spec:
     - Base path is `/api/v1`
-    - Agent ingestion uses `X-API-Key`
-    - Frontend requests use either JWT Bearer tokens or a session cookie
-    - Browser CORS is allowed for `http://localhost:5173` and `https://app.vscanner.example.com`
+    - Agent ingestion uses HMAC-signed requests, not a simple API key
+    - Required HMAC headers are `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`
+    - Frontend business endpoints use JWT Bearer tokens
+    - Refresh cookies may exist only on future auth endpoints and are not an alternative auth method for the current read endpoints
+    - Production uses HTTPS; local development may use HTTP
+    - Browser CORS is restricted to `http://localhost:5173` and `https://app.vscanner.example.com`
 tags:
   - name: scans
     description: Scan ingestion and scan history endpoints.
@@ -24,9 +28,9 @@ tags:
     description: Liveness and readiness endpoint.
 servers:
   - url: https://api.vscanner.example.com
-    description: Production placeholder
+    description: Production - HTTPS required
   - url: http://localhost:8000
-    description: Local development
+    description: Local development only - HTTP allowed
 x-cors:
   allowedOrigins:
     - http://localhost:5173
@@ -35,7 +39,6 @@ x-cors:
   allowHeaders:
     - Authorization
     - Content-Type
-    - X-API-Key
     - X-Request-Id
   allowMethods:
     - GET
@@ -90,10 +93,15 @@ paths:
       tags:
         - scans
       summary: Ingest a full scan payload
-      description: Hardware agents submit completed scan results through this endpoint.
+      description: Hardware agents submit completed scan results through this 
+        endpoint. Security v1 requires HMAC-signed requests with the headers 
+        `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and 
+        `X-Signature`. The server validates the signature, rejects replay 
+        attempts, and returns 401 for invalid or expired signatures and 403 for 
+        revoked devices.
       operationId: ingestScan
       security:
-        - AgentApiKey: []
+        - AgentHmacAuth: []
       requestBody:
         required: true
         content:
@@ -124,23 +132,33 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+          description: Missing signature, invalid signature, or 
+            replay/clock-window failure.
         '403':
           $ref: '#/components/responses/Forbidden'
+          description: Device exists but is revoked or not allowed to submit 
+            scans.
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '422':
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalServerError'
+      parameters:
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
     get:
       tags:
         - scans
       summary: List scans
-      description: Paginated scan listing for frontend reporting views.
+      description: 'Paginated scan listing for frontend reporting views. Authenticated
+        frontend requests use `Authorization: Bearer <token>` in v1.'
       operationId: listScans
       security:
         - FrontendBearerAuth: []
-        - FrontendSessionAuth: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -186,11 +204,12 @@ paths:
       tags:
         - scans
       summary: Get scan details
-      description: Returns a full scan with devices, ports, services, findings, and metadata.
+      description: 'Returns a full scan with devices, ports, services, findings, and
+        metadata. Authenticated frontend requests use `Authorization: Bearer <token>`
+        in v1.'
       operationId: getScanById
       security:
         - FrontendBearerAuth: []
-        - FrontendSessionAuth: []
       parameters:
         - $ref: '#/components/parameters/ScanId'
       responses:
@@ -234,11 +253,11 @@ paths:
       tags:
         - devices
       summary: List devices
-      description: Returns the host inventory known to the backend.
+      description: 'Returns the host inventory known to the backend. Authenticated
+        frontend requests use `Authorization: Bearer <token>` in v1.'
       operationId: listDevices
       security:
         - FrontendBearerAuth: []
-        - FrontendSessionAuth: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -290,11 +309,12 @@ paths:
       tags:
         - devices
       summary: Get device details
-      description: Returns device detail, open ports, severity summary, and scan history.
+      description: 'Returns device detail, open ports, severity summary, and scan
+        history. Authenticated frontend requests use `Authorization: Bearer <token>`
+        in v1.'
       operationId: getDeviceById
       security:
         - FrontendBearerAuth: []
-        - FrontendSessionAuth: []
       parameters:
         - $ref: '#/components/parameters/DeviceId'
       responses:
@@ -338,11 +358,11 @@ paths:
       tags:
         - findings
       summary: List findings
-      description: Returns findings filtered by severity, scan, or device.
+      description: 'Returns findings filtered by severity, scan, or device. Authenticated
+        frontend requests use `Authorization: Bearer <token>` in v1.'
       operationId: listFindings
       security:
         - FrontendBearerAuth: []
-        - FrontendSessionAuth: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -385,22 +405,18 @@ paths:
 
 components:
   securitySchemes:
-    AgentApiKey:
+    AgentHmacAuth:
       type: apiKey
       in: header
-      name: X-API-Key
-      description: API key used by embedded hardware agents.
+      name: X-Signature
+      description: HMAC-SHA256 signature for device-to-API requests. This scheme
+        must be used together with the required headers `X-Device-Id`, 
+        `X-Timestamp`, `X-Nonce`, and `X-Body-SHA256`.
     FrontendBearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
       description: JWT bearer token used by frontend clients.
-    FrontendSessionAuth:
-      type: apiKey
-      in: cookie
-      name: session
-      description: Session cookie for frontend deployments that use cookie auth.
-
   parameters:
     Page:
       name: page
@@ -500,6 +516,48 @@ components:
         type: string
         format: uuid
 
+    DeviceIdHeader:
+      name: X-Device-Id
+      in: header
+      required: true
+      description: Stable backend-issued device identifier.
+      schema:
+        type: string
+        format: uuid
+    TimestampHeader:
+      name: X-Timestamp
+      in: header
+      required: true
+      description: UTC timestamp used in signature validation, ISO 8601 format.
+      schema:
+        type: string
+        format: date-time
+    NonceHeader:
+      name: X-Nonce
+      in: header
+      required: true
+      description: Per-request unique nonce used for anti-replay protection.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    BodySha256Header:
+      name: X-Body-SHA256
+      in: header
+      required: true
+      description: Lowercase hex SHA-256 of the raw request body.
+      schema:
+        type: string
+        pattern: ^[0-9a-f]{64}$
+    SignatureHeader:
+      name: X-Signature
+      in: header
+      required: true
+      description: Lowercase hex HMAC-SHA256 over the canonical string 
+        `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`.
+      schema:
+        type: string
+        pattern: ^[0-9a-f]{64}$
   headers:
     X-Request-Id:
       description: Correlation identifier for logs and tracing.
@@ -513,7 +571,8 @@ components:
           - http://localhost:5173
           - https://app.vscanner.example.com
     Access-Control-Allow-Credentials:
-      description: Indicates whether credentials are allowed in cross-origin requests.
+      description: Indicates whether credentials are allowed in cross-origin 
+        requests.
       schema:
         type: string
         enum:
@@ -522,7 +581,7 @@ components:
       description: Allowed headers for preflight requests.
       schema:
         type: string
-        example: Authorization, Content-Type, X-API-Key, X-Request-Id
+        example: Authorization, Content-Type, X-Request-Id
     Access-Control-Allow-Methods:
       description: Allowed methods for preflight requests.
       schema:
@@ -684,16 +743,19 @@ components:
                 protocol: tcp
                 state: filtered
                 service: afp
-                version: null
+                version:
         findings:
           - severity: high
             title: Outdated SSH service exposed
-            description: The camera at 192.168.1.10 runs OpenSSH 7.2p2, which lacks multiple security fixes.
-            recommendation: Upgrade the firmware or disable remote SSH access from untrusted networks.
+            description: The camera at 192.168.1.10 runs OpenSSH 7.2p2, which 
+              lacks multiple security fixes.
+            recommendation: Upgrade the firmware or disable remote SSH access 
+              from untrusted networks.
             evidence: 'Banner from 192.168.1.10: OpenSSH_7.2p2 Raspbian-5.'
           - severity: medium
             title: SMB signing disabled
-            description: The NAS at 192.168.1.40 allows SMB connections without message signing, enabling MITM tampering.
+            description: The NAS at 192.168.1.40 allows SMB connections without 
+              message signing, enabling MITM tampering.
             recommendation: Enable SMB signing and restrict SMB exposure.
             evidence: 'Nmap smb2-security-mode: Message signing disabled but supported.'
 
