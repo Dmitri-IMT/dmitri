@@ -106,7 +106,6 @@ Itens que podem ser adicionados depois, sem reabrir a decisao da v1:
 - endpoints dedicados de login, refresh e logout
 - refresh token em cookie `httpOnly` com contrato OpenAPI proprio
 - mTLS para agente
-- VPN/Tailscale como camada adicional de protecao
 - rotacao automatica de segredo do device e onboarding mais forte
 
 ## Resumo executivo da v1
@@ -123,3 +122,4 @@ Itens que podem ser adicionados depois, sem reabrir a decisao da v1:
 - OWASP REST Security Cheat Sheet.
 - OWASP Session Management Cheat Sheet.
 - RFC 2104: HMAC.
+
