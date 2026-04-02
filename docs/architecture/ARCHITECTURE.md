@@ -19,10 +19,10 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 
 ### 2.2 Backend API
 - **Onde roda:** Cloud (Render ou Railway recomendado)
-- **Tecnologia:** FastAPI (Python) + Pydantic
+- **Tecnologia:** FastAPI (Python) + Pydantic + SQLModel
 - **Responsabilidades:**
   - Recebimento e validação de payloads do Pi Agent
-  - Persistência dos resultados de scans
+  - Persistência dos resultados de scans (via SQLModel + Supabase)
   - Exposição de REST API para o Frontend
   - Aplicação das regras de autenticação e autorização
   - Geração automática de documentação OpenAPI
@@ -42,8 +42,8 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 - **Responsabilidades:**
   - Receber tarefas de processamento de scans enviadas pelo Backend API
   - Desacoplar o recebimento do scan do seu processamento pesado
-  - **Garantir entrega confiável das mensagens para os workers**
-  - **Permitir processamento assíncrono e escalável dos resultados de varredura**
+  - Garantir entrega confiável das mensagens para os workers
+  - Permitir processamento assíncrono e escalável dos resultados de varredura
 
 ### 2.5 Background Worker
 - **Onde roda:** Cloud (como consumer do RabbitMQ)
@@ -51,12 +51,27 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 - **Responsabilidades:**
   - Consumir mensagens da fila do RabbitMQ
   - Processar os resultados de scans (enriquecimento, correlações, cálculos de risco, etc.)
-  - Persistir os dados processados no Data Store
+  - Persistir os dados processados no Data Store (via SQLModel + asyncpg)
   - Executar tarefas demoradas sem bloquear a API principal
 
 ### 2.6 Data Store
-- **A definir** (recomendação comum: PostgreSQL)
-- Responsável por armazenar scans, dispositivos, usuários e histórico
+**Decisão: PostgreSQL via Supabase (cloud).**  
+Versão do PostgreSQL: conforme provisionado pelo Supabase (atualmente 15.x — verificar no dashboard no momento da configuração).
+
+O banco **não roda no Pi** nem no container do Backend. O FastAPI e o Background Worker conectam remotamente ao Supabase via internet.
+
+**ORM:** SQLModel 0.0.21 (construído sobre SQLAlchemy 2.x + Pydantic v2)  
+**Driver assíncrono:** asyncpg 0.29.0  
+**Migrações:** Alembic 1.13.x
+
+**Modo de conexão:**
+- FastAPI / Background Worker → Pooler (PgBouncer, porta 6543, transaction mode)
+- Alembic / migrações → Conexão direta (porta 5432)
+
+**Entidades principais:** `scans`, `devices`, `ports`, `services`, `findings`  
+**Padrão de escrita:** bulk `POST /scans` com idempotência (`INSERT ... ON CONFLICT DO NOTHING`)
+
+---
 
 ## 3. Component diagram showing data flow
 
@@ -74,12 +89,17 @@ flowchart TB
         NGINX[Nginx<br/><b>Reverse Proxy + Static Server</b>]
         
         subgraph "Backend Services"
-            B[Backend API<br/><b>FastAPI + Pydantic</b><br/>Uvicorn/Gunicorn<br/>OpenAPI]
+            B[Backend API<br/><b>FastAPI + Pydantic + SQLModel</b><br/>Uvicorn/Gunicorn<br/>OpenAPI]
             R[RabbitMQ<br/><b>Message Broker</b><br/>Async processing queue]
             W[Background Worker<br/><b>Python Consumer</b>]
         end
-        
-        D[(Data Store<br/><b>PostgreSQL</b><br/>ou equivalente)]
+
+        %% === SUPABASE (EXTERNO) ===
+        subgraph "Supabase Cloud"
+            direction TB
+            D[(Data Store<br/><b>PostgreSQL via Supabase</b><br/>Conexão remota via internet)]
+        end
+
     end
 
     %% === BROWSER ===
@@ -93,54 +113,55 @@ flowchart TB
     
     B -->|"3. Publish scan task"| R
     R -->|"4. Consume message"| W
-    W -->|"5. Process + persist"| D
+    W -->|"5. Process + persist<br/>SQLModel + asyncpg"| D
     
     NGINX -.->|"6. Serve static files<br/>React dist/ (SPA)"| C
     C <-->|"7. HTTPS + JWT Bearer Token<br/>GET/POST endpoints"| NGINX
 
     classDef edge fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d47a1
     classDef cloud fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef supabase fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#004d40
     classDef browser fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#1b5e20
 
-    %% === APLICAÇÃO DAS CLASSES ===
     class A edge
-    class NGINX,B,R,W,D cloud
+    class NGINX,B,R,W cloud
+    class D supabase
     class C browser
 ```
 
 ## Fluxo principal
 
 - Pi Agent realiza varredura → normaliza → envia via POST com HMAC  
-- Backend valida, persiste e processa  
+- Backend valida, publica tarefa no RabbitMQ  
+- Background Worker processa e persiste via **SQLModel + asyncpg** no Supabase  
 - Frontend React consulta via JWT e exibe os resultados  
 
 ---
 
 ### 4. Deployment Topology
 
-De acordo com a decisão do ADR-007, esta é a definição de onde cada componente roda:
+De acordo com as decisões dos ADRs:
 
 - **Raspberry Pi 4 Model B 4 GB**  
   - Roda apenas o **Pi Agent**.
 
-- **Cloud (servidor na nuvem)**  
+- **Cloud (Render ou Railway)**  
   - Roda:
       - **Backend API (FastAPI)**
       - **RabbitMQ (Message Broker)**
       - **Background Worker (consumer do RabbitMQ)**
-      - **Data Store (Banco de dados)**
-      - **Arquivos estáticos do React Frontend**
+
+- **Supabase Cloud** (externo)  
+  - Roda o **Data Store (PostgreSQL)**
 
 - **Navegador (Browser)**  
-  - Roda o **React Frontend** (aplicação SPA).
+  - Roda o **React Frontend** (SPA).
 
-
-### Recomendação de implantação
-
-- O frontend React será servido como **arquivos estáticos**.  
-- O Backend API será exposto via **proxy reverso** usando **Nginx + Docker**.
-- O processamento pesado dos scans será feito de forma assíncrona via RabbitMQ + Background Worker.
-- O Pi Agent envia os dados para o Backend na nuvem via **HTTPS**.
+**Recomendação de implantação**  
+- Frontend servido como arquivos estáticos via Nginx.  
+- Backend exposto via proxy reverso (Nginx + Docker).  
+- Processamento assíncrono via RabbitMQ + Worker.  
+- Conexão do Backend/Worker com Supabase via internet (HTTPS + SSL obrigatório).
 
 ---
 
@@ -156,25 +177,28 @@ De acordo com a decisão do ADR-007, esta é a definição de onde cada componen
 | **Pi Agent**        | Ferramenta principal de varredura                | Nmap + NSE                                      | ADR-002           | Inclui categorias: `default`, `safe`, `vuln`, `auth`, `discovery` |
 | **Pi Agent**        | Correlação de vulnerabilidades                   | vulners NSE                                     | ADR-002 / ADR-006 | — |
 | **Pi Agent**        | Ferramentas v2 (condicionais)                    | enum4linux-ng, testssl.sh, Nikto                | ADR-002 / ADR-006 | Ativadas apenas quando portas específicas são detectadas |
-| **Backend**         | Framework principal                              | **FastAPI (v. 0.135.2)**                                     | ADR-003           | Versão mais recente estável recomendada |
+| **Backend**         | Framework principal                              | **FastAPI (v. 0.135.2)**                        | ADR-003           | — |
+| **Backend**         | ORM                                              | **SQLModel 0.0.21**                             | ADR-009          | Único modelo para tabela + schema Pydantic |
+| **Backend**         | Driver assíncrono PostgreSQL                     | **asyncpg 0.29.0**                              | ADR-009          | Mantém FastAPI não-bloqueante |
+| **Backend**         | Migrações                                        | **Alembic 1.13.x**                              | ADR-009          | Usa SQLModel models para autogenerate |
 | **Backend**         | Validação de dados                               | **Pydantic** v2+                                | ADR-003           | — |
-| **Backend**         | Servidor ASGI                                    | **Uvicorn (v. 0.30.0) / Gunicorn (v. 23.0.0)**                              | ADR-007           | Produção: Gunicorn + Uvicorn workers |
+| **Backend**         | Servidor ASGI                                    | **Uvicorn (v. 0.30.0) / Gunicorn (v. 23.0.0)**  | ADR-007           | Produção: Gunicorn + Uvicorn workers |
 | **Backend**         | Proxy reverso + arquivos estáticos               | **Nginx**                                       | ADR-007           | Serve React `dist/` + proxy `/api/*` |
-| **Backend**         | Message Broker                    | **RabbitMQ (v. 4.0.x)**                                     | N.A.           | Versão mais recente estável recomendada |
-| **Backend**         | Background Worker                    | **Python Consumer**                                     | N.A.           | Versão mais recente estável recomendada |
-| **Frontend**        | Framework                                        | **React (v. 19.2.4)** + **TypeScript (v. 5.9.0)**                      | ADR-008           | — |
-| **Frontend**        | Build tool                                       | **Vite 8.0.3**                                        | ADR-008           | — |
+| **Backend**         | Message Broker                                   | **RabbitMQ (v. 4.0.x)**                         | N.A.              | — |
+| **Backend**         | Background Worker                                | **Python Consumer**                             | N.A.              | — |
+| **Frontend**        | Framework                                        | **React (v. 19.2.4)** + **TypeScript (v. 5.9.0)** | ADR-008         | — |
+| **Frontend**        | Build tool                                       | **Vite 8.0.3**                                  | ADR-008           | — |
 | **Frontend**        | Roteamento                                       | **React Router** v6                             | ADR-008           | — |
 | **Frontend**        | Gerenciamento de estado e cache                  | **TanStack Query** v5                           | ADR-008           | — |
 | **Frontend**        | Biblioteca de componentes UI                     | **shadcn/ui**                                   | ADR-008           | Componentes copiados para o projeto |
 | **Frontend**        | Gráficos                                         | **Recharts**                                    | ADR-008           | — |
-| **Frontend**        | Cliente HTTP                                     | **Axios (v. 1.13.6)**                                           | ADR-008           | Instância centralizada em `/src/api/client.ts` |
+| **Frontend**        | Cliente HTTP                                     | **Axios (v. 1.13.6)**                           | ADR-008           | Instância centralizada em `/src/api/client.ts` |
 | **Segurança**       | Autenticação Agent → Backend                     | **HMAC** (secret único por device)              | ADR-005           | Assinatura + timestamp + nonce |
-| **Segurança**       | Autenticação Frontend → Backend                  | **JWT** (access + refresh token) + httpOnly cookies | ADR-005       | — |
+| **Segurança**       | Autenticação Frontend → Backend                  | **JWT** (access + refresh token) + httpOnly cookies | ADR-005     | — |
 | **Segurança**       | Transporte                                       | **HTTPS** obrigatório                           | ADR-005 / ADR-007 | Let’s Encrypt em produção |
-| **Infraestrutura**  | Deploy                                           | **Docker + Docker Compose (v. 27.1+)**                        | ADR-007           | Multi-stage (Nginx + FastAPI) |
-| **Infraestrutura**  | Hosting                                          | Cloud (Render ou Railway recomendado)           | ADR-007           | — |
-| **Data Store**      | Banco de dados                                   | **A ser definido** (recomendado: PostgreSQL)   | —                 | Será formalizado no próximo ADR |
+| **Infraestrutura**  | Deploy                                           | **Docker + Docker Compose (v. 27.1+)**          | ADR-007           | Multi-stage (Nginx + FastAPI) |
+| **Infraestrutura**  | Hosting                                          | Cloud (Render ou Railway recomendado)           | ADR-007           | Backend + RabbitMQ + Worker |
+| **Data Store**      | Banco de dados                                   | **PostgreSQL via Supabase (cloud)**             | ADR-009          | Conexão remota (pooler 6543 / direta 5432) |
 
 ---
 
@@ -282,5 +306,3 @@ Durante o desenvolvimento, o backend aceitará requisições vindas das portas n
 - Qualquer alteração na lista de origens permitidas deve ser revisada para evitar expor a API desnecessariamente.
 
 Essa configuração garante o equilíbrio entre **segurança** (em produção) e **praticidade** (no desenvolvimento), alinhada com as decisões de autenticação JWT e HMAC definidas nos ADRs 005 e 007.
-
----
