@@ -33,9 +33,21 @@ LICENSE, README.md, .gitignore
 1. O agente de hardware agenda e executa scans (quick/full) usando o Nmap na sub-rede configurada.
 2. Os resultados são normalizados em JSON conforme `contracts/schemas/scan_result.schema.json`.
 3. O backend recebe os payloads, persiste no PostgreSQL e prepara dados agregados.
-4. O aplicativo mobile consome os endpoints documentados em `docs/api.md` para exibir hist�ricos, alertas e recomendações.
+4. O aplicativo mobile consome os endpoints documentados em `docs/api.md` para exibir históricos, alertas e recomendações.
 
 ## Estado Atual
 - Estrutura de diretórios, arquivos placeholder e documentação inicial concluídos.
 - Sem qualquer lógica de negócio implementada (scans, validações, rotas, persistência ou UI).
 - Ferramentas de desenvolvimento, testes automatizados e integrações externas serão definidas nas próximas fases.
+
+**Documentação completa de arquitetura:** [ARCHITECTURE.md](ARCHITECTURE.md)
+
+## Setup
+
+Siga o guia completo:
+
+→ [docs/DEV-SETUP.md](docs/DEV-SETUP.md)
+
+## Contribuindo
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md)
