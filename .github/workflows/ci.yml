@@ -54,6 +54,9 @@ jobs:
 
   frontend-lint:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -62,11 +65,8 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: |
-          cd frontend
-          npm install
+        run: npm install
 
       - name: Run ESLint
-        run: |
-          cd frontend
-          npm run lint
+        run: npm run lint
+        
