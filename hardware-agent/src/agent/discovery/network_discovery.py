@@ -1,15 +1,16 @@
-import psutil
 import ipaddress
-import subprocess
-import platform
 import json
-import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import platform
 import re
+import socket
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import psutil
 
 
 def get_network_info():
-    
+
     local_ip = get_local_ip()
     interfaces = psutil.net_if_addrs()
     for interface in interfaces:
@@ -23,16 +24,9 @@ def get_network_info():
                     ip = addr.address
                     netmask = addr.netmask
 
-                    network = ipaddress.IPv4Network(
-                        f"{ip}/{netmask}",
-                        strict=False
-                    )
+                    network = ipaddress.IPv4Network(f"{ip}/{netmask}", strict=False)
 
-                    return {
-                        "ip": ip,
-                        "netmask": netmask,
-                        "network": str(network)
-                    }
+                    return {"ip": ip, "netmask": netmask, "network": str(network)}
 
     raise Exception("Active network interface not found")
 
@@ -58,9 +52,7 @@ def ping_host(ip):
         command = ["ping", "-c", "1", "-W", "1", ip]
 
     result = subprocess.run(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
     return result.returncode == 0
@@ -78,9 +70,7 @@ def ping_sweep(network, local_ip):
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
 
-        future_to_ip = {
-            executor.submit(ping_host, ip): ip for ip in ips
-        }
+        future_to_ip = {executor.submit(ping_host, ip): ip for ip in ips}
 
         for future in as_completed(future_to_ip):
 
@@ -108,9 +98,9 @@ def nmap_discovery(network, local_ip):
     try:
 
         result = subprocess.run(
-            [r"C:\Program Files (x86)\Nmap\nmap.exe", "-sn","-T3", network],
+            [r"C:\Program Files (x86)\Nmap\nmap.exe", "-sn", "-T3", network],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         hosts = []
@@ -146,12 +136,7 @@ def merge_results(ping_hosts, nmap_hosts):
 
     for ip in sorted(combined):
 
-        host = {
-            "ip": ip,
-            "hostname": "",
-            "state": "up",
-            "open_ports": []
-        }
+        host = {"ip": ip, "hostname": "", "state": "up", "open_ports": []}
 
         hosts.append(host)
 
@@ -164,7 +149,7 @@ def save_results(network_info, hosts):
         "network": network_info["network"],
         "local_ip": network_info["ip"],
         "netmask": network_info["netmask"],
-        "hosts": hosts
+        "hosts": hosts,
     }
 
     with open("network_scan.json", "w") as f:

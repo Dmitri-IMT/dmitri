@@ -1,6 +1,6 @@
 import json
-import subprocess
 import re
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 NMAP_PATH = r"C:\Program Files (x86)\Nmap\nmap.exe"
@@ -29,7 +29,7 @@ def scan_ports(ip):
         result = subprocess.run(
             [NMAP_PATH, "-p-", "--min-rate", "1000", "-T4", "-Pn", ip],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         open_ports = []
