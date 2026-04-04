@@ -6,7 +6,9 @@ export default [
     rules: {
       // Aqui você pode adicionar regras futuras. 
       // Deixando vazio por enquanto, a pipeline vai apenas checar 
-      // a sintaxe básica sem quebrar por bobeira.
+      // a sintaxe básica.
+      // "no-console": "warn",
+      // "no-unused-vars": "error"
     }
   }
 ];
