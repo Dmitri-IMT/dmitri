@@ -18,7 +18,7 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 - **Restrições:** 4 GB RAM, CPU ARM64, adaptador Wi-Fi USB dedicado para monitor mode
 
 ### 2.2 Backend API
-- **Onde roda:** Cloud (Render ou Railway recomendado)
+- **Onde roda:** Cloud (Railway recomendado; free tier durante testes)
 - **Tecnologia:** FastAPI (Python) + Pydantic + SQLModel
 - **Responsabilidades:**
   - Recebimento e validação de payloads do Pi Agent
@@ -36,20 +36,19 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
   - Autenticação e gerenciamento de sessões
   - Consumo da API via TanStack Query
 
-### 2.4 RabbitMQ (Message Broker)
-- **Onde roda:** Cloud (mesmo ambiente do Backend API)
-- **Tecnologia:** RabbitMQ
+### 2.4 Fila de processamento no PostgreSQL
+- **Onde roda:** Supabase (mesmo banco PostgreSQL)
+- **Tecnologia:** Tabela de jobs + `FOR UPDATE SKIP LOCKED`
 - **Responsabilidades:**
   - Receber tarefas de processamento de scans enviadas pelo Backend API
   - Desacoplar o recebimento do scan do seu processamento pesado
-  - Garantir entrega confiável das mensagens para os workers
-  - Permitir processamento assíncrono e escalável dos resultados de varredura
+  - Controlar concorrência de workers sem broker externo
 
 ### 2.5 Background Worker
-- **Onde roda:** Cloud (como consumer do RabbitMQ)
+- **Onde roda:** Cloud (como consumer da fila no PostgreSQL)
 - **Tecnologia:** Python
 - **Responsabilidades:**
-  - Consumir mensagens da fila do RabbitMQ
+  - Consumir mensagens da fila no PostgreSQL
   - Processar os resultados de scans (enriquecimento, correlações, cálculos de risco, etc.)
   - Persistir os dados processados no Data Store (via SQLModel + asyncpg)
   - Executar tarefas demoradas sem bloquear a API principal
@@ -71,6 +70,8 @@ O banco **não roda no Pi** nem no container do Backend. O FastAPI e o Backgroun
 **Entidades principais:** `scans`, `devices`, `ports`, `services`, `findings`  
 **Padrão de escrita:** bulk `POST /scans` com idempotência (`INSERT ... ON CONFLICT DO NOTHING`)
 
+**Recursos adicionais do PostgreSQL:** fila de jobs, materialized views para métricas e full-text search para pesquisa de findings/serviços.
+
 ---
 
 ## 3. Component diagram showing data flow
@@ -84,20 +85,20 @@ flowchart TB
     end
 
     %% === CLOUD ===
-    subgraph "Cloud Environment (Render / Railway)"
+    subgraph "Cloud Environment (Railway)"
         direction TB
         NGINX[Nginx<br/><b>Reverse Proxy + Static Server</b>]
         
         subgraph "Backend Services"
             B[Backend API<br/><b>FastAPI + Pydantic + SQLModel</b><br/>Uvicorn/Gunicorn<br/>OpenAPI]
-            R[RabbitMQ<br/><b>Message Broker</b><br/>Async processing queue]
             W[Background Worker<br/><b>Python Consumer</b>]
         end
 
         %% === SUPABASE (EXTERNO) ===
         subgraph "Supabase Cloud"
             direction TB
-            D[(Data Store<br/><b>PostgreSQL via Supabase</b><br/>Conexão remota via internet)]
+            Q[Queue Table<br/><b>PostgreSQL Jobs</b><br/>FOR UPDATE SKIP LOCKED]
+            D[(Data Store<br/><b>PostgreSQL via Supabase</b><br/>Full-text search + materialized views)]
         end
 
     end
@@ -111,8 +112,8 @@ flowchart TB
     A -->|"1. POST /scans<br/>JSON payload + HMAC signature<br/>HTTPS"| NGINX
     NGINX -->|"2. Proxy<br/>/api/* → FastAPI"| B
     
-    B -->|"3. Publish scan task"| R
-    R -->|"4. Consume message"| W
+    B -->|"3. Enqueue scan job"| Q
+    Q -->|"4. Claim job"| W
     W -->|"5. Process + persist<br/>SQLModel + asyncpg"| D
     
     NGINX -.->|"6. Serve static files<br/>React dist/ (SPA)"| C
@@ -124,15 +125,15 @@ flowchart TB
     classDef browser fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#1b5e20
 
     class A edge
-    class NGINX,B,R,W cloud
-    class D supabase
+    class NGINX,B,W cloud
+    class Q,D supabase
     class C browser
 ```
 
 ## Fluxo principal
 
 - Pi Agent realiza varredura → normaliza → envia via POST com HMAC  
-- Backend valida, publica tarefa no RabbitMQ  
+- Backend valida, enfileira job no PostgreSQL  
 - Background Worker processa e persiste via **SQLModel + asyncpg** no Supabase  
 - Frontend React consulta via JWT e exibe os resultados  
 
@@ -145,14 +146,13 @@ De acordo com as decisões dos ADRs:
 - **Raspberry Pi 4 Model B 4 GB**  
   - Roda apenas o **Pi Agent**.
 
-- **Cloud (Render ou Railway)**  
+- **Cloud (Railway, free tier em testes)**  
   - Roda:
       - **Backend API (FastAPI)**
-      - **RabbitMQ (Message Broker)**
-      - **Background Worker (consumer do RabbitMQ)**
+      - **Background Worker (consumer da fila no PostgreSQL)**
 
 - **Supabase Cloud** (externo)  
-  - Roda o **Data Store (PostgreSQL)**
+  - Roda o **Data Store (PostgreSQL)** e a **fila de jobs**
 
 - **Navegador (Browser)**  
   - Roda o **React Frontend** (SPA).
@@ -160,8 +160,13 @@ De acordo com as decisões dos ADRs:
 **Recomendação de implantação**  
 - Frontend servido como arquivos estáticos via Nginx.  
 - Backend exposto via proxy reverso (Nginx + Docker).  
-- Processamento assíncrono via RabbitMQ + Worker.  
+- Processamento assíncrono via fila no PostgreSQL + Worker.  
 - Conexão do Backend/Worker com Supabase via internet (HTTPS + SSL obrigatório).
+
+**Sizing inicial (testes / baixo volume)**  
+- 1 vCPU / 1 GB RAM para o serviço de backend (API + worker).  
+- 1 worker de API (Uvicorn/Gunicorn) e 1 worker de fila.  
+- Pool de conexões baixo (ex.: API 5–10, worker 2–5).
 
 ---
 
@@ -184,7 +189,7 @@ De acordo com as decisões dos ADRs:
 | **Backend**         | Validação de dados                               | **Pydantic** v2+                                | ADR-003           | — |
 | **Backend**         | Servidor ASGI                                    | **Uvicorn (v. 0.30.0) / Gunicorn (v. 23.0.0)**  | ADR-007           | Produção: Gunicorn + Uvicorn workers |
 | **Backend**         | Proxy reverso + arquivos estáticos               | **Nginx**                                       | ADR-007           | Serve React `dist/` + proxy `/api/*` |
-| **Backend**         | Message Broker                                   | **RabbitMQ (v. 4.0.x)**                         | N.A.              | — |
+| **Backend**         | Fila de processamento                             | **PostgreSQL (jobs table)**                     | ADR-009           | Usa `FOR UPDATE SKIP LOCKED` |
 | **Backend**         | Background Worker                                | **Python Consumer**                             | N.A.              | — |
 | **Frontend**        | Framework                                        | **React (v. 19.2.4)** + **TypeScript (v. 5.9.0)** | ADR-008         | — |
 | **Frontend**        | Build tool                                       | **Vite 8.0.3**                                  | ADR-008           | — |
@@ -197,7 +202,7 @@ De acordo com as decisões dos ADRs:
 | **Segurança**       | Autenticação Frontend → Backend                  | **JWT** (access + refresh token) + httpOnly cookies | ADR-005     | — |
 | **Segurança**       | Transporte                                       | **HTTPS** obrigatório                           | ADR-005 / ADR-007 | Let’s Encrypt em produção |
 | **Infraestrutura**  | Deploy                                           | **Docker + Docker Compose (v. 27.1+)**          | ADR-007           | Multi-stage (Nginx + FastAPI) |
-| **Infraestrutura**  | Hosting                                          | Cloud (Render ou Railway recomendado)           | ADR-007           | Backend + RabbitMQ + Worker |
+| **Infraestrutura**  | Hosting                                          | Cloud (Railway; free tier em testes)            | ADR-007           | Backend + Worker (fila no PostgreSQL) |
 | **Data Store**      | Banco de dados                                   | **PostgreSQL via Supabase (cloud)**             | ADR-009          | Conexão remota (pooler 6543 / direta 5432) |
 
 ---
@@ -232,15 +237,15 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 - **Referência**: ADR-003, ADR-005, ADR-008
 
 ### 6.3 Backend API → Background Worker (comunicação assíncrona)
-- **Método de comunicação**: Publicação de mensagens via **RabbitMQ**
-- **Padrão**: Producer/Consumer (fila de tarefas)
-- **Conteúdo da mensagem**:
+- **Método de comunicação**: Enfileiramento em **tabela de jobs no PostgreSQL**
+- **Padrão**: Producer/Consumer com `FOR UPDATE SKIP LOCKED`
+- **Conteúdo do job**:
   - ID do scan recebido
   - Payload JSON completo do scan
   - Metadados de processamento (prioridade, timestamp, device_id)
 - **Objetivo**: Desacoplar o recebimento do scan (rápido) do processamento pesado (enriquecimento, cálculos de risco, correlações, etc.)
 - **Resposta**: Não há resposta síncrona (fire-and-forget). O Background Worker processa a mensagem de forma assíncrona.
-- **Referência**: Arquitetura assíncrona (RabbitMQ)
+- **Referência**: Fila de processamento no PostgreSQL
 
 ### 6.4 Backend API → React Frontend
 - **Respostas**: Sempre JSON estruturado
@@ -252,7 +257,7 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 - O Pi Agent utiliza apenas comunicação **one-way** (push) via HMAC
 - O React Frontend nunca acessa diretamente o Pi Agent
 - Nenhum componente expõe endpoints sem autenticação em produção
-- A comunicação interna entre Backend API e Background Worker é feita exclusivamente via **RabbitMQ** (assíncrona e desacoplada)
+- A comunicação interna entre Backend API e Background Worker é feita via **fila no PostgreSQL** (assíncrona e desacoplada)
 
 ---
 

@@ -1,0 +1,51 @@
+flowchart TB
+    %% === EDGE DEVICE ===
+    subgraph "Raspberry Pi 4 - Edge Device"
+        direction TB
+        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Normalização JSON]
+    end
+
+    %% === CLOUD ===
+    subgraph "Cloud Environment (Render / Railway)"
+        direction TB
+        NGINX[Nginx<br/><b>Reverse Proxy + Static Server</b>]
+        
+        subgraph "Backend Services"
+            B[Backend API<br/><b>FastAPI + Pydantic + SQLModel</b><br/>Uvicorn/Gunicorn<br/>OpenAPI]
+            W[Background Worker<br/><b>Python Consumer</b>]
+        end
+
+        %% === SUPABASE (EXTERNO) ===
+        subgraph "Supabase Cloud"
+            direction TB
+            Q[Queue Table<br/><b>PostgreSQL Jobs</b><br/>FOR UPDATE SKIP LOCKED]
+            D[(Data Store<br/><b>PostgreSQL via Supabase</b><br/>Full-text search + materialized views)]
+        end
+
+    end
+
+    %% === BROWSER ===
+    subgraph "User Browser"
+        C[React Frontend<br/><b>Vite + TypeScript</b><br/>React Router v6<br/>TanStack Query v5<br/>shadcn/ui + Recharts]
+    end
+
+    %% === FLUXOS ===
+    A -->|"1. POST /scans<br/>JSON payload + HMAC signature<br/>HTTPS"| NGINX
+    NGINX -->|"2. Proxy<br/>/api/* → FastAPI"| B
+    
+    B -->|"3. Enqueue scan job"| Q
+    Q -->|"4. Claim job"| W
+    W -->|"5. Process + persist<br/>SQLModel + asyncpg"| D
+    
+    NGINX -.->|"6. Serve static files<br/>React dist/ (SPA)"| C
+    C <-->|"7. HTTPS + JWT Bearer Token<br/>GET/POST endpoints"| NGINX
+
+    classDef edge fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d47a1
+    classDef cloud fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef supabase fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#004d40
+    classDef browser fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+
+    class A edge
+    class NGINX,B,W cloud
+    class Q,D supabase
+    class C browser

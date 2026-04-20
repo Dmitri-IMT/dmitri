@@ -4,7 +4,7 @@
  
 **PostgreSQL via Supabase (cloud).** Versão do PostgreSQL: conforme provisionado pelo Supabase (atualmente 15.x — verificar no dashboard no momento da configuração).
  
-O banco não roda no Pi. O FastAPI conecta remotamente ao Supabase via internet.
+O banco não roda no Pi. Backend API e Background Worker (cloud) conectam remotamente ao Supabase via internet.
 
 ---
  
@@ -53,25 +53,66 @@ Migrações nunca devem rodar via pooler (porta 6543) — o PgBouncer em transac
  
 ---
  
+### Fila de processamento no PostgreSQL
+
+**Decisão: usar uma fila no próprio PostgreSQL** (tabela de jobs) para o processamento assíncrono, no lugar de um message broker dedicado.
+
+**Padrão sugerido:** tabela `jobs` + seleção concorrente com `SELECT ... FOR UPDATE SKIP LOCKED`.
+
+**Motivos:**
+- Menos serviços para operar (remove RabbitMQ).
+- Mantém o processamento assíncrono sem alterar o fluxo do agente.
+
+**Riscos / tradeoffs:**
+- A fila passa a compartilhar recursos com o banco principal.
+- Picos de jobs podem impactar queries de leitura se não houver limites.
+
+---
+
+### Analytics e busca no PostgreSQL
+
+**Decisão: usar recursos nativos do PostgreSQL** para análises e busca, evitando serviços externos.
+
+**Capacidades previstas (alto nível):**
+- **Materialized views** para métricas de dashboard (ex.: scans por dia, findings por severidade).
+- **Full-text search** (TSVector + GIN) para pesquisa de findings e serviços.
+
+**Motivos:**
+- Centraliza dados e queries em um único lugar.
+- Reduz complexidade de infraestrutura para o time.
+
+---
+
+### Postura de hosting e sizing inicial
+
+**Decisão: Railway com free tier durante testes.** Upgrade quando o volume justificar ou quando houver necessidade de ambiente sempre ativo.
+
+**Sizing inicial (baixo volume):**
+- 1 vCPU / 1 GB RAM para o serviço de backend (API + worker).
+- 1 worker de API e 1 worker de fila.
+- Pools pequenos de conexão (API 5–10, worker 2–5).
+
+---
+
 ### Modo de conexão ao Supabase
  
 O Supabase expõe dois endpoints de conexão com propósitos distintos:
  
 | Contexto | Endpoint | Porta | Motivo |
 |----------|----------|-------|--------|
-| FastAPI em produção (Pi) | Pooler (PgBouncer, transaction mode) | 6543 | Múltiplas conexões simultâneas; o Pi pode ter vários workers |
+| Backend API / Worker em produção (cloud) | Pooler (PgBouncer, transaction mode) | 6543 | Múltiplas conexões simultâneas; workers do backend |
 | Alembic / migrations | Conexão direta | 5432 | DDL requer modo sessão; PgBouncer transaction mode não suporta |
 | Scripts de manutenção | Conexão direta | 5432 | Mesma razão que migrations |
  
 **SSL:** obrigatório. Adicionar `?sslmode=require` à connection string em todos os contextos.
  
  
-**Latência Pi → Supabase:** esperada entre 10–80 ms por query dependendo da região. Aceitável para o endpoint de ingestão de scan, que é um único POST em bulk por scan concluído — não há queries de alta frequência no caminho crítico do agente.
+**Latência backend cloud → Supabase:** esperada entre 10–80 ms por query dependendo da região. Aceitável para o endpoint de ingestão de scan, que é um único POST em bulk por scan concluído — não há queries de alta frequência no caminho crítico do agente.
  
 **Configurações recomendadas no SQLAlchemy:**
 - `pool_pre_ping=True` — detecta conexões mortas antes de usar
 - `connect_args={"timeout": 10}` — evita travamentos em falhas de rede
-- `pool_size` e `max_overflow` dimensionados conforme número de workers do Uvicorn no Pi
+- `pool_size` e `max_overflow` dimensionados conforme número de workers do Uvicorn no backend cloud
  
 **Região do Supabase:** selecionar a região AWS mais próxima geograficamente da localização física do Pi e da equipe. Documentar a região escolhida no guia `SUPABASE-CONNECTION.md` após provisionamento.
  
@@ -79,7 +120,7 @@ O Supabase expõe dois endpoints de conexão com propósitos distintos:
  
 ### Gestão de segredos
  
-- A connection string é armazenada exclusivamente como variável de ambiente `DATABASE_URL` no ambiente onde o FastAPI roda (Pi em produção, container em desenvolvimento).
+- A connection string é armazenada exclusivamente como variável de ambiente `DATABASE_URL` no ambiente onde o FastAPI roda (backend cloud em produção, container em desenvolvimento).
 - **Nunca** hardcodar credentials no código-fonte.
 - O arquivo `.env` local deve estar no `.gitignore`. O repositório não deve conter credentials de nenhum ambiente.
 - Docker Compose de desenvolvimento usa uma variável `DATABASE_URL` separada apontando para instância PostgreSQL local (via `docker-compose.yml`) ou Supabase de staging — nunca para produção.

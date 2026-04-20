@@ -10,6 +10,14 @@ Monorepo do Trabalho de Conclusão de Curso (Engenharia de Computação) que ir�
 - Matheus Santos Feitosa // 20.00628-4
 - Rafael Maciel Bertani // 21.00634-2
 
+## Escopo e premissas (TCC)
+
+- **Duração:** 8 meses (entrega alinhada ao TCC).
+- **Implantação atual (v1):** varreduras no **laboratório de NSPi** da universidade — não se assume uso campus-wide ou redes arbitrárias sem decisão explícita.
+- **Usuários:** até **10** operadores/visualizadores em cenário típico.
+- **Carga:** **1–2 varreduras por dia** em operação normal (evitar dimensionar como produção 24/7 ou alto throughput sem necessidade).
+- **Evolução:** versões futuras (**v2/v3**) podem **ampliar o escopo operacional** (mais locais, usuários ou frequência).
+
 ## Componentes do sistema
 
 1. **Hardware Agent (Raspberry Pi 4 + Python + Nmap)**: Executará varreduras rápidas ou completas, normalizará os resultados segundo os schemas compartilhados e enviará os relatários ao backend via REST/HTTPS.
@@ -61,7 +69,7 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 - Sem qualquer lógica de negócio implementada (scans, validações, rotas, persistência ou UI).
 - Ferramentas de desenvolvimento, testes automatizados e integrações externas serão definidas nas próximas fases.
 
-**Documentação completa de arquitetura:** [ARCHITECTURE.md](ARCHITECTURE.md)
+**Documentação completa de arquitetura:** [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
 
 ## Setup
 
