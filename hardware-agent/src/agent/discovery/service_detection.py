@@ -23,16 +23,19 @@ def detect_services(ip, ports):
             [
                 NMAP_PATH,
                 "-sV",
-                "--version-intensity", "5",
+                "--version-intensity",
+                "5",
                 "--script=banner",
-                "-p", port_string,
+                "-p",
+                port_string,
                 "-T4",
                 "-Pn",
-                "-oX", "-",
-                ip
+                "-oX",
+                "-",
+                ip,
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
         print(result.stdout)
 
@@ -42,10 +45,9 @@ def detect_services(ip, ports):
 
         root = ET.fromstring(result.stdout)
 
-       
         for elem in root.iter():
-            if '}' in elem.tag:
-                elem.tag = elem.tag.split('}', 1)[1]
+            if "}" in elem.tag:
+                elem.tag = elem.tag.split("}", 1)[1]
 
         services = []
 
@@ -71,12 +73,14 @@ def detect_services(ip, ports):
                 product = service.get("product", "") if service is not None else ""
                 version = service.get("version", "") if service is not None else ""
 
-                services.append({
-                    "port": port_id,
-                    "service": service_name,
-                    "product": product,
-                    "version": version
-                })
+                services.append(
+                    {
+                        "port": port_id,
+                        "service": service_name,
+                        "product": product,
+                        "version": version,
+                    }
+                )
 
         return services
 
@@ -85,6 +89,7 @@ def detect_services(ip, ports):
         print(f"Error scanning {ip}: {e}")
 
         return []
+
 
 def main():
 

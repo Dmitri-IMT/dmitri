@@ -61,3 +61,14 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 - Sem qualquer lógica de negócio implementada (scans, validações, rotas, persistência ou UI).
 - Ferramentas de desenvolvimento, testes automatizados e integrações externas serão definidas nas próximas fases.
 
+**Documentação completa de arquitetura:** [ARCHITECTURE.md](ARCHITECTURE.md)
+
+## Setup
+
+Siga o guia completo:
+
+→ [docs/DEV-SETUP.md](docs/DEV-SETUP.md)
+
+## Contribuindo
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md)
