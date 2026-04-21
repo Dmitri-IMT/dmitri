@@ -11,6 +11,45 @@
     "evidence"
   ],
   "properties": {
+    "ip": {
+      "type": ["string", "null"],
+      "format": "ipv4",
+      "description": "IPv4 address of the affected device when the finding is device-specific"
+    },
+    "port": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Affected network port when the finding is tied to a service"
+    },
+    "protocol": {
+      "type": ["string", "null"],
+      "enum": ["tcp", "udp", null],
+      "description": "Transport protocol associated with the affected port"
+    },
+    "service": {
+      "type": ["string", "null"],
+      "description": "Service name associated with the finding"
+    },
+    "source": {
+      "type": ["string", "null"],
+      "description": "High-level origin of the finding, such as nmap_nse or nmap_vulners"
+    },
+    "source_script": {
+      "type": ["string", "null"],
+      "description": "Exact NSE script responsible for the finding"
+    },
+    "cve_id": {
+      "type": ["string", "null"],
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$",
+      "description": "CVE identifier when the finding maps to a known vulnerability"
+    },
+    "cvss_score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 10,
+      "description": "CVSS score reported by the source when available"
+    },
     "severity": {
       "type": "string",
       "description": "Impact level of the finding",
@@ -32,6 +71,15 @@
     "evidence": {
       "type": "string",
       "description": "Snippet of scan output, banner, or proof that supports the finding"
+    },
+    "references": {
+      "type": "array",
+      "description": "URLs or other references associated with the finding",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
     }
   },
   "additionalProperties": false

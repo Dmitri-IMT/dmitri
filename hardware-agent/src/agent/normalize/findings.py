@@ -1,0 +1,348 @@
+"""Normalization of NSE output into shared finding payloads."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
+
+from agent.normalize.contracts import FindingPayload
+from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+
+CVE_PATTERN = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
+URL_PATTERN = re.compile(r"https?://\S+")
+
+
+def extract_findings(hosts: list[HostInfo]) -> list[FindingPayload]:
+    """Convert parsed NSE results into the shared `findings` payload."""
+
+    findings: list[FindingPayload] = []
+    seen: set[tuple[str, int | None, str, str]] = set()
+
+    for host in hosts:
+        for script in host.host_scripts:
+            for finding in _extract_script_findings(host, None, script):
+                _append_unique(findings, seen, finding)
+
+        for port in host.ports:
+            for script in port.scripts:
+                for finding in _extract_script_findings(host, port, script):
+                    _append_unique(findings, seen, finding)
+
+    return findings
+
+
+def _append_unique(
+    findings: list[FindingPayload],
+    seen: set[tuple[str, int | None, str, str]],
+    finding: FindingPayload,
+) -> None:
+    key = (
+        str(finding.ip) if finding.ip is not None else "global",
+        finding.port,
+        finding.source_script or "unknown-script",
+        finding.cve_id or finding.title,
+    )
+    if key in seen:
+        return
+    seen.add(key)
+    findings.append(finding)
+
+
+def _extract_script_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if script.script_id == "vulners":
+        return _extract_vulners_findings(host, port, script)
+    if script.script_id == "smb2-security-mode":
+        finding = _extract_smb_signing_finding(host, port, script)
+        return [finding] if finding is not None else []
+
+    generic = _extract_generic_vuln_table_findings(host, port, script)
+    if generic:
+        return generic
+
+    cves = sorted(set(CVE_PATTERN.findall(script.output)))
+    if not cves:
+        return []
+
+    return [
+        _base_finding(
+            host,
+            port,
+            severity="high",
+            title=f"{cve.upper()} reported by {script.script_id}",
+            description=(
+                f"The NSE script {script.script_id} reported {cve.upper()} for "
+                f"{_service_label(port)} on {host.ip}."
+            ),
+            recommendation=(
+                "Review the affected service and apply the vendor patch or mitigation "
+                "referenced by the NSE script output."
+            ),
+            evidence=(
+                script.output
+                or f"NSE script {script.script_id} reported {cve.upper()}."
+            ),
+            source="nmap_nse",
+            source_script=script.script_id,
+            cve_id=cve.upper(),
+            references=_extract_urls(script.output),
+        )
+        for cve in cves
+    ]
+
+
+def _extract_vulners_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if port is None or not isinstance(script.data, Mapping):
+        return []
+
+    findings: list[FindingPayload] = []
+    for lookup_key, advisories in script.data.items():
+        advisory_items = (
+            advisories
+            if isinstance(advisories, Sequence)
+            and not isinstance(advisories, (str, bytes))
+            else [advisories]
+        )
+        for advisory in advisory_items:
+            if not isinstance(advisory, Mapping):
+                continue
+
+            advisory_id = str(advisory.get("id", "")).upper()
+            if not advisory_id or not CVE_PATTERN.fullmatch(advisory_id):
+                continue
+
+            score = _coerce_float(advisory.get("cvss"))
+            evidence = (
+                f"vulners matched {_service_label(port)} on {host.ip}:{port.port} "
+                f"to {advisory_id} via {lookup_key}."
+            )
+            findings.append(
+                _base_finding(
+                    host,
+                    port,
+                    severity=_severity_from_cvss(score),
+                    title=f"Known CVE detected via vulners: {advisory_id}",
+                    description=(
+                        f"The service {_service_label(port)} exposed by "
+                        f"{host.ip}:{port.port} "
+                        f"was correlated by the vulners NSE script with the known "
+                        f"vulnerability {advisory_id}."
+                    ),
+                    recommendation=(
+                        "Validate the affected product/version, apply the vendor fix, "
+                        "and restrict exposure of the service until remediation "
+                        "is complete."
+                    ),
+                    evidence=evidence,
+                    source="nmap_vulners",
+                    source_script="vulners",
+                    cve_id=advisory_id,
+                    cvss_score=score,
+                    references=[f"https://vulners.com/cve/{advisory_id}"],
+                )
+            )
+    return findings
+
+
+def _extract_smb_signing_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> FindingPayload | None:
+    if port is None:
+        return None
+
+    haystack = f"{script.output}\n{_stringify(script.data)}".lower()
+    if "message_signing" not in haystack and "signing" not in haystack:
+        return None
+    if (
+        "disabled" not in haystack
+        and "not required" not in haystack
+        and "dangerous" not in haystack
+    ):
+        return None
+
+    evidence = (
+        script.output
+        or "smb2-security-mode reported SMB signing disabled or not required."
+    )
+    return _base_finding(
+        host,
+        port,
+        severity="medium",
+        title="SMB signing disabled",
+        description=(
+            f"The host {host.ip} exposes SMB on TCP/{port.port} with message signing "
+            "disabled or not required, which can enable tampering or relay attacks."
+        ),
+        recommendation=(
+            "Require SMB signing on the server and restrict SMB exposure to trusted "
+            "segments and approved clients."
+        ),
+        evidence=evidence,
+        source="nmap_nse",
+        source_script=script.script_id,
+    )
+
+
+def _extract_generic_vuln_table_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    findings: list[FindingPayload] = []
+    for candidate in _walk_mappings(script.data):
+        title = _lookup(candidate, "title")
+        description = _lookup(candidate, "description")
+        state = (_lookup(candidate, "state") or "").lower()
+        if not title or not description:
+            continue
+        if "vuln" not in state and "exploit" not in state and "dos" not in state:
+            continue
+
+        ids = candidate.get("IDS") or candidate.get("ids")
+        cve_id = None
+        if isinstance(ids, Mapping):
+            raw_cve = ids.get("CVE") or ids.get("cve")
+            if isinstance(raw_cve, str) and CVE_PATTERN.fullmatch(raw_cve):
+                cve_id = raw_cve.upper()
+
+        check_results = candidate.get("check_results") or candidate.get("check-results")
+        evidence = _stringify(check_results) or script.output or str(title)
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity=_severity_from_risk_factor(_lookup(candidate, "risk_factor")),
+                title=str(title),
+                description=str(description),
+                recommendation=(
+                    "Review the upstream advisory referenced by the NSE script and "
+                    "apply the vendor fix or mitigation."
+                ),
+                evidence=evidence,
+                source="nmap_nse",
+                source_script=script.script_id,
+                cve_id=cve_id,
+                cvss_score=_coerce_float(_lookup(candidate, "cvss")),
+                references=_extract_urls(_stringify(candidate)),
+            )
+        )
+    return findings
+
+
+def _base_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    *,
+    severity: str,
+    title: str,
+    description: str,
+    recommendation: str,
+    evidence: str,
+    source: str,
+    source_script: str,
+    cve_id: str | None = None,
+    cvss_score: float | None = None,
+    references: list[str] | None = None,
+) -> FindingPayload:
+    protocol = (
+        port.protocol
+        if port is not None and port.protocol in {"tcp", "udp"}
+        else None
+    )
+    service_name = port.service.name if port is not None and port.service.name else None
+    return FindingPayload(
+        ip=host.ip,
+        port=port.port if port is not None else None,
+        protocol=protocol,
+        service=service_name,
+        source=source,
+        source_script=source_script,
+        cve_id=cve_id,
+        cvss_score=cvss_score,
+        severity=severity,  # type: ignore[arg-type]
+        title=title,
+        description=description,
+        recommendation=recommendation,
+        evidence=evidence,
+        references=references or [],
+    )
+
+
+def _lookup(mapping: Mapping[str, Any], key: str) -> Any:
+    if key in mapping:
+        return mapping[key]
+    lowered = {str(k).lower(): value for k, value in mapping.items()}
+    return lowered.get(key.lower())
+
+
+def _walk_mappings(value: Any) -> Iterable[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        yield value
+        for nested in value.values():
+            yield from _walk_mappings(nested)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for nested in value:
+            yield from _walk_mappings(nested)
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _severity_from_cvss(score: float | None) -> str:
+    if score is None:
+        return "medium"
+    if score >= 9.0:
+        return "critical"
+    if score >= 7.0:
+        return "high"
+    if score >= 4.0:
+        return "medium"
+    return "low"
+
+
+def _severity_from_risk_factor(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"critical", "high", "medium", "low"}:
+        return normalized
+    return "medium"
+
+
+def _extract_urls(text: str) -> list[str]:
+    return sorted(set(URL_PATTERN.findall(text)))
+
+
+def _stringify(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        return " ".join(_stringify(item) for item in value.values() if _stringify(item))
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return " ".join(_stringify(item) for item in value if _stringify(item))
+    return str(value)
+
+
+def _service_label(port: PortInfo | None) -> str:
+    if port is None:
+        return "host-level observation"
+    label = port.service.banner or port.service.name or "unknown service"
+    if port.protocol == "tcp":
+        return f"{label} (TCP/{port.port})"
+    return f"{label} ({port.protocol}/{port.port})"
