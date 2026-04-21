@@ -30,13 +30,61 @@ python -m agent.main --subnet 192.168.1.0/24 --mode full
 Useful environment variables:
 
 - `AGENT_NMAP_PATH`: explicit path to `nmap`
-- `AGENT_SCAN_SUBNET`: default target subnet
+- `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
 - `AGENT_SCAN_MODE`: `quick` or `full`
 - `AGENT_NMAP_SCRIPTS`: comma-separated NSE scripts, defaults to `vulners,smb2-security-mode`
 - `AGENT_MIN_CVSS`: minimum CVSS threshold forwarded from `vulners`
 - `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
 - `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each full port-scan batch
 - `AGENT_OUTPUT_PATH`: JSON output file location
+
+## Running with Docker
+
+The repository now includes a dedicated image for the hardware agent with:
+
+- Python runtime
+- Nmap installed inside the image
+- `vulners.nse` downloaded during image build
+- default command `python -m agent.main`
+
+### Quick start
+
+1. Copy the environment template:
+
+```bash
+cd hardware-agent
+cp .env.example .env
+```
+
+2. Adjust `.env` with the target subnet and desired mode.
+   If `AGENT_SCAN_SUBNET` is omitted, the agent resolves the active subnet automatically.
+
+3. Build and run:
+
+```bash
+docker compose up --build
+```
+
+The resulting JSON payload is written to `hardware-agent/artifacts/`.
+
+### Linux / Raspberry Pi recommended mode
+
+For the agent to scan the real LAN, the container should share the host network namespace:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.host.yml up --build
+```
+
+This is the recommended way to run the scanner on Raspberry Pi or native Linux.
+
+### Windows / Docker Desktop note
+
+Docker Desktop runs Linux containers behind virtualization. Because of that, a container may not see the same LAN surface as a native process running on Windows. The image still builds and runs, but LAN scanning results can differ from native execution.
+
+For development and validation:
+
+- use the container to validate packaging and runtime behavior
+- prefer native execution or Linux/Raspberry Pi for real LAN scanning results
 
 ## Integration Points
 - Reads configuration from `config.py` (to be wired to environment variables).

@@ -15,7 +15,7 @@ class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
     backend_base_url: str = "https://backend.local/api/v1"
-    scan_subnet: str = "192.168.0.0/24"
+    scan_subnet: str | None = None
     scan_mode: Literal["quick", "full"] = "quick"
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
@@ -63,7 +63,7 @@ def load_settings() -> AgentSettings:
     scan_mode = _parse_scan_mode(os.getenv("AGENT_SCAN_MODE"))
     return AgentSettings(
         backend_base_url=os.getenv("AGENT_BACKEND_BASE_URL", "https://backend.local/api/v1"),
-        scan_subnet=os.getenv("AGENT_SCAN_SUBNET", "192.168.0.0/24"),
+        scan_subnet=os.getenv("AGENT_SCAN_SUBNET"),
         scan_mode=scan_mode,
         device_id=os.getenv("AGENT_DEVICE_ID", "pi-agent-placeholder"),
         nmap_path=os.getenv("AGENT_NMAP_PATH"),

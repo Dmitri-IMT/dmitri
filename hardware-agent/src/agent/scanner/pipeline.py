@@ -18,6 +18,7 @@ from agent.normalize.contracts import DevicePayload, PortPayload, ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo, PortInfo
 from agent.scanner.nmap import NmapRunner
+from agent.utils.network import LocalNetworkInfo, detect_local_network
 
 LOGGER = logging.getLogger(__name__)
 AGENT_VERSION = "0.1.0"
@@ -37,6 +38,7 @@ class ScanOrchestrator:
         self.started_at: datetime | None = None
         self.current_stage = "idle"
         self.hosts: list[HostInfo] = []
+        self.network_info: LocalNetworkInfo | None = None
 
     def run(self) -> ScanPayload:
         """Execute discovery, service detection, NSE correlation, and normalization."""
@@ -44,12 +46,13 @@ class ScanOrchestrator:
         started_at = perf_counter()
         self.started_at = datetime.now(timezone.utc)
         self.current_stage = "discovery"
+        self.network_info = self._resolve_network_info()
 
-        self.hosts = discover_hosts(self.runner, self.settings.scan_subnet)
+        self.hosts = discover_hosts(self.runner, self.network_info.subnet)
         LOGGER.info(
             "Discovered %s live hosts in %s.",
             len(self.hosts),
-            self.settings.scan_subnet,
+            self.network_info.subnet,
         )
 
         if self.hosts:
@@ -63,7 +66,7 @@ class ScanOrchestrator:
         payload = ScanPayload(
             scan_id=self.scan_id,
             timestamp=completed_at,
-            subnet=self.settings.scan_subnet,
+            subnet=self.network_info.subnet,
             scan_mode=self.settings.scan_mode,
             devices=[self._build_device_payload(host) for host in self.hosts],
             findings=findings,
@@ -106,7 +109,7 @@ class ScanOrchestrator:
         return ScanPayload(
             scan_id=self.scan_id,
             timestamp=datetime.now(timezone.utc),
-            subnet=self.settings.scan_subnet,
+            subnet=self._resolve_network_info().subnet,
             scan_mode=self.settings.scan_mode,
             devices=[self._build_device_payload(host) for host in self.hosts],
             findings=findings,
@@ -254,9 +257,45 @@ class ScanOrchestrator:
             "host_batch_size": self.settings.host_batch_size,
             "partial_result": partial_result,
         }
+        if self.network_info is not None:
+            metadata["detected_local_ip"] = self.network_info.ip
+            metadata["detected_netmask"] = self.network_info.netmask
+            metadata["detected_interface"] = self.network_info.interface
+            metadata["scan_subnet_source"] = (
+                "environment" if self.settings.scan_subnet else "autodetected"
+            )
         if interrupted_stage:
             metadata["interrupted_stage"] = interrupted_stage
         return metadata
+
+    def _resolve_network_info(self) -> LocalNetworkInfo:
+        if self.network_info is not None:
+            return self.network_info
+
+        detected = detect_local_network()
+        if self.settings.scan_subnet:
+            LOGGER.info(
+                "Using configured subnet %s. Active interface %s has IPv4 %s.",
+                self.settings.scan_subnet,
+                detected.interface,
+                detected.ip,
+            )
+            self.network_info = LocalNetworkInfo(
+                ip=detected.ip,
+                netmask=detected.netmask,
+                subnet=self.settings.scan_subnet,
+                interface=detected.interface,
+            )
+        else:
+            LOGGER.info(
+                "Auto-detected subnet %s from interface %s (%s/%s).",
+                detected.subnet,
+                detected.interface,
+                detected.ip,
+                detected.netmask,
+            )
+            self.network_info = detected
+        return self.network_info
 
 
 def _merge_ports(
