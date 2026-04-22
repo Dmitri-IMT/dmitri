@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from api.main import ingest_scan
+from api.main import ingest_scan, ingest_scan_endpoint
 from api.schemas import ScanResult
 
 
@@ -20,3 +20,18 @@ def test_ingest_scan_accepts_enriched_findings_example() -> None:
 
     assert response.devices_received == 2
     assert str(response.scan_id) == payload["scan_id"]
+
+
+def test_api_v1_scans_endpoint_accepts_payload() -> None:
+    example_path = (
+        Path(__file__).resolve().parents[2]
+        / "contracts"
+        / "examples"
+        / "scan_result.example.json"
+    )
+    payload = json.loads(example_path.read_text(encoding="utf-8"))
+
+    scan = ScanResult.model_validate(payload)
+    response = ingest_scan_endpoint(scan)
+
+    assert response.devices_received == 2
