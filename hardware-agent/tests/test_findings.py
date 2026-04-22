@@ -83,3 +83,97 @@ def test_smb_signing_output_becomes_misconfiguration_finding() -> None:
     assert finding.source_script == "smb2-security-mode"
     assert finding.severity == "medium"
     assert finding.port == 445
+
+
+def test_smb_protocols_detects_smbv1_support() -> None:
+    host_element = ET.fromstring(
+        """
+        <host>
+          <ports>
+            <port protocol="tcp" portid="445">
+              <state state="open" />
+              <service name="microsoft-ds" />
+              <script
+                id="smb-protocols"
+                output="Supported dialects:&#10;  NT LM 0.12 (SMBv1)&#10;  2.02"
+              >
+                <elem key="dialects">NT LM 0.12 (SMBv1), 2.02</elem>
+              </script>
+            </port>
+          </ports>
+        </host>
+        """
+    )
+    host = HostInfo(
+        ip="192.168.0.50",
+        hostname="fileserver",
+        ports=parse_ports(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title == "SMBv1 protocol enabled"
+    assert finding.severity == "high"
+    assert finding.source_script == "smb-protocols"
+
+
+def test_http_methods_detects_risky_verbs() -> None:
+    host_element = ET.fromstring(
+        """
+        <host>
+          <ports>
+            <port protocol="tcp" portid="8080">
+              <state state="open" />
+              <service name="http" />
+              <script
+                id="http-methods"
+                output="Supported Methods: GET HEAD POST OPTIONS PUT DELETE TRACE"
+              />
+            </port>
+          </ports>
+        </host>
+        """
+    )
+    host = HostInfo(ip="192.168.0.60", hostname="web", ports=parse_ports(host_element))
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title == "Potentially risky HTTP methods enabled"
+    assert finding.severity == "medium"
+    assert finding.source_script == "http-methods"
+
+
+def test_ssh_auth_methods_detects_password_authentication() -> None:
+    host_element = ET.fromstring(
+        """
+        <host>
+          <ports>
+            <port protocol="tcp" portid="22">
+              <state state="open" />
+              <service name="ssh" />
+              <script
+                id="ssh-auth-methods"
+                output="Supported authentication methods: publickey,password"
+              />
+            </port>
+          </ports>
+        </host>
+        """
+    )
+    host = HostInfo(
+        ip="192.168.0.70",
+        hostname="ssh-host",
+        ports=parse_ports(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title == "SSH password authentication exposed"
+    assert finding.severity == "low"
+    assert finding.source_script == "ssh-auth-methods"

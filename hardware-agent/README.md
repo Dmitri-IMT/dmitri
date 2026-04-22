@@ -66,7 +66,7 @@ Useful environment variables:
 - `AGENT_NMAP_PATH`: explicit path to `nmap`
 - `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
 - `AGENT_SCAN_MODE`: `quick` or `full`
-- `AGENT_NMAP_SCRIPTS`: comma-separated NSE scripts, defaults to `vulners,smb2-security-mode`
+- `AGENT_NMAP_SCRIPTS`: comma-separated NSE scripts, defaults to a curated set for CVE correlation plus SMB, SSH, HTTP, and TLS surface checks
 - `AGENT_MIN_CVSS`: minimum CVSS threshold forwarded from `vulners`
 - `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
 - `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each full port-scan batch

@@ -89,7 +89,7 @@ function Resolve-VulnersScript {
     & $NmapPath --script-help vulners *> $null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[setup] Using vulners script bundled with Nmap"
-        return "vulners,smb2-security-mode"
+        return "vulners"
     }
 
     $nseDir = Join-Path $AgentDir "resources\nse"
@@ -107,7 +107,7 @@ function Resolve-VulnersScript {
         Write-Host "[setup] Using cached local vulners.nse"
     }
 
-    return "$vulnersPath,smb2-security-mode"
+    return $vulnersPath
 }
 
 $agentDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -115,7 +115,18 @@ $pythonExe = Ensure-Venv -AgentDir $agentDir
 Install-AgentDependencies -PythonExe $pythonExe -AgentDir $agentDir
 
 $nmapPath = Get-NmapPath
-$nmapScripts = Resolve-VulnersScript -NmapPath $nmapPath -AgentDir $agentDir
+$resolvedVulnersScript = Resolve-VulnersScript -NmapPath $nmapPath -AgentDir $agentDir
+$defaultScripts = @(
+    $resolvedVulnersScript
+    "smb2-security-mode"
+    "smb-protocols"
+    "ssh-auth-methods"
+    "ssh2-enum-algos"
+    "http-title"
+    "http-server-header"
+    "http-methods"
+    "ssl-cert"
+)
 
 $resolvedOutputPath = if ($OutputPath) {
     $OutputPath
@@ -129,7 +140,9 @@ else {
 
 $env:AGENT_NMAP_PATH = $nmapPath
 $env:AGENT_SCAN_MODE = $Mode
-$env:AGENT_NMAP_SCRIPTS = $nmapScripts
+if (-not $env:AGENT_NMAP_SCRIPTS) {
+    $env:AGENT_NMAP_SCRIPTS = ($defaultScripts -join ",")
+}
 $env:AGENT_MIN_CVSS = if ($env:AGENT_MIN_CVSS) { $env:AGENT_MIN_CVSS } else { "5.0" }
 $env:AGENT_MAX_WORKERS = if ($env:AGENT_MAX_WORKERS) { $env:AGENT_MAX_WORKERS } else { "4" }
 $env:AGENT_HOST_BATCH_SIZE = if ($env:AGENT_HOST_BATCH_SIZE) { $env:AGENT_HOST_BATCH_SIZE } else { "8" }

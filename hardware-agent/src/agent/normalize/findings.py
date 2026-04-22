@@ -59,6 +59,15 @@ def _extract_script_findings(
     if script.script_id == "smb2-security-mode":
         finding = _extract_smb_signing_finding(host, port, script)
         return [finding] if finding is not None else []
+    if script.script_id == "smb-protocols":
+        finding = _extract_smbv1_finding(host, port, script)
+        return [finding] if finding is not None else []
+    if script.script_id == "http-methods":
+        finding = _extract_http_methods_finding(host, port, script)
+        return [finding] if finding is not None else []
+    if script.script_id == "ssh-auth-methods":
+        finding = _extract_ssh_auth_methods_finding(host, port, script)
+        return [finding] if finding is not None else []
 
     generic = _extract_generic_vuln_table_findings(host, port, script)
     if generic:
@@ -188,6 +197,110 @@ def _extract_smb_signing_finding(
             "segments and approved clients."
         ),
         evidence=evidence,
+        source="nmap_nse",
+        source_script=script.script_id,
+    )
+
+
+def _extract_smbv1_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> FindingPayload | None:
+    if port is None:
+        return None
+
+    haystack = f"{script.output}\n{_stringify(script.data)}".lower()
+    if "smbv1" not in haystack and "nt lm 0.12" not in haystack:
+        return None
+
+    return _base_finding(
+        host,
+        port,
+        severity="high",
+        title="SMBv1 protocol enabled",
+        description=(
+            f"The host {host.ip} appears to support SMBv1 on TCP/{port.port}, "
+            "which is deprecated and associated with multiple legacy attack paths."
+        ),
+        recommendation=(
+            "Disable SMBv1 on the affected host, restrict SMB exposure, and keep "
+            "the operating system and file-sharing stack fully patched."
+        ),
+        evidence=(
+            script.output
+            or _stringify(script.data)
+            or "smb-protocols reported SMBv1 support."
+        ),
+        source="nmap_nse",
+        source_script=script.script_id,
+    )
+
+
+def _extract_http_methods_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> FindingPayload | None:
+    if port is None:
+        return None
+
+    risky_methods = []
+    haystack = f"{script.output}\n{_stringify(script.data)}".upper()
+    for method in ("PUT", "DELETE", "TRACE", "CONNECT"):
+        if re.search(rf"\b{method}\b", haystack):
+            risky_methods.append(method)
+
+    if not risky_methods:
+        return None
+
+    risky_methods.sort()
+    return _base_finding(
+        host,
+        port,
+        severity="medium",
+        title="Potentially risky HTTP methods enabled",
+        description=(
+            f"The HTTP service on {host.ip}:{port.port} appears to allow the "
+            f"following methods: {', '.join(risky_methods)}."
+        ),
+        recommendation=(
+            "Restrict HTTP methods to those required by the application and "
+            "disable unused verbs such as PUT, DELETE, TRACE, or CONNECT."
+        ),
+        evidence=script.output or _stringify(script.data),
+        source="nmap_nse",
+        source_script=script.script_id,
+    )
+
+
+def _extract_ssh_auth_methods_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> FindingPayload | None:
+    if port is None:
+        return None
+
+    haystack = f"{script.output}\n{_stringify(script.data)}".lower()
+    if "password" not in haystack:
+        return None
+
+    return _base_finding(
+        host,
+        port,
+        severity="low",
+        title="SSH password authentication exposed",
+        description=(
+            f"The SSH service on {host.ip}:{port.port} appears to allow password-based "
+            "authentication, which increases brute-force and "
+            "credential-stuffing exposure."
+        ),
+        recommendation=(
+            "Prefer key-based SSH authentication, restrict network exposure, and "
+            "rate-limit or monitor login attempts."
+        ),
+        evidence=script.output or _stringify(script.data),
         source="nmap_nse",
         source_script=script.script_id,
     )

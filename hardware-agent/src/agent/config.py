@@ -7,7 +7,17 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
-DEFAULT_NSE_SCRIPTS = ("vulners", "smb2-security-mode")
+DEFAULT_NSE_SCRIPTS = (
+    "vulners",
+    "smb2-security-mode",
+    "smb-protocols",
+    "ssh-auth-methods",
+    "ssh2-enum-algos",
+    "http-title",
+    "http-server-header",
+    "http-methods",
+    "ssl-cert",
+)
 
 
 @dataclass(slots=True)
