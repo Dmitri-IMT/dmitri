@@ -27,6 +27,40 @@ cd hardware-agent
 python -m agent.main --subnet 192.168.1.0/24 --mode full
 ```
 
+## Windows one-command runner
+
+For Windows, the recommended path is now:
+
+```powershell
+cd hardware-agent
+.\run-agent.ps1
+```
+
+or:
+
+```cmd
+cd hardware-agent
+run-agent.cmd
+```
+
+What this runner does automatically:
+
+- creates `hardware-agent/.venv` if needed
+- installs the Python dependencies
+- detects the local Nmap installation
+- checks whether `vulners` is already available in Nmap
+- downloads a local copy of `vulners.nse` if needed
+- keeps subnet autodetection enabled unless you explicitly pass one
+- runs `python -m agent.main`
+
+Optional examples:
+
+```powershell
+.\run-agent.ps1 -Mode full
+.\run-agent.ps1 -Mode full -Subnet 192.168.15.0/24
+.\run-agent.ps1 -Mode quick -OutputPath C:\temp\scan.json
+```
+
 Useful environment variables:
 
 - `AGENT_NMAP_PATH`: explicit path to `nmap`
