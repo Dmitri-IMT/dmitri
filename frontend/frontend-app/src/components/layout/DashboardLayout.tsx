@@ -90,14 +90,16 @@ export default function DashboardLayout({ onLogout }: DashboardLayoutProps) {
 
         {/* Perfil / Logout */ }
         <div style={{ borderTop: '1px solid var(--border)', padding: '10px 4px 14px', marginTop: 6, cursor: 'pointer' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '6px 4px', whiteSpace: 'nowrap' }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--surface3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
                A
             </div>
             <div className="sidebar-text">
               <div style={{ fontSize: 13, fontWeight: 600 }}>Administrador</div>
-              <div className='logout-button' style={{ fontSize: 13 }} onClick={onLogout} >Sair</div>
             </div>
+
+            <div className="logout-button" onClick={onLogout}>Sair</div>
+
           </div>
         </div>
       </aside>

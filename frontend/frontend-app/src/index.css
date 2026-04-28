@@ -47,11 +47,18 @@ body {
 button { font-family: var(--font); cursor: pointer; border: none; outline: none; }
 input, select { font-family: var(--font); }
 .logout-button{
-  font-size: 10;
+  font-size: 13;
   color: brown;
   font-family: var(--font);
+  color: var(--danger, #ff4d4d);
+  background: rgba(255, 0, 0, 0.12);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 .logout-button:hover{
+  background: rgba(255, 0, 0, 0.25);
   color: red;
   font-weight: bold;
   font-family: var(--font);
