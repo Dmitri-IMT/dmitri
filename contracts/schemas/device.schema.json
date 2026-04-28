@@ -11,7 +11,7 @@
       "description": "IPv4 address assigned to the device"
     },
     "mac": {
-      "type": "string",
+      "type": ["string", "null"],
       "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
       "description": "MAC address derived from ARP/Nmap results"
     },

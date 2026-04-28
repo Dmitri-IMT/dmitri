@@ -56,18 +56,38 @@
   ],
   "findings": [
     {
+      "ip": "192.168.1.10",
+      "port": 22,
+      "protocol": "tcp",
+      "service": "ssh",
+      "source": "nmap_vulners",
+      "source_script": "vulners",
+      "cve_id": "CVE-2016-10012",
+      "cvss_score": 7.8,
       "severity": "high",
-      "title": "Outdated SSH service exposed",
-      "description": "The camera at 192.168.1.10 runs OpenSSH 7.2p2, which lacks multiple security fixes.",
+      "title": "OpenSSH version mapped to known CVE",
+      "description": "The camera at 192.168.1.10 exposes OpenSSH 7.2p2 on TCP/22 and the vulners NSE script mapped the detected version to a published CVE.",
       "recommendation": "Upgrade the firmware or disable remote SSH access from untrusted networks.",
-      "evidence": "Banner from 192.168.1.10: OpenSSH_7.2p2 Raspbian-5."
+      "evidence": "vulners matched OpenSSH 7.2p2 to CVE-2016-10012 with CVSS 7.8 during the NSE phase.",
+      "references": [
+        "https://vulners.com/cve/CVE-2016-10012"
+      ]
     },
     {
+      "ip": "192.168.1.40",
+      "port": 445,
+      "protocol": "tcp",
+      "service": "smb",
+      "source": "nmap_nse",
+      "source_script": "smb2-security-mode",
+      "cve_id": null,
+      "cvss_score": null,
       "severity": "medium",
       "title": "SMB signing disabled",
       "description": "The NAS at 192.168.1.40 allows SMB connections without message signing, enabling MITM tampering.",
       "recommendation": "Enable SMB signing (server signing = mandatory) and restrict SMB exposure.",
-      "evidence": "Nmap smb2-security-mode: Message signing disabled but supported."
+      "evidence": "Nmap smb2-security-mode reported: message_signing: disabled (dangerous, but default).",
+      "references": []
     }
   ]
 }

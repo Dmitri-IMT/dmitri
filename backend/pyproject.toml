@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["httpx", "pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/api"]

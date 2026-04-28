@@ -1,25 +1,36 @@
 # Backend API (FastAPI)
 
-Backend mínimo responsável por receber resultados de varredura do agente embarcado e validar o payload conforme os contratos em `../contracts/schemas`.
+Backend minimo responsavel por receber resultados de varredura do hardware-agent e validar o payload conforme os contratos em `../contracts/schemas`.
 
 ## Requisitos
 
 - Python 3.11+
-- Dependências do `pyproject.toml` (instale com `pip install -e .[dev]` dentro de `backend/`)
+- dependencias do `pyproject.toml`
+
+Instalacao local:
+
+```bash
+cd backend
+python -m pip install -e ".[dev]"
+```
 
 ## Como executar
 
 ```bash
 cd backend
-uvicorn api.main:app --reload --app-dir src
+python -m uvicorn api.main:app --reload --app-dir src
 ```
 
-O servidor ficará disponível em `http://127.0.0.1:8000`.
+O servidor fica disponivel em `http://127.0.0.1:8000`.
 
 ## Endpoints
 
-- `GET /` → responde `{"status": "ok"}`.
-- `POST /scans` → recebe um JSON igual ao contrato `scan_result.schema.json` e retorna:
+- `GET /` -> responde `{"status": "ok"}`
+- `GET /api/v1/health` -> responde `{"status": "ok"}`
+- `POST /scans` -> recebe um JSON compativel com o contrato compartilhado
+- `POST /api/v1/scans` -> alias versionado usado pelo agente
+
+Resposta esperada de ingestao:
 
 ```json
 {
@@ -39,4 +50,12 @@ curl -X POST http://127.0.0.1:8000/scans \
   --data @contracts/examples/scan_result.example.json
 ```
 
-Você deve ver o mesmo `scan_id` do arquivo de exemplo e `devices_received` igual à quantidade de dispositivos listados.
+Ou usando o caminho versionado:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/scans \
+  -H "Content-Type: application/json" \
+  --data @contracts/examples/scan_result.example.json
+```
+
+Voce deve ver o mesmo `scan_id` do arquivo de exemplo e `devices_received` igual ao numero de dispositivos listados.

@@ -1,181 +1,49 @@
-import ipaddress
-import json
-import platform
-import re
-import socket
-import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+"""Host discovery stage for the scanning pipeline."""
 
-import psutil
+from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 
-def get_network_info():
-
-    local_ip = get_local_ip()
-    interfaces = psutil.net_if_addrs()
-    for interface in interfaces:
-
-        for addr in interfaces[interface]:
-
-            if addr.family.name == "AF_INET":
-
-                if addr.address == local_ip:
-
-                    ip = addr.address
-                    netmask = addr.netmask
-
-                    network = ipaddress.IPv4Network(f"{ip}/{netmask}", strict=False)
-
-                    return {"ip": ip, "netmask": netmask, "network": str(network)}
-
-    raise Exception("Active network interface not found")
+from agent.scanner.models import HostInfo
+from agent.scanner.nmap import NmapRunner
 
 
-def get_local_ip():
+def discover_hosts(runner: NmapRunner, subnet: str) -> list[HostInfo]:
+    """Return live hosts discovered by Nmap host discovery."""
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    finally:
-        s.close()
-
-    return ip
-
-
-def ping_host(ip):
-
-    system = platform.system()
-    if system == "Windows":
-        command = ["ping", "-n", "1", "-w", "1000", ip]
-    else:
-        command = ["ping", "-c", "1", "-W", "1", ip]
-
-    result = subprocess.run(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
-    return result.returncode == 0
-
-
-def ping_sweep(network, local_ip):
-
-    print(f"[+] Starting Ping Sweep on {network}")
-
-    net = ipaddress.IPv4Network(network, strict=False)
-    live_hosts = []
-    ips = [str(ip) for ip in net.hosts() if str(ip) != local_ip]
-
-    MAX_THREADS = 50
-
-    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-
-        future_to_ip = {executor.submit(ping_host, ip): ip for ip in ips}
-
-        for future in as_completed(future_to_ip):
-
-            ip = future_to_ip[future]
-
-            try:
-
-                if future.result():
-
-                    print(f"[LIVE] {ip}")
-
-                    live_hosts.append(ip)
-
-            except Exception as e:
-
-                print(f"Error scanning {ip}: {e}")
-
-    return live_hosts
-
-
-def nmap_discovery(network, local_ip):
-
-    print(f"[+] Running Nmap Host Discovery on {network}")
-
-    try:
-
-        result = subprocess.run(
-            [r"C:\Program Files (x86)\Nmap\nmap.exe", "-sn", "-T3", network],
-            capture_output=True,
-            text=True,
-        )
-
-        hosts = []
-
-        for line in result.stdout.split("\n"):
-
-            if "Nmap scan report for" in line:
-
-                match = re.search(r"\d+\.\d+\.\d+\.\d+", line)
-
-                if match:
-
-                    ip = match.group()
-
-                    # remove seu próprio host
-                    if ip != local_ip:
-                        hosts.append(ip)
-
-        return list(set(hosts))
-
-    except Exception as e:
-
-        print("Error running nmap:", e)
-
-        return []
-
-
-def merge_results(ping_hosts, nmap_hosts):
-
-    combined = set(ping_hosts) | set(nmap_hosts)
-
-    hosts = []
-
-    for ip in sorted(combined):
-
-        host = {"ip": ip, "hostname": "", "state": "up", "open_ports": []}
-
-        hosts.append(host)
-
+    root = runner.run_xml(["-sn", "-PE", "-T4", subnet])
+    hosts: list[HostInfo] = []
+    for host_element in root.findall("host"):
+        parsed = _parse_host(host_element)
+        if parsed is not None:
+            hosts.append(parsed)
     return hosts
 
 
-def save_results(network_info, hosts):
+def _parse_host(host_element: ET.Element) -> HostInfo | None:
+    status_node = host_element.find("status")
+    if status_node is None or status_node.get("state") != "up":
+        return None
 
-    data = {
-        "network": network_info["network"],
-        "local_ip": network_info["ip"],
-        "netmask": network_info["netmask"],
-        "hosts": hosts,
-    }
+    ip = ""
+    mac: str | None = None
+    vendor = "unknown"
+    for address_node in host_element.findall("address"):
+        address_type = address_node.get("addrtype")
+        if address_type == "ipv4":
+            ip = address_node.get("addr", "")
+        elif address_type == "mac":
+            mac = address_node.get("addr")
+            vendor = address_node.get("vendor", "unknown")
 
-    with open("network_scan.json", "w") as f:
+    if not ip:
+        return None
 
-        json.dump(data, f, indent=4)
+    hostname = ip
+    hostnames_node = host_element.find("hostnames")
+    if hostnames_node is not None:
+        hostname_node = hostnames_node.find("hostname")
+        if hostname_node is not None and hostname_node.get("name"):
+            hostname = hostname_node.get("name", ip)
 
-    print("\n[+] Results saved to network_scan.json")
-
-
-def run():
-
-    print("[*] Detecting network information...")
-
-    net_info = get_network_info()
-
-    print(f"Local IP: {net_info['ip']}")
-    print(f"Network: {net_info['network']}")
-
-    ping_hosts = ping_sweep(net_info["network"], net_info["ip"])
-
-    nmap_hosts = nmap_discovery(net_info["network"], net_info["ip"])
-
-    hosts = merge_results(ping_hosts, nmap_hosts)
-
-    save_results(net_info, hosts)
-
-
-if __name__ == "__main__":
-    run()
+    return HostInfo(ip=ip, hostname=hostname, mac=mac, vendor=vendor)
