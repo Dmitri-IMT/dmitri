@@ -138,7 +138,7 @@ export default function Landing() {
             {/* <Icon n="shield" s={20} c="var(--accent)" /> */}
             <img src="/Dmitri-logo.png" alt="Logo" style={{ maxWidth: "100%", height: "auto", objectFit: "contain" }} />
           </div>
-          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Dmitri</span>
+          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Dmitri Vulnerability Scanner</span>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <Btn variant="ghost" onClick={() => navigate('/login')}>Entrar</Btn>
