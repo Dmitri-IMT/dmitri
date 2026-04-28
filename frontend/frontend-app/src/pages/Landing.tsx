@@ -159,7 +159,7 @@ export default function Landing() {
         </h1>
         
         <p style={{ fontSize: 'clamp(16px, 2vw, 18px)', color: 'var(--text2)', lineHeight: 1.6, maxWidth: 600, marginBottom: 40 }}>
-          Dmitri é um agente de hardware plug-and-play que escaneia, identifica e protege a rede da sua empresa contra vulnerabilidades antes que elas sejam exploradas.
+          Dmitri é um agente de hardware plug-and-play que escaneia, identifica e protege a sua rede contra vulnerabilidades antes que elas sejam exploradas.
         </p>
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
