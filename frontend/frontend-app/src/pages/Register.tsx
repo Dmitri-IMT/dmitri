@@ -81,7 +81,22 @@ export default function Register({ onRegister }: RegisterProps) {
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
             </div>
 
-            <Btn variant="secondary" style={{ width: '100%', justifyContent: 'center', background: 'white', color: 'black' }} onClick={() => console.log('Cadastro Google')}>
+            <Btn 
+              variant="secondary" 
+              style={{ 
+                width: '100%', 
+                justifyContent: 'center', 
+                background: 'white', 
+                color: 'black',
+                border: '1px solid #e5e7eb' 
+              }} 
+              onClick={() => console.log('Cadastro Google')}
+            >
+              <img 
+                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                alt="Google" 
+                style={{ width: 18, height: 18, marginRight: 10 }} 
+              />
               Cadastrar com Google
             </Btn>
           </div>
