@@ -213,3 +213,9 @@ __marimo__/
 
 # claude
 .claude
+
+# cursor
+.cursor/
+
+# spec-kit Github
+.specify/
