@@ -69,10 +69,7 @@ def main() -> None:
             result = client.submit_scan(payload)
         except BackendSubmissionError as exc:
             raise SystemExit(f"Backend submission failed: {exc}") from exc
-        print(
-            "Payload submitted to backend "
-            f"({result.status_code}): {result.body}"
-        )
+        print("Payload submitted to backend " f"({result.status_code}): {result.body}")
 
 
 if __name__ == "__main__":

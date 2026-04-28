@@ -368,9 +368,7 @@ def _base_finding(
     references: list[str] | None = None,
 ) -> FindingPayload:
     protocol = (
-        port.protocol
-        if port is not None and port.protocol in {"tcp", "udp"}
-        else None
+        port.protocol if port is not None and port.protocol in {"tcp", "udp"} else None
     )
     service_name = port.service.name if port is not None and port.service.name else None
     return FindingPayload(

@@ -201,24 +201,24 @@ class ScanOrchestrator:
             hostname=host.hostname or host.ip,
             vendor=host.vendor or "unknown",
             ports=[
-                    PortPayload(
-                        port=port.port,
-                        protocol=(
-                            port.protocol if port.protocol in {"tcp", "udp"} else "tcp"
-                        ),
-                        state=(
-                            port.state
-                            if port.state in {"open", "closed", "filtered"}
-                            else "open"
-                        ),
-                        service=port.service.name or "unknown",
-                        version=port.service.banner,
-                    )
-                    for port in sorted(
-                        host.ports,
-                        key=lambda item: (item.port, item.protocol),
-                    )
-                ],
+                PortPayload(
+                    port=port.port,
+                    protocol=(
+                        port.protocol if port.protocol in {"tcp", "udp"} else "tcp"
+                    ),
+                    state=(
+                        port.state
+                        if port.state in {"open", "closed", "filtered"}
+                        else "open"
+                    ),
+                    service=port.service.name or "unknown",
+                    version=port.service.banner,
+                )
+                for port in sorted(
+                    host.ports,
+                    key=lambda item: (item.port, item.protocol),
+                )
+            ],
         )
 
     def _nmap_arguments_summary(self) -> str:
@@ -324,6 +324,5 @@ def _merge_ports(
 
 def _chunked(items: list[str], chunk_size: int) -> list[list[str]]:
     return [
-        items[index : index + chunk_size]
-        for index in range(0, len(items), chunk_size)
+        items[index : index + chunk_size] for index in range(0, len(items), chunk_size)
     ]

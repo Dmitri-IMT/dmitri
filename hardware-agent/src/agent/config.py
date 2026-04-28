@@ -79,7 +79,9 @@ def load_settings() -> AgentSettings:
 
     scan_mode = _parse_scan_mode(os.getenv("AGENT_SCAN_MODE"))
     return AgentSettings(
-        backend_base_url=os.getenv("AGENT_BACKEND_BASE_URL", "https://backend.local/api/v1"),
+        backend_base_url=os.getenv(
+            "AGENT_BACKEND_BASE_URL", "https://backend.local/api/v1"
+        ),
         submit_results=_parse_bool(os.getenv("AGENT_SUBMIT_RESULTS"), default=False),
         scan_subnet=os.getenv("AGENT_SCAN_SUBNET"),
         scan_mode=scan_mode,
