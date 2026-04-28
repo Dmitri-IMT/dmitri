@@ -32,8 +32,8 @@ function NetworkBackground() {
       size: number;
 
       constructor() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
+        this.x = Math.random() * canvas!.width;
+        this.y = Math.random() * canvas!.height;
         this.vx = Math.random() * 0.5 - 0.25;
         this.vy = Math.random() * 0.5 - 0.25;
         this.size = 2;
@@ -42,8 +42,8 @@ function NetworkBackground() {
       move() {
         this.x += this.vx;
         this.y += this.vy;
-        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
-        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+        if (this.x < 0 || this.x > canvas!.width) this.vx *= -1;
+        if (this.y < 0 || this.y > canvas!.height) this.vy *= -1;
       }
 
       draw() {
