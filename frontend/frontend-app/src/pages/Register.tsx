@@ -90,12 +90,13 @@ export default function Register({ onRegister }: RegisterProps) {
         <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, marginTop: 24 }}>
           Já tem uma conta? <span onClick={() => navigate('/login')} style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}>Faça login</span>
         </p>
-      </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
-        <Btn variant="ghost" size="sm" icon="back" onClick={() => navigate('/')}>
-          Voltar para o início
-        </Btn>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
+          <Btn variant="ghost" size="sm" icon="back" onClick={() => navigate('/')}>
+            Voltar para o início
+          </Btn>
+        </div>
+
       </div>
 
     </div>
