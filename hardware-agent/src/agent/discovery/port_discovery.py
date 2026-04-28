@@ -1,90 +1,51 @@
-import json
-import re
-import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+"""Port discovery stage for the scanning pipeline."""
 
-NMAP_PATH = r"C:\Program Files (x86)\Nmap\nmap.exe"
+from __future__ import annotations
 
-MAX_THREADS = 5
-
-
-def load_scan():
-
-    with open("network_scan.json", "r") as f:
-        return json.load(f)
+from agent.scanner.models import PortInfo
+from agent.scanner.nmap import NmapRunner
+from agent.utils.nmap_xml import extract_ipv4, parse_ports
 
 
-def save_scan(data):
+def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
+    """Enumerate open and filtered ports for a single host."""
 
-    with open("network_scan.json", "w") as f:
-        json.dump(data, f, indent=4)
+    arguments = ["-Pn", "-T4"]
+    if scan_mode == "full":
+        arguments.extend(["-p-", "--min-rate", "1000"])
+    else:
+        arguments.append("-F")
+    arguments.append(ip)
 
-
-def scan_ports(ip):
-
-    print(f"[+] Scanning ports on {ip}")
-
-    try:
-
-        result = subprocess.run(
-            [NMAP_PATH, "-p-", "--min-rate", "1000", "-T4", "-Pn", ip],
-            capture_output=True,
-            text=True,
-        )
-
-        open_ports = []
-
-        for line in result.stdout.split("\n"):
-
-            match = re.match(r"(\d+)/tcp\s+open", line)
-
-            if match:
-
-                port = int(match.group(1))
-                open_ports.append(port)
-
-        print(f"[OPEN PORTS] {ip}: {open_ports}")
-
-        return ip, open_ports
-
-    except Exception as e:
-
-        print(f"Error scanning {ip}: {e}")
-        return ip, []
+    root = runner.run_xml(arguments)
+    host_element = root.find("host")
+    if host_element is None:
+        return []
+    return parse_ports(host_element)
 
 
-def run():
+def scan_ports_batch(
+    runner: NmapRunner,
+    ips: list[str],
+    scan_mode: str,
+) -> dict[str, list[PortInfo]]:
+    """Enumerate ports for a batch of hosts in one Nmap process."""
 
-    print("[*] Loading hosts from network_scan.json")
+    if not ips:
+        return {}
 
-    data = load_scan()
+    arguments = ["-Pn", "-T4"]
+    if scan_mode == "full":
+        arguments.extend(["-p-", "--min-rate", "1000"])
+    else:
+        arguments.append("-F")
+    arguments.extend(ips)
 
-    hosts = [host["ip"] for host in data["hosts"]]
-
-    results = {}
-
-    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-
-        futures = {executor.submit(scan_ports, ip): ip for ip in hosts}
-
-        for future in as_completed(futures):
-
-            ip, ports = future.result()
-
-            results[ip] = ports
-
-    for host in data["hosts"]:
-
-        ip = host["ip"]
-
-        if ip in results:
-
-            host["open_ports"] = results[ip]
-
-    save_scan(data)
-
-    print("\n[+] Port scan finished and saved")
-
-
-if __name__ == "__main__":
-    run()
+    root = runner.run_xml(arguments)
+    results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}
+    for host_element in root.findall("host"):
+        ip = extract_ipv4(host_element)
+        if not ip:
+            continue
+        results[ip] = parse_ports(host_element)
+    return results

@@ -22,18 +22,27 @@ class Port(BaseModel):
 
 class Device(BaseModel):
     ip: IPvAnyAddress
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
     ports: list[Port] = Field(default_factory=list)
 
 
 class Finding(BaseModel):
+    ip: IPvAnyAddress | None = None
+    port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"] | None = None
+    service: str | None = None
+    source: str | None = None
+    source_script: str | None = None
+    cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
+    cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Literal["low", "medium", "high", "critical"]
     title: constr(min_length=3)
     description: constr(min_length=3)
     recommendation: constr(min_length=3)
     evidence: constr(min_length=3)
+    references: list[constr(min_length=1)] = Field(default_factory=list)
 
 
 class ScanResult(BaseModel):

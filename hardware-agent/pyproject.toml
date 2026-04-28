@@ -6,8 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "requests>=2.31.0",
-  "pydantic>=2.6.0"
+  "pydantic>=2.6.0",
+  "psutil>=7.0.0"
 ]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent"]

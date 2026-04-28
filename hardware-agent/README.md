@@ -2,18 +2,143 @@
 
 Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Lite. It orchestrates Nmap scans, normalizes output, and forwards JSON payloads to the backend.
 
-## Responsibilities (Future Phases)
+## Responsibilities
 - Manage scan scheduling (quick/full) per subnet configuration.
 - Execute Nmap using safe defaults and capture XML/JSON output.
 - Convert raw results to the contracts defined in `../contracts/schemas`.
-- Handle retries, buffering, and authentication when talking to the backend API.
-- Report device health metrics (CPU, memory, connectivity).
+- Execute curated NSE scripts, including `vulners`, to correlate services with CVEs.
+- Optionally submit the normalized payload to the backend API over HTTP.
+
+Planned but not implemented yet:
+
+- retries / offline buffering for failed submissions
+- transport authentication
+- device health metrics reporting
 
 ## Current Status
-- Basic project skeleton under `src/agent` with placeholders for discovery, scanning, normalization, transport, and utilities.
-- Systemd service and installation script templates live in `system/`.
-- No scanning logic is implemented yet; focus remains on structure.
+- A working multi-stage pipeline is implemented under `src/agent`:
+  - host discovery with `nmap -sn`
+  - batched port discovery (`-F` for quick scans, `-p-` for full scans)
+  - deep inspection with `-sV` plus curated NSE scripts
+  - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
+- XML output is parsed into normalized devices, ports, and findings.
+- The CLI entrypoint writes a JSON payload compatible with the shared contracts.
+- The CLI can optionally submit that payload to the backend after saving it locally.
+- Systemd service and installation script templates still live in `system/`.
+
+## Running the Agent
+
+```bash
+cd hardware-agent
+python -m agent.main --subnet 192.168.1.0/24 --mode full
+```
+
+## Windows one-command runner
+
+For Windows, the recommended path is now:
+
+```powershell
+cd hardware-agent
+.\run-agent.ps1
+```
+
+or:
+
+```cmd
+cd hardware-agent
+run-agent.cmd
+```
+
+What this runner does automatically:
+
+- creates `hardware-agent/.venv` if needed
+- installs the Python dependencies
+- detects the local Nmap installation
+- checks whether `vulners` is already available in Nmap
+- downloads a local copy of `vulners.nse` if needed
+- keeps subnet autodetection enabled unless you explicitly pass one
+- runs `python -m agent.main`
+
+Optional examples:
+
+```powershell
+.\run-agent.ps1 -Mode full
+.\run-agent.ps1 -Mode full -Subnet 192.168.15.0/24
+.\run-agent.ps1 -Mode quick -OutputPath C:\temp\scan.json
+```
+
+To also submit the generated payload to the backend:
+
+```powershell
+$env:AGENT_BACKEND_BASE_URL="http://127.0.0.1:8000/api/v1"
+$env:AGENT_SUBMIT_RESULTS="true"
+.\run-agent.ps1 -Mode full
+```
+
+Useful environment variables:
+
+- `AGENT_BACKEND_BASE_URL`: backend base URL, e.g. `http://127.0.0.1:8000/api/v1`
+- `AGENT_SUBMIT_RESULTS`: when `true`, submit the generated payload to the backend after saving it
+- `AGENT_NMAP_PATH`: explicit path to `nmap`
+- `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
+- `AGENT_SCAN_MODE`: `quick` or `full`
+- `AGENT_NMAP_SCRIPTS`: comma-separated NSE scripts, defaults to a curated set for CVE correlation plus SMB, SSH, HTTP, and TLS surface checks
+- `AGENT_MIN_CVSS`: minimum CVSS threshold forwarded from `vulners`
+- `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
+- `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each full port-scan batch
+- `AGENT_OUTPUT_PATH`: JSON output file location
+
+## Running with Docker
+
+The repository now includes a dedicated image for the hardware agent with:
+
+- Python runtime
+- Nmap installed inside the image
+- `vulners.nse` downloaded during image build
+- default command `python -m agent.main`
+
+### Quick start
+
+1. Copy the environment template:
+
+```bash
+cd hardware-agent
+cp .env.example .env
+```
+
+2. Adjust `.env` with the target subnet and desired mode.
+   If `AGENT_SCAN_SUBNET` is omitted, the agent resolves the active subnet automatically.
+
+3. Build and run:
+
+```bash
+docker compose up --build
+```
+
+The resulting JSON payload is written to `hardware-agent/artifacts/`.
+
+### Linux / Raspberry Pi recommended mode
+
+For the agent to scan the real LAN, the container should share the host network namespace:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.host.yml up --build
+```
+
+This is the recommended way to run the scanner on Raspberry Pi or native Linux.
+
+### Windows / Docker Desktop note
+
+Docker Desktop runs Linux containers behind virtualization. Because of that, a container may not see the same LAN surface as a native process running on Windows. The image still builds and runs, but LAN scanning results can differ from native execution.
+
+For development and validation:
+
+- use the container to validate packaging and runtime behavior
+- prefer native execution or Linux/Raspberry Pi for real LAN scanning results
 
 ## Integration Points
 - Reads configuration from `config.py` (to be wired to environment variables).
-- Sends HTTP requests to backend endpoints documented in `docs/api.md`.
+- Produces JSON payloads compatible with the backend contracts in `../contracts/`.
+- Can optionally submit the normalized payload to the backend ingestion endpoint after the scan completes.
+
+Detailed implementation notes: `../docs/implementation/NSE-VULNERABILITY-PIPELINE.md`
