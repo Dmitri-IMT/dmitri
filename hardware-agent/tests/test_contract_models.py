@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from agent.normalize.contracts import (
+    ArtifactPayload,
     DevicePayload,
     FindingPayload,
     PortPayload,
@@ -16,7 +17,8 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
         scan_id=uuid4(),
         timestamp=datetime.now(timezone.utc),
         subnet="192.168.0.0/24",
-        scan_mode="quick",
+        target_mode="subnet",
+        scan_profile="lan",
         devices=[
             DevicePayload(
                 ip="192.168.0.20",
@@ -30,6 +32,7 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
                         state="open",
                         service="http",
                         version="nginx 1.24.0",
+                        cpes=["cpe:/a:nginx:nginx:1.24.0"],
                     )
                 ],
             )
@@ -52,8 +55,16 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
                 references=["https://vulners.com/cve/CVE-2024-12345"],
             )
         ],
+        artifacts=[
+            ArtifactPayload(
+                kind="nmap_xml",
+                path="hardware-agent/artifacts/raw/discovery/discovery.xml",
+                stage="discovery",
+            )
+        ],
         metadata={"elapsed_seconds": 12.5},
     )
 
     assert payload.devices[0].mac is None
+    assert payload.devices[0].ports[0].cpes == ["cpe:/a:nginx:nginx:1.24.0"]
     assert payload.findings[0].cve_id == "CVE-2024-12345"

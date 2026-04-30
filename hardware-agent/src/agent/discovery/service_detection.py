@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent.scanner.models import PortInfo
 from agent.scanner.nmap import NmapRunner
+from agent.scanner.profiles import ScanProfile
 from agent.utils.nmap_xml import parse_ports
 
 
@@ -11,7 +12,9 @@ def detect_services(
     runner: NmapRunner,
     ip: str,
     ports: list[PortInfo],
-    version_intensity: int,
+    profile: ScanProfile,
+    *,
+    output_xml_path: str | None = None,
 ) -> list[PortInfo]:
     """Run `-sV` over the discovered open ports for a single host."""
 
@@ -24,12 +27,15 @@ def detect_services(
         "-T4",
         "-sV",
         "--version-intensity",
-        str(version_intensity),
+        str(profile.version_intensity),
         "-p",
-        ",".join(str(port.port) for port in open_ports),
+        ",".join(
+            f"{'T' if port.protocol == 'tcp' else 'U'}:{port.port}"
+            for port in open_ports
+        ),
         ip,
     ]
-    root = runner.run_xml(arguments)
+    root = runner.run_xml(arguments, output_path=output_xml_path)
     host_element = root.find("host")
     if host_element is None:
         return []

@@ -16,11 +16,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run the hardware-agent Nmap pipeline."
     )
+    parser.add_argument(
+        "--target",
+        help="Scan a single IPv4 or a comma-separated host list.",
+    )
     parser.add_argument("--subnet", help="Override the configured scan subnet.")
     parser.add_argument(
-        "--mode",
-        choices=("quick", "full"),
-        help="Override the configured scan mode.",
+        "--profile",
+        choices=("single-host", "lab", "lan", "deep"),
+        help="Override the configured scan profile.",
+    )
+    parser.add_argument(
+        "--target-mode",
+        choices=("single_host", "subnet", "multi_host"),
+        help="Force the target interpretation mode.",
     )
     parser.add_argument("--output", help="Write the resulting payload to this path.")
     parser.add_argument(
@@ -36,8 +45,10 @@ def main() -> None:
     )
 
     settings = load_settings().with_overrides(
+        scan_target=args.target,
         scan_subnet=args.subnet,
-        scan_mode=args.mode,
+        scan_profile=args.profile,
+        target_mode=args.target_mode,
         output_path=args.output,
     )
     orchestrator = ScanOrchestrator(settings)

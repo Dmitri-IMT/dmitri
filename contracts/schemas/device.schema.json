@@ -58,6 +58,16 @@
         "version": {
           "type": ["string", "null"],
           "description": "Optional product/version banner when detected"
+        },
+        "cpes": {
+          "type": "array",
+          "description": "Explicit CPE identifiers derived from service detection",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0,
+          "default": []
         }
       },
       "additionalProperties": false

@@ -28,9 +28,11 @@ def test_submit_scan_posts_to_api_v1_scans(monkeypatch: pytest.MonkeyPatch) -> N
         scan_id=uuid4(),
         timestamp=datetime.now(timezone.utc),
         subnet="192.168.0.0/24",
-        scan_mode="quick",
+        target_mode="subnet",
+        scan_profile="lan",
         devices=[],
         findings=[],
+        artifacts=[],
         metadata=None,
     )
     posted: dict[str, object] = {}
@@ -56,9 +58,11 @@ def test_submit_scan_raises_on_error_status(monkeypatch: pytest.MonkeyPatch) -> 
         scan_id=uuid4(),
         timestamp=datetime.now(timezone.utc),
         subnet="192.168.0.0/24",
-        scan_mode="quick",
+        target_mode="subnet",
+        scan_profile="lan",
         devices=[],
         findings=[],
+        artifacts=[],
         metadata=None,
     )
 

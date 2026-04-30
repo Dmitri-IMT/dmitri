@@ -2,12 +2,26 @@
   "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
   "timestamp": "2026-03-05T14:12:45Z",
   "subnet": "192.168.1.0/24",
-  "scan_mode": "full",
+  "target_mode": "subnet",
+  "scan_profile": "deep",
   "metadata": {
     "agent_version": "0.2.0",
-    "nmap_arguments": "-sS -sV -O --top-ports 200",
+    "nmap_arguments": "discovery=-PR -sn; tcp=-p- -sS; udp=53,67,68,123,137,161,1900; service=-sV; nse=service-directed",
     "elapsed_seconds": 187
   },
+  "artifacts": [
+    {
+      "kind": "nmap_xml",
+      "path": "hardware-agent/artifacts/raw/discovery.xml",
+      "stage": "discovery"
+    },
+    {
+      "kind": "nse_output",
+      "path": "hardware-agent/artifacts/raw/192.168.1.10-nse.txt",
+      "stage": "nse",
+      "host_ip": "192.168.1.10"
+    }
+  ],
   "devices": [
     {
       "ip": "192.168.1.10",
@@ -20,14 +34,20 @@
           "protocol": "tcp",
           "state": "open",
           "service": "ssh",
-          "version": "OpenSSH 7.2p2"
+          "version": "OpenSSH 7.2p2",
+          "cpes": [
+            "cpe:/a:openbsd:openssh:7.2p2"
+          ]
         },
         {
           "port": 80,
           "protocol": "tcp",
           "state": "open",
           "service": "http",
-          "version": "lighttpd 1.4.59"
+          "version": "lighttpd 1.4.59",
+          "cpes": [
+            "cpe:/a:lighttpd:lighttpd:1.4.59"
+          ]
         }
       ]
     },
@@ -42,14 +62,18 @@
           "protocol": "tcp",
           "state": "open",
           "service": "smb",
-          "version": "Samba smbd 4.13.14"
+          "version": "Samba smbd 4.13.14",
+          "cpes": [
+            "cpe:/a:samba:samba:4.13.14"
+          ]
         },
         {
           "port": 548,
           "protocol": "tcp",
           "state": "filtered",
           "service": "afp",
-          "version": null
+          "version": null,
+          "cpes": []
         }
       ]
     }

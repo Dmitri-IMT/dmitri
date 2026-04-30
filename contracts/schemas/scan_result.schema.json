@@ -3,7 +3,7 @@
   "title": "ScanResult",
   "type": "object",
   "description": "Top-level payload transmitted from the hardware agent to the backend.",
-  "required": ["scan_id", "timestamp", "subnet", "scan_mode", "devices", "findings"],
+  "required": ["scan_id", "timestamp", "subnet", "target_mode", "scan_profile", "devices", "findings"],
   "properties": {
     "scan_id": {
       "type": "string",
@@ -20,10 +20,15 @@
       "description": "CIDR range that was scanned",
       "pattern": "^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$"
     },
-    "scan_mode": {
+    "target_mode": {
       "type": "string",
-      "enum": ["quick", "full"],
-      "description": "Indicates whether a lightweight or deep scan was executed"
+      "enum": ["single_host", "subnet", "multi_host"],
+      "description": "Describes how the target was interpreted by the agent"
+    },
+    "scan_profile": {
+      "type": "string",
+      "enum": ["single-host", "lab", "lan", "deep"],
+      "description": "Named scan profile executed by the agent"
     },
     "devices": {
       "type": "array",
@@ -35,6 +40,35 @@
       "type": "array",
       "description": "Findings derived from the scan, either global or device-specific references",
       "items": { "$ref": "finding.schema.json" },
+      "minItems": 0,
+      "default": []
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Optional references to raw artifacts generated during scanning",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path", "stage"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["nmap_xml", "nse_output"]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "type": "string",
+            "minLength": 1
+          },
+          "host_ip": {
+            "type": ["string", "null"],
+            "format": "ipv4"
+          }
+        },
+        "additionalProperties": false
+      },
       "minItems": 0,
       "default": []
     },

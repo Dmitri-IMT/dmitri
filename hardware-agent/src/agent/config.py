@@ -7,17 +7,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
-DEFAULT_NSE_SCRIPTS = (
-    "vulners",
-    "smb2-security-mode",
-    "smb-protocols",
-    "ssh-auth-methods",
-    "ssh2-enum-algos",
-    "http-title",
-    "http-server-header",
-    "http-methods",
-    "ssl-cert",
-)
+ScanProfile = Literal["single-host", "lab", "lan", "deep"]
+TargetMode = Literal["single_host", "subnet", "multi_host"]
 
 
 @dataclass(slots=True)
@@ -26,45 +17,59 @@ class AgentSettings:
 
     backend_base_url: str = "https://backend.local/api/v1"
     submit_results: bool = False
+    scan_target: str | None = None
     scan_subnet: str | None = None
-    scan_mode: Literal["quick", "full"] = "quick"
+    scan_profile: ScanProfile = "lan"
+    target_mode: TargetMode | None = None
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
-    nmap_scripts: tuple[str, ...] = DEFAULT_NSE_SCRIPTS
+    vulners_script: str = "vulners"
     min_cvss: float = 5.0
     max_workers: int = 4
     host_batch_size: int = 8
     output_path: str = str(Path("hardware-agent") / "artifacts" / "latest-scan.json")
-    version_intensity: int = 5
+    save_raw_artifacts: bool = False
+    raw_artifacts_dir: str = str(Path("hardware-agent") / "artifacts" / "raw")
 
     def with_overrides(
         self,
         *,
+        scan_target: str | None = None,
         scan_subnet: str | None = None,
-        scan_mode: Literal["quick", "full"] | None = None,
+        scan_profile: ScanProfile | None = None,
+        target_mode: TargetMode | None = None,
         output_path: str | None = None,
     ) -> AgentSettings:
         """Return a copy with CLI-provided overrides applied."""
 
         return replace(
             self,
+            scan_target=scan_target or self.scan_target,
             scan_subnet=scan_subnet or self.scan_subnet,
-            scan_mode=scan_mode or self.scan_mode,
+            scan_profile=scan_profile or self.scan_profile,
+            target_mode=target_mode or self.target_mode,
             output_path=output_path or self.output_path,
         )
 
 
-def _parse_csv(value: str | None) -> tuple[str, ...]:
-    if not value:
-        return DEFAULT_NSE_SCRIPTS
-    items = tuple(item.strip() for item in value.split(",") if item.strip())
-    return items or DEFAULT_NSE_SCRIPTS
+def _parse_scan_profile(value: str | None) -> ScanProfile:
+    normalized = (value or "lan").strip().lower()
+    if normalized not in {"single-host", "lab", "lan", "deep"}:
+        raise ValueError(
+            "AGENT_SCAN_PROFILE must be one of 'single-host', 'lab', 'lan', or 'deep'."
+        )
+    return normalized  # type: ignore[return-value]
 
 
-def _parse_scan_mode(value: str | None) -> Literal["quick", "full"]:
-    normalized = (value or "quick").strip().lower()
-    if normalized not in {"quick", "full"}:
-        raise ValueError("AGENT_SCAN_MODE must be either 'quick' or 'full'.")
+def _parse_target_mode(value: str | None) -> TargetMode | None:
+    if value is None or not value.strip():
+        return None
+
+    normalized = value.strip().lower()
+    if normalized not in {"single_host", "subnet", "multi_host"}:
+        raise ValueError(
+            "AGENT_TARGET_MODE must be one of 'single_host', 'subnet', or 'multi_host'."
+        )
     return normalized  # type: ignore[return-value]
 
 
@@ -77,17 +82,18 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
 def load_settings() -> AgentSettings:
     """Load settings from environment variables with sane defaults."""
 
-    scan_mode = _parse_scan_mode(os.getenv("AGENT_SCAN_MODE"))
     return AgentSettings(
         backend_base_url=os.getenv(
             "AGENT_BACKEND_BASE_URL", "https://backend.local/api/v1"
         ),
         submit_results=_parse_bool(os.getenv("AGENT_SUBMIT_RESULTS"), default=False),
+        scan_target=os.getenv("AGENT_SCAN_TARGET"),
         scan_subnet=os.getenv("AGENT_SCAN_SUBNET"),
-        scan_mode=scan_mode,
+        scan_profile=_parse_scan_profile(os.getenv("AGENT_SCAN_PROFILE")),
+        target_mode=_parse_target_mode(os.getenv("AGENT_TARGET_MODE")),
         device_id=os.getenv("AGENT_DEVICE_ID", "pi-agent-placeholder"),
         nmap_path=os.getenv("AGENT_NMAP_PATH"),
-        nmap_scripts=_parse_csv(os.getenv("AGENT_NMAP_SCRIPTS")),
+        vulners_script=os.getenv("AGENT_VULNERS_SCRIPT", "vulners"),
         min_cvss=float(os.getenv("AGENT_MIN_CVSS", "5.0")),
         max_workers=max(1, int(os.getenv("AGENT_MAX_WORKERS", "4"))),
         host_batch_size=max(1, int(os.getenv("AGENT_HOST_BATCH_SIZE", "8"))),
@@ -95,5 +101,12 @@ def load_settings() -> AgentSettings:
             "AGENT_OUTPUT_PATH",
             str(Path("hardware-agent") / "artifacts" / "latest-scan.json"),
         ),
-        version_intensity=7 if scan_mode == "full" else 5,
+        save_raw_artifacts=_parse_bool(
+            os.getenv("AGENT_SAVE_RAW_ARTIFACTS"),
+            default=False,
+        ),
+        raw_artifacts_dir=os.getenv(
+            "AGENT_RAW_ARTIFACTS_DIR",
+            str(Path("hardware-agent") / "artifacts" / "raw"),
+        ),
     )

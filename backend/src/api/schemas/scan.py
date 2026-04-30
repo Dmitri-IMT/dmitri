@@ -12,12 +12,25 @@ SubnetCIDR = constr(
 )
 
 
+ArtifactKind = Literal["nmap_xml", "nse_output"]
+ScanProfile = Literal["single-host", "lab", "lan", "deep"]
+TargetMode = Literal["single_host", "subnet", "multi_host"]
+
+
+class Artifact(BaseModel):
+    kind: ArtifactKind
+    path: constr(min_length=1)
+    stage: constr(min_length=1)
+    host_ip: IPvAnyAddress | None = None
+
+
 class Port(BaseModel):
     port: Annotated[int, Field(ge=1, le=65535)]
     protocol: Literal["tcp", "udp"]
     state: Literal["open", "closed", "filtered"]
     service: constr(min_length=1)
     version: str | None = None
+    cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
 class Device(BaseModel):
@@ -49,9 +62,11 @@ class ScanResult(BaseModel):
     scan_id: UUID
     timestamp: datetime
     subnet: SubnetCIDR
-    scan_mode: Literal["quick", "full"]
+    target_mode: TargetMode
+    scan_profile: ScanProfile
     devices: list[Device] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+    artifacts: list[Artifact] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None
 
 

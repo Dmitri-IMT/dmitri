@@ -1,8 +1,11 @@
 param(
-    [ValidateSet("quick", "full")]
-    [string]$Mode = "quick",
+    [ValidateSet("single-host", "lab", "lan", "deep")]
+    [string]$Profile = "lan",
     [string]$OutputPath = "",
-    [string]$Subnet = ""
+    [string]$Subnet = "",
+    [string]$Target = "",
+    [ValidateSet("single_host", "subnet", "multi_host")]
+    [string]$TargetMode = ""
 )
 
 Set-StrictMode -Version Latest
@@ -139,22 +142,30 @@ else {
 }
 
 $env:AGENT_NMAP_PATH = $nmapPath
-$env:AGENT_SCAN_MODE = $Mode
-if (-not $env:AGENT_NMAP_SCRIPTS) {
-    $env:AGENT_NMAP_SCRIPTS = ($defaultScripts -join ",")
-}
+$env:AGENT_SCAN_PROFILE = $Profile
+$env:AGENT_VULNERS_SCRIPT = $resolvedVulnersScript
 $env:AGENT_MIN_CVSS = if ($env:AGENT_MIN_CVSS) { $env:AGENT_MIN_CVSS } else { "5.0" }
 $env:AGENT_MAX_WORKERS = if ($env:AGENT_MAX_WORKERS) { $env:AGENT_MAX_WORKERS } else { "4" }
 $env:AGENT_HOST_BATCH_SIZE = if ($env:AGENT_HOST_BATCH_SIZE) { $env:AGENT_HOST_BATCH_SIZE } else { "8" }
 $env:AGENT_OUTPUT_PATH = $resolvedOutputPath
 
+if ($Target) {
+    $env:AGENT_SCAN_TARGET = $Target
+}
 if ($Subnet) {
     $env:AGENT_SCAN_SUBNET = $Subnet
 }
+if ($TargetMode) {
+    $env:AGENT_TARGET_MODE = $TargetMode
+}
 
 Write-Host "[run] Nmap path: $env:AGENT_NMAP_PATH"
-Write-Host "[run] Scripts: $env:AGENT_NMAP_SCRIPTS"
-if ($env:AGENT_SCAN_SUBNET) {
+Write-Host "[run] Profile: $env:AGENT_SCAN_PROFILE"
+Write-Host "[run] Vulners script: $env:AGENT_VULNERS_SCRIPT"
+if ($env:AGENT_SCAN_TARGET) {
+    Write-Host "[run] Target: $env:AGENT_SCAN_TARGET"
+}
+elseif ($env:AGENT_SCAN_SUBNET) {
     Write-Host "[run] Subnet: $env:AGENT_SCAN_SUBNET"
 }
 else {

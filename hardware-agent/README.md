@@ -87,6 +87,7 @@ Useful environment variables:
 - `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
 - `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each full port-scan batch
 - `AGENT_OUTPUT_PATH`: JSON output file location
+- `AGENT_SAVE_RAW_ARTIFACTS`: when `true`, also persist intermediate XML/text artifacts from each scan stage; default is `false`
 
 ## Running with Docker
 

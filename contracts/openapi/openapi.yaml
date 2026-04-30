@@ -463,7 +463,7 @@ components:
         enum:
           - timestamp
           - status
-          - scan_mode
+          - scan_profile
         default: timestamp
     DeviceSortBy:
       name: sort_by
@@ -708,11 +708,21 @@ components:
         scan_id: b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77
         timestamp: '2026-03-05T14:12:45Z'
         subnet: 192.168.1.0/24
-        scan_mode: full
+        target_mode: subnet
+        scan_profile: deep
         metadata:
           agent_version: 0.2.0
-          nmap_arguments: -sS -sV -O --top-ports 200
+          nmap_arguments: discovery=-PR -sn; tcp=-p- -sS; udp=53,67,68,123,137,161,1900;
+            service=-sV; nse=service-directed
           elapsed_seconds: 187
+        artifacts:
+          - kind: nmap_xml
+            path: hardware-agent/artifacts/raw/discovery.xml
+            stage: discovery
+          - kind: nse_output
+            path: hardware-agent/artifacts/raw/192.168.1.10-nse.txt
+            stage: nse
+            host_ip: 192.168.1.10
         devices:
           - ip: 192.168.1.10
             mac: B8:27:EB:44:55:66
@@ -724,11 +734,15 @@ components:
                 state: open
                 service: ssh
                 version: OpenSSH 7.2p2
+                cpes:
+                  - cpe:/a:openbsd:openssh:7.2p2
               - port: 80
                 protocol: tcp
                 state: open
                 service: http
                 version: lighttpd 1.4.59
+                cpes:
+                  - cpe:/a:lighttpd:lighttpd:1.4.59
           - ip: 192.168.1.40
             mac: 00:1C:B3:AA:BB:CC
             hostname: office-nas
@@ -739,11 +753,14 @@ components:
                 state: open
                 service: smb
                 version: Samba smbd 4.13.14
+                cpes:
+                  - cpe:/a:samba:samba:4.13.14
               - port: 548
                 protocol: tcp
                 state: filtered
                 service: afp
                 version:
+                cpes: []
         findings:
           - ip: 192.168.1.10
             port: 22
@@ -789,11 +806,19 @@ components:
         - processing
         - completed
         - failed
-    ScanMode:
+    TargetMode:
       type: string
       enum:
-        - quick
-        - full
+        - single_host
+        - subnet
+        - multi_host
+    ScanProfile:
+      type: string
+      enum:
+        - single-host
+        - lab
+        - lan
+        - deep
     Severity:
       type: string
       enum:
@@ -832,6 +857,12 @@ components:
           type:
             - string
             - 'null'
+        cpes:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
     DevicePayload:
       type: object
       additionalProperties: false
@@ -861,6 +892,30 @@ components:
           items:
             $ref: '#/components/schemas/Port'
           default: []
+    ArtifactPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - path
+        - stage
+      properties:
+        kind:
+          type: string
+          enum:
+            - nmap_xml
+            - nse_output
+        path:
+          type: string
+          minLength: 1
+        stage:
+          type: string
+          minLength: 1
+        host_ip:
+          type:
+            - string
+            - 'null'
+          format: ipv4
     FindingPayload:
       type: object
       additionalProperties: false
@@ -940,7 +995,8 @@ components:
         - scan_id
         - timestamp
         - subnet
-        - scan_mode
+        - target_mode
+        - scan_profile
         - devices
         - findings
       properties:
@@ -953,8 +1009,10 @@ components:
         subnet:
           type: string
           pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
-        scan_mode:
-          $ref: '#/components/schemas/ScanMode'
+        target_mode:
+          $ref: '#/components/schemas/TargetMode'
+        scan_profile:
+          $ref: '#/components/schemas/ScanProfile'
         devices:
           type: array
           items:
@@ -964,6 +1022,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FindingPayload'
+          default: []
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactPayload'
           default: []
         metadata:
           type:
@@ -1004,7 +1067,8 @@ components:
         - scan_id
         - timestamp
         - subnet
-        - scan_mode
+        - target_mode
+        - scan_profile
         - status
         - device_count
         - finding_count
@@ -1017,8 +1081,10 @@ components:
           format: date-time
         subnet:
           type: string
-        scan_mode:
-          $ref: '#/components/schemas/ScanMode'
+        target_mode:
+          $ref: '#/components/schemas/TargetMode'
+        scan_profile:
+          $ref: '#/components/schemas/ScanProfile'
         status:
           $ref: '#/components/schemas/ScanStatus'
         device_count:
@@ -1038,7 +1104,8 @@ components:
         - scan_id
         - timestamp
         - subnet
-        - scan_mode
+        - target_mode
+        - scan_profile
         - devices
         - findings
         - status
@@ -1054,8 +1121,10 @@ components:
         subnet:
           type: string
           pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
-        scan_mode:
-          $ref: '#/components/schemas/ScanMode'
+        target_mode:
+          $ref: '#/components/schemas/TargetMode'
+        scan_profile:
+          $ref: '#/components/schemas/ScanProfile'
         devices:
           type: array
           items:
@@ -1064,6 +1133,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FindingRecord'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactPayload'
         metadata:
           type:
             - object
@@ -1141,7 +1214,7 @@ components:
       required:
         - scan_id
         - timestamp
-        - scan_mode
+        - scan_profile
         - open_ports_count
       properties:
         scan_id:
@@ -1150,8 +1223,8 @@ components:
         timestamp:
           type: string
           format: date-time
-        scan_mode:
-          $ref: '#/components/schemas/ScanMode'
+        scan_profile:
+          $ref: '#/components/schemas/ScanProfile'
         open_ports_count:
           type: integer
           minimum: 0
