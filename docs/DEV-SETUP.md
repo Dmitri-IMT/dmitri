@@ -1,54 +1,89 @@
-# Setup de desenvolvimento (em **menos de 15 minutos**)
+# Development setup — **hardware-agent** & **Dmitri** (TUI)
+
+This guide covers **only** the `**hardware-agent`** Python package and the **Textual TUI** (`dmitri` / `dmitri start`).
+
+**Not in scope right now:** Docker Compose, **backend** API, and **frontend** web app. You do not need Node.js, `npm`, or backend `.env` / `docker compose` to work on Dmitri. Those directories remain in the repo for later; when this changes, extend this doc or add a separate full-stack guide.
+
+---
 
 ## Prerequisites
 
-- Docker + Docker Compose
-- Node.js 20+ (recomendado via nvm)
-- npm
-- Git
+- **Git**
+- **Python 3.11+** (matches `requires-python` in `hardware-agent/pyproject.toml`)
+- **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — required for syncing dependencies (supported path; `pip` is an unsupported escape hatch per product specs)
+- **Nmap** — install on the host yourself (the repo does **not** install it via `install.sh`). It must be available for **real** scans when you run the TUI. Verify with `nmap --version`. Automated **tests** mock nmap; CI does not install it — see `[specs/001-agent-tui/tech-stack/testing-tooling.md](../specs/001-agent-tui/tech-stack/testing-tooling.md)`.
 
-## Backend Setup
+### Nmap (local runs)
+
+- **Windows**: [Nmap download](https://nmap.org/download.html) or a package manager (e.g. Chocolatey: `choco install nmap`).
+- **macOS**: `brew install nmap` or the upstream installer.
+- **Debian / Ubuntu**: `sudo apt install nmap`
+- **Fedora**: `sudo dnf install nmap`
+
+---
+
+## Install dependencies (**uv**)
+
+From the **repository root**:
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/Dmitri-IMT/vulnerability-scanner-device
-cd vulnerability-scanner-device/backend
-
-# 2. Copie o exemplo de env
-cp .env.example .env
-
-# 3. Suba os serviços
-docker compose up -d
-
-# 4. Verifique se está rodando
-curl http://localhost:8000/api/v1/health
-# Deve retornar {"status": "ok"}
-
-# 5. Fazer Rebuild, quando necessário
-docker compose up --build
-
+./hardware-agent/install.sh
 ```
 
-## Frontend Setup
-(Em outro terminal)
+Or from `**hardware-agent/**`:
+
 ```bash
-cd frontend
-npm install
-npm run dev
-Frontend estará em http://localhost:5173
-Importante: O Vite dev server já está configurado com proxy /api/* → http://localhost:8000.
+cd hardware-agent
+chmod +x install.sh   # Unix, if needed
+./install.sh
 ```
 
-## Ambiente de Desenvolvimento
-### (Nunca commite credenciais reais)
-Atualize, caso necessário, as credenciais nos arquivos `.env` do backend e do frontend
+The script runs `**uv sync**` in `hardware-agent/`. It does **not** install Nmap; if `nmap` is missing from `PATH`, the script prints a warning — install Nmap using the section above.
 
-## Pre-commit Hooks
+**Advanced (unsupported):** `pip install -e .` inside `hardware-agent/` may work in some environments (e.g. air-gapped mirrors), but it is **not** the supported install path — prefer **uv** — `[specs/001-agent-tui/tech-stack/package-and-distribution.md](../specs/001-agent-tui/tech-stack/package-and-distribution.md)`.
 
-Para garantir qualidade de código automaticamente antes de cada commit:
+### Persisted prefs (TUI)
+
+When saving app config (e.g. under `%LOCALAPPDATA%\Dmitri\`, XDG `~/.config/dmitri/`, etc.), use **write a `*.tmp`next to the real file → flush →`os.replace`/`Path.replace`** so a crash never leaves a half-written config. Details:` [specs/001-agent-tui/tech-stack/persistence-and-io.md](../specs/001-agent-tui/tech-stack/persistence-and-io.md) `(**Atomic save**). Default scan output for **Use default** is under `**…/Dmitri/results`** —` [specs/001-agent-tui/ui/screens.md](../specs/001-agent-tui/ui/screens.md)`.
+
+---
+
+## Run the TUI
+
+From `**hardware-agent/`** (after `uv sync`):
+
+```bash
+cd hardware-agent
+uv run dmitri
+# or
+uv run dmitri start
+```
+
+The `**dmitri**` console script is declared in `hardware-agent/pyproject.toml` (`[project.scripts]`). If your environment cannot see the script entrypoint, use:
+
+```bash
+uv run python -m agent.cli
+```
+
+---
+
+## Optional: pre-commit (repo-wide)
+
+If the repository configures **pre-commit** at the root:
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
-Após a instalação, o primeiro commit pode demorar alguns minutos por conta da inicialização do ambiente.
+
+Or with uv: `uv tool install pre-commit` then `pre-commit install` from the repo root.
+
+Do not commit real secrets. For hardware-agent–only work, hooks may still touch other trees if configured globally — adjust or skip as needed.
+
+---
+
+## Spec pointers
+
+- CLI contract: `[specs/001-agent-tui/contracts/cli.md](../specs/001-agent-tui/contracts/cli.md)`
+- Tech stack (uv, lockfile, CI intent): `[specs/001-agent-tui/tech-stack/](../specs/001-agent-tui/tech-stack/)`
+

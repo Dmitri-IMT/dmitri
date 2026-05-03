@@ -8,8 +8,7 @@ from agent.utils.nmap_xml import parse_ports
 
 
 def test_vulners_script_is_normalized_into_cve_findings() -> None:
-    host_element = ET.fromstring(
-        """
+    host_element = ET.fromstring("""
         <host>
           <ports>
             <port protocol="tcp" portid="22">
@@ -30,8 +29,7 @@ def test_vulners_script_is_normalized_into_cve_findings() -> None:
             </port>
           </ports>
         </host>
-        """
-    )
+        """)
     host = HostInfo(
         ip="192.168.0.10",
         hostname="camera",
@@ -51,8 +49,7 @@ def test_vulners_script_is_normalized_into_cve_findings() -> None:
 
 
 def test_smb_signing_output_becomes_misconfiguration_finding() -> None:
-    host_element = ET.fromstring(
-        """
+    host_element = ET.fromstring("""
         <host>
           <ports>
             <port protocol="tcp" portid="445">
@@ -67,8 +64,7 @@ def test_smb_signing_output_becomes_misconfiguration_finding() -> None:
             </port>
           </ports>
         </host>
-        """
-    )
+        """)
     host = HostInfo(
         ip="192.168.0.40",
         hostname="nas",
@@ -86,8 +82,7 @@ def test_smb_signing_output_becomes_misconfiguration_finding() -> None:
 
 
 def test_smb_protocols_detects_smbv1_support() -> None:
-    host_element = ET.fromstring(
-        """
+    host_element = ET.fromstring("""
         <host>
           <ports>
             <port protocol="tcp" portid="445">
@@ -102,8 +97,7 @@ def test_smb_protocols_detects_smbv1_support() -> None:
             </port>
           </ports>
         </host>
-        """
-    )
+        """)
     host = HostInfo(
         ip="192.168.0.50",
         hostname="fileserver",
@@ -120,8 +114,7 @@ def test_smb_protocols_detects_smbv1_support() -> None:
 
 
 def test_http_methods_detects_risky_verbs() -> None:
-    host_element = ET.fromstring(
-        """
+    host_element = ET.fromstring("""
         <host>
           <ports>
             <port protocol="tcp" portid="8080">
@@ -134,8 +127,7 @@ def test_http_methods_detects_risky_verbs() -> None:
             </port>
           </ports>
         </host>
-        """
-    )
+        """)
     host = HostInfo(ip="192.168.0.60", hostname="web", ports=parse_ports(host_element))
 
     findings = extract_findings([host])
@@ -148,8 +140,7 @@ def test_http_methods_detects_risky_verbs() -> None:
 
 
 def test_ssh_auth_methods_detects_password_authentication() -> None:
-    host_element = ET.fromstring(
-        """
+    host_element = ET.fromstring("""
         <host>
           <ports>
             <port protocol="tcp" portid="22">
@@ -162,8 +153,7 @@ def test_ssh_auth_methods_detects_password_authentication() -> None:
             </port>
           </ports>
         </host>
-        """
-    )
+        """)
     host = HostInfo(
         ip="192.168.0.70",
         hostname="ssh-host",

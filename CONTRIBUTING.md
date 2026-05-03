@@ -9,8 +9,8 @@
   - `chore/nome-do-chore` (ex: `chore/A-06`)
 
 - **Pull Requests**:
-  - 1- Crie um PR do seu branch para `main`
-  - 2- Preencha o template de PR (se existir)
+  - 1- Faça commit das mudanças
+  - 2- Rode o /create-pr skill
   - 3- Aguarde aprovação de pelo menos 1 reviewer
   - 4- O CI deve passar antes do merge
 

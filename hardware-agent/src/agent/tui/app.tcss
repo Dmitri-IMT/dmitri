@@ -1,0 +1,159 @@
+Screen {
+    layout: vertical;
+}
+
+#summary-section {
+    margin: 1 4 0 4;
+    height: auto;
+}
+
+#summary-band {
+    height: auto;
+    text-style: dim italic;
+}
+
+#btn-view-full-scan {
+    margin-top: 1;
+    width: auto;
+}
+
+#home-menu-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#home-menu {
+    height: auto;
+    max-height: 10;
+}
+
+#setup-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#setup-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#setup-subtitle {
+    margin-bottom: 1;
+    text-style: dim;
+}
+
+#setup-container Input {
+    margin-bottom: 1;
+}
+
+#setup-container Button {
+    margin: 0 0 1 0;
+}
+
+#resolved-path {
+    margin: 0 0 1 0;
+    text-style: dim;
+}
+
+#error-msg {
+    margin-bottom: 1;
+}
+
+#settings-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#settings-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#settings-container Input {
+    margin-bottom: 1;
+}
+
+#settings-container Button {
+    margin: 0 0 1 0;
+}
+
+#network-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#network-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#network-list {
+    height: auto;
+    max-height: 15;
+}
+
+#network-empty {
+    margin: 1 0;
+}
+
+#scanmode-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#scanmode-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#scanmode-list {
+    height: auto;
+    max-height: 6;
+}
+
+#progress-container {
+    margin: 2 4;
+    height: auto;
+}
+
+#progress-container Static {
+    margin-bottom: 1;
+}
+
+#scan-done-actions {
+    margin: 1 4;
+    height: auto;
+}
+
+#scan-done-actions Button {
+    margin-bottom: 1;
+    width: auto;
+}
+
+#scan-view-scroll {
+    margin: 1 4;
+}
+
+#scan-view-content {
+    width: 1fr;
+}
+
+#past-scans-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#past-scans-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#past-scans-list {
+    height: auto;
+    max-height: 20;
+}
+
+#past-scans-empty {
+    margin: 1 0;
+    text-style: dim italic;
+}
