@@ -141,21 +141,13 @@ class ScanProgressScreen(DmitriScreen):
             elif stage in self._completed_details:
                 detail = self._completed_details[stage]
                 suffix = f"  {detail}" if detail else ""
-                widget.update(
-                    f"[green]✓[/green] {STAGE_LABELS[stage]}{suffix}"
-                )
+                widget.update(f"[green]✓[/green] {STAGE_LABELS[stage]}{suffix}")
             else:
                 widget.update(f"[green]✓[/green] {STAGE_LABELS[stage]}")
 
-        self._bindings.bind(
-            "up", "focus_prev_btn", "↑↓ Navigate", show=True
-        )
-        self._bindings.bind(
-            "down", "focus_next_btn", show=True
-        )
-        self._bindings.bind(
-            "enter", "press_focused", "Enter Select", show=True
-        )
+        self._bindings.bind("up", "focus_prev_btn", "↑↓ Navigate", show=True)
+        self._bindings.bind("down", "focus_next_btn", show=True)
+        self._bindings.bind("enter", "press_focused", "Enter Select", show=True)
         self._bindings.bind("escape", "no_op", "Esc Back", show=True)
 
         self.query_one("#scan-done-actions").display = True

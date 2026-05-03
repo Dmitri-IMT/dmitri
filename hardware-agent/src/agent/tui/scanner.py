@@ -113,9 +113,7 @@ class ScanRunner:
                 self._emit("deep_inspection")
                 orchestrator._run_deep_inspection_stage(orchestrator.hosts)
                 self._check_cancel()
-                self._emit(
-                    "deep_inspection", "Done", completed=True
-                )
+                self._emit("deep_inspection", "Done", completed=True)
             else:
                 self._emit("port_scan", "(no hosts)", completed=True)
                 self._emit("deep_inspection")
@@ -131,8 +129,7 @@ class ScanRunner:
 
             orchestrator.current_stage = "completed"
             devices = [
-                orchestrator._build_device_payload(h)
-                for h in orchestrator.hosts
+                orchestrator._build_device_payload(h) for h in orchestrator.hosts
             ]
             payload = ScanPayload(
                 scan_id=orchestrator.scan_id,
@@ -151,8 +148,7 @@ class ScanRunner:
             final_ports = sum(len(d.ports) for d in devices)
             self._emit(
                 "normalizing",
-                f"Ports: {final_ports} | "
-                f"Vulnerabilities: {len(findings)}",
+                f"Ports: {final_ports} | " f"Vulnerabilities: {len(findings)}",
                 completed=True,
             )
 
