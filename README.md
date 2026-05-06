@@ -71,6 +71,8 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 
 **Documentação completa de arquitetura:** [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
 
+**Roadmap tecnico atual:** [docs/implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md](docs/implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md)
+
 ## Setup
 
 Siga o guia completo:

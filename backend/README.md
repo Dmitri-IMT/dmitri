@@ -1,6 +1,6 @@
 # Backend API (FastAPI)
 
-Backend minimo responsavel por receber resultados de varredura do hardware-agent e validar o payload conforme os contratos em `../contracts/schemas`.
+Backend responsavel por receber resultados do `hardware-agent`, persistir scans/dispositivos/portas/servicos/CPEs/findings, enfileirar jobs de enrichment e correlacionar CVEs com a NVD.
 
 ## Requisitos
 
@@ -23,12 +23,38 @@ python -m uvicorn api.main:app --reload --app-dir src
 
 O servidor fica disponivel em `http://127.0.0.1:8000`.
 
+Banco local default:
+
+- se `DATABASE_URL` nao for definido, o backend usa `sqlite:///./scanner.db`
+- em producao, configure `DATABASE_URL` para PostgreSQL
+
+Variaveis relevantes:
+
+- `DATABASE_URL`
+- `NVD_API_BASE_URL`
+- `NVD_API_KEY`
+- `NVD_CACHE_TTL_HOURS`
+- `PROCESS_ENRICHMENT_INLINE`
+
+Roadmap tecnico da proxima fase:
+
+- `../docs/implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`
+
+Prioridade atual do roadmap:
+
+- `vulners` continua como base imediata de CVE
+- `KEV` e `EPSS` entram antes de `NVD`
+- `NVD` fica como camada opcional posterior de canonicidade
+
 ## Endpoints
 
 - `GET /` -> responde `{"status": "ok"}`
 - `GET /api/v1/health` -> responde `{"status": "ok"}`
-- `POST /scans` -> recebe um JSON compativel com o contrato compartilhado
+- `POST /scans` -> recebe e persiste um JSON compativel com o contrato compartilhado
 - `POST /api/v1/scans` -> alias versionado usado pelo agente
+- `GET /scans` e `GET /api/v1/scans` -> lista historico de scans persistidos
+- `GET /scans/{scan_id}` e `GET /api/v1/scans/{scan_id}` -> detalhe completo de um scan
+- `GET /findings` e `GET /api/v1/findings` -> lista findings persistidos com filtros simples
 
 Resposta esperada de ingestao:
 
@@ -39,6 +65,15 @@ Resposta esperada de ingestao:
   "devices_received": 2
 }
 ```
+
+Com a Fase 2 implementada, a ingestao agora faz:
+
+- persistencia idempotente por `scan_id`
+- normalizacao relacional de `scan`, `device`, `port`, `service`, `cpe` e `finding`
+- criacao de `enrichment_jobs`
+- cache local de consultas NVD
+- correlacao CPE -> CVE e deduplicacao entre sinais do scan e enrichment
+- score de confianca: `tentative`, `probable`, `confirmed`
 
 ## Testando com o payload de exemplo
 
@@ -58,4 +93,11 @@ curl -X POST http://127.0.0.1:8000/api/v1/scans \
   --data @contracts/examples/scan_result.example.json
 ```
 
-Voce deve ver o mesmo `scan_id` do arquivo de exemplo e `devices_received` igual ao numero de dispositivos listados.
+Depois consulte:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/scans
+curl http://127.0.0.1:8000/api/v1/findings
+```
+
+Voce deve ver o mesmo `scan_id` do arquivo de exemplo, historico persistido e findings com `confidence` e `source_labels`.
