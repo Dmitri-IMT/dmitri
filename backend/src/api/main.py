@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from uuid import UUID
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
@@ -32,7 +33,6 @@ from api.schemas.persistence import (
     PersistedPort,
     PersistedService,
 )
-from api.services.enrichment import process_pending_enrichment_jobs
 from api.services.persistence import persist_scan
 
 settings = get_settings()
@@ -90,15 +90,11 @@ def ingest_scan(scan: ScanResult, session: Session) -> ScanIngestResponse:
 )
 def ingest_scan_endpoint(
     scan: ScanResult,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> ScanIngestResponse:
     """HTTP wrapper for scan ingestion."""
 
-    response = ingest_scan(scan, session)
-    if settings.process_enrichment_inline:
-        background_tasks.add_task(_process_enrichment_jobs)
-    return response
+    return ingest_scan(scan, session)
 
 
 @app.get("/scans", response_model=list[PersistedScanSummary])
@@ -134,7 +130,7 @@ def list_scans(session: Session = Depends(get_session)) -> list[PersistedScanSum
 @app.get("/scans/{scan_id}", response_model=PersistedScanDetail)
 @app.get("/api/v1/scans/{scan_id}", response_model=PersistedScanDetail)
 def get_scan(
-    scan_id: str,
+    scan_id: UUID,
     session: Session = Depends(get_session),
 ) -> PersistedScanDetail:
     scan = session.get(ScanRecord, scan_id)
@@ -160,11 +156,6 @@ def list_findings(
         statement = statement.where(FindingRecord.ip == device_ip)
     findings = session.exec(statement.order_by(FindingRecord.created_at.desc())).all()
     return [_serialize_finding(record) for record in findings]
-
-
-def _process_enrichment_jobs() -> None:
-    for session in get_session():
-        process_pending_enrichment_jobs(session)
 
 
 def _serialize_scan_detail(session: Session, scan: ScanRecord) -> PersistedScanDetail:

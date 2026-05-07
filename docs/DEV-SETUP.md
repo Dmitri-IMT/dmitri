@@ -21,7 +21,7 @@ cp .env.example .env
 docker compose up -d
 
 # 4. Verifique se está rodando
-curl http://localhost:8000/api/v1/health
+curl http://localhost:18000/api/v1/health
 # Deve retornar {"status": "ok"}
 
 # 5. Fazer Rebuild, quando necessário
@@ -36,7 +36,7 @@ cd frontend
 npm install
 npm run dev
 Frontend estará em http://localhost:5173
-Importante: O Vite dev server já está configurado com proxy /api/* → http://localhost:8000.
+Importante: Se o backend estiver rodando via `docker compose`, use http://localhost:18000. Se estiver rodando direto com `uvicorn`, a porta continua `8000`.
 ```
 
 ## Ambiente de Desenvolvimento

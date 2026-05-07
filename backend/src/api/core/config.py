@@ -14,16 +14,20 @@ class Settings(BaseSettings):
     )
     nvd_api_key: str | None = Field(default=None, alias="NVD_API_KEY")
     nvd_cache_ttl_hours: int = Field(default=12, alias="NVD_CACHE_TTL_HOURS")
+    enrichment_poll_interval_seconds: float = Field(
+        default=5.0,
+        alias="ENRICHMENT_POLL_INTERVAL_SECONDS",
+    )
+    enrichment_batch_size: int = Field(
+        default=10,
+        alias="ENRICHMENT_BATCH_SIZE",
+    )
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:5173",
         ],
         alias="CORS_ORIGINS",
-    )
-    process_enrichment_inline: bool = Field(
-        default=True,
-        alias="PROCESS_ENRICHMENT_INLINE",
     )
 
     model_config = SettingsConfigDict(

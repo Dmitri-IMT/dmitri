@@ -16,35 +16,79 @@ from api.services.nvd import NvdClient, parse_nvd_matches
 from api.services.persistence import upsert_finding
 
 
-def process_pending_enrichment_jobs(session: Session) -> int:
-    client = NvdClient()
-    jobs = session.exec(
-        select(EnrichmentJobRecord).where(EnrichmentJobRecord.status == "pending")
-    ).all()
-    processed = 0
+def claim_pending_enrichment_jobs(
+    session: Session,
+    *,
+    batch_size: int,
+) -> list[EnrichmentJobRecord]:
+    statement = (
+        select(EnrichmentJobRecord)
+        .where(EnrichmentJobRecord.status == "pending")
+        .order_by(EnrichmentJobRecord.created_at, EnrichmentJobRecord.id)
+        .limit(batch_size)
+    )
+    bind = session.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        statement = statement.with_for_update(skip_locked=True)
+
+    jobs = session.exec(statement).all()
+    now = datetime.now(timezone.utc)
     for job in jobs:
-        processed += 1
         job.status = "running"
         job.attempts += 1
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = now
+        job.completed_at = None
+        job.last_error = None
+        session.add(job)
+    session.commit()
+    for job in jobs:
+        session.refresh(job)
+    return jobs
+
+
+def process_claimed_enrichment_job(
+    session: Session,
+    job: EnrichmentJobRecord,
+    *,
+    client: NvdClient | None = None,
+) -> None:
+    client = client or NvdClient()
+    try:
+        if job.job_type == "nvd_cpe":
+            _process_cpe_job(session, client, job)
+        elif job.job_type == "nvd_cve":
+            _process_cve_job(session, client, job)
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.last_error = None
         session.add(job)
         session.commit()
-        try:
-            if job.job_type == "nvd_cpe":
-                _process_cpe_job(session, client, job)
-            elif job.job_type == "nvd_cve":
-                _process_cve_job(session, client, job)
-            job.status = "completed"
-            job.completed_at = datetime.now(timezone.utc)
-            job.last_error = None
-            session.add(job)
-            session.commit()
-        except Exception as exc:
-            job.status = "failed"
-            job.last_error = str(exc)
-            session.add(job)
-            session.commit()
-    return processed
+    except Exception as exc:
+        session.rollback()
+        managed_job = session.get(EnrichmentJobRecord, job.id)
+        if managed_job is None:
+            raise
+        managed_job.status = "failed"
+        managed_job.completed_at = datetime.now(timezone.utc)
+        managed_job.last_error = str(exc)
+        session.add(managed_job)
+        session.commit()
+
+
+def process_pending_enrichment_jobs(
+    session: Session,
+    *,
+    batch_size: int = 10,
+    client: NvdClient | None = None,
+) -> int:
+    jobs = claim_pending_enrichment_jobs(session, batch_size=batch_size)
+    if not jobs:
+        return 0
+
+    resolved_client = client or NvdClient()
+    for job in jobs:
+        process_claimed_enrichment_job(session, job, client=resolved_client)
+    return len(jobs)
 
 
 def _process_cpe_job(
