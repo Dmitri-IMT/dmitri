@@ -1,4 +1,4 @@
-"""Tests for agent.tui.results — scan result persistence."""
+"""Tests for agent.tui.results — scan result persistence under results/ subdirectory."""
 
 from __future__ import annotations
 
@@ -22,11 +22,12 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
     )
 
 
-def test_write_creates_file(tmp_path):
+def test_write_creates_file_in_results_subdir(tmp_path):
     payload = _make_payload()
     result_path = write_scan_result(payload, str(tmp_path))
     assert result_path.exists()
     assert result_path.suffix == ".json"
+    assert result_path.parent == tmp_path / "results"
 
 
 def test_filename_contains_timestamp_and_subnet(tmp_path):
@@ -60,12 +61,30 @@ def test_two_scans_create_two_files(tmp_path):
     path1 = write_scan_result(p1, str(tmp_path))
     path2 = write_scan_result(p2, str(tmp_path))
     assert path1 != path2
-    assert len(list(tmp_path.glob("*.json"))) == 2
+    results_dir = tmp_path / "results"
+    assert len(list(results_dir.glob("*.json"))) == 2
 
 
-def test_creates_directory_if_missing(tmp_path):
-    nested = tmp_path / "a" / "b" / "c"
+def test_creates_results_directory_if_missing(tmp_path):
+    nested = tmp_path / "a" / "b" / "workspace"
     payload = _make_payload()
     result_path = write_scan_result(payload, str(nested))
     assert result_path.exists()
-    assert nested.is_dir()
+    assert (nested / "results").is_dir()
+
+
+def test_prunes_to_10_after_writing(tmp_path):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir(parents=True)
+    for i in range(10):
+        ts = f"2026-05-{i + 1:02d}T10-00-00"
+        (results_dir / f"{ts}_192-168-1-0_24.json").write_text(
+            '{"old": true}', encoding="utf-8"
+        )
+    assert len(list(results_dir.glob("*.json"))) == 10
+
+    payload = _make_payload()
+    write_scan_result(payload, str(tmp_path))
+
+    remaining = list(results_dir.glob("*.json"))
+    assert len(remaining) == 10

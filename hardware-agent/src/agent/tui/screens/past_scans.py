@@ -57,7 +57,7 @@ class PastScansScreen(DmitriScreen):
         self._entries = []
 
         if config:
-            results_dir = Path(config.results_dir)
+            results_dir = Path(config.results_dir) / "results"
             if results_dir.is_dir():
                 for file_path in results_dir.glob("*.json"):
                     entry = self._parse_entry(file_path)

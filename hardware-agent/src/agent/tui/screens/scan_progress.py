@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 from textual.binding import Binding
@@ -9,6 +10,7 @@ from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Button, Static
 
+from agent.tui.config import load_config
 from agent.tui.scanner import ProgressSnapshot, ScanRunner
 from agent.tui.screens.base import DmitriScreen
 
@@ -90,12 +92,15 @@ class ScanProgressScreen(DmitriScreen):
         self._start_scan()
 
     def _start_scan(self) -> None:
+        config = load_config()
+        workspace_root = Path(config.results_dir) if config else None
         self._runner = ScanRunner(
             subnet=self.subnet,
             scan_mode=self.scan_mode,
             on_progress=self._on_worker_progress,
             on_complete=self._on_worker_complete,
             on_error=self._on_worker_error,
+            workspace_root=workspace_root,
         )
         self._runner.start()
 

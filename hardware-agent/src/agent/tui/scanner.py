@@ -5,10 +5,12 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
+from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.pipeline import ScanOrchestrator
 from agent.utils.network import LocalNetworkInfo
 
@@ -41,12 +43,14 @@ class ScanRunner:
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         on_complete: Callable[[ScanPayload], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
+        workspace_root: Path | None = None,
     ) -> None:
         self.subnet = subnet
         self.scan_mode = scan_mode
         self._on_progress = on_progress
         self._on_complete = on_complete
         self._on_error = on_error
+        self._workspace_root = workspace_root
         self._cancel_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -83,12 +87,15 @@ class ScanRunner:
                 subnet=self.subnet,
                 interface="tui",
             )
-            orchestrator = ScanOrchestrator(settings)
+            orchestrator = ScanOrchestrator(
+                settings, workspace_root=self._workspace_root
+            )
             orchestrator.network_info = network_info
 
             self._emit("discovery")
             self._check_cancel()
             orchestrator.current_stage = "discovery"
+            orchestrator._set_runner_stage("discovery")
             from agent.discovery.network_discovery import discover_hosts
 
             orchestrator.hosts = discover_hosts(orchestrator.runner, self.subnet)
