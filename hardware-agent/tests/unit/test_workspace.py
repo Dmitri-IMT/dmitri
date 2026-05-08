@@ -1,0 +1,550 @@
+"""Unit tests for agent.scanner.workspace — layout, migration, pruning, basename, argv, meta."""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+
+from agent.scanner.workspace import (
+    build_nmap_argv,
+    ensure_workspace_layout,
+    make_run_folder_name,
+    prune_logs,
+    prune_results,
+    write_meta_json,
+)
+
+
+class TestEnsureWorkspaceLayout:
+    def test_creates_results_and_logs(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "scan-workspace"
+        ensure_workspace_layout(workspace)
+        assert (workspace / "results").is_dir()
+        assert (workspace / "logs").is_dir()
+
+    def test_creates_workspace_root_if_missing(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "deep" / "nested" / "workspace"
+        assert not workspace.exists()
+        ensure_workspace_layout(workspace)
+        assert workspace.is_dir()
+        assert (workspace / "results").is_dir()
+        assert (workspace / "logs").is_dir()
+
+    def test_idempotent_second_call(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        ensure_workspace_layout(workspace)
+        ensure_workspace_layout(workspace)
+        assert (workspace / "results").is_dir()
+        assert (workspace / "logs").is_dir()
+
+    def test_preserves_existing_content(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "results").mkdir()
+        existing_file = workspace / "results" / "scan.json"
+        existing_file.write_text('{"test": true}', encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+
+        assert existing_file.exists()
+        assert existing_file.read_text(encoding="utf-8") == '{"test": true}'
+
+    def test_creates_logs_when_results_already_exists(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "results").mkdir()
+
+        ensure_workspace_layout(workspace)
+
+        assert (workspace / "results").is_dir()
+        assert (workspace / "logs").is_dir()
+
+    def test_creates_results_when_logs_already_exists(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "logs").mkdir()
+
+        ensure_workspace_layout(workspace)
+
+        assert (workspace / "results").is_dir()
+        assert (workspace / "logs").is_dir()
+
+
+class TestLegacyJsonMigration:
+    def test_moves_root_json_into_results(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        legacy = workspace / "2026-05-03T14-30-00_192-168-1-0_24.json"
+        legacy.write_text('{"subnet": "192.168.1.0/24"}', encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+
+        assert not legacy.exists()
+        migrated = workspace / "results" / legacy.name
+        assert migrated.exists()
+        assert migrated.read_text(encoding="utf-8") == '{"subnet": "192.168.1.0/24"}'
+
+    def test_moves_multiple_json_files(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        for i in range(3):
+            (workspace / f"scan-{i}.json").write_text(f'{{"id": {i}}}', encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+
+        for i in range(3):
+            assert not (workspace / f"scan-{i}.json").exists()
+            assert (workspace / "results" / f"scan-{i}.json").exists()
+
+    def test_skips_when_destination_already_exists(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "results").mkdir()
+        root_file = workspace / "scan.json"
+        root_file.write_text('{"old": true}', encoding="utf-8")
+        dest_file = workspace / "results" / "scan.json"
+        dest_file.write_text('{"new": true}', encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+
+        # Root file not moved because destination exists — root copy stays
+        assert root_file.exists()
+        # Destination keeps its original content
+        assert dest_file.read_text(encoding="utf-8") == '{"new": true}'
+
+    def test_idempotent_after_migration(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "old.json").write_text('{"x": 1}', encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+        ensure_workspace_layout(workspace)
+
+        assert not (workspace / "old.json").exists()
+        assert (workspace / "results" / "old.json").exists()
+
+    def test_ignores_non_json_files_at_root(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "notes.txt").write_text("hello", encoding="utf-8")
+        (workspace / "config.toml").write_text("key = 1", encoding="utf-8")
+
+        ensure_workspace_layout(workspace)
+
+        assert (workspace / "notes.txt").exists()
+        assert (workspace / "config.toml").exists()
+        assert not list((workspace / "results").glob("*.txt"))
+        assert not list((workspace / "results").glob("*.toml"))
+
+    def test_no_op_on_empty_workspace(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+
+        ensure_workspace_layout(workspace)
+
+        assert list((workspace / "results").iterdir()) == []
+
+
+class TestPruneLogs:
+    def _make_run_dirs(self, logs_dir: Path, count: int) -> list[Path]:
+        dirs = []
+        for i in range(count):
+            name = f"2026-05-{i + 1:02d}-10-00-00-discovery-aa{i:02x}"
+            d = logs_dir / name
+            d.mkdir(parents=True)
+            (d / "console.log").write_text(f"run {i}", encoding="utf-8")
+            dirs.append(d)
+        return dirs
+
+    def test_no_op_under_limit(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        dirs = self._make_run_dirs(logs_dir, 5)
+
+        prune_logs(logs_dir, max_count=10)
+
+        for d in dirs:
+            assert d.exists()
+
+    def test_no_op_at_exactly_limit(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        dirs = self._make_run_dirs(logs_dir, 10)
+
+        prune_logs(logs_dir, max_count=10)
+
+        for d in dirs:
+            assert d.exists()
+
+    def test_prunes_oldest_when_over_limit(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        dirs = self._make_run_dirs(logs_dir, 12)
+
+        prune_logs(logs_dir, max_count=10)
+
+        assert not dirs[0].exists()
+        assert not dirs[1].exists()
+        for d in dirs[2:]:
+            assert d.exists()
+
+    def test_prunes_to_exact_count(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        self._make_run_dirs(logs_dir, 15)
+
+        prune_logs(logs_dir, max_count=10)
+
+        remaining = [d for d in logs_dir.iterdir() if d.is_dir()]
+        assert len(remaining) == 10
+
+    def test_removes_directory_contents(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        dirs = self._make_run_dirs(logs_dir, 11)
+
+        prune_logs(logs_dir, max_count=10)
+
+        assert not dirs[0].exists()
+        assert not (dirs[0] / "console.log").exists()
+
+    def test_no_op_on_empty_dir(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+
+        prune_logs(logs_dir, max_count=10)
+
+        assert list(logs_dir.iterdir()) == []
+
+    def test_ignores_files_in_logs_dir(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        stray_file = logs_dir / "stray.txt"
+        stray_file.write_text("stray", encoding="utf-8")
+        self._make_run_dirs(logs_dir, 11)
+
+        prune_logs(logs_dir, max_count=10)
+
+        assert stray_file.exists()
+        remaining_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
+        assert len(remaining_dirs) == 10
+
+
+class TestPruneResults:
+    def _make_result_files(self, results_dir: Path, count: int) -> list[Path]:
+        results_dir.mkdir(parents=True, exist_ok=True)
+        files = []
+        for i in range(count):
+            name = f"2026-05-{i + 1:02d}T10-00-00_192-168-1-0_24.json"
+            f = results_dir / name
+            f.write_text(f'{{"id": {i}}}', encoding="utf-8")
+            files.append(f)
+        return files
+
+    def test_no_op_under_limit(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        files = self._make_result_files(results_dir, 5)
+
+        prune_results(results_dir, max_count=10)
+
+        for f in files:
+            assert f.exists()
+
+    def test_no_op_at_exactly_limit(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        files = self._make_result_files(results_dir, 10)
+
+        prune_results(results_dir, max_count=10)
+
+        for f in files:
+            assert f.exists()
+
+    def test_prunes_oldest_when_over_limit(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        files = self._make_result_files(results_dir, 12)
+
+        prune_results(results_dir, max_count=10)
+
+        assert not files[0].exists()
+        assert not files[1].exists()
+        for f in files[2:]:
+            assert f.exists()
+
+    def test_prunes_to_exact_count(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        self._make_result_files(results_dir, 15)
+
+        prune_results(results_dir, max_count=10)
+
+        remaining = list(results_dir.glob("*.json"))
+        assert len(remaining) == 10
+
+    def test_no_op_on_empty_dir(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+
+        prune_results(results_dir, max_count=10)
+
+        assert list(results_dir.iterdir()) == []
+
+    def test_ignores_non_json_files(self, tmp_path: Path) -> None:
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+        readme = results_dir / "README.md"
+        readme.write_text("keep me", encoding="utf-8")
+        self._make_result_files(results_dir, 11)
+
+        prune_results(results_dir, max_count=10)
+
+        assert readme.exists()
+        remaining_json = list(results_dir.glob("*.json"))
+        assert len(remaining_json) == 10
+
+
+# Regex matching the contract grammar: {YYYY-MM-DD}-{HH-MM-SS}-{stage}-{unique}
+_BASENAME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-[a-z][a-z0-9-]*-[0-9a-f]{4}$"
+)
+
+
+class TestMakeRunFolderName:
+    def test_matches_contract_grammar(self) -> None:
+        name = make_run_folder_name("discovery")
+        assert _BASENAME_RE.match(name), f"'{name}' does not match grammar"
+
+    def test_uses_local_time_not_utc(self) -> None:
+        local_now = datetime(2026, 5, 7, 14, 30, 0)
+        name = make_run_folder_name("discovery", now=local_now)
+        assert name.startswith("2026-05-07-14-30-00-")
+
+    def test_stage_appears_in_name(self) -> None:
+        name = make_run_folder_name("port-batch")
+        parts = name.split("-")
+        # After date (3 parts) and time (3 parts), stage starts
+        stage_and_rest = "-".join(parts[6:])
+        assert stage_and_rest.startswith("port-batch-")
+
+    def test_unique_suffix_is_4_hex_chars(self) -> None:
+        name = make_run_folder_name("discovery")
+        unique = name.rsplit("-", 1)[-1]
+        assert len(unique) == 4
+        assert all(c in "0123456789abcdef" for c in unique)
+
+    def test_successive_calls_differ(self) -> None:
+        fixed = datetime(2026, 5, 7, 14, 30, 0)
+        names = {make_run_folder_name("discovery", now=fixed) for _ in range(20)}
+        assert len(names) == 20
+
+    def test_no_forbidden_characters(self) -> None:
+        name = make_run_folder_name("nse-vuln")
+        forbidden = set(':/"\\<>|?*')
+        assert not forbidden.intersection(name)
+
+    def test_filesystem_safe_on_windows(self, tmp_path: Path) -> None:
+        name = make_run_folder_name("discovery")
+        d = tmp_path / name
+        d.mkdir()
+        assert d.is_dir()
+
+    def test_hyphenated_stage(self) -> None:
+        name = make_run_folder_name("port-batch")
+        assert _BASENAME_RE.match(name), f"'{name}' does not match grammar"
+
+    def test_single_word_stages(self) -> None:
+        for stage in ("discovery", "ports", "nse"):
+            name = make_run_folder_name(stage)
+            assert _BASENAME_RE.match(name), f"'{name}' does not match for {stage}"
+
+
+class TestBuildNmapArgv:
+    def test_injects_all_flags(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        result = build_nmap_argv(["-sn", "-T4", "192.168.1.0/24"], xml)
+        assert "-oX" in result
+        assert str(xml) in result
+        assert "-v" in result
+        assert "--stats-every" in result
+        assert "30s" in result
+
+    def test_preserves_base_args(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        base = ["-sn", "-PE", "-T4", "192.168.1.0/24"]
+        result = build_nmap_argv(base, xml)
+        for arg in base:
+            assert arg in result
+
+    def test_no_duplicate_oX(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        base = ["-oX", "/other/path.xml", "-sn"]
+        result = build_nmap_argv(base, xml)
+        assert result.count("-oX") == 1
+        assert "/other/path.xml" in result
+        assert str(xml) not in result
+
+    def test_no_duplicate_v(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        result = build_nmap_argv(["-v", "-sn"], xml)
+        assert result.count("-v") == 1
+
+    def test_no_v_when_vv_present(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        result = build_nmap_argv(["-vv", "-sn"], xml)
+        assert "-v" not in result
+        assert "-vv" in result
+
+    def test_no_duplicate_stats_every(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        result = build_nmap_argv(["--stats-every", "10s", "-sn"], xml)
+        assert result.count("--stats-every") == 1
+        assert "10s" in result
+        assert "30s" not in result
+
+    def test_does_not_mutate_input(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        base = ["-sn", "-T4"]
+        original = list(base)
+        build_nmap_argv(base, xml)
+        assert base == original
+
+    def test_empty_base_args(self, tmp_path: Path) -> None:
+        xml = tmp_path / "nmaprun.xml"
+        result = build_nmap_argv([], xml)
+        assert "-oX" in result
+        assert "-v" in result
+        assert "--stats-every" in result
+
+
+_STARTED = datetime(2026, 5, 7, 14, 30, 0, tzinfo=timezone.utc)
+_FINISHED = datetime(2026, 5, 7, 14, 35, 12, tzinfo=timezone.utc)
+_REQUIRED_FIELDS = {
+    "run_id",
+    "nmap_path",
+    "argv",
+    "started_at",
+    "finished_at",
+    "exit_code",
+    "terminated_by",
+    "scan_workspace_root",
+}
+
+
+class TestWriteMetaJson:
+    def _write(self, run_dir: Path, **overrides) -> dict:
+        defaults = dict(
+            nmap_path="/usr/bin/nmap",
+            argv=["-sn", "-T4", "192.168.1.0/24"],
+            started_at=_STARTED,
+            finished_at=_FINISHED,
+            exit_code=0,
+            terminated_by="completed",
+            scan_workspace_root=run_dir.parent.parent,
+        )
+        defaults.update(overrides)
+        path = write_meta_json(run_dir, **defaults)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_creates_meta_json_file(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "2026-05-07-14-30-00-discovery-a3f2"
+        run_dir.mkdir(parents=True)
+
+        path = write_meta_json(
+            run_dir,
+            nmap_path="/usr/bin/nmap",
+            argv=["-sn"],
+            started_at=_STARTED,
+            finished_at=_FINISHED,
+            exit_code=0,
+            terminated_by="completed",
+            scan_workspace_root=tmp_path,
+        )
+
+        assert path == run_dir / "meta.json"
+        assert path.exists()
+
+    def test_contains_all_required_fields(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "2026-05-07-14-30-00-discovery-a3f2"
+        run_dir.mkdir(parents=True)
+
+        data = self._write(run_dir)
+
+        assert _REQUIRED_FIELDS.issubset(data.keys())
+
+    def test_run_id_equals_folder_name(self, tmp_path: Path) -> None:
+        folder_name = "2026-05-07-14-30-00-discovery-a3f2"
+        run_dir = tmp_path / "logs" / folder_name
+        run_dir.mkdir(parents=True)
+
+        data = self._write(run_dir)
+
+        assert data["run_id"] == folder_name
+
+    def test_timestamps_are_iso8601_utc(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "2026-05-07-14-30-00-discovery-a3f2"
+        run_dir.mkdir(parents=True)
+
+        data = self._write(run_dir)
+
+        started = datetime.fromisoformat(data["started_at"])
+        finished = datetime.fromisoformat(data["finished_at"])
+        assert started.tzinfo is not None
+        assert finished.tzinfo is not None
+
+    def test_terminated_by_completed(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run1"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, terminated_by="completed", exit_code=0)
+        assert data["terminated_by"] == "completed"
+
+    def test_terminated_by_error(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run2"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, terminated_by="error", exit_code=1)
+        assert data["terminated_by"] == "error"
+        assert data["exit_code"] == 1
+
+    def test_terminated_by_user_cancel(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run3"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, terminated_by="user_cancel", exit_code=None)
+        assert data["terminated_by"] == "user_cancel"
+
+    def test_terminated_by_timeout(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run4"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, terminated_by="timeout", exit_code=None)
+        assert data["terminated_by"] == "timeout"
+
+    def test_null_exit_code(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run5"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, exit_code=None)
+        assert data["exit_code"] is None
+
+    def test_argv_is_list(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run6"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, argv=["-sn", "-v", "--stats-every", "30s"])
+        assert isinstance(data["argv"], list)
+        assert data["argv"] == ["-sn", "-v", "--stats-every", "30s"]
+
+    def test_optional_parent_scan_id(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run7"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, parent_scan_id="abc-123-def")
+        assert data["parent_scan_id"] == "abc-123-def"
+
+    def test_optional_agent_version(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run8"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, agent_version="0.1.0")
+        assert data["agent_version"] == "0.1.0"
+
+    def test_omits_optional_fields_when_not_provided(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run9"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir)
+        assert "parent_scan_id" not in data
+        assert "agent_version" not in data
+
+    def test_scan_workspace_root_is_absolute(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "logs" / "run10"
+        run_dir.mkdir(parents=True)
+        data = self._write(run_dir, scan_workspace_root=tmp_path)
+        root_path = Path(data["scan_workspace_root"])
+        assert root_path.is_absolute()

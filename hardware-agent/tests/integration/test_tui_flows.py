@@ -24,13 +24,15 @@ from agent.tui.screens.setup import SetupScreen
 
 
 def _make_config(tmp_path: Path) -> tuple[Path, Path]:
-    """Create a temp config and results dir, return (config_path, results_dir)."""
+    """Create a temp config and workspace dir, return (config_path, workspace_dir)."""
     config_dir = tmp_path / "config"
-    results_dir = tmp_path / "results"
-    results_dir.mkdir(parents=True)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    (workspace_dir / "results").mkdir(exist_ok=True)
+    (workspace_dir / "logs").mkdir(exist_ok=True)
     config_path = config_dir / "config.toml"
-    save_config(DmitriConfig(results_dir=str(results_dir)), config_path)
-    return config_path, results_dir
+    save_config(DmitriConfig(results_dir=str(workspace_dir)), config_path)
+    return config_path, workspace_dir
 
 
 def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
@@ -130,12 +132,12 @@ async def test_past_scans_empty_state(tmp_path):
 
 @pytest.mark.asyncio
 async def test_past_scans_with_files(tmp_path):
-    """S6 lists scan files from results dir."""
-    config_path, results_dir = _make_config(tmp_path)
-    config = DmitriConfig(results_dir=str(results_dir))
+    """S6 lists scan files from results/ subdirectory."""
+    config_path, workspace_dir = _make_config(tmp_path)
+    config = DmitriConfig(results_dir=str(workspace_dir))
 
     payload = _make_payload()
-    scan_file = results_dir / "2026-05-03T14-30-00_192-168-1-0_24.json"
+    scan_file = workspace_dir / "results" / "2026-05-03T14-30-00_192-168-1-0_24.json"
     scan_file.write_text(
         json.dumps(payload.model_dump(mode="json"), indent=2),
         encoding="utf-8",

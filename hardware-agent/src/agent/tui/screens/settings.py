@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import Button, Input, Label, Static
 
+from agent.scanner.workspace import ensure_workspace_layout
 from agent.tui.config import (
     DmitriConfig,
     default_results_dir,
@@ -29,7 +32,12 @@ class SettingsScreen(DmitriScreen):
         current_dir = current.results_dir if current else default_results_dir()
         with Vertical(id="settings-container"):
             yield Static("Settings", id="settings-title")
-            yield Label("Results directory:")
+            yield Static(
+                "results/ — saved scan JSON (10 newest kept)\n"
+                "logs/    — Nmap operational traces (10 newest kept)",
+                id="settings-subtitle",
+            )
+            yield Label("Workspace directory:")
             yield Input(
                 value=current_dir,
                 placeholder="Enter path...",
@@ -64,6 +72,7 @@ class SettingsScreen(DmitriScreen):
             return
         resolved = resolve_display_path(path_str)
         save_config(DmitriConfig(results_dir=resolved))
+        ensure_workspace_layout(Path(resolved))
         self.dismiss()
 
     def action_cancel(self) -> None:
@@ -72,5 +81,5 @@ class SettingsScreen(DmitriScreen):
     def _update_resolved_path(self) -> None:
         path_str = self.query_one("#path-input", Input).value
         resolved = resolve_display_path(path_str)
-        display = f"Scans will be saved to: [bold]{resolved}[/bold]" if resolved else ""
+        display = f"Workspace: [bold]{resolved}[/bold]" if resolved else ""
         self.query_one("#resolved-path", Static).update(display)

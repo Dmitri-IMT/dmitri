@@ -17,7 +17,7 @@ from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload, ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo, PortInfo
-from agent.scanner.nmap import NmapRunner
+from agent.scanner.nmap import LoggedNmapRunner, NmapRunner
 from agent.utils.network import LocalNetworkInfo, detect_local_network
 
 LOGGER = logging.getLogger(__name__)
@@ -31,14 +31,30 @@ class ScanOrchestrator:
         self,
         settings: AgentSettings,
         runner: NmapRunner | None = None,
+        workspace_root: Path | None = None,
     ) -> None:
         self.settings = settings
-        self.runner = runner or NmapRunner(settings.nmap_path)
         self.scan_id = uuid4()
+        self.workspace_root = workspace_root
+        if runner is not None:
+            self.runner = runner
+        elif workspace_root is not None:
+            self.runner = LoggedNmapRunner(
+                settings.nmap_path,
+                workspace_root,
+                parent_scan_id=str(self.scan_id),
+                agent_version=AGENT_VERSION,
+            )
+        else:
+            self.runner = NmapRunner(settings.nmap_path)
         self.started_at: datetime | None = None
         self.current_stage = "idle"
         self.hosts: list[HostInfo] = []
         self.network_info: LocalNetworkInfo | None = None
+
+    def _set_runner_stage(self, stage: str) -> None:
+        if isinstance(self.runner, LoggedNmapRunner):
+            self.runner.set_stage(stage)
 
     def run(self) -> ScanPayload:
         """Execute discovery, service detection, NSE correlation, and normalization."""
@@ -46,6 +62,7 @@ class ScanOrchestrator:
         started_at = perf_counter()
         self.started_at = datetime.now(timezone.utc)
         self.current_stage = "discovery"
+        self._set_runner_stage("discovery")
         self.network_info = self._resolve_network_info()
 
         self.hosts = discover_hosts(self.runner, self.network_info.subnet)
@@ -124,6 +141,7 @@ class ScanOrchestrator:
 
     def _run_port_stage(self, hosts: list[HostInfo]) -> None:
         self.current_stage = "port_scan"
+        self._set_runner_stage("ports")
         LOGGER.info(
             "Starting port scan stage for %s hosts using batches of %s.",
             len(hosts),
@@ -161,6 +179,7 @@ class ScanOrchestrator:
 
     def _run_deep_inspection_stage(self, hosts: list[HostInfo]) -> None:
         self.current_stage = "deep_inspection"
+        self._set_runner_stage("nse")
         eligible_hosts = [host for host in hosts if host.open_ports]
         LOGGER.info(
             "Starting deep inspection stage for %s hosts with open ports.",
