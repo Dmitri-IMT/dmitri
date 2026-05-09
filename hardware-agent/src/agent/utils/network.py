@@ -47,6 +47,27 @@ def detect_local_network() -> LocalNetworkInfo:
     )
 
 
+class NetworkUnreachableError(RuntimeError):
+    """Raised when no usable network path exists to run a scan."""
+
+
+def check_network_connectivity() -> None:
+    """Verify that at least one non-loopback IPv4 interface is up."""
+    for name, stats in psutil.net_if_stats().items():
+        if not stats.isup:
+            continue
+        addrs = psutil.net_if_addrs().get(name, [])
+        for addr in addrs:
+            if getattr(addr.family, "name", "") != "AF_INET":
+                continue
+            if addr.address and not addr.address.startswith("127."):
+                return
+    raise NetworkUnreachableError(
+        "No active network interface found. "
+        "Cannot run scan — check your network connection."
+    )
+
+
 def _detect_local_ip() -> str:
     socket_obj = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:

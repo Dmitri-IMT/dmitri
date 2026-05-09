@@ -14,7 +14,7 @@ def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
     if scan_mode == "full":
         arguments.extend(["-p-", "--min-rate", "1000"])
     else:
-        arguments.append("-F")
+        arguments.extend(["-sV", "-O", "--script", "vulners"])
     arguments.append(ip)
 
     root = runner.run_xml(arguments)
@@ -38,7 +38,7 @@ def scan_ports_batch(
     if scan_mode == "full":
         arguments.extend(["-p-", "--min-rate", "1000"])
     else:
-        arguments.append("-F")
+        arguments.extend(["-sV", "-O", "--script", "vulners"])
     arguments.extend(ips)
 
     root = runner.run_xml(arguments)
