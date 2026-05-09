@@ -155,7 +155,7 @@ class ScanRunner:
             final_ports = sum(len(d.ports) for d in devices)
             self._emit(
                 "normalizing",
-                f"Ports: {final_ports} | " f"Vulnerabilities: {len(findings)}",
+                f"Ports: {final_ports} | Vulnerabilities: {len(findings)}",
                 completed=True,
             )
 

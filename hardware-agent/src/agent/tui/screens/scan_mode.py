@@ -26,7 +26,10 @@ class ScanModeScreen(DmitriScreen):
         with Vertical(id="scanmode-container"):
             yield Static("Select scan mode", id="scanmode-title")
             yield OptionList(
-                Option("Quick      —  Top 1000 ports · CVE detection · ~2–5 min", id="quick"),
+                Option(
+                    "Quick      —  Top 1000 ports · CVE detection · ~2–5 min",
+                    id="quick",
+                ),
                 Option("Standard   —  Coming soon", id="standard", disabled=True),
                 Option("Extensive  —  Coming soon", id="extensive", disabled=True),
                 Option("MAX        —  Coming soon", id="max", disabled=True),
