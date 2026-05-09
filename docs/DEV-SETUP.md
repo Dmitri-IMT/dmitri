@@ -73,10 +73,13 @@ If the repository configures **pre-commit** at the root:
 
 ```bash
 pip install pre-commit
-pre-commit install
+pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
-Or with uv: `uv tool install pre-commit` then `pre-commit install` from the repo root.
+Or with uv: `uv tool install pre-commit` then run the same `pre-commit install --hook-type pre-commit --hook-type pre-push`.
+
+The pre-push hook runs the repo lint hooks plus the full pytest suite before `git push`
+(including pushes triggered from the VS Code Git UI).
 
 Do not commit real secrets. For hardware-agent–only work, hooks may still touch other trees if configured globally — adjust or skip as needed.
 
