@@ -6,12 +6,18 @@ repos:
     hooks:
       - id: black
         stages: [push]
+        args: ["--check", "backend", "hardware-agent"]
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.0
     hooks:
       - id: ruff
         stages: [push]
+        args: ["check", "backend", "hardware-agent"]
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
