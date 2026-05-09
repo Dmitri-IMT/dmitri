@@ -11,7 +11,7 @@ from typing import Literal
 from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
 from agent.scanner.pipeline import ScanOrchestrator
-from agent.utils.network import LocalNetworkInfo
+from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
 class ScanCancelled(Exception):
@@ -76,6 +76,7 @@ class ScanRunner:
 
     def _run(self) -> None:
         try:
+            check_network_connectivity()
             settings = AgentSettings(
                 scan_subnet=self.subnet,
                 scan_mode=self.scan_mode,
@@ -154,7 +155,7 @@ class ScanRunner:
             final_ports = sum(len(d.ports) for d in devices)
             self._emit(
                 "normalizing",
-                f"Ports: {final_ports} | " f"Vulnerabilities: {len(findings)}",
+                f"Ports: {final_ports} | Vulnerabilities: {len(findings)}",
                 completed=True,
             )
 

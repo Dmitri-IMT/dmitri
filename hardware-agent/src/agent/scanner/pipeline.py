@@ -18,7 +18,11 @@ from agent.normalize.contracts import DevicePayload, PortPayload, ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo, PortInfo
 from agent.scanner.nmap import LoggedNmapRunner, NmapRunner
-from agent.utils.network import LocalNetworkInfo, detect_local_network
+from agent.utils.network import (
+    LocalNetworkInfo,
+    check_network_connectivity,
+    detect_local_network,
+)
 
 LOGGER = logging.getLogger(__name__)
 AGENT_VERSION = "0.1.0"
@@ -59,6 +63,7 @@ class ScanOrchestrator:
     def run(self) -> ScanPayload:
         """Execute discovery, service detection, NSE correlation, and normalization."""
 
+        check_network_connectivity()
         started_at = perf_counter()
         self.started_at = datetime.now(timezone.utc)
         self.current_stage = "discovery"
@@ -242,7 +247,9 @@ class ScanOrchestrator:
 
     def _nmap_arguments_summary(self) -> str:
         port_stage = (
-            "-p- --min-rate 1000" if self.settings.scan_mode == "full" else "-F"
+            "-p- --min-rate 1000"
+            if self.settings.scan_mode == "full"
+            else "-sV -O --script vulners"
         )
         return (
             f"discovery=-sn -PE -T4; ports={port_stage} -Pn -T4; "
