@@ -14,10 +14,16 @@ Create **all** of these under `specs/NNN-feature-slug/`:
 | `decisions/` | `README.md`, `record-template.md` |
 | `interaction/` | `README.md` |
 | `notes/` | `README.md` |
+| `open-questions/` | `README.md`, `to-define.md` |
 | `plans/` | `README.md` |
 | `tech-stack/` | `README.md` |
 | `testing/` | `README.md` |
 | `ui/` | `README.md` |
+
+### `open-questions/` contents
+
+- **`README.md`** — H1 “Open questions”; **ill-defined** or ambiguous items **not** yet specified enough to implement. **Not** for product/engineering **choices**—those go in **`decisions/`** (use **proposed** status if still undecided).
+- **`to-define.md`** — Table or bullets for **specification gaps** (technical ambiguity, missing requirements, unclear integration). When resolved, move outcomes into **`contracts/`**, **`architecture/`**, **`ui/`**, or **`decisions/`** and remove the row.
 
 ## Numbering algorithm
 
@@ -54,6 +60,7 @@ Do **not** invent long `plans/NN-*.md` or `bugs/NNN-*.md` unless the user asks; 
 | [`tech-stack/`](tech-stack/) | … |
 | [`contracts/`](contracts/) | … |
 | [`decisions/`](decisions/) | … |
+| [`open-questions/`](open-questions/) | Ill-defined / ambiguous items until specified (not the home for settled product picks) |
 | [`notes/`](notes/) | … |
 | [`testing/`](testing/) | … |
 | [`checklists/`](checklists/) | … |
@@ -118,6 +125,8 @@ Next, let’s sharpen the spec. Reply in one message (bullet points OK):
 5. **Acceptance** — How will we know “done” (testable checks)?
 6. **Risks** — Security, privacy, performance, or compliance concerns?
 
+**Specification gaps** (unclear or missing definition) → [`open-questions/to-define.md`](open-questions/to-define.md). **Product or engineering choices** (picking between options) → **`decisions/`** as a DR (**proposed** until accepted).
+
 Optional: say which subfolder you want filled first (`contracts/`, `architecture/`, `plans/`, …) and the agent will draft there.
 
 ---
@@ -129,3 +138,5 @@ If the environment supports slash commands, document for the user:
 ```text
 /create-spec {initial idea in natural language}
 ```
+
+Also natural language: **create spec …** (same arguments as above).
