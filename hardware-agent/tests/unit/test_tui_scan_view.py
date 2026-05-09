@@ -68,7 +68,7 @@ def test_render_contains_target_and_date():
     rendered = screen._render_payload(_make_payload())
     assert "192.168.1.0/24" in rendered
     assert "2026-05-03 14:30:00 UTC" in rendered
-    assert "quick" in rendered
+    assert "Quick" in rendered
 
 
 def test_render_contains_device_info():
