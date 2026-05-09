@@ -8,10 +8,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
+from agent.config import AgentSettings
 from agent.scanner.nmap import LoggedNmapRunner, NmapExecutionError, NmapRunner
 from agent.scanner.pipeline import ScanOrchestrator
-from agent.config import AgentSettings
 
 VALID_XML = textwrap.dedent("""\
     <?xml version="1.0"?>
@@ -46,7 +45,7 @@ class TestLoggedNmapRunnerRunXml:
             "import sys; "
             f"open(sys.argv[sys.argv.index('-oX')+1], 'w').write('''{VALID_XML}''')"
         )
-        root = runner.run_xml(["-c", script])
+        runner.run_xml(["-c", script])
 
         logs_dir = workspace / "logs"
         run_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
@@ -184,7 +183,10 @@ class TestOrchestratorUsesLoggedRunner:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         (workspace / "logs").mkdir()
-        settings = AgentSettings(scan_subnet="192.168.1.0/24")
+        settings = AgentSettings(
+            scan_subnet="192.168.1.0/24",
+            nmap_path=sys.executable,
+        )
 
         orch = ScanOrchestrator(settings, workspace_root=workspace)
 
@@ -192,7 +194,10 @@ class TestOrchestratorUsesLoggedRunner:
         assert orch.runner.parent_scan_id == str(orch.scan_id)
 
     def test_creates_regular_runner_without_workspace(self) -> None:
-        settings = AgentSettings(scan_subnet="192.168.1.0/24")
+        settings = AgentSettings(
+            scan_subnet="192.168.1.0/24",
+            nmap_path=sys.executable,
+        )
         orch = ScanOrchestrator(settings)
         assert type(orch.runner) is NmapRunner
 
@@ -203,6 +208,8 @@ class TestOrchestratorUsesLoggedRunner:
         custom_runner = NmapRunner.__new__(NmapRunner)
         custom_runner.nmap_path = "/custom/nmap"
 
-        orch = ScanOrchestrator(settings, runner=custom_runner, workspace_root=workspace)
+        orch = ScanOrchestrator(
+            settings, runner=custom_runner, workspace_root=workspace
+        )
 
         assert orch.runner is custom_runner

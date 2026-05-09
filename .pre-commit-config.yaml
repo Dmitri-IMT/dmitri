@@ -1,15 +1,36 @@
+default_stages: [pre-push]
+
 repos:
   - repo: https://github.com/psf/black
     rev: 24.3.0
     hooks:
       - id: black
+        stages: [pre-push]
+        args: ["--check", "hardware-agent"]
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.0
     hooks:
       - id: ruff
+        stages: [pre-push]
+        args: ["hardware-agent"]
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
+        stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Run pytest (backend + hardware-agent)
+        entry: python -m pytest hardware-agent/tests
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

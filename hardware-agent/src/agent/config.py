@@ -24,8 +24,6 @@ DEFAULT_NSE_SCRIPTS = (
 class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
-    backend_base_url: str = "https://backend.local/api/v1"
-    submit_results: bool = False
     scan_subnet: str | None = None
     scan_mode: Literal["quick", "full"] = "quick"
     device_id: str = "pi-agent-placeholder"
@@ -68,21 +66,11 @@ def _parse_scan_mode(value: str | None) -> Literal["quick", "full"]:
     return normalized  # type: ignore[return-value]
 
 
-def _parse_bool(value: str | None, default: bool = False) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def load_settings() -> AgentSettings:
     """Load settings from environment variables with sane defaults."""
 
     scan_mode = _parse_scan_mode(os.getenv("AGENT_SCAN_MODE"))
     return AgentSettings(
-        backend_base_url=os.getenv(
-            "AGENT_BACKEND_BASE_URL", "https://backend.local/api/v1"
-        ),
-        submit_results=_parse_bool(os.getenv("AGENT_SUBMIT_RESULTS"), default=False),
         scan_subnet=os.getenv("AGENT_SCAN_SUBNET"),
         scan_mode=scan_mode,
         device_id=os.getenv("AGENT_DEVICE_ID", "pi-agent-placeholder"),
