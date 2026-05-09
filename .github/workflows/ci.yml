@@ -50,4 +50,21 @@ jobs:
 
       - name: Run Black
         run: black --check hardware-agent
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install hardware-agent with test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "hardware-agent[dev]"
+
+      - name: Run pytest
+        run: python -m pytest hardware-agent/tests
         
