@@ -57,5 +57,6 @@ def main() -> None:
     )
     print(f"Payload written to {output_path}")
 
+
 if __name__ == "__main__":
     main()

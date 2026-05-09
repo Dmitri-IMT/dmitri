@@ -8,10 +8,9 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
+from agent.config import AgentSettings
 from agent.scanner.nmap import LoggedNmapRunner, NmapExecutionError, NmapRunner
 from agent.scanner.pipeline import ScanOrchestrator
-from agent.config import AgentSettings
 
 VALID_XML = textwrap.dedent("""\
     <?xml version="1.0"?>
@@ -46,7 +45,7 @@ class TestLoggedNmapRunnerRunXml:
             "import sys; "
             f"open(sys.argv[sys.argv.index('-oX')+1], 'w').write('''{VALID_XML}''')"
         )
-        root = runner.run_xml(["-c", script])
+        runner.run_xml(["-c", script])
 
         logs_dir = workspace / "logs"
         run_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
@@ -203,6 +202,8 @@ class TestOrchestratorUsesLoggedRunner:
         custom_runner = NmapRunner.__new__(NmapRunner)
         custom_runner.nmap_path = "/custom/nmap"
 
-        orch = ScanOrchestrator(settings, runner=custom_runner, workspace_root=workspace)
+        orch = ScanOrchestrator(
+            settings, runner=custom_runner, workspace_root=workspace
+        )
 
         assert orch.runner is custom_runner

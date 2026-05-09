@@ -1,4 +1,7 @@
-"""Unit tests for agent.scanner.workspace — layout, migration, pruning, basename, argv, meta."""
+"""Unit tests for agent.scanner.workspace.
+
+Coverage: layout, migration, pruning, basename, argv, meta.
+"""
 
 from __future__ import annotations
 
@@ -90,7 +93,9 @@ class TestLegacyJsonMigration:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         for i in range(3):
-            (workspace / f"scan-{i}.json").write_text(f'{{"id": {i}}}', encoding="utf-8")
+            (workspace / f"scan-{i}.json").write_text(
+                f'{{"id": {i}}}', encoding="utf-8"
+            )
 
         ensure_workspace_layout(workspace)
 

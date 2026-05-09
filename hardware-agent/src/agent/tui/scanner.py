@@ -10,7 +10,6 @@ from typing import Literal
 
 from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
-from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.pipeline import ScanOrchestrator
 from agent.utils.network import LocalNetworkInfo
 

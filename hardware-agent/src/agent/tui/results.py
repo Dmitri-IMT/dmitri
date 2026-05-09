@@ -10,7 +10,9 @@ from agent.scanner.workspace import prune_results
 
 
 def write_scan_result(payload: ScanPayload, workspace_root: str) -> Path:
-    """Write a scan payload as JSON to workspace_root/results/. Returns the written path.
+    """Write a scan payload as JSON to workspace_root/results/.
+
+    Returns the written path.
 
     Filename pattern: <ISO-timestamp>_<subnet-slug>.json
     Example: 2026-05-03T14-30-00_192-168-1-0_24.json
