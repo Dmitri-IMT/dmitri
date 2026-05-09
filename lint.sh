@@ -8,15 +8,12 @@ python -m black --check "${ROOT}/hardware-agent" || BLACK_FAIL=1
 BLACK_FAIL="${BLACK_FAIL:-0}"
 
 echo "== Ruff =="
-if ! python -m ruff check "${ROOT}/hardware-agent"; then
-  echo "Ruff failed — attempting auto-fix..."
-  python -m ruff check --fix "${ROOT}/hardware-agent"
-  python -m ruff check "${ROOT}/hardware-agent"
-fi
+python -m ruff check "${ROOT}/hardware-agent" || RUFF_FAIL=1
+RUFF_FAIL="${RUFF_FAIL:-0}"
 
-if [[ "$BLACK_FAIL" -ne 0 ]]; then
+if [[ "$BLACK_FAIL" -ne 0 || "$RUFF_FAIL" -ne 0 ]]; then
   echo ""
-  echo "Lint failed (Black)."
+  echo "Lint failed."
   exit 1
 fi
 
