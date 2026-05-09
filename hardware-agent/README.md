@@ -1,19 +1,13 @@
 # Hardware Agent
 
-Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Lite. It orchestrates Nmap scans, normalizes output, and forwards JSON payloads to the backend.
+Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Lite. It orchestrates Nmap scans, normalizes output, and writes JSON payloads for the TUI workflow.
 
 ## Responsibilities
 - Manage scan scheduling (quick/full) per subnet configuration.
 - Execute Nmap using safe defaults and capture XML/JSON output.
 - Convert raw results to the contracts defined in `../contracts/schemas`.
 - Execute curated NSE scripts, including `vulners`, to correlate services with CVEs.
-- Optionally submit the normalized payload to the backend API over HTTP.
-
-Planned but not implemented yet:
-
-- retries / offline buffering for failed submissions
-- transport authentication
-- device health metrics reporting
+- device health metrics reporting (planned).
 
 ## Current Status
 - A working multi-stage pipeline is implemented under `src/agent`:
@@ -23,7 +17,6 @@ Planned but not implemented yet:
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
 - The CLI entrypoint writes a JSON payload compatible with the shared contracts.
-- The CLI can optionally submit that payload to the backend after saving it locally.
 - Systemd service and installation script templates still live in `system/`.
 
 ## Running the Agent
@@ -67,18 +60,8 @@ Optional examples:
 .\run-agent.ps1 -Mode quick -OutputPath C:\temp\scan.json
 ```
 
-To also submit the generated payload to the backend:
-
-```powershell
-$env:AGENT_BACKEND_BASE_URL="http://127.0.0.1:8000/api/v1"
-$env:AGENT_SUBMIT_RESULTS="true"
-.\run-agent.ps1 -Mode full
-```
-
 Useful environment variables:
 
-- `AGENT_BACKEND_BASE_URL`: backend base URL, e.g. `http://127.0.0.1:8000/api/v1`
-- `AGENT_SUBMIT_RESULTS`: when `true`, submit the generated payload to the backend after saving it
 - `AGENT_NMAP_PATH`: explicit path to `nmap`
 - `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
 - `AGENT_SCAN_MODE`: `quick` or `full`
@@ -138,7 +121,7 @@ For development and validation:
 
 ## Integration Points
 - Reads configuration from `config.py` (to be wired to environment variables).
-- Produces JSON payloads compatible with the backend contracts in `../contracts/`.
-- Can optionally submit the normalized payload to the backend ingestion endpoint after the scan completes.
+- Produces JSON payloads compatible with the shared contracts in `../contracts/`.
+- Writes the normalized payload to `hardware-agent/artifacts/` for later analysis.
 
 Detailed implementation notes: `../docs/implementation/NSE-VULNERABILITY-PIPELINE.md`

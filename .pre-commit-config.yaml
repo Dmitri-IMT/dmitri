@@ -1,12 +1,12 @@
-default_stages: [push]
+default_stages: [pre-push]
 
 repos:
   - repo: https://github.com/psf/black
     rev: 24.3.0
     hooks:
       - id: black
-        stages: [push]
-        args: ["--check", "backend", "hardware-agent"]
+        stages: [pre-push]
+        args: ["--check", "hardware-agent"]
         pass_filenames: false
         always_run: true
 
@@ -14,8 +14,8 @@ repos:
     rev: v0.4.0
     hooks:
       - id: ruff
-        stages: [push]
-        args: ["check", "backend", "hardware-agent"]
+        stages: [pre-push]
+        args: ["hardware-agent"]
         pass_filenames: false
         always_run: true
 
@@ -23,14 +23,14 @@ repos:
     rev: v1.4.0
     hooks:
       - id: detect-secrets
-        stages: [push]
+        stages: [pre-push]
 
   - repo: local
     hooks:
       - id: pytest
         name: Run pytest (backend + hardware-agent)
-        entry: python -m pytest backend/tests hardware-agent/tests
+        entry: python -m pytest hardware-agent/tests
         language: system
         pass_filenames: false
         always_run: true
-        stages: [push]
+        stages: [pre-push]

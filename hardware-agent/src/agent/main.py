@@ -7,7 +7,6 @@ import logging
 
 from agent.config import load_settings
 from agent.scanner.pipeline import ScanOrchestrator
-from agent.transport import BackendClient, BackendSubmissionError
 
 
 def main() -> None:
@@ -23,11 +22,6 @@ def main() -> None:
         help="Override the configured scan mode.",
     )
     parser.add_argument("--output", help="Write the resulting payload to this path.")
-    parser.add_argument(
-        "--submit",
-        action="store_true",
-        help="Submit the resulting payload to the configured backend after saving it.",
-    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -62,15 +56,6 @@ def main() -> None:
         f"{len(payload.devices)} devices and {len(payload.findings)} findings."
     )
     print(f"Payload written to {output_path}")
-
-    if settings.submit_results or args.submit:
-        client = BackendClient(settings.backend_base_url)
-        try:
-            result = client.submit_scan(payload)
-        except BackendSubmissionError as exc:
-            raise SystemExit(f"Backend submission failed: {exc}") from exc
-        print("Payload submitted to backend " f"({result.status_code}): {result.body}")
-
 
 if __name__ == "__main__":
     main()

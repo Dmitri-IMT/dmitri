@@ -2,7 +2,7 @@
 
 This guide covers **only** the `**hardware-agent`** Python package and the **Textual TUI** (`dmitri` / `dmitri start`).
 
-**Not in scope right now:** Docker Compose, **backend** API, and **frontend** web app. You do not need Node.js, `npm`, or backend `.env` / `docker compose` to work on Dmitri. Those directories remain in the repo for later; when this changes, extend this doc or add a separate full-stack guide.
+**Not in scope right now:** Docker Compose, the **backend** API, and the **frontend** web app. You do not need Node.js, `npm`, or backend `.env` / `docker compose` to work on Dmitri. The API and frontend will be added later; when that happens, extend this doc or add a separate full-stack guide.
 
 ---
 
@@ -80,7 +80,7 @@ Or with uv: `uv tool install pre-commit` then run the same `pre-commit install -
 
 The pre-push hook runs the repo lint hooks plus the full pytest suite before `git push`
 (including pushes triggered from the VS Code Git UI). Lint checks always run against
-`backend/` and `hardware-agent/` even if no files are staged.
+`hardware-agent/` even if no files are staged.
 
 Do not commit real secrets. For hardware-agent–only work, hooks may still touch other trees if configured globally — adjust or skip as needed.
 
