@@ -2,6 +2,8 @@
 
 This guide covers **only** the `**hardware-agent`** Python package and the **Textual TUI** (`dmitri` / `dmitri start`).
 
+**Deployment context:** o agente **Dmitri** está orientado ao laboratório **NSPi** (robótica industrial na universidade). Equipamentos típicos (CLPs em Ethernet, Pi em Wi‑Fi) e o foco só-TUI estão descritos no [README](../README.md) (secções *Foco atual do desenvolvimento* e *Ambiente de implantação: laboratório NSPi*).
+
 **Not in scope right now:** Docker Compose, the **backend** API, and the **frontend** web app. You do not need Node.js, `npm`, or backend `.env` / `docker compose` to work on Dmitri. The API and frontend will be added later; when that happens, extend this doc or add a separate full-stack guide.
 
 ---
