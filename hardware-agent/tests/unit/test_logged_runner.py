@@ -183,7 +183,10 @@ class TestOrchestratorUsesLoggedRunner:
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         (workspace / "logs").mkdir()
-        settings = AgentSettings(scan_subnet="192.168.1.0/24")
+        settings = AgentSettings(
+            scan_subnet="192.168.1.0/24",
+            nmap_path=sys.executable,
+        )
 
         orch = ScanOrchestrator(settings, workspace_root=workspace)
 
@@ -191,7 +194,10 @@ class TestOrchestratorUsesLoggedRunner:
         assert orch.runner.parent_scan_id == str(orch.scan_id)
 
     def test_creates_regular_runner_without_workspace(self) -> None:
-        settings = AgentSettings(scan_subnet="192.168.1.0/24")
+        settings = AgentSettings(
+            scan_subnet="192.168.1.0/24",
+            nmap_path=sys.executable,
+        )
         orch = ScanOrchestrator(settings)
         assert type(orch.runner) is NmapRunner
 

@@ -6,7 +6,7 @@ import os
 import platform
 import tomllib
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 @dataclass(slots=True)
@@ -21,7 +21,7 @@ def default_results_dir() -> str:
     system = platform.system()
     if system == "Windows":
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        return str(Path(base) / "Dmitri" / "results")
+        return str(PureWindowsPath(base) / "Dmitri" / "results")
     # Linux and macOS
     xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     return str(Path(xdg_data) / "dmitri" / "results")
@@ -32,7 +32,7 @@ def default_config_path() -> Path:
     system = platform.system()
     if system == "Windows":
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        return Path(base) / "Dmitri" / "config.toml"
+        return Path(str(PureWindowsPath(base) / "Dmitri" / "config.toml"))
     # Linux and macOS
     xdg_config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     return Path(xdg_config) / "dmitri" / "config.toml"
