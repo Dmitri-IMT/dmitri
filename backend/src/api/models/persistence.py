@@ -138,5 +138,61 @@ class NvdCacheRecord(SQLModel, table=True):
     expires_at: datetime = Field(index=True)
 
 
+class KevRecord(SQLModel, table=True):
+    __tablename__ = "kev_records"
+
+    cve_id: str = Field(primary_key=True)
+    date_added: datetime | None = None
+    known_ransomware: bool = Field(default=False)
+    required_action: str | None = None
+    raw_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    fetched_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class EpssRecord(SQLModel, table=True):
+    __tablename__ = "epss_records"
+
+    cve_id: str = Field(primary_key=True)
+    epss_score: float
+    percentile: float | None = None
+    scored_at: datetime | None = None
+    raw_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    fetched_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class KevCacheRecord(SQLModel, table=True):
+    __tablename__ = "kev_cache"
+
+    cve_id: str = Field(primary_key=True)
+    response_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    fetched_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(index=True)
+
+
+class EpssCacheRecord(SQLModel, table=True):
+    __tablename__ = "epss_cache"
+
+    cve_id: str = Field(primary_key=True)
+    response_json: dict[str, Any] = Field(sa_column=Column(JSON))
+    fetched_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(index=True)
+
+
+class RiskSnapshotRecord(SQLModel, table=True):
+    __tablename__ = "risk_snapshots"
+    __table_args__ = (UniqueConstraint("finding_id"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    finding_id: int = Field(index=True, foreign_key="findings.id")
+    confidence: str
+    exploitability: float
+    risk_score: float
+    rationale: str
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class SQLModelMetadataAnchor(SQLModel):
     pass

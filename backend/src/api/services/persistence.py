@@ -16,6 +16,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import Device, Finding, Port, ScanResult
+from api.services.risk import refresh_risk_snapshot
 
 
 def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
@@ -145,6 +146,7 @@ def upsert_finding(
         )
         session.add(record)
         session.flush()
+        refresh_risk_snapshot(session, record)
         return record
 
     existing.cvss_score = _prefer_float(existing.cvss_score, finding.cvss_score)
@@ -162,6 +164,7 @@ def upsert_finding(
         existing.source = finding.source
     if existing.source_script is None:
         existing.source_script = finding.source_script
+    refresh_risk_snapshot(session, existing)
     return existing
 
 
@@ -266,6 +269,19 @@ def _enqueue_enrichment_jobs(
                 target_value=finding.cve_id,
             )
         )
+        for job_type in ("kev_cve", "epss_cve"):
+            key = (job_type, finding.id, finding.cve_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            session.add(
+                EnrichmentJobRecord(
+                    scan_id=scan_id,
+                    finding_id=finding.id,
+                    job_type=job_type,
+                    target_value=finding.cve_id,
+                )
+            )
 
 
 def _merge_evidence(base: str, evidence_suffix: str | None) -> str:

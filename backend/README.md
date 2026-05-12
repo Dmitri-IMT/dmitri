@@ -2,6 +2,14 @@
 
 Backend responsavel por receber resultados do `hardware-agent`, persistir scans/dispositivos/portas/servicos/CPEs/findings, enfileirar jobs de enrichment e executar o enrichment em um worker dedicado.
 
+O enrichment atual cruza `cve_id` com:
+
+- NVD para validacao/correlacao complementar
+- CISA KEV para exploracao conhecida
+- FIRST EPSS para probabilidade de exploracao
+
+Com isso, cada finding pode expor `kev`, `epss` e um `risk_score` inicial explicavel.
+
 ## Requisitos
 
 - Python 3.11+
@@ -64,6 +72,10 @@ Variaveis relevantes:
 
 - `DATABASE_URL`
 - `BACKEND_HOST_PORT`
+- `KEV_API_BASE_URL`
+- `KEV_CACHE_TTL_HOURS`
+- `EPSS_API_BASE_URL`
+- `EPSS_CACHE_TTL_HOURS`
 - `NVD_API_BASE_URL`
 - `NVD_API_KEY`
 - `NVD_CACHE_TTL_HOURS`
@@ -88,7 +100,9 @@ Prioridade atual do roadmap:
 - `POST /api/v1/scans` -> alias versionado usado pelo agente
 - `GET /scans` e `GET /api/v1/scans` -> lista historico de scans persistidos
 - `GET /scans/{scan_id}` e `GET /api/v1/scans/{scan_id}` -> detalhe completo de um scan
+- `GET /scans/{scan_id}/risk-summary` e `GET /api/v1/scans/{scan_id}/risk-summary` -> resumo de risco do scan
 - `GET /findings` e `GET /api/v1/findings` -> lista findings persistidos com filtros simples
+- `GET /findings/{finding_id}` e `GET /api/v1/findings/{finding_id}` -> detalhe de um finding com enrichment e risco
 
 Resposta esperada de ingestao:
 
@@ -106,9 +120,27 @@ Com a Fase 2 implementada, a ingestao agora faz:
 - normalizacao relacional de `scan`, `device`, `port`, `service`, `cpe` e `finding`
 - criacao de `enrichment_jobs`
 - retorno imediato sem enrichment inline
-- cache local de consultas NVD
+- cache local de consultas NVD, KEV e EPSS
 - correlacao CPE -> CVE e deduplicacao entre sinais do scan e enrichment
+- enrichment por `cve_id` com KEV e EPSS
 - score de confianca: `tentative`, `probable`, `confirmed`
+- snapshot inicial de risco com `exploitability`, `risk_score` e `rationale`
+
+## Regra inicial de risco
+
+O `risk_score` atual e intencionalmente simples e deterministico:
+
+- usa `severity` como base principal
+- aumenta `exploitability` com `epss_score`
+- aplica boost se o CVE estiver no catalogo KEV
+- aplica pequeno peso para `confidence` e servico exposto
+
+O resultado persistido em `risk_snapshots` inclui:
+
+- `confidence`
+- `exploitability`
+- `risk_score`
+- `rationale`
 
 ## Testando com o payload de exemplo
 
@@ -133,6 +165,18 @@ Depois consulte:
 ```bash
 curl http://127.0.0.1:18000/api/v1/scans
 curl http://127.0.0.1:18000/api/v1/findings
+curl http://127.0.0.1:18000/api/v1/findings/<finding_id>
+curl http://127.0.0.1:18000/api/v1/scans/<scan_id>/risk-summary
 ```
 
-Voce deve ver o mesmo `scan_id` do arquivo de exemplo e os `enrichment_jobs` em `pending` ate o worker consumir a fila. Depois que o worker rodar, os findings enriquecidos passam a refletir `confidence` e `source_labels`.
+Voce deve ver o mesmo `scan_id` do arquivo de exemplo e os `enrichment_jobs` em `pending` ate o worker consumir a fila. Depois que o worker rodar, os findings enriquecidos passam a refletir `confidence`, `source_labels`, `kev`, `epss` e `risk`.
+
+## Testes locais
+
+```bash
+cd backend
+python -m ruff check src tests
+python -m pytest tests
+```
+
+Os testes usam `monkeypatch` e fixtures offline para NVD, KEV e EPSS. Nao dependem da rede real.

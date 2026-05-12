@@ -8,6 +8,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///./scanner.db", alias="DATABASE_URL")
+    kev_api_base_url: str = Field(
+        default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+        alias="KEV_API_BASE_URL",
+    )
+    kev_cache_ttl_hours: int = Field(default=24, alias="KEV_CACHE_TTL_HOURS")
+    epss_api_base_url: str = Field(
+        default="https://api.first.org/data/v1/epss",
+        alias="EPSS_API_BASE_URL",
+    )
+    epss_cache_ttl_hours: int = Field(default=24, alias="EPSS_CACHE_TTL_HOURS")
     nvd_api_base_url: str = Field(
         default="https://services.nvd.nist.gov/rest/json/cves/2.0",
         alias="NVD_API_BASE_URL",

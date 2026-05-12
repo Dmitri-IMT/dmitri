@@ -11,11 +11,13 @@ O foco passa a ser:
 - usar um agente LLM como analista assistivo
 - introduzir um modo formal de assessment autorizado com guardrails
 
-Este roadmap assume o estado atual do repositorio em maio de 2026:
+Este roadmap assume o estado atual do repositorio em 12 de maio de 2026:
 
 - `hardware-agent` ja executa discovery, enumeracao TCP/UDP seletiva, service detection e NSE orientado por servico
 - o backend ja persiste `scan`, `device`, `port`, `service`, `cpe`, `finding`, `artifact`, `enrichment_job` e cache NVD
-- o enrichment NVD ainda roda inline no processo da API e precisa ser desacoplado
+- o enrichment ja roda em worker dedicado separado da API
+- o backend ja persiste `kev_records`, `epss_records` e `risk_snapshots`
+- a API ja expoe `GET /api/v1/findings/{finding_id}` e `GET /api/v1/scans/{scan_id}/risk-summary`
 
 ## Decisao de Prioridade
 
@@ -393,10 +395,18 @@ Backend de enrichment desacoplado da API:
 
 Inteligencia de vulnerabilidade:
 
-- adicionar clientes KEV e EPSS
+- integrar clientes KEV e EPSS com cache local
 - persistir `kev_records`, `epss_records` e snapshots de risco
-- calcular `risk_score`
-- adicionar endpoints de consulta historica
+- calcular `risk_score` inicial e `exploitability`
+- expandir endpoints de findings e resumo de risco por scan
+
+Status atual:
+
+- concluido: clientes KEV e EPSS
+- concluido: persistencia minima de KEV, EPSS e `risk_snapshots`
+- concluido: enrichment por `cve_id` no worker
+- concluido: exposicao de `kev`, `epss` e `risk` na API
+- proxima iteracao: reprocessamento explicito por scan e endpoints historicos adicionais
 
 ### Marco 2B
 

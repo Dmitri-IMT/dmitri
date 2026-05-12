@@ -12,8 +12,11 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import Finding
+from api.services.epss import EpssClient, upsert_epss_record
+from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, parse_nvd_matches
 from api.services.persistence import upsert_finding
+from api.services.risk import refresh_risk_snapshot
 
 
 def claim_pending_enrichment_jobs(
@@ -51,13 +54,21 @@ def process_claimed_enrichment_job(
     job: EnrichmentJobRecord,
     *,
     client: NvdClient | None = None,
+    kev_client: KevClient | None = None,
+    epss_client: EpssClient | None = None,
 ) -> None:
     client = client or NvdClient()
+    kev_client = kev_client or KevClient()
+    epss_client = epss_client or EpssClient()
     try:
         if job.job_type == "nvd_cpe":
             _process_cpe_job(session, client, job)
         elif job.job_type == "nvd_cve":
             _process_cve_job(session, client, job)
+        elif job.job_type == "kev_cve":
+            _process_kev_job(session, kev_client, job)
+        elif job.job_type == "epss_cve":
+            _process_epss_job(session, epss_client, job)
         job.status = "completed"
         job.completed_at = datetime.now(timezone.utc)
         job.last_error = None
@@ -80,14 +91,24 @@ def process_pending_enrichment_jobs(
     *,
     batch_size: int = 10,
     client: NvdClient | None = None,
+    kev_client: KevClient | None = None,
+    epss_client: EpssClient | None = None,
 ) -> int:
     jobs = claim_pending_enrichment_jobs(session, batch_size=batch_size)
     if not jobs:
         return 0
 
     resolved_client = client or NvdClient()
+    resolved_kev_client = kev_client or KevClient()
+    resolved_epss_client = epss_client or EpssClient()
     for job in jobs:
-        process_claimed_enrichment_job(session, job, client=resolved_client)
+        process_claimed_enrichment_job(
+            session,
+            job,
+            client=resolved_client,
+            kev_client=resolved_kev_client,
+            epss_client=resolved_epss_client,
+        )
     return len(jobs)
 
 
@@ -173,4 +194,80 @@ def _process_cve_job(
         )
     finding_record.updated_at = datetime.now(timezone.utc)
     session.add(finding_record)
+    refresh_risk_snapshot(session, finding_record)
     session.commit()
+
+
+def _process_kev_job(
+    session: Session,
+    client: KevClient,
+    job: EnrichmentJobRecord,
+) -> None:
+    finding_record = _load_finding_for_cve_job(session, job)
+    if finding_record is None:
+        return
+
+    payload = client.query_by_cve(session, job.target_value)
+    kev_record = upsert_kev_record(
+        session,
+        cve_id=job.target_value,
+        payload=payload,
+    )
+    if kev_record is not None:
+        finding_record.references_json = sorted(
+            set(finding_record.references_json).union(
+                {"https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+            )
+        )
+        finding_record.source_labels_json = sorted(
+            set(finding_record.source_labels_json).union({"kev"})
+        )
+        if "KEV catalog lists this CVE." not in finding_record.evidence:
+            finding_record.evidence = (
+                f"{finding_record.evidence} | KEV catalog lists this CVE."
+            )
+    finding_record.updated_at = datetime.now(timezone.utc)
+    session.add(finding_record)
+    refresh_risk_snapshot(session, finding_record)
+    session.commit()
+
+
+def _process_epss_job(
+    session: Session,
+    client: EpssClient,
+    job: EnrichmentJobRecord,
+) -> None:
+    finding_record = _load_finding_for_cve_job(session, job)
+    if finding_record is None:
+        return
+
+    payload = client.query_by_cve(session, job.target_value)
+    epss_record = upsert_epss_record(
+        session,
+        cve_id=job.target_value,
+        payload=payload,
+    )
+    if epss_record is not None:
+        finding_record.source_labels_json = sorted(
+            set(finding_record.source_labels_json).union({"epss"})
+        )
+        if "EPSS score recorded for this CVE." not in finding_record.evidence:
+            finding_record.evidence = (
+                f"{finding_record.evidence} | EPSS score recorded for this CVE."
+            )
+    finding_record.updated_at = datetime.now(timezone.utc)
+    session.add(finding_record)
+    refresh_risk_snapshot(session, finding_record)
+    session.commit()
+
+
+def _load_finding_for_cve_job(
+    session: Session,
+    job: EnrichmentJobRecord,
+) -> FindingRecord | None:
+    if job.finding_id is None:
+        return None
+    finding_record = session.get(FindingRecord, job.finding_id)
+    if finding_record is None or finding_record.cve_id is None:
+        return None
+    return finding_record

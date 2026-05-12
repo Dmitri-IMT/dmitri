@@ -14,24 +14,31 @@ from api.models.persistence import (
     CPERecord,
     DeviceRecord,
     EnrichmentJobRecord,
+    EpssRecord,
     FindingRecord,
+    KevRecord,
     PortRecord,
+    RiskSnapshotRecord,
     ScanRecord,
     ServiceRecord,
 )
 from api.schemas import (
     PersistedFinding,
     PersistedScanDetail,
+    PersistedScanRiskSummary,
     PersistedScanSummary,
     ScanIngestResponse,
     ScanResult,
 )
 from api.schemas.persistence import (
     EnrichmentJobView,
+    EpssRecordView,
+    KevRecordView,
     PersistedArtifact,
     PersistedDevice,
     PersistedPort,
     PersistedService,
+    RiskSnapshotView,
 )
 from api.services.persistence import persist_scan
 
@@ -155,7 +162,71 @@ def list_findings(
     if device_ip is not None:
         statement = statement.where(FindingRecord.ip == device_ip)
     findings = session.exec(statement.order_by(FindingRecord.created_at.desc())).all()
-    return [_serialize_finding(record) for record in findings]
+    return [_serialize_finding(session, record) for record in findings]
+
+
+@app.get("/findings/{finding_id}", response_model=PersistedFinding)
+@app.get("/api/v1/findings/{finding_id}", response_model=PersistedFinding)
+def get_finding(
+    finding_id: int,
+    session: Session = Depends(get_session),
+) -> PersistedFinding:
+    finding = session.get(FindingRecord, finding_id)
+    if finding is None:
+        raise HTTPException(status_code=404, detail="finding not found")
+    return _serialize_finding(session, finding)
+
+
+@app.get(
+    "/scans/{scan_id}/risk-summary",
+    response_model=PersistedScanRiskSummary,
+)
+@app.get(
+    "/api/v1/scans/{scan_id}/risk-summary",
+    response_model=PersistedScanRiskSummary,
+)
+def get_scan_risk_summary(
+    scan_id: UUID,
+    session: Session = Depends(get_session),
+) -> PersistedScanRiskSummary:
+    scan = session.get(ScanRecord, scan_id)
+    if scan is None:
+        raise HTTPException(status_code=404, detail="scan not found")
+
+    findings = session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan_id)
+    ).all()
+    serialized_findings = [_serialize_finding(session, record) for record in findings]
+    risk_scores = [
+        finding.risk.risk_score
+        for finding in serialized_findings
+        if finding.risk is not None
+    ]
+    kev_findings = [
+        finding for finding in serialized_findings if finding.kev is not None
+    ]
+    confirmed_findings = [
+        finding for finding in serialized_findings if finding.confidence == "confirmed"
+    ]
+    top_findings = sorted(
+        serialized_findings,
+        key=lambda finding: (
+            finding.risk.risk_score if finding.risk is not None else 0.0
+        ),
+        reverse=True,
+    )[:5]
+    average_risk_score = (
+        round(sum(risk_scores) / len(risk_scores), 2) if risk_scores else 0.0
+    )
+    return PersistedScanRiskSummary(
+        scan_id=scan_id,
+        total_findings=len(serialized_findings),
+        confirmed_findings=len(confirmed_findings),
+        kev_findings=len(kev_findings),
+        average_risk_score=average_risk_score,
+        max_risk_score=max(risk_scores) if risk_scores else 0.0,
+        top_findings=top_findings,
+    )
 
 
 def _serialize_scan_detail(session: Session, scan: ScanRecord) -> PersistedScanDetail:
@@ -179,7 +250,7 @@ def _serialize_scan_detail(session: Session, scan: ScanRecord) -> PersistedScanD
         scan_profile=scan.scan_profile,
         metadata=scan.metadata_json,
         devices=[_serialize_device(session, device) for device in devices],
-        findings=[_serialize_finding(record) for record in findings],
+        findings=[_serialize_finding(session, record) for record in findings],
         artifacts=[
             PersistedArtifact(
                 kind=artifact.kind,
@@ -227,7 +298,10 @@ def _serialize_device(session: Session, device: DeviceRecord) -> PersistedDevice
     )
 
 
-def _serialize_finding(record: FindingRecord) -> PersistedFinding:
+def _serialize_finding(session: Session, record: FindingRecord) -> PersistedFinding:
+    kev = _get_kev_view(session, record)
+    epss = _get_epss_view(session, record)
+    risk = _get_risk_view(session, record)
     return PersistedFinding(
         id=record.id or 0,
         scan_id=record.scan_id,
@@ -247,4 +321,51 @@ def _serialize_finding(record: FindingRecord) -> PersistedFinding:
         evidence=record.evidence,
         references=record.references_json,
         source_labels=record.source_labels_json,
+        kev=kev,
+        epss=epss,
+        risk=risk,
+    )
+
+
+def _get_kev_view(session: Session, record: FindingRecord) -> KevRecordView | None:
+    if record.cve_id is None:
+        return None
+    kev_record = session.get(KevRecord, record.cve_id.upper())
+    if kev_record is None:
+        return None
+    return KevRecordView(
+        cve_id=kev_record.cve_id,
+        date_added=kev_record.date_added,
+        known_ransomware=kev_record.known_ransomware,
+        required_action=kev_record.required_action,
+    )
+
+
+def _get_epss_view(session: Session, record: FindingRecord) -> EpssRecordView | None:
+    if record.cve_id is None:
+        return None
+    epss_record = session.get(EpssRecord, record.cve_id.upper())
+    if epss_record is None:
+        return None
+    return EpssRecordView(
+        cve_id=epss_record.cve_id,
+        epss_score=epss_record.epss_score,
+        percentile=epss_record.percentile,
+        scored_at=epss_record.scored_at,
+    )
+
+
+def _get_risk_view(session: Session, record: FindingRecord) -> RiskSnapshotView | None:
+    if record.id is None:
+        return None
+    risk_record = session.exec(
+        select(RiskSnapshotRecord).where(RiskSnapshotRecord.finding_id == record.id)
+    ).first()
+    if risk_record is None:
+        return None
+    return RiskSnapshotView(
+        confidence=risk_record.confidence,
+        exploitability=risk_record.exploitability,
+        risk_score=risk_record.risk_score,
+        rationale=risk_record.rationale,
     )

@@ -47,6 +47,30 @@ class PersistedFinding(BaseModel):
     evidence: str
     references: list[str]
     source_labels: list[str]
+    kev: "KevRecordView | None" = None
+    epss: "EpssRecordView | None" = None
+    risk: "RiskSnapshotView | None" = None
+
+
+class KevRecordView(BaseModel):
+    cve_id: str
+    date_added: datetime | None
+    known_ransomware: bool
+    required_action: str | None
+
+
+class EpssRecordView(BaseModel):
+    cve_id: str
+    epss_score: float
+    percentile: float | None
+    scored_at: datetime | None
+
+
+class RiskSnapshotView(BaseModel):
+    confidence: str
+    exploitability: float
+    risk_score: float
+    rationale: str
 
 
 class PersistedArtifact(BaseModel):
@@ -92,3 +116,13 @@ class PersistedScanDetail(BaseModel):
     findings: list[PersistedFinding]
     artifacts: list[PersistedArtifact]
     enrichment_jobs: list[EnrichmentJobView]
+
+
+class PersistedScanRiskSummary(BaseModel):
+    scan_id: UUID
+    total_findings: int
+    confirmed_findings: int
+    kev_findings: int
+    average_risk_score: float
+    max_risk_score: float
+    top_findings: list[PersistedFinding]
