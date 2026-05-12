@@ -4,6 +4,8 @@ Monorepo do Trabalho de Conclusão de Curso (Engenharia de Computação) que ir�
 
 **Nome do projeto (agente / TUI):** **Dmitri** — interface em terminal e pipeline de varredura no Raspberry Pi.
 
+https://mauabr-my.sharepoint.com/:w:/r/personal/22_00085-2_maua_br/Documents/ATIVIDADE%201%20-%20TCC%20-%202026.docx?d=w0581bf6338ae4395a2070a5a633a5023&csf=1&web=1&e=VTZq7k
+
 # Integrantes
 
 - Giuliano Rodrigues Tumoli // 21.00036-0
