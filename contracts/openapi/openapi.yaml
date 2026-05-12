@@ -793,6 +793,7 @@ components:
       type: string
       enum:
         - quick
+        - standard
         - full
     Severity:
       type: string
