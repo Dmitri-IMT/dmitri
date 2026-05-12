@@ -25,7 +25,7 @@ class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
     scan_subnet: str | None = None
-    scan_mode: Literal["quick", "full"] = "quick"
+    scan_mode: Literal["quick", "standard", "full"] = "quick"
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
     nmap_scripts: tuple[str, ...] = DEFAULT_NSE_SCRIPTS
@@ -39,7 +39,7 @@ class AgentSettings:
         self,
         *,
         scan_subnet: str | None = None,
-        scan_mode: Literal["quick", "full"] | None = None,
+        scan_mode: Literal["quick", "standard", "full"] | None = None,
         output_path: str | None = None,
     ) -> AgentSettings:
         """Return a copy with CLI-provided overrides applied."""
@@ -52,6 +52,37 @@ class AgentSettings:
         )
 
 
+STANDARD_NSE_SCRIPTS = (
+    "vulners",
+    "smb-protocols",
+    "smb2-security-mode",
+    "ssh-auth-methods",
+    "http-title",
+    "http-server-header",
+)
+
+QUICK_NSE_SCRIPTS = ("vulners",)
+
+
+def port_stage_scripts(scan_mode: str) -> str:
+    """Return the --script CSV for the port-scan stage (quick/standard only)."""
+    if scan_mode == "standard":
+        return ",".join(STANDARD_NSE_SCRIPTS)
+    return "vulners"
+
+
+def deep_stage_scripts(
+    scan_mode: str,
+    configured_scripts: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return the script tuple for the deep-inspection stage."""
+    if scan_mode == "standard":
+        return STANDARD_NSE_SCRIPTS
+    if scan_mode == "full":
+        return configured_scripts
+    return QUICK_NSE_SCRIPTS
+
+
 def _parse_csv(value: str | None) -> tuple[str, ...]:
     if not value:
         return DEFAULT_NSE_SCRIPTS
@@ -59,10 +90,10 @@ def _parse_csv(value: str | None) -> tuple[str, ...]:
     return items or DEFAULT_NSE_SCRIPTS
 
 
-def _parse_scan_mode(value: str | None) -> Literal["quick", "full"]:
+def _parse_scan_mode(value: str | None) -> Literal["quick", "standard", "full"]:
     normalized = (value or "quick").strip().lower()
-    if normalized not in {"quick", "full"}:
-        raise ValueError("AGENT_SCAN_MODE must be either 'quick' or 'full'.")
+    if normalized not in {"quick", "standard", "full"}:
+        raise ValueError("AGENT_SCAN_MODE must be 'quick', 'standard', or 'full'.")
     return normalized  # type: ignore[return-value]
 
 
