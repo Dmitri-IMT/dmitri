@@ -84,6 +84,75 @@ class TestQuickModeArgv:
         assert "--script" not in argv
 
 
+STANDARD_SCRIPT_CSV = (
+    "vulners,smb-protocols,smb2-security-mode,"
+    "ssh-auth-methods,http-title,http-server-header"
+)
+
+
+class TestStandardModeArgv:
+    def test_scan_ports_includes_contract_scripts(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports(runner, "10.0.0.1", "standard")
+
+        assert len(captured) == 1
+        argv = captured[0]
+        assert "-sV" in argv
+        assert "-O" in argv
+        assert "--script" in argv
+        script_idx = argv.index("--script")
+        assert argv[script_idx + 1] == STANDARD_SCRIPT_CSV
+
+    def test_scan_ports_batch_includes_contract_scripts(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports_batch(runner, ["10.0.0.1", "10.0.0.2"], "standard")
+
+        assert len(captured) == 1
+        argv = captured[0]
+        assert "-sV" in argv
+        assert "-O" in argv
+        assert "--script" in argv
+        script_idx = argv.index("--script")
+        assert argv[script_idx + 1] == STANDARD_SCRIPT_CSV
+
+    def test_scan_ports_excludes_port_flags(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports(runner, "10.0.0.1", "standard")
+
+        argv = captured[0]
+        for flag in FORBIDDEN_PORT_FLAGS:
+            assert flag not in argv, f"standard mode argv must not contain {flag}"
+
+
+class TestStandardModeScanPayload:
+    def test_scan_mode_is_top_level_field(self) -> None:
+        payload = ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            devices=[],
+            findings=[],
+        )
+        dumped = payload.model_dump(mode="json")
+        assert "scan_mode" in dumped
+        assert dumped["scan_mode"] == "standard"
+
+    def test_scan_mode_not_nested_under_metadata(self) -> None:
+        payload = ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            devices=[],
+            findings=[],
+            metadata={"elapsed_seconds": 5.0},
+        )
+        dumped = payload.model_dump(mode="json")
+        assert "scan_mode" not in (dumped.get("metadata") or {})
+        assert dumped["scan_mode"] == "standard"
+
+
 class TestQuickModeScanPayload:
     def test_scan_mode_is_top_level_field(self) -> None:
         payload = ScanPayload(
