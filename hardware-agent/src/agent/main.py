@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--subnet", help="Override the configured scan subnet.")
     parser.add_argument(
         "--mode",
-        choices=("quick", "full"),
+        choices=("quick", "standard", "full"),
         help="Override the configured scan mode.",
     )
     parser.add_argument("--output", help="Write the resulting payload to this path.")

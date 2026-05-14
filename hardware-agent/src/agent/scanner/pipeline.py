@@ -10,7 +10,7 @@ from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
-from agent.config import AgentSettings
+from agent.config import AgentSettings, deep_stage_scripts, port_stage_scripts
 from agent.discovery.network_discovery import discover_hosts
 from agent.discovery.port_discovery import scan_ports_batch
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
@@ -198,7 +198,9 @@ class ScanOrchestrator:
                     host.ip,
                     host.ports,
                     version_intensity=self.settings.version_intensity,
-                    scripts=self.settings.nmap_scripts,
+                    scripts=deep_stage_scripts(
+                        self.settings.scan_mode, self.settings.nmap_scripts
+                    ),
                     min_cvss=self.settings.min_cvss,
                 ): host
                 for host in eligible_hosts
@@ -249,14 +251,17 @@ class ScanOrchestrator:
         port_stage = (
             "-p- --min-rate 1000"
             if self.settings.scan_mode == "full"
-            else "-sV -O --script vulners"
+            else f"-sV -O --script {port_stage_scripts(self.settings.scan_mode)}"
+        )
+        deep_scripts = deep_stage_scripts(
+            self.settings.scan_mode, self.settings.nmap_scripts
         )
         return (
             f"discovery=-sn -PE -T4; ports={port_stage} -Pn -T4; "
             "deep_inspection="
             f"-sV --version-intensity {self.settings.version_intensity}; "
             "scripts="
-            f"{','.join(self.settings.nmap_scripts)}; "
+            f"{','.join(deep_scripts)}; "
             f"min_cvss={self.settings.min_cvss}; "
             f"workers={self.settings.max_workers}; "
             f"host_batch_size={self.settings.host_batch_size}"

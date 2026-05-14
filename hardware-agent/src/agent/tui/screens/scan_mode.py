@@ -30,7 +30,10 @@ class ScanModeScreen(DmitriScreen):
                     "Quick      —  Top 1000 ports · CVE detection · ~2–5 min",
                     id="quick",
                 ),
-                Option("Standard   —  Coming soon", id="standard", disabled=True),
+                Option(
+                    "Standard   —  Top 1000 ports · Service scripts · ~5–10 min",
+                    id="standard",
+                ),
                 Option("Extensive  —  Coming soon", id="extensive", disabled=True),
                 Option("MAX        —  Coming soon", id="max", disabled=True),
                 Option("NSPi       —  Coming soon", id="nspi", disabled=True),

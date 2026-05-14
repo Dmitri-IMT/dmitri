@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent.config import port_stage_scripts
 from agent.scanner.models import PortInfo
 from agent.scanner.nmap import NmapRunner
 from agent.utils.nmap_xml import extract_ipv4, parse_ports
@@ -14,7 +15,7 @@ def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
     if scan_mode == "full":
         arguments.extend(["-p-", "--min-rate", "1000"])
     else:
-        arguments.extend(["-sV", "-O", "--script", "vulners"])
+        arguments.extend(["-sV", "-O", "--script", port_stage_scripts(scan_mode)])
     arguments.append(ip)
 
     root = runner.run_xml(arguments)
@@ -38,7 +39,7 @@ def scan_ports_batch(
     if scan_mode == "full":
         arguments.extend(["-p-", "--min-rate", "1000"])
     else:
-        arguments.extend(["-sV", "-O", "--script", "vulners"])
+        arguments.extend(["-sV", "-O", "--script", port_stage_scripts(scan_mode)])
     arguments.extend(ips)
 
     root = runner.run_xml(arguments)
