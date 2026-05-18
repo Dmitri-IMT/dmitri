@@ -18,7 +18,7 @@ A ampliação contínua da superfície de ataque em redes locais e corporativas 
 
 Em paralelo, mecanismos padronizados de identificação e catalogação, como o Common Vulnerabilities and Exposures (CVE), e bases estruturadas como o National Vulnerability Database (NVD), tornaram-se centrais para a interoperabilidade entre ferramentas, relatórios e fluxos de gerenciamento de vulnerabilidades (CVE PROGRAM, [s.d.]; NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY, [s.d.]). Mais recentemente, abordagens de priorização orientadas por evidências, como o Known Exploited Vulnerabilities Catalog (KEV), mantido pela CISA, e o Exploit Prediction Scoring System (EPSS), proposto pela FIRST, passaram a complementar métricas tradicionais de severidade ao incorporar informações sobre exploração observada e probabilidade de abuso em curto prazo (CYBERSECURITY AND INFRASTRUCTURE SECURITY AGENCY, [s.d.]; FIRST, [s.d.]).
 
-É nesse cenário que se insere este trabalho. Propõe-se o desenvolvimento do DMITRI, uma plataforma de varredura de vulnerabilidades para redes locais baseada em um dispositivo embarcado de baixo custo, com foco em rastreabilidade, modularidade e viabilidade acadêmica. Em vez de se restringir à execução pontual de scans, a proposta busca integrar descoberta de ativos, normalização de resultados, persistência estruturada, enriquecimento contextual dos achados e apoio à interpretação técnica. Com isso, o projeto se posiciona como uma plataforma progressiva de inteligência de vulnerabilidades, construída a partir de um núcleo de coleta técnica e evoluída com mecanismos de priorização e análise assistida.
+É nesse cenário que se insere este trabalho. Propõe-se o desenvolvimento do DMITRI, uma plataforma de varredura de vulnerabilidades para redes locais baseada em um dispositivo embarcado de baixo custo, com foco em rastreabilidade, modularidade e viabilidade acadêmica. Em vez de se restringir à execução pontual de scans, a proposta busca integrar descoberta de ativos, normalização de resultados, persistência estruturada, enriquecimento contextual dos achados e apoio à interpretação técnica. Com isso, o projeto evolui de um scanner de rede tradicional para uma plataforma voltada à organização e análise de vulnerabilidades.
 
 ### 1.1 Objetivos
 
@@ -55,7 +55,7 @@ Embora o trabalho não tenha como foco exclusivo dispositivos de Internet das Co
 
 No entanto, o trabalho não se limita ao estado atual da implementação. Considerando a entrega final prevista, a principal oportunidade de evolução está na transição de um scanner de rede para uma plataforma de inteligência de vulnerabilidades. Isso implica ir além da identificação de CVEs e incorporar fontes complementares de contexto e priorização. O CVE fornece um identificador comum para vulnerabilidades; o NVD agrega metadados estruturados e métricas padronizadas; o KEV destaca vulnerabilidades com exploração observada; e o EPSS estima a probabilidade de exploração em curto prazo (CVE PROGRAM, [s.d.]; NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY, [s.d.]; CYBERSECURITY AND INFRASTRUCTURE SECURITY AGENCY, [s.d.]; FIRST, [s.d.]).
 
-Outra oportunidade relevante reside no uso assistivo de modelos de linguagem. Em vez de atribuir autonomia operacional ao modelo, a proposta é utilizá-lo como mecanismo de apoio à interpretação, sumarização e organização dos achados persistidos. Essa escolha está alinhada tanto à literatura recente sobre aplicações de LLMs em cibersegurança, que destaca potencial em tarefas analíticas, quanto a diretrizes de uso responsável que enfatizam governança, rastreabilidade e gestão de risco em sistemas de IA (SILVA; WESTPHALL, 2024; XU et al., 2024; NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY, 2025).
+Outra oportunidade relevante reside no uso assistivo de modelos de linguagem. Em vez de atribuir autonomia operacional ao modelo, a proposta é utilizá-lo como mecanismo de apoio à interpretação, sumarização e organização dos achados persistidos. Essa abordagem é coerente com estudos recentes sobre o uso de modelos de linguagem em cibersegurança, que destaca potencial em tarefas analíticas, quanto a diretrizes de uso responsável que enfatizam governança, rastreabilidade e gestão de risco em sistemas de IA (SILVA; WESTPHALL, 2024; XU et al., 2024; NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY, 2025).
 
 ### 1.4 Métodos e Tecnologias
 
@@ -93,15 +93,107 @@ Revisões recentes indicam que modelos de linguagem têm sido aplicados a um con
 
 Nesse sentido, o presente trabalho adota uma posição deliberadamente conservadora: o modelo de linguagem não é tratado como executor autônomo de ações na rede, mas como um componente assistivo para sumarização, explicação e priorização dos dados já persistidos pela plataforma. Essa opção converge com as diretrizes do NIST AI RMF, que destacam a importância de incorporar governança e gestão de risco ao desenvolvimento e uso responsável de sistemas de IA (NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY, 2025).
 
+### 2.5 Trabalhos Relacionados
+
+Diversas soluções comerciais, open-source e acadêmicas foram desenvolvidas para realizar varredura e gerenciamento de vulnerabilidades. Elas podem ser agrupadas em duas categorias principais: ferramentas profissionais/enterprise e soluções mais leves ou voltadas para ambientes de baixo custo.
+
+No segmento profissional, destacam-se o Nessus (Tenable) e o OpenVAS/Greenbone. O Nessus é um dos scanners mais consolidados do mercado, oferecendo detecção abrangente, relatórios avançados e suporte a autenticação. Seu preço para a versão Nessus Professional gira em torno de US$ 4.790 por ano por scanner (com scanning ilimitado de IPs), enquanto a versão Nessus Expert custa aproximadamente US$ 6.790 por ano (TENABLE, 2026). Já o OpenVAS, mantido pela Greenbone, oferece uma solução enterprise-grade open-source com suporte pago. A assinatura OpenVAS Basic custa cerca de € 2.524 por ano, representando uma opção mais acessível dentro do segmento profissional (GREENBONE NETWORKS, 2026).
+
+Embora robustas e ricas em funcionalidades, essas soluções apresentam limitações significativas para o contexto deste trabalho: alto custo de aquisição e manutenção, exigência de recursos computacionais elevados e interfaces complexas, o que as torna pouco viáveis para pequenas empresas, ambientes residenciais e usuários com conhecimento técnico limitado.
+
+No âmbito de soluções open-source leves e executáveis em hardware de baixo custo, o Vuls se destaca. Desenvolvido pela Future Architect, o Vuls é um scanner agentless focado em vulnerabilidades de pacotes e dependências em sistemas Linux (incluindo Raspbian), com integração a múltiplas fontes de inteligência (NVD, CISA KEV, Exploit Database etc.). Ele suporta execução em Raspberry Pi e geração de relatórios periódicos, sendo uma excelente opção para administradores de sistemas com restrições de custo (FUTURE ARCHITECT, 2025). No entanto, seu foco principal está na análise de pacotes instalados via SSH ou modo local, com menor ênfase em descoberta ativa de rede, enumeração detalhada de serviços e correlação em tempo real de dispositivos não gerenciados.
+
+Estudos acadêmicos e técnicos também reforçam a viabilidade do uso de Raspberry Pi em segurança. Sainz-Raso et al. (2019) analisam as fraquezas de segurança nativas do Raspberry Pi, enquanto outros trabalhos exploram sua aplicação prática em cenários de pentest e auditoria IoT. No contexto deste trabalho, tais limitações foram consideradas desde o início do projeto. O DMITRI adota configurações headless, hardening do sistema operacional, autenticação forte via HMAC para o agente e execução mínima de serviços, visando minimizar a superfície de ataque do próprio dispositivo de varredura.
+
+Nesse contexto, o DMITRI busca combinar características de scanners tradicionais com mecanismos adicionais de contextualização e priorização. Diferentemente das ferramentas enterprise (Nessus e Greenbone), o projeto prioriza baixo custo, facilidade de uso e usabilidade para pequenos negócios e usuários residenciais. Em relação ao Vuls, o DMITRI avança ao combinar descoberta ativa de rede via Nmap + NSE, normalização estruturada dos resultados, persistência histórica completa, enriquecimento com KEV/EPSS e um copiloto baseado em LLM para interpretação e triagem dos achados, características que transformam dados brutos em inteligência acionável de forma mais integrada.
+
 ## 3. Desenvolvimento
 
 O desenvolvimento da solução foi organizado como um pipeline distribuído e incremental, no qual cada componente assume responsabilidades específicas na coleta, no tratamento, no armazenamento e na interpretação dos dados de segurança. A arquitetura proposta parte de um agente embarcado executado em Raspberry Pi 4, conectado à rede local, e integra esse agente a uma plataforma web composta por backend, banco PostgreSQL, worker de processamento e interface de visualização.
 
 ### 3.1 Arquitetura geral da solução
 
-A arquitetura foi concebida para separar captura, processamento e apresentação. No primeiro nível, o agente embarcado executa a varredura sobre os alvos configurados e produz um payload estruturado com os resultados. No segundo nível, o backend recebe esse payload por meio de API REST, valida seus dados e persiste o conteúdo em um banco relacional. No terceiro nível, um worker assíncrono consome tarefas de enriquecimento, permitindo desacoplar a ingestão rápida do scan das etapas posteriores de correlação e priorização. Por fim, a interface web consulta a API para exibir histórico, inventário, findings e indicadores analíticos.
+A arquitetura do DMITRI foi projetada com base nos princípios de separação de responsabilidades, escalabilidade e evolutividade. O sistema adota uma abordagem híbrida, combinando um agente embarcado de baixo custo para coleta de dados diretamente na rede local com uma plataforma backend em nuvem para processamento, armazenamento e visualização das informações.
 
-Essa decomposição apresenta duas vantagens principais. A primeira é arquitetural: reduz o acoplamento entre os componentes e facilita a evolução incremental da solução. A segunda é metodológica: torna explícita a distinção entre evidência coletada, metadado estruturado e inferência analítica, o que favorece auditabilidade e reprodutibilidade no contexto de um trabalho científico.
+O sistema é composto por cinco componentes principais:
+
+- **Hardware Agent** — executado em Raspberry Pi 4;
+- **Backend API** — responsável pelo recebimento e orquestração;
+- **Background Worker** — processamento assíncrono de enriquecimento;
+- **Banco de Dados** — PostgreSQL para persistência centralizada;
+- **Frontend Web** — interface de visualização e interação.
+
+Essa divisão modular permite que cada parte do sistema opere de forma otimizada, reduzindo o acoplamento entre os componentes e facilitando a manutenção e a evolução incremental do projeto.
+
+Figura 1 – Arquitetura geral da solução
+
+```mermaid
+flowchart TB
+    %% === EDGE DEVICE ===
+    subgraph "Raspberry Pi 4 - Edge Device"
+        direction TB
+        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Normalização JSON]
+    end
+
+    %% === CLOUD ===
+    subgraph "Cloud Environment (Railway)"
+        direction TB
+        NGINX[Nginx<br/><b>Reverse Proxy + Static Server</b>]
+        
+        subgraph "Backend Services"
+            B[Backend API<br/><b>FastAPI + Pydantic + SQLModel</b><br/>Uvicorn/Gunicorn<br/>OpenAPI]
+            W[Background Worker<br/><b>Python Consumer</b>]
+        end
+
+        %% === SUPABASE (EXTERNO) ===
+        subgraph "Supabase Cloud"
+            direction TB
+            Q[Queue Table<br/><b>PostgreSQL Jobs</b><br/>FOR UPDATE SKIP LOCKED]
+            D[(Data Store<br/><b>PostgreSQL via Supabase</b><br/>Full-text search + materialized views)]
+        end
+
+    end
+
+    %% === BROWSER ===
+    subgraph "User Browser"
+        C[React Frontend<br/><b>Vite + TypeScript</b><br/>React Router v6<br/>TanStack Query v5<br/>shadcn/ui + Recharts]
+    end
+
+    %% === FLUXOS ===
+    A -->|"1. POST /scans<br/>JSON payload + HMAC signature<br/>HTTPS"| NGINX
+    NGINX -->|"2. Proxy<br/>/api/* → FastAPI"| B
+    
+    B -->|"3. Enqueue scan job"| Q
+    Q -->|"4. Claim job"| W
+    W -->|"5. Process + persist<br/>SQLModel + asyncpg"| D
+    
+    NGINX -.->|"6. Serve static files<br/>React dist/ (SPA)"| C
+    C <-->|"7. HTTPS + JWT Bearer Token<br/>GET/POST endpoints"| NGINX
+
+    classDef edge fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d47a1
+    classDef cloud fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef supabase fill:#e0f2f1,stroke:#00796b,stroke-width:2px,color:#004d40
+    classDef browser fill:#e8f5e8,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+
+    class A edge
+    class NGINX,B,W cloud
+    class Q,D supabase
+    class C browser
+```
+
+Fonte: Elaborado pelo autor (2026).
+
+#### Descrição do fluxo principal
+
+1. O **Hardware Agent**, executando no Raspberry Pi 4, realiza as varreduras na rede local utilizando Nmap e scripts NSE, normaliza os resultados em formato JSON estruturado e os envia de forma segura para o Backend.
+
+2. O **Backend API** recebe o payload, realiza validações e enfileira a tarefa de processamento.
+
+3. O **Background Worker** consome os jobs da fila, executa o enriquecimento dos achados (correlação de vulnerabilidades, cálculo de risco, etc.) e persiste os dados no banco.
+
+4. O **Frontend Web** consome a API para exibir dashboards, histórico de scans, inventário de dispositivos, findings e recomendações de priorização.
+
+Essa arquitetura oferece vantagens significativas: permite a execução eficiente em hardware com recursos limitados, mantém o processamento pesado fora do dispositivo embarcado, garante histórico completo e auditável dos scans, e separa claramente as etapas de coleta, enriquecimento e apresentação. Tal organização não apenas atende aos requisitos técnicos e de custo do projeto, como também favorece a auditabilidade e a reprodutibilidade dos resultados no contexto acadêmico.
 
 ### 3.2 Pipeline de varredura no agente embarcado
 
@@ -154,3 +246,11 @@ NATIONAL INSTITUTE OF STANDARDS AND TECHNOLOGY. NIST Artificial Intelligence Ris
 SILVA, Gabriel de Jesus Coelho da; WESTPHALL, Carlos Becker. A Survey of Large Language Models in Cybersecurity. arXiv, 2024. Disponível em: <https://doi.org/10.48550/arXiv.2402.16968>. Acesso em: 12 maio 2026.
 
 XU, Hanxiang; WANG, Shenao; LI, Ningke; WANG, Kailong; ZHAO, Yanjie; CHEN, Kai; YU, Ting; LIU, Yang; WANG, Haoyu. Large Language Models for Cyber Security: A Systematic Literature Review. arXiv, 2024. Disponível em: <https://doi.org/10.48550/arXiv.2405.04760>. Acesso em: 12 maio 2026.
+
+TENABLE. Nessus Vulnerability Scanner – Pricing. [S. l.], 2026. Disponível em: <https://www.tenable.com/buy>. Acesso em: 18 maio 2026.
+
+GREENBONE NETWORKS. OpenVAS Basic – Pricing. [S. l.], 2026. Disponível em: <https://www.greenbone.net/en/openvas-basic-order/>. Acesso em: 18 maio 2026.
+
+FUTURE ARCHITECT. Vuls: Agent-less vulnerability scanner. [S. l.], 2025. Disponível em: <https://github.com/future-architect/vuls>. Acesso em: 18 maio 2026.
+
+SAINZ-RASO, Jorge et al. Security Vulnerabilities in Raspberry Pi – Analysis of the System Weaknesses. IEEE Consumer Electronics Magazine, v. 8, n. 6, p. 47-52, 2019.
