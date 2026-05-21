@@ -88,18 +88,17 @@ class NetworkScreen(DmitriScreen):
                 self._push_scan_mode(subnet)
 
     def _push_scan_mode(self, subnet: str) -> None:
-        from agent.tui.screens.scan_mode import ScanModeScreen
+        from agent.tui.screens.scan_category import ScanCategoryScreen
 
         self.app.push_screen(
-            ScanModeScreen(),
-            callback=lambda mode: self._on_mode_result(subnet, mode),
+            ScanCategoryScreen(subnet),
+            callback=self._on_mode_result,
         )
 
-    def _on_mode_result(self, subnet: str, mode: str | None) -> None:
-        if mode is None:
+    def _on_mode_result(self, result: tuple[str, str] | None) -> None:
+        if result is None:
             return
-        # Both subnet and mode selected — dismiss with the pair
-        self.dismiss((subnet, mode))
+        self.dismiss(result)
 
     @staticmethod
     def _subnet_from_id(option_id: str | None) -> str | None:

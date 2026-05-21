@@ -12,12 +12,21 @@ from textual.widgets import Static
 from agent.normalize.contracts import ScanPayload
 from agent.tui.screens.base import DmitriScreen
 
+MODE_LABELS = {"quick": "Quick", "standard": "Standard", "full": "Full", "nspi": "NSPi"}
+
 SEVERITY_COLORS = {
     "critical": "red bold",
     "high": "red",
     "medium": "yellow",
     "low": "dim",
 }
+
+
+def _has_iolink_banner(device) -> bool:
+    for p in device.ports:
+        if p.version and any(kw in p.version.lower() for kw in ("balluf", "io-link")):
+            return True
+    return False
 
 
 class ScanViewScreen(DmitriScreen):
@@ -67,7 +76,7 @@ class ScanViewScreen(DmitriScreen):
         lines.append("[bold]── Scan Results ──────────────────────────────[/bold]")
         lines.append(f"Target:   {payload.subnet}")
         lines.append(f"Date:     {payload.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        lines.append(f"Mode:     {payload.scan_mode.capitalize()}")
+        lines.append(f"Mode:     {MODE_LABELS.get(payload.scan_mode, payload.scan_mode.capitalize())}")
         if payload.metadata and "elapsed_seconds" in payload.metadata:
             elapsed = payload.metadata["elapsed_seconds"]
             lines.append(f"Duration: {elapsed}s")
@@ -99,6 +108,9 @@ class ScanViewScreen(DmitriScreen):
                         f"{version_str}"
                     )
                     lines.append(line)
+
+            if _has_iolink_banner(device):
+                lines.append("  [bold]⚙ IO-Link Master detected[/bold]")
 
             device_findings = findings_by_ip.get(ip_str, [])
             if device_findings:
