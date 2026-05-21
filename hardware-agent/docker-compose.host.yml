@@ -1,3 +1,0 @@
-services:
-  hardware-agent:
-    network_mode: host
