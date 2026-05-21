@@ -76,9 +76,7 @@ class ScanViewScreen(DmitriScreen):
         lines.append("[bold]── Scan Results ──────────────────────────────[/bold]")
         lines.append(f"Target:   {payload.subnet}")
         lines.append(f"Date:     {payload.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        mode_label = MODE_LABELS.get(
-            payload.scan_mode, payload.scan_mode.capitalize()
-        )
+        mode_label = MODE_LABELS.get(payload.scan_mode, payload.scan_mode.capitalize())
         lines.append(f"Mode:     {mode_label}")
         if payload.metadata and "elapsed_seconds" in payload.metadata:
             elapsed = payload.metadata["elapsed_seconds"]
