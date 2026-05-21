@@ -96,6 +96,21 @@ Screen {
     margin: 1 0;
 }
 
+#scancategory-container {
+    margin: 1 4;
+    height: auto;
+}
+
+#scancategory-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#scancategory-list {
+    height: auto;
+    max-height: 4;
+}
+
 #scanmode-container {
     margin: 1 4;
     height: auto;

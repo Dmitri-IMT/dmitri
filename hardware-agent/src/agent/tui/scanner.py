@@ -38,7 +38,7 @@ class ScanRunner:
     def __init__(
         self,
         subnet: str,
-        scan_mode: Literal["quick", "standard", "full"],
+        scan_mode: Literal["quick", "standard", "full", "nspi"],
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         on_complete: Callable[[ScanPayload], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,

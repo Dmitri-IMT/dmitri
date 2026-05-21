@@ -12,11 +12,11 @@ from uuid import uuid4
 
 from agent.config import AgentSettings, deep_stage_scripts, port_stage_scripts
 from agent.discovery.network_discovery import discover_hosts
-from agent.discovery.port_discovery import scan_ports_batch
+from agent.discovery.port_discovery import merge_ports, scan_ports_batch
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload, ScanPayload
 from agent.normalize.findings import extract_findings
-from agent.scanner.models import HostInfo, PortInfo
+from agent.scanner.models import HostInfo
 from agent.scanner.nmap import LoggedNmapRunner, NmapRunner
 from agent.utils.network import (
     LocalNetworkInfo,
@@ -210,7 +210,7 @@ class ScanOrchestrator:
                 result = future.result()
                 if result is None:
                     continue
-                host.ports = _merge_ports(host.ports, result.ports)
+                host.ports = merge_ports(host.ports, result.ports)
                 host.host_scripts = result.host_scripts
                 LOGGER.info(
                     "Deep inspection finished for %s with %s open ports "
@@ -327,30 +327,6 @@ class ScanOrchestrator:
             )
             self.network_info = detected
         return self.network_info
-
-
-def _merge_ports(
-    existing_ports: list[PortInfo],
-    new_ports: list[PortInfo],
-) -> list[PortInfo]:
-    merged: dict[tuple[int, str], PortInfo] = {
-        (port.port, port.protocol): port for port in existing_ports
-    }
-
-    for new_port in new_ports:
-        key = (new_port.port, new_port.protocol)
-        current = merged.get(key)
-        if current is None:
-            merged[key] = new_port
-            continue
-
-        current.state = new_port.state or current.state
-        if new_port.service.name or new_port.service.banner or new_port.service.cpes:
-            current.service = new_port.service
-        if new_port.scripts:
-            current.scripts = new_port.scripts
-
-    return sorted(merged.values(), key=lambda port: (port.port, port.protocol))
 
 
 def _chunked(items: list[str], chunk_size: int) -> list[list[str]]:

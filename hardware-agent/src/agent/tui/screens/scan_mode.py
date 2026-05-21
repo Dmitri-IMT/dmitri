@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from agent.tui.screens.base import DmitriScreen
+
+_GENERAL_OPTIONS = [
+    Option("Quick      —  Top 1000 ports · CVE detection · ~2–5 min", id="quick"),
+    Option("Standard   —  Top 1000 ports · Service scripts · ~5–10 min", id="standard"),
+    Option("Extensive  —  Coming soon", id="extensive", disabled=True),
+    Option("MAX        —  Coming soon", id="max", disabled=True),
+]
+
+_NSPI_OPTIONS = [
+    Option(
+        "NSPi Standard  —  Industrial ports · OT + security scripts · ~20–30 min",
+        id="nspi",
+    ),
+]
 
 
 class ScanModeScreen(DmitriScreen):
@@ -22,23 +38,16 @@ class ScanModeScreen(DmitriScreen):
         Binding("enter", "select", "Enter Select", show=True, priority=True),
     ]
 
+    def __init__(self, category: Literal["general", "nspi"] = "general") -> None:
+        super().__init__()
+        self._category = category
+
     def compose_body(self):
+        title = "Select NSPi mode" if self._category == "nspi" else "Select scan mode"
+        options = _NSPI_OPTIONS if self._category == "nspi" else _GENERAL_OPTIONS
         with Vertical(id="scanmode-container"):
-            yield Static("Select scan mode", id="scanmode-title")
-            yield OptionList(
-                Option(
-                    "Quick      —  Top 1000 ports · CVE detection · ~2–5 min",
-                    id="quick",
-                ),
-                Option(
-                    "Standard   —  Top 1000 ports · Service scripts · ~5–10 min",
-                    id="standard",
-                ),
-                Option("Extensive  —  Coming soon", id="extensive", disabled=True),
-                Option("MAX        —  Coming soon", id="max", disabled=True),
-                Option("NSPi       —  Coming soon", id="nspi", disabled=True),
-                id="scanmode-list",
-            )
+            yield Static(title, id="scanmode-title")
+            yield OptionList(*options, id="scanmode-list")
 
     def on_mount(self) -> None:
         self.query_one("#scanmode-list", OptionList).focus()

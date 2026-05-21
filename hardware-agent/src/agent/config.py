@@ -25,7 +25,7 @@ class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
     scan_subnet: str | None = None
-    scan_mode: Literal["quick", "standard", "full"] = "quick"
+    scan_mode: Literal["quick", "standard", "full", "nspi"] = "quick"
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
     nmap_scripts: tuple[str, ...] = DEFAULT_NSE_SCRIPTS
@@ -39,7 +39,7 @@ class AgentSettings:
         self,
         *,
         scan_subnet: str | None = None,
-        scan_mode: Literal["quick", "standard", "full"] | None = None,
+        scan_mode: Literal["quick", "standard", "full", "nspi"] | None = None,
         output_path: str | None = None,
     ) -> AgentSettings:
         """Return a copy with CLI-provided overrides applied."""
@@ -63,9 +63,30 @@ STANDARD_NSE_SCRIPTS = (
 
 QUICK_NSE_SCRIPTS = ("vulners",)
 
+NSPI_PORTS = "502,4840,44818,445,139,3389,5985"
+
+NSPI_NSE_SCRIPTS = (
+    "modbus-discover",
+    "enip-info",
+    "smb-protocols",
+    "smb2-security-mode",
+    "smb-security-mode",
+    "smb-vuln-ms17-010",
+    "smb-enum-shares",
+    "rdp-enum-encryption",
+    "ssh-auth-methods",
+    "ssh2-enum-algos",
+    "ssl-cert",
+    "ssl-enum-ciphers",
+    "http-title",
+    "vulners",
+)
+
 
 def port_stage_scripts(scan_mode: str) -> str:
     """Return the --script CSV for the port-scan stage (quick/standard only)."""
+    if scan_mode == "nspi":
+        return ",".join(NSPI_NSE_SCRIPTS)
     if scan_mode == "standard":
         return ",".join(STANDARD_NSE_SCRIPTS)
     return "vulners"
@@ -76,6 +97,8 @@ def deep_stage_scripts(
     configured_scripts: tuple[str, ...],
 ) -> tuple[str, ...]:
     """Return the script tuple for the deep-inspection stage."""
+    if scan_mode == "nspi":
+        return NSPI_NSE_SCRIPTS
     if scan_mode == "standard":
         return STANDARD_NSE_SCRIPTS
     if scan_mode == "full":
