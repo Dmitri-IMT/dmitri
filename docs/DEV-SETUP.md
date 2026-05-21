@@ -13,7 +13,7 @@ This guide covers **only** the `**hardware-agent`** Python package and the **Tex
 - **Git**
 - **Python 3.11+** (matches `requires-python` in `hardware-agent/pyproject.toml`)
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — required for syncing dependencies (supported path; `pip` is an unsupported escape hatch per product specs)
-- **Nmap** — install on the host yourself (the repo does **not** install it via `install.sh`). It must be available for **real** scans when you run the TUI. Verify with `nmap --version`. Automated **tests** mock nmap; CI does not install it — see `[specs/001-agent-tui/tech-stack/testing-tooling.md](../specs/001-agent-tui/tech-stack/testing-tooling.md)`.
+- **Nmap** — install on the host yourself. It must be available for **real** scans when you run the TUI. Verify with `nmap --version`. Automated **tests** mock nmap; CI does not install it — see `[specs/001-agent-tui/tech-stack/testing-tooling.md](../specs/001-agent-tui/tech-stack/testing-tooling.md)`.
 
 ### Nmap (local runs)
 
@@ -26,21 +26,14 @@ This guide covers **only** the `**hardware-agent`** Python package and the **Tex
 
 ## Install dependencies (**uv**)
 
-From the **repository root**:
-
-```bash
-./hardware-agent/install.sh
-```
-
-Or from `**hardware-agent/**`:
+From `**hardware-agent/**`:
 
 ```bash
 cd hardware-agent
-chmod +x install.sh   # Unix, if needed
-./install.sh
+uv sync
 ```
 
-The script runs `**uv sync**` in `hardware-agent/`. It does **not** install Nmap; if `nmap` is missing from `PATH`, the script prints a warning — install Nmap using the section above.
+This installs all Python dependencies. It does **not** install Nmap; if `nmap` is missing from `PATH`, install it using the section above.
 
 **Advanced (unsupported):** `pip install -e .` inside `hardware-agent/` may work in some environments (e.g. air-gapped mirrors), but it is **not** the supported install path — prefer **uv** — `[specs/001-agent-tui/tech-stack/package-and-distribution.md](../specs/001-agent-tui/tech-stack/package-and-distribution.md)`.
 
