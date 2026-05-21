@@ -16,7 +16,7 @@ from agent.discovery.port_discovery import merge_ports, scan_ports_batch
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload, ScanPayload
 from agent.normalize.findings import extract_findings
-from agent.scanner.models import HostInfo, PortInfo
+from agent.scanner.models import HostInfo
 from agent.scanner.nmap import LoggedNmapRunner, NmapRunner
 from agent.utils.network import (
     LocalNetworkInfo,
