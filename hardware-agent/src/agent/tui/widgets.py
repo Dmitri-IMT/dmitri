@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textual.widgets import Static
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 
 class DmitriHeader(Static):

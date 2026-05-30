@@ -22,6 +22,17 @@ SEVERITY_COLORS = {
 }
 
 
+def format_duration(seconds: float) -> str:
+    total = round(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if total >= 3600:
+        return f"{hours}h {minutes:02d}m {secs:02d}s"
+    if total >= 60:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
 def _has_iolink_banner(device) -> bool:
     for p in device.ports:
         if p.version and any(kw in p.version.lower() for kw in ("balluf", "io-link")):
@@ -80,7 +91,7 @@ class ScanViewScreen(DmitriScreen):
         lines.append(f"Mode:     {mode_label}")
         if payload.metadata and "elapsed_seconds" in payload.metadata:
             elapsed = payload.metadata["elapsed_seconds"]
-            lines.append(f"Duration: {elapsed}s")
+            lines.append(f"Duration: {format_duration(elapsed)}")
         lines.append("")
 
         device_count = len(payload.devices)
