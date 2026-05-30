@@ -5,12 +5,18 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Literal
+from uuid import uuid4
 
 from agent.config import AgentSettings
+from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
-from agent.scanner.pipeline import ScanOrchestrator
+from agent.normalize.findings import extract_findings
+from agent.scanner import stages
+from agent.scanner.nmap import NmapRunner, build_runner
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
@@ -43,6 +49,7 @@ class ScanRunner:
         on_complete: Callable[[ScanPayload], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
         workspace_root: Path | None = None,
+        runner: NmapRunner | None = None,
     ) -> None:
         self.subnet = subnet
         self.scan_mode = scan_mode
@@ -50,6 +57,7 @@ class ScanRunner:
         self._on_complete = on_complete
         self._on_error = on_error
         self._workspace_root = workspace_root
+        self._runner = runner
         self._cancel_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -87,30 +95,32 @@ class ScanRunner:
                 subnet=self.subnet,
                 interface="tui",
             )
-            orchestrator = ScanOrchestrator(
-                settings, workspace_root=self._workspace_root
+            scan_id = uuid4()
+            runner = build_runner(
+                settings,
+                self._workspace_root,
+                scan_id,
+                runner=self._runner,
             )
-            orchestrator.network_info = network_info
+
+            started_counter = perf_counter()
 
             self._emit("discovery")
             self._check_cancel()
-            orchestrator.current_stage = "discovery"
-            orchestrator._set_runner_stage("discovery")
-            from agent.discovery.network_discovery import discover_hosts
-
-            orchestrator.hosts = discover_hosts(orchestrator.runner, self.subnet)
+            stages.set_runner_stage(runner, "discovery")
+            hosts = discover_hosts(runner, self.subnet)
             self._check_cancel()
 
-            hosts_count = len(orchestrator.hosts)
+            hosts_count = len(hosts)
             self._emit("discovery", f"({hosts_count} hosts found)", completed=True)
 
             self._emit("port_scan")
-            if orchestrator.hosts:
+            if hosts:
                 self._check_cancel()
-                orchestrator._run_port_stage(orchestrator.hosts)
+                stages.run_port_stage(runner, settings, hosts)
                 self._check_cancel()
 
-                total_ports = sum(len(h.ports) for h in orchestrator.hosts)
+                total_ports = sum(len(h.ports) for h in hosts)
                 self._emit(
                     "port_scan",
                     f"Ports open: {total_ports}",
@@ -118,7 +128,7 @@ class ScanRunner:
                 )
 
                 self._emit("deep_inspection")
-                orchestrator._run_deep_inspection_stage(orchestrator.hosts)
+                stages.run_deep_inspection_stage(runner, settings, hosts)
                 self._check_cancel()
                 self._emit("deep_inspection", "Done", completed=True)
             else:
@@ -128,25 +138,21 @@ class ScanRunner:
 
             self._emit("normalizing")
             self._check_cancel()
-            from agent.normalize.findings import extract_findings
-
-            findings = extract_findings(orchestrator.hosts)
-
-            from datetime import datetime, timezone
-
-            orchestrator.current_stage = "completed"
-            devices = [
-                orchestrator._build_device_payload(h) for h in orchestrator.hosts
-            ]
+            findings = extract_findings(hosts)
+            elapsed_seconds = round(perf_counter() - started_counter, 2)
+            devices = [stages.build_device_payload(h) for h in hosts]
             payload = ScanPayload(
-                scan_id=orchestrator.scan_id,
+                scan_id=scan_id,
                 timestamp=datetime.now(timezone.utc),
                 subnet=self.subnet,
                 scan_mode=self.scan_mode,
                 devices=devices,
                 findings=findings,
-                metadata=orchestrator._build_metadata(
-                    elapsed_seconds=0,
+                metadata=stages.build_metadata(
+                    runner=runner,
+                    settings=settings,
+                    network_info=network_info,
+                    elapsed_seconds=elapsed_seconds,
                     hosts_discovered=hosts_count,
                     findings_count=len(findings),
                 ),
