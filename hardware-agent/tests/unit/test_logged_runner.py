@@ -6,11 +6,16 @@ import json
 import sys
 import textwrap
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from agent.config import AgentSettings
-from agent.scanner.nmap import LoggedNmapRunner, NmapExecutionError, NmapRunner
-from agent.scanner.pipeline import ScanOrchestrator
+from agent.scanner.nmap import (
+    LoggedNmapRunner,
+    NmapExecutionError,
+    NmapRunner,
+    build_runner,
+)
 
 VALID_XML = textwrap.dedent("""\
     <?xml version="1.0"?>
@@ -176,7 +181,7 @@ class TestLoggedNmapRunnerRunXml:
         assert "-oX" in argv
 
 
-class TestOrchestratorUsesLoggedRunner:
+class TestBuildRunner:
     def test_creates_logged_runner_when_workspace_provided(
         self, tmp_path: Path
     ) -> None:
@@ -187,19 +192,20 @@ class TestOrchestratorUsesLoggedRunner:
             scan_subnet="192.168.1.0/24",
             nmap_path=sys.executable,
         )
+        scan_id = uuid4()
 
-        orch = ScanOrchestrator(settings, workspace_root=workspace)
+        runner = build_runner(settings, workspace_root=workspace, scan_id=scan_id)
 
-        assert isinstance(orch.runner, LoggedNmapRunner)
-        assert orch.runner.parent_scan_id == str(orch.scan_id)
+        assert isinstance(runner, LoggedNmapRunner)
+        assert runner.parent_scan_id == str(scan_id)
 
     def test_creates_regular_runner_without_workspace(self) -> None:
         settings = AgentSettings(
             scan_subnet="192.168.1.0/24",
             nmap_path=sys.executable,
         )
-        orch = ScanOrchestrator(settings)
-        assert type(orch.runner) is NmapRunner
+        runner = build_runner(settings, workspace_root=None, scan_id=uuid4())
+        assert type(runner) is NmapRunner
 
     def test_explicit_runner_takes_precedence(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"
@@ -208,8 +214,11 @@ class TestOrchestratorUsesLoggedRunner:
         custom_runner = NmapRunner.__new__(NmapRunner)
         custom_runner.nmap_path = "/custom/nmap"
 
-        orch = ScanOrchestrator(
-            settings, runner=custom_runner, workspace_root=workspace
+        runner = build_runner(
+            settings,
+            workspace_root=workspace,
+            scan_id=uuid4(),
+            runner=custom_runner,
         )
 
-        assert orch.runner is custom_runner
+        assert runner is custom_runner

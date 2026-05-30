@@ -10,8 +10,15 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from agent.config import AgentSettings
 
 LOGGER = logging.getLogger(__name__)
+AGENT_VERSION = "0.1.2"
 
 
 class NmapExecutionError(RuntimeError):
@@ -217,3 +224,21 @@ class LoggedNmapRunner(NmapRunner):
         _strip_namespaces(root)
         LOGGER.info("Logged nmap run: %s", run_name)
         return root
+
+
+def build_runner(
+    settings: AgentSettings,
+    workspace_root: Path | None,
+    scan_id: UUID | str,
+    runner: NmapRunner | None = None,
+) -> NmapRunner:
+    if runner is not None:
+        return runner
+    if workspace_root is not None:
+        return LoggedNmapRunner(
+            settings.nmap_path,
+            workspace_root,
+            parent_scan_id=str(scan_id),
+            agent_version=AGENT_VERSION,
+        )
+    return NmapRunner(settings.nmap_path)
