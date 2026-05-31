@@ -167,3 +167,254 @@ def test_ssh_auth_methods_detects_password_authentication() -> None:
     assert finding.title == "SSH password authentication exposed"
     assert finding.severity == "low"
     assert finding.source_script == "ssh-auth-methods"
+
+
+def test_unmapped_script_with_cve_uses_generic_fallback() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <ports>
+            <port protocol="tcp" portid="443">
+              <state state="open" />
+              <service name="https" />
+              <script
+                id="some-unmapped-script"
+                output="Advisory notes CVE-2021-1234 is present"
+              />
+            </port>
+          </ports>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.0.80",
+        hostname="host",
+        ports=parse_ports(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.cve_id == "CVE-2021-1234"
+    assert finding.source_script == "some-unmapped-script"
+    assert finding.severity == "high"
+
+
+def _ssl_cert_host(
+    *,
+    not_after: str,
+    subject_cn: str,
+    issuer_cn: str,
+    sig_algo: str,
+    bits: str,
+) -> HostInfo:
+    host_element = ET.fromstring(f"""
+        <host>
+          <ports>
+            <port protocol="tcp" portid="443">
+              <state state="open" />
+              <service name="https" />
+              <script id="ssl-cert" output="Certificate details">
+                <table key="subject"><elem key="commonName">{subject_cn}</elem></table>
+                <table key="issuer"><elem key="commonName">{issuer_cn}</elem></table>
+                <table key="pubkey">
+                  <elem key="type">rsa</elem>
+                  <elem key="bits">{bits}</elem>
+                </table>
+                <table key="validity">
+                  <elem key="notBefore">2019-01-01T00:00:00</elem>
+                  <elem key="notAfter">{not_after}</elem>
+                </table>
+                <elem key="sig_algo">{sig_algo}</elem>
+                <elem key="md5">abc123</elem>
+                <elem key="sha1">def456</elem>
+              </script>
+            </port>
+          </ports>
+        </host>
+        """)
+    return HostInfo(
+        ip="192.168.1.10",
+        hostname="tls-host",
+        ports=parse_ports(host_element),
+    )
+
+
+def test_ssl_cert_expired_is_high() -> None:
+    host = _ssl_cert_host(
+        not_after="2021-01-01T00:00:00",
+        subject_cn="a.local",
+        issuer_cn="DigiCert CA",
+        sig_algo="sha256WithRSAEncryption",
+        bits="2048",
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].title == "TLS certificate expired"
+    assert findings[0].severity == "high"
+    assert findings[0].source_script == "ssl-cert"
+
+
+def test_ssl_cert_self_signed_is_medium() -> None:
+    host = _ssl_cert_host(
+        not_after="2035-01-01T00:00:00",
+        subject_cn="a.local",
+        issuer_cn="a.local",
+        sig_algo="sha256WithRSAEncryption",
+        bits="2048",
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Self-signed TLS certificate"
+    assert findings[0].severity == "medium"
+
+
+def test_ssl_cert_weak_signature_is_medium_not_fooled_by_fingerprint() -> None:
+    host = _ssl_cert_host(
+        not_after="2035-01-01T00:00:00",
+        subject_cn="a.local",
+        issuer_cn="DigiCert CA",
+        sig_algo="sha1WithRSAEncryption",
+        bits="2048",
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Weak TLS certificate signature"
+    assert findings[0].severity == "medium"
+
+
+def test_ssl_cert_weak_key_is_medium() -> None:
+    host = _ssl_cert_host(
+        not_after="2035-01-01T00:00:00",
+        subject_cn="a.local",
+        issuer_cn="DigiCert CA",
+        sig_algo="sha256WithRSAEncryption",
+        bits="1024",
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Weak TLS public key"
+    assert findings[0].severity == "medium"
+
+
+def test_ssl_cert_valid_modern_yields_no_finding() -> None:
+    host = _ssl_cert_host(
+        not_after="2035-01-01T00:00:00",
+        subject_cn="a.local",
+        issuer_cn="DigiCert CA",
+        sig_algo="sha256WithRSAEncryption",
+        bits="4096",
+    )
+
+    assert extract_findings([host]) == []
+
+
+def test_ssl_enum_ciphers_weak_config_yields_medium_findings() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <ports>
+            <port protocol="tcp" portid="443">
+              <state state="open" />
+              <service name="https" />
+              <script id="ssl-enum-ciphers" output="cipher report">
+                <table key="TLSv1.0">
+                  <table key="warnings">
+                    <elem>Broken cipher RC4 is deprecated by RFC 7465</elem>
+                  </table>
+                </table>
+                <elem key="least strength">C</elem>
+              </script>
+            </port>
+          </ports>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.1.11",
+        hostname="tls-host",
+        ports=parse_ports(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 3
+    assert all(f.severity == "medium" for f in findings)
+    titles = {f.title for f in findings}
+    assert "Deprecated TLS/SSL protocol offered: TLSv1.0" in titles
+    assert "Weak TLS cipher configuration" in titles
+    assert "Weak TLS cipher strength (grade C)" in titles
+
+
+def test_ssl_enum_ciphers_clean_grade_yields_no_finding() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <ports>
+            <port protocol="tcp" portid="443">
+              <state state="open" />
+              <service name="https" />
+              <script id="ssl-enum-ciphers" output="cipher report">
+                <table key="TLSv1.2">
+                  <table key="ciphers" />
+                </table>
+                <elem key="least strength">A</elem>
+              </script>
+            </port>
+          </ports>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.1.12",
+        hostname="tls-host",
+        ports=parse_ports(host_element),
+    )
+
+    assert extract_findings([host]) == []
+
+
+def _ftp_anon_host(output: str) -> HostInfo:
+    host_element = ET.fromstring(f"""
+        <host>
+          <ports>
+            <port protocol="tcp" portid="21">
+              <state state="open" />
+              <service name="ftp" />
+              <script id="ftp-anon" output="{output}" />
+            </port>
+          </ports>
+        </host>
+        """)
+    return HostInfo(
+        ip="192.168.1.13",
+        hostname="ftp-host",
+        ports=parse_ports(host_element),
+    )
+
+
+def test_ftp_anon_allowed_is_high() -> None:
+    host = _ftp_anon_host("Anonymous FTP login allowed (FTP code 230)")
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Anonymous FTP login allowed"
+    assert findings[0].severity == "high"
+
+
+def test_ftp_anon_writeable_is_critical() -> None:
+    output = (
+        "Anonymous FTP login allowed (FTP code 230) "
+        "drwxrwxrwx incoming [NSE: writeable]"
+    )
+    findings = extract_findings([_ftp_anon_host(output)])
+
+    assert len(findings) == 1
+    assert findings[0].severity == "critical"
+
+
+def test_ftp_anon_denied_yields_no_finding() -> None:
+    assert extract_findings([_ftp_anon_host("")]) == []
