@@ -25,7 +25,7 @@ class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
     scan_subnet: str | None = None
-    scan_mode: Literal["quick", "standard", "full", "nspi"] = "quick"
+    scan_mode: Literal["quick", "standard", "extensive", "full", "nspi"] = "quick"
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
     nmap_scripts: tuple[str, ...] = DEFAULT_NSE_SCRIPTS
@@ -39,7 +39,9 @@ class AgentSettings:
         self,
         *,
         scan_subnet: str | None = None,
-        scan_mode: Literal["quick", "standard", "full", "nspi"] | None = None,
+        scan_mode: (
+            Literal["quick", "standard", "extensive", "full", "nspi"] | None
+        ) = None,
         output_path: str | None = None,
     ) -> AgentSettings:
         """Return a copy with CLI-provided overrides applied."""
@@ -62,6 +64,20 @@ STANDARD_NSE_SCRIPTS = (
 )
 
 QUICK_NSE_SCRIPTS = ("vulners",)
+
+EXTENSIVE_NSE_SCRIPTS = (
+    "vulners",
+    "smb-protocols",
+    "smb2-security-mode",
+    "ssh-auth-methods",
+    "http-title",
+    "http-server-header",
+    "ssl-cert",
+    "ssl-enum-ciphers",
+    "http-methods",
+    "ftp-anon",
+    "banner",
+)
 
 NSPI_PORTS = "502,4840,44818,445,139,3389,5985"
 
@@ -101,9 +117,17 @@ def deep_stage_scripts(
         return NSPI_NSE_SCRIPTS
     if scan_mode == "standard":
         return STANDARD_NSE_SCRIPTS
+    if scan_mode == "extensive":
+        return EXTENSIVE_NSE_SCRIPTS
     if scan_mode == "full":
         return configured_scripts
     return QUICK_NSE_SCRIPTS
+
+
+def min_cvss_for_mode(scan_mode: str) -> float:
+    if scan_mode == "extensive":
+        return 3.0
+    return 5.0
 
 
 def _parse_csv(value: str | None) -> tuple[str, ...]:

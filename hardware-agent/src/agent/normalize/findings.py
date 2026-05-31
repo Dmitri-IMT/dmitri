@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from agent.normalize.contracts import FindingPayload
@@ -54,21 +55,17 @@ def _extract_script_findings(
     port: PortInfo | None,
     script: ScriptResult,
 ) -> list[FindingPayload]:
-    if script.script_id == "vulners":
-        return _extract_vulners_findings(host, port, script)
-    if script.script_id == "smb2-security-mode":
-        finding = _extract_smb_signing_finding(host, port, script)
-        return [finding] if finding is not None else []
-    if script.script_id == "smb-protocols":
-        finding = _extract_smbv1_finding(host, port, script)
-        return [finding] if finding is not None else []
-    if script.script_id == "http-methods":
-        finding = _extract_http_methods_finding(host, port, script)
-        return [finding] if finding is not None else []
-    if script.script_id == "ssh-auth-methods":
-        finding = _extract_ssh_auth_methods_finding(host, port, script)
-        return [finding] if finding is not None else []
+    extractor = _EXTRACTORS.get(script.script_id)
+    if extractor is not None:
+        return extractor(host, port, script)
+    return _extract_generic_findings(host, port, script)
 
+
+def _extract_generic_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
     generic = _extract_generic_vuln_table_findings(host, port, script)
     if generic:
         return generic
@@ -306,6 +303,234 @@ def _extract_ssh_auth_methods_finding(
     )
 
 
+def _parse_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _extract_ssl_cert_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    data = script.data
+    if port is None or not isinstance(data, Mapping):
+        return []
+
+    findings: list[FindingPayload] = []
+
+    validity = _lookup(data, "validity")
+    not_after = _lookup(validity, "notAfter") if isinstance(validity, Mapping) else None
+    expiry = _parse_timestamp(not_after)
+    if expiry is not None and expiry < datetime.now():
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity="high",
+                title="TLS certificate expired",
+                description=(
+                    f"The TLS certificate on {host.ip}:{port.port} expired on "
+                    f"{not_after}."
+                ),
+                recommendation=(
+                    "Renew the certificate and automate rotation before expiry."
+                ),
+                evidence=script.output or f"notAfter={not_after}",
+                source="nmap_nse",
+                source_script=script.script_id,
+            )
+        )
+
+    subject = _lookup(data, "subject")
+    issuer = _lookup(data, "issuer")
+    if subject and issuer and subject == issuer:
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity="medium",
+                title="Self-signed TLS certificate",
+                description=(
+                    f"The TLS certificate on {host.ip}:{port.port} is self-signed "
+                    "(subject matches issuer)."
+                ),
+                recommendation=(
+                    "Replace with a certificate from a trusted CA for "
+                    "externally-reachable services."
+                ),
+                evidence=script.output or _stringify(subject),
+                source="nmap_nse",
+                source_script=script.script_id,
+            )
+        )
+
+    sig_algo = _stringify(_lookup(data, "sig_algo")).lower()
+    if "sha1" in sig_algo or "md5" in sig_algo:
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity="medium",
+                title="Weak TLS certificate signature",
+                description=(
+                    f"The TLS certificate on {host.ip}:{port.port} is signed with a "
+                    f"weak algorithm ({sig_algo})."
+                ),
+                recommendation="Reissue the certificate using SHA-256 or stronger.",
+                evidence=script.output or sig_algo,
+                source="nmap_nse",
+                source_script=script.script_id,
+            )
+        )
+
+    pubkey = _lookup(data, "pubkey")
+    bits = (
+        _coerce_float(_lookup(pubkey, "bits")) if isinstance(pubkey, Mapping) else None
+    )
+    if bits is not None and bits < 2048:
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity="medium",
+                title="Weak TLS public key",
+                description=(
+                    f"The TLS certificate on {host.ip}:{port.port} uses a "
+                    f"{int(bits)}-bit key, below the 2048-bit minimum."
+                ),
+                recommendation=(
+                    "Reissue the certificate with a 2048-bit or larger key."
+                ),
+                evidence=script.output or f"bits={int(bits)}",
+                source="nmap_nse",
+                source_script=script.script_id,
+            )
+        )
+
+    return findings
+
+
+def _extract_weak_cipher_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    data = script.data
+    if port is None or not isinstance(data, Mapping):
+        return []
+
+    findings: list[FindingPayload] = []
+
+    for protocol in ("SSLv3", "TLSv1.0"):
+        if isinstance(_lookup(data, protocol), Mapping):
+            findings.append(
+                _base_finding(
+                    host,
+                    port,
+                    severity="medium",
+                    title=f"Deprecated TLS/SSL protocol offered: {protocol}",
+                    description=(
+                        f"{host.ip}:{port.port} offers the deprecated {protocol} "
+                        "protocol."
+                    ),
+                    recommendation=f"Disable {protocol}; require TLS 1.2 or higher.",
+                    evidence=script.output or protocol,
+                    source="nmap_nse",
+                    source_script=script.script_id,
+                )
+            )
+
+    seen_warnings: set[str] = set()
+    for value in data.values():
+        if not isinstance(value, Mapping):
+            continue
+        warnings = value.get("warnings")
+        if not isinstance(warnings, Sequence) or isinstance(warnings, (str, bytes)):
+            continue
+        for warning in warnings:
+            text = _stringify(warning)
+            if not text or text in seen_warnings:
+                continue
+            seen_warnings.add(text)
+            findings.append(
+                _base_finding(
+                    host,
+                    port,
+                    severity="medium",
+                    title="Weak TLS cipher configuration",
+                    description=f"{host.ip}:{port.port}: {text}",
+                    recommendation=(
+                        "Disable the affected ciphers/protocols and prefer modern "
+                        "AEAD suites."
+                    ),
+                    evidence=text,
+                    source="nmap_nse",
+                    source_script=script.script_id,
+                )
+            )
+
+    least = _stringify(_lookup(data, "least strength")).upper()
+    if least in {"C", "D", "E", "F"}:
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity="medium",
+                title=f"Weak TLS cipher strength (grade {least})",
+                description=(
+                    f"The weakest cipher offered by {host.ip}:{port.port} graded "
+                    f"{least}."
+                ),
+                recommendation="Remove low-grade ciphers; prefer A-grade suites.",
+                evidence=script.output or f"least strength={least}",
+                source="nmap_nse",
+                source_script=script.script_id,
+            )
+        )
+
+    return findings
+
+
+def _extract_ftp_anon_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> FindingPayload | None:
+    if port is None:
+        return None
+
+    haystack = f"{script.output}\n{_stringify(script.data)}"
+    if "anonymous ftp login allowed" not in haystack.lower():
+        return None
+
+    writeable = "[NSE: writeable]" in haystack
+    severity = "critical" if writeable else "high"
+    description = f"The FTP service on {host.ip}:{port.port} allows anonymous login" + (
+        " and exposes a writeable directory."
+        if writeable
+        else ", which can disclose files to unauthenticated users."
+    )
+    return _base_finding(
+        host,
+        port,
+        severity=severity,
+        title="Anonymous FTP login allowed",
+        description=description,
+        recommendation=(
+            "Disable anonymous FTP access, or restrict it to a controlled, "
+            "read-only directory."
+        ),
+        evidence=script.output or "Anonymous FTP login allowed",
+        source="nmap_nse",
+        source_script=script.script_id,
+    )
+
+
 def _extract_generic_vuln_table_findings(
     host: HostInfo,
     port: PortInfo | None,
@@ -457,3 +682,35 @@ def _service_label(port: PortInfo | None) -> str:
     if port.protocol == "tcp":
         return f"{label} (TCP/{port.port})"
     return f"{label} ({port.protocol}/{port.port})"
+
+
+_SingleExtractor = Callable[
+    [HostInfo, "PortInfo | None", ScriptResult], "FindingPayload | None"
+]
+_ListExtractor = Callable[
+    [HostInfo, "PortInfo | None", ScriptResult], list[FindingPayload]
+]
+
+
+def _single(extractor: _SingleExtractor) -> _ListExtractor:
+    def _wrapped(
+        host: HostInfo,
+        port: PortInfo | None,
+        script: ScriptResult,
+    ) -> list[FindingPayload]:
+        finding = extractor(host, port, script)
+        return [finding] if finding is not None else []
+
+    return _wrapped
+
+
+_EXTRACTORS: dict[str, _ListExtractor] = {
+    "vulners": _extract_vulners_findings,
+    "smb2-security-mode": _single(_extract_smb_signing_finding),
+    "smb-protocols": _single(_extract_smbv1_finding),
+    "http-methods": _single(_extract_http_methods_finding),
+    "ssh-auth-methods": _single(_extract_ssh_auth_methods_finding),
+    "ssl-cert": _extract_ssl_cert_findings,
+    "ssl-enum-ciphers": _extract_weak_cipher_findings,
+    "ftp-anon": _single(_extract_ftp_anon_finding),
+}

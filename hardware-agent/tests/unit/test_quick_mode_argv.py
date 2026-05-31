@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 from uuid import uuid4
 
-from agent.discovery.port_discovery import scan_ports, scan_ports_batch
+from agent.discovery.port_discovery import (
+    discovery_arguments,
+    scan_ports,
+    scan_ports_batch,
+)
 from agent.normalize.contracts import ScanPayload
 from agent.scanner.nmap import NmapRunner
 
@@ -122,6 +125,53 @@ class TestStandardModeArgv:
         argv = captured[0]
         for flag in FORBIDDEN_PORT_FLAGS:
             assert flag not in argv, f"standard mode argv must not contain {flag}"
+
+
+class TestExtensiveModeArgv:
+    def test_discovery_arguments_top_ports_no_scripts(self) -> None:
+        assert discovery_arguments("extensive") == [
+            "-sV",
+            "-O",
+            "--top-ports",
+            "10000",
+        ]
+
+    def test_discovery_arguments_unchanged_for_other_modes(self) -> None:
+        assert discovery_arguments("full") == ["-p-", "--min-rate", "1000"]
+        assert discovery_arguments("quick") == ["-sV", "-O", "--script", "vulners"]
+
+    def test_scan_ports_includes_top_ports_excludes_scripts(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports(runner, "10.0.0.1", "extensive")
+
+        argv = captured[0]
+        assert "-sV" in argv
+        assert "-O" in argv
+        assert "--top-ports" in argv
+        assert argv[argv.index("--top-ports") + 1] == "10000"
+        assert "--script" not in argv
+        assert "-p-" not in argv
+
+    def test_scan_ports_batch_matches_single_discovery_flags(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports_batch(runner, ["10.0.0.1", "10.0.0.2"], "extensive")
+
+        argv = captured[0]
+        assert "--top-ports" in argv
+        assert argv[argv.index("--top-ports") + 1] == "10000"
+        assert "--script" not in argv
+        assert "-p-" not in argv
+
+    def test_single_and_batch_share_discovery_flags(self) -> None:
+        single_runner, single_cap = _make_capturing_runner()
+        batch_runner, batch_cap = _make_capturing_runner()
+        scan_ports(single_runner, "10.0.0.1", "extensive")
+        scan_ports_batch(batch_runner, ["10.0.0.1"], "extensive")
+
+        flags = ["-sV", "-O", "--top-ports", "10000"]
+        for flag in flags:
+            assert flag in single_cap[0]
+            assert flag in batch_cap[0]
 
 
 class TestStandardModeScanPayload:

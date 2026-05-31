@@ -33,15 +33,18 @@ def merge_ports(
     return sorted(merged.values(), key=lambda port: (port.port, port.protocol))
 
 
+def discovery_arguments(scan_mode: str) -> list[str]:
+    if scan_mode == "full":
+        return ["-p-", "--min-rate", "1000"]
+    if scan_mode == "extensive":
+        return ["-sV", "-O", "--top-ports", "10000"]
+    return ["-sV", "-O", "--script", port_stage_scripts(scan_mode)]
+
+
 def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
     """Enumerate open and filtered ports for a single host."""
 
-    arguments = ["-Pn", "-T4"]
-    if scan_mode == "full":
-        arguments.extend(["-p-", "--min-rate", "1000"])
-    else:
-        arguments.extend(["-sV", "-O", "--script", port_stage_scripts(scan_mode)])
-    arguments.append(ip)
+    arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), ip]
 
     root = runner.run_xml(arguments)
     host_element = root.find("host")
@@ -63,12 +66,7 @@ def scan_ports_batch(
     if scan_mode == "nspi":
         return _scan_ports_batch_nspi(runner, ips)
 
-    arguments = ["-Pn", "-T4"]
-    if scan_mode == "full":
-        arguments.extend(["-p-", "--min-rate", "1000"])
-    else:
-        arguments.extend(["-sV", "-O", "--script", port_stage_scripts(scan_mode)])
-    arguments.extend(ips)
+    arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), *ips]
 
     root = runner.run_xml(arguments)
     results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}

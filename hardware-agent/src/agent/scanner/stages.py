@@ -4,8 +4,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING
 
-from agent.config import deep_stage_scripts, port_stage_scripts
-from agent.discovery.port_discovery import merge_ports, scan_ports_batch
+from agent.config import deep_stage_scripts
+from agent.discovery.port_discovery import (
+    discovery_arguments,
+    merge_ports,
+    scan_ports_batch,
+)
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload
 from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
@@ -136,11 +140,7 @@ def build_device_payload(host: HostInfo) -> DevicePayload:
 
 
 def nmap_arguments_summary(settings: AgentSettings) -> str:
-    port_stage = (
-        "-p- --min-rate 1000"
-        if settings.scan_mode == "full"
-        else f"-sV -O --script {port_stage_scripts(settings.scan_mode)}"
-    )
+    port_stage = " ".join(discovery_arguments(settings.scan_mode))
     deep_scripts = deep_stage_scripts(settings.scan_mode, settings.nmap_scripts)
     return (
         f"discovery=-sn -PE -T4; ports={port_stage} -Pn -T4; "

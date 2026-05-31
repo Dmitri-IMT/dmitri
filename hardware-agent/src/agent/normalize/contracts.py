@@ -51,7 +51,7 @@ class ScanPayload(BaseModel):
     scan_id: UUID
     timestamp: datetime
     subnet: SubnetCIDR
-    scan_mode: Literal["quick", "standard", "full", "nspi"]
+    scan_mode: Literal["quick", "standard", "extensive", "full", "nspi"]
     devices: list[DevicePayload] = Field(default_factory=list)
     findings: list[FindingPayload] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None

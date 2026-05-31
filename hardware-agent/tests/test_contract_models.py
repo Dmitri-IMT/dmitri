@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import get_args
 from uuid import uuid4
 
 from agent.normalize.contracts import (
@@ -8,6 +11,13 @@ from agent.normalize.contracts import (
     FindingPayload,
     PortPayload,
     ScanPayload,
+)
+
+SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "contracts"
+    / "schemas"
+    / "scan_result.schema.json"
 )
 
 
@@ -57,3 +67,24 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
 
     assert payload.devices[0].mac is None
     assert payload.findings[0].cve_id == "CVE-2024-12345"
+
+
+def test_scan_payload_accepts_extensive_and_nspi() -> None:
+    for mode in ("extensive", "nspi"):
+        payload = ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.0.0/24",
+            scan_mode=mode,
+            devices=[],
+            findings=[],
+        )
+        assert payload.scan_mode == mode
+
+
+def test_schema_enum_matches_pydantic_literal() -> None:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    enum = set(schema["properties"]["scan_mode"]["enum"])
+    literal = set(get_args(ScanPayload.model_fields["scan_mode"].annotation))
+    assert enum == literal
+    assert {"extensive", "nspi"} <= enum

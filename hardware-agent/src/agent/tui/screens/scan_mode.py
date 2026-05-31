@@ -14,7 +14,10 @@ from agent.tui.screens.base import DmitriScreen
 _GENERAL_OPTIONS = [
     Option("Quick      —  Top 1000 ports · CVE detection · ~2–5 min", id="quick"),
     Option("Standard   —  Top 1000 ports · Service scripts · ~5–10 min", id="standard"),
-    Option("Extensive  —  Coming soon", id="extensive", disabled=True),
+    Option(
+        "Extensive  —  Top 10000 ports · Full security analysis · ~20–35 min",
+        id="extensive",
+    ),
     Option("MAX        —  Coming soon", id="max", disabled=True),
 ]
 
