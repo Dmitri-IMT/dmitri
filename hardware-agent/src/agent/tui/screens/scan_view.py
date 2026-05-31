@@ -12,7 +12,13 @@ from textual.widgets import Static
 from agent.normalize.contracts import ScanPayload
 from agent.tui.screens.base import DmitriScreen
 
-MODE_LABELS = {"quick": "Quick", "standard": "Standard", "full": "Full", "nspi": "NSPi"}
+MODE_LABELS = {
+    "quick": "Quick",
+    "standard": "Standard",
+    "extensive": "Extensive",
+    "full": "Full",
+    "nspi": "NSPi",
+}
 
 SEVERITY_COLORS = {
     "critical": "red bold",

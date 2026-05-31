@@ -22,7 +22,7 @@
     },
     "scan_mode": {
       "type": "string",
-      "enum": ["quick", "standard", "full"],
+      "enum": ["quick", "standard", "full", "extensive", "nspi"],
       "description": "Indicates whether a lightweight or deep scan was executed"
     },
     "devices": {

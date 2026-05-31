@@ -11,7 +11,7 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
-from agent.config import AgentSettings
+from agent.config import AgentSettings, min_cvss_for_mode
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
@@ -44,7 +44,7 @@ class ScanRunner:
     def __init__(
         self,
         subnet: str,
-        scan_mode: Literal["quick", "standard", "full", "nspi"],
+        scan_mode: Literal["quick", "standard", "extensive", "full", "nspi"],
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         on_complete: Callable[[ScanPayload], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
@@ -88,6 +88,7 @@ class ScanRunner:
             settings = AgentSettings(
                 scan_subnet=self.subnet,
                 scan_mode=self.scan_mode,
+                min_cvss=min_cvss_for_mode(self.scan_mode),
             )
             network_info = LocalNetworkInfo(
                 ip="0.0.0.0",
