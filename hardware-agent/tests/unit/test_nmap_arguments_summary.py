@@ -9,9 +9,9 @@ class TestNmapArgumentsSummary:
         summary = nmap_arguments_summary(AgentSettings(scan_mode="extensive"))
         assert "ports=-sV -O --top-ports 10000 -Pn -T4" in summary
 
-    def test_full_port_stage_unchanged(self) -> None:
-        summary = nmap_arguments_summary(AgentSettings(scan_mode="full"))
-        assert "ports=-p- --min-rate 1000 -Pn -T4" in summary
+    def test_max_uses_all_ports_min_rate(self) -> None:
+        summary = nmap_arguments_summary(AgentSettings(scan_mode="max"))
+        assert "ports=-sV -O -p- --min-rate 1000 -Pn -T4" in summary
 
     def test_quick_port_stage_unchanged(self) -> None:
         summary = nmap_arguments_summary(AgentSettings(scan_mode="quick"))
