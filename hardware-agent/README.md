@@ -12,7 +12,7 @@ Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Li
 ## Current Status
 - A working multi-stage pipeline is implemented under `src/agent`:
   - host discovery with `nmap -sn`
-  - batched port discovery (`-F` for quick scans, `-p-` for full scans)
+  - batched port discovery (`-F` for quick; `--top-ports` / `-p-` for extensive and MAX, per mode)
   - deep inspection with `-sV` plus curated NSE scripts
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
@@ -39,11 +39,10 @@ uv run python -m agent.cli
 
 - `AGENT_NMAP_PATH`: explicit path to `nmap`
 - `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
-- `AGENT_SCAN_MODE`: scan mode (`quick`, `standard`, `full`, `nspi`)
-- `AGENT_NMAP_SCRIPTS`: comma-separated NSE scripts, defaults to a curated set for CVE correlation plus SMB, SSH, HTTP, and TLS surface checks
+- `AGENT_SCAN_MODE`: optional legacy env override (`quick`, `standard`, `extensive`, `nspi`; `full` is being removed — use TUI mode **MAX** instead). **Preferred:** choose the mode in the TUI.
 - `AGENT_MIN_CVSS`: minimum CVSS threshold forwarded from `vulners`
 - `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
-- `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each full port-scan batch
+- `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each all-ports (`-p-`) batch when applicable
 - `AGENT_OUTPUT_PATH`: JSON output file location
 
 ## Integration Points
