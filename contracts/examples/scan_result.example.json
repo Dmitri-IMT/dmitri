@@ -2,7 +2,7 @@
   "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
   "timestamp": "2026-03-05T14:12:45Z",
   "subnet": "192.168.1.0/24",
-  "scan_mode": "full",
+  "scan_mode": "standard",
   "metadata": {
     "agent_version": "0.2.0",
     "nmap_arguments": "-sS -sV -O --top-ports 200",

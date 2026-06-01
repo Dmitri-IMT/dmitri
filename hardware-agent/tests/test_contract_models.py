@@ -69,8 +69,8 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
     assert payload.findings[0].cve_id == "CVE-2024-12345"
 
 
-def test_scan_payload_accepts_extensive_and_nspi() -> None:
-    for mode in ("extensive", "nspi"):
+def test_scan_payload_accepts_extensive_nspi_and_max() -> None:
+    for mode in ("extensive", "nspi", "max"):
         payload = ScanPayload(
             scan_id=uuid4(),
             timestamp=datetime.now(timezone.utc),
@@ -87,4 +87,5 @@ def test_schema_enum_matches_pydantic_literal() -> None:
     enum = set(schema["properties"]["scan_mode"]["enum"])
     literal = set(get_args(ScanPayload.model_fields["scan_mode"].annotation))
     assert enum == literal
-    assert {"extensive", "nspi"} <= enum
+    assert {"extensive", "nspi", "max"} <= enum
+    assert "full" not in enum
