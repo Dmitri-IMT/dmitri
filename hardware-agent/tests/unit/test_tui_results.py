@@ -53,7 +53,7 @@ def test_two_scans_create_two_files(tmp_path):
         scan_id=uuid4(),
         timestamp=datetime(2026, 5, 3, 14, 35, 0, tzinfo=timezone.utc),
         subnet="192.168.1.0/24",
-        scan_mode="full",
+        scan_mode="max",
         devices=[],
         findings=[],
         metadata={},

@@ -16,8 +16,8 @@ MODE_LABELS = {
     "quick": "Quick",
     "standard": "Standard",
     "extensive": "Extensive",
-    "full": "Full",
     "nspi": "NSPi",
+    "max": "MAX",
 }
 
 SEVERITY_COLORS = {
