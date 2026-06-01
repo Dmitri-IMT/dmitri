@@ -71,6 +71,13 @@ def test_render_contains_target_and_date():
     assert "Quick" in rendered
 
 
+def test_render_shows_max_mode_label():
+    payload = _make_payload()
+    payload.scan_mode = "max"
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+    assert "MAX" in rendered
+
+
 def test_render_contains_device_info():
     rendered = ScanViewScreen(payload=_make_payload())._render_payload(_make_payload())
     assert "192.168.1.1" in rendered

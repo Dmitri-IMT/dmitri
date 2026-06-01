@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from agent.config import AgentSettings
 
 LOGGER = logging.getLogger(__name__)
-AGENT_VERSION = "0.1.2"
+AGENT_VERSION = "0.1.3"
 
 
 class NmapExecutionError(RuntimeError):

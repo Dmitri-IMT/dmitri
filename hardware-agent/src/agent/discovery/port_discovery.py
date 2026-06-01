@@ -34,8 +34,8 @@ def merge_ports(
 
 
 def discovery_arguments(scan_mode: str) -> list[str]:
-    if scan_mode == "full":
-        return ["-p-", "--min-rate", "1000"]
+    if scan_mode == "max":
+        return ["-sV", "-O", "-p-", "--min-rate", "1000"]
     if scan_mode == "extensive":
         return ["-sV", "-O", "--top-ports", "10000"]
     return ["-sV", "-O", "--script", port_stage_scripts(scan_mode)]

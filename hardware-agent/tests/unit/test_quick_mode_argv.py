@@ -76,16 +76,6 @@ class TestQuickModeArgv:
         for flag in FORBIDDEN_PORT_FLAGS:
             assert flag not in argv, f"quick mode argv must not contain {flag}"
 
-    def test_full_mode_does_not_get_quick_flags(self) -> None:
-        runner, captured = _make_capturing_runner()
-        scan_ports(runner, "10.0.0.1", "full")
-
-        argv = captured[0]
-        assert "-p-" in argv
-        assert "-sV" not in argv
-        assert "-O" not in argv
-        assert "--script" not in argv
-
 
 STANDARD_SCRIPT_CSV = (
     "vulners,smb-protocols,smb2-security-mode,"
@@ -137,7 +127,6 @@ class TestExtensiveModeArgv:
         ]
 
     def test_discovery_arguments_unchanged_for_other_modes(self) -> None:
-        assert discovery_arguments("full") == ["-p-", "--min-rate", "1000"]
         assert discovery_arguments("quick") == ["-sV", "-O", "--script", "vulners"]
 
     def test_scan_ports_includes_top_ports_excludes_scripts(self) -> None:
@@ -172,6 +161,39 @@ class TestExtensiveModeArgv:
         for flag in flags:
             assert flag in single_cap[0]
             assert flag in batch_cap[0]
+
+
+class TestMaxModeArgv:
+    def test_discovery_arguments_all_ports_min_rate_no_scripts(self) -> None:
+        assert discovery_arguments("max") == [
+            "-sV",
+            "-O",
+            "-p-",
+            "--min-rate",
+            "1000",
+        ]
+
+    def test_scan_ports_includes_all_ports_excludes_scripts(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports(runner, "10.0.0.1", "max")
+
+        argv = captured[0]
+        assert "-sV" in argv
+        assert "-O" in argv
+        assert "-p-" in argv
+        assert argv[argv.index("--min-rate") + 1] == "1000"
+        assert "--script" not in argv
+        assert "--top-ports" not in argv
+
+    def test_scan_ports_batch_matches_single_discovery_flags(self) -> None:
+        runner, captured = _make_capturing_runner()
+        scan_ports_batch(runner, ["10.0.0.1", "10.0.0.2"], "max")
+
+        argv = captured[0]
+        assert "-p-" in argv
+        assert "--min-rate" in argv
+        assert "--script" not in argv
+        assert "--top-ports" not in argv
 
 
 class TestStandardModeScanPayload:

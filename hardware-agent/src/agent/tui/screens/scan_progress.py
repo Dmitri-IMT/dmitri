@@ -63,7 +63,7 @@ class ScanProgressScreen(DmitriScreen):
     def __init__(
         self,
         subnet: str,
-        scan_mode: Literal["quick", "standard", "extensive", "full", "nspi"],
+        scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"],
     ) -> None:
         super().__init__()
         self.subnet = subnet

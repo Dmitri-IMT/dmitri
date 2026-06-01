@@ -72,13 +72,28 @@ LICENSE, README.md, .gitignore
 
 ## Fluxo de alto nível
 
-1. O agente de hardware (**Dmitri**) agenda e executa scans (quick/full) usando o Nmap na sub-rede configurada.
-2. Os resultados são normalizados em JSON conforme `contracts/schemas/scan_result.schema.json` (e podem ser gravados localmente no Pi).
+1. O operador inicia o **Dmitri** (TUI), confirma a sub-rede e escolhe a categoria e o **modo de varredura** (ver tabela abaixo).
+2. O agente executa o pipeline Nmap (descoberta de hosts → portas → inspeção profunda com NSE, conforme o modo) e normaliza a saída.
+3. Os resultados são gravados em JSON conforme `contracts/schemas/scan_result.schema.json` (localmente no Pi).
+
+### Modos de varredura (TUI)
+
+O modo é escolhido na interface; o valor `scan_mode` no payload segue o contrato em `contracts/schemas/scan_result.schema.json`.
+
+| Modo (UI) | `scan_mode` | Escopo (resumo) |
+| --------- | ----------- | ---------------- |
+| **Quick** | `quick` | Varredura rápida (portas com `-F`) |
+| **Standard** | `standard` | Varredura padrão com scripts NSE no estágio de descoberta |
+| **Extensive** | `extensive` | Análise de segurança nas top 10 000 portas; `vulners.mincvss = 3.0` |
+| **MAX** | `max` | Todas as portas (`-p-`), mesmo conjunto NSE que Extensive; `vulners.mincvss = 1.0` (auditoria completa; ~45 min+) |
+| **NSPi** | `nspi` | Fluxo dedicado ao laboratório NSPi (categoria própria no TUI) |
+
+O modo legado **`full`** (all-ports via variável de ambiente / caminho headless) está **sendo removido**; **MAX** é o sucessor no TUI, com `-p-` e scripts completos — acompanhar [#57](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/57) e [#70](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/70).
 
 **Visão alvo (quando backend e frontend estiverem em uso):**
 
-3. O backend recebe os payloads, persiste no PostgreSQL e prepara dados agregados.
-4. O frontend web consome os endpoints documentados em `docs/api.md` para exibir históricos, alertas e recomendações.
+4. O backend recebe os payloads, persiste no PostgreSQL e prepara dados agregados.
+5. O frontend web consome os endpoints documentados em `docs/api.md` para exibir históricos, alertas e recomendações.
 
 ## Versões do projeto (roadmap)
 
@@ -99,10 +114,17 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 ## Estado Atual
 
 - **Prioridade:** TUI **Dmitri** e pipeline de varredura no `hardware-agent` (Nmap, normalização, testes e CI do agente).
+- **Em curso:** modo **MAX** e remoção do modo legado **`full`** — [#57](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/57), [#70](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/70).
 - **Não prioritário neste momento:** implementação do backend, frontend e ingestão remota — permanecem planejados conforme contratos em `contracts/` e [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
 - **Implantação-alvo:** laboratório **NSPi** (ver secção acima).
 
-**Documentação completa de arquitetura (visão de sistema):** [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
+**Documentação de referência**
+
+| Tópico | Onde |
+| ------ | ---- |
+| Arquitetura de sistema | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) |
+| Pipeline NSE / modos | [docs/implementation/NSE-VULNERABILITY-PIPELINE.md](docs/implementation/NSE-VULNERABILITY-PIPELINE.md) |
+| Agente + TUI (setup) | [hardware-agent/README.md](hardware-agent/README.md), [docs/DEV-SETUP.md](docs/DEV-SETUP.md) |
 
 ## Setup
 

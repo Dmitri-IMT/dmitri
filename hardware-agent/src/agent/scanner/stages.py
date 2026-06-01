@@ -92,7 +92,7 @@ def run_deep_inspection_stage(
                 host.ip,
                 host.ports,
                 version_intensity=settings.version_intensity,
-                scripts=deep_stage_scripts(settings.scan_mode, settings.nmap_scripts),
+                scripts=deep_stage_scripts(settings.scan_mode),
                 min_cvss=settings.min_cvss,
             ): host
             for host in eligible_hosts
@@ -141,7 +141,7 @@ def build_device_payload(host: HostInfo) -> DevicePayload:
 
 def nmap_arguments_summary(settings: AgentSettings) -> str:
     port_stage = " ".join(discovery_arguments(settings.scan_mode))
-    deep_scripts = deep_stage_scripts(settings.scan_mode, settings.nmap_scripts)
+    deep_scripts = deep_stage_scripts(settings.scan_mode)
     return (
         f"discovery=-sn -PE -T4; ports={port_stage} -Pn -T4; "
         "deep_inspection="

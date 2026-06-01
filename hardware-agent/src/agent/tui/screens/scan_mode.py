@@ -18,7 +18,7 @@ _GENERAL_OPTIONS = [
         "Extensive  —  Top 10000 ports · Full security analysis · ~20–35 min",
         id="extensive",
     ),
-    Option("MAX        —  Coming soon", id="max", disabled=True),
+    Option("MAX        —  All ports · Full security analysis · 45 min+", id="max"),
 ]
 
 _NSPI_OPTIONS = [
