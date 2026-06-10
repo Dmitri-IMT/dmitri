@@ -3,7 +3,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 from agent.normalize.findings import extract_findings
-from agent.scanner.models import HostInfo
+from agent.scanner.models import HostInfo, PortInfo, ScriptResult, ServiceInfo
 from agent.utils.nmap_xml import parse_ports
 
 
@@ -418,3 +418,93 @@ def test_ftp_anon_writeable_is_critical() -> None:
 
 def test_ftp_anon_denied_yields_no_finding() -> None:
     assert extract_findings([_ftp_anon_host("")]) == []
+
+
+def test_ffuf_classified_path_hits_become_web_findings() -> None:
+    host = HostInfo(
+        ip="192.168.1.90",
+        hostname="web-host",
+        ports=[
+            PortInfo(
+                port=80,
+                service=ServiceInfo(name="http"),
+                scripts=[
+                    ScriptResult(
+                        script_id="ffuf",
+                        output="1 sensitive path discovered",
+                        data={
+                            "hits": [
+                                {
+                                    "path": "/.git/",
+                                    "url": "http://192.168.1.90:80/.git/",
+                                    "status": 403,
+                                    "dangerous": True,
+                                    "risk": "dangerous",
+                                    "reason": "sensitive-path",
+                                },
+                                {
+                                    "path": "/assets/",
+                                    "url": "http://192.168.1.90:80/assets/",
+                                    "status": 200,
+                                    "dangerous": False,
+                                    "risk": "informational",
+                                    "reason": "common-web-path",
+                                },
+                            ]
+                        },
+                    )
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 2
+    assert [finding.source for finding in findings] == [
+        "web_directory_enum",
+        "web_directory_enum",
+    ]
+    assert [finding.source_script for finding in findings] == ["ffuf", "ffuf"]
+    assert [finding.title for finding in findings] == [
+        "Potentially dangerous web path exposed: /.git/",
+        "Web path discovered: /assets/",
+    ]
+    assert [finding.severity for finding in findings] == ["medium", "low"]
+
+
+def test_nikto_issue_becomes_web_vulnerability_finding() -> None:
+    host = HostInfo(
+        ip="192.168.1.91",
+        hostname="web-host",
+        ports=[
+            PortInfo(
+                port=80,
+                service=ServiceInfo(name="http"),
+                scripts=[
+                    ScriptResult(
+                        script_id="nikto",
+                        output="Nikto reported /admin/",
+                        data={
+                            "issues": [
+                                {
+                                    "title": "Nikto reported /admin/",
+                                    "message": "Admin login page/section found.",
+                                    "path": "/admin/",
+                                    "severity": "medium",
+                                }
+                            ]
+                        },
+                    )
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].source == "web_vulnerability_scan"
+    assert findings[0].source_script == "nikto"
+    assert findings[0].title == "Nikto reported /admin/"
+    assert findings[0].severity == "medium"

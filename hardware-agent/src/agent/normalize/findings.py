@@ -531,6 +531,121 @@ def _extract_ftp_anon_finding(
     )
 
 
+def _extract_web_directory_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if port is None or not isinstance(script.data, Mapping):
+        return []
+
+    hits = script.data.get("hits")
+    if not isinstance(hits, Sequence) or isinstance(hits, (str, bytes)):
+        return []
+
+    findings: list[FindingPayload] = []
+    for hit in hits:
+        if not isinstance(hit, Mapping):
+            continue
+        path = _stringify(hit.get("path"))
+        url = _stringify(hit.get("url"))
+        status = _stringify(hit.get("status"))
+        risk = _stringify(hit.get("risk")) or "informational"
+        reason = _stringify(hit.get("reason")) or "common-web-path"
+        dangerous = bool(hit.get("dangerous"))
+        if not path:
+            continue
+        evidence = f"{script.script_id} discovered {url or path}"
+        if status:
+            evidence = f"{evidence} with HTTP status {status}."
+        evidence = f"{evidence} Classification: {risk} ({reason})."
+        if dangerous:
+            severity = "medium"
+            title = f"Potentially dangerous web path exposed: {path}"
+            description = (
+                f"The web service on {host.ip}:{port.port} exposes the "
+                f"security-relevant path {path}."
+            )
+            recommendation = (
+                "Remove public access to sensitive files or directories and "
+                "verify the web root does not expose source control, backups, "
+                "configuration files, administrative panels, or diagnostic endpoints."
+            )
+        else:
+            severity = "low"
+            title = f"Web path discovered: {path}"
+            description = (
+                f"The web service on {host.ip}:{port.port} exposes the path {path}. "
+                "The path was classified as informational by the directory "
+                "enumeration rules."
+            )
+            recommendation = (
+                "Review whether this path is expected to be publicly reachable. "
+                "No immediate vulnerability was inferred from the path alone."
+            )
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity=severity,
+                title=title,
+                description=description,
+                recommendation=recommendation,
+                evidence=evidence,
+                source="web_directory_enum",
+                source_script=script.script_id,
+                references=[url] if url else [],
+            )
+        )
+    return findings
+
+
+def _extract_nikto_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if port is None or not isinstance(script.data, Mapping):
+        return []
+
+    issues = script.data.get("issues")
+    if not isinstance(issues, Sequence) or isinstance(issues, (str, bytes)):
+        return []
+
+    findings: list[FindingPayload] = []
+    for issue in issues:
+        if not isinstance(issue, Mapping):
+            continue
+        title = _stringify(issue.get("title")) or "Nikto web finding"
+        message = _stringify(issue.get("message"))
+        path = _stringify(issue.get("path"))
+        severity = _severity_from_risk_factor(issue.get("severity"))
+        evidence_parts = [title, message]
+        if path:
+            evidence_parts.append(f"path={path}")
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity=severity,
+                title=title,
+                description=(
+                    f"Nikto reported a web security issue on "
+                    f"{host.ip}:{port.port}: {message or title}"
+                ),
+                recommendation=(
+                    "Review the affected web service, validate the Nikto output, "
+                    "and apply the vendor or application hardening guidance for "
+                    "the reported issue."
+                ),
+                evidence=" | ".join(part for part in evidence_parts if part),
+                source="web_vulnerability_scan",
+                source_script="nikto",
+            )
+        )
+    return findings
+
+
 def _extract_generic_vuln_table_findings(
     host: HostInfo,
     port: PortInfo | None,
@@ -713,4 +828,7 @@ _EXTRACTORS: dict[str, _ListExtractor] = {
     "ssl-cert": _extract_ssl_cert_findings,
     "ssl-enum-ciphers": _extract_weak_cipher_findings,
     "ftp-anon": _single(_extract_ftp_anon_finding),
+    "ffuf": _extract_web_directory_findings,
+    "gobuster": _extract_web_directory_findings,
+    "nikto": _extract_nikto_findings,
 }
