@@ -13,6 +13,7 @@ from agent.discovery.port_discovery import (
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload
 from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
+from agent.tools.web import WebToolSummary, run_web_security_tools
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
@@ -113,6 +114,23 @@ def run_deep_inspection_stage(
             )
 
 
+def run_web_targeted_tools_stage(
+    settings: AgentSettings,
+    hosts: list[HostInfo],
+) -> WebToolSummary:
+    LOGGER.info("Starting web targeted tools stage.")
+    summary = run_web_security_tools(hosts, settings)
+    LOGGER.info(
+        "Web targeted tools finished with %s targets, %s attempted runs, "
+        "%s skipped runs, and %s finding candidates.",
+        summary.targets_discovered,
+        summary.tools_attempted,
+        summary.tools_skipped,
+        summary.finding_candidates,
+    )
+    return summary
+
+
 def build_device_payload(host: HostInfo) -> DevicePayload:
     return DevicePayload(
         ip=host.ip,
@@ -162,6 +180,7 @@ def build_metadata(
     elapsed_seconds: float,
     hosts_discovered: int,
     findings_count: int,
+    web_tool_summary: WebToolSummary | None = None,
     partial_result: bool = False,
     interrupted_stage: str | None = None,
 ) -> dict[str, str | int | float | bool]:
@@ -177,6 +196,12 @@ def build_metadata(
         "host_batch_size": settings.host_batch_size,
         "partial_result": partial_result,
     }
+    if web_tool_summary is not None:
+        metadata["web_targets_discovered"] = web_tool_summary.targets_discovered
+        metadata["web_tools_attempted"] = web_tool_summary.tools_attempted
+        metadata["web_tools_skipped"] = web_tool_summary.tools_skipped
+        metadata["web_tools_timed_out"] = web_tool_summary.tools_timed_out
+        metadata["web_tool_finding_candidates"] = web_tool_summary.finding_candidates
     if network_info is not None:
         metadata["detected_local_ip"] = network_info.ip
         metadata["detected_netmask"] = network_info.netmask

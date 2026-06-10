@@ -11,7 +11,7 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
-from agent.config import AgentSettings, min_cvss_for_mode
+from agent.config import load_settings, min_cvss_for_mode
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
@@ -34,7 +34,12 @@ class ProgressSnapshot:
 
 
 StageType = Literal[
-    "discovery", "port_scan", "deep_inspection", "normalizing", "completed"
+    "discovery",
+    "port_scan",
+    "deep_inspection",
+    "web_targeted_tools",
+    "normalizing",
+    "completed",
 ]
 
 
@@ -85,11 +90,11 @@ class ScanRunner:
     def _run(self) -> None:
         try:
             check_network_connectivity()
-            settings = AgentSettings(
+            settings = load_settings().with_overrides(
                 scan_subnet=self.subnet,
                 scan_mode=self.scan_mode,
-                min_cvss=min_cvss_for_mode(self.scan_mode),
             )
+            settings.min_cvss = min_cvss_for_mode(self.scan_mode)
             network_info = LocalNetworkInfo(
                 ip="0.0.0.0",
                 netmask="255.255.255.0",
@@ -105,6 +110,7 @@ class ScanRunner:
             )
 
             started_counter = perf_counter()
+            web_tool_summary = None
 
             self._emit("discovery")
             self._check_cancel()
@@ -132,10 +138,28 @@ class ScanRunner:
                 stages.run_deep_inspection_stage(runner, settings, hosts)
                 self._check_cancel()
                 self._emit("deep_inspection", "Done", completed=True)
+
+                self._emit("web_targeted_tools")
+                web_tool_summary = stages.run_web_targeted_tools_stage(
+                    settings,
+                    hosts,
+                )
+                self._check_cancel()
+                self._emit(
+                    "web_targeted_tools",
+                    (
+                        f"Targets: {web_tool_summary.targets_discovered} | "
+                        f"Tools: {web_tool_summary.tools_attempted} | "
+                        f"Skipped: {web_tool_summary.tools_skipped}"
+                    ),
+                    completed=True,
+                )
             else:
                 self._emit("port_scan", "(no hosts)", completed=True)
                 self._emit("deep_inspection")
                 self._emit("deep_inspection", "(skipped)", completed=True)
+                self._emit("web_targeted_tools")
+                self._emit("web_targeted_tools", "(skipped)", completed=True)
 
             self._emit("normalizing")
             self._check_cancel()
@@ -156,6 +180,7 @@ class ScanRunner:
                     elapsed_seconds=elapsed_seconds,
                     hosts_discovered=hosts_count,
                     findings_count=len(findings),
+                    web_tool_summary=web_tool_summary,
                 ),
             )
 

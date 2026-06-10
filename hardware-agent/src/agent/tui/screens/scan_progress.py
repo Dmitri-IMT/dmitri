@@ -18,6 +18,7 @@ STAGES: list[str] = [
     "discovery",
     "port_scan",
     "deep_inspection",
+    "web_targeted_tools",
     "normalizing",
     "completed",
 ]
@@ -26,6 +27,7 @@ STAGE_LABELS: dict[str, str] = {
     "discovery": "Finding open ports...",
     "port_scan": "Scanning ports...",
     "deep_inspection": "Running scripts...",
+    "web_targeted_tools": "Running web tools...",
     "normalizing": "Normalizing results...",
     "completed": "DONE!",
 }
@@ -80,6 +82,7 @@ class ScanProgressScreen(DmitriScreen):
             yield Static("", id="phase-discovery")
             yield Static("", id="phase-port_scan")
             yield Static("", id="phase-deep_inspection")
+            yield Static("", id="phase-web_targeted_tools")
             yield Static("", id="phase-normalizing")
             yield Static("", id="phase-completed")
         with Vertical(id="scan-done-actions"):
