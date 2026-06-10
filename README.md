@@ -17,7 +17,7 @@ https://mauabr-my.sharepoint.com/:w:/r/personal/22_00085-2_maua_br/Documents/ATI
 ## Escopo e premissas (TCC)
 
 - **Duração:** 8 meses (entrega alinhada ao TCC).
-- **Implantação atual (v1):** varreduras no **laboratório de NSPi** da universidade — não se assume uso campus-wide ou redes arbitrárias sem decisão explícita.
+- **Implantação atual (v1):** varreduras no **laboratório de NSPI** da universidade — não se assume uso campus-wide ou redes arbitrárias sem decisão explícita.
 - **Usuários:** até **10** operadores/visualizadores em cenário típico.
 - **Carga:** **1–2 varreduras por dia** em operação normal (evitar dimensionar como produção 24/7 ou alto throughput sem necessidade).
 - **Evolução:** versões futuras (**v2/v3**) podem **ampliar o escopo operacional** (mais locais, usuários ou frequência).
@@ -29,9 +29,9 @@ Por ora o grupo está construindo **apenas o agente embarcado com TUI** (**Dmitr
 - **Em escopo agora:** `hardware-agent`, interface Textual (`dmitri`), contratos JSON compartilhados e CI relacionado ao agente.
 - **Fora de escopo por enquanto:** **backend** (FastAPI), **frontend** web e implantação cloud descritos na arquitetura-alvo. Esses componentes permanecem planejados; integração virá em uma fase posterior.
 
-## Ambiente de implantação: laboratório NSPi
+## Ambiente de implantação: laboratório NSPI
 
-O foco operacional atual é implantar o **Dmitri** no **NSPi** — laboratório de robótica industrial da universidade (rede do laboratório, não campus inteiro). O cenário orienta prioridades de rede e visibilidade dos equipamentos locais.
+O foco operacional atual é implantar o **Dmitri** no **NSPI** — laboratório de robótica industrial da universidade (rede do laboratório, não campus inteiro). O cenário orienta prioridades de rede e visibilidade dos equipamentos locais.
 
 Equipamentos e sistemas típicos no ambiente (referência para contexto da rede):
 
@@ -86,7 +86,7 @@ O modo é escolhido na interface; o valor `scan_mode` no payload segue o contrat
 | **Standard** | `standard` | Varredura padrão com scripts NSE no estágio de descoberta |
 | **Extensive** | `extensive` | Análise de segurança nas top 10 000 portas; `vulners.mincvss = 3.0` |
 | **MAX** | `max` | Todas as portas (`-p-`), mesmo conjunto NSE que Extensive; `vulners.mincvss = 1.0` (auditoria completa; ~45 min+) |
-| **NSPi** | `nspi` | Fluxo dedicado ao laboratório NSPi (categoria própria no TUI) |
+| **NSPI** | `nspi` | Fluxo dedicado ao laboratório NSPI (categoria própria no TUI) |
 
 O modo legado **`full`** (all-ports via variável de ambiente / caminho headless) está **sendo removido**; **MAX** é o sucessor no TUI, com `-p-` e scripts completos — acompanhar [#57](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/57) e [#70](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/70).
 
@@ -116,7 +116,7 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 - **Prioridade:** TUI **Dmitri** e pipeline de varredura no `hardware-agent` (Nmap, normalização, testes e CI do agente).
 - **Em curso:** modo **MAX** e remoção do modo legado **`full`** — [#57](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/57), [#70](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues/70).
 - **Não prioritário neste momento:** implementação do backend, frontend e ingestão remota — permanecem planejados conforme contratos em `contracts/` e [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
-- **Implantação-alvo:** laboratório **NSPi** (ver secção acima).
+- **Implantação-alvo:** laboratório **NSPI** (ver secção acima).
 
 **Documentação de referência**
 
