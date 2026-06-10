@@ -29,6 +29,12 @@ class AgentSettings:
     web_tool_timeout_seconds: int = 120
     web_tools_max_workers: int = 1
     web_wordlist_path: str | None = None
+    testssl_enabled: bool = True
+    testssl_path: str | None = None
+    testssl_timeout_seconds: int = 180
+    enum4linux_enabled: bool = True
+    enum4linux_path: str | None = None
+    enum4linux_timeout_seconds: int = 90
 
     def with_overrides(
         self,
@@ -180,4 +186,22 @@ def load_settings() -> AgentSettings:
             int(os.getenv("AGENT_WEB_TOOLS_MAX_WORKERS", "1")),
         ),
         web_wordlist_path=os.getenv("AGENT_WEB_WORDLIST_PATH"),
+        testssl_enabled=_parse_bool(
+            os.getenv("AGENT_TESTSSL_ENABLED"),
+            default=True,
+        ),
+        testssl_path=os.getenv("AGENT_TESTSSL_PATH"),
+        testssl_timeout_seconds=max(
+            1,
+            int(os.getenv("AGENT_TESTSSL_TIMEOUT_SECONDS", "180")),
+        ),
+        enum4linux_enabled=_parse_bool(
+            os.getenv("AGENT_ENUM4LINUX_ENABLED"),
+            default=True,
+        ),
+        enum4linux_path=os.getenv("AGENT_ENUM4LINUX_PATH"),
+        enum4linux_timeout_seconds=max(
+            1,
+            int(os.getenv("AGENT_ENUM4LINUX_TIMEOUT_SECONDS", "90")),
+        ),
     )
