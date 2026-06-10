@@ -13,8 +13,7 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
   - Descoberta de hosts, portas, serviços e SO via Nmap
   - Execução de scripts NSE (`default`, `safe`, `vuln`, `auth`, `discovery`)
   - Correlação de vulnerabilidades via **vulners NSE**
-  - Execução opcional de ferramentas direcionadas por serviço após o Nmap/NSE:
-    `ffuf` e Nikto para HTTP/HTTPS, `testssl.sh` para TLS e `enum4linux-ng` para SMB
+  - Execução opcional de ferramentas web direcionadas (`ffuf`, Nikto) após detecção de HTTP/HTTPS
   - Normalização dos resultados em payload JSON estruturado
   - Envio seguro do payload para o Backend API
 - **Restrições:** 4 GB RAM, CPU ARM64, adaptador Wi-Fi USB dedicado para monitor mode

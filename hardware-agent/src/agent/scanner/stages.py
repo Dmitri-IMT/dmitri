@@ -13,7 +13,7 @@ from agent.discovery.port_discovery import (
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload
 from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
-from agent.tools.targeted import TargetedToolSummary, run_targeted_security_tools
+from agent.tools.web import WebToolSummary, run_web_security_tools
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
@@ -117,16 +117,13 @@ def run_deep_inspection_stage(
 def run_web_targeted_tools_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
-) -> TargetedToolSummary:
-    LOGGER.info("Starting targeted tools stage.")
-    summary = run_targeted_security_tools(hosts, settings)
+) -> WebToolSummary:
+    LOGGER.info("Starting web targeted tools stage.")
+    summary = run_web_security_tools(hosts, settings)
     LOGGER.info(
-        "Targeted tools finished with %s targets (%s web, %s TLS, %s SMB), "
-        "%s attempted runs, %s skipped runs, and %s finding candidates.",
+        "Web targeted tools finished with %s targets, %s attempted runs, "
+        "%s skipped runs, and %s finding candidates.",
         summary.targets_discovered,
-        summary.web_targets_discovered,
-        summary.tls_targets_discovered,
-        summary.smb_targets_discovered,
         summary.tools_attempted,
         summary.tools_skipped,
         summary.finding_candidates,
@@ -183,7 +180,7 @@ def build_metadata(
     elapsed_seconds: float,
     hosts_discovered: int,
     findings_count: int,
-    web_tool_summary: TargetedToolSummary | None = None,
+    web_tool_summary: WebToolSummary | None = None,
     partial_result: bool = False,
     interrupted_stage: str | None = None,
 ) -> dict[str, str | int | float | bool]:
@@ -200,28 +197,11 @@ def build_metadata(
         "partial_result": partial_result,
     }
     if web_tool_summary is not None:
-        metadata["targeted_targets_discovered"] = web_tool_summary.targets_discovered
-        metadata["targeted_tools_attempted"] = web_tool_summary.tools_attempted
-        metadata["targeted_tools_skipped"] = web_tool_summary.tools_skipped
-        metadata["targeted_tools_timed_out"] = web_tool_summary.tools_timed_out
-        metadata["targeted_tool_finding_candidates"] = (
-            web_tool_summary.finding_candidates
-        )
-        metadata["web_targets_discovered"] = web_tool_summary.web_targets_discovered
-        metadata["web_tools_attempted"] = web_tool_summary.web_tools_attempted
-        metadata["web_tools_skipped"] = web_tool_summary.web_tools_skipped
-        metadata["web_tools_timed_out"] = web_tool_summary.web_tools_timed_out
-        metadata["web_tool_finding_candidates"] = (
-            web_tool_summary.web_finding_candidates
-        )
-        metadata["tls_targets_discovered"] = web_tool_summary.tls_targets_discovered
-        metadata["tls_tool_finding_candidates"] = (
-            web_tool_summary.tls_finding_candidates
-        )
-        metadata["smb_targets_discovered"] = web_tool_summary.smb_targets_discovered
-        metadata["smb_tool_finding_candidates"] = (
-            web_tool_summary.smb_finding_candidates
-        )
+        metadata["web_targets_discovered"] = web_tool_summary.targets_discovered
+        metadata["web_tools_attempted"] = web_tool_summary.tools_attempted
+        metadata["web_tools_skipped"] = web_tool_summary.tools_skipped
+        metadata["web_tools_timed_out"] = web_tool_summary.tools_timed_out
+        metadata["web_tool_finding_candidates"] = web_tool_summary.finding_candidates
     if network_info is not None:
         metadata["detected_local_ip"] = network_info.ip
         metadata["detected_netmask"] = network_info.netmask

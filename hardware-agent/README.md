@@ -17,12 +17,10 @@ Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Li
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
 - The TUI entrypoint writes a JSON payload compatible with the shared contracts.
-- Deep scan modes can run optional targeted tools after Nmap/NSE:
+- Deep scan modes can run optional targeted web tools after Nmap/NSE:
   - HTTP/HTTPS target selection from Nmap-discovered open ports and services
   - `ffuf` directory/content enumeration when a wordlist is available, with discovered paths classified as dangerous or informational
   - `nikto` checks for known web issues when installed
-  - `testssl.sh` for deeper TLS configuration audits on confirmed TLS endpoints
-  - `enum4linux-ng` for unauthenticated SMB enumeration on confirmed SMB endpoints
   - missing tools are skipped without failing the scan
 
 ## Running the Agent
@@ -56,12 +54,6 @@ uv run python -m agent.cli
 - `AGENT_NIKTO_ENABLED`: enable Nikto web checks (`true` by default)
 - `AGENT_WEB_TOOL_TIMEOUT_SECONDS`: per-target timeout for each web tool (`120` by default)
 - `AGENT_WEB_WORDLIST_PATH`: wordlist used by `ffuf`; if absent and no common system wordlist is found, directory enumeration is skipped
-- `AGENT_TESTSSL_ENABLED`: enable `testssl.sh` on TLS-confirmed services (`true` by default)
-- `AGENT_TESTSSL_PATH`: optional explicit path to `testssl.sh`
-- `AGENT_TESTSSL_TIMEOUT_SECONDS`: per-target timeout for `testssl.sh` (`180` by default)
-- `AGENT_ENUM4LINUX_ENABLED`: enable `enum4linux-ng` on SMB-confirmed services (`true` by default)
-- `AGENT_ENUM4LINUX_PATH`: optional explicit path to `enum4linux-ng`
-- `AGENT_ENUM4LINUX_TIMEOUT_SECONDS`: per-target timeout for `enum4linux-ng` (`90` by default)
 
 ## Integration Points
 - Reads configuration from `config.py` (to be wired to environment variables).
