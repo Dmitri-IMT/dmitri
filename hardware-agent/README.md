@@ -17,6 +17,11 @@ Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Li
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
 - The TUI entrypoint writes a JSON payload compatible with the shared contracts.
+- Deep scan modes can run optional targeted web tools after Nmap/NSE:
+  - HTTP/HTTPS target selection from Nmap-discovered open ports and services
+  - `ffuf` directory/content enumeration when a wordlist is available, with discovered paths classified as dangerous or informational
+  - `nikto` checks for known web issues when installed
+  - missing tools are skipped without failing the scan
 
 ## Running the Agent
 
@@ -44,6 +49,11 @@ uv run python -m agent.cli
 - `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
 - `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each all-ports (`-p-`) batch when applicable
 - `AGENT_OUTPUT_PATH`: JSON output file location
+- `AGENT_WEB_TOOLS_ENABLED`: optional override for targeted web tools (`true`/`false`); when unset, web tools run only for deeper modes
+- `AGENT_WEB_DIRECTORY_ENUM_ENABLED`: enable `ffuf` directory/content enumeration (`true` by default)
+- `AGENT_NIKTO_ENABLED`: enable Nikto web checks (`true` by default)
+- `AGENT_WEB_TOOL_TIMEOUT_SECONDS`: per-target timeout for each web tool (`120` by default)
+- `AGENT_WEB_WORDLIST_PATH`: wordlist used by `ffuf`; if absent and no common system wordlist is found, directory enumeration is skipped
 
 ## Integration Points
 - Reads configuration from `config.py` (to be wired to environment variables).

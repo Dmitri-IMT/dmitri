@@ -93,6 +93,19 @@ Cada ferramenta considerada aqui deve passar por três critérios:
 | **Justificativa** | Configuração incorreta de TLS é uma das descobertas mais comuns e de maior valor em varreduras de redes internas. O testssl.sh roda no hardware do Pi, é juridicamente inequívoco e preenche uma lacuna genuína na cobertura NSE do Nmap. Deve ser adicionado na v2 como um scanner direcionado invocado apenas quando portas TLS (443, 8443, 993, 995, 465, etc.) estiverem confirmadamente abertas, com descobertas normalizadas no motor de descobertas. |
 
 ---
+
+### 6.1 Nikto e ffuf/gobuster
+
+| Atributo | Avaliação |
+|----------|-----------|
+| **Propósito** | Análise web direcionada após detecção de HTTP/HTTPS: Nikto para checks conhecidos e ffuf/gobuster para enumeração e classificação de conteúdo encontrado. |
+| **Critério de valor** | Complementam o Nmap/NSE em superfícies web, registrando caminhos encontrados e classificando exposição de arquivos/diretórios sensíveis, painéis administrativos e misconfigurações comuns de servidor web. |
+| **Critério ético/legal** | Adequados apenas em redes autorizadas, com escopo condicionado a serviços web detectados, timeouts e wordlists pequenas/controladas. Não devem executar autenticação, exploração ou extração de dados. |
+| **Critério de hardware** | Leves quando executados com baixa concorrência e por alvo selecionado; adequados ao Raspberry Pi dentro dos limites de timeout do pipeline. |
+| **Decisão** | **INCLUIR — Futuro (v2)** |
+| **Justificativa** | A implementação deve invocar essas ferramentas somente depois que o Nmap confirmar portas/serviços web abertos. Ausência de binário ou wordlist deve causar skip não fatal, preservando o fluxo principal de scan. |
+
+---
  
 ### 7. OpenVAS
 
@@ -135,7 +148,7 @@ Cada ferramenta considerada aqui deve passar por três critérios:
 
 ### Distinção Passivo vs. Ativo
  
-As ferramentas incluídas neste projeto (descoberta Nmap, varredura de portas, detecção de serviços NSE e as adições da v2 — enum4linux-ng e testssl.sh) situam-se na **extremidade de observação passiva do espectro**: elas leem informações que os serviços anunciam publicamente. Elas não se autenticam, não executam código nos alvos e não tentam explorar vulnerabilidades.
+As ferramentas incluídas neste projeto (descoberta Nmap, varredura de portas, detecção de serviços NSE e as adições da v2 — Nikto, ffuf/gobuster, enum4linux-ng e testssl.sh) devem permanecer no espectro de enumeração autorizada e de baixo impacto: elas leem informações que os serviços anunciam publicamente ou fazem requisições controladas contra serviços já detectados. Elas não se autenticam, não executam código nos alvos e não tentam explorar vulnerabilidades.
  
 Ferramentas que cruzam para o território de ataque ativo — força bruta de credenciais, execução de código, reverse shells, movimento lateral — estão **categoricamente fora do escopo da v1**, porque:
  
@@ -156,7 +169,7 @@ Se o scanner descobrir uma vulnerabilidade crítica em um host que o operador n�
  ## Consequências
  
 - **O escopo da v1 está fixo**: Apenas Nmap + NSE. Nenhuma ferramenta ativa adicional.
-- **Nova proposta de futuro** pode referenciar enum4linux-ng e testssl.sh como fontes futuras de dados, mas não deve depender deles para a entrega da v1.
+- **Nova proposta de futuro** pode referenciar Nikto, ffuf/gobuster, enum4linux-ng e testssl.sh como fontes futuras de dados, mas não deve depender deles para a entrega da v1.
 - **Qualquer adição de ferramenta na v2 ou v3 requer seu próprio card de implementação** no backlog e deve estar em conformidade com a arquitetura do pipeline de varredura (A-04) e o contrato de API (A-03).
 - **As ferramentas "EXCLUIR" não devem ser adicionadas ao projeto sob nenhuma circunstância** sem um novo ADR, uma revisão legal e aprovação explícita do instrutor/stakeholder.
 - **Vamos fazer uma diferenciação entre versões de projeto**: a v1 vai ser o scanner principal, v2 um scanner mais potente com scripts de penetração basicos somente para verificação, v3 uma solução mais personalizada com possibilidade de rodar scripts avançados usando credenciais da empresa.
@@ -168,6 +181,8 @@ Se o scanner descobrir uma vulnerabilidade crítica em um host que o operador n�
 - [Documentação Nmap NSE](https://nmap.org/nsedoc/)
 - [enum4linux-ng GitHub](https://github.com/cddmp/enum4linux-ng)
 - [testssl.sh GitHub](https://github.com/drwetter/testssl.sh)
+- [Nikto GitHub](https://github.com/sullo/nikto)
+- [ffuf GitHub](https://github.com/ffuf/ffuf)
 - [OpenVAS / Greenbone Community Edition — Documentação](https://greenbone.github.io/docs/latest/)
 - [Vuls GitHub](https://github.com/future-architect/vuls)
 - [vulners NSE — Documentação oficial Nmap](https://nmap.org/nsedoc/scripts/vulners.html)

@@ -13,6 +13,7 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
   - Descoberta de hosts, portas, serviços e SO via Nmap
   - Execução de scripts NSE (`default`, `safe`, `vuln`, `auth`, `discovery`)
   - Correlação de vulnerabilidades via **vulners NSE**
+  - Execução opcional de ferramentas web direcionadas (`ffuf`, Nikto) após detecção de HTTP/HTTPS
   - Normalização dos resultados em payload JSON estruturado
   - Envio seguro do payload para o Backend API
 - **Restrições:** 4 GB RAM, CPU ARM64, adaptador Wi-Fi USB dedicado para monitor mode
@@ -81,7 +82,7 @@ flowchart TB
     %% === EDGE DEVICE ===
     subgraph "Raspberry Pi 4 - Edge Device"
         direction TB
-        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Normalização JSON]
+        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Web tools direcionadas<br/>Normalização JSON]
     end
 
     %% === CLOUD ===
@@ -181,7 +182,7 @@ De acordo com as decisões dos ADRs:
 | **Pi Agent**        | Linguagem                                        | Python 3.13+                                    | ADR-002 / ADR-006 | — |
 | **Pi Agent**        | Ferramenta principal de varredura                | Nmap + NSE                                      | ADR-002           | Inclui categorias: `default`, `safe`, `vuln`, `auth`, `discovery` |
 | **Pi Agent**        | Correlação de vulnerabilidades                   | vulners NSE                                     | ADR-002 / ADR-006 | — |
-| **Pi Agent**        | Ferramentas v2 (condicionais)                    | enum4linux-ng, testssl.sh, Nikto                | ADR-002 / ADR-006 | Ativadas apenas quando portas específicas são detectadas |
+| **Pi Agent**        | Ferramentas v2 (condicionais)                    | ffuf, Nikto, enum4linux-ng, testssl.sh          | ADR-002 / ADR-006 | Ativadas apenas quando portas/serviços específicos são detectados |
 | **Backend**         | Framework principal                              | **FastAPI (v. 0.135.2)**                        | ADR-003           | — |
 | **Backend**         | ORM                                              | **SQLModel 0.0.21**                             | ADR-009          | Único modelo para tabela + schema Pydantic |
 | **Backend**         | Driver assíncrono PostgreSQL                     | **asyncpg 0.29.0**                              | ADR-009          | Mantém FastAPI não-bloqueante |
@@ -216,7 +217,7 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 - **Autenticação**: HMAC signature (secret único por dispositivo)
 - **Payload**: JSON contendo:
   - Metadados do scan (timestamp, device_id, rede escaneada)
-  - Resultados normalizados de Nmap + NSE + vulners NSE
+  - Resultados normalizados de Nmap + NSE + vulners NSE + ferramentas web direcionadas
   - Descobertas de hosts, portas, serviços, versões, SO e CVEs
 - **Formato de autenticação**: Header customizado + assinatura do body (método + path + timestamp + body hash)
 - **Resposta esperada**: `202 Accepted` com ID do scan registrado

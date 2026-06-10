@@ -117,7 +117,7 @@ Cada ferramenta avaliada deve satisfazer três critérios obrigatórios, alinhad
 | **Critério de Valor**    | Limitado a serviços web. Complementar ao Nmap para hosts com HTTP/HTTPS detectados.                                |
 | **Critério Ético/Legal** | Ferramenta de auditoria web padrão. Uso responsável em redes autorizadas.                                          |
 | **Critério de Hardware** | Leve. Roda sem problemas no Pi 4.                                                                                  |
-| **Decisão**              | 🟡 **REVALIDAR — v2.** Ativar apenas quando portas HTTP/HTTPS detectadas.                                          |
+| **Decisão**              | 🔵 **INCLUIR — v2.** Ativar apenas quando portas HTTP/HTTPS detectadas, com timeout e parser conservador.          |
 
 
 ---
@@ -192,6 +192,19 @@ Cada ferramenta avaliada deve satisfazer três critérios obrigatórios, alinhad
 
 ---
 
+### 3.12 ffuf / gobuster
+
+| Atributo                 | Avaliação                                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Propósito**            | Enumeração e classificação de diretórios e conteúdo web em serviços HTTP/HTTPS descobertos previamente.                                                |
+| **Critério de Valor**    | Produz achados que o Nmap/NSE não cobre bem, registrando caminhos encontrados e destacando exposição de `.git`, backups, arquivos de configuração e endpoints administrativos. |
+| **Critério Ético/Legal** | Deve ser usado apenas em redes autorizadas, com wordlist pequena/controlada, timeout e ativação condicionada a serviços web confirmadamente abertos.   |
+| **Critério de Hardware** | Leve quando limitado por alvo e wordlist; adequado ao Raspberry Pi desde que a concorrência seja baixa.                                                |
+| **Decisão**              | 🔵 **INCLUIR — v2.** Preferir `ffuf` por saída JSON; manter `gobuster` como fallback futuro se o parser for confiável.                                 |
+
+
+---
+
 ## 4. Matriz de Pontuação
 
 
@@ -201,6 +214,7 @@ Cada ferramenta avaliada deve satisfazer três critérios obrigatórios, alinhad
 | Nmap NSE     | 8               | 10        | 9          | 9       | 10        | **9.5** |
 | vulners NSE  | 10              | 9         | 10         | 9       | 10        | **9.6** |
 | Nikto        | 7               | 7         | 8          | 7       | 7         | **7.2** |
+| ffuf/gobuster | 8             | 7         | 8          | 8       | 7         | **7.6** |
 | testssl.sh   | 7               | 7         | 8          | 7       | 7         | **7.2** |
 | sqlmap       | 7               | 8         | 6          | 7       | 7         | **7.0** |
 | masscan      | 10              | 5         | 7          | 7       | 6         | **7.0** |
@@ -231,9 +245,10 @@ Ferramentas que cruzam para o território de ataque ativo estão **categoricamen
 | Nmap          | v1     | INCLUIR                    | Motor principal — baixo consumo, altamente flexível.                                  |
 | Nmap NSE      | v1     | INCLUIR                    | Estende o Nmap com detecção de vulnerabilidades sem overhead extra.                   |
 | vulners NSE   | v1     | INCLUIR                    | Correlação de CVE passiva via API Vulners. Cobertura muito superior ao `vuln` nativo. |
+| ffuf/gobuster | v2     | INCLUIR (v2)               | Enumeração web direcionada. Ativar apenas quando HTTP/HTTPS for detectado.             |
+| Nikto         | v2     | INCLUIR (v2)               | Scanner web leve. Ativar apenas quando HTTP/HTTPS for detectado.                       |
 | enum4linux-ng | v2     | INCLUIR (v2)               | Enumeração SMB rica. Ativar apenas quando portas 139/445 abertas.                     |
 | testssl.sh    | v2     | INCLUIR (v2)               | Auditoria TLS profunda. Ativar apenas em portas TLS confirmadas.                      |
-| Nikto         | v2     | REVALIDAR (v2)             | Scanner web leve. Útil quando HTTP/HTTPS detectados.                                  |
 | sqlmap        | v2     | REVALIDAR (v2)             | Expansão futura para análise de SQL injection em serviços web.                        |
 | CrackMapExec  | —      | **REVALIDAR - Futuro(v3)** | Ferramenta ofensiva de pós-exploração.                                                |
 | masscan       | —      | ❌ EXCLUIR                  | Nmap cobre o caso de uso com melhor integração.                                       |
@@ -246,7 +261,7 @@ Ferramentas que cruzam para o território de ataque ativo estão **categoricamen
 ## 7. Versões do Projeto
 
 - **v1** — Scanner principal: Nmap + NSE + vulners NSE. Apenas ferramentas passivas, sem dependências adicionais.
-- **v2** — Scanner estendido: adiciona enum4linux-ng, testssl.sh, Nikto e possibilidade de verificações de credenciais limitadas (ex.: admin/admin) com número controlado de tentativas.
+- **v2** — Scanner estendido: adiciona ferramentas condicionais por serviço, incluindo ffuf/gobuster para enumeração web, Nikto para checks web conhecidos, enum4linux-ng, testssl.sh e possibilidade de verificações de credenciais limitadas (ex.: admin/admin) com número controlado de tentativas.
 - **v3** — Solução personalizada: scripts avançados usando credenciais da empresa, possibilidade de Vuls para inventário de patches em infraestrutura gerenciada, revalidação de LinPEAS/WinPEAS com autorização explícita.
 
 ---
@@ -254,7 +269,7 @@ Ferramentas que cruzam para o território de ataque ativo estão **categoricamen
 ## 8. Consequências
 
 - O escopo da v1 está fixo: apenas Nmap + NSE + vulners NSE. Nenhuma ferramenta ativa adicional.
-- Qualquer funcionalidade futura pode referenciar enum4linux-ng e testssl.sh, mas não deve depender deles para a entrega da v1.
+- Qualquer funcionalidade futura pode referenciar ffuf/gobuster, Nikto, enum4linux-ng e testssl.sh, mas não deve depender deles para a entrega da v1.
 - Qualquer adição de ferramenta na v2 ou v3 requer seu próprio card de implementação no backlog e deve estar em conformidade com a arquitetura do pipeline (A-04) e o contrato de API (A-03).
 - As ferramentas **EXCLUIR** não devem ser adicionadas ao projeto sob nenhuma circunstância sem um novo ADR, revisão legal e aprovação explícita do instrutor/stakeholder.
 - Os resultados de varredura podem conter informações sensíveis (portas abertas, banners de serviço, certificados TLS, nomes SMB). O backend deve impor controles de acesso apropriados e as descobertas não devem ser transmitidas por canais não criptografados.
@@ -267,6 +282,8 @@ Ferramentas que cruzam para o território de ataque ativo estão **categoricamen
 - [nmap-vulners GitHub](https://github.com/vulnersCom/nmap-vulners)
 - [enum4linux-ng GitHub](https://github.com/cddmp/enum4linux-ng)
 - [testssl.sh GitHub](https://github.com/drwetter/testssl.sh)
+- [Nikto GitHub](https://github.com/sullo/nikto)
+- [ffuf GitHub](https://github.com/ffuf/ffuf)
 - [OpenVAS / Greenbone Community Edition](https://greenbone.github.io/docs/latest/)
 - OWASP Testing Guide — Testes de Infraestrutura de Rede
 - ADR R-06 — Ferramentas Adicionais de Pentest e Enumeração (referência interna)
