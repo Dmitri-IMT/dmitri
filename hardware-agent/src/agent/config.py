@@ -7,13 +7,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
+ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
+
 
 @dataclass(slots=True)
 class AgentSettings:
     """Runtime configuration for the scanning agent."""
 
     scan_subnet: str | None = None
-    scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"] = "quick"
+    scan_mode: ScanMode = "quick"
     device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
     min_cvss: float = 5.0
@@ -21,14 +23,18 @@ class AgentSettings:
     host_batch_size: int = 8
     output_path: str = str(Path("hardware-agent") / "artifacts" / "latest-scan.json")
     version_intensity: int = 5
+    web_tools_enabled: bool | None = None
+    web_directory_enum_enabled: bool = True
+    nikto_enabled: bool = True
+    web_tool_timeout_seconds: int = 120
+    web_tools_max_workers: int = 1
+    web_wordlist_path: str | None = None
 
     def with_overrides(
         self,
         *,
         scan_subnet: str | None = None,
-        scan_mode: (
-            Literal["quick", "standard", "extensive", "nspi", "max"] | None
-        ) = None,
+        scan_mode: ScanMode | None = None,
         output_path: str | None = None,
     ) -> AgentSettings:
         """Return a copy with CLI-provided overrides applied."""
@@ -116,11 +122,30 @@ def min_cvss_for_mode(scan_mode: str) -> float:
     return 5.0
 
 
-def _parse_scan_mode(value: str | None) -> Literal["quick", "standard"]:
+def _parse_scan_mode(value: str | None) -> ScanMode:
     normalized = (value or "quick").strip().lower()
-    if normalized not in {"quick", "standard"}:
-        raise ValueError("AGENT_SCAN_MODE must be 'quick' or 'standard'.")
+    allowed = {"quick", "standard", "extensive", "nspi", "max"}
+    if normalized not in allowed:
+        raise ValueError(
+            "AGENT_SCAN_MODE must be one of: quick, standard, extensive, nspi, max."
+        )
     return normalized  # type: ignore[return-value]
+
+
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(f"Invalid boolean environment value: {value!r}")
+
+
+def _parse_bool(value: str | None, *, default: bool) -> bool:
+    parsed = _parse_optional_bool(value)
+    return default if parsed is None else parsed
 
 
 def load_settings() -> AgentSettings:
@@ -140,4 +165,19 @@ def load_settings() -> AgentSettings:
             str(Path("hardware-agent") / "artifacts" / "latest-scan.json"),
         ),
         version_intensity=5,
+        web_tools_enabled=_parse_optional_bool(os.getenv("AGENT_WEB_TOOLS_ENABLED")),
+        web_directory_enum_enabled=_parse_bool(
+            os.getenv("AGENT_WEB_DIRECTORY_ENUM_ENABLED"),
+            default=True,
+        ),
+        nikto_enabled=_parse_bool(os.getenv("AGENT_NIKTO_ENABLED"), default=True),
+        web_tool_timeout_seconds=max(
+            1,
+            int(os.getenv("AGENT_WEB_TOOL_TIMEOUT_SECONDS", "120")),
+        ),
+        web_tools_max_workers=max(
+            1,
+            int(os.getenv("AGENT_WEB_TOOLS_MAX_WORKERS", "1")),
+        ),
+        web_wordlist_path=os.getenv("AGENT_WEB_WORDLIST_PATH"),
     )
