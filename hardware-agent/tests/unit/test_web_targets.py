@@ -50,6 +50,42 @@ class _FakeToolRunner:
         raise AssertionError(f"Unexpected tool: {executable}")
 
 
+class _FileOutputFfufRunner:
+    def run(self, executable: str, arguments: list[str]) -> ToolRunResult:
+        if executable == "nikto":
+            return ToolRunResult(
+                tool=executable,
+                argv=[executable, *arguments],
+                status=ToolRunStatus.COMPLETED,
+                exit_code=0,
+                stdout="+ [FAIL] Unable to connect to 192.168.1.62:80.",
+            )
+
+        assert executable == "ffuf"
+        output_path = Path(arguments[arguments.index("-o") + 1])
+        output_path.write_text(
+            json.dumps(
+                {
+                    "results": [
+                        {
+                            "url": "http://192.168.1.62:80/phpinfo.php",
+                            "status": 200,
+                            "length": 48062,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return ToolRunResult(
+            tool=executable,
+            argv=[executable, *arguments],
+            status=ToolRunStatus.COMPLETED,
+            exit_code=0,
+            stdout="phpinfo.php",
+        )
+
+
 def test_select_web_targets_uses_open_http_ports_from_nmap_data() -> None:
     host = HostInfo(
         ip="192.168.1.20",
@@ -159,6 +195,22 @@ def test_parse_nikto_output_keeps_header_security_issues() -> None:
     assert issues[0].path is None
 
 
+def test_parse_nikto_output_ignores_connection_failures() -> None:
+    host = HostInfo(
+        ip="192.168.1.52",
+        hostname="web.local",
+        ports=[PortInfo(port=80, service=ServiceInfo(name="http"))],
+    )
+    target = select_web_targets([host])[0]
+
+    issues = parse_nikto_output(
+        target,
+        "+ [FAIL] Unable to connect to 192.168.1.52:80.",
+    )
+
+    assert issues == []
+
+
 def test_run_web_security_tools_attaches_tool_scripts(
     tmp_path: Path,
 ) -> None:
@@ -187,6 +239,44 @@ def test_run_web_security_tools_attaches_tool_scripts(
     ffuf_hits = host.ports[0].scripts[0].data["hits"]
     assert [hit["path"] for hit in ffuf_hits] == ["/.git/", "/assets/"]
     assert [hit["dangerous"] for hit in ffuf_hits] == [True, False]
+
+
+def test_run_web_security_tools_reads_ffuf_json_output_file(
+    tmp_path: Path,
+) -> None:
+    wordlist = tmp_path / "web.txt"
+    wordlist.write_text("phpinfo.php\n", encoding="utf-8")
+    host = HostInfo(
+        ip="192.168.1.62",
+        hostname="web.local",
+        ports=[PortInfo(port=80, service=ServiceInfo(name="http"))],
+    )
+    settings = AgentSettings(
+        scan_mode="extensive",
+        web_wordlist_path=str(wordlist),
+    )
+
+    summary = run_web_security_tools(
+        [host],
+        settings,
+        tool_runner=_FileOutputFfufRunner(),
+    )
+
+    assert summary.tools_attempted == 2
+    assert summary.finding_candidates == 1
+    assert [script.script_id for script in host.ports[0].scripts] == ["ffuf"]
+    ffuf_hits = host.ports[0].scripts[0].data["hits"]
+    assert ffuf_hits == [
+        {
+            "url": "http://192.168.1.62:80/phpinfo.php",
+            "path": "/phpinfo.php",
+            "status": 200,
+            "dangerous": True,
+            "risk": "dangerous",
+            "reason": "sensitive-path",
+            "length": 48062,
+        }
+    ]
 
 
 def test_run_web_security_tools_is_disabled_for_quick_by_default(

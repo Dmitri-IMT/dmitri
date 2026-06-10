@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlparse
 
@@ -80,6 +81,7 @@ NIKTO_INFORMATION_PREFIXES = (
     "End Time:",
     "Server:",
     "No web server",
+    "[FAIL]",
 )
 
 
@@ -253,37 +255,44 @@ def _run_ffuf(
     summary: WebToolSummary,
 ) -> None:
     target_url = f"{target.url.rstrip('/')}/FUZZ"
-    result = runner.run(
-        "ffuf",
-        [
-            "-u",
-            target_url,
-            "-w",
-            str(wordlist_path),
-            "-of",
-            "json",
-            "-o",
-            "-",
-            "-ac",
-            "-noninteractive",
-            "-s",
-        ],
-    )
-    _record_run(summary, result)
-    if result.status != ToolRunStatus.COMPLETED:
-        return
-
-    hits = parse_ffuf_results(target, result.stdout)
-    if not hits:
-        return
-    summary.finding_candidates += len(hits)
-    target.port.scripts.append(
-        ScriptResult(
-            script_id="ffuf",
-            output=f"{len(hits)} web path(s) discovered and classified.",
-            data={"hits": [_directory_hit_payload(hit) for hit in hits]},
+    output_path = _temporary_ffuf_output_path()
+    try:
+        result = runner.run(
+            "ffuf",
+            [
+                "-u",
+                target_url,
+                "-w",
+                str(wordlist_path),
+                "-of",
+                "json",
+                "-o",
+                str(output_path),
+                "-ac",
+                "-noninteractive",
+                "-s",
+            ],
         )
-    )
+        _record_run(summary, result)
+        if result.status != ToolRunStatus.COMPLETED:
+            return
+
+        hits = parse_ffuf_results(
+            target,
+            _read_ffuf_output(output_path=output_path, fallback_stdout=result.stdout),
+        )
+        if not hits:
+            return
+        summary.finding_candidates += len(hits)
+        target.port.scripts.append(
+            ScriptResult(
+                script_id="ffuf",
+                output=f"{len(hits)} web path(s) discovered and classified.",
+                data={"hits": [_directory_hit_payload(hit) for hit in hits]},
+            )
+        )
+    finally:
+        output_path.unlink(missing_ok=True)
 
 
 def _run_nikto(
@@ -323,6 +332,24 @@ def _record_run(summary: WebToolSummary, result: ToolRunResult) -> None:
     summary.tools_attempted += 1
     if result.status == ToolRunStatus.TIMED_OUT:
         summary.tools_timed_out += 1
+
+
+def _temporary_ffuf_output_path() -> Path:
+    handle = NamedTemporaryFile(
+        prefix="dmitri-ffuf-",
+        suffix=".json",
+        delete=False,
+    )
+    handle.close()
+    return Path(handle.name)
+
+
+def _read_ffuf_output(*, output_path: Path, fallback_stdout: str) -> str:
+    try:
+        file_output = output_path.read_text(encoding="utf-8")
+    except OSError:
+        file_output = ""
+    return file_output or fallback_stdout
 
 
 def _directory_hit_payload(hit: WebDirectoryHit) -> dict[str, str | int | bool]:
