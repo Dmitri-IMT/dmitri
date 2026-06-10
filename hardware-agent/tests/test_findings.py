@@ -508,3 +508,77 @@ def test_nikto_issue_becomes_web_vulnerability_finding() -> None:
     assert findings[0].source_script == "nikto"
     assert findings[0].title == "Nikto reported /admin/"
     assert findings[0].severity == "medium"
+
+
+def test_testssl_issue_becomes_tls_finding() -> None:
+    host = HostInfo(
+        ip="192.168.1.92",
+        hostname="tls-host",
+        ports=[
+            PortInfo(
+                port=443,
+                service=ServiceInfo(name="https"),
+                scripts=[
+                    ScriptResult(
+                        script_id="testssl",
+                        output="testssl issues",
+                        data={
+                            "issues": [
+                                {
+                                    "title": "Deprecated TLS/SSL protocol offered: TLSv1.0",
+                                    "message": "testssl.sh reported support for TLSv1.0.",
+                                    "severity": "medium",
+                                    "evidence": "TLS 1.0 offered",
+                                }
+                            ]
+                        },
+                    )
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].source == "tls_configuration_audit"
+    assert findings[0].source_script == "testssl"
+    assert findings[0].title == "Deprecated TLS/SSL protocol offered: TLSv1.0"
+    assert findings[0].severity == "medium"
+
+
+def test_enum4linux_issue_becomes_smb_finding() -> None:
+    host = HostInfo(
+        ip="192.168.1.93",
+        hostname="smb-host",
+        ports=[
+            PortInfo(
+                port=445,
+                service=ServiceInfo(name="microsoft-ds"),
+                scripts=[
+                    ScriptResult(
+                        script_id="enum4linux-ng",
+                        output="enum4linux issues",
+                        data={
+                            "issues": [
+                                {
+                                    "title": "Anonymous SMB session allowed",
+                                    "message": "enum4linux-ng reported a successful null SMB session.",
+                                    "severity": "high",
+                                    "evidence": "Server allows authentication via username '' and password ''",
+                                }
+                            ]
+                        },
+                    )
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].source == "smb_enumeration"
+    assert findings[0].source_script == "enum4linux-ng"
+    assert findings[0].title == "Anonymous SMB session allowed"
+    assert findings[0].severity == "high"

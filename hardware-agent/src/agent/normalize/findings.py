@@ -646,6 +646,93 @@ def _extract_nikto_findings(
     return findings
 
 
+def _extract_testssl_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if port is None or not isinstance(script.data, Mapping):
+        return []
+
+    issues = script.data.get("issues")
+    if not isinstance(issues, Sequence) or isinstance(issues, (str, bytes)):
+        return []
+
+    findings: list[FindingPayload] = []
+    for issue in issues:
+        if not isinstance(issue, Mapping):
+            continue
+        title = _stringify(issue.get("title")) or "testssl.sh TLS finding"
+        message = _stringify(issue.get("message")) or title
+        evidence = _stringify(issue.get("evidence")) or message
+        severity = _severity_from_risk_factor(issue.get("severity"))
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity=severity,
+                title=title,
+                description=(
+                    f"testssl.sh reported a TLS security issue on "
+                    f"{host.ip}:{port.port}: {message}"
+                ),
+                recommendation=(
+                    "Review the TLS configuration, validate the reported issue, "
+                    "and harden the affected service by removing deprecated "
+                    "protocols, weak ciphers, weak certificates, or known "
+                    "cryptographic exposures."
+                ),
+                evidence=evidence,
+                source="tls_configuration_audit",
+                source_script="testssl",
+            )
+        )
+    return findings
+
+
+def _extract_enum4linux_findings(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingPayload]:
+    if port is None or not isinstance(script.data, Mapping):
+        return []
+
+    issues = script.data.get("issues")
+    if not isinstance(issues, Sequence) or isinstance(issues, (str, bytes)):
+        return []
+
+    findings: list[FindingPayload] = []
+    for issue in issues:
+        if not isinstance(issue, Mapping):
+            continue
+        title = _stringify(issue.get("title")) or "enum4linux-ng SMB finding"
+        message = _stringify(issue.get("message")) or title
+        evidence = _stringify(issue.get("evidence")) or message
+        severity = _severity_from_risk_factor(issue.get("severity"))
+        findings.append(
+            _base_finding(
+                host,
+                port,
+                severity=severity,
+                title=title,
+                description=(
+                    f"enum4linux-ng reported an SMB exposure on "
+                    f"{host.ip}:{port.port}: {message}"
+                ),
+                recommendation=(
+                    "Validate the anonymous SMB exposure, tighten share and "
+                    "session permissions, and enforce a stronger password policy "
+                    "where applicable."
+                ),
+                evidence=evidence,
+                source="smb_enumeration",
+                source_script="enum4linux-ng",
+            )
+        )
+    return findings
+
+
 def _extract_generic_vuln_table_findings(
     host: HostInfo,
     port: PortInfo | None,
@@ -831,4 +918,6 @@ _EXTRACTORS: dict[str, _ListExtractor] = {
     "ffuf": _extract_web_directory_findings,
     "gobuster": _extract_web_directory_findings,
     "nikto": _extract_nikto_findings,
+    "testssl": _extract_testssl_findings,
+    "enum4linux-ng": _extract_enum4linux_findings,
 }
