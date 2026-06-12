@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Btn, Badge } from '../components/ui';
-import { Icon } from '../components/icons/Icon';
 import type { Severity } from '../types';
 
 export default function Scanning() {

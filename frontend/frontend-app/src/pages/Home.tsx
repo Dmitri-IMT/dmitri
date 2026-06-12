@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { SCANS, DEVICES, FINDINGS, timeAgo, fmtDate } from '../data/mockData';
-import { Card, Btn, Badge } from '../components/ui';
+import { SCANS, DEVICES, FINDINGS, timeAgo, fmtDate } from '../data/mockData-v2';
+import { Card, Btn } from '../components/ui';
 import { Icon } from '../components/icons/Icon';
 
 export default function Home() {

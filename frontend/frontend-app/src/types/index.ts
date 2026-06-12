@@ -46,4 +46,9 @@ export interface Finding {
   recommendation: string;
   evidence: string;
   detected_at: string;
+
+  cve_id?: string;
+  cvss_score?: number;
+  references?: string[];
+  source_scripts?: string[];
 }

@@ -1,0 +1,8 @@
+services:
+  frontend:
+    build:
+      context: ./frontend-app
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
