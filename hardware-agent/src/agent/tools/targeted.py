@@ -343,7 +343,8 @@ def parse_testssl_output(target: TLSTarget, output: str) -> list[TestsslIssue]:
             )
 
         if any(marker in lowered for marker in ("rc4", "3des", "des-cbc3")) and any(
-            marker in lowered for marker in ("offered", "supported", "accepted", "available")
+            marker in lowered
+            for marker in ("offered", "supported", "accepted", "available")
         ):
             _append_issue(
                 issues,
@@ -370,7 +371,12 @@ def parse_testssl_output(target: TLSTarget, output: str) -> list[TestsslIssue]:
                 continue
             if not any(
                 risk_text in lowered
-                for risk_text in ("vulnerable", "potentially vulnerable", "yes", "vulnerability")
+                for risk_text in (
+                    "vulnerable",
+                    "potentially vulnerable",
+                    "yes",
+                    "vulnerability",
+                )
             ):
                 continue
             _append_issue(

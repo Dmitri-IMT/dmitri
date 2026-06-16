@@ -77,7 +77,11 @@ def test_select_smb_targets_uses_open_smb_ports_only() -> None:
         ports=[
             PortInfo(port=139, service=ServiceInfo(name="netbios-ssn")),
             PortInfo(port=445, service=ServiceInfo(name="microsoft-ds")),
-            PortInfo(port=445, state="filtered", service=ServiceInfo(name="microsoft-ds")),
+            PortInfo(
+                port=445,
+                state="filtered",
+                service=ServiceInfo(name="microsoft-ds"),
+            ),
             PortInfo(port=8445, service=ServiceInfo(name="smb-alt")),
         ],
     )

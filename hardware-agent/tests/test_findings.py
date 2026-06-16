@@ -525,8 +525,12 @@ def test_testssl_issue_becomes_tls_finding() -> None:
                         data={
                             "issues": [
                                 {
-                                    "title": "Deprecated TLS/SSL protocol offered: TLSv1.0",
-                                    "message": "testssl.sh reported support for TLSv1.0.",
+                                    "title": (
+                                        "Deprecated TLS/SSL protocol offered: TLSv1.0"
+                                    ),
+                                    "message": (
+                                        "testssl.sh reported support for TLSv1.0."
+                                    ),
                                     "severity": "medium",
                                     "evidence": "TLS 1.0 offered",
                                 }
@@ -563,9 +567,15 @@ def test_enum4linux_issue_becomes_smb_finding() -> None:
                             "issues": [
                                 {
                                     "title": "Anonymous SMB session allowed",
-                                    "message": "enum4linux-ng reported a successful null SMB session.",
+                                    "message": (
+                                        "enum4linux-ng reported a successful null "
+                                        "SMB session."
+                                    ),
                                     "severity": "high",
-                                    "evidence": "Server allows authentication via username '' and password ''",
+                                    "evidence": (
+                                        "Server allows authentication via username "
+                                        "'' and password ''"
+                                    ),
                                 }
                             ]
                         },
