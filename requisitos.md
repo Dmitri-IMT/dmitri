@@ -35,7 +35,7 @@
   - Verificação: scan em rede conhecida retorna ≥ 1 host por IP ativo.
   - Rastreabilidade: `discovery/network_discovery.py` (`nmap -sn -PE -T4`).
 
-- **RF-002** *(S)* — Quando o operador seleciona um perfil de varredura, o agente deve
+- **RF-002** *(E)* — Quando o operador seleciona um perfil de varredura, o agente deve
   aplicar somente o subconjunto de portas e scripts correspondente ao perfil escolhido,
   conforme a tabela: `quick` (-F, portas top), `standard` (NSE descoberta), `extensive`
   (top 10 000 + `vulners.mincvss=3.0`), `max` (`-p-` + `vulners.mincvss=1.0`), `nspi`
@@ -43,7 +43,7 @@
   - Origem: Artigo §3.2 + ADR-004; README §"Modos de varredura".
   - Verificação: payload gerado contém `scan_mode` igual ao selecionado e flags Nmap
     coerentes (`nmap_arguments_summary`).
-  - Rastreabilidade: `config.py::discovery_arguments`, `scanner/stages.py:142-154`.
+  - Rastreabilidade: `config.py::discovery_arguments`, `scanner/stages.py`.
 
 - **RF-003** *(U)* — O agente deve identificar serviço e versão em cada porta aberta
   retornada pela enumeração.
@@ -81,7 +81,7 @@
   interrompido em `metadata.interrupted_stage`.
   - Origem: necessidade operacional; ADR-004.
   - Verificação: teste de interrupção em `hardware-agent/tests/` seta o flag.
-  - Rastreabilidade: `scanner/stages.py::build_metadata` (linhas 165-189).
+  - Rastreabilidade: `scanner/stages.py::build_metadata`.
 
 ### Interface do operador (TUI Textual)
 
@@ -105,20 +105,13 @@
   e mensagem de sucesso.
   - Origem: Artigo §3.1 (item 2) + §3.3; `main.py::ingest_scan_endpoint`.
   - Verificação: teste e2e em `backend/` (`smoke_test.py`) com payload válido.
-  - Rastreabilidade: `main.py:88-104`.
-
-- **RF-011** *(E)* — Ao receber um POST em `/api/v1/scans`, o Backend deve validar a
-  assinatura HMAC-SHA256 no header da requisição e rejeitar payloads com assinatura
-  inválida ou ausente.
-  - Origem: ADR-005; Artigo §3.1 ("envia de forma segura").
-  - Verificação: teste com HMAC correto retorna 202; HMAC incorreto retorna 401.
-  - Rastreabilidade: middleware HMAC em `main.py` (referência ADR-005).
+  - Rastreabilidade: `main.py::ingest_scan_endpoint`.
 
 - **RF-012** *(W)* — Se o `scan_id` recebido já existir no banco, o Backend deve
   retornar o registro existente sem criar duplicata (idempotência).
   - Origem: Artigo §3.3 (rastreabilidade, reprocessamento sem repetir coleta).
   - Verificação: dois POSTs com mesmo `scan_id` resultam em 1 `ScanRecord`.
-  - Rastreabilidade: `services/persistence.py::persist_scan` (linhas 22-25).
+  - Rastreabilidade: `services/persistence.py::persist_scan`.
 
 ### Persistência — modelo e dedupe
 
@@ -220,7 +213,7 @@
   detectadas, o agente deve opcionalmente executar `enum4linux-ng`, `testssl.sh` ou
   `Nikto`, respectivamente, em modo de varredura estendida.
   - Origem: Artigo §1.2 (v2 inclui ferramentas complementares); ADR-006.
-  - Verificação: scan com perfil `v2` em host que暴露a SMB dispara enum4linux-ng.
+  - Verificação: scan com perfil `v2` em host que expõe SMB dispara enum4linux-ng.
   - Rastreabilidade: a definir em `#issue` (v2).
 
 - **RF-202** *(U)* — A camada de apresentação deve disponibilizar um Frontend Web
@@ -242,6 +235,15 @@
   - Origem: Artigo §1.1.2 (OE-3: "usuários, permissões").
   - Verificação: usuário sem role não acessa `/scans`.
   - Rastreabilidade: a definir em `models/persistence.py` (v2).
+
+- **RF-011** *(S)* — *(Reclassificado de v1 → v2: a verificação de assinatura
+  agente→API ainda não existe em `backend/src/api/`; o ID original é preservado.)*
+  Ao receber um POST em `/api/v1/scans`, o Backend deve validar a assinatura
+  HMAC-SHA256 no header da requisição e rejeitar payloads com assinatura inválida
+  ou ausente.
+  - Origem: ADR-005; Artigo §3.1 ("envia de forma segura"); ver NFR-S-01.
+  - Verificação: teste com HMAC correto retorna 202; HMAC incorreto/ausente retorna 401.
+  - Rastreabilidade: a definir (middleware HMAC, conforme ADR-005).
 
 ---
 
@@ -272,10 +274,145 @@
 
 ---
 
-## Restrições e NFRs (fora do escopo de RF — IEEE 830 §5)
+## Requisitos Não Funcionais (RNF)
 
-Itens abaixo **não são requisitos funcionais** (são restrições de Design/Plataforma);
-listados aqui apenas para rastreabilidade cruzada:
+> **Base normativa:** ISO/IEC 25010 (atributos de qualidade) para a categorização e
+> ISO/IEC/IEEE 29148 (requisitos verificáveis e mensuráveis) para a forma. Cada RNF
+> referencia, em "Rastreabilidade", a restrição de Design correspondente na tabela
+> de Restrições abaixo (NFR-x) e/ou o ADR de origem.
+
+### Segurança
+
+- **RNF-001** — Toda comunicação agente→API e frontend→API deve ocorrer sobre HTTPS/TLS;
+  requisições em HTTP simples devem ser recusadas ou redirecionadas.
+  - Origem: ADR-005; Artigo §3.1 ("envia de forma segura").
+  - Verificação: requisição HTTP em texto claro não é aceita (301/426 ou recusa de conexão).
+  - Rastreabilidade: NFR-S-01.
+
+- **RNF-002** — A API deve restringir CORS a uma allowlist explícita de origens, sem
+  uso de `*` quando `allow_credentials=True`.
+  - Origem: ARCHITECTURE.md §8.
+  - Verificação: origem fora da allowlist não recebe headers `Access-Control-Allow-*`.
+  - Rastreabilidade: NFR-S-02; `core/config.py` (CORS origins).
+
+- **RNF-003** — Segredos (chave HMAC, segredo JWT, credenciais de banco) devem ser lidos
+  de variáveis de ambiente e nunca versionados no repositório.
+  - Origem: ADR-005; `backend/.env.example`.
+  - Verificação: varredura do repositório não encontra segredo literal commitado.
+  - Rastreabilidade: NFR-S-01.
+
+### Desempenho e eficiência
+
+- **RNF-010** — Uma varredura `standard` de sub-rede `/24` deve concluir em tempo
+  compatível com o baseline do artigo (§4.1: 3 hosts, 322 findings, ≈ 389,24 s).
+  - Origem: Artigo §4.1 (validação em Metasploitable).
+  - Verificação: scan de laboratório dentro de margem do baseline reportado.
+  - Rastreabilidade: cruza RF-001..006.
+
+- **RNF-011** — O worker de enriquecimento deve reaproveitar feeds em cache dentro do TTL,
+  limitando requisições externas a NVD/KEV/EPSS a uma por CVE/CPE por janela de TTL.
+  - Origem: Artigo §3.3 ("aderência ao porte"); ADR-009.
+  - Verificação: dois enriquecimentos consecutivos do mesmo CVE geram 1 requisição HTTP.
+  - Rastreabilidade: cruza RF-017; `services/{nvd,kev,epss}.py`.
+
+- **RNF-012** — O agente deve operar dentro dos limites de memória do Raspberry Pi (4 GB)
+  durante uma varredura `/24`, sem esgotar RAM.
+  - Origem: ADR-001 (sizing).
+  - Verificação: monitoramento de RAM durante scan `/24` permanece abaixo do limite.
+  - Rastreabilidade: NFR-S-03; ADR-001.
+
+### Confiabilidade
+
+- **RNF-020** — A ingestão de scans deve ser idempotente: reprocessar o mesmo `scan_id`
+  não cria registros duplicados.
+  - Origem: Artigo §3.3.
+  - Verificação: dois POSTs com mesmo `scan_id` resultam em 1 `ScanRecord`.
+  - Rastreabilidade: cruza RF-012; `services/persistence.py::persist_scan`.
+
+- **RNF-021** — Jobs de enriquecimento não concluídos devem permanecer reentregáveis;
+  a falha de um worker não pode deixar um job preso indefinidamente.
+  - Origem: ADR-009; Artigo §3.3.
+  - Verificação: job interrompido por queda de worker é reclamado por outro worker.
+  - Rastreabilidade: cruza RF-015; `services/enrichment.py::claim_pending_enrichment_jobs`.
+
+- **RNF-022** — Uma varredura interrompida deve produzir um resultado parcial recuperável
+  e gravado, sem corromper o histórico existente.
+  - Origem: necessidade operacional; ADR-004.
+  - Verificação: abort durante scan grava payload com `partial_result=true`.
+  - Rastreabilidade: cruza RF-007, RF-009.
+
+### Manutenibilidade
+
+- **RNF-030** — Os contratos de dados devem ser versionados em `contracts/schemas/*.json`
+  e validados em CI; alterações de contrato sem atualização de schema devem falhar o build.
+  - Origem: Artigo §3.3.
+  - Verificação: payload fora do schema reprova na etapa de validação de contrato em CI.
+  - Rastreabilidade: NFR-M-01.
+
+- **RNF-031** — O código deve passar `ruff`, `black` e a suíte `pytest` (unit + e2e +
+  contrato) no CI antes de qualquer merge.
+  - Origem: ADR-005 / pipeline de CI.
+  - Verificação: pipeline de CI bloqueia merge com lint/format/test falhando.
+  - Rastreabilidade: NFR-Q-01.
+
+- **RNF-032** — Toda alteração de esquema de banco deve ser aplicada via migração Alembic,
+  sem modificação manual do schema em produção.
+  - Origem: ADR-009.
+  - Verificação: `alembic upgrade head` reproduz o schema a partir do zero.
+  - Rastreabilidade: NFR-P-02; `models/persistence.py`.
+
+### Portabilidade e plataforma
+
+- **RNF-040** — O agente deve executar de forma headless em Raspberry Pi OS Lite
+  (ARM64), sem dependência de ambiente gráfico.
+  - Origem: ADR-001.
+  - Verificação: instalação via `install.sh` e execução da TUI em ARM64 sem GUI.
+  - Rastreabilidade: NFR-S-03.
+
+- **RNF-041** — O Backend deve ser implantável via Docker Compose + Nginx, compatível
+  com Railway (free-tier) e Supabase (Postgres).
+  - Origem: ADR-007.
+  - Verificação: `docker compose up` sobe API + worker + proxy funcionais.
+  - Rastreabilidade: NFR-P-01.
+
+### Escalabilidade e capacidade
+
+- **RNF-050** — O sistema deve suportar 1–2 varreduras por dia em sub-rede `/24` e
+  até ~10 operadores/visualizadores concorrentes sem degradação perceptível.
+  - Origem: Artigo §1.2; README §"Escopo e premissas".
+  - Verificação: smoke test com 2 scans/dia e 10 sessões simuladas não extrapola recursos.
+  - Rastreabilidade: cruza RF-023; ADR-001.
+
+### Custo
+
+- **RNF-060** — O custo de hardware do agente deve ser ≤ R$ 1.250, sem licenciamento
+  por dispositivo.
+  - Origem: Artigo §1.2; ADR-001.
+  - Verificação: BOM do dispositivo dentro do teto; software sem licença por unidade.
+  - Rastreabilidade: NFR-C-01.
+
+### Auditabilidade
+
+- **RNF-070** — O sistema deve preservar histórico completo e consultável de scans,
+  findings e `enrichment_jobs`, sem descarte automático de registros.
+  - Origem: Artigo §3.3.
+  - Verificação: registros de scans anteriores permanecem consultáveis após novos scans.
+  - Rastreabilidade: NFR-A-01.
+
+### Usabilidade
+
+- **RNF-080** — A TUI deve ser totalmente operável por teclado, sem dependência de
+  mouse ou ambiente gráfico, com cada tela acessível por navegação.
+  - Origem: Artigo §3.1 (uso pelo operador).
+  - Verificação: fluxo completo (setup → scan → resultado) concluído apenas com teclado.
+  - Rastreabilidade: cruza RF-008.
+
+---
+
+## Restrições e NFRs (Design/Plataforma — IEEE 830 §5)
+
+Os itens abaixo são as **restrições de Design/Plataforma** que fundamentam os RNF acima.
+Cada RNF referencia o `NFR-x` correspondente em sua "Rastreabilidade":
 
 | ID | Tipo | Descrição | Origem |
 |----|------|-----------|--------|
@@ -301,7 +438,7 @@ listados aqui apenas para rastreabilidade cruzada:
 | §1.1.2 OE-4: interface web "simples, não técnica" | **gap**: `frontend/` vazio | RF-202 | ⚠️ → v2 |
 | §1.1.2 OE-5: validação em ambiente controlado | artigo §4.1 (Metasploitable) | validado em laboratório | ✅ |
 | §1.1 (geral): "suporte à atualização de versões" | apenas texto em `recommendation` | RF-303 | ⚠️ → v3 |
-| §3.1 Hardware Agent envia seguro | código (HMAC planejado em main.py) | RF-011 + NFR-S-01 | ✅ MUST |
+| §3.1 Hardware Agent envia seguro | **gap**: HMAC só nos docs (ADR-005), não em `backend/src/api/` | RF-011 + NFR-S-01 | ⚠️ planejado → v2 |
 | §3.1 Backend enfileira job | código (`_enqueue_enrichment_jobs`) | RF-015, RF-016 | ✅ MUST |
 | §3.1 Worker enriquece + risco + persiste | código (`services/{enrichment,risk,persistence}.py`) | RF-016, RF-018 | ✅ MUST |
 | §3.2 pipeline 4 estágios | código (`stages.py`) | RF-001..005 | ✅ MUST |
