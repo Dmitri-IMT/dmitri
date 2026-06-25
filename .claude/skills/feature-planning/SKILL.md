@@ -9,7 +9,7 @@ description: >-
   spec", or pastes a feature/issue body to begin a new feature.
 user-invocable: true
 argument-hint: "Short idea or feature name (optional)"
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # Feature Planning (`/feature-planning`)
