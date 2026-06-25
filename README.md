@@ -1,4 +1,4 @@
-# Vulnerability Scanner Device
+# Dmitri
 
 Monorepo do Trabalho de Conclusão de Curso (Engenharia de Computação) que irá entregar um dispositivo embarcado capaz de conectar-se a uma rede local, executar varreduras com o Nmap e, em fases posteriores, disponibilizar relatórios via backend e frontend web.
 
