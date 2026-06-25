@@ -109,6 +109,23 @@ through — at minimum `ScanRunner` and `ScanProgressScreen` per the CLAUDE.md i
 
 {Which screen pushes which; entry and dismiss results.}
 
+## Visual mockup
+
+ASCII / box-drawing render of each new or changed screen — the visual frontend design.
+Label widgets with their `#id`. Follow each mockup with a short prose explanation of the
+layout regions, where focus starts, and how the render differs per state.
+
+\`\`\`text
+┌─ {title} ──────────────────────────────┐
+│ {header / status line}                  │
+│                                         │
+│ > {option / row}            #{id}       │
+│   {option / row}                        │
+│                                         │
+│ {footer: key bindings}                  │
+└─────────────────────────────────────────┘
+\`\`\`
+
 ## Layout
 
 {Widgets top-to-bottom: header, OptionList / table, footer bindings.}

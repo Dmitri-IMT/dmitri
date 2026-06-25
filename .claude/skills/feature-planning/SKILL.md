@@ -57,7 +57,9 @@ only pasted requirements.
    **mandatory New files and naming** table and per-area testing expectations.
 6. **Spawn the TUI design agent** (`subagent_type: tui-design-agent`) to write
    **`DESIGN.md`** **only when** the feature adds or changes Textual screens
-   (`hardware-agent/src/agent/tui/screens/`). Skip for pure pipeline/config features.
+   (`hardware-agent/src/agent/tui/screens/`). It must include a **visual frontend mockup**
+   (ASCII / box-drawing render) of each screen with a prose explanation. Skip for pure
+   pipeline/config features.
 7. **Naming is mandatory** — both agents must list the exact files/paths implementers will
    create or touch under `hardware-agent/src/agent/`.
 
