@@ -90,9 +90,7 @@ class ScanRunner:
 
             started_counter = perf_counter()
 
-            self._emit(
-                ScanEvent(kind="discovery_started", message="Finding hosts…")
-            )
+            self._emit(ScanEvent(kind="discovery_started", message="Finding hosts…"))
             self._check_cancel()
             stages.set_runner_stage(runner, "discovery")
             hosts = discover_hosts(runner, self.subnet)
@@ -113,9 +111,7 @@ class ScanRunner:
 
             if hosts:
                 self._check_cancel()
-                stages.run_port_stage(
-                    runner, settings, hosts, reporter=self._reporter
-                )
+                stages.run_port_stage(runner, settings, hosts, reporter=self._reporter)
                 self._check_cancel()
 
                 stages.run_deep_inspection_stage(

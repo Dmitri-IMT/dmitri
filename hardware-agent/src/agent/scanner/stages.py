@@ -121,9 +121,7 @@ def run_deep_inspection_stage(
     )
     hosts_total = len(eligible_hosts)
     started_message = (
-        "Running scripts…"
-        if hosts_total
-        else "No hosts to inspect — skipping scripts"
+        "Running scripts…" if hosts_total else "No hosts to inspect — skipping scripts"
     )
     _emit(
         reporter,

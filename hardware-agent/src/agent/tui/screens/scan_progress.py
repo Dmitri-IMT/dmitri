@@ -263,7 +263,10 @@ class ScanProgressScreen(DmitriScreen):
                     f"[green]✓[/green] {self._scripts_hosts_total} hosts scanned",
                 )
             if self._done and self._payload is not None:
-                if "normalize" in self._stage_lines or "normalize" in self._active_stages:
+                if (
+                    "normalize" in self._stage_lines
+                    or "normalize" in self._active_stages
+                ):
                     self._finish_stage("normalize", self._done_line(self._payload))
             else:
                 self._start_stage("normalize", "Generating results…")
