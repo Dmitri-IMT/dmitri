@@ -84,15 +84,31 @@ def write_meta_json(
     return meta_path
 
 
-def prune_logs(logs_dir: Path, max_count: int = 10) -> None:
-    """Delete oldest run directories under logs/ when count exceeds max_count."""
+def prune_logs(
+    logs_dir: Path,
+    max_count: int = 10,
+    *,
+    protected: frozenset[Path] | None = None,
+) -> None:
+    """Delete oldest run directories under logs/ when count exceeds max_count.
+
+    Directories in *protected* (typically in-flight nmap runs) are never removed.
+    """
+    protected = protected or frozenset()
     dirs = sorted(
         (d for d in logs_dir.iterdir() if d.is_dir()),
         key=lambda d: d.name,
     )
     excess = len(dirs) - max_count
-    for d in dirs[:excess]:
+    if excess <= 0:
+        return
+    for d in dirs:
+        if excess <= 0:
+            break
+        if d in protected:
+            continue
         shutil.rmtree(d)
+        excess -= 1
 
 
 def prune_results(results_dir: Path, max_count: int = 10) -> None:

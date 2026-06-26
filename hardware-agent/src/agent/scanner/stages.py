@@ -13,11 +13,13 @@ from agent.discovery.port_discovery import (
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload
 from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
+from agent.scanner.progress import ScanEvent
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
     from agent.scanner.models import HostInfo
     from agent.scanner.nmap import NmapRunner
+    from agent.scanner.progress import ScanReporter
     from agent.utils.network import LocalNetworkInfo
 
 LOGGER = logging.getLogger(__name__)
@@ -26,6 +28,11 @@ LOGGER = logging.getLogger(__name__)
 def set_runner_stage(runner: NmapRunner, stage: str) -> None:
     if isinstance(runner, LoggedNmapRunner):
         runner.set_stage(stage)
+
+
+def _emit(reporter: ScanReporter | None, event: ScanEvent) -> None:
+    if reporter is not None:
+        reporter.emit(event)
 
 
 def _chunked(items: list[str], chunk_size: int) -> list[list[str]]:
@@ -38,6 +45,7 @@ def run_port_stage(
     runner: NmapRunner,
     settings: AgentSettings,
     hosts: list[HostInfo],
+    reporter: ScanReporter | None = None,
 ) -> None:
     set_runner_stage(runner, "ports")
     LOGGER.info(
@@ -47,6 +55,14 @@ def run_port_stage(
     )
     batches = _chunked([host.ip for host in hosts], settings.host_batch_size)
     host_map = {host.ip: host for host in hosts}
+    started_message = (
+        "Scanning all ports…"
+        if settings.scan_mode in {"extensive", "max"}
+        else "Scanning ports…"
+    )
+    _emit(reporter, ScanEvent(kind="port_stage_started", message=started_message))
+    batches_total = len(batches)
+    batches_done = 0
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
             executor.submit(
@@ -71,12 +87,31 @@ def run_port_stage(
                     host.ip,
                     len(host.ports),
                 )
+            batches_done += 1
+            _emit(
+                reporter,
+                ScanEvent(
+                    kind="port_batch_done",
+                    batches_done=batches_done,
+                    batches_total=batches_total,
+                ),
+            )
+    ports_open = sum(len(host.ports) for host in hosts)
+    _emit(
+        reporter,
+        ScanEvent(
+            kind="port_stage_done",
+            message=f"{ports_open} open ports found",
+            ports_open=ports_open,
+        ),
+    )
 
 
 def run_deep_inspection_stage(
     runner: NmapRunner,
     settings: AgentSettings,
     hosts: list[HostInfo],
+    reporter: ScanReporter | None = None,
 ) -> None:
     set_runner_stage(runner, "nse")
     eligible_hosts = [host for host in hosts if host.open_ports]
@@ -84,6 +119,19 @@ def run_deep_inspection_stage(
         "Starting deep inspection stage for %s hosts with open ports.",
         len(eligible_hosts),
     )
+    hosts_total = len(eligible_hosts)
+    started_message = (
+        "Running scripts…" if hosts_total else "No hosts to inspect — skipping scripts"
+    )
+    _emit(
+        reporter,
+        ScanEvent(
+            kind="deep_stage_started",
+            message=started_message,
+            hosts_total=hosts_total,
+        ),
+    )
+    hosts_done = 0
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
             executor.submit(
@@ -100,6 +148,17 @@ def run_deep_inspection_stage(
         for future in as_completed(futures):
             host = futures[future]
             result = future.result()
+            hosts_done += 1
+            _emit(
+                reporter,
+                ScanEvent(
+                    kind="host_inspected",
+                    message=f"Scanned {host.ip} ({hosts_done}/{hosts_total})",
+                    hosts_done=hosts_done,
+                    hosts_total=hosts_total,
+                    ip=host.ip,
+                ),
+            )
             if result is None:
                 continue
             host.ports = merge_ports(host.ports, result.ports)

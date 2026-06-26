@@ -230,6 +230,19 @@ class TestPruneLogs:
         remaining_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
         assert len(remaining_dirs) == 10
 
+    def test_skips_protected_directories(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        dirs = self._make_run_dirs(logs_dir, 12)
+        protected = frozenset({dirs[0], dirs[1]})
+
+        prune_logs(logs_dir, max_count=10, protected=protected)
+
+        assert dirs[0].exists()
+        assert dirs[1].exists()
+        assert not dirs[2].exists()
+        remaining = [d for d in logs_dir.iterdir() if d.is_dir()]
+        assert len(remaining) == 10
+
 
 class TestPruneResults:
     def _make_result_files(self, results_dir: Path, count: int) -> list[Path]:

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from agent.config import AgentSettings
 
 LOGGER = logging.getLogger(__name__)
-AGENT_VERSION = "0.1.3"
+AGENT_VERSION = "0.1.4"
 
 
 class NmapExecutionError(RuntimeError):
@@ -162,6 +162,8 @@ class LoggedNmapRunner(NmapRunner):
         self.parent_scan_id = parent_scan_id
         self.agent_version = agent_version
         self._current_stage = "unknown"
+        self._run_lock = threading.Lock()
+        self._active_run_dirs: set[Path] = set()
 
     def set_stage(self, stage: str) -> None:
         self._current_stage = stage
@@ -176,54 +178,62 @@ class LoggedNmapRunner(NmapRunner):
 
         run_name = make_run_folder_name(self._current_stage)
         run_dir = self.logs_dir / run_name
-        run_dir.mkdir(parents=True, exist_ok=True)
+        with self._run_lock:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            self._active_run_dirs.add(run_dir)
 
         xml_path = run_dir / "nmaprun.xml"
         full_argv = build_nmap_argv(arguments, xml_path)
 
         started_at = datetime.now(timezone.utc)
-        result = self.run_streamed(full_argv, run_dir)
-        finished_at = datetime.now(timezone.utc)
+        try:
+            result = self.run_streamed(full_argv, run_dir)
+            finished_at = datetime.now(timezone.utc)
 
-        if result.exit_code == 0:
-            terminated_by = "completed"
-        else:
-            terminated_by = "error"
+            if result.exit_code == 0:
+                terminated_by = "completed"
+            else:
+                terminated_by = "error"
 
-        write_meta_json(
-            run_dir,
-            nmap_path=self.nmap_path,
-            argv=full_argv,
-            started_at=started_at,
-            finished_at=finished_at,
-            exit_code=result.exit_code,
-            terminated_by=terminated_by,
-            scan_workspace_root=self.workspace_root,
-            parent_scan_id=self.parent_scan_id,
-            agent_version=self.agent_version,
-        )
-
-        prune_logs(self.logs_dir)
-
-        if result.exit_code != 0:
-            stderr_text = ""
-            if result.stderr_log.exists():
-                stderr_text = result.stderr_log.read_text(encoding="utf-8").strip()
-            raise NmapExecutionError(
-                stderr_text or "Nmap returned a non-zero exit code."
+            write_meta_json(
+                run_dir,
+                nmap_path=self.nmap_path,
+                argv=full_argv,
+                started_at=started_at,
+                finished_at=finished_at,
+                exit_code=result.exit_code,
+                terminated_by=terminated_by,
+                scan_workspace_root=self.workspace_root,
+                parent_scan_id=self.parent_scan_id,
+                agent_version=self.agent_version,
             )
 
-        if not xml_path.exists():
-            raise NmapExecutionError("Nmap did not produce XML output.")
+            if result.exit_code != 0:
+                stderr_text = ""
+                if result.stderr_log.exists():
+                    stderr_text = result.stderr_log.read_text(encoding="utf-8").strip()
+                raise NmapExecutionError(
+                    stderr_text or "Nmap returned a non-zero exit code."
+                )
 
-        try:
-            root = ET.fromstring(xml_path.read_text(encoding="utf-8"))
-        except ET.ParseError as exc:
-            raise NmapExecutionError("Nmap did not return valid XML output.") from exc
+            if not xml_path.exists():
+                raise NmapExecutionError("Nmap did not produce XML output.")
 
-        _strip_namespaces(root)
-        LOGGER.info("Logged nmap run: %s", run_name)
-        return root
+            try:
+                root = ET.fromstring(xml_path.read_text(encoding="utf-8"))
+            except ET.ParseError as exc:
+                raise NmapExecutionError(
+                    "Nmap did not return valid XML output."
+                ) from exc
+
+            _strip_namespaces(root)
+            LOGGER.info("Logged nmap run: %s", run_name)
+            return root
+        finally:
+            with self._run_lock:
+                self._active_run_dirs.discard(run_dir)
+                protected = frozenset(self._active_run_dirs)
+            prune_logs(self.logs_dir, protected=protected)
 
 
 def build_runner(
