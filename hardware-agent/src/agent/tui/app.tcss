@@ -131,8 +131,23 @@ Screen {
     height: auto;
 }
 
-#progress-container Static {
+#scan-header {
+    text-style: bold;
     margin-bottom: 1;
+}
+
+#progress-row {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#progress-bar {
+    width: 100%;
+}
+
+#activity-log {
+    height: 10;
+    border: round $panel;
 }
 
 #scan-done-actions {
