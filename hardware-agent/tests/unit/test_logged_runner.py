@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import textwrap
+import threading
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,6 +38,8 @@ def _make_logged_runner(workspace: Path, stage: str = "discovery") -> LoggedNmap
     runner.parent_scan_id = "test-scan-123"
     runner.agent_version = "0.1.0"
     runner._current_stage = stage
+    runner._run_lock = threading.Lock()
+    runner._active_run_dirs = set()
     return runner
 
 
@@ -179,6 +182,37 @@ class TestLoggedNmapRunnerRunXml:
         assert "-v" in argv
         assert "--stats-every" in argv
         assert "-oX" in argv
+
+
+class TestLoggedNmapRunnerConcurrentPrune:
+    def test_prune_skips_in_flight_run_directory(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "workspace"
+        logs_dir = workspace / "logs"
+        logs_dir.mkdir(parents=True)
+
+        slow_dir = logs_dir / "2026-05-01-10-00-00-nse-slow"
+        slow_dir.mkdir()
+        (slow_dir / "console.log").write_text("still running", encoding="utf-8")
+
+        for i in range(10):
+            d = logs_dir / f"2026-05-{i + 2:02d}-10-00-00-old-aa{i:02x}"
+            d.mkdir()
+            (d / "meta.json").write_text("{}", encoding="utf-8")
+
+        runner = _make_logged_runner(workspace, stage="nse")
+        runner._active_run_dirs.add(slow_dir)
+
+        script = (
+            "import sys; "
+            f"open(sys.argv[sys.argv.index('-oX')+1], 'w').write('''{VALID_XML}''')"
+        )
+        runner.run_xml(["-c", script])
+
+        assert slow_dir.exists()
+        assert (slow_dir / "console.log").read_text(encoding="utf-8") == "still running"
+        run_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
+        assert len(run_dirs) == 10
+        assert any(d.name.startswith("2026-") and "-nse-" in d.name for d in run_dirs)
 
 
 class TestBuildRunner:
