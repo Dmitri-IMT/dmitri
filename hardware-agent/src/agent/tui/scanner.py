@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -17,25 +16,12 @@ from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner import stages
 from agent.scanner.nmap import NmapRunner, build_runner
+from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
 class ScanCancelled(Exception):
     """Raised when the scan is aborted by the user."""
-
-
-@dataclass(slots=True)
-class ProgressSnapshot:
-    """A stage transition report sent to the UI."""
-
-    stage: str
-    detail: str = ""
-    completed: bool = False
-
-
-StageType = Literal[
-    "discovery", "port_scan", "deep_inspection", "normalizing", "completed"
-]
 
 
 class ScanRunner:
@@ -45,7 +31,7 @@ class ScanRunner:
         self,
         subnet: str,
         scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"],
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        reporter: ScanReporter | None = None,
         on_complete: Callable[[ScanPayload], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
         workspace_root: Path | None = None,
@@ -53,7 +39,7 @@ class ScanRunner:
     ) -> None:
         self.subnet = subnet
         self.scan_mode = scan_mode
-        self._on_progress = on_progress
+        self._reporter = reporter
         self._on_complete = on_complete
         self._on_error = on_error
         self._workspace_root = workspace_root
@@ -76,11 +62,9 @@ class ScanRunner:
         if self._cancel_event.is_set():
             raise ScanCancelled()
 
-    def _emit(self, stage: str, detail: str = "", *, completed: bool = False) -> None:
-        if self._on_progress:
-            self._on_progress(
-                ProgressSnapshot(stage=stage, detail=detail, completed=completed)
-            )
+    def _emit(self, event: ScanEvent) -> None:
+        if self._reporter is not None:
+            self._reporter.emit(event)
 
     def _run(self) -> None:
         try:
@@ -106,38 +90,42 @@ class ScanRunner:
 
             started_counter = perf_counter()
 
-            self._emit("discovery")
+            self._emit(
+                ScanEvent(kind="discovery_started", message="Finding hosts…")
+            )
             self._check_cancel()
             stages.set_runner_stage(runner, "discovery")
             hosts = discover_hosts(runner, self.subnet)
             self._check_cancel()
 
             hosts_count = len(hosts)
-            self._emit("discovery", f"({hosts_count} hosts found)", completed=True)
+            self._emit(
+                ScanEvent(
+                    kind="hosts_found",
+                    message=(
+                        f"{hosts_count} hosts found"
+                        if hosts_count
+                        else "No hosts found"
+                    ),
+                    hosts_total=hosts_count,
+                )
+            )
 
-            self._emit("port_scan")
             if hosts:
                 self._check_cancel()
-                stages.run_port_stage(runner, settings, hosts)
-                self._check_cancel()
-
-                total_ports = sum(len(h.ports) for h in hosts)
-                self._emit(
-                    "port_scan",
-                    f"Ports open: {total_ports}",
-                    completed=True,
+                stages.run_port_stage(
+                    runner, settings, hosts, reporter=self._reporter
                 )
-
-                self._emit("deep_inspection")
-                stages.run_deep_inspection_stage(runner, settings, hosts)
                 self._check_cancel()
-                self._emit("deep_inspection", "Done", completed=True)
-            else:
-                self._emit("port_scan", "(no hosts)", completed=True)
-                self._emit("deep_inspection")
-                self._emit("deep_inspection", "(skipped)", completed=True)
 
-            self._emit("normalizing")
+                stages.run_deep_inspection_stage(
+                    runner, settings, hosts, reporter=self._reporter
+                )
+                self._check_cancel()
+
+            self._emit(
+                ScanEvent(kind="normalize_started", message="Generating results…")
+            )
             self._check_cancel()
             findings = extract_findings(hosts)
             elapsed_seconds = round(perf_counter() - started_counter, 2)
@@ -159,20 +147,14 @@ class ScanRunner:
                 ),
             )
 
-            final_ports = sum(len(d.ports) for d in devices)
-            self._emit(
-                "normalizing",
-                f"Ports: {final_ports} | Vulnerabilities: {len(findings)}",
-                completed=True,
-            )
-
             self._check_cancel()
-            self._emit("completed", "DONE!")
+            self._emit(ScanEvent(kind="completed", message="Done"))
             if self._on_complete:
                 self._on_complete(payload)
 
         except ScanCancelled:
-            pass
+            self._emit(ScanEvent(kind="failed", message="Scan aborted"))
         except Exception as exc:
+            self._emit(ScanEvent(kind="failed", message=f"Scan failed: {exc}"))
             if self._on_error:
                 self._on_error(exc)
