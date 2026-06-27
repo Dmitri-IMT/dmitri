@@ -34,6 +34,7 @@
 | [`adr/ADR-007-deployment-architecture.md`](adr/ADR-007-deployment-architecture.md) | Touch deployment / packaging |
 | [`adr/ADR-008-frontend-stack.md`](adr/ADR-008-frontend-stack.md) | Touch the frontend stack |
 | [`adr/ADR-009-database-stack.md`](adr/ADR-009-database-stack.md) | Touch persistence / database |
+| [`adr/ADR-010-scan-contingency-policy.md`](adr/ADR-010-scan-contingency-policy.md) | Decide when a scan stops vs. continues on errors (timeouts, partial results, taxonomy) |
 
 ### Scan & vulnerability pipeline (`implementation/`)
 
