@@ -213,4 +213,6 @@ __marimo__/
 
 # Development
 .cursor/
-specs/
+
+# Specs before 010 (keep 010+ tracked)
+specs/00[0-9]-*/
