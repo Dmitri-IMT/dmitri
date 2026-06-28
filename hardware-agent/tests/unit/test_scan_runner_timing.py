@@ -21,7 +21,9 @@ class _FakeRunner(NmapRunner):
     def __init__(self) -> None:
         self.nmap_path = "fake-nmap"
 
-    def run_xml(self, arguments: list[str]) -> ET.Element:
+    def run_xml(
+        self, arguments: list[str], timeout: float | None = None
+    ) -> ET.Element:
         time.sleep(0.02)
         return ET.fromstring("<nmaprun/>")
 
