@@ -57,6 +57,7 @@ def scan_ports_batch(
     runner: NmapRunner,
     ips: list[str],
     scan_mode: str,
+    timeout: float | None = None,
 ) -> dict[str, list[PortInfo]]:
     """Enumerate ports for a batch of hosts in one Nmap process."""
 
@@ -64,11 +65,11 @@ def scan_ports_batch(
         return {}
 
     if scan_mode == "nspi":
-        return _scan_ports_batch_nspi(runner, ips)
+        return _scan_ports_batch_nspi(runner, ips, timeout=timeout)
 
     arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), *ips]
 
-    root = runner.run_xml(arguments)
+    root = runner.run_xml(arguments, timeout=timeout)
     results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}
     for host_element in root.findall("host"):
         ip = extract_ipv4(host_element)
@@ -81,6 +82,7 @@ def scan_ports_batch(
 def _scan_ports_batch_nspi(
     runner: NmapRunner,
     ips: list[str],
+    timeout: float | None = None,
 ) -> dict[str, list[PortInfo]]:
     """NSPi two-pass port scan: top-1000 + OT-specific ports, merged."""
 
@@ -88,7 +90,7 @@ def _scan_ports_batch_nspi(
 
     # Pass 1: top-1000 (no -p flag)
     pass1_args = ["-Pn", "-T2", "-n", "-sV", "-O", *ips]
-    root1 = runner.run_xml(pass1_args)
+    root1 = runner.run_xml(pass1_args, timeout=timeout)
     for host_element in root1.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:
@@ -96,7 +98,7 @@ def _scan_ports_batch_nspi(
 
     # Pass 2: OT-specific ports
     pass2_args = ["-Pn", "-T2", "-n", "-p", NSPI_PORTS, "-sV", *ips]
-    root2 = runner.run_xml(pass2_args)
+    root2 = runner.run_xml(pass2_args, timeout=timeout)
     for host_element in root2.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:

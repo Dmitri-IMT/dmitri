@@ -36,11 +36,7 @@ def _fake_nvd_payload(cve_id: str) -> dict[str, object]:
                     "references": [
                         {"url": f"https://nvd.nist.gov/vuln/detail/{cve_id}"}
                     ],
-                    "metrics": {
-                        "cvssMetricV31": [
-                            {"cvssData": {"baseScore": 8.1}}
-                        ]
-                    },
+                    "metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": 8.1}}]},
                 }
             }
         ]

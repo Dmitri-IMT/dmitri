@@ -73,8 +73,7 @@ def main() -> int:
         findings = _get_json(f"{api_base_url}/api/v1/findings")
 
         if not any(
-            job["status"] == "completed"
-            for job in detail_after["enrichment_jobs"]
+            job["status"] == "completed" for job in detail_after["enrichment_jobs"]
         ):
             raise RuntimeError("Smoke test failed: worker did not complete any jobs.")
         if not any(

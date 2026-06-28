@@ -63,9 +63,11 @@ def parse_epss_record(payload: dict[str, Any], cve_id: str) -> dict[str, Any] | 
     return {
         "cve_id": cve_id.upper(),
         "epss_score": float(record["epss"]),
-        "percentile": float(record["percentile"])
-        if record.get("percentile") is not None
-        else None,
+        "percentile": (
+            float(record["percentile"])
+            if record.get("percentile") is not None
+            else None
+        ),
         "scored_at": scored_at,
         "raw_json": record,
     }

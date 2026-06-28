@@ -136,6 +136,12 @@ Screen {
     margin-bottom: 1;
 }
 
+#scan-badge {
+    margin-bottom: 1;
+    text-style: bold;
+    display: none;
+}
+
 #progress-row {
     height: 1;
     margin-bottom: 1;

@@ -1,0 +1,61 @@
+# Product Roadmap — Dmitri
+
+> **What this folder is:** forward-looking, per-layer roadmaps for taking Dmitri from
+> "working TUI + scanning backend" to the **final product** (remotely-commandable Pi,
+> frontend-facing backend, web app, and an in-app LLM explainer).
+>
+> **What this folder is *not*:** current-state architecture (see
+> [`../architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)) or locked decisions
+> (see [`../adr/`](../adr/)). Those documents hold real truth, but **they are not absolute** —
+> several were written before the current code existed. Where a roadmap doc relies on an ADR
+> claim that needs checking against reality, it is flagged **⚠️ REVALIDATE**.
+
+## Documents
+
+| Doc | Layer | Status today |
+|-----|-------|--------------|
+| [`PI.md`](PI.md) | Raspberry Pi agent | **Software built (dev machine/TUI).** No Pi hardware yet. No daemon, no backend HTTP client. |
+| [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · ADR-011 |
+| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); not built in code |
+| [`FRONTEND.md`](FRONTEND.md) | React SPA | **Greenfield.** No `frontend/` directory exists. |
+| [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
+| [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
+
+## Where each layer stands (one paragraph)
+
+The scan pipeline (`hardware-agent/`) runs on developer machines via the TUI and writes normalized
+JSON locally. **No Raspberry Pi hardware is in possession yet** — acquisition is on the critical
+path for September. A separate FastAPI backend (`backend/`) can ingest payloads, enrich, and score
+risk — but **nothing calls the backend today**; the link is the shared `contracts/` schema only.
+**September (B10 = Control):** scan-from-web via command channel, Pi daemon, frontend trigger.
+**Still missing:** Pi hardware, Pi→backend transport, command channel, **frontend**, auth in code,
+LLM explainer. This roadmap sequences those.
+
+## Cross-layer milestone sequencing
+
+These layers are coupled; build in roughly this order so each layer has something real to talk to:
+
+1. **Pi hardware** (PI): acquire + base configure per ADR-001 — **blocker today**
+2. **Hosted stack** (BACKEND B4/B5): Supabase + Railway for NSPi — [`epics/EPICS.md`](../epics/EPICS.md)
+3. **Auth Phase 1** — implement [`AUTH.md`](AUTH.md) (roadmap ✅)
+4. **ADR-011 + OpenAPI** — ✅ [`ADR-011`](../adr/ADR-011-pi-command-channel.md); implement `contracts/openapi/` in backend/Pi
+5. **Agent transport + command channel** (PI + BACKEND B6): daemon, **WebSocket**, Postgres command rows, ingest
+6. **Frontend MVP** (FRONTEND): read UI + **"Scan now"** (B10 Control ✅)
+7. **Auth Phase 2** (EOY): product-ready identity — [`AUTH.md`](AUTH.md)
+8. **LLM explainer** (AI + BACKEND)
+9. **Auth Phase 3 + enterprise** (deal-driven)
+
+## Keeping these docs in sync
+
+These docs share contracts (API shapes, auth, the Pi command channel). **Changing one usually
+ripples to its neighbours.** The dependency map and the review rule live in the
+**`roadmap-sync`** skill (`.claude/skills/roadmap-sync/`). After editing any file here, run it —
+it tells you which sibling docs and the status table above to re-check.
+
+## Conventions
+
+- **⚠️ REVALIDATE** — a claim inherited from an ADR/ARCHITECTURE that must be checked against
+  the code before it is trusted.
+- **🔓 OPEN** — a decision not yet made; the doc lists options and a recommendation.
+- Keep these short. Link to ADRs/ARCHITECTURE for detail instead of restating them.
+- New cross-layer decisions get a real ADR under [`../adr/`](../adr/) once settled here.

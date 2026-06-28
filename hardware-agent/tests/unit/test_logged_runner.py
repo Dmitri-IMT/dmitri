@@ -11,9 +11,9 @@ from uuid import uuid4
 
 import pytest
 from agent.config import AgentSettings
+from agent.scanner.errors import UnitScanError
 from agent.scanner.nmap import (
     LoggedNmapRunner,
-    NmapExecutionError,
     NmapRunner,
     build_runner,
 )
@@ -40,6 +40,9 @@ def _make_logged_runner(workspace: Path, stage: str = "discovery") -> LoggedNmap
     runner._current_stage = stage
     runner._run_lock = threading.Lock()
     runner._active_run_dirs = set()
+    runner._proc_lock = threading.Lock()
+    runner._active_procs = set()
+    runner._cancelled = False
     return runner
 
 
@@ -107,7 +110,7 @@ class TestLoggedNmapRunnerRunXml:
         (workspace / "logs").mkdir(parents=True)
         runner = _make_logged_runner(workspace)
 
-        with pytest.raises(NmapExecutionError):
+        with pytest.raises(UnitScanError):
             runner.run_xml(["-c", "raise SystemExit(1)"])
 
         run_dir = next((workspace / "logs").iterdir())

@@ -12,6 +12,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent.scanner.errors import (
+    BudgetExceeded,
+    FatalScanError,
+    ScanError,
+    TransientScanError,
+    UnitScanError,
+)
+
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -20,9 +28,20 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 AGENT_VERSION = "0.1.4"
 
+TRANSIENT_STDERR_MARKERS = (
+    "temporary failure in name resolution",
+    "connection reset",
+)
 
-class NmapExecutionError(RuntimeError):
-    """Raised when Nmap fails to execute or emits invalid XML."""
+
+def _classify_nonzero(stderr_text: str) -> ScanError:
+    lowered = stderr_text.lower()
+    for marker in TRANSIENT_STDERR_MARKERS:
+        if marker in lowered:
+            return TransientScanError(
+                stderr_text or "Nmap returned a transient failure."
+            )
+    return UnitScanError(stderr_text or "Nmap returned a non-zero exit code.")
 
 
 @dataclass(slots=True)
@@ -53,7 +72,7 @@ def _resolve_nmap_path(candidate: str | None) -> str:
         if location.exists():
             return str(location)
 
-    raise NmapExecutionError(
+    raise FatalScanError(
         "Nmap executable not found. Set AGENT_NMAP_PATH or install nmap in PATH."
     )
 
@@ -71,21 +90,41 @@ class NmapRunner:
 
     def __init__(self, nmap_path: str | None = None) -> None:
         self.nmap_path = _resolve_nmap_path(nmap_path)
+        self._proc_lock = threading.Lock()
+        self._active_procs: set[subprocess.Popen] = set()
+        self._cancelled = False
 
-    def run_xml(self, arguments: list[str]) -> ET.Element:
+    def terminate_active(self) -> None:
+        self._cancelled = True
+        with self._proc_lock:
+            procs = list(self._active_procs)
+        for proc in procs:
+            proc.kill()
+
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         """Execute Nmap and parse its XML output."""
 
         command = [self.nmap_path, *arguments, "-oX", "-"]
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            raise NmapExecutionError(
-                result.stderr.strip() or "Nmap returned a non-zero exit code."
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise BudgetExceeded(f"Nmap exceeded its {timeout}s timeout.") from exc
+        except FileNotFoundError as exc:
+            raise FatalScanError(f"Nmap executable not found: {exc}") from exc
+
+        if result.returncode != 0:
+            raise _classify_nonzero(result.stderr.strip())
 
         try:
             root = ET.fromstring(result.stdout)
         except ET.ParseError as exc:
-            raise NmapExecutionError("Nmap did not return valid XML output.") from exc
+            raise UnitScanError("Nmap did not return valid XML output.") from exc
 
         _strip_namespaces(root)
         return root
@@ -94,6 +133,7 @@ class NmapRunner:
         self,
         arguments: list[str],
         run_dir: Path,
+        timeout: float | None = None,
     ) -> StreamedRunResult:
         """Execute Nmap with streaming stdout/stderr to files in run_dir.
 
@@ -104,13 +144,16 @@ class NmapRunner:
         xml_path = run_dir / "nmaprun.xml"
 
         command = [self.nmap_path, *arguments]
-        proc = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            errors="replace",
-        )
+        try:
+            proc = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+            )
+        except FileNotFoundError as exc:
+            raise FatalScanError(f"Nmap executable not found: {exc}") from exc
 
         stdout_thread = threading.Thread(
             target=_stream_pipe_to_file,
@@ -123,9 +166,22 @@ class NmapRunner:
         stdout_thread.start()
         stderr_thread.start()
 
-        proc.wait()
-        stdout_thread.join()
-        stderr_thread.join()
+        with self._proc_lock:
+            self._active_procs.add(proc)
+        try:
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                proc.kill()
+                proc.wait()
+                stdout_thread.join()
+                stderr_thread.join()
+                raise BudgetExceeded(f"Nmap exceeded its {timeout}s timeout.") from exc
+            stdout_thread.join()
+            stderr_thread.join()
+        finally:
+            with self._proc_lock:
+                self._active_procs.discard(proc)
 
         return StreamedRunResult(
             exit_code=proc.returncode,
@@ -168,7 +224,7 @@ class LoggedNmapRunner(NmapRunner):
     def set_stage(self, stage: str) -> None:
         self._current_stage = stage
 
-    def run_xml(self, arguments: list[str]) -> ET.Element:
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         from agent.scanner.workspace import (
             build_nmap_argv,
             make_run_folder_name,
@@ -187,11 +243,28 @@ class LoggedNmapRunner(NmapRunner):
 
         started_at = datetime.now(timezone.utc)
         try:
-            result = self.run_streamed(full_argv, run_dir)
+            try:
+                result = self.run_streamed(full_argv, run_dir, timeout=timeout)
+            except BudgetExceeded:
+                write_meta_json(
+                    run_dir,
+                    nmap_path=self.nmap_path,
+                    argv=full_argv,
+                    started_at=started_at,
+                    finished_at=datetime.now(timezone.utc),
+                    exit_code=None,
+                    terminated_by="timeout",
+                    scan_workspace_root=self.workspace_root,
+                    parent_scan_id=self.parent_scan_id,
+                    agent_version=self.agent_version,
+                )
+                raise
             finished_at = datetime.now(timezone.utc)
 
             if result.exit_code == 0:
                 terminated_by = "completed"
+            elif self._cancelled:
+                terminated_by = "user_cancel"
             else:
                 terminated_by = "error"
 
@@ -212,19 +285,15 @@ class LoggedNmapRunner(NmapRunner):
                 stderr_text = ""
                 if result.stderr_log.exists():
                     stderr_text = result.stderr_log.read_text(encoding="utf-8").strip()
-                raise NmapExecutionError(
-                    stderr_text or "Nmap returned a non-zero exit code."
-                )
+                raise _classify_nonzero(stderr_text)
 
             if not xml_path.exists():
-                raise NmapExecutionError("Nmap did not produce XML output.")
+                raise UnitScanError("Nmap did not produce XML output.")
 
             try:
                 root = ET.fromstring(xml_path.read_text(encoding="utf-8"))
             except ET.ParseError as exc:
-                raise NmapExecutionError(
-                    "Nmap did not return valid XML output."
-                ) from exc
+                raise UnitScanError("Nmap did not return valid XML output.") from exc
 
             _strip_namespaces(root)
             LOGGER.info("Logged nmap run: %s", run_name)

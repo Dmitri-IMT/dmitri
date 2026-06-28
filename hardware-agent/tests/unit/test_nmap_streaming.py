@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 from agent.scanner.nmap import NmapRunner, StreamedRunResult
@@ -12,6 +13,9 @@ def _make_runner() -> NmapRunner:
     """Create a runner pointing at the Python interpreter (used as a fake nmap)."""
     runner = NmapRunner.__new__(NmapRunner)
     runner.nmap_path = sys.executable
+    runner._proc_lock = threading.Lock()
+    runner._active_procs = set()
+    runner._cancelled = False
     return runner
 
 

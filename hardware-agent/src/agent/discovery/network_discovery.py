@@ -8,10 +8,14 @@ from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
 
 
-def discover_hosts(runner: NmapRunner, subnet: str) -> list[HostInfo]:
+def discover_hosts(
+    runner: NmapRunner,
+    subnet: str,
+    timeout: float | None = None,
+) -> list[HostInfo]:
     """Return live hosts discovered by Nmap host discovery."""
 
-    root = runner.run_xml(["-sn", "-PE", "-T4", subnet])
+    root = runner.run_xml(["-sn", "-PE", "-T4", subnet], timeout=timeout)
     hosts: list[HostInfo] = []
     for host_element in root.findall("host"):
         parsed = _parse_host(host_element)

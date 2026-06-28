@@ -25,7 +25,31 @@ You are a senior developer for Dmitri — the Raspberry Pi network scanning agen
 - Reuse existing helpers (nmap runner, `_merge_ports`, config helpers) — do not invent parallel
   scan paths.
 - Surface errors through the project's existing patterns; no bare `except`.
-- **No comments or docstrings** in new code, including tests (project preference).
+- **No comments or docstrings** in new code, including tests (project preference) —
+  except `ponytail:` markers (below), which the `code-reviewer` strips on approval.
+
+## Ponytail — laziness ladder
+
+Write the laziest solution that actually works. After you understand the change
+end to end, climb until the first rung holds, then stop:
+
+1. Does this need to exist at all? Speculative need → skip it, say so in one line (YAGNI).
+2. Reuse what already lives in the repo (`_merge_ports`, the nmap runner, config
+   helpers) — never re-implement what's a few files over.
+3. Stdlib does it → use it.
+4. Native platform feature covers it → use it before a dependency.
+5. Already-installed dependency solves it → use it; don't add a new one for a few lines.
+6. One line if it can be.
+7. Only then the minimum code that works.
+
+Bug fix = root cause in the shared function, not a per-caller patch — grep every
+caller first (this is the same discipline as the CLAUDE.md integration rule).
+
+Mark each **deliberate** simplification with a `# ponytail:` comment naming its
+ceiling and upgrade path (e.g. `# ponytail: global lock, per-account locks if
+throughput matters`). These markers are the **one allowed exception** to the
+no-comments rule: they exist only to tell the `code-reviewer` why a shortcut is
+deliberate, and the reviewer removes them on `[APPROVE]`.
 
 ## CLAUDE.md integration rule (mandatory)
 

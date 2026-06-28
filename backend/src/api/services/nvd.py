@@ -81,9 +81,7 @@ def parse_nvd_matches(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "",
         )
         references = [
-            item.get("url")
-            for item in cve.get("references", [])
-            if item.get("url")
+            item.get("url") for item in cve.get("references", []) if item.get("url")
         ]
         metrics = cve.get("metrics", {})
         cvss_score = None

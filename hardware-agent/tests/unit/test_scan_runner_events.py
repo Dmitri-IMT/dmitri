@@ -20,7 +20,9 @@ class _FakeRunner(NmapRunner):
     def __init__(self) -> None:
         self.nmap_path = "fake-nmap"
 
-    def run_xml(self, arguments: list[str]) -> ET.Element:
+    def run_xml(
+        self, arguments: list[str], timeout: float | None = None
+    ) -> ET.Element:
         return ET.fromstring("<nmaprun/>")
 
 
@@ -28,7 +30,9 @@ class _BoomRunner(NmapRunner):
     def __init__(self) -> None:
         self.nmap_path = "fake-nmap"
 
-    def run_xml(self, arguments: list[str]) -> ET.Element:
+    def run_xml(
+        self, arguments: list[str], timeout: float | None = None
+    ) -> ET.Element:
         raise RuntimeError("nmap exploded")
 
 

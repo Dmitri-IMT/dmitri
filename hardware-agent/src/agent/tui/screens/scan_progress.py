@@ -27,6 +27,20 @@ class ScanProgressScreen(DmitriScreen):
 
     _PCT_STEP = 5.0
 
+    _PARTIAL_REASONS = {
+        "user_cancel": "stopped by you; partial results kept",
+        "timeout": "a step timed out; partial results kept",
+        "error": "scan stopped early; partial results kept",
+    }
+
+    _INTERRUPTED_STAGE_LABELS = {
+        "discovery": "host discovery",
+        "ports": "port scanning",
+        "port_scan": "port scanning",
+        "deep_inspection": "deep inspection",
+        "normalize": "results generation",
+    }
+
     BINDINGS = [
         Binding("ctrl+x", "abort", "Abort scan", priority=True),
         Binding("escape", "no_op", show=False),
@@ -73,6 +87,7 @@ class ScanProgressScreen(DmitriScreen):
         self._target_pct = 0.0
         self._display_pct = 0.0
         self._done = False
+        self._state = "running"
         self._payload = None
         self._spinner_frame = 0
         self._stage_lines: dict[str, int] = {}
@@ -82,6 +97,7 @@ class ScanProgressScreen(DmitriScreen):
     def compose_body(self):
         with Vertical(id="progress-container"):
             yield Static("", id="scan-header")
+            yield Static("", id="scan-badge")
             with Horizontal(id="progress-row"):
                 yield ProgressBar(
                     total=100,
@@ -209,9 +225,10 @@ class ScanProgressScreen(DmitriScreen):
         self._target_pct = self._mapper.update(event)
         if event.kind == "failed":
             self._active_stages.clear()
-            self.query_one("#activity-log", RichLog).write(
-                f"[red]✗ {event.message}[/red]"
-            )
+            if self._state != "cancelling" and not self._terminal():
+                self.query_one("#activity-log", RichLog).write(
+                    f"[red]✗ {event.message}[/red]"
+                )
             return
         if event.kind == "completed":
             return
@@ -238,10 +255,14 @@ class ScanProgressScreen(DmitriScreen):
                 self._start_stage("ports", "Scanning ports…")
             return
         if kind == "port_stage_done":
-            self._finish_stage(
-                "ports",
-                f"[green]✓[/green] {event.ports_open} open ports found",
-            )
+            if event.units_skipped > 0:
+                line = (
+                    f"[yellow]⚠[/yellow] {event.ports_open} open ports found "
+                    f"({event.units_skipped} of {event.units_total} hosts skipped)"
+                )
+            else:
+                line = f"[green]✓[/green] {event.ports_open} open ports found"
+            self._finish_stage("ports", line)
             return
         if kind == "deep_stage_started":
             self._scripts_hosts_total = event.hosts_total
@@ -256,8 +277,28 @@ class ScanProgressScreen(DmitriScreen):
                 f"({event.hosts_done}/{event.hosts_total})[/dim]"
             )
             return
+        if kind == "unit_timed_out":
+            log.write(f"[yellow]  ↳ {event.ip} timed out (skipped)[/yellow]")
+            return
+        if kind == "unit_failed":
+            log.write(f"[yellow]  ↳ {event.ip} failed (skipped)[/yellow]")
+            return
+        if kind == "deep_stage_done":
+            if "scripts" not in self._stage_lines:
+                return
+            total = event.units_total
+            if event.units_skipped > 0:
+                scanned = total - event.units_skipped
+                line = (
+                    f"[yellow]⚠[/yellow] {scanned} of {total} hosts scanned "
+                    f"({event.units_skipped} skipped)"
+                )
+            else:
+                line = f"[green]✓[/green] {total} hosts scanned"
+            self._finish_stage("scripts", line)
+            return
         if kind == "normalize_started":
-            if self._scripts_hosts_total > 0:
+            if "scripts" in self._stage_lines:
                 self._finish_stage(
                     "scripts",
                     f"[green]✓[/green] {self._scripts_hosts_total} hosts scanned",
@@ -280,27 +321,78 @@ class ScanProgressScreen(DmitriScreen):
             f"{findings} vulnerabilities[/bold green]"
         )
 
+    def _terminal(self) -> bool:
+        return self._state in ("completed", "partial", "fatal")
+
+    def _enable_terminal_bindings(self, *, navigate: bool) -> None:
+        self._bindings.bind("escape", "no_op", "Esc Back", show=True)
+        if navigate:
+            self._bindings.bind("up", "focus_prev_btn", "↑↓ Navigate", show=True)
+            self._bindings.bind("down", "focus_next_btn", show=True)
+            self._bindings.bind("enter", "press_focused", "Enter Select", show=True)
+
     def _handle_complete(self, payload) -> None:
-        self._done = True
         self._payload = payload
         self._active_stages.clear()
+        metadata = getattr(payload, "metadata", None) or {}
+        if metadata.get("partial_result") is True:
+            self._handle_partial(payload)
+        else:
+            self._handle_success(payload)
 
+    def _handle_success(self, payload) -> None:
+        self._done = True
+        self._state = "completed"
         self._target_pct = 100.0
         self._display_pct = 100.0
         self.query_one("#progress-bar", ProgressBar).update(progress=100)
 
         self._finish_stage("normalize", self._done_line(payload))
 
-        self._bindings.bind("up", "focus_prev_btn", "↑↓ Navigate", show=True)
-        self._bindings.bind("down", "focus_next_btn", show=True)
-        self._bindings.bind("enter", "press_focused", "Enter Select", show=True)
-        self._bindings.bind("escape", "no_op", "Esc Back", show=True)
-
+        self._enable_terminal_bindings(navigate=True)
         self.query_one("#scan-done-actions").display = True
         self.query_one("#btn-view-scan", Button).focus()
 
+    def _handle_partial(self, payload) -> None:
+        if not payload.devices:
+            self.dismiss(None)
+            return
+        self._done = True
+        self._state = "partial"
+        metadata = payload.metadata or {}
+        reason = self._PARTIAL_REASONS.get(
+            metadata.get("terminated_by"), "partial results kept"
+        )
+        stage = self._INTERRUPTED_STAGE_LABELS.get(
+            metadata.get("interrupted_stage"), "an earlier stage"
+        )
+        badge = self.query_one("#scan-badge", Static)
+        badge.update(f"[black on yellow] PARTIAL [/] {reason}")
+        badge.display = True
+
+        devices = len(payload.devices)
+        findings = len(payload.findings)
+        self.query_one("#activity-log", RichLog).write(
+            f"[yellow]⚠ Partial — {devices} devices, "
+            f"{findings} vulnerabilities (interrupted during {stage})[/yellow]"
+        )
+
+        self._enable_terminal_bindings(navigate=True)
+        view = self.query_one("#btn-view-scan", Button)
+        view.label = "View partial scan"
+        self.query_one("#scan-done-actions").display = True
+        view.focus()
+
     def _handle_error(self, error: Exception) -> None:
-        self.notify(f"Scan error: {error}", severity="error")
+        self._state = "fatal"
+        self._active_stages.clear()
+        badge = self.query_one("#scan-badge", Static)
+        badge.update("[bold red]✗ SCAN FAILED — nothing to keep[/bold red]")
+        badge.display = True
+        self.query_one("#btn-view-scan", Button).display = False
+        self._enable_terminal_bindings(navigate=False)
+        self.query_one("#scan-done-actions").display = True
+        self.query_one("#btn-back-home", Button).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-view-scan":
@@ -308,44 +400,64 @@ class ScanProgressScreen(DmitriScreen):
         elif event.button.id == "btn-back-home":
             self.dismiss((self._payload, False))
 
-    def action_abort(self) -> None:
-        if self._done:
-            self.dismiss((self._payload, False))
-            return
+    def _enter_cancelling(self) -> None:
+        self._state = "cancelling"
+        self.query_one("#activity-log", RichLog).write(
+            "[yellow]● Stopping scan — terminating running steps…[/yellow]"
+        )
         if self._runner:
             self._runner.request_cancel()
-        self.dismiss(None)
+
+    def action_abort(self) -> None:
+        if self._terminal():
+            self.dismiss((self._payload, False))
+            return
+        if self._state == "cancelling":
+            return
+        self._enter_cancelling()
 
     def action_no_op(self) -> None:
-        if self._done:
+        if self._terminal():
             self.dismiss((self._payload, False))
 
+    def _terminal_buttons(self) -> list[Button]:
+        buttons = []
+        for button_id in ("btn-view-scan", "btn-back-home"):
+            button = self.query_one(f"#{button_id}", Button)
+            if button.display:
+                buttons.append(button)
+        return buttons
+
     def action_focus_next_btn(self) -> None:
-        if not self._done:
+        if not self._terminal():
             return
-        btn_view = self.query_one("#btn-view-scan", Button)
-        btn_home = self.query_one("#btn-back-home", Button)
+        buttons = self._terminal_buttons()
+        if len(buttons) < 2:
+            return
+        btn_view, btn_home = buttons
         if btn_view.has_focus:
             btn_home.focus()
         else:
             btn_view.focus()
 
     def action_focus_prev_btn(self) -> None:
-        if not self._done:
+        if not self._terminal():
             return
-        btn_view = self.query_one("#btn-view-scan", Button)
-        btn_home = self.query_one("#btn-back-home", Button)
+        buttons = self._terminal_buttons()
+        if len(buttons) < 2:
+            return
+        btn_view, btn_home = buttons
         if btn_home.has_focus:
             btn_view.focus()
         else:
             btn_home.focus()
 
     def action_press_focused(self) -> None:
-        if not self._done:
+        if not self._terminal():
             return
         btn_view = self.query_one("#btn-view-scan", Button)
         btn_home = self.query_one("#btn-back-home", Button)
-        if btn_view.has_focus:
+        if btn_view.display and btn_view.has_focus:
             self.dismiss((self._payload, True))
         elif btn_home.has_focus:
             self.dismiss((self._payload, False))

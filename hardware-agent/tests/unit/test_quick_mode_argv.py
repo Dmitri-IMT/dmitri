@@ -27,7 +27,7 @@ def _make_capturing_runner() -> tuple[NmapRunner, list[list[str]]]:
     runner.nmap_path = "nmap"
     captured: list[list[str]] = []
 
-    def _capture(arguments: list[str]) -> ET.Element:
+    def _capture(arguments: list[str], timeout: float | None = None) -> ET.Element:
         captured.append(list(arguments))
         return EMPTY_NMAP_XML
 

@@ -13,7 +13,15 @@ You review one completed task for Dmitri before it can be marked COMPLETED.
 ## Focus
 
 - Correctness, regressions, and missing tests.
-- Anti-overengineering: reject full rewrites and unrequested abstractions.
+- Anti-overengineering: reject full rewrites and unrequested abstractions. In a
+  `[REJECT]`, name each over-engineering finding on one line — location, what to
+  cut, what replaces it — using a tag: `delete:` (dead code / dead flexibility,
+  replaced by nothing), `stdlib:` (hand-rolled thing the stdlib ships — name the
+  function), `native:` (dep/code doing what the platform already does), `yagni:`
+  (abstraction with one implementation, config nobody sets, layer with one
+  caller), `shrink:` (same logic, fewer lines — show the shorter form). The
+  coder's `# ponytail:` markers state why a shortcut is deliberate; read them
+  before flagging a `shrink:`/`yagni:` that's already justified.
 - Every Success Criterion in the Task N section actually met.
 - The files actually changed match the Task's Target Files.
 - **CLAUDE.md integration rule**: if the task added an orchestrator/runner parameter, verify it
@@ -34,6 +42,12 @@ The **first line** must be exactly `[APPROVE]` or `[REJECT]`.
 If `[REJECT]`: a bullet list with file paths, line references, and the violated success
 criterion or spec section. Be specific enough for a fresh coder to fix without guessing.
 
+If `[APPROVE]`: before finishing, strip every `# ponytail:` marker comment the coder
+left in the touched files — this is the **single, mechanical exception** to "review
+only" (delete the marker lines, change no logic), so the committed code stays
+comment-free. Then re-run `uv run ruff check` on those files to confirm the strip
+broke nothing.
+
 ## POOP.md (mandatory before terminating)
 
 Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
@@ -46,4 +60,5 @@ Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior
 ## Behavioral guidelines
 
 Follow `.claude/CLAUDE.md`. Never approve work with failing tests — mark it `[REJECT]` and
-explain. Do not modify application code; review only.
+explain. Do not modify application code; review only — the sole exception is stripping
+`# ponytail:` marker comments on `[APPROVE]`, as described in the output contract.

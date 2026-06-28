@@ -21,6 +21,9 @@ class AgentSettings:
     host_batch_size: int = 8
     output_path: str = str(Path("hardware-agent") / "artifacts" / "latest-scan.json")
     version_intensity: int = 5
+    scan_deadline_s: int = 0
+    unit_failure_threshold: float = 0.5
+    transient_retries: int = 1
 
     def with_overrides(
         self,
@@ -114,6 +117,36 @@ def min_cvss_for_mode(scan_mode: str) -> float:
     if scan_mode == "max":
         return 1.0
     return 5.0
+
+
+TIMEOUTS: dict[str, dict[str, float]] = {
+    "discovery": {
+        "quick": 600.0,
+        "standard": 600.0,
+        "extensive": 600.0,
+        "nspi": 600.0,
+        "max": 600.0,
+    },
+    "ports": {
+        "quick": 600.0,
+        "standard": 900.0,
+        "extensive": 1800.0,
+        "nspi": 600.0,
+        "max": 3600.0,
+    },
+    "nse": {
+        "quick": 900.0,
+        "standard": 1200.0,
+        "extensive": 2400.0,
+        "nspi": 1200.0,
+        "max": 3600.0,
+    },
+}
+
+
+def subprocess_timeout_for(scan_mode: str, stage: str) -> float:
+    by_mode = TIMEOUTS.get(stage, TIMEOUTS["discovery"])
+    return by_mode.get(scan_mode, by_mode["quick"])
 
 
 def _parse_scan_mode(value: str | None) -> Literal["quick", "standard"]:
