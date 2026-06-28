@@ -11,6 +11,9 @@ ScanEventKind = Literal[
     "port_stage_done",
     "deep_stage_started",
     "host_inspected",
+    "deep_stage_done",
+    "unit_timed_out",
+    "unit_failed",
     "normalize_started",
     "completed",
     "failed",
@@ -27,6 +30,8 @@ class ScanEvent:
     batches_total: int = 0
     ports_open: int = 0
     ip: str | None = None
+    units_skipped: int = 0
+    units_total: int = 0
 
 
 class ScanReporter(Protocol):
@@ -70,7 +75,7 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
     if kind == "host_inspected":
         fraction = event.hosts_done / event.hosts_total if event.hosts_total else 0.0
         return d + p + i * fraction
-    if kind == "normalize_started":
+    if kind in ("normalize_started", "deep_stage_done"):
         return d + p + i
     if kind == "completed":
         return 100.0
