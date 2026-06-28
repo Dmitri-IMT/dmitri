@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
+import agent.tui.app as _agent_app
 import pytest
 from agent.normalize.contracts import (
     DevicePayload,
@@ -14,10 +16,12 @@ from agent.scanner.progress import ScanEvent
 from agent.tui.screens.scan_progress import ScanProgressScreen
 from textual.app import App
 from textual.css.query import NoMatches
-from textual.widgets import ProgressBar, RichLog, Static
+from textual.widgets import Button, ProgressBar, RichLog, Static
 
 
 class _Harness(App[None]):
+    CSS_PATH = Path(_agent_app.__file__).parent / "app.tcss"
+
     def __init__(self, screen: ScanProgressScreen) -> None:
         super().__init__()
         self._target_screen = screen
@@ -98,6 +102,28 @@ def _make_payload(n_devices: int, n_findings: int) -> ScanPayload:
         findings=findings,
         metadata={"hosts_discovered": n_devices, "findings_count": n_findings},
     )
+
+
+def _make_partial_payload(
+    n_devices: int,
+    n_findings: int,
+    terminated_by: str,
+    interrupted_stage: str,
+) -> ScanPayload:
+    base = _make_payload(n_devices, n_findings)
+    return base.model_copy(
+        update={
+            "metadata": {
+                "partial_result": True,
+                "terminated_by": terminated_by,
+                "interrupted_stage": interrupted_stage,
+            }
+        }
+    )
+
+
+def _badge_text(screen: ScanProgressScreen) -> str:
+    return str(screen.query_one("#scan-badge", Static).render())
 
 
 class TestMountLayout:
@@ -291,3 +317,284 @@ class TestFailure:
             )
             assert "Scan failed: boom" in _log_text(screen)
             assert screen.query_one("#progress-bar", ProgressBar).progress != 100
+
+
+class TestScanBadge:
+    @pytest.mark.asyncio
+    async def test_badge_hidden_while_running(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            assert screen.query_one("#scan-badge", Static).display is False
+
+    @pytest.mark.asyncio
+    async def test_badge_hidden_on_success(self) -> None:
+        screen = _make_screen()
+        payload = _make_payload(2, 3)
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert screen.query_one("#scan-badge", Static).display is False
+
+    @pytest.mark.asyncio
+    async def test_badge_partial_string_for_timeout(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "timeout", "deep_inspection")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            badge = screen.query_one("#scan-badge", Static)
+            assert badge.display is True
+            text = _badge_text(screen)
+            assert "PARTIAL" in text
+            assert "a step timed out; partial results kept" in text
+
+    @pytest.mark.asyncio
+    async def test_badge_partial_string_for_user_cancel(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "user_cancel", "deep_inspection")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert "stopped by you; partial results kept" in _badge_text(screen)
+
+    @pytest.mark.asyncio
+    async def test_badge_fatal_string(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_error(RuntimeError("boom"))
+            await pilot.pause()
+            badge = screen.query_one("#scan-badge", Static)
+            assert badge.display is True
+            assert "✗ SCAN FAILED — nothing to keep" in _badge_text(screen)
+
+
+class TestEndActions:
+    @pytest.mark.asyncio
+    async def test_view_button_hidden_in_fatal(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_error(RuntimeError("boom"))
+            await pilot.pause()
+            assert screen.query_one("#btn-view-scan", Button).display is False
+            assert screen.query_one("#btn-back-home", Button).display is True
+            assert screen.query_one("#scan-done-actions").display is True
+
+    @pytest.mark.asyncio
+    async def test_fatal_shows_only_back_home(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_error(RuntimeError("boom"))
+            await pilot.pause()
+            visible = [
+                button_id
+                for button_id in ("btn-view-scan", "btn-back-home")
+                if screen.query_one(f"#{button_id}", Button).display
+            ]
+            assert visible == ["btn-back-home"]
+
+    @pytest.mark.asyncio
+    async def test_view_button_shown_and_labelled_in_partial(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "timeout", "deep_inspection")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            view = screen.query_one("#btn-view-scan", Button)
+            assert view.display is True
+            assert str(view.label) == "View partial scan"
+            assert screen.query_one("#scan-done-actions").display is True
+
+
+class TestProgressBarTerminal:
+    @pytest.mark.asyncio
+    async def test_bar_not_100_in_partial(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "timeout", "deep_inspection")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            bar = screen.query_one("#progress-bar", ProgressBar)
+            bar.update(progress=62)
+            screen._display_pct = 62.0
+            screen._target_pct = 62.0
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert bar.progress == 62
+            assert bar.progress != 100
+
+    @pytest.mark.asyncio
+    async def test_bar_not_100_in_fatal(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            bar = screen.query_one("#progress-bar", ProgressBar)
+            bar.update(progress=6)
+            screen._display_pct = 6.0
+            screen._target_pct = 6.0
+            screen._handle_error(RuntimeError("boom"))
+            await pilot.pause()
+            assert bar.progress == 6
+            assert bar.progress != 100
+
+    @pytest.mark.asyncio
+    async def test_bar_100_only_on_completed(self) -> None:
+        screen = _make_screen()
+        payload = _make_payload(2, 3)
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert screen.query_one("#progress-bar", ProgressBar).progress == 100
+
+
+class TestCancelling:
+    @pytest.mark.asyncio
+    async def test_abort_while_running_enters_cancelling(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            calls = []
+            screen._runner.request_cancel = lambda: calls.append(1)
+            await pilot.press("ctrl+x")
+            assert screen._state == "cancelling"
+            assert screen._terminal() is False
+            assert (
+                "Stopping scan — terminating running steps…" in _log_text(screen)
+            )
+            assert calls == [1]
+            assert pilot.app.screen is screen
+
+    @pytest.mark.asyncio
+    async def test_second_ctrl_x_ignored_while_cancelling(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            calls = []
+            screen._runner.request_cancel = lambda: calls.append(1)
+            await pilot.press("ctrl+x")
+            await pilot.press("ctrl+x")
+            assert calls == [1]
+            assert screen._state == "cancelling"
+            assert pilot.app.screen is screen
+
+    @pytest.mark.asyncio
+    async def test_cancelling_resolves_to_partial_on_callback(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "user_cancel", "deep_inspection")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._runner.request_cancel = lambda: None
+            await pilot.press("ctrl+x")
+            assert screen._state == "cancelling"
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert screen._state == "partial"
+            assert screen.query_one("#scan-badge", Static).display is True
+
+
+class TestDegradedFinishLines:
+    @pytest.mark.asyncio
+    async def test_port_stage_degraded_line_with_skips(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_started"))
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="port_stage_done",
+                    ports_open=41,
+                    units_skipped=3,
+                    units_total=20,
+                ),
+            )
+            text = _log_text(screen)
+            assert "41 open ports found (3 of 20 hosts skipped)" in text
+
+    @pytest.mark.asyncio
+    async def test_port_stage_clean_line_when_no_skips(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_started"))
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="port_stage_done",
+                    ports_open=41,
+                    units_skipped=0,
+                    units_total=20,
+                ),
+            )
+            text = _log_text(screen)
+            assert "41 open ports found" in text
+            assert "skipped" not in text
+
+    @pytest.mark.asyncio
+    async def test_deep_stage_degraded_line_with_skips(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot, screen, ScanEvent(kind="deep_stage_started", hosts_total=20)
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="deep_stage_done",
+                    units_skipped=2,
+                    units_total=20,
+                ),
+            )
+            text = _log_text(screen)
+            assert "18 of 20 hosts scanned (2 skipped)" in text
+
+    @pytest.mark.asyncio
+    async def test_deep_stage_clean_line_when_no_skips(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot, screen, ScanEvent(kind="deep_stage_started", hosts_total=20)
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="deep_stage_done",
+                    units_skipped=0,
+                    units_total=20,
+                ),
+            )
+            text = _log_text(screen)
+            assert "20 hosts scanned" in text
+            assert "skipped" not in text
+
+    @pytest.mark.asyncio
+    async def test_unit_timed_out_and_failed_lines(self) -> None:
+        screen = _make_screen()
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="unit_timed_out", ip="192.168.1.11"),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="unit_failed", ip="192.168.1.12"),
+            )
+            text = _log_text(screen)
+            assert "192.168.1.11 timed out (skipped)" in text
+            assert "192.168.1.12 failed (skipped)" in text
