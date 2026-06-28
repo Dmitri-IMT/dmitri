@@ -36,6 +36,18 @@
 | [`adr/ADR-009-database-stack.md`](adr/ADR-009-database-stack.md) | Touch persistence / database |
 | [`adr/ADR-010-scan-contingency-policy.md`](adr/ADR-010-scan-contingency-policy.md) | Decide when a scan stops vs. continues on errors (timeouts, partial results, taxonomy) |
 
+### Product roadmap (`roadmap/`)
+
+| File | Read it when you need to… |
+|------|---------------------------|
+| [`roadmap/README.md`](roadmap/README.md) | Plan the path to the final product (Pi remote-command, backend/auth, frontend, LLM) — the index + cross-layer sequencing |
+| [`roadmap/PI.md`](roadmap/PI.md) / [`BACKEND.md`](roadmap/BACKEND.md) / [`AUTH.md`](roadmap/AUTH.md) / [`FRONTEND.md`](roadmap/FRONTEND.md) / [`AI.md`](roadmap/AI.md) / [`SECURITY.md`](roadmap/SECURITY.md) | Layer direction / open decisions |
+| [`cloud/README.md`](cloud/README.md) | Hosted stack (Supabase + Railway), env contract, NSPi ops |
+| [`epics/EPICS.md`](epics/EPICS.md) | Cloud/hosting issue epics |
+
+> Roadmap docs are forward-looking and link back to ADRs/ARCHITECTURE. They are kept in sync by
+> the **`roadmap-sync`** skill — edit one, run it to find the siblings to re-check.
+
 ### Scan & vulnerability pipeline (`implementation/`)
 
 | File | Read it when you need to… |
