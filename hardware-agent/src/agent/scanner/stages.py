@@ -150,8 +150,7 @@ def run_port_stage(
                 and batches_failed / batches_total > settings.unit_failure_threshold
             ):
                 raise CircuitBreakerError(
-                    f"Port stage aborted: {batches_failed}/{batches_total} "
-                    "units failed"
+                    f"Port stage aborted: {batches_failed}/{batches_total} units failed"
                 )
     ports_open = sum(len(host.ports) for host in hosts)
     _emit(

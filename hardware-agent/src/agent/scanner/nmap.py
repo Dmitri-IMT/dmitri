@@ -101,9 +101,7 @@ class NmapRunner:
         for proc in procs:
             proc.kill()
 
-    def run_xml(
-        self, arguments: list[str], timeout: float | None = None
-    ) -> ET.Element:
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         """Execute Nmap and parse its XML output."""
 
         command = [self.nmap_path, *arguments, "-oX", "-"]
@@ -116,9 +114,7 @@ class NmapRunner:
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired as exc:
-            raise BudgetExceeded(
-                f"Nmap exceeded its {timeout}s timeout."
-            ) from exc
+            raise BudgetExceeded(f"Nmap exceeded its {timeout}s timeout.") from exc
         except FileNotFoundError as exc:
             raise FatalScanError(f"Nmap executable not found: {exc}") from exc
 
@@ -180,9 +176,7 @@ class NmapRunner:
                 proc.wait()
                 stdout_thread.join()
                 stderr_thread.join()
-                raise BudgetExceeded(
-                    f"Nmap exceeded its {timeout}s timeout."
-                ) from exc
+                raise BudgetExceeded(f"Nmap exceeded its {timeout}s timeout.") from exc
             stdout_thread.join()
             stderr_thread.join()
         finally:
@@ -230,9 +224,7 @@ class LoggedNmapRunner(NmapRunner):
     def set_stage(self, stage: str) -> None:
         self._current_stage = stage
 
-    def run_xml(
-        self, arguments: list[str], timeout: float | None = None
-    ) -> ET.Element:
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         from agent.scanner.workspace import (
             build_nmap_argv,
             make_run_folder_name,
@@ -301,9 +293,7 @@ class LoggedNmapRunner(NmapRunner):
             try:
                 root = ET.fromstring(xml_path.read_text(encoding="utf-8"))
             except ET.ParseError as exc:
-                raise UnitScanError(
-                    "Nmap did not return valid XML output."
-                ) from exc
+                raise UnitScanError("Nmap did not return valid XML output.") from exc
 
             _strip_namespaces(root)
             LOGGER.info("Logged nmap run: %s", run_name)

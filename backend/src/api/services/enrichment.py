@@ -189,9 +189,7 @@ def _process_cve_job(
         set(finding_record.source_labels_json).union({"nvd"})
     )
     if "NVD validated this CVE." not in finding_record.evidence:
-        finding_record.evidence = (
-            f"{finding_record.evidence} | NVD validated this CVE."
-        )
+        finding_record.evidence = f"{finding_record.evidence} | NVD validated this CVE."
     finding_record.updated_at = datetime.now(timezone.utc)
     session.add(finding_record)
     refresh_risk_snapshot(session, finding_record)
