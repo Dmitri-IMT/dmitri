@@ -39,7 +39,7 @@ def _make_runner(host_ports: dict[str, list[int]]) -> NmapRunner:
     runner = NmapRunner.__new__(NmapRunner)
     runner.nmap_path = "nmap"
 
-    def _run_xml(arguments: list[str]) -> ET.Element:
+    def _run_xml(arguments: list[str], timeout: float | None = None) -> ET.Element:
         root = ET.Element("nmaprun")
         for ip, ports in host_ports.items():
             if ip in arguments:

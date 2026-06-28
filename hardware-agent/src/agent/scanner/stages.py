@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
-from agent.config import deep_stage_scripts
+from agent.config import deep_stage_scripts, subprocess_timeout_for
 from agent.discovery.port_discovery import (
     discovery_arguments,
     merge_ports,
@@ -12,6 +14,12 @@ from agent.discovery.port_discovery import (
 )
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import DevicePayload, PortPayload
+from agent.scanner.errors import (
+    BudgetExceeded,
+    CircuitBreakerError,
+    TransientScanError,
+    UnitScanError,
+)
 from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
 
@@ -23,6 +31,23 @@ if TYPE_CHECKING:
     from agent.utils.network import LocalNetworkInfo
 
 LOGGER = logging.getLogger(__name__)
+
+_UnitResult = TypeVar("_UnitResult")
+
+
+def _run_unit_with_retry(
+    retries: int,
+    work: Callable[..., _UnitResult],
+    *args: object,
+    **kwargs: object,
+) -> _UnitResult:
+    last_exc: TransientScanError | None = None
+    for _ in range(retries + 1):
+        try:
+            return work(*args, **kwargs)
+        except TransientScanError as exc:
+            last_exc = exc
+    raise UnitScanError(str(last_exc)) from last_exc
 
 
 def set_runner_stage(runner: NmapRunner, stage: str) -> None:
@@ -46,6 +71,7 @@ def run_port_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
     reporter: ScanReporter | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> None:
     set_runner_stage(runner, "ports")
     LOGGER.info(
@@ -63,30 +89,53 @@ def run_port_stage(
     _emit(reporter, ScanEvent(kind="port_stage_started", message=started_message))
     batches_total = len(batches)
     batches_done = 0
+    batches_failed = 0
+    hosts_skipped = 0
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
             executor.submit(
+                _run_unit_with_retry,
+                settings.transient_retries,
                 scan_ports_batch,
                 runner,
                 batch,
                 settings.scan_mode,
+                timeout=subprocess_timeout_for(settings.scan_mode, "ports"),
             ): batch
             for batch in batches
         }
         for future in as_completed(futures):
+            if cancel_event is not None and cancel_event.is_set():
+                break
             batch = futures[future]
-            results = future.result()
-            for ip in batch:
-                host = host_map[ip]
-                host.ports = sorted(
-                    results.get(ip, []),
-                    key=lambda port: (port.port, port.protocol),
-                )
-                LOGGER.info(
-                    "Port scan finished for %s with %s ports.",
-                    host.ip,
-                    len(host.ports),
-                )
+            try:
+                results = future.result()
+            except CircuitBreakerError:
+                raise
+            except BudgetExceeded:
+                batches_failed += 1
+                hosts_skipped += len(batch)
+                for ip in batch:
+                    _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
+                LOGGER.warning("Port scan timed out for batch %s.", batch)
+            except UnitScanError:
+                batches_failed += 1
+                hosts_skipped += len(batch)
+                for ip in batch:
+                    _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
+                LOGGER.warning("Port scan failed for batch %s.", batch)
+            else:
+                for ip in batch:
+                    host = host_map[ip]
+                    host.ports = sorted(
+                        results.get(ip, []),
+                        key=lambda port: (port.port, port.protocol),
+                    )
+                    LOGGER.info(
+                        "Port scan finished for %s with %s ports.",
+                        host.ip,
+                        len(host.ports),
+                    )
             batches_done += 1
             _emit(
                 reporter,
@@ -96,6 +145,14 @@ def run_port_stage(
                     batches_total=batches_total,
                 ),
             )
+            if (
+                batches_total
+                and batches_failed / batches_total > settings.unit_failure_threshold
+            ):
+                raise CircuitBreakerError(
+                    f"Port stage aborted: {batches_failed}/{batches_total} "
+                    "units failed"
+                )
     ports_open = sum(len(host.ports) for host in hosts)
     _emit(
         reporter,
@@ -103,6 +160,8 @@ def run_port_stage(
             kind="port_stage_done",
             message=f"{ports_open} open ports found",
             ports_open=ports_open,
+            units_skipped=hosts_skipped,
+            units_total=len(hosts),
         ),
     )
 
@@ -112,6 +171,7 @@ def run_deep_inspection_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
     reporter: ScanReporter | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> None:
     set_runner_stage(runner, "nse")
     eligible_hosts = [host for host in hosts if host.open_ports]
@@ -132,9 +192,12 @@ def run_deep_inspection_stage(
         ),
     )
     hosts_done = 0
+    hosts_skipped = 0
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
             executor.submit(
+                _run_unit_with_retry,
+                settings.transient_retries,
                 run_nse_vulnerability_scan,
                 runner,
                 host.ip,
@@ -142,12 +205,37 @@ def run_deep_inspection_stage(
                 version_intensity=settings.version_intensity,
                 scripts=deep_stage_scripts(settings.scan_mode),
                 min_cvss=settings.min_cvss,
+                timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
             ): host
             for host in eligible_hosts
         }
         for future in as_completed(futures):
+            if cancel_event is not None and cancel_event.is_set():
+                break
             host = futures[future]
-            result = future.result()
+            try:
+                result = future.result()
+            except CircuitBreakerError:
+                raise
+            except BudgetExceeded:
+                hosts_skipped += 1
+                _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
+                LOGGER.warning("Deep inspection timed out for %s.", host.ip)
+            except UnitScanError:
+                hosts_skipped += 1
+                _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
+                LOGGER.warning("Deep inspection failed for %s.", host.ip)
+            else:
+                if result is not None:
+                    host.ports = merge_ports(host.ports, result.ports)
+                    host.host_scripts = result.host_scripts
+                    LOGGER.info(
+                        "Deep inspection finished for %s with %s open ports "
+                        "and %s host scripts.",
+                        host.ip,
+                        len(host.open_ports),
+                        len(host.host_scripts),
+                    )
             hosts_done += 1
             _emit(
                 reporter,
@@ -159,17 +247,23 @@ def run_deep_inspection_stage(
                     ip=host.ip,
                 ),
             )
-            if result is None:
-                continue
-            host.ports = merge_ports(host.ports, result.ports)
-            host.host_scripts = result.host_scripts
-            LOGGER.info(
-                "Deep inspection finished for %s with %s open ports "
-                "and %s host scripts.",
-                host.ip,
-                len(host.open_ports),
-                len(host.host_scripts),
-            )
+            if (
+                hosts_total
+                and hosts_skipped / hosts_total > settings.unit_failure_threshold
+            ):
+                raise CircuitBreakerError(
+                    f"Deep inspection aborted: {hosts_skipped}/{hosts_total} "
+                    "units failed"
+                )
+    _emit(
+        reporter,
+        ScanEvent(
+            kind="deep_stage_done",
+            message="Deep inspection complete",
+            units_skipped=hosts_skipped,
+            units_total=hosts_total,
+        ),
+    )
 
 
 def build_device_payload(host: HostInfo) -> DevicePayload:
@@ -223,6 +317,7 @@ def build_metadata(
     findings_count: int,
     partial_result: bool = False,
     interrupted_stage: str | None = None,
+    terminated_by: str | None = None,
 ) -> dict[str, str | int | float | bool]:
     metadata: dict[str, str | int | float | bool] = {
         "agent_version": AGENT_VERSION,
@@ -245,4 +340,6 @@ def build_metadata(
         )
     if interrupted_stage:
         metadata["interrupted_stage"] = interrupted_stage
+    if terminated_by is not None:
+        metadata["terminated_by"] = terminated_by
     return metadata
