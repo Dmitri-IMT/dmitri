@@ -40,7 +40,7 @@ def _make_nspi_runner(
     captured: list[list[str]] = []
     call_count = 0
 
-    def _capture(arguments: list[str]) -> ET.Element:
+    def _capture(arguments: list[str], timeout: float | None = None) -> ET.Element:
         nonlocal call_count
         captured.append(list(arguments))
         ports = pass1_ports if call_count == 0 else pass2_ports
