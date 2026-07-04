@@ -1,5 +1,10 @@
 # ADR-005: Modelo de Seguranca v1
 
+> **Status:** Aceito. §1 (direcionalidade do canal do agente) **emendado por
+> [ADR-011](ADR-011-pi-command-channel.md)** — o canal do agente passa a ser **bidirecional**
+> (resultados sobem via `POST /scans`; comandos descem via WSS). As decisoes de HMAC, JWT Bearer,
+> CORS e transporte desta ADR permanecem em vigor.
+
 ## Contexto
 
 O produto precisa de um modelo de seguranca unico para evitar drift entre arquitetura e implementacao.
@@ -56,6 +61,13 @@ Provisionamento e rotacao:
 - o segredo e provisionado por processo administrativo/backend antes da operacao
 - rotacao ocorre emitindo novo segredo por device e invalidando o anterior
 - o segredo deve ser armazenado no dispositivo fora do codigo-fonte e fora de artefatos versionados
+
+> **Emenda (ADR-011):** a v1 assumia o agente como *one-way push* (apenas `POST /api/v1/scans`).
+> O escopo Control passou a exigir um canal **backend -> Pi**, tornando o canal do agente
+> **bidirecional**: resultados sobem por `POST /api/v1/scans` e comandos descem por WSS
+> `…/agents/{agent_id}/commands`. **As mesmas regras de HMAC desta secao** se aplicam ao upgrade do
+> WebSocket (string canonica e headers analogos, com hash de corpo vazio). Detalhe em
+> [ADR-011](ADR-011-pi-command-channel.md).
 
 ### 2. Frontend -> API na v1
 

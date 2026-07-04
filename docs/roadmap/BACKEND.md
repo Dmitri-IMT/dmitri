@@ -23,7 +23,7 @@
 | B5 | App hosting | ✅ | Railway → AWS; single `nspi` env for September |
 | B6 | Pi command channel | ✅ | [B6](#b6--pi-command-channel-) — [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |
 | B7 | OpenAPI vs reality | ✅ | September slice — [`ADR-011`](../adr/ADR-011-pi-command-channel.md), `contracts/openapi/` |
-| B8 | Reuse `backend/` code | 🔓 | [Reuse](#reuse-from-backend-code) |
+| B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
 
@@ -233,15 +233,54 @@ Locked with [`ADR-011`](../adr/ADR-011-pi-command-channel.md): stub scan `200` +
 
 ---
 
-## Reuse from `backend/` code 🔓
+## Reuse from `backend/` code ✅
 
-| Area | Keep? | Notes |
-|------|-------|-------|
-| Ingest + `persist_scan` | Likely yes | Matches `contracts/` |
-| Enrichment worker | Likely yes | KEV/EPSS/NVD |
-| Risk scoring | Review | Formula ownership |
-| `main.py` monolith | Refactor | When auth middleware lands |
-| SQLite / `create_all` | Replace | Postgres + Alembic |
+**Context:** the current `backend/` was written by a prior contributor **before** the auth, frontend,
+Pi-command-channel, and `contracts/` decisions existed. It is a standalone scan-result **scorer** —
+it ingests a payload, enriches CVEs against KEV/EPSS/NVD, and assigns a risk score. **It is not wired
+to the TUI and nothing calls it today.** Full rewrite is acceptable; this decision only records *what
+domain code is worth carrying forward* vs. what should be discarded and rebuilt under the new
+architecture.
+
+**The line:** keep `services/` (the enrichment + scoring **engine**); discard the app **shell**
+(`main.py`, the `db/session.py` stack, `config.py`, routers placeholder). The engine is portable
+because it is mostly functions over a `Session` + records. The shell encodes a world with no auth, no
+`org_id`, no Pi, and SQLite — none of which match where we are going (see [B6](#b6--pi-command-channel-),
+[B7](#b7--openapi-contract-), [`AUTH.md`](AUTH.md)).
+
+### Keep — real domain logic, reusable largely as-is
+
+| Component | File | Why |
+|-----------|------|-----|
+| Risk scoring formula | `services/risk.py` | Self-contained; finding + KEV/EPSS → score + rationale. "Formula ownership" is editorial, not a code problem. |
+| Enrichment job processing | `services/enrichment.py` | CPE→CVE and CVE→KEV/EPSS correlation — the hard part already solved. |
+| External API clients | `services/nvd.py`, `kev.py`, `epss.py` | NVD/KEV/EPSS HTTP clients with TTL caching. Only the cache *storage* changes with the DB stack. |
+| NVD parsing | `parse_nvd_matches`, `_severity_from_cvss` | Pure functions, zero infra coupling. |
+| Finding dedupe/merge | `upsert_finding`, `finding_dedupe_key`, `_max_severity`, `_max_confidence` | Domain rules; survive any rewrite. |
+
+### Keep with changes — right shape, stale wiring
+
+| Component | Survives / changes |
+|-----------|--------------------|
+| `persist_scan()` (`services/persistence.py`) | Ingest+normalize logic is good and contract-aligned. Changes: add `org_id`; link to `agents`/`commands`; revisit mid-function `commit()`s. |
+| Data model (`models/persistence.py`) | scan→device→port→service→cpe→finding→risk tree is sound. Changes: `devices`→`hosts` rename ([B6](#b6--pi-command-channel-)), add `org_id`, drop `create_all` (Alembic-managed). |
+| Worker loop (`worker.py`, `worker_main.py`) | Poll loop + `FOR UPDATE SKIP LOCKED` is a keeper. Run against the real DB stack; respect org scoping. |
+| Pydantic scan schemas (`schemas/scan.py`) | Aligned with `contracts/schemas/`. Reconcile *from* the contract — the contract is source of truth ([B7](#b7--openapi-contract-)), not these. |
+
+### Discard — predates current decisions, rebuilt anyway
+
+| Component | Why |
+|-----------|-----|
+| `main.py` (as written) | Monolith; all routes + serializers in one file, empty `routers/`, open CORS, no auth. Routes get rewritten under auth middleware. Salvage the `_serialize_*` helpers as reference only. |
+| `db/session.py` stack assumptions | SQLite default + `create_all()` in lifespan. Replaced by Postgres + Alembic. |
+| `config.py` (as the settings model) | No auth/JWT/HMAC/org settings; SQLite-centric. Only the KEV/EPSS/NVD URL+TTL fields carry over. |
+| Read/query endpoints (`list_scans`, `list_findings`, `get_scan_risk_summary`, …) | Auth-less, org-less; the [B7](#b7--openapi-contract-) contract already redefines this surface. Risk-summary *aggregation* is worth reading as reference. |
+| `smoke_test.py` | Dev scaffolding from the old standalone setup. |
+
+**Caveat (revalidate at build time):** the engine assumes SQLModel record types and a **synchronous**
+`Session`. If the rebuilt backend goes async SQLAlchemy or a different ORM, "keep as-is" becomes "keep
+the algorithm, re-port the I/O." Confirm the DB-access style is settled before treating these as a
+clean lift.
 
 ---
 

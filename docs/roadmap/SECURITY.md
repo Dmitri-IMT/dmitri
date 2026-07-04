@@ -4,14 +4,23 @@
 > **Authentication roadmap (phased):** [`AUTH.md`](AUTH.md) — September → product-ready → enterprise.
 > This file tracks cross-cutting posture and implementation gaps, not detailed auth product decisions.
 >
-> **Sources:** [`ADR-005`](../adr/ADR-005-security-model.md) (proposal), [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml).
+> **Sources:** [`ADR-005`](../adr/ADR-005-security-model.md) (v1 baseline; §1 amended by ADR-011),
+> [`ADR-011`](../adr/ADR-011-pi-command-channel.md), [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml).
 
 ---
 
-## ADR-005 — proposal, not product auth yet
+## Authority map — who owns which security decision
 
-ADR-005 suggests HMAC (agent) and JWT (browser). **[`AUTH.md`](AUTH.md) Phase 1 ✅** — roadmap
-complete; implement in code.
+Decided in roadmap, **not yet built in code**. Source of truth per area:
+
+- **Agent HMAC + CORS/transport baseline** — [`ADR-005`](../adr/ADR-005-security-model.md) (v1
+  baseline; §1 agent directionality amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md)).
+- **Pi command channel** (bidirectional agent, WSS HMAC upgrade) —
+  [`ADR-011`](../adr/ADR-011-pi-command-channel.md), reusing ADR-005's HMAC rules.
+- **Identity** (login, sessions, invites, roles, password policy) — [`AUTH.md`](AUTH.md) **Phase 1 ✅**
+  (roadmap); the detailed authority over ADR-005's frontend-auth sketch.
+
+"Decided" ≠ "built" — none of the above exists in code yet (see [Built vs. gap](#built-vs-gap)).
 
 ---
 
