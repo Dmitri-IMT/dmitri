@@ -17,6 +17,10 @@ class TransientScanError(ScanError):
     pass
 
 
+class ScanCancelled(ScanError):
+    pass
+
+
 class BudgetExceeded(ScanError):
     pass
 
