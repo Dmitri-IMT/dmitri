@@ -7,6 +7,9 @@ from agent.scanner.models import PortInfo
 from agent.scanner.nmap import NmapRunner
 from agent.utils.nmap_xml import extract_ipv4, parse_ports
 
+NSPI_PASS1_ARGS = ["-Pn", "-T4", "-n", "-sV", "-O"]
+NSPI_PASS2_ARGS = ["-Pn", "-T2", "-n", "-p", NSPI_PORTS, "-sV"]
+
 
 def merge_ports(
     existing_ports: list[PortInfo],
@@ -89,7 +92,7 @@ def _scan_ports_batch_nspi(
     results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}
 
     # Pass 1: top-1000 (no -p flag)
-    pass1_args = ["-Pn", "-T2", "-n", "-sV", "-O", *ips]
+    pass1_args = [*NSPI_PASS1_ARGS, *ips]
     root1 = runner.run_xml(pass1_args, timeout=timeout)
     for host_element in root1.findall("host"):
         ip = extract_ipv4(host_element)
@@ -97,7 +100,7 @@ def _scan_ports_batch_nspi(
             results[ip] = parse_ports(host_element)
 
     # Pass 2: OT-specific ports
-    pass2_args = ["-Pn", "-T2", "-n", "-p", NSPI_PORTS, "-sV", *ips]
+    pass2_args = [*NSPI_PASS2_ARGS, *ips]
     root2 = runner.run_xml(pass2_args, timeout=timeout)
     for host_element in root2.findall("host"):
         ip = extract_ipv4(host_element)
