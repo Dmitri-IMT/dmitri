@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from time import monotonic
 from typing import Literal
 
 from rich.measure import measure_renderables
@@ -93,6 +94,10 @@ class ScanProgressScreen(DmitriScreen):
         self._stage_lines: dict[str, int] = {}
         self._active_stages: dict[str, str] = {}
         self._scripts_hosts_total = 0
+        self._port_stage_started_at: float | None = None
+        self._port_base_label = ""
+        self._port_batches_done = 0
+        self._port_batches_total = 0
 
     def compose_body(self):
         with Vertical(id="progress-container"):
@@ -210,8 +215,26 @@ class ScanProgressScreen(DmitriScreen):
         else:
             log.write(content, scroll_end=True)
 
+    def _format_elapsed(self, seconds: float) -> str:
+        total = max(int(seconds), 0)
+        minutes, secs = divmod(total, 60)
+        if minutes:
+            return f"{minutes}m {secs}s"
+        return f"{secs}s"
+
+    def _port_stage_label(self) -> str:
+        elapsed = self._format_elapsed(monotonic() - self._port_stage_started_at)
+        if self._port_batches_total:
+            return (
+                f"{self._port_base_label} (batch "
+                f"{self._port_batches_done}/{self._port_batches_total} · {elapsed})"
+            )
+        return f"{self._port_base_label} ({elapsed})"
+
     def _refresh_active_stage_lines(self) -> None:
         log = self.query_one("#activity-log", RichLog)
+        if "ports" in self._active_stages and self._port_stage_started_at is not None:
+            self._active_stages["ports"] = self._port_stage_label()
         for stage, label in self._active_stages.items():
             index = self._stage_lines.get(stage)
             if index is None or index >= len(log.lines):
@@ -249,10 +272,19 @@ class ScanProgressScreen(DmitriScreen):
                 )
             return
         if kind == "port_stage_started":
-            if self.scan_mode in ("extensive", "max"):
-                self._start_stage("ports", "Scanning all ports…")
-            else:
-                self._start_stage("ports", "Scanning ports…")
+            self._port_base_label = (
+                "Scanning all ports…"
+                if self.scan_mode in ("extensive", "max")
+                else "Scanning ports…"
+            )
+            self._port_stage_started_at = monotonic()
+            self._port_batches_done = 0
+            self._port_batches_total = 0
+            self._start_stage("ports", self._port_base_label)
+            return
+        if kind == "port_batch_done":
+            self._port_batches_done = event.batches_done
+            self._port_batches_total = event.batches_total
             return
         if kind == "port_stage_done":
             if event.units_skipped > 0:
@@ -402,8 +434,12 @@ class ScanProgressScreen(DmitriScreen):
 
     def _enter_cancelling(self) -> None:
         self._state = "cancelling"
+        badge = self.query_one("#scan-badge", Static)
+        badge.update("[black on yellow] CANCELLING [/] saving partial results…")
+        badge.display = True
         self.query_one("#activity-log", RichLog).write(
-            "[yellow]● Stopping scan — terminating running steps…[/yellow]"
+            "[yellow]● Stopping scan — saving partial results, "
+            "no new probes will start…[/yellow]"
         )
         if self._runner:
             self._runner.request_cancel()

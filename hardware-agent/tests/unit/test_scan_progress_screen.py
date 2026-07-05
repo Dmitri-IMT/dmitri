@@ -460,14 +460,22 @@ class TestCancelling:
         screen = _make_screen()
         async with _Harness(screen).run_test() as pilot:
             await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_started"))
             calls = []
             screen._runner.request_cancel = lambda: calls.append(1)
             await pilot.press("ctrl+x")
             assert screen._state == "cancelling"
             assert screen._terminal() is False
             assert (
-                "Stopping scan — terminating running steps…" in _log_text(screen)
+                "Stopping scan — saving partial results, no new probes will start…"
+                in _log_text(screen)
             )
+            badge = screen.query_one("#scan-badge", Static)
+            assert badge.display is True
+            badge_text = _badge_text(screen)
+            assert "CANCELLING" in badge_text
+            assert "saving partial results…" in badge_text
+            assert "ports" in screen._active_stages
             assert calls == [1]
             assert pilot.app.screen is screen
 
@@ -497,6 +505,75 @@ class TestCancelling:
             await pilot.pause()
             assert screen._state == "partial"
             assert screen.query_one("#scan-badge", Static).display is True
+
+
+class TestPortStageHeartbeat:
+    @pytest.mark.asyncio
+    async def test_elapsed_counter_advances_without_moving_bar_on_tick(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        fake_now = [1000.0]
+        monkeypatch.setattr(
+            "agent.tui.screens.scan_progress.monotonic", lambda: fake_now[0]
+        )
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_started"))
+            bar = screen.query_one("#progress-bar", ProgressBar)
+            for _ in range(5):
+                screen._tick()
+            await pilot.pause()
+            settled_progress = bar.progress
+
+            fake_now[0] += 5
+            screen._tick()
+            await pilot.pause()
+            text_after_first = _log_text(screen)
+
+            fake_now[0] += 7
+            screen._tick()
+            await pilot.pause()
+            text_after_second = _log_text(screen)
+
+            assert "Scanning ports…" in text_after_second
+            assert "(5s)" in text_after_first
+            assert "(12s)" in text_after_second
+            assert text_after_first != text_after_second
+            assert bar.progress == settled_progress
+
+    @pytest.mark.asyncio
+    async def test_batch_done_updates_fraction_and_advances_bar(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        fake_now = [2000.0]
+        monkeypatch.setattr(
+            "agent.tui.screens.scan_progress.monotonic", lambda: fake_now[0]
+        )
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_started"))
+            bar = screen.query_one("#progress-bar", ProgressBar)
+            for _ in range(5):
+                screen._tick()
+            await pilot.pause()
+            progress_before_batch = bar.progress
+
+            fake_now[0] += 80
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="port_batch_done", batches_done=3, batches_total=8),
+            )
+            for _ in range(5):
+                screen._tick()
+            await pilot.pause()
+            text = _log_text(screen)
+
+            assert "batch 3/8" in text
+            assert "1m 20s" in text
+            assert bar.progress > progress_before_batch
 
 
 class TestDegradedFinishLines:
