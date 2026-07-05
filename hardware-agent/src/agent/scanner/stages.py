@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, TypeVar
 
 from agent.config import deep_stage_scripts, subprocess_timeout_for
 from agent.discovery.port_discovery import (
+    NSPI_PASS1_ARGS,
+    NSPI_PASS2_ARGS,
     discovery_arguments,
     merge_ports,
     scan_ports_batch,
@@ -292,10 +294,16 @@ def build_device_payload(host: HostInfo) -> DevicePayload:
 
 
 def nmap_arguments_summary(settings: AgentSettings) -> str:
-    port_stage = " ".join(discovery_arguments(settings.scan_mode))
+    if settings.scan_mode == "nspi":
+        port_stage = (
+            f"pass1:{' '.join(NSPI_PASS1_ARGS)} (top-1000); "
+            f"pass2:{' '.join(NSPI_PASS2_ARGS)}"
+        )
+    else:
+        port_stage = f"{' '.join(discovery_arguments(settings.scan_mode))} -Pn -T4"
     deep_scripts = deep_stage_scripts(settings.scan_mode)
     return (
-        f"discovery=-sn -PE -T4; ports={port_stage} -Pn -T4; "
+        f"discovery=-sn -PE -T4; ports={port_stage}; "
         "deep_inspection="
         f"-sV --version-intensity {settings.version_intensity}; "
         "scripts="
