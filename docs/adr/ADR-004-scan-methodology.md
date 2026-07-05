@@ -279,3 +279,37 @@ Esta abordagem baseada em pipeline:
            v
         [ SAÍDA ]
 ```
+
+---
+
+## Emenda — Timing do estágio de portas do modo NSPi (DMI-50, 2026-07-05)
+
+**Contexto.** O modo NSPi executava o estágio de portas em duas passagens `-T2` (varredura ampla
+top-1000 `-sV -O`, depois as portas OT específicas), mas herdou o orçamento de 600 s do modo Quick
+(que usa `-T4`). O tempo mínimo de uma passagem `-T2` top-1000 (`max_parallelism=1` + atraso de
+0,4 s → ~400 s por host só na fase SYN) excede 600 s, então o estágio nunca concluía: todo lote
+batia em `BudgetExceeded`, os hosts eram pulados e o circuit breaker abortava o estágio (0 portas).
+Evidência: comentário Stage 1 em DMI-50 e teste de campo `docs/tests/nspi-september/results.md`
+(2026-07-03: descoberta achou 9 dispositivos, estágio de portas produziu 0).
+
+**Decisão.** A **passagem 1** (varredura ampla top-1000, `-sV -O`) passa a rodar em **`-T4`**; a
+**passagem 2** (portas OT específicas — 502, 4840, 44818, 445, 139, 3389, 5985) permanece em
+**`-T2`**. O orçamento (`TIMEOUTS["ports"]["nspi"] = 600.0`) e o tamanho de lote (8) **não mudam**, e
+nenhum outro modo (Quick/Standard/Extensive/MAX) é afetado.
+
+**Justificativa de segurança de PLC.** A passagem 1 em `-T4` varre o top-1000 de **todos** os hosts,
+PLCs inclusos, na velocidade padrão — não é o caso de "a passagem 1 evitar os PLCs". Isso é aceito
+porque o modo **Quick já executa exatamente essa** varredura `-T4` top-1000 `-sV -O` contra esses
+mesmos PLCs, e o fez na rede NSPi real em 2026-07-03 sem dano relatado; a passagem 1 do NSPi não é
+mais agressiva que o scan que o piloto já roda ali. A validação de DMI-50 é **apenas em dev** (sem
+reteste de campo; o piloto continua no Quick). A polidez `-T2` é mantida na passagem 2, onde os
+serviços OT de fato respondem. Alternativas que preservavam `-T2` em tudo — aumentar o orçamento /
+reduzir o lote (scans de ~20–45 min) ou reduzir o escopo a um conjunto de portas conhecidas — foram
+consideradas e rejeitadas em favor de um scan rápido e completo.
+
+**Consequência.** Substitui a nota "Timing & flags = `-T2 -n`" em
+`specs/004-nspi-scan-mode/contracts/nspi-constants.md`, que agora vale só para a passagem 2.
+Especificação da correção: `specs/011-nspi-port-stage-fix/`. As correções auxiliares de DMI-50
+(feedback de progresso por tempo decorrido no estágio de portas, cancelamento responsivo com guarda
+antes de novo subprocesso, e retenção de logs que preserva a última execução parcial/falha) seguem a
+política de contingência do **ADR-010** e não alteram esta metodologia.
