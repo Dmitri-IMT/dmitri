@@ -55,6 +55,9 @@ class ScanRunner:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
+    def run_blocking(self) -> None:
+        self._run()
+
     def request_cancel(self) -> None:
         self._cancel_event.set()
         with self._runner_lock:
