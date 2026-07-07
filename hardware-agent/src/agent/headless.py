@@ -106,9 +106,7 @@ def run_headless_scan(
             captured_payload.metadata
             and captured_payload.metadata.get("partial_result")
         )
-        outcome: Literal["completed", "partial"] = (
-            "partial" if partial else "completed"
-        )
+        outcome: Literal["completed", "partial"] = "partial" if partial else "completed"
         return HeadlessScanResult(
             outcome=outcome,
             payload=captured_payload,
