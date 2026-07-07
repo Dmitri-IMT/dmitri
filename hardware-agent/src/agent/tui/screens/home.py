@@ -9,7 +9,7 @@ from textual.containers import Vertical
 from textual.widgets import Button, OptionList, Static
 from textual.widgets.option_list import Option
 
-from agent.tui.config import load_config
+from agent.paths import load_config
 from agent.tui.results import write_scan_result
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.network import NetworkScreen

@@ -15,8 +15,8 @@ from agent.normalize.contracts import (
     PortPayload,
     ScanPayload,
 )
+from agent.paths import DmitriConfig, save_config
 from agent.tui.app import DmitriApp
-from agent.tui.config import DmitriConfig, save_config
 from agent.tui.screens.home import HomeScreen
 from agent.tui.screens.past_scans import PastScansScreen
 from agent.tui.screens.settings import SettingsScreen
@@ -170,7 +170,7 @@ async def test_ctrl_q_exits(tmp_path):
 
 
 def test_cli_unknown_command():
-    """Exit code 1 for unknown subcommand."""
+    """Exit code 2 for unknown subcommand."""
     import sys
 
     from agent.cli import main
@@ -178,11 +178,11 @@ def test_cli_unknown_command():
     with patch.object(sys, "argv", ["dmitri", "nonsense"]):
         with pytest.raises(SystemExit) as exc_info:
             main()
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 2
 
 
 def test_cli_nmap_missing():
-    """Exit code 1 when nmap is not found."""
+    """Exit code 20 when nmap is not found."""
     import sys
 
     from agent.cli import main
@@ -193,4 +193,4 @@ def test_cli_nmap_missing():
     ):
         with pytest.raises(SystemExit) as exc_info:
             main()
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 20

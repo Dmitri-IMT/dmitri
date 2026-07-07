@@ -7,8 +7,8 @@ from pathlib import Path
 from textual.app import App
 from textual.binding import Binding
 
+from agent.paths import load_config
 from agent.scanner.workspace import ensure_workspace_layout
-from agent.tui.config import load_config
 from agent.tui.screens.home import HomeScreen
 from agent.tui.screens.scan_progress import ScanProgressScreen
 from agent.tui.screens.settings import SettingsScreen
