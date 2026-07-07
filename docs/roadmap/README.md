@@ -22,6 +22,12 @@
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
 | [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
 
+## Reference
+
+| Doc | What |
+|-----|------|
+| [`../CLI.md`](../CLI.md) | Full `dmitri` CLI — `start` (TUI), `agent` (headless), scan modes, exit codes |
+
 ## Field tests
 
 | Folder | What |
