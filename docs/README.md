@@ -35,6 +35,8 @@
 | [`adr/ADR-008-frontend-stack.md`](adr/ADR-008-frontend-stack.md) | Touch the frontend stack |
 | [`adr/ADR-009-database-stack.md`](adr/ADR-009-database-stack.md) | Touch persistence / database |
 | [`adr/ADR-010-scan-contingency-policy.md`](adr/ADR-010-scan-contingency-policy.md) | Decide when a scan stops vs. continues on errors (timeouts, partial results, taxonomy) |
+| [`adr/ADR-011-pi-command-channel.md`](adr/ADR-011-pi-command-channel.md) | Touch the Pi ↔ backend command channel (WebSocket, HMAC upgrade, command lifecycle) |
+| [`adr/ADR-012-headless-exit-code-contract.md`](adr/ADR-012-headless-exit-code-contract.md) | Change how a headless/CLI scan reports outcome (exit codes, `dmitri agent`) |
 
 ### Product roadmap (`roadmap/`)
 
