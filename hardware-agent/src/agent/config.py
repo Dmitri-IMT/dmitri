@@ -7,6 +7,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
+SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
+
 
 @dataclass(slots=True)
 class AgentSettings:
