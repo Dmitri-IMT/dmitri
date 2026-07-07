@@ -93,7 +93,9 @@ HeadlessScanResult`:
      subnet is guaranteed to pass payload validation downstream.
 2. **Resolve workspace.** `workspace_root` defaults to the TUI's own results dir so headless
    and TUI write to the **same place** in the same shape: `load_config()` → `results_dir` if a
-   config exists, else `default_results_dir()` (both from `tui/config.py`). A caller (the
+   config exists, else `default_results_dir()` (both from `agent/paths.py` — the neutral,
+   Textual-free app-config module both front doors share; relocated out of `tui/` so the daemon
+   foundation never imports the `tui` package for its default location). A caller (the
    future daemon, or tests) may pass an explicit `workspace_root`. Pre-create the
    `results/` subdir; if that raises `OSError`, return `outcome="fatal"` before scanning
    (ADR-010: "workspace não gravável" is Fatal-before-data).
@@ -132,10 +134,23 @@ hand-rolled `sys.argv` dispatch — no argparse rewrite.
 - On `InvalidScanInput`: print the message to `stderr`, exit `2`.
 - On success: print one machine-readable JSON line to `stdout`
   (`{"outcome": ..., "result_path": ..., "scan_id": ...}`) and exit per the outcome→code map.
+  `scan_id` and `result_path` are read from the returned `HeadlessScanResult.payload`; both are
+  `null` on a `fatal` outcome (no payload).
+- **Exit-code alignment (whole dispatcher — decided during refinement).** To keep one
+  exit-code space across the binary, the same `cli.py` edit updates the existing paths:
+  `_run_tui`'s nmap-missing exit changes `1 → 20` and the top-level unknown-command exit
+  changes `1 → 2`. This also edits two existing CLI tests (`test_cli_nmap_missing` → `20`,
+  `test_cli_unknown_command` → `2`, both in `tests/integration/test_tui_flows.py`) and two
+  spec-000 contracts (`specs/000-agent-tui/contracts/cli.md`, `.../checklists/requirements.md`).
+  `BUG-004` and `plans/01-cli-entry-and-skeleton.md` are left as historical records carrying a
+  superseded-by-spec-012 note. No TUI screen/flow/output change — the exit happens before any
+  screen renders, so an operator inside a running TUI cannot observe it.
 
-**Machine-readable outcome (pinned).** Both front doors report outcome machine-readably: the
-programmatic API returns `HeadlessScanResult.outcome`; the CLI encodes it in the exit code
-(and echoes the JSON line).
+**Machine-readable outcome (pinned in [`ADR-012`](../../docs/adr/ADR-012-headless-exit-code-contract.md)).**
+Both front doors report outcome machine-readably: the programmatic API returns
+`HeadlessScanResult.outcome`; the CLI encodes it in the exit code (and echoes the JSON line). The
+outcome→exit-code table below is the ADR-012 contract; the values live in `headless.EXIT_CODES` /
+`INVALID_INPUT_EXIT` and a test asserts they equal the ADR table (see Testing expectations).
 
 | Outcome | Meaning | Exit code | JSON result written? |
 |---------|---------|-----------|----------------------|
@@ -182,8 +197,9 @@ All paths under `hardware-agent/src/agent/` (source) and `hardware-agent/tests/`
 | Layer | Path | New/Touch | Responsibility of the change |
 |-------|------|-----------|------------------------------|
 | Headless front door | `hardware-agent/src/agent/headless.py` | **New** | `run_headless_scan` (programmatic API), `validate_inputs`, `HeadlessScanResult`, `InvalidScanInput`, `EXIT_CODES`/`INVALID_INPUT_EXIT`, `StderrReporter`. New **`ScanRunner` call site**. |
-| CLI | `hardware-agent/src/agent/cli.py` | Touch | Add `dmitri agent <mode> <subnet>` branch; reuse `_check_nmap()`; map outcome→exit code; print machine-readable JSON line. Update usage string. |
+| CLI | `hardware-agent/src/agent/cli.py` | Touch | Add `dmitri agent <mode> <subnet>` branch; reuse `_check_nmap()`; map outcome→exit code; print machine-readable JSON line. Update usage string. Also align existing exits (§4): `_run_tui` nmap-missing `1→20`, top-level unknown-command `1→2`. |
 | Config | `hardware-agent/src/agent/config.py` | Touch | Add `SCAN_MODES` tuple (mode-validation source). No timeout/budget change. |
+| App config / paths (reused) | `hardware-agent/src/agent/paths.py` (`load_config`, `default_results_dir`, `DmitriConfig`) | **Reused, no change** | Default results-dir resolution shared by both front doors. Relocated out of `tui/config.py` in a prerequisite refactor (done on this branch); `headless.py` imports it from here so the daemon path never imports `tui`. |
 | TUI runner | `hardware-agent/src/agent/tui/scanner.py` (`ScanRunner`) | Touch | Add public `run_blocking()` (calls `self._run()`). **No constructor parameter added.** Coordinate with spec 011 (same file). |
 | Persistence (reused) | `hardware-agent/src/agent/tui/results.py` (`write_scan_result`) | **Reused, no change** | Shared JSON write; imported by `headless.py`. Verified Textual-free. |
 | TUI screen | `hardware-agent/src/agent/tui/screens/scan_progress.py` (`ScanProgressScreen`) | **No change** | Existing `ScanRunner(...)` call site at line 131 — unchanged (no new constructor arg to thread). |
@@ -226,7 +242,9 @@ call site (`headless.py`) is listed, and both TUI call sites are confirmed uncha
   `scanner.stages` functions, and `write_scan_result` — no duplicated discovery/port/deep/
   normalize/persist logic. A future pipeline fix applies to both front doors automatically.
 - **TUI byte-for-byte unchanged.** No screen, flow, copy, or output change; the only edit to a
-  TUI-package file is the additive `run_blocking()` method on `ScanRunner`.
+  TUI-package file is the additive `run_blocking()` method on `ScanRunner`. The dispatcher
+  exit-code alignment (§4) touches `cli.py` (not a TUI-package file) and two spec-000 contracts;
+  no TUI screen renders differently and no in-TUI behaviour changes.
 - **No transport, no upload, no daemonization/systemd/reconnect, no WebSocket** (ADR-011 /
   later issues). `dmitri agent` v1 runs one scan and exits.
 - **No new scan modes; no new config surface** beyond `SCAN_MODES` (needed to validate the
@@ -250,10 +268,11 @@ workspace_root=tmp_path)`.
 |------------------------------|------|----------------|
 | Same shape | new `test_headless.py` | Run headless with a fake runner into `tmp_path`; assert a `<ts>_<subnet-slug>.json` exists under `tmp_path/results`, load it, `ScanPayload.model_validate(...)` succeeds. Run `ScanRunner` directly (mirror `test_scan_runner_partial._build_runner`) with the same inputs and assert the two payloads' structure/fields match (only ts/scan_id differ). |
 | Programmatic result | `test_headless.py` | Assert `run_headless_scan(...)` returns `HeadlessScanResult(outcome="completed", payload=<ScanPayload>, result_path=<Path>)` and the returned `result_path` is the written file. |
-| Failure semantics match | `test_headless.py` | Monkeypatch `stages.run_port_stage` to raise `FatalScanError` (as `test_scan_runner_partial.TestPostDiscoveryFatal` does). Assert `outcome="partial"`, written JSON has `metadata.partial_result is True`, `terminated_by == "error"`, `interrupted_stage == "ports"` — identical to what `ScanRunner` yields for the same failure. Also cover a pre-discovery fatal → `outcome="fatal"`, no JSON. |
+| Failure semantics match | `test_headless.py` | Monkeypatch `stages.run_port_stage` to raise `FatalScanError` (as `test_scan_runner_partial.TestPostDiscoveryFatal` does). Assert `outcome="partial"`, written JSON has `metadata["partial_result"] is True`, `terminated_by == "error"`, `interrupted_stage == "ports"` — identical to what `ScanRunner` yields for the same failure. Also cover a pre-discovery fatal → `outcome="fatal"`, no JSON. |
 | TUI untouched | existing `test_scan_progress_screen.py`, `test_scan_runner_*` | Must remain green with zero edits — proves the additive `run_blocking()` and the new module changed nothing in the TUI path. |
 | One pipeline | `test_headless.py` | Assert the headless run goes through the shared stages: monkeypatching `stages.run_port_stage` changes the headless result (it is not a duplicated code path), and assert `headless` imports `ScanRunner`/`write_scan_result` (no private scan reimplementation). |
 | Input validation | `test_headless.py` | `run_headless_scan("bogus", "192.168.1.0/24")` raises `InvalidScanInput`; `run_headless_scan("quick", "not-a-subnet")` and `run_headless_scan("quick", "192.168.1.5")` (no `/`) raise; assert `discover_hosts` was never called and no `results/` dir was created. |
-| CLI exit codes | new `test_cli_agent.py` | Drive `cli.main()` with monkeypatched `sys.argv` and a stubbed `run_headless_scan`; assert `SystemExit` code = `0`/`10`/`20` per outcome, `2` for bad arity and `InvalidScanInput`, `20` when `_check_nmap()` is stubbed False. Mirror any existing cli test harness; if none, this is the first. |
+| CLI exit codes | new `test_cli_agent.py` | Drive `cli.main()` with monkeypatched `sys.argv` and a stubbed `run_headless_scan`; assert `SystemExit` code = `0`/`10`/`20` per outcome, `2` for bad arity and `InvalidScanInput`, `20` when `_check_nmap()` is stubbed False. Mirror the existing `test_cli_*` harness in `tests/integration/test_tui_flows.py`. **Also update the two existing CLI tests for the aligned codes:** `test_cli_nmap_missing` `1→20`, `test_cli_unknown_command` `1→2`. |
 | Modes source in sync | extend `test_config_timeouts.py` (or new `test_config_modes.py`) | Assert `config.SCAN_MODES == ("quick","standard","extensive","nspi","max")` and equals `typing.get_args(...)` of the `ScanPayload.scan_mode` `Literal` so the validation list can't drift. |
+| Exit-code contract (ADR-012) | `test_headless.py` (or `test_cli_agent.py`) | Assert `headless.EXIT_CODES == {"completed": 0, "partial": 10, "fatal": 20}` and `headless.INVALID_INPUT_EXIT == 2`, matching the [`ADR-012`](../../docs/adr/ADR-012-headless-exit-code-contract.md) table — a drift guard so the code and the ADR contract cannot diverge silently. |
 | Suites green | full run | `uv run pytest` + `uv run ruff check` pass. |

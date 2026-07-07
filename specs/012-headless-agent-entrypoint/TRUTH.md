@@ -82,6 +82,7 @@ one pipeline, two front doors.
   This spec must not conflict with it; where both touch the same seam, 011's decisions
   (e.g. the shared cancellation error living in the scanner layer) are assumed.
 - Failure semantics source: `specs/010-scan-pipeline-resilience/`, `docs/adr/ADR-010-scan-contingency-policy.md`.
+- Machine-readable outcome / exit-code contract: `docs/adr/ADR-012-headless-exit-code-contract.md`.
 - Legacy headless path discontinued: `specs/006-scan-duration-fix/` (issue #68 context).
 - Implementation: `ARCHITECTURE.md`
 - Execution ledger: `POOP.md` (written during orchestration)
