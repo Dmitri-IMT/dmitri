@@ -18,9 +18,10 @@
 - **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **HMAC-SHA256** ([`ADR-005`](../adr/ADR-005-security-model.md)) — **not implemented** on either side.
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.
 
-⚠️ **REVALIDATE:** ADR-005 states the agent is *one-way push*. The product now requires the
-backend to **command** the Pi. This roadmap explicitly reopens that constraint — it must be
-reconciled in a new ADR (see below), not silently contradicted.
+✅ **RECONCILED:** ADR-005 originally assumed a *one-way push* agent. Control requires the backend
+to **command** the Pi, so the agent channel is now **bidirectional** — amended in
+[`ADR-011`](../adr/ADR-011-pi-command-channel.md) and reflected in the ADR-005 status note. The HMAC
+rules are reused for the WebSocket upgrade.
 
 ## The gap: remote-commandable Pi
 

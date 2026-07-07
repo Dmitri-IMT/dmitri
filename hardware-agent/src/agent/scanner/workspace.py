@@ -84,31 +84,50 @@ def write_meta_json(
     return meta_path
 
 
+_FAILED_TERMINATED_BY = frozenset({"timeout", "error", "user_cancel"})
+
+
+def _read_run_meta(run_dir: Path) -> tuple[str | None, str | None]:
+    try:
+        meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+        return meta.get("parent_scan_id"), meta.get("terminated_by")
+    except (OSError, ValueError, AttributeError):
+        return None, None
+
+
 def prune_logs(
     logs_dir: Path,
-    max_count: int = 10,
+    max_scans: int = 10,
     *,
-    protected: frozenset[Path] | None = None,
+    protected: frozenset[Path] = frozenset(),
 ) -> None:
-    """Delete oldest run directories under logs/ when count exceeds max_count.
-
-    Directories in *protected* (typically in-flight nmap runs) are never removed.
-    """
-    protected = protected or frozenset()
-    dirs = sorted(
-        (d for d in logs_dir.iterdir() if d.is_dir()),
-        key=lambda d: d.name,
-    )
-    excess = len(dirs) - max_count
-    if excess <= 0:
-        return
-    for d in dirs:
-        if excess <= 0:
-            break
-        if d in protected:
+    groups: dict[object, list[Path]] = {}
+    failed: set[object] = set()
+    for d in logs_dir.iterdir():
+        if not d.is_dir():
             continue
-        shutil.rmtree(d)
-        excess -= 1
+        parent_scan_id, terminated_by = _read_run_meta(d)
+        key = parent_scan_id if parent_scan_id is not None else d
+        groups.setdefault(key, []).append(d)
+        if terminated_by in _FAILED_TERMINATED_BY:
+            failed.add(key)
+    ordered = sorted(
+        groups,
+        key=lambda k: max(d.name for d in groups[k]),
+        reverse=True,
+    )
+    keep = set(ordered[:max_scans])
+    for key in ordered:
+        if key in failed:
+            keep.add(key)
+            break
+    for key in ordered:
+        if key in keep:
+            continue
+        for d in groups[key]:
+            if d in protected:
+                continue
+            shutil.rmtree(d)
 
 
 def prune_results(results_dir: Path, max_count: int = 10) -> None:

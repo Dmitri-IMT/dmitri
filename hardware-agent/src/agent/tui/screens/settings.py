@@ -8,8 +8,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import Button, Input, Label, Static
 
-from agent.scanner.workspace import ensure_workspace_layout
-from agent.tui.config import (
+from agent.paths import (
     DmitriConfig,
     default_results_dir,
     load_config,
@@ -17,6 +16,7 @@ from agent.tui.config import (
     save_config,
     validate_results_path,
 )
+from agent.scanner.workspace import ensure_workspace_layout
 from agent.tui.screens.base import DmitriScreen
 
 

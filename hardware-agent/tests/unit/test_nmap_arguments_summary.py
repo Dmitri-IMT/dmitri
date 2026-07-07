@@ -16,3 +16,16 @@ class TestNmapArgumentsSummary:
     def test_quick_port_stage_unchanged(self) -> None:
         summary = nmap_arguments_summary(AgentSettings(scan_mode="quick"))
         assert "ports=-sV -O --script vulners -Pn -T4" in summary
+
+    def test_standard_port_stage_unchanged(self) -> None:
+        summary = nmap_arguments_summary(AgentSettings(scan_mode="standard"))
+        assert "ports=-sV -O --script " in summary
+        assert "-Pn -T4" in summary
+
+    def test_nspi_port_stage_describes_both_passes(self) -> None:
+        summary = nmap_arguments_summary(AgentSettings(scan_mode="nspi"))
+        assert "pass1:-Pn -T4" in summary
+        assert (
+            "pass2:-Pn -T2 -n -p 502,4840,44818,445,139,3389,5985 -sV" in summary
+        )
+        assert "--script" not in summary

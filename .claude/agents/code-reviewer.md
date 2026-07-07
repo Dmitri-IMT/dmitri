@@ -1,5 +1,6 @@
 ---
 name: code-reviewer
+model: claude-opus-4-8
 description: >-
   Per-task review gate in the orchestration loop. Reviews a coder + test-engineer's work against
   the TASKS.md success criteria and the specs, runs uv run pytest + uv run ruff check on the

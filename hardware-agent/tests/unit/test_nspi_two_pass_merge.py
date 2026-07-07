@@ -95,12 +95,15 @@ class TestNspiTwoPassMerge:
         p_idx = captured[1].index("-p")
         assert captured[1][p_idx + 1] == NSPI_PORTS
 
-    def test_both_passes_use_t2_and_n(self) -> None:
+    def test_pass1_t4_pass2_t2_and_n(self) -> None:
         runner, captured = _make_nspi_runner(
             pass1_ports=[22],
             pass2_ports=[502],
         )
         scan_ports_batch(runner, ["10.0.0.1"], "nspi")
+        assert "-T4" in captured[0]
+        assert "-T2" not in captured[0]
+        assert "-T2" in captured[1]
+        assert "-T4" not in captured[1]
         for argv in captured:
-            assert "-T2" in argv
             assert "-n" in argv

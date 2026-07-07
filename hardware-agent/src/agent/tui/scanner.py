@@ -19,15 +19,11 @@ from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
     FatalScanError,
-    ScanError,
+    ScanCancelled,
 )
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
-
-
-class ScanCancelled(ScanError):
-    """Raised when the scan is aborted by the user."""
 
 
 class ScanRunner:
@@ -58,6 +54,9 @@ class ScanRunner:
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def run_blocking(self) -> None:
+        self._run()
 
     def request_cancel(self) -> None:
         self._cancel_event.set()

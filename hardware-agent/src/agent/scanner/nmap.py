@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from agent.scanner.errors import (
     BudgetExceeded,
     FatalScanError,
+    ScanCancelled,
     ScanError,
     TransientScanError,
     UnitScanError,
@@ -104,6 +105,9 @@ class NmapRunner:
     def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         """Execute Nmap and parse its XML output."""
 
+        if self._cancelled:
+            raise ScanCancelled("Scan cancelled before nmap spawn.")
+
         command = [self.nmap_path, *arguments, "-oX", "-"]
         try:
             result = subprocess.run(
@@ -139,6 +143,9 @@ class NmapRunner:
 
         XML output is written by Nmap itself via -oX in the arguments.
         """
+        if self._cancelled:
+            raise ScanCancelled("Scan cancelled before nmap spawn.")
+
         console_log = run_dir / "console.log"
         stderr_log = run_dir / "stderr.log"
         xml_path = run_dir / "nmaprun.xml"
@@ -231,6 +238,9 @@ class LoggedNmapRunner(NmapRunner):
             prune_logs,
             write_meta_json,
         )
+
+        if self._cancelled:
+            raise ScanCancelled("Scan cancelled before nmap spawn.")
 
         run_name = make_run_folder_name(self._current_stage)
         run_dir = self.logs_dir / run_name

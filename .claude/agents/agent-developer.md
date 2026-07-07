@@ -1,5 +1,6 @@
 ---
 name: agent-developer
+model: claude-sonnet-5
 description: >-
   Implements one TASKS.md task for the Dmitri scanner (Python + Textual) per the approved
   ARCHITECTURE.md / DESIGN.md. Surgical edits only, implements every success criterion, honors

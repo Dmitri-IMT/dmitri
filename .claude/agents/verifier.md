@@ -4,7 +4,7 @@
   summary of what passed, what is incomplete, and what is broken. Never modifies
   code or config — report only.
 name: verifier
-model: composer-2
+model: model: claude-opus-4-8
 description: >-
 readonly: true
 ---

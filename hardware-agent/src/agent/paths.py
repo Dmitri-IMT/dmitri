@@ -1,4 +1,7 @@
-"""Persisted TUI configuration — load, save, validate, OS-aware defaults."""
+"""Persisted app configuration — load, save, validate, OS-aware defaults.
+
+Shared by every scan front door (TUI and headless); holds no UI state.
+"""
 
 from __future__ import annotations
 

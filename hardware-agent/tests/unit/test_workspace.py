@@ -166,7 +166,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         dirs = self._make_run_dirs(logs_dir, 5)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         for d in dirs:
             assert d.exists()
@@ -175,7 +175,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         dirs = self._make_run_dirs(logs_dir, 10)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         for d in dirs:
             assert d.exists()
@@ -184,7 +184,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         dirs = self._make_run_dirs(logs_dir, 12)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         assert not dirs[0].exists()
         assert not dirs[1].exists()
@@ -195,7 +195,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         self._make_run_dirs(logs_dir, 15)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         remaining = [d for d in logs_dir.iterdir() if d.is_dir()]
         assert len(remaining) == 10
@@ -204,7 +204,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         dirs = self._make_run_dirs(logs_dir, 11)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         assert not dirs[0].exists()
         assert not (dirs[0] / "console.log").exists()
@@ -213,7 +213,7 @@ class TestPruneLogs:
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         assert list(logs_dir.iterdir()) == []
 
@@ -224,7 +224,7 @@ class TestPruneLogs:
         stray_file.write_text("stray", encoding="utf-8")
         self._make_run_dirs(logs_dir, 11)
 
-        prune_logs(logs_dir, max_count=10)
+        prune_logs(logs_dir, max_scans=10)
 
         assert stray_file.exists()
         remaining_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
@@ -233,15 +233,133 @@ class TestPruneLogs:
     def test_skips_protected_directories(self, tmp_path: Path) -> None:
         logs_dir = tmp_path / "logs"
         dirs = self._make_run_dirs(logs_dir, 12)
-        protected = frozenset({dirs[0], dirs[1]})
+        protected = frozenset({dirs[0]})
 
-        prune_logs(logs_dir, max_count=10, protected=protected)
+        prune_logs(logs_dir, max_scans=10, protected=protected)
 
         assert dirs[0].exists()
-        assert dirs[1].exists()
-        assert not dirs[2].exists()
+        assert not dirs[1].exists()
+        for d in dirs[2:]:
+            assert d.exists()
+
+    def _make_run_dir(
+        self,
+        logs_dir: Path,
+        day: int,
+        suffix: str,
+        *,
+        parent_scan_id: str | None = None,
+        terminated_by: str = "completed",
+        meta: str = "valid",
+    ) -> Path:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        name = f"2026-05-{day:02d}-10-00-00-discovery-{suffix}"
+        d = logs_dir / name
+        d.mkdir()
+        (d / "console.log").write_text(f"run {suffix}", encoding="utf-8")
+        if meta == "valid":
+            payload = {
+                "parent_scan_id": parent_scan_id,
+                "terminated_by": terminated_by,
+            }
+            (d / "meta.json").write_text(json.dumps(payload), encoding="utf-8")
+        elif meta == "malformed":
+            (d / "meta.json").write_text("{not valid json", encoding="utf-8")
+        elif meta == "empty":
+            (d / "meta.json").write_text("", encoding="utf-8")
+        return d
+
+    def test_grouping_counts_scans_not_folders(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        a1 = self._make_run_dir(logs_dir, 1, "a1", parent_scan_id="scan-a")
+        a2 = self._make_run_dir(logs_dir, 2, "a2", parent_scan_id="scan-a")
+        b1 = self._make_run_dir(logs_dir, 3, "b1", parent_scan_id="scan-b")
+        b2 = self._make_run_dir(logs_dir, 4, "b2", parent_scan_id="scan-b")
+        c1 = self._make_run_dir(logs_dir, 5, "c1", parent_scan_id="scan-c")
+        c2 = self._make_run_dir(logs_dir, 6, "c2", parent_scan_id="scan-c")
+
+        prune_logs(logs_dir, max_scans=2)
+
+        assert not a1.exists()
+        assert not a2.exists()
+        assert b1.exists()
+        assert b2.exists()
+        assert c1.exists()
+        assert c2.exists()
         remaining = [d for d in logs_dir.iterdir() if d.is_dir()]
-        assert len(remaining) == 10
+        assert len(remaining) == 4
+
+    def test_failed_scan_survives_later_completed_scans(
+        self, tmp_path: Path
+    ) -> None:
+        logs_dir = tmp_path / "logs"
+        failed = self._make_run_dir(
+            logs_dir, 1, "f1", parent_scan_id="scan-failed", terminated_by="error"
+        )
+        c1 = self._make_run_dir(logs_dir, 2, "c1", parent_scan_id="scan-c1")
+        c2 = self._make_run_dir(logs_dir, 3, "c2", parent_scan_id="scan-c2")
+        c3 = self._make_run_dir(logs_dir, 4, "c3", parent_scan_id="scan-c3")
+
+        prune_logs(logs_dir, max_scans=2)
+
+        assert failed.exists()
+        assert not c1.exists()
+        assert c2.exists()
+        assert c3.exists()
+
+    def test_failed_scan_all_folders_survive(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        f1 = self._make_run_dir(
+            logs_dir, 1, "f1", parent_scan_id="scan-failed", terminated_by="completed"
+        )
+        f2 = self._make_run_dir(
+            logs_dir, 2, "f2", parent_scan_id="scan-failed", terminated_by="timeout"
+        )
+        c1 = self._make_run_dir(logs_dir, 3, "c1", parent_scan_id="scan-c1")
+        c2 = self._make_run_dir(logs_dir, 4, "c2", parent_scan_id="scan-c2")
+
+        prune_logs(logs_dir, max_scans=1)
+
+        assert f1.exists()
+        assert f2.exists()
+        assert not c1.exists()
+        assert c2.exists()
+
+    def test_malformed_meta_does_not_raise(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        malformed = self._make_run_dir(logs_dir, 1, "m1", meta="malformed")
+        empty = self._make_run_dir(logs_dir, 2, "m2", meta="empty")
+        missing = self._make_run_dir(logs_dir, 3, "m3", meta="none")
+
+        prune_logs(logs_dir, max_scans=10)
+
+        assert malformed.exists()
+        assert empty.exists()
+        assert missing.exists()
+
+    def test_malformed_meta_treated_as_singleton(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        grouped_1 = self._make_run_dir(logs_dir, 1, "g1", parent_scan_id="scan-g")
+        grouped_2 = self._make_run_dir(logs_dir, 2, "g2", parent_scan_id="scan-g")
+        malformed = self._make_run_dir(logs_dir, 3, "m1", meta="malformed")
+
+        prune_logs(logs_dir, max_scans=1)
+
+        assert malformed.exists()
+        assert not grouped_1.exists()
+        assert not grouped_2.exists()
+
+    def test_protected_grouped_dirs_never_deleted(self, tmp_path: Path) -> None:
+        logs_dir = tmp_path / "logs"
+        old_1 = self._make_run_dir(logs_dir, 1, "o1", parent_scan_id="scan-old")
+        old_2 = self._make_run_dir(logs_dir, 2, "o2", parent_scan_id="scan-old")
+        new_1 = self._make_run_dir(logs_dir, 3, "n1", parent_scan_id="scan-new")
+
+        prune_logs(logs_dir, max_scans=1, protected=frozenset({old_1}))
+
+        assert old_1.exists()
+        assert not old_2.exists()
+        assert new_1.exists()
 
 
 class TestPruneResults:

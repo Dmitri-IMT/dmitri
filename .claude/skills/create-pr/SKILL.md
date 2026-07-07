@@ -107,7 +107,8 @@ COMMIT_COUNT=$(git log "$TARGET_BRANCH".."$CURRENT_BRANCH" --oneline | wc -l)
 
 Extract from commit messages:
 - **Feature description**: Look for first substantive commit message
-- **Related issues**: Extract `#123`, `fixes #123`, `closes #123` patterns
+- **Related issues**: Extract Linear identifiers — `DMI-123`, `fixes DMI-123`, branch names
+  like `dmi-123-slug` (issues live in Linear; bare `#123` patterns are legacy GitHub refs)
 - **ADR references**: Extract `ADR-NNN` references
 - **Breaking changes**: Look for "BREAKING", "breaking change" keywords
 
@@ -184,7 +185,8 @@ Create comprehensive PR description with sections:
 - Extracted from file changes and commits
 
 ## Related Issues
-Closes #123 (if detected from commits)
+Fixes DMI-123 (if detected from branch name or commits — the "Fixes DMI-NN" magic word is
+what lets the Linear↔GitHub integration auto-move the issue on merge)
 Related to: [ADR-003](docs/adr/ADR-003.md) (if ADR mentioned)
 
 ## Testing
@@ -245,14 +247,17 @@ Build checklist of components affected for PR description.
 
 ### 9. Extract Issue References
 
-Search commit messages for patterns:
+Search the branch name and commit messages for patterns:
 
-- `#123` (issue reference)
-- `fixes #123`, `closes #123`, `resolves #123` (linking)
+- `DMI-123` / branch `dmi-123-slug` (Linear issue reference)
+- `fixes DMI-123`, `closes DMI-123` (linking magic words)
 - `ADR-001`, `ADR-003` (architecture decision records)
 - `v1`, `v2` (version references)
 
-Add these to PR description in "Related Issues" section.
+Add these to the PR description's "Related Issues" section as `Fixes DMI-NN` — Linear's
+GitHub integration parses this to link the PR and auto-move the issue on merge. If the
+branch clearly implements a Linear issue but no identifier was found, ask the user which
+DMI-NN it fixes rather than omitting the link.
 
 
 ### 10. Suggest Labels
@@ -387,7 +392,9 @@ Error cases:
 
 - **Component mapping**: References your monorepo structure (backend, frontend, hardware-agent, infra, docs)
 - **ADR detection**: Finds ADR references in commits
-- **Issue linking**: Detects GitHub issue numbers in commit messages
+- **Issue linking**: Detects Linear identifiers (DMI-NN) in branch names and commit
+  messages; writes "Fixes DMI-NN" so the Linear↔GitHub integration links and auto-moves
+  the issue
 - **Branch naming**: Respects your feature branch conventions
 - **Target branch**: Defaults to `main`, fallback to `master`
 
@@ -482,6 +489,7 @@ Optionally auto-request reviews from suggested reviewers (can be disabled).
 
 1. Use descriptive commit messages — they feed PR title and description
 2. Commit related changes together — creates logical PR chunks
-3. Reference issues in commits (`fixes #123`) — auto-links in PR
+3. Branch from Linear's suggested branch name (`dmi-NN-slug`) and reference issues in
+   commits (`fixes DMI-NN`) — auto-links in both Linear and the PR
 4. Keep PRs focused — single feature per PR when possible
 5. Review generated PR description — adjust if needed before merge

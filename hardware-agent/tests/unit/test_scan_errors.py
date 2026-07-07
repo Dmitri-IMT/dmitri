@@ -11,6 +11,7 @@ from agent.scanner import (
     TransientScanError,
     UnitScanError,
 )
+from agent.scanner.errors import ScanCancelled as ScanCancelledFromErrors
 from agent.tui.scanner import ScanCancelled
 
 
@@ -49,6 +50,13 @@ class TestScanCancelled:
     def test_caught_as_scan_error(self) -> None:
         with pytest.raises(ScanError):
             raise ScanCancelled()
+
+    def test_defined_in_errors_module(self) -> None:
+        assert issubclass(ScanCancelledFromErrors, ScanError)
+        assert ScanCancelledFromErrors.__module__ == "agent.scanner.errors"
+
+    def test_tui_import_is_same_class(self) -> None:
+        assert ScanCancelled is ScanCancelledFromErrors
 
 
 class TestPackageReexports:

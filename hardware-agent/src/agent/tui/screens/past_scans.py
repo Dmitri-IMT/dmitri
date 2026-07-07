@@ -12,7 +12,7 @@ from textual.containers import Vertical
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
-from agent.tui.config import load_config
+from agent.paths import load_config
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.scan_view import ScanViewScreen
 

@@ -206,3 +206,47 @@ class TestScanRunnerNoReporter:
         runner._run()
 
         assert len(completed) == 1
+
+
+class TestScanRunnerRunBlocking:
+    def test_run_blocking_delivers_payload_via_on_complete(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.tui.scanner.check_network_connectivity", lambda: None
+        )
+        completed: list[object] = []
+        runner = ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            reporter=None,
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        )
+        runner.run_blocking()
+
+        assert len(completed) == 1
+
+    def test_run_blocking_does_not_spawn_thread(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.tui.scanner.check_network_connectivity", lambda: None
+        )
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("threading.Thread should not be constructed")
+
+        monkeypatch.setattr("agent.tui.scanner.threading.Thread", _boom)
+        completed: list[object] = []
+        runner = ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            reporter=None,
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        )
+        runner.run_blocking()
+
+        assert len(completed) == 1
+        assert runner._thread is None

@@ -214,7 +214,8 @@ class TestLoggedNmapRunnerConcurrentPrune:
         assert slow_dir.exists()
         assert (slow_dir / "console.log").read_text(encoding="utf-8") == "still running"
         run_dirs = [d for d in logs_dir.iterdir() if d.is_dir()]
-        assert len(run_dirs) == 10
+        assert len(run_dirs) == 11
+        assert not (logs_dir / "2026-05-02-10-00-00-old-aa00").exists()
         assert any(d.name.startswith("2026-") and "-nse-" in d.name for d in run_dirs)
 
 

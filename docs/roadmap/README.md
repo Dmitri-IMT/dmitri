@@ -15,11 +15,24 @@
 | Doc | Layer | Status today |
 |-----|-------|--------------|
 | [`PI.md`](PI.md) | Raspberry Pi agent | **Software built (dev machine/TUI).** No Pi hardware yet. No daemon, no backend HTTP client. |
-| [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · ADR-011 |
+| [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · **B8 ✅** · ADR-011 |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); not built in code |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | **Greenfield.** No `frontend/` directory exists. |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
+| [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
+
+## Reference
+
+| Doc | What |
+|-----|------|
+| [`../CLI.md`](../CLI.md) | Full `dmitri` CLI — `start` (TUI), `agent` (headless), scan modes, exit codes |
+
+## Field tests
+
+| Folder | What |
+|--------|------|
+| [`../tests/nspi-september/`](../tests/nspi-september/) | September NSPi pilot — dual-home plan + 2026-07-03 field results. **Closed** (no retest); pilot = Quick scan on dual-homed laptop. NSPi mode fix in T4.1 is dev-only. |
 
 ## Where each layer stands (one paragraph)
 
@@ -29,7 +42,8 @@ path for September. A separate FastAPI backend (`backend/`) can ingest payloads,
 risk — but **nothing calls the backend today**; the link is the shared `contracts/` schema only.
 **September (B10 = Control):** scan-from-web via command channel, Pi daemon, frontend trigger.
 **Still missing:** Pi hardware, Pi→backend transport, command channel, **frontend**, auth in code,
-LLM explainer. This roadmap sequences those.
+LLM explainer. **NSPi pilot:** dual-homed laptop validated on the real lab network (July 2026); use
+Quick scan until NSPi mode port stage is fixed. This roadmap sequences the rest.
 
 ## Cross-layer milestone sequencing
 

@@ -5,7 +5,7 @@ description: >-
   Show recent activity, open issues by component, PR review queue, blockers, and quick component guide.
   Use when a new team member joins, asking "what should I know about this project?",
   joining a standup, or needing quick situational awareness. Manual invocation via /onboard.
-compatibility: Requires GitHub CLI (gh) and git; designed for GitHub.com repositories with organized issues/labels
+compatibility: Requires the linear-server MCP connection (issues live in Linear), plus GitHub CLI (gh) and git for PRs/commits
 metadata:
   author: github-cli-skills
   source: skills/github-cli/onboard.md
@@ -36,11 +36,10 @@ User may optionally provide a time window (e.g., "last 14 days", "last week") or
 
 ## Prerequisites
 
-- GitHub CLI (`gh`) must be installed and authenticated
-- Current directory must be a git repository
-- Repository should have organized issues with labels (backend, frontend, hardware-agent, infra, docs, etc.)
-- Repository should have some PR history
-- Documentation should be available: `docs/architecture/ARCHITECTURE.md`, component READMEs
+- Linear MCP tools (`mcp__linear-server__*`) for issues; load via ToolSearch if deferred:
+  `list_issues`, `list_milestones`, `get_project`
+- GitHub CLI (`gh`) authenticated + git repository, for PRs and commits (those stay on GitHub)
+- Documentation should be available: `docs/architecture/ARCHITECTURE.md`, `docs/roadmap/`, component READMEs
 
 ## Outline
 
@@ -91,44 +90,34 @@ Parse to extract:
 - **Open PRs**: Count, authors, review status
 - **Recent commits**: Count, sample messages
 
-### 4. Fetch Open Issues
+### 4. Fetch Open Issues (Linear)
 
-Get all open issues organized by component:
+Issues live in Linear (team **Dmitri**, project **Dmitri**). Fetch open work with
+`mcp__linear-server__list_issues` (team `Dmitri`, states Backlog/Todo/In Progress/In Review).
+Exclude closed `Migrated` issues — they are imported GitHub history.
 
-```bash
-gh issue list --state open --limit 100 --json number,title,labels,assignees,createdAt,url
-```
-
-For each issue, determine component using label matching:
+For each issue, determine component from labels:
 
 | Label | Component |
 |-------|-----------|
-| `backend` | Backend API |
-| `frontend` | Frontend |
-| `hardware-agent` | Hardware Agent |
-| `infra` \| `ci` \| `deployment` | Infrastructure & CI |
-| `docs` \| `adr` | Documentation |
-| (no label) | Uncategorized |
+| `layer:backend` \| `epic:backend` | Backend API |
+| `layer:frontend` \| `epic:frontend` | Frontend |
+| `layer:pi` \| `epic:agent` | Pi Agent / Scanner |
+| `layer:auth` | Auth |
+| `type:ops` | Ops / Infrastructure |
+| `type:adr` \| `type:documentation` | Documentation |
+| (no layer label) | Uncategorized |
 
-Group issues by component and sort by:
-1. Priority label (if exists: `critical`, `high`, `medium`, `low`)
-2. Created date (oldest first)
+Group by epic (parent issue) when present — the epics ARE the delivery phases — then sort
+by Linear priority, then created date. Note the milestone (e.g. **MVP — Control**) and its
+target date via `list_milestones`.
 
 ### 5. Identify Blockers and Dependencies
 
-Search issue bodies and PR descriptions for blocker patterns:
-
-```bash
-gh issue list --state open --limit 100 --json number,title,body,labels
-
-# Pattern search in results:
-# "blocked by", "depends on", "waiting for", "⛔", "🚫", "⏳"
-```
-
-For each blocker found:
-- Extract blocker issue number
-- Link to related issue/PR
-- Store as blocking relationship
+Blockers are real Linear relations, not text patterns: `list_issues` results include
+relations; for suspicious cases use `get_issue` with `includeRelations: true`. Report each
+open issue that is blocked, what blocks it, and the blocker's state. Also scan PR
+descriptions (`gh pr list`) for "waiting" language.
 
 ### 6. Analyze PR Review Queue
 
@@ -362,9 +351,9 @@ This is an embedded network vulnerability scanning device for a university lab.
 
 **Suggested issues for new contributors** (good first issues):
 
-1. [#92] Optimize scan query performance — Backend, good learning opportunity
-2. [#98] Docker image size optimization — Infrastructure, self-contained task
-3. [#105] Update hardware agent logging — Hardware, well-defined scope
+1. [DMI-92] Optimize scan query performance — Backend, good learning opportunity
+2. [DMI-98] Docker image size optimization — Ops, self-contained task
+3. [DMI-105] Update hardware agent logging — Pi Agent, well-defined scope
 
 ---
 
@@ -388,8 +377,8 @@ Deep dives by component:
 
 **Want to...**
 
-- **Start a new feature?** Create issue → create feature branch → open PR
-  - See branch naming convention in [git workflow](CONTRIBUTING.md)
+- **Start a new feature?** Create a Linear issue via the `create-issue` skill (human-validated
+  product brief) → branch from Linear's suggested branch name → open PR with "Fixes DMI-NN"
   
 - **Review a PR?** Check review queue above → use `gh pr view` or GitHub UI
   - Use [pr-checklist](CONTRIBUTING.md) if exists
@@ -405,7 +394,7 @@ Deep dives by component:
 ## 📞 Getting Help
 
 - **Questions?** Check [GitHub Discussions](https://github.com/Dmitri-IMT/vulnerability-scanner-device/discussions) or ask team
-- **Found a bug?** Create GitHub issue with steps to reproduce
+- **Found a bug?** Create a Linear issue (`create-issue` skill) with steps to reproduce
 - **Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Onboarding help?** Ask @alice (team lead) or whoever greeted you
 
@@ -413,7 +402,7 @@ Deep dives by component:
 
 ## 📅 Next Milestones
 
-- **Sprint end** (April 28): Complete backend authentication (issue #45)
+- **Sprint end** (April 28): Complete backend authentication (DMI-45)
 - **Beta v1** (May 15): All core features complete, ready for lab testing
 - **v1 Release** (June 1): Deploy to university lab
 
@@ -424,7 +413,7 @@ Deep dives by component:
 | Link | Purpose |
 |------|---------|
 | [GitHub Repo](https://github.com/Dmitri-IMT/vulnerability-scanner-device) | Source code |
-| [GitHub Issues](https://github.com/Dmitri-IMT/vulnerability-scanner-device/issues) | Work queue |
+| [Linear — project Dmitri](https://linear.app/dmitri-imt/project/dmitri-9494f422b1a8) | Work queue (issues, epics, milestones) |
 | [GitHub PRs](https://github.com/Dmitri-IMT/vulnerability-scanner-device/pulls) | Code reviews |
 | [GitHub Discussions](https://github.com/Dmitri-IMT/vulnerability-scanner-device/discussions) | Questions & ideas |
 
@@ -453,8 +442,9 @@ Add a note at top: "Customized for: Frontend Developer" and adjust content accor
 ## Integration with Project
 
 - **Component descriptions**: Source from `docs/architecture/ARCHITECTURE.md` sections 2.1–2.6
-- **Issue labels**: Should follow taxonomy: `backend`, `frontend`, `hardware-agent`, `infra`, `docs`
-- **Recent activity**: Fetched via `gh` CLI from GitHub
+- **Issue labels**: Linear taxonomy — `layer:pi`, `layer:backend`, `layer:frontend`,
+  `layer:auth`, `type:ops`, `type:decision`, `agentic` (legacy `epic:*` on `Migrated` only)
+- **Recent activity**: issues via Linear MCP; PRs/commits via `gh` CLI and git
 - **Contributing guide**: Link to [CONTRIBUTING.md](CONTRIBUTING.md)
 - **Setup guide**: Link to [docs/DEV-SETUP.md](docs/DEV-SETUP.md)
 - **Architecture docs**: Link to ADRs and main ARCHITECTURE.md
@@ -473,7 +463,7 @@ Output:
 - 3 merged PRs last week
 - 7 open PRs (4 in review)
 - 24 open issues
-- 1 blocker (#45 — authentication framework)
+- 1 blocker (DMI-45 — authentication framework)
 
 ## Component Overview
 [5 components with current status and recent activity]
@@ -498,7 +488,7 @@ User reads this and knows:
 
 ## Limitations
 
-- Requires GitHub issues/PRs to be properly labeled
+- Requires Linear issues and GitHub PRs to be properly labeled
 - Requires documentation files to exist and be readable
 - Assumes standard GitHub conventions
 - May not reflect real-time status (GitHub API has some caching)

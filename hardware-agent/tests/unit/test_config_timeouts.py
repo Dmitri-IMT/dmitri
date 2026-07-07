@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import typing
+
 import pytest
+from agent import config
 from agent.config import AgentSettings, subprocess_timeout_for
+from agent.normalize.contracts import ScanPayload
 
 EXPECTED_TIMEOUTS = [
     ("quick", "discovery", 600.0),
@@ -43,3 +47,13 @@ class TestResilienceConfigDefaults:
 
     def test_transient_retries_default(self) -> None:
         assert AgentSettings().transient_retries == 1
+
+
+class TestScanModes:
+    def test_matches_documented_tuple(self) -> None:
+        assert config.SCAN_MODES == ("quick", "standard", "extensive", "nspi", "max")
+
+    def test_matches_scan_payload_literal(self) -> None:
+        scan_mode_field = ScanPayload.model_fields["scan_mode"]
+        literal_values = typing.get_args(scan_mode_field.annotation)
+        assert config.SCAN_MODES == literal_values

@@ -1,11 +1,11 @@
-"""Unit tests for agent.tui.config — OS defaults, load/save, validation."""
+"""Unit tests for agent.paths — OS defaults, load/save, validation."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
 
-from agent.tui.config import (
+from agent.paths import (
     DmitriConfig,
     default_config_path,
     default_results_dir,
@@ -22,19 +22,19 @@ class TestDefaultResultsDir:
         assert "Downloads" not in result
         assert "downloads" not in result
 
-    @patch("agent.tui.config.platform.system", return_value="Windows")
+    @patch("agent.paths.platform.system", return_value="Windows")
     @patch.dict("os.environ", {"LOCALAPPDATA": "C:\\Users\\test\\AppData\\Local"})
     def test_windows(self, _mock_system):
         result = default_results_dir()
         assert result == "C:\\Users\\test\\AppData\\Local\\Dmitri\\results"
 
-    @patch("agent.tui.config.platform.system", return_value="Linux")
+    @patch("agent.paths.platform.system", return_value="Linux")
     @patch.dict("os.environ", {"XDG_DATA_HOME": "/home/user/.local/share"}, clear=False)
     def test_linux_with_xdg(self, _mock_system):
         result = default_results_dir()
         assert result == str(Path("/home/user/.local/share/dmitri/results"))
 
-    @patch("agent.tui.config.platform.system", return_value="Linux")
+    @patch("agent.paths.platform.system", return_value="Linux")
     @patch.dict("os.environ", {}, clear=False)
     def test_linux_without_xdg(self, _mock_system):
         # Falls back to ~/.local/share
@@ -43,7 +43,7 @@ class TestDefaultResultsDir:
         assert "results" in result
         assert "Downloads" not in result
 
-    @patch("agent.tui.config.platform.system", return_value="Darwin")
+    @patch("agent.paths.platform.system", return_value="Darwin")
     @patch.dict("os.environ", {}, clear=False)
     def test_macos(self, _mock_system):
         result = default_results_dir()
@@ -52,13 +52,13 @@ class TestDefaultResultsDir:
 
 
 class TestDefaultConfigPath:
-    @patch("agent.tui.config.platform.system", return_value="Windows")
+    @patch("agent.paths.platform.system", return_value="Windows")
     @patch.dict("os.environ", {"LOCALAPPDATA": "C:\\Users\\test\\AppData\\Local"})
     def test_windows(self, _mock_system):
         result = default_config_path()
         assert result == Path("C:\\Users\\test\\AppData\\Local\\Dmitri\\config.toml")
 
-    @patch("agent.tui.config.platform.system", return_value="Linux")
+    @patch("agent.paths.platform.system", return_value="Linux")
     @patch.dict("os.environ", {"XDG_CONFIG_HOME": "/home/user/.config"}, clear=False)
     def test_linux_with_xdg(self, _mock_system):
         result = default_config_path()
