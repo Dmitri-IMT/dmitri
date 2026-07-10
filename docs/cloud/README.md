@@ -18,7 +18,9 @@
 
 | Piece | Provider |
 |-------|----------|
-| Postgres | Supabase |
-| API + worker | Railway (2 services) |
+| Postgres | Supabase — region `us-east-1` (N. Virginia) |
+| API + worker | Railway (2 services) — region `us-east4` (Virginia) |
 | Frontend | Railway static (same project) |
 | AWS | Staging parallel — see BACKEND B4/B5 schedule |
+
+Region: Supabase `us-east-1` and Railway `us-east4` are co-located in Virginia (Railway has no South America region; compute↔DB latency dominates, so both sit together). Setup: [`supabase/SETUP.md`](supabase/SETUP.md) · [`railway/SETUP.md`](railway/SETUP.md).
