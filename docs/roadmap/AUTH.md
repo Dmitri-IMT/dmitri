@@ -85,7 +85,7 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 | **Password rotation** | **Every 3 months.** User must set a new password when expired; block normal API use until changed (login may succeed only to reach change-password flow). |
 | **Forgot password** | **Self-serve email reset (C2).** “Forgot password?” → email with one-time reset link → set new password (same policy + rotation clock). |
 
-**Frontend surfaces:** invite acceptance page, login, forgot password, reset password, **forced change-password** when rotation due.
+**Frontend surfaces:** invite acceptance page, login, forgot password, reset password, **forced change-password** when rotation due. Client mechanics (token storage, silent-refresh interceptor, route guards): [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
 ### Sessions ✅
 

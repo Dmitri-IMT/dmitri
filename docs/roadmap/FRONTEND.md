@@ -5,7 +5,7 @@
 > order*, not re-deciding the stack.
 >
 > **Sources:** [`ADR-008`](../adr/ADR-008-frontend-stack.md), [`ADR-005`](../adr/ADR-005-security-model.md),
-> [`ui/wireframes.md`](../ui/wireframes.md), [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml).
+> [`ui/REFERENCE.md`](../ui/REFERENCE.md), [`ui/FLOWS.md`](../ui/FLOWS.md), [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml).
 > **Neighbours:** [`BACKEND.md`](BACKEND.md), [`AUTH.md`](AUTH.md), [`AI.md`](AI.md), [`SECURITY.md`](SECURITY.md), [`PI.md`](PI.md).
 
 ## Decided stack (ADR-008)
@@ -33,8 +33,11 @@ backend OpenAPI via **openapi-typescript** → the contract is compile-time enfo
 - **Host inventory:** discovered machines → **`/hosts`** (OpenAPI `/devices` rename per B7) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
 - **Device registration/config:** ADR-008 calls this out as the reason TanStack Query (mutations + cache invalidation) was chosen — design the mutation/invalidation flows around it.
-- ⚠️ **REVALIDATE:** `ui/wireframes.md` documents the **TUI**, not the web SPA. Treat it as
-  inspiration for information architecture, not a web spec — the web wireframes don't exist yet.
+- **Wireframes (resolved 2026-07-10, DMI-54):** the March-era `ui/wireframes.md` was web-SPA
+  wireframes (the old ⚠️ REVALIDATE note claiming it documented the TUI was wrong) but predated
+  auth/agents/Control; it has been removed. Flows are breadboarded in
+  [`ui/FLOWS.md`](../ui/FLOWS.md) per [`ui/REFERENCE.md`](../ui/REFERENCE.md); screen
+  layouts/states/copy land in [`ui/SCREENS.md`](../ui/SCREENS.md) (template ready, no screen specced yet).
 
 ## Milestones
 
