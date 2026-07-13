@@ -1,6 +1,9 @@
 # UI Flows — Breadboards
 
-> **Status:** draft (2026-07-10). The flow layer of the UI docs ladder:
+> **Status:** draft (2026-07-13) — **B3 and B4 clarified against the contract**; B5 (Settings) added;
+> **B1 and B2 corrected against the contract** when the auth screens were specced (C7 resolved — accepting
+> an invite *does* issue a session, so it lands on HOME, not LOGIN; invite expiry is `410`, not `400`).
+> Fourteen open contract asks are recorded below; B4 cannot lock until C1 and C2 land. The flow layer of the UI docs ladder:
 > [`REFERENCE.md`](REFERENCE.md) (principles) → **FLOWS.md** (breadboards) → [`SCREENS.md`](SCREENS.md)
 > (layouts, states, copy). Breadboards fix **places, affordances and connections**
 > and deliberately fix **no layout** ([`REFERENCE.md` §5](REFERENCE.md)) — argue and lock the
@@ -23,20 +26,25 @@ Matches the screen inventory in ADR-008. The LLM explainer panel is deferred and
 | FORGOT PASSWORD | outside | public |
 | RESET PASSWORD | outside (email link) | public |
 | FORCED PASSWORD CHANGE | outside | public (post-403) |
-| DASHBOARD | inside | admin, viewer |
+| HOME | inside | admin, viewer |
 | SCAN LIST | inside | admin, viewer |
 | SCAN DETAIL | inside | admin, viewer |
 | HOST INVENTORY | inside | admin, viewer |
 | HOST DETAIL | inside | admin, viewer |
 | AGENTS | inside | admin, viewer (read-only) |
 | USERS & INVITES | inside | admin only |
+| SETTINGS | inside | admin, viewer |
+
+**Single agent.** The MVP has exactly one Pi. AGENTS is still a list place (one row), and the
+frontend discovers it via `GET /api/v1/agents` — **contract ask C1**; the agent id is the
+provisioning `X-Device-Id` and cannot be derived client-side.
 
 ## B1 — Auth: login and its edges
 
 ```text
 LOGIN
   [email] [password] [Log in]  ["Forgot password?"]
-  [Log in] ok ................→ DASHBOARD
+  [Log in] ok ................→ HOME
   [Log in] 401 ...............→ stay; inline error
   [Log in] 403 pw-expired ....→ FORCED PASSWORD CHANGE
   ["Forgot password?"] .......→ FORGOT PASSWORD
@@ -46,14 +54,16 @@ FORGOT PASSWORD
   always 204 .................→ stay; confirmation copy (no account enumeration)
   (email link) ...............→ RESET PASSWORD
 
-RESET PASSWORD
+RESET PASSWORD                     (?token=… — the token posts in the BODY, not the path)
   [new password] [confirm] [Set password]
-  ok .........................→ LOGIN
-  400 policy / expired token .→ stay; inline error
+  204 ........................→ LOGIN (success copy) — reset issues NO session, unlike accept-invite
+  400 policy .................→ stay; inline error
+  400 dead/used token ........→ form removed; [Request a new link] → FORGOT PASSWORD
+                                ⚠️ both failures are the SAME 400 — contract ask C15
 
 FORCED PASSWORD CHANGE
   [current] [new] [confirm] [Change password]
-  ok .........................→ DASHBOARD
+  ok .........................→ HOME
 
 Session edges (from any authenticated place)
   access expired ..............→ silent refresh → retry (invisible to user)
@@ -70,38 +80,51 @@ in contract + AUTH.md before this flow reaches SCREENS.md.
 ```text
 (invite email link)
   → ACCEPT INVITE
-      [set password] [confirm] [Create account]      POST /invites/{token}/accept
-      ok ......................→ LOGIN (success copy)          [open: auto-login? see below]
-      400 expired/used token ..→ stay; error copy + "ask your admin to re-invite"
+      [email] [password] [confirm] [Create account]  POST /invites/{token}/accept
+      201 .....................→ HOME (blank slate) — returns a LoginResponse; ✅ C7 resolved
+      410 expired/used token ..→ form removed; "ask your admin for a new link"
+      400 policy ..............→ stay; inline error under the password field
 
-LOGIN → DASHBOARD (blank slate: no scans yet)
+HOME (blank slate: no scans yet)
       blank-slate CTA .........→ AGENTS               (the blank slate IS the onboarding)
 
 AGENTS
-      agent row online .. [Scan now] → B4
+      target_subnet == null ..→ [Choose which network to scan]   ← required before the first scan
+                                (the Pi is dual-homed; see B4)
+      network chosen .........→ [Scan now] becomes available → B4
 
 (first scan done)
-  → DASHBOARD with first real data / SCAN DETAIL via B4
+  → HOME with first real data / SCAN DETAIL via B4
 
-USERS & INVITES
-      [Invite user: email + role admin|viewer] → pending-invite row   POST /invites
-      [change role] / [revoke invite] → row updates
+USERS & INVITES                                        ⚠️ mostly blocked — contract ask C4
+      [Invite user: email + role admin|viewer]                        POST /invites  ✅ exists
+          201 → { invite_token, expires_at }
+          → the BACKEND emails the link to the invitee (✅ C17 decided; provider TBD)
+          → the SCREEN also shows the link, copyable — email can land in spam, and
+            some admins would rather send it over Slack
+          → shown ONCE: with no GET /invites, the admin cannot retrieve it again
+      [change role] / [revoke invite] → row updates                   ❌ no endpoint
+      (listing users and pending invites)                             ❌ no endpoint
+      ⇒ v1 ships the invite form ALONE, at /users. The nav item stays "Users" — it names the
+        domain, and more user-related surfaces land inside it as endpoints arrive.
 ```
 
-## B3 — Viewer daily: read path
+## B3 — Daily read path
 
 The viewer has **no** `[Scan now]` and no USERS & INVITES nav item — affordances are omitted,
-not disabled (context over consistency, [`REFERENCE.md` §9](REFERENCE.md)).
+not disabled (context over consistency, [`REFERENCE.md` §9](REFERENCE.md)). Admins walk this same
+path; nothing below is viewer-specific except those two omissions.
 
 ```text
-LOGIN → DASHBOARD ("Review" in the nav — a judgment, not a metrics wall)
+LOGIN → HOME (the nav name is "Home"; its job is a judgment, not a metrics wall)
       verdict line (epicenter) — the product answers "is anything wrong since I last looked?"
       review items — rendered only when something warrants attention:
-        critical/high finding (latest scan) ..→ SCAN DETAIL (finding row)
-        scan failed ..........................→ SCAN DETAIL (failure reason)
+        critical/high finding
+          (latest COMPLETED scan) ............→ SCAN DETAIL, that finding row open
+        scan failed (latest scan) ............→ SCAN DETAIL (failure reason)
         coverage stale (Pi offline /
-          no recent completed scan) ..........→ AGENTS
-        new device on the network ............→ HOST DETAIL      ⚠️ open decision #4
+          no completed scan in N days) .......→ AGENTS                ⚠️ N undecided
+        new device on the network ............→ HOST DETAIL           ⚠️ cut from v1 (#4)
       quiet context footer: last scan · Pi status — muted links, no metric cards
       nav: Scans ................→ SCAN LIST → row → SCAN DETAIL
       nav: Hosts ................→ HOST INVENTORY → row → HOST DETAIL
@@ -114,35 +137,140 @@ HOST DETAIL
       scan-history row ..........→ SCAN DETAIL
 ```
 
+**Findings come from the latest *completed* scan, never simply the latest scan.** If the most
+recent scan **failed**, it has no findings — so keying the review items to it would make Home fall
+*silent about the critical findings from the last good scan*, showing the operator a calmer page at
+the exact moment coverage degraded. The failed scan is an **additional** item, never a replacement.
+Home therefore reads two scans: the latest (for the failure item and the footer) and the latest
+completed (for the findings).
+
+**Finding detail is rendered in place, not fetched.** `GET /findings?scan_id=…` already returns the
+full `FindingRecord` — `title`, `description`, `recommendation`, `evidence`, `device_ip`, `port`,
+`severity`. Scan detail holds every finding it needs the moment it loads, so opening one is local
+state. **No `GET /findings/{id}` endpoint is needed** and none should be added ([`REFERENCE.md`
+§12](REFERENCE.md) — don't solve a problem you don't have).
+
+**The Home → finding deep link is routing, not data:** `/scans/:scanId?finding=:findingId`. Scan
+detail loads its findings as it always does, matches the id locally, scrolls to that row and opens
+its panel. If the param is absent or unmatched the page renders normally, so the link degrades
+cleanly.
+
 ## B4 — "Scan now": command flow
 
 Admin only. Contract: [`ADR-011`](../adr/ADR-011-pi-command-channel.md) +
 [`BACKEND.md` B6](../roadmap/BACKEND.md).
 
 ```text
-AGENTS
-  agent row: name · online/offline · last seen · [Scan now]
+AGENTS  (one row — single-agent MVP; discovered via GET /agents, contract ask C1)
+  agent row: name · online/offline · last seen · target network · [Scan now]
+
+  on mount / return / reload:
+     GET /agents/{agent_id} → active_command_id
+     active_command_id != null ..→ resume polling; render the pill mid-flight
+                                   (this is what makes the pill survive navigation)
+
+  target_subnet == null .........→ [Choose which network to scan]   ← blocks [Scan now]
+     lists AgentDetail.available_subnets, reported by the Pi over its WS channel
+     shown as human labels, never a CIDR text field:
+         ( ) Ethernet · 192.168.0.0/24
+         ( ) Wi-Fi    · 10.12.0.0/16
+     chosen ......................→ persisted on the agent (contract ask C2)
+
   [Scan now] ....................→ POST /agents/{agent_id}/commands
-     accepted ...................→ status pill on the row: queued
-        poll GET /commands/{command_id}
+                                    { scan_mode: "quick", subnet: <agent.target_subnet> }
+     201 ........................→ status pill on the row: queued
+        poll GET /commands/{command_id}  every 5s while pending
         queued → delivered → running → uploading → done
         done ....................→ invalidate scans/agents/findings caches
                                     pill becomes [View scan] → SCAN DETAIL
-        command failure state ...→ error pill + [Retry]
+        failed ..................→ error pill (CommandDetail.error_code) + [Retry]
      503 device_offline .........→ toast "Pi seems to be offline." + refresh agent status
-     409 device_busy ............→ toast (copy TBD — IDEAS.md) + show running state
+     409 device_busy ............→ toast (copy TBD) + GET /agents/{id} → poll active_command_id
+                                    (the Pi is mid-scan; adopt its command, don't start one)
+```
+
+**Why the network must be chosen, and chosen here.** The Pi is **deliberately dual-homed**
+([field test](../tests/nspi-september/plan.md)): ethernet onto the target subnet with *no default
+gateway*, wifi for internet so it can reach `vulners.com` while scanning. It therefore sees **two**
+networks and has no basis for guessing which is the target — and scanning the wrong one (the host
+site's own wifi) would be both useless and hostile. A human must choose, once.
+
+That choice is a **property of the Pi, not a user preference**: one box, pointed at one network, the
+same for every admin in the org. So it lives on the agent and is made on AGENTS — the place you are
+already looking at the Pi and about to scan it ([`REFERENCE.md` §9](REFERENCE.md)) — not in SETTINGS.
+`POST /commands` is unchanged: the frontend sends the stored `target_subnet`, and the admin never
+sees a CIDR field.
+
+**Scan mode is not a choice.** `ScanMode` has five values; the product surfaces one and picks
+**`quick`** ([`REFERENCE.md` §8](REFERENCE.md) — the product decides). It is not exposed in the UI.
+
+**The pill survives navigation.** `AgentDetail.active_command_id` already exists in the contract.
+Without reading it on mount, the status pill would live only in React state and a ten-minute scan
+would lose it the moment the operator visited Scans and came back — or reloaded. The same field is
+the *only* way to implement the 409 branch, which must show the running state of a command the
+frontend did not create and has no id for.
+
+**`[View scan]` appears only at `done`,** deliberately. `CommandSummary` returns `scan_id` at `201`
+— the scan row exists as a stub from the start — so the link is technically available immediately.
+It is withheld because sending an operator to an empty scan is worse than making them wait.
+
+## B5 — Settings
+
+Both roles. Settings exists because **a logged-in user currently has nowhere to change their own
+password**: [`AUTH.md`](../roadmap/AUTH.md) mandates 90-day rotation, but the only change-password
+flow in B1 is the *forced* one after a 403. Voluntary rotation is homeless.
+
+The scan target network is **not** here — it is a property of the Pi, not of the user (see B4).
+
+```text
+SETTINGS
+  Change password
+      [current] [new] [confirm] [Change password]   POST /auth/change-password  ✅ exists
+      ok ..........................→ stay; confirmation copy
+      400 policy / wrong current ..→ stay; inline error
+
+  Profile — display name, email                     ⚠️ blocked — contract ask C3
+      no /users/me endpoint exists; LoginResponse returns only a token, no user object.
+      Whether the user model even has a display_name is unknown.
 ```
 
 ## Not breadboarded (out of scope for September)
 
 LLM explainer panel ([`AI.md`](../roadmap/AI.md)) · Pi provisioning/pairing (installer-only,
-[`AUTH.md`](../roadmap/AUTH.md)) · settings/preferences (none in MVP) · notifications.
+[`AUTH.md`](../roadmap/AUTH.md)) · notifications · scan scheduling · theme toggle (dark mode is a
+later pass, [`SCREENS.md` §Theme](SCREENS.md#theme)).
+
+## Contract asks
+
+Raised against [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) on
+2026-07-13. Each blocks a flow above; none are frontend-solvable.
+
+| # | Ask | Blocks |
+| --- | --- | --- |
+| C1 | `GET /api/v1/agents` — list agents (an array of one in the MVP). Today only `GET /agents/{id}` exists, and `agent_id` is the provisioning `X-Device-Id`, so the frontend cannot discover it. | B4, AGENTS |
+| C2 | `AgentDetail.available_subnets` (reported by the Pi over its WS channel) + `target_subnet`, and a way to set it. Without these, `POST /commands` demands a `subnet` CIDR from a non-technical admin. | B2, B4 |
+| C3 | A user resource: `GET /users/me` + a way to update it. There is **no `/users` path in the contract at all**, and `LoginResponse` returns only a token. | B5 profile |
+| C4 | Users & invites: list users, list pending invites, change role, revoke invite. Only `POST /invites` exists — the USERS & INVITES place is **mostly unbuildable** as breadboarded in B2. | B2, USERS & INVITES |
+| C5 | Forced password change: login with an expired password returns 403 **without a token**, but `POST /auth/change-password` requires Bearer. Needs a scoped token in the 403, or a restricted-scope login. | B1 |
+| C6 | `HostSummary.first_seen_at`, to power the "new device on your network" item on HOME. **Narrowed:** the field already exists on `HostDetailResponse`, so this is projecting an existing column into the list, not new data. | B3 (item cut from v1 until then) |
+| ~~C7~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ **✅ RESOLVED 2026-07-13** — **yes.** It returns `201` with a full `LoginResponse`, so the invitee lands on HOME, not LOGIN. B2 above said the opposite and was corrected. Expiry is **`410`**, not `400`. | — |
+| ~~C8~~ | ~~Does `FindingRecord` carry a `cve_id`?~~ **✅ RESOLVED 2026-07-13** — it does, along with `cvss_score` and `references`. Home copy stands. | — |
+| C9 | `DevicePayload` (the `devices` array on `ScanDetailResponse`) carries **no `host_id`** — so a host row on SCAN DETAIL cannot link to HOST DETAIL. The in-place panel works; the route to that machine's full history does not exist. Add `host_id`, or the affordance stays absent. | SCAN DETAIL |
+| C10 | A **failed scan has no reason**. `ScanDetailResponse` has no error field; the reason must be fetched via `command_id` → `GET /commands/{id}.error_code` — and `error_code` is a *code*, not a sentence, so it needs a plain-language mapping. A failed scan with a null `command_id` has no reason at all. | SCAN DETAIL, B3 "scan failed → failure reason" |
+| C11 | Does `GET /findings?device_id=…` accept the **`host_id`** UUID? The param predates the `/devices`→`/hosts` rename ([B7](../roadmap/BACKEND.md#b7--openapi-contract-)). If they are not the same identifier, **HOST DETAIL cannot show findings at all** — while still displaying `highest_severity`. | HOST DETAIL |
+| C12 | **Does a dead Pi produce `failed` or `expired`?** *(Not a contract gap — the enum has all seven states.)* [`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-) **contradicts itself**: its lifecycle table sends a stale `running` / undelivered command to **`expired`**, its Failure & timeout section says *"mark `failed` after timeout"*. The pill words them differently on purpose — `failed` = *the scan broke, try again*; `expired` = *the box stopped responding, go look at it*. | B4, AGENTS |
+| C13 | Does a bad `current_password` on `POST /auth/change-password` return **400 or 401**? It must be **400** — a `401` trips the Axios refresh interceptor ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and would bounce the user to LOGIN for a mistyped field. | B5, SETTINGS |
+| C14 | **`GET /invites/{token}`** — read an invite before accepting it. Without it ACCEPT INVITE knows *nothing*: it cannot name the org or the role (the sentence that tells a stranger the link is real), and the invitee must **type their own email from memory** to match `AcceptInviteRequest.email`. A typo then fails identically to a dead link, so the product's very first screen has to word its error vaguely. | B2, ACCEPT INVITE |
+| C15 | **Distinct `error.code` values on `POST /auth/reset-password`'s `400`.** A dead/used reset link and a policy-rejected password return the **same status**, and `ErrorBody.code` is an unconstrained `string`. But *"request a new link"* and *"pick a better password"* are opposite instructions — guessing wrong sends the user the wrong way. Stale links are this screen's *most likely* failure (reset emails sit in inboxes), so it is the one it most needs to word right. | B1, RESET PASSWORD |
+| ~~C17~~ | ~~Nothing in the product can send an email.~~ **✅ DECIDED 2026-07-13 — transactional email is in scope; provider TBD.** The backend emails invites *and* reset links. Invites additionally keep the copyable link in the UI (email is the convenience, the link is the guarantee — a one-time login link from a security product sometimes lands in spam). **Reset has no such fallback** — a locked-out user has nobody to hand-carry a link — so this is what makes FORGOT/RESET buildable. Remaining work is a sending domain with **SPF/DKIM/DMARC**, not code. | — |
+| C18 | `POST /invites` documents **only a `201`** — no error responses at all. Inviting an email that **already has an account**, or that **already has a live invite**, is undefined. Re-inviting is the most likely repeat action on the screen, so it needs a defined status + `error.code`. | B2, USERS & INVITES |
+| C16 | **The user's role is not in the contract.** `LoginResponse` carries only a token; there is no user object anywhere. [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis says the role comes from **JWT claims**, but the contract documents no claims — so the frontend would decode an unspecified payload to decide what to render. **Every "absent, not disabled" decision depends on this** (SCREENS rule 3): the `Users` nav item, `[Scan now]`, the network chooser, the invite form. Specify the claims, or return the role (fold into C3's `/users/me`). | **all role-gated UI** |
 
 ## Open decisions
 
-| # | Question | Blocked on |
+Design calls, not contract gaps — settle these in this doc or in SCREENS.md.
+
+| # | Question | Owner |
 | --- | --- | --- |
-| 1 | ACCEPT INVITE: auto-login into DASHBOARD instead of bouncing to LOGIN? | contract — does `/invites/{token}/accept` issue a session? |
-| 2 | FORCED PASSWORD CHANGE flow | contract gap (ADR-008 §Auth Client) |
-| 3 | 409 `device_busy` toast copy | copywriting pass in SCREENS.md |
-| 4 | "New device" review item on DASHBOARD: `HostSummary` has no `first_seen_at` | contract — add the field to `GET /hosts`, or cut the item from v1 |
+| 1 | Coverage-stale threshold: "no completed scan in **N** days". Pi `online: false` is immediate; N is not chosen. | product |
+| 2 | 409 `device_busy` toast copy | copywriting pass in SCREENS.md |

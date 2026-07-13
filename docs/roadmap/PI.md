@@ -59,6 +59,32 @@ Matches [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-):
 - Status over WS: `running` → `uploading` → `done` \| `failed`.
 - Ingest uses the command's **`scan_id`** (not a locally generated UUID).
 
+### Interface reporting 🔓 — new, blocks the first scan
+
+**The Pi must report the networks it can see.** On WS connect (and on reconnect, since interfaces
+change), the daemon enumerates its own interfaces and sends the backend a list of
+**`available_subnets`** — for each: the CIDR, the interface name, and whether it holds the default
+route.
+
+**Why this exists.** `POST /commands` requires a `subnet` CIDR, and **nobody can supply one**. The
+org admin is non-technical and does not know their CIDR ([`AUTH.md`](AUTH.md) — they never touch
+provisioning). And the Pi **cannot guess**: it is deliberately **dual-homed** ([NSPi field
+test](../tests/nspi-september/plan.md)) — ethernet onto the target subnet with **no default
+gateway**, wifi for internet so CVE enrichment can reach `vulners.com` while scanning an isolated
+network. It therefore sees **two** networks, and scanning the wrong one (the host site's own wifi)
+would be useless and hostile.
+
+So the Pi **reports**, a human **chooses once**, and the backend **stores** the choice as
+`agent.target_subnet` ([`BACKEND.md` B11-C2](BACKEND.md#b11--frontend-contract-asks-)). Thereafter
+`[Scan now]` is a single button and no CIDR is ever typed
+([`ui/FLOWS.md` B4](../ui/FLOWS.md#b4--scan-now-command-flow)).
+
+- **Reported, not stored on the Pi** — the backend holds `target_subnet`; the Pi holds nothing.
+- The default-route flag is what lets the UI label the choices honestly (the interface *with* the
+  default route is the internet link, and is almost never the scan target).
+- Until a `target_subnet` is chosen, the agent is online but **cannot be scanned** — the first-run
+  flow makes choosing it the step before the first scan.
+
 ---
 
 ## Hardware acquisition & installer provisioning
@@ -106,6 +132,7 @@ Production Pi runs a **headless daemon** (`dmitri agent`), not the TUI:
 0. HTTP transport client + HMAC signing (Pi submit + backend verify) — closes the unwired contract gap.
 1. ADR-011 ✅ ([`ADR-011`](../adr/ADR-011-pi-command-channel.md)). → *unblocks everything below*
 2. `dmitri agent` daemon + systemd; **WebSocket client** + connection registry on API; Postgres command table for lifecycle/audit.
+2b. **Interface reporting** — daemon enumerates its subnets and reports them on connect; backend stores the operator's `target_subnet`. Blocks the first web-triggered scan ([B11-C2](BACKEND.md#b11--frontend-contract-asks-)).
 3. "Trigger scan from web" end-to-end (frontend → backend → WS → Pi → results → frontend).
 4. **Installer provisioning playbook** documented (vendor); scheduled reboot policy — rotation deferred Phase 2.
 5. (fallback) HTTP poll delivery if WS ops block cutover — same command schema.

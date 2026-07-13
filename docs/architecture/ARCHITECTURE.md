@@ -32,7 +32,7 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 - **Tecnologia:** React + TypeScript + Vite
 - **Responsabilidades:**
   - Interface de visualização dos resultados de scans
-  - Dashboard, lista de scans, detalhe de dispositivos, inventário de rede
+  - Home (security review), lista de scans, detalhe de dispositivos, inventário de rede
   - Autenticação e gerenciamento de sessões
   - Consumo da API via TanStack Query
 
@@ -105,7 +105,7 @@ flowchart TB
 
     %% === BROWSER ===
     subgraph "User Browser"
-        C[React Frontend<br/><b>Vite + TypeScript</b><br/>React Router v6<br/>TanStack Query v5<br/>shadcn/ui + Recharts]
+        C[React Frontend<br/><b>Vite + TypeScript</b><br/>React Router v7<br/>TanStack Query v5<br/>shadcn/ui]
     end
 
     %% === FLUXOS ===
@@ -193,10 +193,10 @@ De acordo com as decisões dos ADRs:
 | **Backend**         | Background Worker                                | **Python Consumer**                             | N.A.              | — |
 | **Frontend**        | Framework                                        | **React (v. 19.2.4)** + **TypeScript (v. 5.9.0)** | ADR-008         | — |
 | **Frontend**        | Build tool                                       | **Vite 8.0.3**                                  | ADR-008           | — |
-| **Frontend**        | Roteamento                                       | **React Router** v6                             | ADR-008           | — |
+| **Frontend**        | Roteamento                                       | **React Router** v7 (library mode)              | ADR-008           | — |
 | **Frontend**        | Gerenciamento de estado e cache                  | **TanStack Query** v5                           | ADR-008           | — |
 | **Frontend**        | Biblioteca de componentes UI                     | **shadcn/ui**                                   | ADR-008           | Componentes copiados para o projeto |
-| **Frontend**        | Gráficos                                         | **Recharts**                                    | ADR-008           | — |
+| **Frontend**        | Gráficos (se entrarem no escopo)                 | **Recharts**                                    | ADR-008           | Fora do MVP Home |
 | **Frontend**        | Cliente HTTP                                     | **Axios (v. 1.13.6)**                           | ADR-008           | Instância centralizada em `/src/api/client.ts` |
 | **Segurança**       | Autenticação Agent → Backend                     | **HMAC** (secret único por device)              | ADR-005           | Assinatura + timestamp + nonce |
 | **Segurança**       | Autenticação Frontend → Backend                  | **JWT** (access + refresh token) + httpOnly cookies | ADR-005     | — |

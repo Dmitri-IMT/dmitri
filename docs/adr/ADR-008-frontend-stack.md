@@ -4,7 +4,14 @@
 > para **v7 (modo library)**; seção de **auth client** adicionada; racional do TanStack Query e
 > inventário de telas atualizados para o escopo Control ([`FRONTEND.md`](../roadmap/FRONTEND.md),
 > [`AUTH.md`](../roadmap/AUTH.md)); geração de tipos via openapi-typescript promovida a decisão.
-> As decisões de Vite, TypeScript, shadcn/ui e Recharts permanecem como originalmente registradas.
+> As decisões de Vite, TypeScript e shadcn/ui permanecem como originalmente registradas.
+> **Recharts** permanece a escolha caso uma visualização seja posteriormente incluída, mas não é
+> parte do MVP Home nem do scaffold inicial, conforme [`ui/SCREENS.md`](../ui/SCREENS.md).
+>
+> **Revisão 2026-07-13:** o `AppShell` foi estreitado de *"sidebar/navbar"* para **top bar, sem
+> sidebar**. Fundamentos visuais compartilhados (shell, viewport, componentes, regras de
+> consistência) passam a ser propriedade de [`ui/SCREENS.md`](../ui/SCREENS.md#foundations) —
+> **essa é a fonte da verdade da UI**; este ADR possui a *stack*, não o desenho das telas.
 
 ---
 
@@ -18,14 +25,16 @@ A plataforma tem dois papéis ([`AUTH.md`](../roadmap/AUTH.md)):
 
 - **Org admin** — operador não-técnico: faz login, convida usuários, gerencia papéis, vê os
   agents (Pis) online/offline, dispara scans ("Scan now") e lê os resultados.
-- **Viewer** — somente leitura: dashboards, scans, hosts.
+- **Viewer** — somente leitura: Home, scans, hosts e agents; não vê as ações de mutação nem
+  Users & invites.
 
-A ordem de construção é **admin-first** (login, convites, gestão de usuários) antes dos
-dashboards de leitura ([`FRONTEND.md`](../roadmap/FRONTEND.md)).
+A modelagem das telas é **admin-first**. A primeira fatia de implementação é login → Home com
+dados reais; as demais superfícies admin e de leitura seguem os fluxos em
+[`ui/FLOWS.md`](../ui/FLOWS.md) e o roadmap em [`FRONTEND.md`](../roadmap/FRONTEND.md).
 
 **Inventário de telas** (inventário apenas — fluxos em [`docs/ui/FLOWS.md`](../ui/FLOWS.md);
 layouts, estados e copy em [`docs/ui/SCREENS.md`](../ui/SCREENS.md)): login · aceite de convite (definir senha) ·
-esqueci/reset de senha · troca forçada de senha · gestão de usuários/convites · dashboard ·
+esqueci/reset de senha · troca forçada de senha · gestão de usuários/convites · Home ·
 lista/detalhe de scans · inventário/detalhe de hosts · agents (online/offline + "Scan now") ·
 painel LLM explainer (posterior, ver [`AI.md`](../roadmap/AI.md)).
 
@@ -89,7 +98,8 @@ versionado torna o drift visível em diff de PR quando o contrato muda.
 **Justificativa:** o modo library da v7 preserva a API e o modelo mental da v6 — a justificativa
 original sobrevive intacta, só muda a major e o pacote. A aplicação possui ~10 telas (ver
 inventário no Contexto). As rotas aninhadas permitem que um único componente de layout `AppShell`
-(sidebar/navbar persistente) envolva todas as rotas autenticadas, com cada rota filha renderizando
+(**top bar persistente — sem sidebar**, ver [`ui/SCREENS.md`](../ui/SCREENS.md#app-shell)) envolva
+todas as rotas autenticadas, com cada rota filha renderizando
 seu conteúdo dentro dele. As telas públicas de auth (`/login`, aceite de convite, esqueci/reset de
 senha) ficam fora do shell. Isso corresponde à UX pretendida: sem recarregamentos completos de
 página, a URL reflete a tela atual, o botão voltar/avançar do navegador funciona corretamente e os
@@ -115,9 +125,9 @@ setembro:
 2. **"Scan now"** ([`FRONTEND.md`](../roadmap/FRONTEND.md), ADR-011) — `useMutation` com
    `POST /agents/{agent_id}/commands` → poll de `GET /commands/{command_id}` com
    `refetchInterval` enquanto o status é pendente (`queued → delivered → running → uploading`) →
-   ao chegar em `done`, invalidar `['scans']`, `['agents']`, `['findings']` e os agregados do
-   dashboard. Erros do contrato tratados na mutação: **503** `device_offline` e **409**
-   `device_busy` (copy definida em FRONTEND.md).
+   ao chegar em `done`, invalidar `['scans']`, `['agents']` e `['findings']`. Erros do contrato
+   tratados na mutação: **503** `device_offline` e **409** `device_busy` (copy ainda aberta em
+   `ui/FLOWS.md`).
 
 O `useMutation` do TanStack Query com invalidação de cache via `onSuccess` lida com isso de forma
 declarativa e colocada junto à definição da mutação. O SWR exige chamadas manuais de `mutate()`
@@ -200,15 +210,20 @@ UX apenas: a autorização real é sempre do backend.
 
 ---
 
-### Biblioteca de Gráficos: Recharts
+### Biblioteca de Gráficos: Recharts (quando necessário)
 
-**Decisão:** Usar Recharts para todas as visualizações de dados.
+**Decisão:** Se uma visualização de dados entrar no escopo, usar Recharts. Não instalar nem criar
+gráficos para o MVP atual: a tela principal é a **Home**, uma revisão de julgamento em linguagem simples,
+não um dashboard de métricas.
 
 **Alternativas consideradas:**
 - Nivo — estética padrão superior, mas bundle maior, menos flexível para layouts customizados, lacunas na documentação
 - Chart.js — maduro e de alta performance em grandes conjuntos de dados, mas a API imperativa baseada em canvas é estranha ao modelo declarativo do React; os objetos de configuração são verbosos
 
-**Justificativa:** O Recharts expõe uma API JSX totalmente declarativa que se integra naturalmente ao modelo de componentes do React. Os gráficos são compostos como árvores JSX, o que significa que participam do mesmo fluxo de dados e estado que o restante da aplicação. Os tipos de gráficos necessários, distribuição de severidade (pizza/donut), achados ao longo do tempo (barra/linha), são bem suportados com implementação direta. O Recharts é responsivo por padrão e ativamente mantido.
+**Justificativa:** O Recharts expõe uma API JSX declarativa que se integra naturalmente ao modelo
+de componentes do React. Se uma necessidade futura justificar gráficos, a decisão evita reabrir a
+escolha de biblioteca. Ela não é autorização para introduzir donut, série temporal ou cards de
+métrica que o produto deliberadamente retirou do MVP.
 
 ---
 
@@ -219,7 +234,7 @@ UX apenas: a autorização real é sempre do backend.
                   (auth.ts, users.ts, invites.ts, scans.ts, hosts.ts, agents.ts, findings.ts)
   /components   ← componentes de UI reutilizáveis
     /ui         ← cópias dos componentes shadcn/ui ficam aqui
-  /pages        ← um arquivo por rota (Dashboard.tsx, ScanList.tsx, Agents.tsx, etc.)
+  /pages        ← um arquivo por rota (Home.tsx, ScanList.tsx, Agents.tsx, etc.)
   /hooks        ← hooks React customizados (useScans, useHosts, useCommandPolling, etc.)
   /types        ← interfaces TypeScript geradas a partir da especificação OpenAPI
 ```
