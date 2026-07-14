@@ -240,8 +240,8 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
 | Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C9, C10) |
 | Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ |
-| Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11) |
-| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2; also C12) |
+| Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
+| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
 | Users & invites | `/users` | inside | admin | B2 | ◐ **ships as invite-only** (C4, C18) |
 | Settings | `/settings` | inside | admin, viewer | B5 | ◐ (password works; profile blocked — C3) |
 
@@ -1192,8 +1192,9 @@ footnote; the attack surface is the page.
 
 `CommandStatus` is `queued | delivered | running | uploading | done | failed | expired` — **seven**
 states, and the pill must render all of them. `expired` is a *backend*-set state (ADR-011): the Pi
-went dark or never took the command. It is not the same event as `failed` and does not get the same
-words.
+**never took the command** — delivery gave up, and the operator already saw the `503` toast. It is not
+the same event as `failed` and does not get the same words. **The split is `delivered_at` (C12):** a Pi
+that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 
 **Three states** — this screen has more than three; each is designed, none inherited:
 - **Blank — no Pi at all.** No agent exists. **The admin cannot fix this themselves**: Pi
@@ -1207,10 +1208,11 @@ words.
 - **Scanning.** A `StatusPill` on the row walks the lifecycle. The whole row stays readable; the
   pill is the only thing that moves.
 - **Done.** Pill becomes `[View scan]` → SCAN DETAIL. Caches for scans/agents/findings invalidate.
-- **Failed.** The scan ran and broke. Error pill carrying `error_code` + `[Retry]`.
-- **Expired.** The Pi went dark mid-scan, or never took the command. Distinct from `failed` — the
-  operator's next step is *check the box*, not *try again* — so it points at the Pi and offers
-  `[Retry]` second.
+- **Failed.** The Pi took the command and it broke — a scan error, a failed upload, or the Pi going
+  dark **mid-scan**. Error pill carrying `error_code` + `[Retry]`.
+- **Expired.** The Pi **never took the command** — delivery gave up after 2 retries. Distinct from
+  `failed` — the operator's next step is *check the box*, not *try again* — so it points at the Pi and
+  offers `[Retry]` second.
 - **Offline.** `online: false`. `[Scan now]` **stays visible and enabled** — see Open questions.
 - **Viewer.** Sees the row, the status and the network. No `[Scan now]`, no network chooser —
   omitted, not disabled (rule 3).
@@ -1235,7 +1237,7 @@ words.
 | Pill — uploading | "Uploading results…" |
 | Pill — done | "View scan" |
 | Pill — failed | "Scan failed — `<error_code>`" · [Retry] |
-| Pill — expired | "The Pi stopped responding." · [Retry] |
+| Pill — expired | "The Pi never picked up the scan." · [Retry] |
 | Hint under trigger | "A scan usually takes about 10 minutes." |
 | Toast — 503 `device_offline` | "Pi seems to be offline." |
 | Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." *(FLOWS open decision #2 — this is the proposed copy)* |
@@ -1300,12 +1302,10 @@ Scanning:
    Hiding the button on a flag that might be wrong denies a scan that would have worked; the `503`
    toast is the designed, honest failure. **This is not rule 3** — that rule is about what a *role*
    may do, not what is momentarily unavailable.
-2. **C12 — does a dead Pi produce `failed` or `expired`?** The contract, B6's lifecycle table and
-   ADR-011 all carry both states, so the *enum* is fine. But **B6 contradicts itself**: its
-   lifecycle table sends a stale `running` / undelivered command to **`expired`**, while its
-   Failure & timeout section says *"mark `failed` after timeout"*. The pill words them differently
-   on purpose — `failed` says *the scan broke, try again*, `expired` says *the box stopped
-   responding, go look at it* — so the screen needs to know which one it will actually get.
+2. ~~**C12 — does a dead Pi produce `failed` or `expired`?**~~ **✅ RESOLVED 2026-07-13 — the split is
+   `delivered_at`.** Never delivered → `expired`; delivered then broke → `failed`. The screen knows
+   which it gets: **a Pi that dies mid-scan is `failed`** (it took the job), and `expired` is only
+   *never picked up*. Pill copy updated accordingly.
 3. Pill vs stepper for the five lifecycle states — pill chosen; stepper parked
    ([`IDEAS.md`](IDEAS.md) → Agents).
 4. Blocked on **C1** (no `GET /agents`) and **C2** (no `available_subnets` / `target_subnet`). The
