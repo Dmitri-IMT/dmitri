@@ -61,7 +61,10 @@
 
 | File | Read it when you need to… |
 |------|---------------------------|
-| [`ui/wireframes.md`](ui/wireframes.md) | Design or change a TUI screen |
+| [`ui/REFERENCE.md`](ui/REFERENCE.md) | Apply the 37signals design principles to any web UI work |
+| [`ui/FLOWS.md`](ui/FLOWS.md) | Add or change a web SPA user flow (breadboards) |
+| [`ui/SCREENS.md`](ui/SCREENS.md) | Spec a web screen (epicenter, three states, copy, layout) |
+| [`ui/IDEAS.md`](ui/IDEAS.md) | Park an unvalidated UI idea |
 | [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent |
 
 ## Global conventions (apply everywhere)

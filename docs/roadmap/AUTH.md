@@ -61,7 +61,9 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 
 **Binding (C1):** Pi authenticates with `agent_id` + HMAC only. `org_id` is set on the `agents` row at provisioning time; backend resolves tenant from DB lookup — Pi does not carry `org_id`.
 
-**Agent admin (D1):** only org **`admin`** may view agents and trigger scans. **`viewer`** read-only. Creating/revoking agent rows and secret handoff to installer is **vendor/installer ops** in September (not a self-serve admin UI flow).
+**Agent admin (D1):** both roles may view agent state; only org **`admin`** may trigger scans.
+Creating/revoking agent rows and secret handoff to installer is **vendor/installer ops** in
+September (not a self-serve admin UI flow). The viewer UI omits the trigger rather than disabling it.
 
 **Rotation (E1):** no rotate/revoke UX in September; `revoked_at` column may exist. Rotation + revoke + re-pair → Phase 2.
 
@@ -84,8 +86,9 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 | **Password policy** | **Strong**, enforced at invite completion, login password change, and reset: minimum length; reject common/breached passwords; reject obvious patterns — repeated characters (e.g. `111`), keyboard/simple suffixes (e.g. `1!`), **repeated number sequences**, **birth dates**, **names** (user name, org name — implementation defines matching). |
 | **Password rotation** | **Every 3 months.** User must set a new password when expired; block normal API use until changed (login may succeed only to reach change-password flow). |
 | **Forgot password** | **Self-serve email reset (C2).** “Forgot password?” → email with one-time reset link → set new password (same policy + rotation clock). |
+| **Transactional email** ✅ | **In scope — the backend sends invite links and reset links.** Decided 2026-07-13; **provider TBD** (Resend / Postmark / SES). Previously *nothing in the roadmap sent mail*, which left self-serve reset unbuildable — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. Code is small (`httpx` already a dependency); **the real work is a sending domain with SPF + DKIM + DMARC** — a one-time login link from a security product looks exactly like phishing and gets filtered without them. **Invites also keep a copyable link in the admin UI** as a fallback ([`ui/SCREENS.md` → Users & invites](../ui/SCREENS.md#users--invites)). |
 
-**Frontend surfaces:** invite acceptance page, login, forgot password, reset password, **forced change-password** when rotation due.
+**Frontend surfaces:** invite acceptance page, login, forgot password, reset password, **forced change-password** when rotation due. Client mechanics (token storage, silent-refresh interceptor, route guards): [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
 ### Sessions ✅
 

@@ -219,3 +219,6 @@ node_modules/
 
 # Specs before 010 (keep 010+ tracked)
 specs/00[0-9]-*/
+
+# UI references
+docs/ui/nous-research/

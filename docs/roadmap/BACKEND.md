@@ -26,6 +26,8 @@
 | B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
+| B11 | Frontend contract asks | 🔓 | 14 contract gaps + 1 self-contradiction — [B11](#b11--frontend-contract-asks-) |
+| B12 | Transactional email | 🔓 | Decided (invites + password reset); **provider and sending domain TBD** — [B11-C17](#b11--frontend-contract-asks-) |
 
 ✅ = decided here · 🔓 = open (auth details → [`AUTH.md`](AUTH.md))
 
@@ -121,8 +123,15 @@ Backend generates **`command_id`** and **`scan_id`** at enqueue. Pi must use the
 | `command_id` | Backend (UUID) |
 | `scan_id` | Backend (UUID) — assigned at enqueue |
 | `agent_id` | Backend (target Pi — `agents` table) |
-| `scan_mode` | Operator — `quick` \| `standard` \| `extensive` \| `nspi` \| `max` |
-| `subnet` | Operator — CIDR |
+| `scan_mode` | ~~Operator~~ → **product picks `quick`**; the other four are not surfaced in the UI ([`FRONTEND.md`](FRONTEND.md), [`ui/FLOWS.md` B4](../ui/FLOWS.md#b4--scan-now-command-flow)) |
+| `subnet` | ~~Operator — CIDR~~ → **`agent.target_subnet`**, chosen once on AGENTS. See [B11-C2](#b11--frontend-contract-asks-) |
+
+> ⚠️ **Revised 2026-07-13.** This table assumed the operator supplies `scan_mode` and `subnet` at
+> trigger time. **They cannot supply `subnet`:** the user is a non-technical org admin who does not
+> know their CIDR, and the Pi is deliberately **dual-homed** ([NSPi field
+> test](../tests/nspi-september/plan.md)) — ethernet on the target subnet with no default gateway,
+> wifi for internet — so it sees two networks and cannot guess either. The choice is made **once**,
+> by a human, and stored on the agent. See [B11-C2](#b11--frontend-contract-asks-).
 
 ### Delivery when operator clicks "Scan now" (3c)
 
@@ -136,7 +145,7 @@ Backend generates **`command_id`** and **`scan_id`** at enqueue. Pi must use the
 ### Failure & timeout (3e)
 
 - **No resume** — scans are not resumable.
-- **`running` without progress / dead Pi:** mark `failed` after timeout. **How long** is tunable at implementation (ADR-011 / config) — not a product decision here.
+- **`running` without progress / dead Pi:** mark `failed` after timeout. **How long** is tunable at implementation (ADR-011 / config) — not a product decision here. ⚠️ **Contradicts the [lifecycle table](#lifecycle-3a--full) above, which sends this case to `expired` — resolve ([C12](#b11--frontend-contract-asks-)).**
 - **WS drop mid-scan:** same timeout → `failed`; operator triggers again.
 
 ### Idempotency (3f)
@@ -152,8 +161,9 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 | Method | Path | Caller | Auth | Purpose |
 |--------|------|--------|------|---------|
 | **WSS** | `/api/v1/agents/{agent_id}/commands` | Pi daemon | HMAC on upgrade | Persistent connection; receive commands; send status |
-| **POST** | `/api/v1/agents/{agent_id}/commands` | Web | JWT | **Scan now** — body: `scan_mode`, `subnet` |
-| **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, active command |
+| **POST** | `/api/v1/agents/{agent_id}/commands` | Web | JWT | **Scan now** — body: `scan_mode`, `subnet` (frontend sends `quick` + the agent's `target_subnet`) |
+| **GET** | `/api/v1/agents` | Web | JWT | **List agents** — array of one in the MVP. 🔓 **missing** ([B11-C1](#b11--frontend-contract-asks-)); without it the frontend cannot discover `agent_id` |
+| **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, `active_command_id`. 🔓 must also carry `available_subnets` + `target_subnet` ([B11-C2](#b11--frontend-contract-asks-)) |
 | **GET** | `/api/v1/commands/{command_id}` | Web | JWT | Command lifecycle |
 | **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(OpenAPI `/devices` → `/hosts` in B7)* |
 | **POST** | `/api/v1/scans` | Pi | HMAC | Upload scan results *(exists in OpenAPI)* |
@@ -180,7 +190,7 @@ org
                 └── hosts  ← discovered machines (ports, findings, …)
 ```
 
-**`agents`** (5b): `agent_id` (PK string), `org_id`, `display_name`, `secret_hash`, `revoked_at`, `last_seen_at`, `created_at`. **`online`** derived from open WS in API registry (5e) — not a persisted boolean.
+**`agents`** (5b): `agent_id` (PK string), `org_id`, `display_name`, `secret_hash`, `revoked_at`, `last_seen_at`, `created_at`, **`target_subnet`** (🔓 [B11-C2](#b11--frontend-contract-asks-) — the network the operator chose to scan; nullable until chosen). **`online`** derived from open WS in API registry (5e) — not a persisted boolean. **`available_subnets`** is *reported*, not stored: the Pi sends its interfaces over the WS channel.
 
 **`commands`** (5c): `command_id`, `org_id`, `agent_id` (FK), `scan_id` (FK), `scan_mode`, `subnet`, `status`, `requested_by` (audit, optional Phase 1), `error_code`, timestamps (`created_at`, `delivered_at`, `started_at`, `completed_at`).
 
@@ -222,6 +232,56 @@ Minimum technical path:
 - [ ] Alembic + identity schema per [`AUTH.md`](AUTH.md) Phase 1  
 - [ ] Pi daemon + Pi → backend ingest (HMAC per AUTH Phase 1)  
 - [ ] Command queue + "Scan now" E2E (web → backend → Pi → results → web)  
+
+---
+
+## B11 — Frontend contract asks 🔓
+
+**Raised 2026-07-13 (DMI-54)** by breadboarding the UI against
+[`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml). Each gap blocks a flow in
+[`ui/FLOWS.md`](../ui/FLOWS.md#contract-asks); none are frontend-solvable. The UI is designed and
+waiting.
+
+**The big one: there is no `/users` path in the contract at all.** Not a missing field — a missing
+resource. `POST /invites` and `POST /invites/{token}/accept` are the *only* identity-adjacent write
+routes, and `LoginResponse` returns a bare token with no user object. This leaves **USERS & INVITES
+mostly unbuildable** as breadboarded (B1 promised "multi-user, single org… invite-only signup, roles
+`admin`/`viewer`" — the UI to operate that does not have endpoints), and leaves a logged-in user
+unable to see or change their own profile.
+
+**And it goes one level deeper than "no profile page" (C16):** with no user object anywhere, the
+frontend has **no documented way to learn the logged-in user's role** — so it cannot decide whether
+to render `[Scan now]`, the `Users` nav item, or the invite form. The entire `admin`/`viewer` split
+promised in [B1](#b1--user-model-organizational-) and [`AUTH.md`](AUTH.md) rests on a JWT claim that
+the contract never specifies. That is the cheapest fix on this list and the one that unblocks the
+most screens.
+
+| # | Ask | Blocks | Notes |
+|---|-----|--------|-------|
+| **C1** | `GET /api/v1/agents` — list agents | AGENTS, "Scan now" | Array of one in the MVP. `agent_id` is the provisioning `X-Device-Id`, so the frontend has **no way to discover it**. Cheap, and correct under [B1](#b1--user-model-organizational-)'s "design toward many orgs". |
+| **C2** | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | The Pi reports its interfaces over the existing WS channel; an admin picks one, once. Fixes the `subnet` hole in [B6](#b6--pi-command-channel-). `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
+| **C3** | `GET /users/me` (+ update) | SETTINGS → profile | No `/users` resource exists. Unknown whether the user model even has a `display_name`. |
+| **C4** | Users & invites: list users, list pending invites, change role, revoke invite | USERS & INVITES | Only `POST /invites` exists. The whole admin surface in [`ui/FLOWS.md` B2](../ui/FLOWS.md#b2--admin-day-one-invite--first-scan) has no endpoints behind it. |
+| **C5** | Forced password change: 403 on expired-password login carries **no token**, but `POST /auth/change-password` requires Bearer | LOGIN → forced rotation | Long-standing gap ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client). Needs a scoped token in the 403, or a restricted-scope login. Blocks the 3-month rotation in [`AUTH.md`](AUTH.md) from being usable. |
+| **C6** | `HostSummary.first_seen_at` | HOME "new device" item | Item is **cut from v1** until this exists. **Cheap:** the field is already on `HostDetailResponse` — this is projecting an existing column into the list. |
+| ~~**C7**~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |
+| ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |
+| **C9** | `host_id` on `DevicePayload` | SCAN DETAIL | The `devices` array on `ScanDetailResponse` has no id — only `ip`/`mac`/`hostname`/`vendor`. A host row on a scan therefore **cannot link to that host's page**. (Findings do carry `device_id`, so the id exists server-side.) |
+| **C10** | A failed scan carries **no reason** | SCAN DETAIL, HOME | `ScanDetailResponse` has no error field. The UI must go `scan.command_id` → `GET /commands/{id}.error_code` — and `error_code` is a machine code, so it needs a **plain-language mapping** owned by the backend or the copy deck. A failed scan with a null `command_id` has no reason at all. B6 promised *"scan failed → readable failure reason"*; today that is unreachable. |
+| **C11** | Does `GET /findings?device_id=…` accept a `host_id`? | HOST DETAIL | The filter predates the `/devices`→`/hosts` rename ([B7](#b7--openapi-contract-)). If the identifiers differ, HOST DETAIL **cannot show findings** while still showing `highest_severity` — the page would state a severity it cannot explain. |
+| **C12** | Dead Pi → `failed` or `expired`? | AGENTS | **Not a contract gap** — `CommandStatus` carries all seven states, matching ADR-011. **B6 contradicts itself:** the [lifecycle table](#lifecycle-3a--full) sends a stale `running` / undelivered command to **`expired`**; [Failure & timeout](#failure--timeout-3e) says *"mark `failed` after timeout"*. Pick one. The UI words them differently on purpose — `failed` = *the scan broke, try again*; `expired` = *the box stopped responding, go look at it*. |
+| **C13** | Bad `current_password` → **400, not 401** | SETTINGS | `POST /auth/change-password` documents both. It must be **400**: a `401` trips the SPA's refresh interceptor ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and bounces the user to login for a mistyped field. Confirm or change. |
+| **C14** | `GET /api/v1/invites/{token}` — read an invite before accepting | ACCEPT INVITE | The screen currently knows **nothing**: not the org, not the role, not the invited email. So (a) it cannot tell a stranger the link is legitimate, and (b) the invitee must **type their own email from memory** to match `AcceptInviteRequest.email` — a typo then fails identically to a dead link. Public route, single-use token, returns `{ email, role, org_name }`. |
+| **C15** | Distinct `error.code`s on `POST /auth/reset-password`'s `400` | RESET PASSWORD | A **dead/used link** and a **weak password** share one status, and `ErrorBody.code` is an unconstrained `string`. The two need *opposite* instructions ("request a new link" vs "pick a better password"), and a stale link is this screen's most likely failure. Same treatment would help ACCEPT INVITE's `400`. |
+| **C16** | **The user's role is nowhere in the contract** | **all role-gated UI** | `LoginResponse` is a bare token; no user object exists anywhere. [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis says the role rides in **JWT claims** — but the contract documents **no claims**, so the SPA would decode an unspecified payload to decide what to render. Every *absent, not disabled* decision depends on it: the `Users` nav item, `[Scan now]`, the network chooser, the invite form. **Either document the claims or return the role** (cheapest: fold into **C3**'s `/users/me`). |
+| ~~**C17**~~ | ~~No email delivery exists anywhere~~ | — | **✅ DECIDED 2026-07-13 — transactional email is in scope. Provider TBD.** The backend sends **invite links** and **password-reset links**. <br>**Cost is small:** `httpx` is already a backend dependency, so no new library — a `services/mailer.py` plus two call sites (`POST /invites`, `POST /auth/forgot-password`), both already the points where a token is minted, and two plain-text templates. <br>**The real work is deliverability, not code:** a sending domain with **SPF + DKIM + DMARC**. A security product's one-time login link is structurally indistinguishable from phishing and will be filtered without them. <br>**Reset is what made this mandatory** — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. <br>**Invites keep the copyable link in the UI anyway** (email is the convenience, the link is the guarantee). <br>**Open:** pick the provider (Resend / Postmark / SES) and own the sending domain. |
+| **C18** | `POST /invites` documents **only a `201`** | USERS & INVITES | No error responses at all. Inviting an address that **already has an account**, or that **already has a live invite**, is undefined behavior — and re-inviting is the likeliest repeat action on that screen. Needs a defined status + `error.code`. |
+| — | `password_expires_at` on the user | SETTINGS | Folded into **C3**. Without it the 3-month rotation always arrives as a surprise 403; Settings cannot warn *"your password expires in 12 days"*. |
+
+**Not asked for, deliberately:** a `GET /findings/{id}`. `GET /findings?scan_id=…` already returns
+the full `FindingRecord` (description, recommendation, evidence), so finding detail renders from data
+the screen already holds — [`REFERENCE.md` §12](../ui/REFERENCE.md), don't solve a problem you don't
+have.
 
 ---
 
