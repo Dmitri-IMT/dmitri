@@ -23,14 +23,19 @@
 
 ## Tier 2 — Build / refactor (runs on dev machine, no Pi)
 
-> **Build-time prerequisite (not a now-task): T2 · validate-then-freeze the OpenAPI contract.**
+> **Build-time prerequisite (not a now-task): T2 · validate the OpenAPI contract into a baseline.**
 > [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) already contains a
 > September-slice **draft** written ahead of the code (`/hosts`, `/agents`, `/commands`, `/auth/*`,
 > typed WS envelope, trigger codes `503 device_offline` / `409 device_busy`). It is a **draft to
 > validate against the locked [B6](BACKEND.md#b6--pi-command-channel-)/[B7](BACKEND.md#b7--openapi-contract-)
-> decisions + [`ADR-011`](../adr/ADR-011-pi-command-channel.md) and then freeze — not to freeze as-is.**
-> Freezing is a down-to-detail decision with no value until something builds against it, so do it
-> *immediately before* T6/T7 (backend routes) and T9 (frontend type-gen), not now.
+> decisions + [`ADR-011`](../adr/ADR-011-pi-command-channel.md)** — correct the drift, don't ship it as-is.
+> Do it *immediately before* T6/T7 (backend routes) and T9 (frontend type-gen), not now.
+>
+> **"Freeze" was retired 2026-07-13.** T2 was written on 2026-07-04, *before* the
+> [B11 contract asks](BACKEND.md#b11--frontend-contract-asks-) were raised. Those asks are now an epic
+> of their own, and **its sub-issues each amend this same file after T2 lands** — so a freeze at T2
+> would be a freeze in name only. T2 produces a **baseline**: correct against every decision that
+> exists on the day it lands, and the thing T6/T7/T9 build from. The B11 amendments follow.
 
 - [ ] **T4.1 · Study and fix NSPi port stage.** Review why NSPi mode failed on the real NSPi LAN
   (field test [`../tests/nspi-september/results.md`](../tests/nspi-september/results.md): discovery

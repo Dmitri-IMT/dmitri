@@ -44,13 +44,25 @@ X-Nonce
 X-Body-SHA256
 ```
 
-`{agent_id}` in the path must match `X-Device-Id`. Reject upgrade on invalid, expired, or replayed signatures (`401` / `403` per ADR-005).
+`{agent_id}` in the path must match `X-Device-Id`. Reject upgrade on invalid, expired, or replayed signatures (`401` / `403` per ADR-005), **and on a path/header mismatch**.
+
+**`agent_id` is a UUID** (decided 2026-07-13). The two values must be byte-equal, so they cannot be
+typed differently; UUID matches every other identifier in the system (`scan_id`, `command_id`,
+`host_id`). Humans read `display_name`, never the id.
 
 `POST /api/v1/scans` ingest continues to use the ADR-005 POST canonical string unchanged.
 
 ### 3. WebSocket message envelope (typed JSON)
 
 Every frame is JSON with a required `type` field.
+
+> **Normative home (decided 2026-07-13):** the frames are **`AgentCommandFrame` and
+> `AgentStatusFrame` in [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml)**
+> (`components/schemas`), referenced from the WS upgrade operation. The examples below are
+> illustrative; the schemas are the contract. OpenAPI cannot *validate* WebSocket frames — accepted:
+> both ends are hand-written against the spec, and **one contract artifact** beats a second file that
+> tooling would have to be taught about. Frames are **not** added to `contracts/schemas/*.json`, which
+> is legacy.
 
 **Backend → Pi — `command`:**
 
@@ -74,6 +86,28 @@ Every frame is JSON with a required `type` field.
   "error_code": null
 }
 ```
+
+**Pi → Backend — `hello`** (decided 2026-07-13, closes the WS half of C2):
+
+```json
+{
+  "type": "hello",
+  "agent_version": "0.2.0",
+  "available_subnets": [
+    { "interface": "eth0", "cidr": "10.0.0.0/24" },
+    { "interface": "wlan0", "cidr": "192.168.1.0/24" }
+  ]
+}
+```
+
+Sent by the Pi **on every connect**, before any `status` frame. The Pi is deliberately **dual-homed**
+(ethernet on the target subnet, wifi for internet) so it sees more than one network and **cannot guess
+which to scan** — a human picks once, and `POST /commands` therefore never asks a non-technical admin
+for a CIDR. The backend caches `available_subnets` against the agent (they are *reported*, not stored
+as truth — the Pi is the authority on its own interfaces).
+
+**Out of this ADR:** how an admin *chooses* `target_subnet`, and how `AgentDetail` exposes it. That is
+the HTTP half of C2 and belongs to the frontend-contract-asks epic.
 
 Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`.
 
@@ -100,7 +134,14 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 
 **Concurrency:** one active scan per Pi (`running` or `uploading`). New trigger → **`409`** + `code: device_busy`.
 
-**Timeouts:** `running` / undelivered stale thresholds are **config/env** (not fixed in this ADR). WS drop mid-scan uses the same running timeout → `failed`; operator re-triggers.
+**Terminal states — the split is `delivered_at`** (C12, decided 2026-07-13):
+
+| Case | State | When it is set |
+|------|-------|----------------|
+| Delivery gave up after the 2 retries — the Pi **never took the job** | `expired` | Synchronously, with the `503 device_offline` |
+| Pi error, ingest failure, WS drop mid-scan, or stale `running` — the Pi **took the job and broke** | `failed` | On report, or by the running timeout |
+
+**Timeouts:** the `running` stale threshold is **config/env** (not fixed in this ADR). WS drop mid-scan uses that same running timeout → `failed`; operator re-triggers. There is **no second timeout for `expired`** — an undelivered command is resolved at enqueue, not swept later.
 
 ### 5. Stub scan (`GET /api/v1/scans/{scan_id}`)
 

@@ -74,11 +74,11 @@ LICENSE, README.md, .gitignore
 
 1. O operador inicia o **Dmitri** (TUI), confirma a sub-rede e escolhe a categoria e o **modo de varredura** (ver tabela abaixo).
 2. O agente executa o pipeline Nmap (descoberta de hosts → portas → inspeção profunda com NSE, conforme o modo) e normaliza a saída.
-3. Os resultados são gravados em JSON conforme `contracts/schemas/scan_result.schema.json` (localmente no Pi).
+3. Os resultados são gravados em JSON conforme o contrato de ingest (`ScanIngestRequest`) em `contracts/openapi/openapi.yaml` (localmente no Pi).
 
 ### Modos de varredura (TUI)
 
-O modo é escolhido na interface; o valor `scan_mode` no payload segue o contrato em `contracts/schemas/scan_result.schema.json`.
+O modo é escolhido na interface; o valor `scan_mode` no payload segue o enum `ScanMode` em `contracts/openapi/openapi.yaml`.
 
 | Modo (UI) | `scan_mode` | Escopo (resumo) |
 | --------- | ----------- | ---------------- |

@@ -246,9 +246,9 @@ paths:
                     scan_mode: nspi
                     status: pending
                     command_id: c1a2b3c4-d5e6-7890-abcd-ef1234567890
-                    devices: []
+                    hosts: []
                     findings: []
-                    device_count: 0
+                    host_count: 0
                     finding_count: 0
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -377,7 +377,7 @@ paths:
       tags:
         - findings
       summary: List findings
-      description: 'Returns findings filtered by severity, scan, or device. Authenticated
+      description: 'Returns findings filtered by severity, scan, or host. Authenticated
         frontend requests use `Authorization: Bearer <token>` in v1.'
       operationId: listFindings
       security:
@@ -387,7 +387,7 @@ paths:
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/SeverityFilter'
         - $ref: '#/components/parameters/ScanIdFilter'
-        - $ref: '#/components/parameters/DeviceIdFilter'
+        - $ref: '#/components/parameters/HostIdFilter'
       responses:
         '200':
           description: Paginated finding list.
@@ -430,7 +430,18 @@ paths:
       description: |
         Pi daemon opens an **outbound WebSocket** on this URL (`wss://` in production).
         HMAC-SHA256 on the HTTP upgrade request uses the same rules as ADR-005 (GET canonical string).
-        Message envelope documented in ADR-011 — `type: command` (backend→Pi), `type: status` (Pi→backend).
+        `{agent_id}` MUST equal `X-Device-Id`; a mismatch is rejected.
+
+        **OpenAPI cannot describe WebSocket frames**, so the envelope is defined as schemas and
+        listed here. Every frame is JSON with a required `type` field (ADR-011 §3):
+
+        | Frame | Direction | Schema |
+        |-------|-----------|--------|
+        | `hello` | Pi → backend, on connect | `AgentHelloFrame` |
+        | `command` | backend → Pi | `AgentCommandFrame` |
+        | `status` | Pi → backend | `AgentStatusFrame` |
+
+        Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
       operationId: connectAgentCommandsWebSocket
       security:
         - AgentHmacAuth: []
@@ -476,19 +487,22 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: 'Pi already running or uploading a scan (code device_busy).'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceBusyError'
         '503':
-          description: 'Pi offline after delivery retries (code device_offline).'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/DeviceOfflineError'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - agents
+      summary: CORS preflight for the scan-now trigger
+      operationId: optionsAgentCommands
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/agents/{agent_id}:
     get:
@@ -516,6 +530,17 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - agents
+      summary: CORS preflight for agent detail
+      operationId: optionsAgentById
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/commands/{command_id}:
     get:
@@ -542,6 +567,17 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - commands
+      summary: CORS preflight for command detail
+      operationId: optionsCommandById
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/login:
     post:
@@ -559,6 +595,9 @@ paths:
       responses:
         '200':
           description: Access JWT in body; refresh token in httpOnly Set-Cookie.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/Set-Cookie-Refresh'
           content:
             application/json:
               schema:
@@ -566,37 +605,81 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Password expired — change-password required.
+          description: |
+            Password expired — the 3-month rotation is due and only the change-password flow is
+            permitted (AUTH Phase 1). **The wire mechanism for reaching that flow is contract ask
+            C5 and is not yet specified here** — see DMI-77. No refresh cookie is issued.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for login
+      operationId: optionsLogin
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/refresh:
     post:
       tags:
         - auth
       summary: Refresh access token
+      description: 'Takes the httpOnly refresh cookie (no body, no Bearer) and returns a new access
+        JWT, rotating the cookie. The SPA calls this with `credentials: include`.'
       operationId: refreshSession
-      security: []
+      security:
+        - RefreshCookieAuth: []
       responses:
         '200':
           description: New access JWT; refresh cookie rotated.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/Set-Cookie-Refresh'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+          description: Cookie missing, expired, revoked, or reused after rotation (the token
+            family is invalidated). The SPA redirects to login.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for refresh
+      operationId: optionsRefresh
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/logout:
     post:
       tags:
         - auth
       summary: Logout
-      description: Revokes refresh server-side and clears cookie.
+      description: Revokes the refresh token server-side and clears the cookie. Server revocation
+        is the point — a client-only logout is not sufficient (AUTH Phase 1).
       operationId: logout
       security:
-        - FrontendBearerAuth: []
+        - RefreshCookieAuth: []
       responses:
         '204':
-          description: Logged out.
+          description: Logged out; refresh revoked server-side.
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/Set-Cookie-Cleared'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for logout
+      operationId: optionsLogout
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/change-password:
     post:
@@ -617,8 +700,21 @@ paths:
           description: Password updated.
         '400':
           $ref: '#/components/responses/BadRequest'
+          description: |
+            Wrong `current_password`, or the new password fails the policy. **This must be `400`,
+            not `401`** — a `401` trips the SPA's refresh interceptor and bounces the user to login
+            over a mistyped field (contract ask C13).
         '401':
           $ref: '#/components/responses/Unauthorized'
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for change-password
+      operationId: optionsChangePassword
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/forgot-password:
     post:
@@ -635,7 +731,17 @@ paths:
               $ref: '#/components/schemas/ForgotPasswordRequest'
       responses:
         '204':
-          description: If account exists, reset email sent.
+          description: If account exists, reset email sent. Always `204` — never reveal whether
+            the address has an account.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for forgot-password
+      operationId: optionsForgotPassword
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/auth/reset-password:
     post:
@@ -655,6 +761,19 @@ paths:
           description: Password reset.
         '400':
           $ref: '#/components/responses/BadRequest'
+          description: |
+            Dead/used token **or** a password the policy rejects. These need opposite instructions
+            ("request a new link" vs "pick a better password") and currently share one status with
+            an unconstrained `code` — **contract ask C15, owned by DMI-77.** Not resolved here.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for reset-password
+      operationId: optionsResetPassword
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/invites:
     post:
@@ -677,6 +796,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InviteCreatedResponse'
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for invite creation
+      operationId: optionsInvites
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/invites/{token}/accept:
     post:
@@ -695,7 +823,11 @@ paths:
               $ref: '#/components/schemas/AcceptInviteRequest'
       responses:
         '201':
-          description: Account created.
+          description: Account created **and signed in** — returns a full `LoginResponse`, so the
+            invitee lands on HOME rather than at a login screen (contract ask C7, resolved).
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/Set-Cookie-Refresh'
           content:
             application/json:
               schema:
@@ -703,7 +835,18 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '410':
-          description: Invite expired or already used.
+          description: Invite expired or already used (single-use). Distinct from `400` on purpose.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for invite acceptance
+      operationId: optionsAcceptInvite
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
 
 components:
   securitySchemes:
@@ -718,7 +861,18 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT bearer token used by frontend clients.
+      description: JWT bearer token used by frontend clients. Short-lived (~15 min) and held
+        in SPA memory only — never in localStorage.
+    RefreshCookieAuth:
+      type: apiKey
+      in: cookie
+      name: dmitri_refresh
+      description: |
+        httpOnly refresh cookie. Scoped to `/api/v1/auth` — it is **never** sent to business
+        endpoints, which take the Bearer JWT instead (AUTH Phase 1 / ADR-005). Rotated on every
+        refresh; reuse of a retired token invalidates the whole family. Fixed 7-day lifetime from
+        login, with no sliding extension: after 7 days the user logs in with a password again.
+        The SPA sends it by setting `credentials: include` on `/auth/*` calls only.
   parameters:
     Page:
       name: page
@@ -813,10 +967,11 @@ components:
       name: agent_id
       in: path
       required: true
-      description: Scanner Pi identifier (HMAC X-Device-Id).
+      description: Scanner Pi identifier. On the WebSocket upgrade this MUST equal the
+        `X-Device-Id` header — a mismatch is rejected (ADR-011).
       schema:
         type: string
-        minLength: 1
+        format: uuid
     CommandId:
       name: command_id
       in: path
@@ -832,11 +987,12 @@ components:
       schema:
         type: string
         minLength: 16
-    DeviceIdFilter:
-      name: device_id
+    HostIdFilter:
+      name: host_id
       in: query
       required: false
-      description: Filter findings by device identifier.
+      description: Filter findings by host identifier. Same `host_id` as
+        `GET /api/v1/hosts/{host_id}` — this is what lets HOST DETAIL show its findings.
       schema:
         type: string
         format: uuid
@@ -845,7 +1001,8 @@ components:
       name: X-Device-Id
       in: header
       required: true
-      description: Stable backend-issued device identifier.
+      description: The calling agent's `agent_id`, issued by the backend at provisioning.
+        (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.)
       schema:
         type: string
         format: uuid
@@ -888,6 +1045,20 @@ components:
       description: Correlation identifier for logs and tracing.
       schema:
         type: string
+    Set-Cookie-Refresh:
+      description: |
+        Issues (or rotates) the httpOnly refresh cookie. Production attributes:
+        `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth; Max-Age=604800` (7 days).
+      schema:
+        type: string
+        example: dmitri_refresh=<token>; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth;
+          Max-Age=604800
+    Set-Cookie-Cleared:
+      description: Clears the refresh cookie on logout (server-side revocation is authoritative;
+        this only tidies the browser).
+      schema:
+        type: string
+        example: dmitri_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth; Max-Age=0
     Access-Control-Allow-Origin:
       description: Allowed browser origin.
       schema:
@@ -920,6 +1091,8 @@ components:
           - Origin
 
   responses:
+    # Every browser-called route needs an `options` twin returning this response —
+    # when adding an endpoint the SPA will call, add its CORS preflight operation too.
     CorsPreflightNoContent:
       description: Successful CORS preflight response.
       headers:
@@ -1013,6 +1186,52 @@ components:
                   message: Request body validation failed.
                   details:
                     field: devices[0].ip
+    DeviceBusyError:
+      description: |
+        The Pi is already `running` or `uploading` a scan — one scan at a time per agent (B6).
+        The `code` is pinned: clients and metrics may switch on it.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        const: device_busy
+          examples:
+            deviceBusy:
+              value:
+                error:
+                  code: device_busy
+                  message: That Pi is already scanning.
+                  details: {}
+    DeviceOfflineError:
+      description: |
+        The command never reached the Pi — delivery gave up after 2 retries. The command is
+        recorded as `expired` (never `failed`: the Pi never took the job). The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        const: device_offline
+          examples:
+            deviceOffline:
+              value:
+                error:
+                  code: device_offline
+                  message: Pi seems to be offline.
+                  details: {}
     InternalServerError:
       description: Unexpected server error.
       content:
@@ -1033,7 +1252,7 @@ components:
         scan_id: b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77
         timestamp: '2026-03-05T14:12:45Z'
         subnet: 192.168.1.0/24
-        scan_mode: full
+        scan_mode: standard
         metadata:
           agent_version: 0.2.0
           nmap_arguments: -sS -sV -O --top-ports 200
@@ -1345,7 +1564,7 @@ components:
         - subnet
         - scan_mode
         - status
-        - device_count
+        - host_count
         - finding_count
       properties:
         scan_id:
@@ -1360,7 +1579,7 @@ components:
           $ref: '#/components/schemas/ScanMode'
         status:
           $ref: '#/components/schemas/ScanStatus'
-        device_count:
+        host_count:
           type: integer
           minimum: 0
         finding_count:
@@ -1378,10 +1597,10 @@ components:
         - timestamp
         - subnet
         - scan_mode
-        - devices
+        - hosts
         - findings
         - status
-        - device_count
+        - host_count
         - finding_count
       properties:
         scan_id:
@@ -1395,10 +1614,12 @@ components:
           pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
         scan_mode:
           $ref: '#/components/schemas/ScanMode'
-        devices:
+        hosts:
           type: array
           items:
             $ref: '#/components/schemas/DevicePayload'
+          description: Machines discovered by this scan. Items reuse the ingest
+            `DevicePayload` shape; they gain a `host_id` under contract ask C9.
         findings:
           type: array
           items:
@@ -1420,7 +1641,7 @@ components:
             - string
             - 'null'
           format: uuid
-        device_count:
+        host_count:
           type: integer
           minimum: 0
         finding_count:
@@ -1599,6 +1820,7 @@ components:
           format: uuid
         agent_id:
           type: string
+          format: uuid
         status:
           $ref: '#/components/schemas/CommandStatus'
     CommandDetail:
@@ -1621,6 +1843,7 @@ components:
           format: uuid
         agent_id:
           type: string
+          format: uuid
         scan_mode:
           $ref: '#/components/schemas/ScanMode'
         subnet:
@@ -1660,6 +1883,7 @@ components:
       properties:
         agent_id:
           type: string
+          format: uuid
         display_name:
           type: string
         online:
@@ -1674,6 +1898,102 @@ components:
             - string
             - 'null'
           format: uuid
+
+    AvailableSubnet:
+      type: object
+      additionalProperties: false
+      required:
+        - interface
+        - cidr
+      properties:
+        interface:
+          type: string
+          minLength: 1
+          example: eth0
+        cidr:
+          type: string
+          pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
+          example: 10.0.0.0/24
+    AgentHelloFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Pi → backend**, sent on every connect, before any `status` frame. The Pi is dual-homed
+        (ethernet on the target subnet, wifi for internet) so it sees more than one network and
+        cannot guess which to scan. It reports what it sees; a human chooses `target_subnet` once.
+      required:
+        - type
+        - agent_version
+        - available_subnets
+      properties:
+        type:
+          type: string
+          const: hello
+        agent_version:
+          type: string
+          example: 0.2.0
+        available_subnets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableSubnet'
+    AgentCommandFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Backend → Pi.** Delivered on the open socket when an operator triggers "Scan now".
+        Duplicate delivery of the same `command_id` must be acked without re-running the scan.
+      required:
+        - type
+        - command_id
+        - scan_id
+        - scan_mode
+        - subnet
+      properties:
+        type:
+          type: string
+          const: command
+        command_id:
+          type: string
+          format: uuid
+        scan_id:
+          type: string
+          format: uuid
+          description: Assigned by the backend at enqueue. The Pi MUST reuse it in the
+            ingest payload it later POSTs to /api/v1/scans.
+        scan_mode:
+          $ref: '#/components/schemas/ScanMode'
+        subnet:
+          type: string
+          pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
+    AgentStatusFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+        `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
+        here.
+      required:
+        - type
+        - command_id
+        - status
+      properties:
+        type:
+          type: string
+          const: status
+        command_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - running
+            - uploading
+            - done
+            - failed
+        error_code:
+          type:
+            - string
+            - 'null'
     LoginRequest:
       type: object
       additionalProperties: false
@@ -1796,12 +2116,12 @@ components:
         scan_id:
           type: string
           format: uuid
-        device_id:
+        host_id:
           anyOf:
             - type: string
               format: uuid
             - type: 'null'
-        device_ip:
+        host_ip:
           anyOf:
             - type: string
               format: ipv4
