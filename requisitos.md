@@ -68,11 +68,11 @@
   - Rastreabilidade: `scanner/stages.py::run_port_stage`, `run_deep_inspection_stage`.
 
 - **RF-006** *(U)* — O agente deve emitir ao final do scan um payload JSON conforme o
-  contrato `ScanResult` em `contracts/schemas/scan_result.schema.json`, incluindo
+  contrato de ingest (`ScanIngestRequest`) em `contracts/openapi/openapi.yaml`, incluindo
   `scan_id` (UUID v4), `timestamp` ISO 8601, `subnet` CIDR, `scan_mode`, `devices[]`,
   `findings[]` e `metadata{}`.
   - Origem: Artigo §3.2 (payload JSON com metadados, devices, ports, services, artifacts,
-  findings); `scan_result.schema.json`.
+  findings); contrato de ingest em `contracts/openapi/openapi.yaml`.
   - Verificação: payload passa no `jsonschema` validation em CI; testes de contrato.
   - Rastreabilidade: `normalize/contracts.py`, `hardware-agent/tests/`.
 
