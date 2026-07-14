@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import get_args
 from uuid import uuid4
 
+import yaml
 from agent.normalize.contracts import (
     DevicePayload,
     FindingPayload,
@@ -13,11 +13,11 @@ from agent.normalize.contracts import (
     ScanPayload,
 )
 
-SCHEMA_PATH = (
+OPENAPI_PATH = (
     Path(__file__).resolve().parents[2]
     / "contracts"
-    / "schemas"
-    / "scan_result.schema.json"
+    / "openapi"
+    / "openapi.yaml"
 )
 
 
@@ -83,9 +83,16 @@ def test_scan_payload_accepts_extensive_nspi_and_max() -> None:
 
 
 def test_schema_enum_matches_pydantic_literal() -> None:
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    enum = set(schema["properties"]["scan_mode"]["enum"])
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    enum = set(spec["components"]["schemas"]["ScanMode"]["enum"])
     literal = set(get_args(ScanPayload.model_fields["scan_mode"].annotation))
     assert enum == literal
     assert {"extensive", "nspi", "max"} <= enum
     assert "full" not in enum
+
+
+def test_openapi_ingest_example_uses_a_real_scan_mode() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    enum = set(spec["components"]["schemas"]["ScanMode"]["enum"])
+    example = spec["components"]["examples"]["ScanIngestRequestExample"]["value"]
+    assert example["scan_mode"] in enum
