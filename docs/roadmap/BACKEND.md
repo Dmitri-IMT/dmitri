@@ -111,8 +111,12 @@ See prior week-by-week plan in git history or expand in [`docs/cloud/`](../cloud
 | `running` | Pi acknowledged; scan pipeline active |
 | `uploading` | Scan finished locally; `POST /scans` in flight |
 | `done` | Ingest succeeded |
-| `failed` | Error reported by Pi, ingest failure, or timeout |
-| `expired` | Stale `running` / undelivered past policy (timeout — implementation detail, ADR-011) |
+| `failed` | Command **reached the Pi** and then broke: error reported by Pi, ingest failure, WS drop mid-scan, or stale `running` past the timeout |
+| `expired` | Command **never reached the Pi**: delivery gave up after the 2 retries (set at the same moment the trigger returns `503 device_offline`) |
+
+**The dividing line is `delivered_at` (C12, decided 2026-07-13).** Not the timeout duration — *whether the
+Pi ever took the job*. Never delivered → `expired`; delivered then broke → `failed`. This is why
+`expired` needs **no timeout sweeper**: it is set synchronously at enqueue when delivery fails.
 
 ### Payload (3b)
 
@@ -145,8 +149,9 @@ Backend generates **`command_id`** and **`scan_id`** at enqueue. Pi must use the
 ### Failure & timeout (3e)
 
 - **No resume** — scans are not resumable.
-- **`running` without progress / dead Pi:** mark `failed` after timeout. **How long** is tunable at implementation (ADR-011 / config) — not a product decision here. ⚠️ **Contradicts the [lifecycle table](#lifecycle-3a--full) above, which sends this case to `expired` — resolve ([C12](#b11--frontend-contract-asks-)).**
+- **`running` without progress / dead Pi:** mark **`failed`** after timeout — the Pi *took* the command, so this is a broken scan, not an undelivered one. **How long** is tunable at implementation (ADR-011 / config) — not a product decision here.
 - **WS drop mid-scan:** same timeout → `failed`; operator triggers again.
+- **Undelivered after the 2 retries:** **`expired`**, set synchronously with the `503 device_offline` — never reached the Pi. This is the *only* path to `expired`; there is no second timeout for it.
 
 ### Idempotency (3f)
 
@@ -190,7 +195,7 @@ org
                 └── hosts  ← discovered machines (ports, findings, …)
 ```
 
-**`agents`** (5b): `agent_id` (PK string), `org_id`, `display_name`, `secret_hash`, `revoked_at`, `last_seen_at`, `created_at`, **`target_subnet`** (🔓 [B11-C2](#b11--frontend-contract-asks-) — the network the operator chose to scan; nullable until chosen). **`online`** derived from open WS in API registry (5e) — not a persisted boolean. **`available_subnets`** is *reported*, not stored: the Pi sends its interfaces over the WS channel.
+**`agents`** (5b): `agent_id` (PK, **UUID** — decided 2026-07-13; it must equal `X-Device-Id`, and every other id in the system is a UUID. Backend mints it at provisioning; `display_name` is what humans read), `org_id`, `display_name`, `secret_hash`, `revoked_at`, `last_seen_at`, `created_at`, **`target_subnet`** (🔓 [B11-C2](#b11--frontend-contract-asks-) — the network the operator chose to scan; nullable until chosen). **`online`** derived from open WS in API registry (5e) — not a persisted boolean. **`available_subnets`** is *reported*, not stored: the Pi sends its interfaces over the WS channel.
 
 **`commands`** (5c): `command_id`, `org_id`, `agent_id` (FK), `scan_id` (FK), `scan_mode`, `subnet`, `status`, `requested_by` (audit, optional Phase 1), `error_code`, timestamps (`created_at`, `delivered_at`, `started_at`, `completed_at`).
 
@@ -259,7 +264,7 @@ most screens.
 | # | Ask | Blocks | Notes |
 |---|-----|--------|-------|
 | **C1** | `GET /api/v1/agents` — list agents | AGENTS, "Scan now" | Array of one in the MVP. `agent_id` is the provisioning `X-Device-Id`, so the frontend has **no way to discover it**. Cheap, and correct under [B1](#b1--user-model-organizational-)'s "design toward many orgs". |
-| **C2** | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | The Pi reports its interfaces over the existing WS channel; an admin picks one, once. Fixes the `subnet` hole in [B6](#b6--pi-command-channel-). `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
+| **C2** ◐ | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | **WS half LOCKED 2026-07-13:** the Pi sends a **`hello` frame on connect** with `available_subnets` (`interface` + `cidr`) — in the contract and in [`ADR-011` §3](../adr/ADR-011-pi-command-channel.md). Decided *now*, while the envelope was being defined, rather than reopening it later. **HTTP half still open:** surfacing them on `AgentDetail` + the endpoint an admin uses to pick one, once. `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
 | **C3** | `GET /users/me` (+ update) | SETTINGS → profile | No `/users` resource exists. Unknown whether the user model even has a `display_name`. |
 | **C4** | Users & invites: list users, list pending invites, change role, revoke invite | USERS & INVITES | Only `POST /invites` exists. The whole admin surface in [`ui/FLOWS.md` B2](../ui/FLOWS.md#b2--admin-day-one-invite--first-scan) has no endpoints behind it. |
 | **C5** | Forced password change: 403 on expired-password login carries **no token**, but `POST /auth/change-password` requires Bearer | LOGIN → forced rotation | Long-standing gap ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client). Needs a scoped token in the 403, or a restricted-scope login. Blocks the 3-month rotation in [`AUTH.md`](AUTH.md) from being usable. |
@@ -268,8 +273,8 @@ most screens.
 | ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |
 | **C9** | `host_id` on `DevicePayload` | SCAN DETAIL | The `devices` array on `ScanDetailResponse` has no id — only `ip`/`mac`/`hostname`/`vendor`. A host row on a scan therefore **cannot link to that host's page**. (Findings do carry `device_id`, so the id exists server-side.) |
 | **C10** | A failed scan carries **no reason** | SCAN DETAIL, HOME | `ScanDetailResponse` has no error field. The UI must go `scan.command_id` → `GET /commands/{id}.error_code` — and `error_code` is a machine code, so it needs a **plain-language mapping** owned by the backend or the copy deck. A failed scan with a null `command_id` has no reason at all. B6 promised *"scan failed → readable failure reason"*; today that is unreachable. |
-| **C11** | Does `GET /findings?device_id=…` accept a `host_id`? | HOST DETAIL | The filter predates the `/devices`→`/hosts` rename ([B7](#b7--openapi-contract-)). If the identifiers differ, HOST DETAIL **cannot show findings** while still showing `highest_severity` — the page would state a severity it cannot explain. |
-| **C12** | Dead Pi → `failed` or `expired`? | AGENTS | **Not a contract gap** — `CommandStatus` carries all seven states, matching ADR-011. **B6 contradicts itself:** the [lifecycle table](#lifecycle-3a--full) sends a stale `running` / undelivered command to **`expired`**; [Failure & timeout](#failure--timeout-3e) says *"mark `failed` after timeout"*. Pick one. The UI words them differently on purpose — `failed` = *the scan broke, try again*; `expired` = *the box stopped responding, go look at it*. |
+| ~~**C11**~~ | ~~Does `GET /findings?device_id=…` accept a `host_id`?~~ | — | **✅ RESOLVED 2026-07-13 — the filter becomes `?host_id=`.** The question only existed because the [B7](#b7--openapi-contract-) rename stopped at the paths; finishing it into the read-model field names dissolves it. Same identifier, one name. HOST DETAIL can show findings. |
+| ~~**C12**~~ | ~~Dead Pi → `failed` or `expired`?~~ | — | **✅ RESOLVED 2026-07-13 — split on `delivered_at`.** Never delivered → **`expired`** (set with the `503`, no sweeper). Delivered then broke — Pi error, ingest failure, WS drop, stale `running` — → **`failed`**. Both statements in B6 were half-right; the [lifecycle table](#lifecycle-3a--full) and [Failure & timeout](#failure--timeout-3e) now say the same thing. **Not a contract gap** — `CommandStatus` already carries all seven states. |
 | **C13** | Bad `current_password` → **400, not 401** | SETTINGS | `POST /auth/change-password` documents both. It must be **400**: a `401` trips the SPA's refresh interceptor ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and bounces the user to login for a mistyped field. Confirm or change. |
 | **C14** | `GET /api/v1/invites/{token}` — read an invite before accepting | ACCEPT INVITE | The screen currently knows **nothing**: not the org, not the role, not the invited email. So (a) it cannot tell a stranger the link is legitimate, and (b) the invitee must **type their own email from memory** to match `AcceptInviteRequest.email` — a typo then fails identically to a dead link. Public route, single-use token, returns `{ email, role, org_name }`. |
 | **C15** | Distinct `error.code`s on `POST /auth/reset-password`'s `400` | RESET PASSWORD | A **dead/used link** and a **weak password** share one status, and `ErrorBody.code` is an unconstrained `string`. The two need *opposite* instructions ("request a new link" vs "pick a better password"), and a stale link is this screen's most likely failure. Same treatment would help ACCEPT INVITE's `400`. |
@@ -290,6 +295,27 @@ have.
 **Decision:** **September slice** — update [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) to match B6 + AUTH Phase 1 **before** frontend type-gen. No `/devices` alias (breaking rename to `/hosts`; no consumers today).
 
 Locked with [`ADR-011`](../adr/ADR-011-pi-command-channel.md): stub scan `200` + `status: pending`, typed WS envelope, HMAC upgrade same as ADR-005, auth + invite routes, trigger error `code`s.
+
+**Baseline, not a freeze (decided 2026-07-13).** B7 originally said *freeze*. It was written before
+[B11](#b11--frontend-contract-asks-) existed, and B11's asks each amend this same file **after** B7
+lands — so "frozen" would be false the week it was declared. B7 delivers a **baseline**: correct
+against every decision that exists the day it lands, and the thing the backend routes and the
+frontend type-gen build from. Version stays `1.0.0`; B11's amendments follow it.
+
+**`openapi.yaml` is the only contract artifact (decided 2026-07-13).** `contracts/schemas/*.json`
+(`scan_result`, `device`, `finding`) were a **second, legacy definition of the ingest payload** — and a
+duplicate is a drift generator: the contract's own ingest example had gone stale (`scan_mode: full`, a
+mode that no longer exists) while the Pi's copy was correct. The schema files are **deleted**; the
+enum-parity guard in `hardware-agent/tests/test_contract_models.py` now checks the Pi's Pydantic
+`Literal` against **`openapi.yaml`**. The **typed WS frames live here too** (`AgentCommandFrame`,
+`AgentStatusFrame`, `AgentHelloFrame`) — one file, one truth.
+
+**The rename goes all the way into the field names.** `/devices` → `/hosts` is not just the paths:
+the read model becomes `hosts[]`, `host_count`, `host_id` / `host_ip`, `?host_id=`. **The ingest
+payload is the boundary and does not move** — `POST /scans` keeps `devices[]` / `DevicePayload` /
+`devices_received` per [`ADR-011` §5](../adr/ADR-011-pi-command-channel.md), because the Pi already
+emits them. *The Pi reports devices; the backend serves hosts* ([`CONTEXT.md`](../../CONTEXT.md)).
+This closes [C11](#b11--frontend-contract-asks-).
 
 ---
 
