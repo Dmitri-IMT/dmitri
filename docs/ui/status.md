@@ -14,7 +14,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 
 | Area | Screens | Status |
 | --- | --- | --- |
-| Auth | Login, accept invite, forgot/reset password, forced password change | B1/B2 **corrected against the contract**; **four screen specs drafted 2026-07-13**. Login needs C16, accept invite C14, reset password C15. Forced change still blocked (C5) and unspecced. |
+| Auth | Login, accept invite, forgot/reset password, forced password change | B1/B2 **corrected against the contract**; **all five screen specs drafted 2026-07-13**. Login needs C16, accept invite C14, reset password C15. **Forced password change is now specced** — C5's mechanism is decided (scoped `password_change_token` in the `403`); the contract must still say so (DMI-77). |
 | Home | `/`; a verdict-led security review | Drafted. The only screen spec so far. |
 | Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C9/C10; host detail needs C11. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2 (also C12). |
@@ -52,8 +52,8 @@ The product should explain what needs attention. It is not a metrics dashboard.
 - **Pick the email provider and the sending domain.** Transactional email is decided (C17 closed — the backend emails invites and reset links; invites also keep a copyable link in the UI as a spam fallback). The code is small; what's left is choosing Resend/Postmark/SES and standing up **SPF + DKIM + DMARC** on a domain you own. Forgot/Reset password stay unbuildable until that exists.
 - **Fourteen contract asks + one doc contradiction** block the UI — see [`FLOWS.md` § Contract asks](FLOWS.md#contract-asks). The heavy ones: no `GET /agents` (C1), no way to set the Pi's target network (C2), and **no `/users` resource at all** (C3, C4, C16), which leaves Users & invites mostly unbuildable — and, via **C16**, leaves the frontend with no documented way to learn the user's **role**, which every "absent, not disabled" affordance in the product depends on. C8 resolved (`cve_id` exists); C7 resolved (accepting an invite **does** issue a session → lands on Home); C12 is a BACKEND.md self-contradiction, not a contract gap.
 - One design call left: the stale-coverage threshold (N days). The 409 busy-Pi copy is now proposed in the Agents spec.
-- Lock B3 and B4 (both clarified; B4 needs C1 + C2 landed). B1/B2 wait on C5, C14, C15, C16.
-- Write the screen spec for **forced password change** — the last one, and blocked on C5. **Every other screen is drafted:** Home, the four B3 read screens, Agents, Settings, the four auth screens, and Users & invites.
+- Lock B3 and B4 (both clarified; B4 needs C1 + C2 landed). B1/B2 wait on C14, C15, C16.
+- **All 13 screens are specced.** Home, the four B3 read screens, Agents, Settings, Users & invites, and the five auth screens including **forced password change** (2026-07-13, the last one).
 - Build the first vertical slice: login → Home with live data.
 
 ## Later, not MVP
