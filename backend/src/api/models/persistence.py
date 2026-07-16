@@ -192,7 +192,3 @@ class RiskSnapshotRecord(SQLModel, table=True):
     rationale: str
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
-
-
-class SQLModelMetadataAnchor(SQLModel):
-    pass

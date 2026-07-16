@@ -1,145 +1,67 @@
 # Railway — setup (API + worker)
 
-> **Scope:** DMI-52 — stand up the Railway project for NSPi with **two services (`api`, `worker`)**,
-> pick the region, and wire Supabase env vars. **No frontend service, no AWS** here (both are later
-> work — see [`BACKEND.md` B4/B5](../../roadmap/BACKEND.md#b4--b5--hosted-stack-)).
+> **Scope:** DMI-52 stood up the Railway project for `nspi` with **two services (`api`,
+> `worker`)**; [DMI-56](../../../specs/013-backend-app-shell-rebuild/) wired both to their real
+> shell entry points and this doc's variable/rollback guidance to the shipped runtime
+> contract. **No frontend service, no AWS** here (both are later work — see
+> [`BACKEND.md` B4/B5](../../roadmap/BACKEND.md#b4--b5--hosted-stack-)).
 >
-> **Locked decisions honored:** two services `api` + `worker`; single `nspi` environment; region
-> matches Supabase and is closest to operators/Pi; Postgres lives on **Supabase**, not Railway
-> (Railway connects via env vars, pooler **6543** at runtime).
+> **Locked decisions honored:** two services `api` + `worker`; single `nspi` environment;
+> region matches Supabase; Postgres lives on **Supabase**, not Railway (Railway connects via
+> env vars, restricted `dmitri_runtime` login, transaction pooler **6543** at runtime).
 >
-> **Honest state of the repo:** the FastAPI **app shell for these two services does not exist yet**.
-> `backend/` today is a legacy standalone scorer whose app shell is explicitly discarded
-> ([`BACKEND.md` B8](../../roadmap/BACKEND.md#reuse-from-backend-code-)); the real `api`/`worker`
-> entrypoints land with **DMI-56**. Every start command below is a **placeholder** marked as such —
-> the services are created empty and will not build successfully until DMI-56 ships. That is expected
-> for DMI-52.
+> **Current state of the repo:** both services build and deploy from `backend/` (Root
+> Directory `/backend` on both, `api` and `worker`) and start through their real entry points
+> — no placeholder start commands remain. See
+> [`specs/013-backend-app-shell-rebuild/ARCHITECTURE.md`](../../../specs/013-backend-app-shell-rebuild/ARCHITECTURE.md)
+> for the full shell contract.
 
 ## What this doc delivers
 
-| Deliverable | Status after DMI-52 |
-|-------------|---------------------|
+| Deliverable | Status |
+|-------------|--------|
 | Railway project + `nspi` environment | Created |
-| `api` service (web/HTTP + WSS) connected to GitHub | Created, empty, no successful build yet |
-| `worker` service (background job runner) connected to GitHub | Created, empty, no successful build yet |
+| `api` service (web/HTTP), Root Directory `/backend`, config `backend/railway.api.toml` | Deployed, real entry point |
+| `worker` service (background job runner), Root Directory `/backend`, config `backend/railway.worker.toml` | Deployed, real entry point |
 | Region selected (matches Supabase) | Set |
-| Supabase `DATABASE_URL` (6543 pooler) wired into both services | Set as shared variable |
-| Config-as-code (`railway.*.toml`) committed with placeholder start commands | Committed |
+| Restricted pooled `DATABASE_URL` (`dmitri_runtime`, 6543 transaction pooler) wired into both services | Documented below — apply with the CLI commands in [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
+| `DATABASE_URL_DIRECT` on either service | **Forbidden** — see [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
 
 ## The two services
 
 | Service | Role | Public domain? | Health check? | Replicas |
 |---------|------|----------------|---------------|----------|
-| `api` | FastAPI web service. Serves HTTP (`/api/v1/...`) **and** the Pi WSS endpoint `/api/v1/agents/{agent_id}/commands`. Holds the in-memory WebSocket connection registry (the Pi dials **in**; the socket is outbound only from the Pi's side — [`PI.md`](../../roadmap/PI.md)). | **Yes** — WSS/HTTPS need a public URL | **Yes** — `/health` | **1** (ADR-011: single API replica for NSPi — the WS registry is in-memory, so do not scale horizontally) |
-| `worker` | Background job runner (enrichment + risk scoring poll loop, `FOR UPDATE SKIP LOCKED` against Supabase — [`BACKEND.md` B8](../../roadmap/BACKEND.md#reuse-from-backend-code-)). No inbound traffic. | **No** — background worker, no domain | **No** — nothing to probe over HTTP | 1 |
+| `api` | FastAPI web service. Serves the contracted health route `GET /api/v1/health` (`uvicorn api.main:app --host 0.0.0.0 --port $PORT`). No business routes in this shell. | **Yes** — needed for the public URL | **Yes** — `/api/v1/health` | **1** (ADR-011: single API replica for NSPi) |
+| `worker` | Background job runner (`python -m api.worker_main` → `api.services.worker`; enrichment poll loop, `FOR UPDATE SKIP LOCKED` against Supabase). No inbound traffic. | **No** | **No** — nothing to probe over HTTP | 1 |
 
-Both services deploy from the **same repo and same build** (identical dependencies); they differ only
-by **start command**. This is Railway's "shared monorepo" shape.
+Both services deploy from the **same repo**, Root Directory `/backend`; they differ only by
+config file (`railway.api.toml` / `railway.worker.toml`) and therefore start command.
 
 ## Prerequisites
 
-1. A Railway account. **Start on the free trial** ($5 one-time credit) for DMI-52 — creating empty services costs nothing. Move to the **Hobby plan ($5/mo)** before nspi runs 24/7 (see [Gotchas](#gotchas--remediation) — the trial pauses services once the $5 credit / 30 days is exhausted).
-2. The Supabase project already created, and its **region** decided (Railway region must mirror it).
-3. GitHub access to `vulnerability-scanner-device` with permission to install the Railway GitHub App.
-4. (Optional but recommended) the Railway CLI installed locally.
+1. A Railway account with access to project `Dmitri` (`2b6b51c6-f5b7-4979-87f9-296e36a55896`),
+   environment `nspi`.
+2. The Railway CLI installed and authenticated (`railway login`, then `railway whoami`).
+3. The Supabase project's `dmitri_runtime` runtime password, already assigned via the
+   interactive `\password` flow in
+   [`docs/cloud/supabase/SETUP.md`](../supabase/SETUP.md#3-assign-the-runtime-password-interactively)
+   and URL-encoded per that doc's Step 4. This doc never repeats or stores that password —
+   every command below uses the placeholder `<DMITRI_RUNTIME_PASSWORD>`.
 
----
+## Region
 
-## Step 1 — Create the project and the `nspi` environment
+**`us-east4` (Virginia)** — co-located with Supabase `us-east-1` (N. Virginia). Set once per
+service in **Settings → Region**; both `api` and `worker` already use it.
 
-1. Railway dashboard → **New Project** → **Empty Project**.
-2. Name it `vulnerability-scanner-nspi` (or per team convention).
-3. Rename the default environment to **`nspi`**: project → **Settings → Environments** → rename `production` to `nspi`. Keep a single environment for September (no PR/branch environments yet — [Gotchas](#gotchas--remediation)).
+## Build system
 
-Verify: project canvas shows one environment named `nspi`.
+Both services build with **Railpack** (Railway's default builder) reading
+`backend/pyproject.toml` + `backend/uv.lock` — no Dockerfile, no build command. Root Directory
+`/backend` on both services makes this the build context; Config Path is set absolute from the
+repo root (`/backend/railway.api.toml`, `/backend/railway.worker.toml` — the config path does
+**not** follow Root Directory).
 
-## Step 2 — Pick the region
-
-Railway sets region **per service**, not per project, so you set it in Steps 3–4. Decide it now.
-
-| Fact | Detail |
-|------|--------|
-| Railway regions | `us-east4` (Virginia), `us-west2` (Oregon/California), `europe-west4` (Amsterdam), `asia-southeast1` (Singapore) |
-| No South America region | Railway has **no SA region** today. |
-| Decision | **`us-east4` (Virginia)** — co-located with Supabase `us-east-1` (N. Virginia). The compute↔DB round trip is paid on every query, so co-locating with Supabase dominates; the ~120ms Brazil-based operators pay on their once-per-request HTTP hop is negligible for this workload. |
-
-Set the region on **each** service in Settings → **Region** (change before the first deploy — moving a
-service later re-provisions it).
-
-## Step 3 — Create the `api` service
-
-1. Project canvas → **New → GitHub Repo** → select `vulnerability-scanner-device`. Install/authorize the Railway GitHub App if prompted.
-2. Rename the service to **`api`**.
-3. **Settings → Source:**
-   - **Branch:** `main` (auto-deploy on push).
-   - **Root Directory:** `/backend` (build context is the backend package once DMI-56 lands there).
-   - **Config Path:** `/backend/railway.api.toml` (absolute from repo root — the config path **does not** follow Root Directory; see [monorepo docs](#references)).
-4. **Settings → Region:** set per Step 2.
-5. **Settings → Networking → Public Networking:** generate a domain (needed for HTTPS + WSS). Note the `*.up.railway.app` URL — the Pi's `BACKEND_URL` and the frontend will point at it.
-6. **Settings → Deploy → Replicas:** leave at **1** (do not increase — ADR-011).
-7. Add the `watchPatterns` in the config (Step 7) so worker-only changes don't rebuild `api`.
-
-Verify: the `api` service card shows the GitHub repo, branch `main`, root `/backend`, and a public domain.
-
-## Step 4 — Create the `worker` service
-
-1. Project canvas → **New → GitHub Repo** → same repo `vulnerability-scanner-device`.
-2. Rename the service to **`worker`**.
-3. **Settings → Source:**
-   - **Branch:** `main`.
-   - **Root Directory:** `/backend`.
-   - **Config Path:** `/backend/railway.worker.toml`.
-4. **Settings → Region:** same region as `api`.
-5. **Settings → Networking:** do **not** generate a public domain. A background worker needs no inbound port and no health check. If it ever needs to reach `api` internally, use **Private Networking** (`api.railway.internal`) rather than the public domain.
-
-Verify: the `worker` service card shows the repo and root `/backend`, and **no** public domain.
-
-## Step 5 — Build system: Railpack + uv
-
-**Recommendation: use Railpack (Railway's default builder) — do not add a Dockerfile.**
-
-| Fact | Detail |
-|------|--------|
-| Default builder | **Railpack** (successor to Nixpacks). Zero-config; smaller Python images. |
-| uv support | Railpack **auto-detects** `pyproject.toml` + `uv.lock` and installs deps with `uv`. This matches this repo's toolchain (`uv` everywhere). |
-| Requirement | The backend package must ship its **own `uv.lock`**. `backend/` has `pyproject.toml` but **no `uv.lock` today** — DMI-56 must add one (`cd backend && uv lock`). Until then Railpack cannot pin deps. |
-| Escape hatch | If Railpack ever mis-detects, set `builder = "NIXPACKS"` (and `NIXPACKS_PYTHON_PACKAGE_MANAGER=uv`) or `builder = "DOCKERFILE"` in the service's config. Not needed for a standard uv project. |
-
-No build command is required for a uv project — Railpack handles install. You only override the
-**start command** (Step 7).
-
-## Step 6 — Wire Supabase env vars
-
-Postgres is **on Supabase**. Both services need the connection string. Use a **project-level shared
-variable** referenced by each service so there is one source of truth.
-
-1. Project → **Settings → Shared Variables** → environment `nspi` → add:
-
-| Variable | Value (placeholder) | Used by | Notes |
-|----------|---------------------|---------|-------|
-| `DATABASE_URL` | `postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-us-east-1.pooler.supabase.com:6543/postgres` | `api`, `worker` | **Runtime** connection via the **6543 transaction pooler** ([`BACKEND.md` B4/B5](../../roadmap/BACKEND.md#b4--b5--hosted-stack-)). |
-| `DATABASE_URL_DIRECT` | `postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres` | `api` (migrations only, later) | **Direct 5432** for Alembic only. Wire now; consumed by a `preDeployCommand` when migrations land (DMI-56+). |
-
-2. **Share** each variable to both `api` and `worker` (Shared Variables → Share → select services). This creates a reference variable in each service.
-3. Alternatively, reference explicitly inside a service's Variables tab:
-
-```
-DATABASE_URL=${{shared.DATABASE_URL}}
-```
-
-4. Add any app config (JWT secret, HMAC pepper, NVD/KEV/EPSS URLs + TTLs) as they are defined by DMI-56. Keep secrets in Railway variables — never commit them.
-
-Verify: both `api` and `worker` → Variables tab show `DATABASE_URL` resolving from `shared`.
-
-> **Transaction-pooler caveat:** the 6543 pooler is PgBouncer in transaction mode — **server-side
-> prepared statements must be disabled**. For SQLAlchemy + asyncpg use `?prepared_statement_cache_size=0`
-> (or the psycopg equivalent) on `DATABASE_URL`, or connections will error under load. Confirm the exact
-> driver flag when DMI-56 picks the DB driver.
-
-## Step 7 — Config-as-code (`railway.*.toml`)
-
-Commit one config file per service under `backend/`. **The start commands are placeholders** — replace
-the marked lines when DMI-56 defines the real entrypoints. No `[build]` command is needed (Railpack + uv).
+## Config-as-code (`railway.*.toml`)
 
 `backend/railway.api.toml`:
 
@@ -149,8 +71,8 @@ builder = "RAILPACK"
 watchPatterns = ["backend/**"]
 
 [deploy]
-startCommand = "PLACEHOLDER_DMI56 uvicorn api.main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/health"
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 300
 restartPolicyType = "ALWAYS"
 ```
@@ -163,55 +85,145 @@ builder = "RAILPACK"
 watchPatterns = ["backend/**"]
 
 [deploy]
-startCommand = "PLACEHOLDER_DMI56 python -m api.worker_main"
+startCommand = "python -m api.worker_main"
 restartPolicyType = "ALWAYS"
 ```
 
-Placeholder rules for DMI-56:
-- `api`: must bind **`0.0.0.0:$PORT`** (Railway injects `$PORT`; the health check uses it too). Keep `--host 0.0.0.0 --port $PORT`. Remove the `PLACEHOLDER_DMI56` token.
-- `worker`: has **no** `healthcheckPath` and **no** `$PORT` binding by design. Point the command at the real worker entrypoint (today's legacy loop is `api.worker_main` — reconcile the module path in DMI-56).
-- Both `watchPatterns` are scoped so a change under `backend/**` rebuilds both; narrow them further if the api/worker code is later split into subpackages.
+`api` binds `0.0.0.0:$PORT` (Railway injects `$PORT`; the health check uses it too) and Railway
+probes the contracted `/api/v1/health` route — it returns `200` only after a live
+`SELECT 1` round-trip through the configured `DATABASE_URL`, and `503` if the database is
+unreachable. `worker` has no `healthcheckPath` and binds no port by design — it is an
+independently runnable background process with no inbound traffic.
 
-## Step 8 — Railway CLI (optional, for local ops and CI)
+## Provisioning the runtime variables
+
+`api` and `worker` receive **only** the restricted pooled runtime credential. Railway never
+holds the administrative direct credential: `DATABASE_URL_DIRECT` is exported transiently from
+the operator's gitignored local `.env` for a single `alembic` command (see
+[`docs/cloud/supabase/SETUP.md`](../supabase/SETUP.md)) and is never configured on, referenced
+by, or exposed to either Railway service. If a service ever carries `DATABASE_URL_DIRECT`, that
+is drift and must be removed.
+
+The runtime URL shape (`ARCHITECTURE.md` § Connection targets, matching what
+`api.core.config.Settings` and `api.db.session.get_engine` accept): psycopg scheme, the pooler
+username `dmitri_runtime.<project-ref>`, the **6543 transaction pooler**, and
+`?sslmode=require` in the URL —
 
 ```
-curl -fsSL agents.railway.com | sh
-railway login
-railway link
-railway variables --service api
-railway up --service api
-railway logs --service worker
+postgresql+psycopg://dmitri_runtime.<project-ref>:<URL-ENCODED-PASSWORD>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
 ```
 
-- `railway link` connects your local checkout to the project/environment.
-- `railway up --service <name>` deploys a specific service manually (GitHub push auto-deploy remains the primary path).
-- `railway variables --service <name>` inspects resolved env vars per service.
+For the current `nspi` Supabase project (`pxxcojewkivbadvktsrp`, region `us-east-1`):
 
----
+```
+postgresql+psycopg://dmitri_runtime.pxxcojewkivbadvktsrp:<DMITRI_RUNTIME_PASSWORD>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+`<DMITRI_RUNTIME_PASSWORD>` is the already URL-encoded password from the Supabase runbook's
+Step 4 — never the raw password, and never typed into a command that lands in shared shell
+history.
+
+### Exact operator commands
+
+Run from a shell authenticated with `railway login` (`railway whoami` to confirm). These set
+the sealed runtime `DATABASE_URL` on both services, remove any `DATABASE_URL_DIRECT`, confirm
+the result, then redeploy both services so the new credential takes effect:
+
+```bash
+PROJECT=2b6b51c6-f5b7-4979-87f9-296e36a55896
+ENV=nspi
+
+# 1. Set the restricted pooled runtime DATABASE_URL on both services
+railway variable set DATABASE_URL="postgresql+psycopg://dmitri_runtime.pxxcojewkivbadvktsrp:<DMITRI_RUNTIME_PASSWORD>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set DATABASE_URL="postgresql+psycopg://dmitri_runtime.pxxcojewkivbadvktsrp:<DMITRI_RUNTIME_PASSWORD>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
+
+# 2. Remove DATABASE_URL_DIRECT from both — it must never reach a long-running service
+railway variable delete DATABASE_URL_DIRECT --service api --environment "$ENV" --project "$PROJECT"
+railway variable delete DATABASE_URL_DIRECT --service worker --environment "$ENV" --project "$PROJECT"
+
+# 3. Confirm: DATABASE_URL is the sealed runtime URL, DATABASE_URL_DIRECT is absent
+railway variable list --service api --environment "$ENV" --project "$PROJECT" --json
+railway variable list --service worker --environment "$ENV" --project "$PROJECT" --json
+
+# 4. Redeploy both so the new credential takes effect
+railway up --detach --service api --environment "$ENV" --project "$PROJECT"
+railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+
+# 5. Poll to a terminal state and confirm the health probe / worker boot
+railway deployment list --service api --environment "$ENV" --project "$PROJECT" --json
+railway deployment list --service worker --environment "$ENV" --project "$PROJECT" --json
+railway logs --service api --environment "$ENV" --project "$PROJECT"
+railway logs --service worker --environment "$ENV" --project "$PROJECT"
+```
+
+`railway logs --service api` should show Uvicorn bound to `0.0.0.0:$PORT` and
+`"GET /api/v1/health HTTP/1.1" 200 OK`; `railway logs --service worker` should show the poll
+loop starting without the previous `psycopg` authentication/undefined-table errors once the
+hosted schema is migrated (see the Supabase runbook).
+
+### Optional: sealing the NVD API key
+
+If an `NVD_API_KEY` is configured, seal it the same way on both services — the API and worker
+both call the NVD client during enrichment:
+
+```bash
+railway variable set NVD_API_KEY="<NVD_API_KEY>" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set NVD_API_KEY="<NVD_API_KEY>" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway up --detach --service api --environment "$ENV" --project "$PROJECT"
+railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+```
+
+Its active DMI-56 setup does not ask operators to provision `JWT_SECRET` or
+`AGENT_HMAC_SECRET` — neither authentication mechanism exists in this shell; the features that
+introduce them will add their own Railway variable guidance when they land.
+
+## Rollback
+
+Hosted rollback is quiescent by design: the API and worker must never run while
+[`docs/cloud/supabase/SETUP.md`](../supabase/SETUP.md#rollback-stop--drain--downgrade--verify)'s
+`alembic downgrade base` drops their tables and login. **Stop both services first:**
+
+```bash
+PROJECT=2b6b51c6-f5b7-4979-87f9-296e36a55896
+ENV=nspi
+
+railway down --service api --environment "$ENV" --project "$PROJECT" --yes
+railway down --service worker --environment "$ENV" --project "$PROJECT" --yes
+```
+
+Confirm both are stopped (`railway status`), then follow the Supabase runbook's drain →
+downgrade → verify steps. Only after a fresh `alembic upgrade head` reapplies a compatible
+schema, bring both services back:
+
+```bash
+railway redeploy --service api --environment "$ENV" --project "$PROJECT" --yes
+railway redeploy --service worker --environment "$ENV" --project "$PROJECT" --yes
+```
+
+Neither service may restart against a dropped or partially-migrated schema.
 
 ## Gotchas & Remediation
 
 | # | Gotcha | Impact on this stack | Remediation |
 |---|--------|----------------------|-------------|
-| 1 | **Free trial pauses services** ($5 credit / 30 days, whichever first) | Harmless now (empty services); but once nspi runs, `api` + `worker` would silently stop when the trial credit runs out | **Now:** trial is fine for creating the empty services. **Before nspi goes 24/7:** move to **Hobby ($5/mo)**. Mirrors the Supabase "start cheap, commit before September" decision. |
-| 2 | **Usage-based billing on always-on containers** | On Hobby, `api` (persistent WS) and `worker` (poll loop) run 24/7 and accrue usage even at zero traffic | Set a **usage/spend alert** in the billing dashboard. Keep to two small services; do not scale `api` replicas (also required by ADR-011). Delete any stray preview/test services. Hobby includes $5/mo of usage before overage. |
-| 3 | **Cold starts / serverless sleep** | The Pi's persistent WSS would drop if `api` slept | Do **not** enable app-sleep/serverless on `api` (or `worker`). Keep both always-on; the WS registry must stay resident. |
-| 4 | **Config file does not follow Root Directory** | Setting Config Path to `railway.api.toml` (relative) silently uses defaults | Always give the **absolute-from-repo-root** path: `/backend/railway.api.toml`, `/backend/railway.worker.toml`. |
-| 5 | **Two services, one build → cross-triggered rebuilds** | A worker-only change rebuilds `api` and vice-versa (wasted build minutes) | Set `watchPatterns` in each config. Once code is split, narrow to the owning subpaths. |
-| 6 | **`$PORT` binding** | `api` health check fails and traffic never routes if it binds `127.0.0.1` or a hardcoded port | `api` must listen on **`0.0.0.0:$PORT`**. The `worker` must **not** bind a port or define a health check. |
-| 7 | **Missing `uv.lock` in `backend/`** | Railpack can't pin deps; builds are unreproducible or fail | DMI-56 runs `cd backend && uv lock` and commits `backend/uv.lock`. |
-| 8 | **PgBouncer transaction pooler (6543)** | Prepared-statement errors under load | Disable prepared statements on `DATABASE_URL` (`prepared_statement_cache_size=0` for asyncpg). Use **5432 direct** only for Alembic via `DATABASE_URL_DIRECT`. |
-| 9 | **Build cache staleness after dep changes** | Old wheels served after a `uv.lock` bump | Trigger a **redeploy without cache** from the deployment's menu when dependencies change and a build looks stale. |
-| 10 | **Egress cost / cross-region latency** | `api`/`worker` ↔ Supabase and NVD/KEV/EPSS clients cross regions | Keep Railway region matched to Supabase (Step 2). External enrichment egress is unavoidable but small; watch it in the usage dashboard. |
-| 11 | **Empty services can't build pre-DMI-56** | First deploys will fail until the app shell exists | Expected. Leave services created and connected; do not chase red builds until DMI-56 lands the entrypoints and `uv.lock`. |
+| 1 | **Free trial pauses services** ($5 credit / 30 days, whichever first) | `api` + `worker` would silently stop when trial credit runs out | Move to the **Hobby plan ($5/mo)** before nspi needs to run 24/7. |
+| 2 | **Usage-based billing on always-on containers** | `api` and `worker` run 24/7 and accrue usage even at zero traffic | Set a **usage/spend alert** in the billing dashboard. Keep to two small services; do not scale `api` replicas (ADR-011). |
+| 3 | **Cold starts / serverless sleep** | A sleeping `api` would drop any persistent connection | Do **not** enable app-sleep/serverless on `api` or `worker`. Keep both always-on. |
+| 4 | **Config file does not follow Root Directory** | A relative Config Path silently uses defaults | Always use the **absolute-from-repo-root** path: `/backend/railway.api.toml`, `/backend/railway.worker.toml`. |
+| 5 | **Two services, one build → cross-triggered rebuilds** | A worker-only change rebuilds `api` and vice-versa | `watchPatterns = ["backend/**"]` is already set in both configs; narrow it if the code is later split into subpackages. |
+| 6 | **`$PORT` binding** | `api`'s health check fails and traffic never routes if it binds `127.0.0.1` or a hardcoded port | `api` must listen on **`0.0.0.0:$PORT`** (already the shipped `startCommand`). `worker` must **not** bind a port or define a health check. |
+| 7 | **`DATABASE_URL_DIRECT` on a Railway service** | The administrative credential would be reachable by a long-running, network-exposed process | Never set it on `api` or `worker`; it lives only in the operator's local shell for a single `alembic` command. Re-run `railway variable list --json` after any provisioning pass to confirm it is absent. |
+| 8 | **Transaction pooler (6543) and prepared statements** | Prepared-statement errors under load | The shipped engine (`api.db.session.get_engine`) always sets `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — not tunable per deployment. Migrations always use `DATABASE_URL_DIRECT` (5432/Session pooler), never 6543. |
+| 9 | **Build cache staleness after dependency changes** | Old wheels served after a `backend/uv.lock` bump | Trigger a **redeploy without cache** from the deployment's menu when dependencies change and a build looks stale. |
+| 10 | **Egress cost / cross-region latency** | `api`/`worker` ↔ Supabase and NVD/KEV/EPSS clients cross regions | Region is matched to Supabase (see [Region](#region)). External enrichment egress is small but watch it in the usage dashboard. |
 
 ## Integrations
 
 | Tool | Fit |
 |------|-----|
-| **GitHub** (primary) | Railway GitHub App → auto-deploy on push to `main`; per-service Root Directory + Config Path drive the monorepo split. |
-| **Railway CLI** | Local deploys (`railway up --service`), variable inspection, logs. Usable from CI later. |
-| **Claude Code / Cursor** | Edit code and the committed `railway.*.toml` in-repo like any file; deploys still flow through GitHub or the CLI. Railway has no special editor plugin — no integration claim beyond "edit config-as-code, push to deploy." |
+| **GitHub** (primary) | Railway GitHub App → auto-deploy on push to `main`; per-service Root Directory (`/backend`) + Config Path drive the monorepo split. |
+| **Railway CLI** | Manual deploys (`railway up --detach --service <name>`), variable management (`railway variable set/delete/list`), logs (`railway logs`), stop/redeploy (`railway down` / `railway redeploy`). |
+| **Claude Code / Cursor** | Edit code and the committed `railway.*.toml` in-repo like any file; deploys still flow through GitHub or the CLI. |
 
 ## References
 
@@ -224,3 +236,5 @@ railway logs --service worker
 - Private networking: <https://docs.railway.com/networking/private-networking> · Public networking: <https://docs.railway.com/public-networking>
 - Pricing / plans: <https://docs.railway.com/pricing/plans>
 - CLI: <https://docs.railway.com/guides/cli>
+- Backend shell contract: [`specs/013-backend-app-shell-rebuild/ARCHITECTURE.md`](../../../specs/013-backend-app-shell-rebuild/ARCHITECTURE.md)
+- Supabase runbook (runtime role, password, rollback): [`docs/cloud/supabase/SETUP.md`](../supabase/SETUP.md)

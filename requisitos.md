@@ -104,7 +104,9 @@
   válido, o Backend deve responder `202 Accepted` contendo `scan_id`, `devices_received`
   e mensagem de sucesso.
   - Origem: Artigo §3.1 (item 2) + §3.3; `main.py::ingest_scan_endpoint`.
-  - Verificação: teste e2e em `backend/` (`smoke_test.py`) com payload válido.
+  - Verificação: a rota `/api/v1/scans` não existe no shell atual (DMI-56 manteve apenas
+    `GET /api/v1/health`); a verificação fica com a futura issue de ingestão autenticada,
+    dona dessa rota, e não é coberta por `backend/tests/` até essa issue landar.
   - Rastreabilidade: `main.py::ingest_scan_endpoint`.
 
 - **RF-012** *(W)* — Se o `scan_id` recebido já existir no banco, o Backend deve
@@ -120,7 +122,8 @@
   RiskSnapshot, conforme definido em `models/persistence.py`.
   - Origem: Artigo §3.3 ("scan, device, port, service, finding, artifact e job de
   enriquecimento"); `ARCHITECTURE.md` §2.6.
-  - Verificação: `Alembic` gera migrations cobrindo todas as tabelas; smoke test.
+  - Verificação: `backend/tests/test_migrations.py` prova o round-trip completo
+    `alembic upgrade head` / `downgrade base` cobrindo as 14 tabelas do modelo.
   - Rastreabilidade: `models/persistence.py`.
 
 - **RF-014** *(E)* — Ao persistir um Finding, o Backend deve deduplicá-lo pela chave
@@ -452,7 +455,7 @@ Cada RNF referencia o `NFR-x` correspondente em sua "Rastreabilidade":
 
 Cada RF acima pode ser cruzado com:
 1. **Código-fonte** (arquivo e linha indicados em "Rastreabilidade").
-2. **Teste** correspondente em `hardware-agent/tests/` e `backend/src/api/smoke_test.py`.
+2. **Teste** correspondente em `hardware-agent/tests/` e `backend/tests/`.
 3. **Schema** em `contracts/schemas/*.json` (para RFs de contrato).
 4. **ADR** correspondente (citado em "Origem").
 

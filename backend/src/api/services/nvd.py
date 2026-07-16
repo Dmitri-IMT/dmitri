@@ -38,7 +38,9 @@ class NvdClient:
         if cached is not None and cached.expires_at >= now:
             return cached.response_json
 
-        headers = {"apiKey": self.api_key} if self.api_key else {}
+        headers = (
+            {"apiKey": self.api_key.get_secret_value()} if self.api_key else {}
+        )
         with httpx.Client(timeout=20.0, headers=headers) as client:
             response = client.get(self.base_url, params=params)
             response.raise_for_status()

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_POSTGRES_PREFIXES = (
+    "postgres://",
+    "postgresql://",
+    "postgresql+psycopg://",
+    "postgresql+asyncpg://",
+)
 
 
 class Settings(BaseSettings):
-    database_url: str = Field(default="sqlite:///./scanner.db", alias="DATABASE_URL")
+    database_url: SecretStr = Field(alias="DATABASE_URL")
     kev_api_base_url: str = Field(
         default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
         alias="KEV_API_BASE_URL",
@@ -22,7 +29,7 @@ class Settings(BaseSettings):
         default="https://services.nvd.nist.gov/rest/json/cves/2.0",
         alias="NVD_API_BASE_URL",
     )
-    nvd_api_key: str | None = Field(default=None, alias="NVD_API_KEY")
+    nvd_api_key: SecretStr | None = Field(default=None, alias="NVD_API_KEY")
     nvd_cache_ttl_hours: int = Field(default=12, alias="NVD_CACHE_TTL_HOURS")
     enrichment_poll_interval_seconds: float = Field(
         default=5.0,
@@ -32,20 +39,19 @@ class Settings(BaseSettings):
         default=10,
         alias="ENRICHMENT_BATCH_SIZE",
     )
-    cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:3000",
-            "http://localhost:5173",
-        ],
-        alias="CORS_ORIGINS",
-    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
         extra="ignore",
+        hide_input_in_errors=True,
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _validate_database_url(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().startswith(_POSTGRES_PREFIXES):
+            raise ValueError("DATABASE_URL must be a PostgreSQL connection URL.")
+        return value
 
 
 @lru_cache(maxsize=1)

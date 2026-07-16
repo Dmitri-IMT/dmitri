@@ -3,5 +3,5 @@ builder = "RAILPACK"
 watchPatterns = ["backend/**"]
 
 [deploy]
-startCommand = "PLACEHOLDER_DMI56 python -m api.worker_main"
+startCommand = "python -m api.worker_main"
 restartPolicyType = "ALWAYS"

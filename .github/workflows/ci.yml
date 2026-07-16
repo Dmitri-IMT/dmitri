@@ -67,4 +67,44 @@ jobs:
 
       - name: Run pytest
         run: python -m pytest hardware-agent/tests
-        
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dmitri_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd=pg_isready
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL_TEST: postgresql+psycopg://postgres:postgres@localhost:5432/dmitri_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen --extra dev
+
+      - name: Run backend test suite
+        working-directory: backend
+        run: |
+          uv run pytest -ra | tee pytest-output.log
+          if grep -qE '[0-9]+ skipped' pytest-output.log; then
+            echo "::error::Database-test skips detected; CI requires a zero-skip backend suite."
+            exit 1
+          fi
+
+      - name: Run Ruff
+        working-directory: backend
+        run: uv run ruff check .

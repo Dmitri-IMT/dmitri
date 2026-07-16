@@ -3,38 +3,33 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Generator
 
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, create_engine
 
 from api.core.config import get_settings
 
-
-def _connect_args(database_url: str) -> dict[str, object]:
-    if database_url.startswith("sqlite"):
-        return {"check_same_thread": False}
-    return {}
+_POSTGRES_PREFIXES = (
+    "postgres://",
+    "postgresql://",
+    "postgresql+psycopg://",
+    "postgresql+asyncpg://",
+)
 
 
 def _normalize_database_url(database_url: str) -> str:
-    if database_url.startswith("postgresql+asyncpg://"):
-        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-    return database_url
+    if not database_url.startswith(_POSTGRES_PREFIXES):
+        raise ValueError("DATABASE_URL must be a PostgreSQL connection URL.")
+    return "postgresql+psycopg://" + database_url.split("://", 1)[1]
 
 
 @lru_cache(maxsize=1)
 def get_engine():
     settings = get_settings()
-    database_url = _normalize_database_url(settings.database_url)
+    database_url = _normalize_database_url(settings.database_url.get_secret_value())
     return create_engine(
         database_url,
-        echo=False,
-        connect_args=_connect_args(database_url),
+        pool_pre_ping=True,
+        connect_args={"prepare_threshold": None, "connect_timeout": 10},
     )
-
-
-def init_db() -> None:
-    from api.models.persistence import SQLModelMetadataAnchor  # noqa: F401
-
-    SQLModel.metadata.create_all(get_engine())
 
 
 def get_session() -> Generator[Session, None, None]:
