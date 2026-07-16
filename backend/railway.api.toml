@@ -3,7 +3,7 @@ builder = "RAILPACK"
 watchPatterns = ["backend/**"]
 
 [deploy]
-startCommand = "PLACEHOLDER_DMI56 uvicorn api.main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/health"
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/v1/health"
 healthcheckTimeout = 300
 restartPolicyType = "ALWAYS"
