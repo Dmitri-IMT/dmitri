@@ -82,7 +82,9 @@ paths:
                 ok:
                   value:
                     status: ok
-                    version: 1.0.0
+                    version: 0.1.0
+        '503':
+          $ref: '#/components/responses/DatabaseUnavailableError'
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -1231,6 +1233,28 @@ components:
                 error:
                   code: device_offline
                   message: Pi seems to be offline.
+                  details: {}
+    DatabaseUnavailableError:
+      description: |
+        The health check's live database round-trip failed. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        const: database_unreachable
+          examples:
+            databaseUnavailable:
+              value:
+                error:
+                  code: database_unreachable
+                  message: Database connection failed.
                   details: {}
     InternalServerError:
       description: Unexpected server error.

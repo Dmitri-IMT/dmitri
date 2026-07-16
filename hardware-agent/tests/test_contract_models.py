@@ -96,3 +96,39 @@ def test_openapi_ingest_example_uses_a_real_scan_mode() -> None:
     enum = set(spec["components"]["schemas"]["ScanMode"]["enum"])
     example = spec["components"]["examples"]["ScanIngestRequestExample"]["value"]
     assert example["scan_mode"] in enum
+
+
+def test_health_response_example_uses_backend_release_version() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    health_ok = spec["paths"]["/api/v1/health"]["get"]["responses"]["200"]
+    example = health_ok["content"]["application/json"]["examples"]["ok"]["value"]
+    assert example == {"status": "ok", "version": "0.1.0"}
+
+    schema = spec["components"]["schemas"]["HealthResponse"]
+    assert set(schema["properties"]) == {"status", "version"}
+    assert schema["additionalProperties"] is False
+
+
+def test_health_503_references_database_unavailable_error() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    health_responses = spec["paths"]["/api/v1/health"]["get"]["responses"]
+    assert health_responses["503"] == {
+        "$ref": "#/components/responses/DatabaseUnavailableError"
+    }
+
+    component = spec["components"]["responses"]["DatabaseUnavailableError"]
+    schema = component["content"]["application/json"]["schema"]
+    assert schema["allOf"][0] == {"$ref": "#/components/schemas/ErrorResponse"}
+    pinned_code = schema["allOf"][1]["properties"]["error"]["properties"]["code"]
+    assert pinned_code["const"] == "database_unreachable"
+
+    example = component["content"]["application/json"]["examples"][
+        "databaseUnavailable"
+    ]["value"]
+    assert example == {
+        "error": {
+            "code": "database_unreachable",
+            "message": "Database connection failed.",
+            "details": {},
+        }
+    }
