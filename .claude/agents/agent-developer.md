@@ -29,7 +29,11 @@ You are a senior developer for Dmitri — the Raspberry Pi network scanning agen
 - **No comments or docstrings** in new code, including tests (project preference) —
   except `ponytail:` markers (below), which the `code-reviewer` strips on approval.
 
-## Ponytail — laziness ladder
+## Ponytail — laziness ladder (ultra by default)
+
+Operate at **ultra** intensity: YAGNI extremist, deletion before addition. Ship
+the one-liner and, in the same response, challenge any part of the requirement
+that may not need to exist — never silently build the speculative parts.
 
 Write the laziest solution that actually works. After you understand the change
 end to end, climb until the first rung holds, then stop:

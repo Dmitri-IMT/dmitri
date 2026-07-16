@@ -222,3 +222,7 @@ specs/00[0-9]-*/
 
 # UI references
 docs/ui/nous-research/
+
+# Agents
+.agents/
+.codex/

@@ -14,7 +14,11 @@ You review one completed task for Dmitri before it can be marked COMPLETED.
 ## Focus
 
 - Correctness, regressions, and missing tests.
-- Anti-overengineering: reject full rewrites and unrequested abstractions. In a
+- Anti-overengineering at **ultra** strictness: the coders run ponytail ultra, so
+  hold their output to the same bar. Any code that could be deleted, replaced by
+  stdlib/native, or shrunk is a `[REJECT]`, not a nit to wave through — when the
+  lazier form exists and is correct, the current form is wrong. Reject full
+  rewrites and unrequested abstractions. In a
   `[REJECT]`, name each over-engineering finding on one line — location, what to
   cut, what replaces it — using a tag: `delete:` (dead code / dead flexibility,
   replaced by nothing), `stdlib:` (hand-rolled thing the stdlib ships — name the

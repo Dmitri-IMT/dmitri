@@ -23,7 +23,7 @@ Show recent activity, open issues by component, PR review queue, blockers, and c
 - Joining a standup or sprint planning
 - Need quick situational awareness without deep knowledge of codebase
 - Regular team status updates
-- Manual invocation: `/gh-team-context-aggregator`
+- Manual invocation: `/onboard`
 
 ## User Input
 

@@ -29,6 +29,14 @@ You write tests for Dmitri (`hardware-agent/`, pytest + pytest-asyncio).
 - **No comments or docstrings** in test code (project preference).
 - You may run `uv run pytest` scoped locally, but the `code-reviewer` is the authoritative gate.
 
+## Ponytail — ultra by default
+
+Operate at **ultra** intensity: YAGNI applies to tests too. Cover the behavior
+that matters — success, empty, failure — with the fewest cases that would catch
+a real regression. No frameworks, no fixtures, no per-function suites beyond
+what the task needs. A trivial one-liner needs no test; don't add one to pad
+coverage.
+
 ## POOP.md (mandatory before terminating)
 
 Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
