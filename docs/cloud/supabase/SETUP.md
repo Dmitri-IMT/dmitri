@@ -1,15 +1,17 @@
-# Supabase — setup (DMI-52)
+# Supabase — setup (DMI-52, updated for DMI-56)
 
-> **Scope (DMI-52):** create the Supabase project, pick the region, capture connection
-> details, and wire the env-var split. This is greenfield — the backend app shell (DMI-56)
-> and Alembic do **not** exist yet. This doc documents the connection contract now so the
-> first migration lands cleanly when the app shell arrives.
+> **Scope:** create the Supabase project, pick the region, capture connection details, wire
+> the env-var split, and provision the backend's dedicated runtime role. The backend app
+> shell and Alembic ([DMI-56](../../../specs/013-backend-app-shell-rebuild/)) now exist and
+> own the schema — this doc documents both the one-time project setup and the provisioning
+> runbook a fresh `nspi`-equivalent environment (or a rebuild of the current one) follows.
 >
 > **Locked decisions:** [`roadmap/BACKEND.md`](../../roadmap/BACKEND.md) B4/B5 · stack detail
-> in [`adr/ADR-009-database-stack.md`](../../adr/ADR-009-database-stack.md).
+> in [`adr/ADR-009-database-stack.md`](../../adr/ADR-009-database-stack.md) (superseded on the
+> async-vs-sync driver point by the DMI-56 architecture — see below).
 >
-> **Out of scope:** AWS staging, Railway service setup, frontend hosting, running the first
-> migration.
+> **Out of scope:** AWS staging, Railway service setup (see
+> [`docs/cloud/railway/SETUP.md`](../railway/SETUP.md)), frontend hosting.
 
 ---
 
@@ -18,16 +20,12 @@
 | Topic | Decision |
 |-------|----------|
 | Provider | **Supabase** (managed Postgres) |
-| Runtime (API + worker) | Pooler **6543** — transaction mode (Supavisor) |
-| Migrations (Alembic only) | Direct **5432** — session protocol required for DDL |
-| Plan | **Free now** — nothing connects to the DB until the app shell (DMI-56). Before September, keep the project active (weekly keep-alive) or upgrade to Pro for backups. Free tier pauses after 7 days idle. |
-| Environments | Single **`nspi`** environment for September |
-| Region | Same broad region as Railway, closest to operators/Pi — record below |
-| SSL | Required on every connection |
-
-> BACKEND.md B4/B5 says "Pro **or keep active** before September". We take the "keep active"
-> path: **start on Free now** (the DB is empty until DMI-56), then before September either add
-> a weekly keep-alive or upgrade to Pro. ADR-009 also starts on Free — consistent.
+| Runtime (API + worker) | Pooler **6543** — transaction mode (Supavisor), connecting as the dedicated `dmitri_runtime` login (not `postgres`) |
+| Migrations (Alembic only) | Direct **5432**, or the **Session pooler on 5432** from an IPv4-only network (direct is IPv6-only — see the gotcha below), connecting as the administrative `postgres` login |
+| Plan | **Free** is fine while the DB stays small; before real, hard-to-regenerate scan data accumulates, either add a weekly keep-alive or upgrade to Pro (see Step 3) |
+| Environments | Single **`nspi`** environment |
+| Region | `us-east-1` (N. Virginia), matching Railway `us-east4` — see Step 2 |
+| SSL | Required on every connection (`?sslmode=require`) |
 
 ---
 
@@ -35,15 +33,16 @@
 
 | Thing | Status |
 |-------|--------|
-| Backend app shell (`main.py`, DB session, config) | Exists under `backend/`, but is the **legacy scorer** slated for discard (BACKEND.md B8). Not wired to anything. |
-| Alembic | **Does not exist** — no `alembic.ini`, no `migrations/`, not a dependency |
-| Async driver | `asyncpg` and `psycopg[binary]` are declared in `backend/pyproject.toml` |
-| ORM | `sqlmodel` + `sqlalchemy>=2.0` declared |
-| `DATABASE_URL` today | `backend/src/api/core/config.py` defaults to **SQLite**; `db/session.py` even rewrites `asyncpg` → sync `psycopg`. This whole shell is being rebuilt (DMI-56). |
-| Toolchain | `uv` (repo root `pyproject.toml`, `uv.lock`) |
+| Backend app shell (`main.py`, DB session, config) | DMI-56 shell: minimal FastAPI app, health-only route, sync SQLModel session over psycopg3. No business routes, no auth. |
+| Alembic | Sole owner of the schema. `backend/alembic.ini`, `backend/alembic/env.py`, one baseline revision (`backend/alembic/versions/20260715_01_baseline.py`). |
+| Driver | **psycopg3** everywhere — API, worker, and Alembic. `asyncpg` is not a dependency; sync `Session` only, no async engine. |
+| `DATABASE_URL` | Required `SecretStr` in `api.core.config.Settings`; no SQLite default, no fallback. |
+| Toolchain | `uv` (`backend/pyproject.toml`, `backend/uv.lock`) |
 
-**Takeaway:** nothing here connects to Postgres yet. DMI-52 only stands up the Supabase
-project and hands the app shell a correct env-var contract to consume later.
+**DB-access style (human-approved, binding):** sync everywhere. This supersedes ADR-009's
+"Driver assíncrono: asyncpg" section and its `connect_args={"timeout": 10}` example (the
+psycopg3 equivalent used by the shipped code is `connect_timeout`); the ADR itself is left
+unedited by instruction.
 
 ---
 
@@ -54,166 +53,213 @@ connections are managed.
 
 | Method | Host / port | Network | Use for | Prepared statements |
 |--------|-------------|---------|---------|---------------------|
-| **Transaction pooler** (Supavisor) | `aws-0-<region>.pooler.supabase.com:6543` | IPv4 (all tiers) | **API + worker runtime** — many short-lived connections | **Not supported** — must disable |
-| **Session pooler** (Supavisor) | `aws-0-<region>.pooler.supabase.com:5432` | IPv4 (all tiers) | IPv4-only fallback for migrations / long-lived backends | Supported |
-| **Direct connection** | `db.<ref>.supabase.co:5432` | IPv6 by default (IPv4 = paid add-on) | **Alembic migrations**, `pg_dump`, admin tools | Supported |
+| **Transaction pooler** (Supavisor) | `aws-0-<region>.pooler.supabase.com:6543` | IPv4 (all tiers) | **API + worker runtime**, as `dmitri_runtime` — many short-lived connections | **Not supported** — the shipped engine sets `prepare_threshold=None` to disable them |
+| **Session pooler** (Supavisor) | `aws-0-<region>.pooler.supabase.com:5432` | IPv4 (all tiers) | **The working IPv4 path for `DATABASE_URL_DIRECT`** — migrations, `psql`, admin tools, from any IPv4-only network | Supported |
+| **Direct connection** | `db.<ref>.supabase.co:5432` | **IPv6-only** — confirmed: this host does not resolve on an IPv4-only network, no add-on toggle observed to change that | Admin tools, only from an IPv6-capable network | Supported |
 
 ### Why migrations need 5432, not 6543
 
 The transaction pooler (Supavisor in transaction mode) hands each transaction a *different*
 physical backend connection. DDL and Alembic's migration transactions assume a stable
-session, and asyncpg's server-side prepared statements assume the same connection is reused —
-neither holds through a transaction pooler. So:
+session — that does not hold through a transaction pooler. So:
 
 - **Runtime → 6543 (transaction mode):** the API and worker open/close many transient
-  connections; the pooler multiplexes them onto a small backend pool. This is exactly what a
-  transaction pooler is good at.
-- **Migrations → 5432 (direct or session mode):** Alembic runs DDL in real sessions. Use the
-  **direct connection**; if your network/CI is IPv4-only (direct is IPv6-only without the
-  add-on), use the **session pooler** on 5432 instead — session mode also holds a stable
-  session and supports DDL and prepared statements.
+  connections; the pooler multiplexes them onto a small backend pool.
+- **Migrations → 5432, `DATABASE_URL_DIRECT`:** Alembic runs DDL in a real session. Use the
+  **Session pooler on 5432** unless you have a confirmed IPv6 path to
+  `db.<ref>.supabase.co:5432` — in practice, for this project's network, the Session pooler
+  is the working option.
 
 ---
 
-## Step-by-step
+## Step-by-step: project setup (one-time)
 
 ### 1. Create the organization and project
 
 1. Sign in at <https://supabase.com/dashboard>.
 2. Create (or reuse) an **organization** for the team.
-3. **New project** → name it for the single September environment, e.g. `nspi`.
-4. Set a strong **database password** and store it in the team secret manager immediately —
-   the dashboard shows it once. It becomes `[YOUR-PASSWORD]` in every string below.
-5. Pick the **region** (next step) before clicking create.
-6. Under **Data API Configuration** (advanced), set the three toggles as below.
+3. **New project** → name it for the environment, e.g. `nspi`.
+4. Set a strong **database password** for the `postgres` (administrative) role and store it
+   in the team secret manager immediately — the dashboard shows it once.
+5. Pick the **region** (Step 2) before clicking create.
+6. Under **Data API Configuration** (advanced), set the toggles below.
 
 #### Data API settings
 
-The app **never** uses Supabase's REST layer — the FastAPI backend connects directly to
-Postgres (pooler 6543, asyncpg) and the frontend talks to that backend, not to Supabase. So
-the public auto-REST API is attack surface we do not want (doubly so for a vuln-scanner product).
+The app never uses Supabase's REST layer — the FastAPI backend connects directly to
+Postgres. The public auto-REST API is attack surface we do not want.
 
 | Setting | Choose | Why |
 |---------|--------|-----|
-| **Data API** | **Disabled** | Auto-generates a public PostgREST API at `https://<ref>.supabase.co/rest/v1/` over every table. We have our own backend + direct DB connection, so it is unused exposure. |
-| **Automatically expose new tables** | **Off** (moot once Data API is disabled) | If on, every table Alembic creates is silently published to that public REST API. |
-| **Automatic RLS on new tables** | **Enabled** | Free defense-in-depth. The backend connects as the `postgres` role, which **bypasses RLS**, so it never interferes; but if the Data API is ever turned on or a table gets exposed, RLS-on-by-default keeps it locked instead of open. |
-
-> Note (not for DMI-52): connecting as `postgres` is high-privilege. When DMI-56 builds the
-> app shell, give the app a dedicated, less-privileged DB role — separate hardening step.
+| **Data API** | **Disabled** | Auto-generates a public PostgREST API over every table; unused exposure. |
+| **Automatically expose new tables** | **Off** | Moot once Data API is disabled. |
+| **Automatic RLS on new tables** | **Enabled** | Defense-in-depth. The DMI-56 baseline migration also explicitly enables RLS (without policies) and revokes `anon`/`authenticated` privileges on every application table as migration DDL — this dashboard default is a backstop, not the source of truth. |
 
 ### 2. Pick the region
 
-Criteria (BACKEND.md): **same broad region as Railway, closest to operators/Pi.**
+**Chosen region:** `us-east-1` (N. Virginia) — mirrors Railway `us-east4`. The
+compute↔DB round trip is paid on every query, so co-locating Supabase with Railway compute
+dominates the decision. Recorded in [`docs/cloud/README.md`](../README.md).
 
-| Consideration | Note |
-|---------------|------|
-| Railway regions are limited | `us-east`, `us-west`, `eu-west`, `ap-southeast` — Railway has **no South America region**. Supabase must sit in the AWS region matching whichever Railway region you deploy to. |
-| Latency | The compute↔DB round trip is paid on **every query** (5–20× per request), so co-locating Supabase with Railway compute dominates the decision. The operator/Pi↔stack hop is paid once per request and is negligible for a background scanner. Optimize for *matching* Railway, not for the absolute closest AWS region to operators. |
-| Decision | **`us-east-1` (N. Virginia)** — co-located with Railway `us-east4` (Virginia). This is the "same broad region as Railway" lock; the ~120ms Brazil-based operators pay on their once-per-request HTTP hop is imperceptible for this workload. |
+### 3. Set the plan
 
-**Chosen region:** `us-east-1` (N. Virginia) — mirrors Railway `us-east4`. Recorded in [`docs/cloud/README.md`](../README.md).
+- **Free** is fine while the DB is small. The one catch: the project **pauses after 7 days
+  of inactivity** — harmless while idle, but a paused DB is a dead API once the deployment is
+  live/demoed.
+- **Before that matters, pick one:** a weekly keep-alive (`SELECT 1` via a scheduled job) to
+  reset the idle timer, **or** upgrade to Pro ($25/mo — no auto-pause, daily backups).
 
-### 3. Set the plan — Free now
+### 4. Grab the administrative connection string
 
-- **Stay on Free.** DMI-52 only stands up an empty project; nothing connects until the app
-  shell (DMI-56). Free covers everything here at no cost.
-- **The one Free-tier catch:** the project **pauses after 7 days of inactivity**. That is
-  fine while the DB is empty and unused, but a paused DB = dead API once nspi is live/demoed.
-- **Before September, pick one** (do not decide now):
-  - **Keep-alive on Free** — a weekly scheduled query (GitHub Action / cron running a trivial
-    `SELECT 1`) resets the idle timer. $0. No backups.
-  - **Upgrade to Pro ($25/mo)** — no auto-pause **and** daily backups (7-day retention),
-    8 GB storage, 250 GB egress. Justify it once nspi holds real scan data you can't regenerate.
-- **Tie-breaker:** backups. Free + keep-alive is fine until there's data worth protecting;
-  after that, Pro pays for itself.
+Dashboard → **Connect** → **Session pooler** (5432). This is the `postgres` administrative
+login used only for `DATABASE_URL_DIRECT`; it is never wired into Railway.
 
-### 4. Grab the connection strings
+---
 
-Dashboard → **Connect** (top bar). It shows all three modes. Copy:
+## Provisioning `dmitri_runtime` and applying the baseline (per environment)
 
-- **Transaction pooler** (6543) → runtime.
-- **Direct connection** (5432) → migrations. (Copy the **Session pooler** 5432 string too if
-  you may run migrations from an IPv4-only machine or CI.)
+This is the human runbook `ARCHITECTURE.md` marks `HUMAN_INFRA_REQUIRED`: confirming the
+hosted Postgres major version, applying the baseline migration with the administrative
+credential, assigning the runtime role's password interactively, and handing Railway only
+the restricted pooled URL. Do this once per environment (or again after a full rollback).
 
-Substitute the SQLAlchemy driver prefix yourself — the dashboard prints bare
-`postgres://…`; the app needs `postgresql+asyncpg://…` (runtime) and
-`postgresql+psycopg://…` (migrations).
+### 1. Pre-flight
 
-### 5. Wire the env-var split
+Connect with `psql` using the Session pooler string (username `postgres.<project-ref>`,
+port 5432) and check three things before running any migration:
 
-The app shell (DMI-56) will read two separate URLs. Define both now so the contract is fixed.
-
-```
-DATABASE_URL=postgresql+asyncpg://postgres.abcdefghijklmnop:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres
-
-MIGRATION_DATABASE_URL=postgresql+psycopg://postgres:[YOUR-PASSWORD]@db.abcdefghijklmnop.supabase.co:5432/postgres
+```sql
+SHOW server_version;                                            -- must start with 17
+SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user;  -- must be true
+SELECT 1 FROM pg_roles WHERE rolname = 'dmitri_runtime';         -- must return no rows
 ```
 
-IPv4-only fallback for migrations (session pooler instead of direct):
+- **PG17 check:** the baseline assumes Postgres 17 behavior.
+- **BYPASSRLS check:** PG16+ only allows `CREATE ROLE ... BYPASSRLS` from a superuser or a
+  role that itself holds `BYPASSRLS`. Supabase's `postgres` is not a true superuser but does
+  carry `BYPASSRLS` on a healthy project; if this returns `false`, the migration's
+  `CREATE ROLE dmitri_runtime ... BYPASSRLS` will be refused by Supabase's `supautils`
+  extension — treat that as a spec amendment situation (fall back to explicit permissive
+  policies for `dmitri_runtime`), not something to route around locally.
+- **Absent-role check:** the baseline creates `dmitri_runtime` unconditionally and fails
+  rather than adopt a pre-existing role of that name. A non-empty result here means unexpected
+  drift; resolve it before migrating.
 
-```
-MIGRATION_DATABASE_URL=postgresql+psycopg://postgres.abcdefghijklmnop:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
-```
+### 2. Apply the baseline
 
-Notes on the shapes:
+Export `DATABASE_URL_DIRECT` in the shell only — never write it to `.env` or a Railway
+variable — run the migration, then unset it:
 
-- **Username differs by endpoint.** Pooler strings use `postgres.<project-ref>`; the direct
-  connection uses bare `postgres`. Copy them verbatim from the dashboard — do not hand-edit.
-- **`sslmode` vs `ssl`.** psycopg accepts `?sslmode=require` in the URL. **asyncpg does not
-  understand `sslmode`** — pass SSL via `connect_args` on the async engine instead (see
-  §6), or use `?ssl=require`. Appending `?sslmode=require` to the asyncpg URL will error.
-- Keep both URLs out of git. `backend/.env.example` is a template only; real values live in
-  Railway/CI env and the team secret manager.
-
-### 6. App-shell contract (for DMI-56, documented now)
-
-When the shell is built, the runtime engine **must disable prepared statements** (transaction
-pooler requirement) and set SSL for asyncpg:
-
-```
-from sqlalchemy.ext.asyncio import create_async_engine
-
-engine = create_async_engine(
-    settings.database_url,
-    pool_pre_ping=True,
-    connect_args={
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-        "ssl": "require",
-        "timeout": 10,
-    },
-)
+```bash
+cd backend
+export DATABASE_URL_DIRECT=postgresql+psycopg://postgres.<project-ref>:<ADMIN-PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+uv run alembic upgrade head
+unset DATABASE_URL_DIRECT
 ```
 
-Alembic (`env.py`) uses a **separate** sync engine off `MIGRATION_DATABASE_URL` (5432,
-psycopg) — no `statement_cache_size` gymnastics needed there because it is not on the
-transaction pooler.
+The hosted database is empty before this feature, so this is a plain `alembic upgrade head`
+— no stamping of pre-existing tables. This creates the 14 application tables with RLS
+enabled and no policies, revokes `anon`/`authenticated` privileges, and creates
+`dmitri_runtime LOGIN PASSWORD NULL BYPASSRLS` with only `CONNECT` + `USAGE` + table
+`SELECT`/`INSERT`/`UPDATE` + sequence `USAGE`/`SELECT` — no ownership, no admin attributes.
 
-### 7. Verify the connection (optional, no app shell required)
+### 3. Assign the runtime password interactively
 
-With `uv`, from `backend/` you can smoke-test the pooler endpoint without building anything:
+Never assign the password with an `ALTER ROLE ... PASSWORD '...'` SQL literal — it would sit
+in shell/SQL history and in any pasted transcript. Use `psql`'s interactive prompt instead:
+
+```bash
+psql "postgresql://postgres.<project-ref>:<ADMIN-PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+```
+
+then, at the `psql` prompt:
 
 ```
-uv run python -c "import asyncio, asyncpg; asyncio.run(asyncpg.connect('postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres', statement_cache_size=0, ssl='require').close())"
+\password dmitri_runtime
 ```
 
-A clean exit confirms the pooler host, password, region, and SSL are all correct.
+Enter and confirm a freshly generated high-entropy password at the two interactive prompts.
+Neither prompt echoes the value, and no SQL statement carrying the password is ever typed,
+logged, or scrolled back through.
+
+### 4. URL-encode the password and build the sealed runtime URL
+
+Pooler DSNs are URLs — a generated password containing `@`, `:`, `/`, `%`, or similar must be
+percent-encoded before it goes in the connection string, or the URL parses wrong. Use Python
+rather than hand-encoding:
+
+```bash
+python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" '<raw-generated-password>'
+```
+
+Build the final runtime URL with the encoded password, the `dmitri_runtime.<project-ref>`
+username, the **6543 transaction pooler**, and `sslmode=require`:
+
+```
+postgresql+psycopg://dmitri_runtime.<project-ref>:<URL-ENCODED-PASSWORD>@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+This is the only value that goes into Railway's `DATABASE_URL` (sealed, both services) — see
+[`docs/cloud/railway/SETUP.md`](../railway/SETUP.md) for the exact `railway variable set`
+commands. The plaintext password itself never appears in a migration, command example, test,
+shell/SQL history entry, or tracked file; only the already-encoded value travels into the
+sealed Railway variable.
+
+---
+
+## Rollback: stop / drain / downgrade / verify
+
+Hosted rollback is also a human operation, and it is quiescent by design — the API and worker
+must never run while their tables and login are being dropped.
+
+1. **Stop** both Railway services (`api` and `worker`) — see
+   [`docs/cloud/railway/SETUP.md`](../railway/SETUP.md#rollback) for the exact CLI commands.
+2. **Drain** — wait for their pooled sessions on the Supabase side to close (a short pause
+   after both services report stopped is normally enough; the Supabase dashboard's
+   connection-pool view can confirm no `dmitri_runtime` sessions remain).
+3. **Downgrade** — export the locally held administrative `DATABASE_URL_DIRECT` (Session
+   pooler, 5432, `postgres` login — never the runtime credential, which cannot alter schema),
+   run the reversal, then unset the variable:
+
+   ```bash
+   cd backend
+   export DATABASE_URL_DIRECT=postgresql+psycopg://postgres.<project-ref>:<ADMIN-PASSWORD>@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+   uv run alembic downgrade base
+   unset DATABASE_URL_DIRECT
+   ```
+
+4. **Verify** — confirm the 14 application tables and `dmitri_runtime` are gone (only
+   Alembic's own `alembic_version` bookkeeping table may remain):
+
+   ```sql
+   SELECT tablename FROM pg_tables WHERE schemaname = 'public';
+   SELECT 1 FROM pg_roles WHERE rolname = 'dmitri_runtime';  -- must return no rows
+   ```
+
+Only restart the Railway services once a compatible schema (a fresh `alembic upgrade head`)
+is in place — they must never run against a dropped or partially-migrated schema.
+
+This exact sequence — pre-flight, `alembic upgrade head`, interactive `\password`, and
+`stop`/`drain`/`downgrade`/`verify` — is rehearsed against the local `supabase start` stack
+(`postgresql://postgres:postgres@127.0.0.1:54322/postgres`, scratch database) as part of the
+DMI-56 Task 9 verification; see `specs/013-backend-app-shell-rebuild/POOP.md` for that run's
+evidence.
 
 ---
 
 ## Gotchas & remediation
 
-| Gotcha | Why it bites this project | Remediation (Python / uv / Alembic / asyncpg) |
-|--------|---------------------------|-----------------------------------------------|
-| **Free-tier pausing** (7 days idle) | Harmless while the DB is empty (now); but once `nspi` is live/demoed, a paused DB = dead API | **Now:** stay on Free, no action needed. **Before September:** add a weekly keep-alive (`SELECT 1` via GitHub Action/cron) to reset the idle timer, **or** upgrade to Pro (also gets backups). |
-| **Prepared statements on 6543** | asyncpg uses server-side prepared statements by default; the transaction pooler reassigns connections, so you hit `prepared statement "…" does not exist` | Set `statement_cache_size=0` **and** `prepared_statement_cache_size=0` in the async engine `connect_args` (§6). |
-| **Migrations run on the pooler** | If someone points Alembic at 6543, DDL fails or behaves oddly (transaction mode can't hold a session) | Keep migrations on `MIGRATION_DATABASE_URL` (5432, direct/session, psycopg). Never let Alembic read `DATABASE_URL`. |
-| **Direct 5432 is IPv6-only** | Direct connect (`db.<ref>.supabase.co`) needs IPv6 unless you buy the IPv4 add-on; many CI runners / office networks are IPv4-only → migration can't connect | Use the **Session pooler** on 5432 (`…pooler.supabase.com`, IPv4, session mode) for migrations — it also supports DDL and prepared statements. |
-| **`sslmode` on asyncpg** | Copy-pasting `?sslmode=require` (valid for psycopg) onto the asyncpg URL raises a connect error | Pass `connect_args={"ssl": "require"}` on the async engine, or use `?ssl=require`. Reserve `?sslmode=require` for the psycopg migration URL. |
-| **Connection-limit exhaustion** | Small instance = small max connections; the pool must share room with Supabase Auth/Storage/PostgREST | Keep SQLAlchemy `pool_size` small (API ~5–10, worker ~2–5 per ADR-009); leave the Supavisor pool ≤ ~80% of Database Max Connections (less if PostgREST is heavily used). |
-| **Wrong username per endpoint** | Pooler needs `postgres.<ref>`, direct needs bare `postgres`; mixing them → auth failure | Copy each string verbatim from Dashboard → Connect; don't reuse one host's username with another host. |
-| **Password / URL leakage** | Strings hold the DB password in plaintext | Store only in Railway/CI env + secret manager. `.env` stays gitignored. Rotate via Dashboard → Database → Reset password if exposed (then update both URLs). |
+| Gotcha | Why it bites this project | Remediation |
+|--------|---------------------------|--------------|
+| **Free-tier pausing** (7 days idle) | A paused DB is a dead API once live/demoed | Add a weekly keep-alive (`SELECT 1`), or upgrade to Pro. |
+| **Prepared statements on 6543** | Transaction-mode pooling reassigns physical connections mid-session, breaking server-side prepared statements | The shipped engine (`api.db.session.get_engine`) always sets `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — this is not optional/tunable per deployment. |
+| **Migrations run on the pooler (6543)** | DDL needs a stable session; transaction mode can't hold one | `alembic/env.py` reads only `DATABASE_URL_DIRECT` from `os.environ` and never falls back to `DATABASE_URL` — there is no path for migrations to accidentally hit 6543. |
+| **Direct 5432 is IPv6-only** | `db.<ref>.supabase.co` does not resolve on an IPv4-only network — confirmed against this project; no free add-on flips it to IPv4 | Use the **Session pooler** on 5432 (`aws-0-<region>.pooler.supabase.com`, username `postgres.<project-ref>`) for `DATABASE_URL_DIRECT` instead. |
+| **`sslmode` in the URL** | psycopg3 reads `?sslmode=require` from the URL itself (not `connect_args`) | Always append `?sslmode=require` to both `DATABASE_URL` and `DATABASE_URL_DIRECT`. |
+| **Wrong username per endpoint** | Pooler endpoints need `<role>.<project-ref>` (e.g. `dmitri_runtime.<project-ref>`); the direct/session-pooler admin login is bare `postgres` unless using the pooler form `postgres.<project-ref>` | Copy usernames exactly per the shapes documented above; don't mix a pooler username with the direct host or vice versa. |
+| **Password in a `.env` or Railway `DATABASE_URL_DIRECT` variable** | `DATABASE_URL_DIRECT` must never be configured on, referenced by, or exposed to either long-running Railway service | It is exported transiently from the operator's gitignored local `.env` for a single Alembic command, then unset. Grep hosted `railway variable list --json` output for `DATABASE_URL_DIRECT` after any provisioning pass — it must show nothing. |
+| **Password-bearing SQL in history** | An `ALTER ROLE dmitri_runtime PASSWORD '...'` statement lands in shell/SQL history and any pasted transcript | Always use the interactive `\password dmitri_runtime` prompt (Step 3 above), never an `ALTER ROLE` literal. |
+| **Connection-limit exhaustion** | Small instance = small max connections, shared with Supabase Auth/Storage | Keep SQLAlchemy pool sizes small; leave the Supavisor pool comfortably under the Database Max Connections limit. |
 
 ---
 
@@ -221,9 +267,9 @@ A clean exit confirms the pooler host, password, region, and SSL are all correct
 
 | Integration | Reality for this project |
 |-------------|--------------------------|
-| **GitHub / Supabase Branching** | Supabase can create preview branches on PRs and run migrations it finds in a `supabase/migrations` directory (Supabase CLI format). This project uses **Alembic**, not the Supabase CLI, so native branching does **not** run our migrations. Skip it for now; keep DB provisioning manual and migrations Alembic-driven. Revisit only if we adopt the Supabase CLI. |
-| **Claude Code / Cursor (MCP)** | Supabase ships an official **MCP server** that works with Claude Code and Cursor (read-only mode recommended; auth via a Supabase personal access token). Useful for inspecting schema/data during development. Optional, not required for DMI-52. |
-| **Railway** | Out of scope here (B5) — Railway consumes `DATABASE_URL` (6543) as an env var. This doc only produces that value. |
+| **GitHub / Supabase Branching** | This project uses **Alembic**, not the Supabase CLI, so native branching does not run our migrations. Keep DB provisioning manual and migrations Alembic-driven. |
+| **Claude Code / Cursor (MCP)** | Supabase ships an official MCP server (read-only mode recommended) — useful for inspecting schema/data during development. Optional. |
+| **Railway** | Consumes the sealed `DATABASE_URL` (6543, `dmitri_runtime`) as an env var; never `DATABASE_URL_DIRECT`. See [`docs/cloud/railway/SETUP.md`](../railway/SETUP.md). |
 
 ---
 
@@ -231,6 +277,5 @@ A clean exit confirms the pooler host, password, region, and SSL are all correct
 
 - Connecting to Postgres (direct / pooler / session, ports, IPv4/IPv6): <https://supabase.com/docs/guides/database/connecting-to-postgres>
 - Connection management & pool sizing: <https://supabase.com/docs/guides/database/connection-management>
-- Disabling prepared statements (asyncpg + transaction pooler): <https://supabase.com/docs/guides/troubleshooting/disabling-prepared-statements-qL8lEL>
 - Pricing / plans / pausing: <https://supabase.com/pricing>
-- Internal: [`roadmap/BACKEND.md`](../../roadmap/BACKEND.md) B4/B5 · [`adr/ADR-009-database-stack.md`](../../adr/ADR-009-database-stack.md) · [`cloud/README.md`](../README.md)
+- Internal: [`roadmap/BACKEND.md`](../../roadmap/BACKEND.md) B4/B5 · [`adr/ADR-009-database-stack.md`](../../adr/ADR-009-database-stack.md) · [`cloud/README.md`](../README.md) · [`specs/013-backend-app-shell-rebuild/ARCHITECTURE.md`](../../../specs/013-backend-app-shell-rebuild/ARCHITECTURE.md)
