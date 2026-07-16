@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "backend-api"
 version = "0.1.0"
@@ -5,11 +9,11 @@ description = "FastAPI backend for the vulnerability scanner device (skeleton)."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "alembic>=1.13",
   "fastapi>=0.110.0",
   "uvicorn>=0.23.2",
   "pydantic>=2.6.0",
   "pydantic-settings>=2.2.1",
-  "asyncpg>=0.29.0",
   "psycopg[binary]>=3.1.12",
   "sqlmodel>=0.0.21",
   "sqlalchemy>=2.0.29",
@@ -17,7 +21,6 @@ dependencies = [
 ]
 
 [project.scripts]
-backend-smoke-test = "api.smoke_test:main"
 backend-worker = "api.worker_main:main"
 
 [project.optional-dependencies]
