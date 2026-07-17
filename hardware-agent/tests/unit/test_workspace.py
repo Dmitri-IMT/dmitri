@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from agent.normalize.contracts import ScanPayload
 from agent.scanner.workspace import (
     build_nmap_argv,
@@ -435,6 +436,41 @@ class TestPruneResults:
         remaining_json = list(results_dir.glob("*.json"))
         assert len(remaining_json) == 10
 
+    def test_unlink_oserror_does_not_propagate(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        results_dir = tmp_path / "results"
+        self._make_result_files(results_dir, 12)
+
+        def _raise(self: Path) -> None:
+            raise OSError("boom")
+
+        monkeypatch.setattr(Path, "unlink", _raise)
+
+        prune_results(results_dir, max_count=10)
+
+    def test_one_stuck_file_does_not_block_rest(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        results_dir = tmp_path / "results"
+        files = self._make_result_files(results_dir, 12)
+        stuck = files[0]
+        original_unlink = Path.unlink
+
+        def _raise_for_stuck(self: Path, *args, **kwargs) -> None:
+            if self == stuck:
+                raise OSError("boom")
+            original_unlink(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", _raise_for_stuck)
+
+        prune_results(results_dir, max_count=10)
+
+        assert stuck.exists()
+        assert not files[1].exists()
+        for f in files[2:]:
+            assert f.exists()
+
 
 # Regex matching the contract grammar: {YYYY-MM-DD}-{HH-MM-SS}-{stage}-{unique}
 _BASENAME_RE = re.compile(
@@ -767,3 +803,48 @@ def test_prunes_to_10_after_writing(tmp_path):
 
     remaining = list(results_dir.glob("*.json"))
     assert len(remaining) == 10
+
+
+def test_returns_path_and_writes_file_when_pruning_fails(tmp_path, monkeypatch):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir(parents=True)
+    for i in range(12):
+        ts = f"2026-05-{i + 1:02d}T10-00-00"
+        (results_dir / f"{ts}_192-168-1-0_24.json").write_text(
+            '{"old": true}', encoding="utf-8"
+        )
+
+    def _raise(self: Path) -> None:
+        raise OSError("boom")
+
+    monkeypatch.setattr(Path, "unlink", _raise)
+
+    payload = _make_payload()
+    result_path = write_scan_result(payload, str(tmp_path))
+
+    assert result_path.exists()
+    data = json.loads(result_path.read_text(encoding="utf-8"))
+    assert data["subnet"] == "192.168.1.0/24"
+    assert data["scan_mode"] == "quick"
+
+
+def test_mkdir_oserror_propagates(tmp_path, monkeypatch):
+    def _raise(self: Path, *args, **kwargs) -> None:
+        raise OSError("mkdir boom")
+
+    monkeypatch.setattr(Path, "mkdir", _raise)
+
+    payload = _make_payload()
+    with pytest.raises(OSError):
+        write_scan_result(payload, str(tmp_path))
+
+
+def test_write_text_oserror_propagates(tmp_path, monkeypatch):
+    def _raise(self: Path, *args, **kwargs) -> None:
+        raise OSError("write boom")
+
+    monkeypatch.setattr(Path, "write_text", _raise)
+
+    payload = _make_payload()
+    with pytest.raises(OSError):
+        write_scan_result(payload, str(tmp_path))

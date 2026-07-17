@@ -145,6 +145,56 @@ class TestFailureSemantics:
         assert list(results_dir.glob("*.json")) == []
 
 
+class TestResultWriteFailure:
+    def test_write_failure_after_completed_scan_yields_fatal_with_payload(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        _patch_discovery(monkeypatch, [])
+        captured: list[ScanPayload] = []
+
+        def boom(payload: ScanPayload, workspace_root: str) -> None:
+            captured.append(payload)
+            raise OSError("disk full")
+
+        monkeypatch.setattr(headless, "write_scan_result", boom)
+        result = headless.run_headless_scan(
+            MODE, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
+        )
+
+        assert result.outcome == "fatal"
+        assert result.result_path is None
+        assert result.payload is captured[0]
+        assert isinstance(result.error, OSError)
+        assert "completed" in str(result.error)
+        assert "could not be written" in str(result.error)
+
+    def test_write_failure_after_partial_scan_yields_fatal_with_payload(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        _patch_discovery(monkeypatch, _one_host())
+
+        def stage_boom(*args, **kwargs):
+            raise FatalScanError("ports blew up")
+
+        monkeypatch.setattr(stages, "run_port_stage", stage_boom)
+
+        captured: list[ScanPayload] = []
+
+        def write_boom(payload: ScanPayload, workspace_root: str) -> None:
+            captured.append(payload)
+            raise OSError("disk full")
+
+        monkeypatch.setattr(headless, "write_scan_result", write_boom)
+        result = headless.run_headless_scan(
+            MODE, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
+        )
+
+        assert result.outcome == "fatal"
+        assert result.result_path is None
+        assert result.payload is captured[0]
+        assert isinstance(result.error, OSError)
+
+
 class TestOnePipeline:
     def test_without_patch_one_host_completes(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path

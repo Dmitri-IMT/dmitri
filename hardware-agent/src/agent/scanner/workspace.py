@@ -140,7 +140,10 @@ def prune_results(results_dir: Path, max_count: int = 10) -> None:
     )
     excess = len(files) - max_count
     for f in files[:excess]:
-        f.unlink()
+        try:
+            f.unlink()
+        except OSError:
+            pass
 
 
 def _migrate_legacy_json(workspace_root: Path, results_dir: Path) -> None:

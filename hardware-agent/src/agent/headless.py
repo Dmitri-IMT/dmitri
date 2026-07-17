@@ -101,7 +101,18 @@ def run_headless_scan(
     scan_runner.run_blocking()
 
     if captured_payload is not None:
-        result_path = write_scan_result(captured_payload, str(workspace_root))
+        try:
+            result_path = write_scan_result(captured_payload, str(workspace_root))
+        except OSError as exc:
+            return HeadlessScanResult(
+                outcome="fatal",
+                payload=captured_payload,
+                result_path=None,
+                error=OSError(
+                    "Scan completed but the result file could not be written "
+                    f"to {workspace_root}: {exc}"
+                ),
+            )
         partial = bool(
             captured_payload.metadata
             and captured_payload.metadata.get("partial_result")

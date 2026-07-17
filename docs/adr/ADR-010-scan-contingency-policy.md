@@ -44,6 +44,7 @@ não-zero viram **Unit** (sem retry). Um **timeout nunca faz retry**.
 |----------|---------|--------------------|
 | Fatal **antes** de qualquer dado | **PARAR** imediatamente | Nada; erro claro ao usuário |
 | Fatal **depois** da descoberta | **PARAR**, emitir parcial | Hosts/portas coletados, `partial_result=True` |
+| Fatal **na gravação do resultado** | **PARAR**, sem emitir parcial | Nenhum JSON; o canal de preservação falhou, embora o payload possa permanecer em memória |
 | Transient em uma unidade | **RETRY uma vez**; persistindo, rebaixa para falha de unidade | — |
 | Unit em um único lote/host | **CONTINUAR** com as demais unidades; registrar a falha | Todas as unidades bem-sucedidas |
 | Taxa de falha de unidades acima do limite (circuit breaker) | **PARAR** (ambiente quebrado) | Tudo que teve sucesso, `partial_result=True` |
@@ -53,7 +54,8 @@ não-zero viram **Unit** (sem retry). Um **timeout nunca faz retry**.
 
 **Princípio guia:** parar apenas quando continuar é inútil (fatal), destrutivo (ambiente
 quebrado), solicitado pelo usuário, ou um orçamento de recurso foi atingido. Caso contrário,
-degradar de forma controlada e **sempre preservar o trabalho parcial**.
+degradar de forma controlada e **sempre preservar o trabalho parcial**, exceto quando o próprio
+canal de gravação falhar.
 
 ### 3. Mecanismos exigidos
 

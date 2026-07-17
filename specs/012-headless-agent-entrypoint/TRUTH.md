@@ -34,8 +34,11 @@ one pipeline, two front doors.
 - Both paths share one pipeline implementation — no forked or duplicated scan logic. A
   future fix to the pipeline must automatically apply to both front doors.
 - When a stage fails mid-run, the headless run applies the same partial/fatal semantics
-  as the TUI runner: the same conditions produce a partial result, the same conditions
-  are fatal, and the saved result records the same terminal state either way.
+  as the TUI runner: the same stage conditions produce a partial or fatal result, and the
+  saved result records the same terminal state either way. A headless-only persistence
+  failure is the exception: if a completed or partial payload cannot be written, the
+  headless outcome is fatal with no result JSON, while the payload remains available to
+  the programmatic caller.
 - The headless run is invocable programmatically (by the future daemon) and from the
   command line (by a developer), and reports its outcome — completed, partial, or fatal —
   in a machine-readable way in both cases.
@@ -59,6 +62,7 @@ one pipeline, two front doors.
 | Same shape | the same mode + subnet | a scan runs headless and a scan runs via the TUI | both produce contract-valid result JSON with the same structure |
 | Programmatic result | the entrypoint invoked programmatically with mode + subnet | the scan completes | the caller receives the normalized result and the result JSON is written |
 | Failure semantics match | a scan that hits a stage failure | it runs headless | the partial/fatal outcome and recorded terminal state match what the TUI runner produces for the same failure |
+| Result persistence failure | a completed or partial payload | the headless result write fails | the outcome is fatal, no result JSON exists, and the programmatic caller still receives the payload |
 | TUI untouched | the TUI | any screen-driven scan runs | behaviour, flow, and outputs are identical to before this change |
 | One pipeline | the pipeline code | headless and TUI paths are compared | both call the same runner/stages implementation — no duplicated scan logic |
 | Input validation | an unknown mode or malformed subnet | a headless run is attempted | it fails fast with a clear error and no scan starts |

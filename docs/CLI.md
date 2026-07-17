@@ -52,7 +52,7 @@ Shared across all subcommands ([ADR-012](adr/ADR-012-headless-exit-code-contract
 | `0` | TUI: normal quit. Agent: scan **completed** (full result JSON written). |
 | `2` | Usage error — unknown subcommand, wrong arity, unknown mode, invalid subnet. |
 | `10` | Agent only: scan **partial** (partial result JSON written). |
-| `20` | Fatal startup or environment error — nmap missing, unwritable workspace, agent **fatal** before preservable data. |
+| `20` | Agent **fatal** with no result JSON written — nmap missing, unwritable workspace, pre-discovery failure, or a completed/partial payload that could not be persisted. |
 | `130` | Optional: OS-level SIGINT (not a documented user action for the TUI). |
 
 ## Examples
@@ -71,6 +71,19 @@ uv run dmitri agent bogus 192.168.1.0/24
 # Missing nmap → exit 20 (both subcommands)
 uv run dmitri agent quick 192.168.1.0/24
 uv run dmitri start
+```
+
+If a scan completes but its result cannot be written, stdout still reports the outcome and keeps
+the in-memory payload's `scan_id` while `result_path` is `null`:
+
+```json
+{"outcome": "fatal", "result_path": null, "scan_id": "7f693869-6357-4d94-8743-bd88e942a7c4"}
+```
+
+The write error is printed separately to stderr:
+
+```text
+Scan completed but the result file could not be written to /path/to/workspace: No space left on device
 ```
 
 ## Related docs

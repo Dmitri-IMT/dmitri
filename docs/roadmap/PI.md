@@ -116,6 +116,8 @@ Production Pi runs a **headless daemon** (`dmitri agent`), not the TUI:
 2. Daemon opens an **outbound WebSocket** to the backend and stays connected (reconnect on drop).
 3. On command message: runs the **same scan pipeline as the TUI** (`ScanRunner` / stages → `nmap` subprocesses).
 4. Uploads results via `POST /api/v1/scans`; sends command status over WS; waits for next command.
+   If result persistence fails after scanning, there is no file to upload: report `failed` even
+   though the daemon may still hold the returned payload in memory.
 5. **TUI** remains for local dev/debug only — not the September demo path.
 
 **Ops (planned):** `Restart=always` for process crashes; **scheduled machine reboot** every few days — daemon reconnects via systemd after reboot. Open connection = **online** in the UI.

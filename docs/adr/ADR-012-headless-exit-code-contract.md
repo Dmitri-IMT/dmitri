@@ -31,7 +31,7 @@ Every headless run reports exactly one outcome, mapped to a fixed exit code:
 |---------|---------|-----------|----------------------|
 | `completed` | scan finished, `partial_result` false | `0` | yes |
 | `partial` | partial work preserved (cancel / timeout / circuit-breaker / post-discovery fatal) | `10` | yes |
-| `fatal` | fatal before any preservable data (nmap missing, unwritable workspace, pre-discovery fatal) | `20` | no |
+| `fatal` | no result JSON written (nmap missing, unwritable workspace, pre-discovery fatal, or a completed/partial payload that could not be persisted) | `20` | no |
 | *(usage / invalid input)* | unknown mode, malformed subnet, wrong arity — nothing ran | `2` | no |
 
 `2` is not an outcome of a run; it is the POSIX-conventional usage-error code, returned before any
@@ -39,11 +39,13 @@ scan starts.
 
 ### 2. Outcome derives from the runner's terminal state — no new vocabulary
 
-`completed` / `partial` / `fatal` are a projection of the existing terminal classification from
-[`ADR-010`](ADR-010-scan-contingency-policy.md) (`terminated_by ∈ {completed, user_cancel,
-timeout, error}` combined with `partial_result`). No new terminal state, metadata field, or schema
-change is introduced. The outcome a caller reads therefore matches the terminal state the TUI
-runner records for the same run.
+Normally, `completed` / `partial` / `fatal` are a projection of the existing terminal
+classification from [`ADR-010`](ADR-010-scan-contingency-policy.md) (`terminated_by ∈
+{completed, user_cancel, timeout, error}` combined with `partial_result`). The exception is a
+result-write `OSError`: `fatal` is then an I/O failure layered on an already-classified payload,
+not a projection of `terminated_by` / `partial_result`. The payload remains available to the
+programmatic caller, but no result JSON or `result_path` exists. No new terminal state, metadata
+field, or schema change is introduced.
 
 ### 3. Two channels, one contract
 
@@ -101,6 +103,7 @@ table, so the two cannot drift silently.
 ## References
 
 - [`spec 012`](../../specs/012-headless-agent-entrypoint/ARCHITECTURE.md) — headless entrypoint
-- [`ADR-010`](ADR-010-scan-contingency-policy.md) — terminal-state vocabulary the outcomes project from
+- [`ADR-010`](ADR-010-scan-contingency-policy.md) — terminal-state vocabulary used before any
+  result-write failure is layered on the outcome
 - [`ADR-011`](ADR-011-pi-command-channel.md) — the daemon that consumes this outcome
 - [`specs/000-agent-tui/contracts/cli.md`](../../specs/000-agent-tui/contracts/cli.md) — aligned CLI contract
