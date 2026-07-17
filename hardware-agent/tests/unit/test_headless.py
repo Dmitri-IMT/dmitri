@@ -11,8 +11,8 @@ from agent.scanner import stages
 from agent.scanner.errors import FatalScanError
 from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
-from agent.tui.results import write_scan_result
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
+from agent.scanner.workspace import write_scan_result
 
 MODE = "standard"
 SUBNET = "192.168.1.0/24"
@@ -33,9 +33,9 @@ def _one_host() -> list[HostInfo]:
 
 
 def _patch_discovery(monkeypatch: pytest.MonkeyPatch, hosts: list[HostInfo]) -> None:
-    monkeypatch.setattr("agent.tui.scanner.check_network_connectivity", lambda: None)
+    monkeypatch.setattr("agent.scanner.runner.check_network_connectivity", lambda: None)
     monkeypatch.setattr(
-        "agent.tui.scanner.discover_hosts",
+        "agent.scanner.runner.discover_hosts",
         lambda runner, subnet, timeout=None: hosts,
     )
 
@@ -126,13 +126,13 @@ class TestFailureSemantics:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
 
         def boom(runner, subnet, timeout=None):
             raise FatalScanError("discovery failed")
 
-        monkeypatch.setattr("agent.tui.scanner.discover_hosts", boom)
+        monkeypatch.setattr("agent.scanner.runner.discover_hosts", boom)
         result = headless.run_headless_scan(
             MODE, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
         )
@@ -182,7 +182,7 @@ class TestInputValidation:
     ) -> None:
         calls: list[object] = []
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda *args, **kwargs: calls.append(True),
         )
 
@@ -197,7 +197,7 @@ class TestInputValidation:
     ) -> None:
         calls: list[object] = []
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda *args, **kwargs: calls.append(True),
         )
 
@@ -214,7 +214,7 @@ class TestInputValidation:
     ) -> None:
         calls: list[object] = []
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda *args, **kwargs: calls.append(True),
         )
 

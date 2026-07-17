@@ -11,8 +11,8 @@ from agent.scanner import (
     TransientScanError,
     UnitScanError,
 )
+from agent.scanner.errors import ScanCancelled
 from agent.scanner.errors import ScanCancelled as ScanCancelledFromErrors
-from agent.tui.scanner import ScanCancelled
 
 
 class TestScanErrorSubclasses:

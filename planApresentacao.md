@@ -144,7 +144,7 @@ Fonte: `hardware-agent/src/agent/`.
 - **Contratos de saída:** `normalize/contracts.py` — `ScanPayload`, `DevicePayload`,
   `FindingPayload` (Pydantic). Mostrar um trecho do JSON gerado.
 - **Regra de integração crítica (CLAUDE.md):** a TUI tem seu próprio runner
-  (`tui/scanner.py::ScanRunner`) que chama as funções de discovery diretamente, **fora** do
+  (`scanner/runner.py::ScanRunner`) que chama as funções de discovery diretamente, **fora** do
   `ScanOrchestrator`. Bom ponto para falar de manutenção/armadilhas de arquitetura.
 - **TUI (Textual):** `tui/app.py` (`DmitriApp`) + telas em `tui/screens/` (home, network,
   scan_mode, scan_progress, scan_view, past_scans). Mostrar 1 screenshot da TUI rodando.

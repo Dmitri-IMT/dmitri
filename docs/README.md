@@ -73,9 +73,9 @@
   `hardware-agent/src/agent/`.
 - **Tests:** `uv run pytest` (inside `hardware-agent/`); lint with `uv run ruff check`.
 - **Style:** no comments or docstrings in new code, including tests.
-- **Integration rule:** the TUI's `ScanRunner` bypasses `ScanOrchestrator.run()` — thread any
-  new orchestrator/runner parameter through `ScanRunner` and `ScanProgressScreen` too (see
-  `.claude/CLAUDE.md`).
+- **Integration rule:** `ScanRunner` (`scanner/runner.py`) bypasses `ScanOrchestrator.run()` —
+  thread any new orchestrator/runner parameter through `ScanRunner` and `ScanProgressScreen`
+  too (see `.claude/CLAUDE.md`).
 - **Specs:** new features are planned with `/feature-planning` (flat docs under
   `specs/NNN-feature-slug/`); see `.claude/docs/pipeline.md`.
 - Keep docs short — code-first, no filler.

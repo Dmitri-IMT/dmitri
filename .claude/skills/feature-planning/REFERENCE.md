@@ -82,7 +82,7 @@ normalization (`ScanPayload`) → TUI / persistence. Name the modules touched un
 | Config | `hardware-agent/src/agent/config.py` | constants / scan_mode Literal |
 | Discovery | `hardware-agent/src/agent/discovery/…` | scan logic |
 | Normalize | `hardware-agent/src/agent/normalize/contracts.py` | payload shape |
-| TUI runner | `hardware-agent/src/agent/tui/scanner.py` (`ScanRunner`) | thread new params (CLAUDE.md rule) |
+| Scan runner | `hardware-agent/src/agent/scanner/runner.py` (`ScanRunner`) | thread new params (CLAUDE.md rule) |
 | TUI screen | `hardware-agent/src/agent/tui/screens/scan_progress.py` (`ScanProgressScreen`) | thread new params |
 
 ## Constraints

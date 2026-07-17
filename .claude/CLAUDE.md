@@ -2,7 +2,7 @@
 
 When wiring a new module into the codebase, trace ALL call paths that reach
 the affected code — not just the primary pipeline. In this project the TUI has
-its own scan runner (`ScanRunner` in `scanner.py`) that bypasses
+its own scan runner (`ScanRunner` in `scanner/runner.py`) that bypasses
 `ScanOrchestrator.run()` and calls discovery functions directly. Any new
 parameter added to the orchestrator (e.g. `workspace_root`) MUST also be
 threaded through `ScanRunner` and `ScanProgressScreen` so TUI-initiated scans

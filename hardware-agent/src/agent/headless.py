@@ -11,8 +11,8 @@ from agent.normalize.contracts import ScanPayload
 from agent.paths import default_results_dir, load_config
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent, ScanReporter
-from agent.tui.results import write_scan_result
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
+from agent.scanner.workspace import write_scan_result
 
 
 class InvalidScanInput(ValueError):

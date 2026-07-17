@@ -110,7 +110,7 @@ line: `{N} tasks. **Unblocked now: #…**`.
 
 When any task adds a parameter to `ScanOrchestrator` / `ScanRunner`, you **must** add
 explicit task(s) (or `Target Files` entries) threading it through
-`hardware-agent/src/agent/tui/scanner.py` (`ScanRunner`) **and**
+`hardware-agent/src/agent/scanner/runner.py` (`ScanRunner`) **and**
 `hardware-agent/src/agent/tui/screens/scan_progress.py` (`ScanProgressScreen`). TUI scans
 bypass `ScanOrchestrator.run()`, so a parameter that isn't threaded reaches no TUI scan.
 

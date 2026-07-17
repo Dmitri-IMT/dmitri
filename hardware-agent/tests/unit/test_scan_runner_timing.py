@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import pytest
 from agent.normalize.contracts import ScanPayload
 from agent.scanner.nmap import NmapRunner
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
 
 
 class _FakeRunner(NmapRunner):
@@ -29,7 +29,7 @@ class _FakeRunner(NmapRunner):
 
 
 def test_elapsed_seconds_is_captured(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("agent.tui.scanner.check_network_connectivity", lambda: None)
+    monkeypatch.setattr("agent.scanner.runner.check_network_connectivity", lambda: None)
     captured: dict[str, ScanPayload] = {}
 
     runner = ScanRunner(

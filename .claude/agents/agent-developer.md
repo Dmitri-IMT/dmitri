@@ -59,7 +59,7 @@ deliberate, and the reviewer removes them on `[APPROVE]`.
 ## CLAUDE.md integration rule (mandatory)
 
 When your task adds a parameter to the orchestrator/runner, you must also thread it through
-`ScanRunner` (`tui/scanner.py`) and `ScanProgressScreen` (`tui/screens/scan_progress.py`) — the
+`ScanRunner` (`scanner/runner.py`) and `ScanProgressScreen` (`tui/screens/scan_progress.py`) — the
 TUI bypasses `ScanOrchestrator.run()`. Grep every constructor/call site of a class you change
 and update each one.
 

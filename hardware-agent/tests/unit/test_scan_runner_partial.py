@@ -12,7 +12,7 @@ from agent.scanner.errors import (
 )
 from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
 
 
 class _FakeReporter:
@@ -43,9 +43,9 @@ def _build_runner(
     hosts: list[HostInfo],
     port_stage=None,
 ) -> tuple[ScanRunner, list[ScanPayload], list[Exception], _FakeReporter]:
-    monkeypatch.setattr("agent.tui.scanner.check_network_connectivity", lambda: None)
+    monkeypatch.setattr("agent.scanner.runner.check_network_connectivity", lambda: None)
     monkeypatch.setattr(
-        "agent.tui.scanner.discover_hosts",
+        "agent.scanner.runner.discover_hosts",
         lambda runner, subnet, timeout=None: hosts,
     )
     if port_stage is not None:
@@ -121,13 +121,13 @@ class TestPostDiscoveryUnexpected:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
 
         def boom(runner, subnet, timeout=None):
             raise RuntimeError("discovery exploded")
 
-        monkeypatch.setattr("agent.tui.scanner.discover_hosts", boom)
+        monkeypatch.setattr("agent.scanner.runner.discover_hosts", boom)
         completed: list[ScanPayload] = []
         errors: list[Exception] = []
         runner = ScanRunner(
@@ -149,13 +149,13 @@ class TestFatalBeforeDiscovery:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
 
         def boom(runner, subnet, timeout=None):
             raise FatalScanError("discovery failed")
 
-        monkeypatch.setattr("agent.tui.scanner.discover_hosts", boom)
+        monkeypatch.setattr("agent.scanner.runner.discover_hosts", boom)
         completed: list[ScanPayload] = []
         errors: list[Exception] = []
         runner = ScanRunner(

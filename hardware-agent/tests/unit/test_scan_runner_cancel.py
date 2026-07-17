@@ -8,7 +8,7 @@ from agent.scanner import errors as scanner_errors
 from agent.scanner import stages
 from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
-from agent.tui.scanner import ScanCancelled, ScanRunner
+from agent.scanner.runner import ScanCancelled, ScanRunner
 
 
 class _FakeReporter:
@@ -79,10 +79,10 @@ class TestCancelDuringStage:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda runner, subnet, timeout=None: [
                 HostInfo(ip="192.168.1.10", hostname="host-a")
             ],
@@ -116,10 +116,10 @@ class TestCancelDuringStage:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda runner, subnet, timeout=None: [
                 HostInfo(ip="192.168.1.10", hostname="host-a")
             ],
@@ -147,10 +147,10 @@ class TestCancelDuringStage:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         monkeypatch.setattr(
-            "agent.tui.scanner.discover_hosts",
+            "agent.scanner.runner.discover_hosts",
             lambda runner, subnet, timeout=None: [
                 HostInfo(ip="192.168.1.10", hostname="host-a")
             ],

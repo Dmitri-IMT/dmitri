@@ -17,7 +17,7 @@ from textual.widgets import Button, ProgressBar, RichLog, Static
 
 from agent.paths import load_config
 from agent.scanner.progress import ProgressMapper, ScanEvent
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.scan_view import MODE_LABELS
 from agent.tui.widgets import SPINNER_FRAMES

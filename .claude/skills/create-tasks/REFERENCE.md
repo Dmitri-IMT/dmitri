@@ -59,7 +59,7 @@ Source: `ARCHITECTURE.md` call sites + the CLAUDE.md integration rule.
 Atoms:
 - Wire new modules into existing call sites (orchestrator, runner, screens)
 - **Thread new orchestrator/runner params through `ScanRunner`
-  (`tui/scanner.py`) and `ScanProgressScreen` (`tui/screens/scan_progress.py`)** —
+  (`scanner/runner.py`) and `ScanProgressScreen` (`tui/screens/scan_progress.py`)** —
   mandatory whenever a param is added; TUI scans bypass `ScanOrchestrator.run()`
 
 Task pattern: "Wire {caller} to use {new-module}" / "Thread {param} through ScanRunner + ScanProgressScreen"

@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import pytest
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent
-from agent.tui.scanner import ScanRunner
+from agent.scanner.runner import ScanRunner
 
 
 class _FakeReporter:
@@ -45,7 +45,7 @@ class TestScanRunnerSuccess:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         runner = ScanRunner(
@@ -70,7 +70,7 @@ class TestScanRunnerSuccess:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         runner = ScanRunner(
@@ -88,7 +88,7 @@ class TestScanRunnerSuccess:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         runner = ScanRunner(
@@ -109,7 +109,7 @@ class TestScanRunnerFailure:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         errors: list[Exception] = []
@@ -130,7 +130,7 @@ class TestScanRunnerFailure:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         errors: list[Exception] = []
@@ -152,7 +152,7 @@ class TestScanRunnerAbort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         runner = ScanRunner(
@@ -172,7 +172,7 @@ class TestScanRunnerAbort:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         reporter = _FakeReporter()
         runner = ScanRunner(
@@ -193,7 +193,7 @@ class TestScanRunnerNoReporter:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         completed: list[object] = []
         runner = ScanRunner(
@@ -213,7 +213,7 @@ class TestScanRunnerRunBlocking:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
         completed: list[object] = []
         runner = ScanRunner(
@@ -231,13 +231,13 @@ class TestScanRunnerRunBlocking:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "agent.tui.scanner.check_network_connectivity", lambda: None
+            "agent.scanner.runner.check_network_connectivity", lambda: None
         )
 
         def _boom(*args, **kwargs):
             raise AssertionError("threading.Thread should not be constructed")
 
-        monkeypatch.setattr("agent.tui.scanner.threading.Thread", _boom)
+        monkeypatch.setattr("agent.scanner.runner.threading.Thread", _boom)
         completed: list[object] = []
         runner = ScanRunner(
             subnet="192.168.1.0/24",
