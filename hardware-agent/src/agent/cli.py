@@ -75,6 +75,8 @@ def _run_agent(args: list[str]) -> None:
             {"outcome": result.outcome, "result_path": result_path, "scan_id": scan_id}
         )
     )
+    if result.error is not None:
+        print(str(result.error), file=sys.stderr)
     raise SystemExit(headless.EXIT_CODES[result.outcome])
 
 

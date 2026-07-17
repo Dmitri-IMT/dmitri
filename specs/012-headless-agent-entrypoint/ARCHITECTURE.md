@@ -8,7 +8,7 @@ TUI. An operator opens a screen, `ScanProgressScreen` constructs `ScanRunner`
 (`tui/scanner.py`), the runner drives `discovery.discover_hosts` → `stages.run_port_stage` →
 `stages.run_deep_inspection_stage` → `_build_payload` (normalization), and when the payload
 comes back the **screen's owner** (`home.py:_on_scan_complete`) writes it to disk via
-`tui/results.py:write_scan_result`.
+`scanner/workspace.py:write_scan_result`.
 
 This feature adds a **second front door** — a headless entrypoint — onto the **same** runner
 and the **same** persistence function. It is a single-layer change under
@@ -25,27 +25,29 @@ Two structural facts, verified in code, make this a small change:
   `textual`, no screen. `agent/tui/__init__.py` is a bare docstring. So a non-TUI module can
   `from agent.tui.scanner import ScanRunner` without importing or constructing any screen.
 - **Persistence is not inside `ScanRunner`.** `ScanRunner` produces the `ScanPayload` and
-  hands it to `on_complete`; the JSON write lives in `tui/results.py:write_scan_result`, which
-  imports no Textual either. Reusing that one function guarantees byte-identical JSON shape and
-  location across both front doors.
+  hands it to `on_complete`; the JSON write lives in
+  `scanner/workspace.py:write_scan_result`, which imports no Textual either. Reusing that one
+  function guarantees byte-identical JSON shape and location across both front doors.
 
 ## Design decisions
 
-### 1. Keep `ScanRunner` and `write_scan_result` where they are — do not relocate
+### 1. Keep `ScanRunner` where it is and reuse the shared `write_scan_result`
 
 The task flagged the layering question: if the shared runner pulled in Textual, the headless
 path would drag a screen into a daemon. It does not. `ScanRunner` (`tui/scanner.py`) and
-`write_scan_result` (`tui/results.py`) are both import-clean of Textual (verified above). The
-headless entrypoint therefore imports them in place.
+`write_scan_result` (`scanner/workspace.py`) are both import-clean of Textual (verified above).
+The headless entrypoint therefore imports both shared implementations directly.
 
-**Rejected — relocate `ScanRunner`/`write_scan_result` down to the `scanner/` layer.** It is
-the "tidier" package layout, but it is a larger, riskier move: it rewrites the imports in
-`scan_progress.py`, `home.py`, and four `test_scan_runner_*.py` modules purely mechanically,
+**Rejected — relocate `ScanRunner` down to the `scanner/` layer.** It is the "tidier" package
+layout, but it is a larger, riskier move: it rewrites the imports in `scan_progress.py`,
+`home.py`, and four `test_scan_runner_*.py` modules purely mechanically,
 widening the blast radius against the hard requirement that the **TUI behave byte-for-byte
 unchanged**, and it collides directly with the **pending sibling spec 011**, which is already
 editing `tui/scanner.py` (relocating `ScanCancelled` into `scanner/errors.py`, adding the
 cancel-before-spawn guard). Moving the whole class out from under 011's feet invites a merge
-conflict for zero functional gain. Smallest correct move wins: leave them, import them.
+conflict for zero functional gain. Smallest correct move wins: leave the runner in place. DMI-68
+later moved only `write_scan_result` into the neutral scanner layer; both front doors now import
+it from `scanner/workspace.py`.
 
 ### 2. Add one synchronous public method to `ScanRunner`; do not fork the pipeline
 
@@ -104,11 +106,12 @@ HeadlessScanResult`:
    and call `run_blocking()`. The `runner` passthrough mirrors `ScanRunner`'s own injection
    seam and exists for tests (inject a fake `NmapRunner`); production/daemon leaves it `None`
    so `build_runner` creates a `LoggedNmapRunner`.
-4. **Persist + classify.** If a payload was captured, `write_scan_result(payload,
-   str(workspace_root))` (the same function the TUI uses) and classify from
-   `payload.metadata["partial_result"]`: `True` → `"partial"`, else `"completed"`. If an error
-   was captured instead (runner's `on_error`), `outcome="fatal"`, no JSON. Return
-   `HeadlessScanResult(outcome, payload, result_path, error)`.
+4. **Persist + classify.** If a payload was captured, call `write_scan_result(payload,
+   str(workspace_root))` (the same function the TUI uses). A successful write is classified from
+   `payload.metadata["partial_result"]`: `True` → `"partial"`, else `"completed"`. If the write
+   raises `OSError`, return `outcome="fatal"`, keep the captured payload, set
+   `result_path=None`, and return a descriptive `OSError`; no result JSON exists. If an error was
+   captured instead (runner's `on_error`), return `outcome="fatal"` with no payload or JSON.
 
 **Reporter contract.** `ScanRunner` guards `None` reporters (`_emit` is a no-op when
 `reporter is None`), so the **programmatic API defaults to `reporter=None`** — the daemon will
@@ -134,8 +137,9 @@ hand-rolled `sys.argv` dispatch — no argparse rewrite.
 - On `InvalidScanInput`: print the message to `stderr`, exit `2`.
 - On success: print one machine-readable JSON line to `stdout`
   (`{"outcome": ..., "result_path": ..., "scan_id": ...}`) and exit per the outcome→code map.
-  `scan_id` and `result_path` are read from the returned `HeadlessScanResult.payload`; both are
-  `null` on a `fatal` outcome (no payload).
+  `scan_id` is read from the returned `HeadlessScanResult.payload`; it is `null` when no payload
+  was produced and remains non-null when persistence fails after scanning. `result_path` is
+  `null` on every `fatal` outcome.
 - **Exit-code alignment (whole dispatcher — decided during refinement).** To keep one
   exit-code space across the binary, the same `cli.py` edit updates the existing paths:
   `_run_tui`'s nmap-missing exit changes `1 → 20` and the top-level unknown-command exit
@@ -156,12 +160,13 @@ outcome→exit-code table below is the ADR-012 contract; the values live in `hea
 |---------|---------|-----------|----------------------|
 | `completed` | scan finished, `partial_result` false | `0` | yes |
 | `partial` | scan preserved partial work (ADR-010: cancel / timeout / circuit-breaker / post-discovery fatal) | `10` | yes |
-| `fatal` | fatal before any preservable data (nmap missing, unwritable workspace, pre-discovery fatal) | `20` | no |
+| `fatal` | no result JSON written (nmap missing, unwritable workspace, pre-discovery fatal, or completed/partial payload that could not be persisted) | `20` | no |
 | invalid input | unknown mode or malformed subnet — nothing ran | `2` | no |
 
-The `completed`/`partial`/`fatal` split is exactly the runner's own terminal classification
-(`terminated_by` ∈ `{"completed","user_cancel","timeout","error"}` + `partial_result`), so the
-outcome the daemon reads matches the terminal state the TUI runner records for the same run.
+Normally, the `completed`/`partial`/`fatal` split projects the runner's own terminal
+classification (`terminated_by` ∈ `{"completed","user_cancel","timeout","error"}` +
+`partial_result`). A result-write `OSError` is the carve-out: it layers `fatal` on an already
+classified payload because no result JSON exists, while preserving that payload for the caller.
 
 ## Data model / contracts
 
@@ -201,7 +206,7 @@ All paths under `hardware-agent/src/agent/` (source) and `hardware-agent/tests/`
 | Config | `hardware-agent/src/agent/config.py` | Touch | Add `SCAN_MODES` tuple (mode-validation source). No timeout/budget change. |
 | App config / paths (reused) | `hardware-agent/src/agent/paths.py` (`load_config`, `default_results_dir`, `DmitriConfig`) | **Reused, no change** | Default results-dir resolution shared by both front doors. Relocated out of `tui/config.py` in a prerequisite refactor (done on this branch); `headless.py` imports it from here so the daemon path never imports `tui`. |
 | TUI runner | `hardware-agent/src/agent/tui/scanner.py` (`ScanRunner`) | Touch | Add public `run_blocking()` (calls `self._run()`). **No constructor parameter added.** Coordinate with spec 011 (same file). |
-| Persistence (reused) | `hardware-agent/src/agent/tui/results.py` (`write_scan_result`) | **Reused, no change** | Shared JSON write; imported by `headless.py`. Verified Textual-free. |
+| Persistence (reused) | `hardware-agent/src/agent/scanner/workspace.py` (`write_scan_result`) | **Reused, no change** | Shared JSON write; imported by `headless.py`. Verified Textual-free. |
 | TUI screen | `hardware-agent/src/agent/tui/screens/scan_progress.py` (`ScanProgressScreen`) | **No change** | Existing `ScanRunner(...)` call site at line 131 — unchanged (no new constructor arg to thread). |
 | TUI owner | `hardware-agent/src/agent/tui/screens/home.py` (`_on_scan_complete`) | **No change** | Existing `ScanProgressScreen(...)` call site at line 74 — unchanged. |
 
@@ -269,6 +274,7 @@ workspace_root=tmp_path)`.
 | Same shape | new `test_headless.py` | Run headless with a fake runner into `tmp_path`; assert a `<ts>_<subnet-slug>.json` exists under `tmp_path/results`, load it, `ScanPayload.model_validate(...)` succeeds. Run `ScanRunner` directly (mirror `test_scan_runner_partial._build_runner`) with the same inputs and assert the two payloads' structure/fields match (only ts/scan_id differ). |
 | Programmatic result | `test_headless.py` | Assert `run_headless_scan(...)` returns `HeadlessScanResult(outcome="completed", payload=<ScanPayload>, result_path=<Path>)` and the returned `result_path` is the written file. |
 | Failure semantics match | `test_headless.py` | Monkeypatch `stages.run_port_stage` to raise `FatalScanError` (as `test_scan_runner_partial.TestPostDiscoveryFatal` does). Assert `outcome="partial"`, written JSON has `metadata["partial_result"] is True`, `terminated_by == "error"`, `interrupted_stage == "ports"` — identical to what `ScanRunner` yields for the same failure. Also cover a pre-discovery fatal → `outcome="fatal"`, no JSON. |
+| Result persistence failure | `test_headless.py`, `test_cli_agent.py` | Monkeypatch `agent.headless.write_scan_result` to raise `OSError` after completed and partial runs. Assert `outcome="fatal"`, `result_path is None`, the captured payload and non-null `scan_id` survive, stderr explains that the result could not be written, and stdout retains exactly `outcome`, `result_path`, `scan_id`. |
 | TUI untouched | existing `test_scan_progress_screen.py`, `test_scan_runner_*` | Must remain green with zero edits — proves the additive `run_blocking()` and the new module changed nothing in the TUI path. |
 | One pipeline | `test_headless.py` | Assert the headless run goes through the shared stages: monkeypatching `stages.run_port_stage` changes the headless result (it is not a duplicated code path), and assert `headless` imports `ScanRunner`/`write_scan_result` (no private scan reimplementation). |
 | Input validation | `test_headless.py` | `run_headless_scan("bogus", "192.168.1.0/24")` raises `InvalidScanInput`; `run_headless_scan("quick", "not-a-subnet")` and `run_headless_scan("quick", "192.168.1.5")` (no `/`) raise; assert `discover_hosts` was never called and no `results/` dir was created. |

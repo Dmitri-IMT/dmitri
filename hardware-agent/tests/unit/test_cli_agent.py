@@ -16,14 +16,17 @@ class _StubPayload:
 
 
 def _stub_result(
-    outcome: str, scan_id: str | None = None, result_path: str | None = None
+    outcome: str,
+    scan_id: str | None = None,
+    result_path: str | None = None,
+    error: Exception | None = None,
 ) -> headless.HeadlessScanResult:
     payload = _StubPayload(scan_id) if scan_id is not None else None
     return headless.HeadlessScanResult(
         outcome=outcome,
         payload=payload,
         result_path=Path(result_path) if result_path is not None else None,
-        error=None,
+        error=error,
     )
 
 
@@ -81,6 +84,35 @@ def test_cli_agent_fatal_exits_20(capsys: pytest.CaptureFixture[str]) -> None:
     assert out["outcome"] == "fatal"
     assert out["scan_id"] is None
     assert out["result_path"] is None
+
+
+def test_cli_agent_write_failure_fatal_exits_20_and_prints_stderr(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    error = OSError(
+        "Scan completed but the result file could not be written to /tmp: disk full"
+    )
+    result = _stub_result("fatal", scan_id="ghi-789", error=error)
+    with (
+        patch.object(sys, "argv", ["dmitri", "agent", "quick", "192.168.1.0/24"]),
+        patch("agent.cli._check_nmap", return_value=True),
+        patch("agent.headless.run_headless_scan", return_value=result),
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 20
+        assert exc_info.value.code == headless.EXIT_CODES["fatal"]
+
+    captured = capsys.readouterr()
+    assert str(error) in captured.err
+
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(lines) == 1
+    out = json.loads(lines[0])
+    assert set(out.keys()) == {"outcome", "result_path", "scan_id"}
+    assert out["outcome"] == "fatal"
+    assert out["result_path"] is None
+    assert out["scan_id"] == "ghi-789"
 
 
 @pytest.mark.parametrize(

@@ -113,6 +113,9 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 
 - Backend sets `delivered` when the `command` frame is sent; Pi’s first `running` moves DB to `running`.
 - Large scan payloads are **not** sent on WS — only on `POST /api/v1/scans`.
+- Headless `fatal` maps to `failed`, including when scanning succeeded but the result could not be
+  persisted. In that write-failure case the daemon may still hold the payload returned in memory,
+  but there is no result JSON to upload.
 
 **Idempotency:** duplicate `command` delivery with the same `command_id` → Pi acks without re-running the scan.
 
@@ -140,6 +143,10 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 |------|-------|----------------|
 | Delivery gave up after the 2 retries — the Pi **never took the job** | `expired` | Synchronously, with the `503 device_offline` |
 | Pi error, ingest failure, WS drop mid-scan, or stale `running` — the Pi **took the job and broke** | `failed` | On report, or by the running timeout |
+
+A headless `fatal` is a Pi-reported `failed`, including a result-write failure after the scan
+pipeline completed. The daemon may retain the returned payload in memory, but must not report
+`uploading` or `done` when no result JSON was persisted.
 
 **Timeouts:** the `running` stale threshold is **config/env** (not fixed in this ADR). WS drop mid-scan uses that same running timeout → `failed`; operator re-triggers. There is **no second timeout for `expired`** — an undelivered command is resolved at enqueue, not swept later.
 
