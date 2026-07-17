@@ -4,6 +4,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
+from api.core.config import normalize_postgres_url
 from api.models import persistence
 from sqlalchemy import engine_from_config, pool
 
@@ -20,16 +21,10 @@ def _migration_url() -> str:
     if not value:
         raise RuntimeError("DATABASE_URL_DIRECT is required for migrations.")
 
-    prefixes = (
-        "postgres://",
-        "postgresql://",
-        "postgresql+psycopg://",
-        "postgresql+asyncpg://",
-    )
-    if not value.startswith(prefixes):
-        raise RuntimeError("DATABASE_URL_DIRECT must be a PostgreSQL connection URL.")
-
-    return "postgresql+psycopg://" + value.split("://", 1)[1]
+    try:
+        return normalize_postgres_url(value, variable="DATABASE_URL_DIRECT")
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def run_migrations_offline() -> None:

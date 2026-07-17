@@ -20,7 +20,7 @@ explicit **stop-vs-continue policy** plus the structural changes needed to enfor
 ## 2. How the pipeline works today
 
 A TUI scan runs entirely on a daemon worker thread owned by `ScanRunner._run()`
-(`hardware-agent/src/agent/tui/scanner.py`). Stages run sequentially:
+(`hardware-agent/src/agent/scanner/runner.py`). Stages run sequentially:
 
 ```
 discover_hosts → run_port_stage → run_deep_inspection_stage → extract_findings → ScanPayload
@@ -61,7 +61,7 @@ scan. **All successful batches are discarded.** There is no per-unit isolation.
 (`scanner/stages.py:166-189`), and `workspace.py:12` defines
 `TerminatedBy = Literal["completed", "error", "user_cancel", "timeout"]`. **None of these are ever
 emitted.** `ScanRunner` only ever builds a payload on full success; on `ScanCancelled` it just
-`pass`es (`scanner/scanner.py:174-175`), and `LoggedNmapRunner` only writes `"completed"` or
+`pass`es (`scanner/runner.py:174-175`), and `LoggedNmapRunner` only writes `"completed"` or
 `"error"` (`scanner/nmap.py:188-191`). A 40-minute scan that fails in deep inspection yields
 **nothing** — not even the hosts and ports already found.
 
@@ -86,7 +86,7 @@ extensive/max scans have no overall deadline and no graceful "stop and keep what
 until done or until something hangs (F1).
 
 ### F8 — Connectivity checked once, at the start 🟡
-`check_network_connectivity()` runs once (`scanner/scanner.py:87`). If the network drops mid-scan,
+`check_network_connectivity()` runs once (`scanner/runner.py:87`). If the network drops mid-scan,
 every subsequent nmap call fails and the scan collapses (amplified by F2).
 
 ---

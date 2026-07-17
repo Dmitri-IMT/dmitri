@@ -45,7 +45,7 @@ def test_get_engine_normalizes_accepted_urls_with_pooler_safe_args(
 @pytest.mark.parametrize("url", ["sqlite:///x.db", "mysql://user:pass@host/db"])
 def test_normalize_database_url_rejects_non_postgres(url: str) -> None:
     with pytest.raises(ValueError):
-        session_module._normalize_database_url(url)
+        session_module.normalize_postgres_url(url)
 
 
 def test_non_postgres_url_never_reaches_create_engine(
@@ -58,7 +58,7 @@ def test_non_postgres_url_never_reaches_create_engine(
     )
 
     with pytest.raises(ValueError):
-        session_module._normalize_database_url("mongodb://host/db")
+        session_module.normalize_postgres_url("mongodb://host/db")
 
 
 def test_settings_rejects_non_postgres_before_engine_module_is_touched(

@@ -5,26 +5,13 @@ from typing import Generator
 
 from sqlmodel import Session, create_engine
 
-from api.core.config import get_settings
-
-_POSTGRES_PREFIXES = (
-    "postgres://",
-    "postgresql://",
-    "postgresql+psycopg://",
-    "postgresql+asyncpg://",
-)
-
-
-def _normalize_database_url(database_url: str) -> str:
-    if not database_url.startswith(_POSTGRES_PREFIXES):
-        raise ValueError("DATABASE_URL must be a PostgreSQL connection URL.")
-    return "postgresql+psycopg://" + database_url.split("://", 1)[1]
+from api.core.config import get_settings, normalize_postgres_url
 
 
 @lru_cache(maxsize=1)
 def get_engine():
     settings = get_settings()
-    database_url = _normalize_database_url(settings.database_url.get_secret_value())
+    database_url = normalize_postgres_url(settings.database_url.get_secret_value())
     return create_engine(
         database_url,
         pool_pre_ping=True,

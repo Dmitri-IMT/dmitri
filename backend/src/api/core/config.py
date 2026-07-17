@@ -13,6 +13,12 @@ _POSTGRES_PREFIXES = (
 )
 
 
+def normalize_postgres_url(value: str, variable: str = "DATABASE_URL") -> str:
+    if not value.startswith(_POSTGRES_PREFIXES):
+        raise ValueError(f"{variable} must be a PostgreSQL connection URL.")
+    return "postgresql+psycopg://" + value.split("://", 1)[1]
+
+
 class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
     kev_api_base_url: str = Field(
@@ -49,8 +55,7 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _validate_database_url(cls, value: SecretStr) -> SecretStr:
-        if not value.get_secret_value().startswith(_POSTGRES_PREFIXES):
-            raise ValueError("DATABASE_URL must be a PostgreSQL connection URL.")
+        normalize_postgres_url(value.get_secret_value())
         return value
 
 

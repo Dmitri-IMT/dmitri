@@ -13,7 +13,7 @@
 ## Current state
 
 - **Hardware: none in possession.** Target BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md): Raspberry Pi 4 (4 GB), headless, ALFA Wi-Fi adapter. **Must acquire and configure before September E2E** — see [Hardware acquisition](#hardware-acquisition--open).
-- **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via the TUI's `ScanRunner`.
+- **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
 - **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
 - **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **HMAC-SHA256** ([`ADR-005`](../adr/ADR-005-security-model.md)) — **not implemented** on either side.
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.

@@ -33,7 +33,7 @@ You are the architecture agent for Dmitri (the network vulnerability scanner).
 
 ## CLAUDE.md integration rule (mandatory)
 
-The TUI has its own scan runner (`ScanRunner` in `tui/scanner.py`) that bypasses the
+The TUI has its own scan runner (`ScanRunner` in `scanner/runner.py`) that bypasses the
 orchestrator and calls discovery directly. Whenever a new parameter is added to the
 orchestrator/runner, the naming table **must** list `ScanRunner` and `ScanProgressScreen`
 (`tui/screens/scan_progress.py`) as call sites that thread it through. Do not mark architecture

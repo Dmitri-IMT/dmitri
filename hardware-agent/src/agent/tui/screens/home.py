@@ -10,7 +10,7 @@ from textual.widgets import Button, OptionList, Static
 from textual.widgets.option_list import Option
 
 from agent.paths import load_config
-from agent.tui.results import write_scan_result
+from agent.scanner.workspace import write_scan_result
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.network import NetworkScreen
 from agent.tui.screens.past_scans import PastScansScreen

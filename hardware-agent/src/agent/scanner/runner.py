@@ -1,4 +1,4 @@
-"""TUI scan runner — worker thread, cancellation, progress reporting."""
+"""Scan runner — worker thread, cancellation, progress reporting."""
 
 from __future__ import annotations
 
