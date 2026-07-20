@@ -128,7 +128,13 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 
 ## Setup
 
-Siga o guia completo:
+Run the automated installer from the repo root:
+
+```bash
+./install.sh
+```
+
+Or follow the manual guide:
 
 → [docs/DEV-SETUP.md](docs/DEV-SETUP.md)
 
