@@ -186,11 +186,16 @@ def test_baseline_matches_model_metadata_and_security_fence(
         )
 
     assert tuple(created) == baseline.APPLICATION_TABLES
-    assert set(created) == set(persistence.SQLModel.metadata.tables)
+    # The baseline owns a subset of the model metadata; later migrations
+    # (e.g. the identity schema) add their own tables and may extend baseline
+    # tables (scans gains org_id). Assert the baseline reproduces exactly its
+    # own tables' models, tolerating columns/indexes added by later migrations.
+    assert set(created) <= set(persistence.SQLModel.metadata.tables)
     for name, table in created.items():
-        assert _table_shape(table) == _table_shape(
-            persistence.SQLModel.metadata.tables[name]
-        )
+        created_shape = _table_shape(table)
+        model_shape = _table_shape(persistence.SQLModel.metadata.tables[name])
+        for created_group, model_group in zip(created_shape, model_shape):
+            assert set(created_group) <= set(model_group)
 
     statements = tuple(" ".join(statement.split()) for statement in executed)
     tables = ", ".join(
