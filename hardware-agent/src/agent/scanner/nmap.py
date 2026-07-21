@@ -74,7 +74,7 @@ def _resolve_nmap_path(candidate: str | None) -> str:
             return str(location)
 
     raise FatalScanError(
-        "Nmap executable not found. Set AGENT_NMAP_PATH or install nmap in PATH."
+        "Nmap executable not found. Install nmap and ensure it is on PATH."
     )
 
 

@@ -20,6 +20,7 @@ You drive subagents and maintain `TASKS.md` / `POOP.md`.
 - Read / update `TASKS.md` (status, Review Rejections)
 - Spawn Task subagents (`agent-developer`, `test-engineer`, `code-reviewer`, and the planning
   agents during a structural re-eval)
+- Run the `docs-sync` skill **once** at the end of the pipeline (docs only — never app code)
 - Append `STRUCTURAL_REEVAL — Task N` blocks to `POOP.md`
 - Read-only `Read` / `Grep` / `Glob` on `hardware-agent/**`
 
@@ -69,6 +70,7 @@ add explicit tasks (or target files) covering `ScanRunner` and `ScanProgressScre
 | 4 | on `[REJECT]` | Increment `Review Rejections`; if **≥ 4** → structural re-eval; else spawn a **new** `agent-developer` (+ `test-engineer` if tests failed) with the full rejection text, then re-run step 3 |
 
 Pass subagents **paths**, not pasted spec contents. The reviewer is the authoritative gate.
+Documentation is synced once at the end (Phase 5), not per task.
 
 ## Structural re-evaluation (4th rejection)
 
@@ -84,7 +86,10 @@ Pass subagents **paths**, not pasted spec contents. The reviewer is the authorit
 ## Phase 5 — state
 
 On `[APPROVE]`: mark the task `COMPLETED`, move to the next. When all tasks are `COMPLETED`,
-report to the operator and remind them the human-only tail is: `nuke` → `commit` → `create-pr`.
+**run the `docs-sync` skill once**, scoped to the whole feature's diff (`git diff --name-only`
+vs the base branch), to update `.claude/docs` + apply narrow `docs/` patches; report any contested
+docs drift to the operator. Then report completion and remind them the human-only tail is:
+`nuke` → `commit` → `create-pr`.
 
 ## POOP.md
 

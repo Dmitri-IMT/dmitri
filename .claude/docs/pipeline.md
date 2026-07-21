@@ -1,3 +1,11 @@
+---
+type: Process
+title: Dmitri document-driven pipeline
+description: The team's spec-to-merge feature pipeline (Peirce) — process, not code.
+tags: [process, pipeline, meta]
+timestamp: 2026-07-21T00:00:00Z
+---
+
 # Dmitri document-driven pipeline
 
 Adapted from the Peirce `harness-template` for this single-repo Python/Textual project. This is

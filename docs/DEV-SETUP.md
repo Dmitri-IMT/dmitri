@@ -8,6 +8,47 @@ This guide covers **only** the `**hardware-agent`** Python package and the **Tex
 
 ---
 
+## Quick install (recommended)
+
+From the **repo root** after cloning:
+
+```bash
+# macOS / Linux / Pi — full dev bootstrap (agent + backend + local Supabase when Docker is available)
+./install.sh
+
+# Agent-only (Pi, no Docker)
+./install.sh --agent-only
+
+# Skip post-install pytest
+./install.sh --skip-verify
+
+# Also install pre-commit pre-push hooks
+./install.sh --hooks
+```
+
+Windows (PowerShell):
+
+```powershell
+.\install.ps1
+.\install.ps1 -AgentOnly
+.\install.ps1 -SkipVerify
+.\install.ps1 -Hooks
+```
+
+The root installer auto-installs **uv** and **nmap**, runs `uv sync --extra dev` in both packages (required for `uv run pytest`), seeds `backend/.env` when missing, and — if Docker and the Supabase CLI are present — starts local Postgres and runs Alembic migrations. It also installs a `dmitri` launcher in `~/.local/bin` (and adds that directory to your shell `PATH` on macOS/Linux when missing).
+
+After `./install.sh`, run the TUI from anywhere:
+
+```bash
+dmitri
+```
+
+`hardware-agent/install.sh` is a thin wrapper that runs `./install.sh --agent-only`.
+
+Manual steps below remain valid if you prefer not to use the scripts.
+
+---
+
 ## Prerequisites
 
 - **Git**
@@ -30,10 +71,10 @@ From `**hardware-agent/**`:
 
 ```bash
 cd hardware-agent
-uv sync
+uv sync --extra dev
 ```
 
-This installs all Python dependencies. It does **not** install Nmap; if `nmap` is missing from `PATH`, install it using the section above.
+This installs runtime and dev dependencies (including **pytest**). Plain `uv sync` omits dev extras and `uv run pytest` will fail. It does **not** install Nmap; if `nmap` is missing from `PATH`, install it using the section above (or use `./install.sh` from the repo root).
 
 **Advanced (unsupported):** `pip install -e .` inside `hardware-agent/` may work in some environments (e.g. air-gapped mirrors), but it is **not** the supported install path — prefer **uv** — `[specs/001-agent-tui/tech-stack/package-and-distribution.md](../specs/001-agent-tui/tech-stack/package-and-distribution.md)`.
 

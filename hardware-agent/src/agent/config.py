@@ -1,10 +1,8 @@
-"""Configuration loading for the hardware agent."""
+"""Configuration for the hardware agent."""
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, replace
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Literal
 
 SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
@@ -16,34 +14,14 @@ class AgentSettings:
 
     scan_subnet: str | None = None
     scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"] = "quick"
-    device_id: str = "pi-agent-placeholder"
     nmap_path: str | None = None
     min_cvss: float = 5.0
     max_workers: int = 4
     host_batch_size: int = 8
-    output_path: str = str(Path("hardware-agent") / "artifacts" / "latest-scan.json")
     version_intensity: int = 5
     scan_deadline_s: int = 0
     unit_failure_threshold: float = 0.5
     transient_retries: int = 1
-
-    def with_overrides(
-        self,
-        *,
-        scan_subnet: str | None = None,
-        scan_mode: (
-            Literal["quick", "standard", "extensive", "nspi", "max"] | None
-        ) = None,
-        output_path: str | None = None,
-    ) -> AgentSettings:
-        """Return a copy with CLI-provided overrides applied."""
-
-        return replace(
-            self,
-            scan_subnet=scan_subnet or self.scan_subnet,
-            scan_mode=scan_mode or self.scan_mode,
-            output_path=output_path or self.output_path,
-        )
 
 
 STANDARD_NSE_SCRIPTS = (
@@ -149,30 +127,3 @@ TIMEOUTS: dict[str, dict[str, float]] = {
 def subprocess_timeout_for(scan_mode: str, stage: str) -> float:
     by_mode = TIMEOUTS.get(stage, TIMEOUTS["discovery"])
     return by_mode.get(scan_mode, by_mode["quick"])
-
-
-def _parse_scan_mode(value: str | None) -> Literal["quick", "standard"]:
-    normalized = (value or "quick").strip().lower()
-    if normalized not in {"quick", "standard"}:
-        raise ValueError("AGENT_SCAN_MODE must be 'quick' or 'standard'.")
-    return normalized  # type: ignore[return-value]
-
-
-def load_settings() -> AgentSettings:
-    """Load settings from environment variables with sane defaults."""
-
-    scan_mode = _parse_scan_mode(os.getenv("AGENT_SCAN_MODE"))
-    return AgentSettings(
-        scan_subnet=os.getenv("AGENT_SCAN_SUBNET"),
-        scan_mode=scan_mode,
-        device_id=os.getenv("AGENT_DEVICE_ID", "pi-agent-placeholder"),
-        nmap_path=os.getenv("AGENT_NMAP_PATH"),
-        min_cvss=float(os.getenv("AGENT_MIN_CVSS", "5.0")),
-        max_workers=max(1, int(os.getenv("AGENT_MAX_WORKERS", "4"))),
-        host_batch_size=max(1, int(os.getenv("AGENT_HOST_BATCH_SIZE", "8"))),
-        output_path=os.getenv(
-            "AGENT_OUTPUT_PATH",
-            str(Path("hardware-agent") / "artifacts" / "latest-scan.json"),
-        ),
-        version_intensity=5,
-    )

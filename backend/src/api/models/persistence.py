@@ -17,6 +17,7 @@ class ScanRecord(SQLModel, table=True):
     __tablename__ = "scans"
 
     scan_id: UUID = Field(primary_key=True)
+    org_id: UUID | None = Field(default=None, foreign_key="orgs.id", index=True)
     timestamp: datetime
     subnet: str
     target_mode: str

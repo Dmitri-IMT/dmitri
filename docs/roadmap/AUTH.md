@@ -1,8 +1,9 @@
 # Roadmap — Authentication & authorization
 
-> **Status:** **Phase 1 ✅ decided** (roadmap). Nothing shipped in code yet — implement per sections
-> below; then update ADR-005 to match. **Neighbours:** [`BACKEND.md`](BACKEND.md), [`SECURITY.md`](SECURITY.md),
-> [`FRONTEND.md`](FRONTEND.md), [`PI.md`](PI.md).
+> **Status:** **Phase 1 ✅ decided** (roadmap). **Identity schema shipped** (DMI-58 — `orgs`/`users`/`invites`
+> tables + `org_id` on tenant data); routes, sessions, and middleware still pending (DMI-60+). Implement the
+> remaining sections below; update ADR-005 to match once the auth layer lands. **Neighbours:** [`BACKEND.md`](BACKEND.md),
+> [`SECURITY.md`](SECURITY.md), [`FRONTEND.md`](FRONTEND.md), [`PI.md`](PI.md).
 
 ---
 

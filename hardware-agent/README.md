@@ -35,18 +35,14 @@ If your environment cannot see the script entrypoint:
 uv run python -m agent.cli
 ```
 
-## Environment variables
+Headless scans (no TUI):
 
-- `AGENT_NMAP_PATH`: explicit path to `nmap`
-- `AGENT_SCAN_SUBNET`: optional target subnet; when omitted the agent auto-detects the active IPv4 subnet
-- `AGENT_SCAN_MODE`: optional legacy env override (`quick`, `standard`, `extensive`, `nspi`; `full` is being removed — use TUI mode **MAX** instead). **Preferred:** choose the mode in the TUI.
-- `AGENT_MIN_CVSS`: minimum CVSS threshold forwarded from `vulners`
-- `AGENT_MAX_WORKERS`: number of concurrent batches/hosts processed by the agent
-- `AGENT_HOST_BATCH_SIZE`: number of hosts grouped into each all-ports (`-p-`) batch when applicable
-- `AGENT_OUTPUT_PATH`: JSON output file location
+```bash
+uv run dmitri agent quick 192.168.1.0/24
+```
 
 ## Integration Points
-- Reads configuration from `config.py` (to be wired to environment variables).
+- Scan mode and subnet are chosen in the TUI or passed to `dmitri agent <mode> <subnet>`.
 - Produces JSON payloads compatible with the shared contracts in `../contracts/`.
 - Writes the normalized payload to `hardware-agent/artifacts/` for later analysis.
 
