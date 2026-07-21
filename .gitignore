@@ -147,7 +147,6 @@ venv.bak/
 # Permite os arquivos de exemplo (templates)
 !backend/.env.example
 !frontend/.env.example
-!hardware-agent/.env.example
 
 # Spyder project settings
 .spyderproject
