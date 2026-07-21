@@ -82,7 +82,7 @@ O modo é escolhido na interface; o valor `scan_mode` no payload segue o enum `S
 
 | Modo (UI) | `scan_mode` | Escopo (resumo) |
 | --------- | ----------- | ---------------- |
-| **Quick** | `quick` | Varredura rápida (portas com `-F`) |
+| **Quick** | `quick` | Varredura rápida nas portas padrão do Nmap (top 1000); script `vulners` |
 | **Standard** | `standard` | Varredura padrão com scripts NSE no estágio de descoberta |
 | **Extensive** | `extensive` | Análise de segurança nas top 10 000 portas; `vulners.mincvss = 3.0` |
 | **MAX** | `max` | Todas as portas (`-p-`), mesmo conjunto NSE que Extensive; `vulners.mincvss = 1.0` (auditoria completa; ~45 min+) |
