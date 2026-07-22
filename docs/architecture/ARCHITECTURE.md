@@ -50,7 +50,7 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
 - **Responsabilidades:**
   - Consumir mensagens da fila no PostgreSQL
   - Processar os resultados de scans (enriquecimento, correlações, cálculos de risco, etc.)
-  - Persistir os dados processados no Data Store (via SQLModel + asyncpg)
+  - Persistir os dados processados no Data Store (via SQLModel + psycopg3 síncrono)
   - Executar tarefas demoradas sem bloquear a API principal
 
 ### 2.6 Data Store
@@ -60,7 +60,7 @@ Versão do PostgreSQL: conforme provisionado pelo Supabase (atualmente 15.x — 
 O banco **não roda no Pi** nem no container do Backend. O FastAPI e o Background Worker conectam remotamente ao Supabase via internet.
 
 **ORM:** SQLModel 0.0.21 (construído sobre SQLAlchemy 2.x + Pydantic v2)  
-**Driver assíncrono:** asyncpg 0.29.0  
+**Driver:** psycopg3 (`psycopg[binary]>=3.1.12`, síncrono)  
 **Migrações:** Alembic 1.13.x
 
 **Modo de conexão:**
@@ -114,7 +114,7 @@ flowchart TB
     
     B -->|"3. Enqueue scan job"| Q
     Q -->|"4. Claim job"| W
-    W -->|"5. Process + persist<br/>SQLModel + asyncpg"| D
+    W -->|"5. Process + persist<br/>SQLModel + psycopg3"| D
     
     NGINX -.->|"6. Serve static files<br/>React dist/ (SPA)"| C
     C <-->|"7. HTTPS + JWT Bearer Token<br/>GET/POST endpoints"| NGINX
@@ -134,7 +134,7 @@ flowchart TB
 
 - Pi Agent realiza varredura → normaliza → envia via POST com HMAC  
 - Backend valida, enfileira job no PostgreSQL  
-- Background Worker processa e persiste via **SQLModel + asyncpg** no Supabase  
+- Background Worker processa e persiste via **SQLModel + psycopg3 síncrono** no Supabase  
 - Frontend React consulta via JWT e exibe os resultados  
 
 ---
@@ -184,7 +184,7 @@ De acordo com as decisões dos ADRs:
 | **Pi Agent**        | Ferramentas v2 (condicionais)                    | enum4linux-ng, testssl.sh, Nikto                | ADR-002 / ADR-006 | Ativadas apenas quando portas específicas são detectadas |
 | **Backend**         | Framework principal                              | **FastAPI (v. 0.135.2)**                        | ADR-003           | — |
 | **Backend**         | ORM                                              | **SQLModel 0.0.21**                             | ADR-009          | Único modelo para tabela + schema Pydantic |
-| **Backend**         | Driver assíncrono PostgreSQL                     | **asyncpg 0.29.0**                              | ADR-009          | Mantém FastAPI não-bloqueante |
+| **Backend**         | Driver PostgreSQL                                | **psycopg3 (`psycopg[binary]>=3.1.12`, síncrono)** | ADR-009          | Sync-everywhere (DMI-56); único driver p/ API, worker, Alembic |
 | **Backend**         | Migrações                                        | **Alembic 1.13.x**                              | ADR-009          | Usa SQLModel models para autogenerate |
 | **Backend**         | Validação de dados                               | **Pydantic** v2+                                | ADR-003           | — |
 | **Backend**         | Servidor ASGI                                    | **Uvicorn (v. 0.30.0) / Gunicorn (v. 23.0.0)**  | ADR-007           | Produção: Gunicorn + Uvicorn workers |
