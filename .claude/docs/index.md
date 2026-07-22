@@ -51,6 +51,16 @@ FastAPI ingest/persistence + the CVE-enrichment worker. Full listing in
 * [backend/services](./backend/services.md) — persist_scan, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
 * [backend/migrations](./backend/migrations.md) — The Alembic env and revisions that own the schema, plus Supabase RLS hardening.
 
+## Frontend (scaffold only)
+
+The React 19 + TypeScript SPA. Only the greenfield scaffold exists — contract-typed API access
+and the auth-client plumbing, with a throwaway stub UI. Full listing in
+[frontend/index.md](./frontend/index.md).
+
+* [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA scaffold — contract-typed API access and the auth-client plumbing, with only a throwaway stub UI.
+* [frontend/api](./frontend/api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the auth resource module, and the in-memory token store.
+* [frontend/app](./frontend/app.md) — The React root, the boot-time silent-refresh gate, and the throwaway login stub + signed-in placeholder.
+
 ## Infrastructure
 
 Full listing in [infra/index.md](./infra/index.md).
