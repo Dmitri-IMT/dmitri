@@ -1,3 +1,12 @@
+# ADR-009: Stack de Banco de Dados
+
+> **Status:** Aceito — **revisado em 2026-07-15 (DMI-79):** a decisão *sync-everywhere*
+> (2026-07-14, adotada no rebuild do app shell do backend — [DMI-56](https://linear.app/dmitri-imt/issue/DMI-56/backend-app-shell-rebuild))
+> **supersede as linhas de driver `asyncpg` e `psycopg2`** deste ADR. O backend usa
+> **SQLAlchemy `Session` síncrono sobre psycopg3** (`psycopg[binary]>=3.1.12`), sem asyncpg.
+> Ver a seção *Driver: psycopg3 (síncrono)* abaixo. As demais decisões (Supabase, SQLModel,
+> Alembic, modos de conexão, fila no Postgres) permanecem como originalmente registradas.
+
 ## Decisão
  
 ### Engine de banco de dados
@@ -27,18 +36,40 @@ SQLModel é construído sobre SQLAlchemy 2.x + Pydantic v2. Um único modelo de 
  
 ---
  
-### Driver assíncrono: asyncpg
+### Driver: psycopg3 (síncrono)
 
-#### 
- 
+> **Supersede (2026-07-15, DMI-79):** a decisão original deste ADR era `asyncpg` como driver
+> assíncrono de produção, com `psycopg2` mantido apenas para o Alembic. A decisão
+> *sync-everywhere* (2026-07-14, [DMI-56](https://linear.app/dmitri-imt/issue/DMI-56/backend-app-shell-rebuild))
+> substituiu ambos por **psycopg3 síncrono**. O texto original é preservado abaixo apenas como
+> registro histórico.
+
+**Decisão (vigente): psycopg3 (`psycopg[binary]`) com SQLAlchemy `Session` síncrono.**
+
+O app shell rebuild adotou acesso a banco **totalmente síncrono**: um único estilo de sessão
+(`Session` do SQLAlchemy) para API, worker, Alembic e scripts, eliminando a divisão async/sync e o
+par de drivers. As connection strings são normalizadas para o dialeto `postgresql+psycopg://`.
+Sob o padrão de escrita do sistema (um POST em bulk por scan, sem queries de alta frequência no
+caminho crítico), o custo de não usar um driver async é desprezível, e a simplicidade operacional
+de um único driver compensa.
+
+**Versões pinadas:** `psycopg[binary]>=3.1.12`, `sqlalchemy>=2.0.29`
+
+---
+
+<details>
+<summary>Decisão original (superada em 2026-07-15) — asyncpg</summary>
+
 **Decisão: asyncpg** para acesso em produção via FastAPI.
- 
+
 FastAPI é um framework async. Usar um driver síncrono (psycopg2) bloquearia o event loop durante queries, eliminando o benefício de concorrência do FastAPI. `asyncpg` é o driver assíncrono de referência para PostgreSQL em Python.
- 
+
 **Versões pinadas:** `asyncpg==0.29.0`, `sqlalchemy[asyncio]==2.0.x`
- 
+
 psycopg2 pode ser mantido como dependência de desenvolvimento exclusivamente para suporte ao Alembic (ver seção de migrações).
- 
+
+</details>
+
 ---
  
 ### Migrações: Alembic 1.13
@@ -191,7 +222,7 @@ Retenção indefinida em v1. Sem política de expiração ou arquivamento. Decis
 ### Positivas
  
 - SQLModel elimina duplicação entre modelos de banco e schemas Pydantic, reduzindo drift com a OpenAPI spec (A-03).
-- asyncpg mantém o FastAPI não-bloqueante sob carga concorrente.
+- psycopg3 síncrono unifica o acesso a banco (API, worker, Alembic, scripts) em um único driver e estilo de sessão, reduzindo a superfície operacional. O padrão de escrita em bulk do agente não exige concorrência async.
 - Supabase cloud remove a carga operacional de banco do Pi, preservando recursos para scans.
 - PgBouncer (pooler) protege o banco de picos de conexão do agente.
  
