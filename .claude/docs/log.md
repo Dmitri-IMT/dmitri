@@ -3,6 +3,18 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-07-23
+
+* **Update**: Documented spec 016's command-channel data model (DMI-59) — schema + lifecycle only,
+  not yet wired. New `backend/src/api/models/command.py` (`Agent`→`agents` with the AES-256-GCM
+  recoverable-secret columns `secret_ciphertext`/`secret_nonce`/`secret_key_version`, `revoked_at`
+  tombstone, `last_seen_at`; `Command`→`commands` with the 1:1 `scan_id` UNIQUE FK, VARCHAR `status`,
+  four timestamps) — added to `backend/models.md`. New pure `services/command_lifecycle.py`
+  (`next_status`, `scan_status_for`, `InvalidCommandTransition`) — added to `backend/services.md`.
+  New migration `20260723_07_command_channel.py` (agents + commands with the RLS/revoke/grant fence)
+  — added to `backend/migrations.md` (now seven revisions); `env.py` now imports `command`/`identity`
+  explicitly. Refreshed `backend/index.md` listings. Cites ADR-011, ADR-015.
+
 ## 2026-07-22
 
 * **Update**: Documented spec 015's read path. Backend: three new routers (`hosts.py`, `scans.py`,

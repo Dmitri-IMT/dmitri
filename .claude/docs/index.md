@@ -47,10 +47,10 @@ FastAPI API (read path wired) + the CVE-enrichment worker. Full listing in
 * [backend/overview](./backend/overview.md) — The FastAPI backend (read path wired) and the CVE-enrichment worker.
 * [backend/api](./backend/api.md) — The FastAPI app (health + the wired read path), the worker entry, settings, and the DB engine/session.
 * [backend/routers](./backend/routers.md) — The three FastAPI routers that wire the read path — GET /hosts, /hosts/{id}, /scans/{id}, /findings.
-* [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, dormant identity.
+* [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, dormant identity, and the command channel.
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections, and the new read-path response schemas.
-* [backend/services](./backend/services.md) — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and six revisions that own the schema, plus Supabase RLS hardening.
+* [backend/services](./backend/services.md) — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and seven revisions that own the schema, plus Supabase RLS hardening.
 
 ## Frontend (scaffold only)
 

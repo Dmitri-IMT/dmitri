@@ -1,22 +1,23 @@
 ---
 type: Module
 title: Backend ORM models
-description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, and dormant identity.
+description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, dormant identity, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Backend ORM models
 
 ## Purpose
 
-`models/` defines every persisted table as a `SQLModel` class (`table=True`). Two modules —
-`persistence.py` (the scan/enrichment domain) and `identity.py` (orgs/users/invites) — register
-their tables on one shared `SQLModel.metadata`, which is the object [Alembic](/backend/migrations.md)
-targets. The models are the query mapping; they **do not** create tables (`create_all` is never
-called). `models/__init__.py` imports both modules so their tables are registered; `identity.py`
-imports `utc_now` from `persistence.py`, so import order is irrelevant.
+`models/` defines every persisted table as a `SQLModel` class (`table=True`). Three modules —
+`persistence.py` (the scan/enrichment domain), `identity.py` (orgs/users/invites), and `command.py`
+(the command channel: `agents`/`commands`) — register their tables on one shared
+`SQLModel.metadata`, which is the object [Alembic](/backend/migrations.md) targets. The models are
+the query mapping; they **do not** create tables (`create_all` is never called). `models/__init__.py`
+imports all three modules so their tables are registered; `identity.py` and `command.py` import
+`utc_now` from `persistence.py`, so import order is irrelevant.
 
 ## Key classes / functions — `persistence.py`
 
@@ -45,6 +46,13 @@ imports `utc_now` from `persistence.py`, so import order is irrelevant.
 | `User` → `users` | Case-insensitive unique index `(org_id, lower(email))`; `role` check `admin`/`viewer`; `password_hash`, `password_changed_at`. | `backend/src/api/models/identity.py:22` |
 | `Invite` → `invites` | Unique `token_hash`; `role` check; `expires_at`, `consumed_at`. | `backend/src/api/models/identity.py:38` |
 
+## Key classes / functions — `command.py`
+
+| Model → table | Notable columns / constraints | Ref |
+|---------------|------------------------------|-----|
+| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; the AES-256-GCM device secret stored **recoverable, not hashed** across `secret_ciphertext`/`secret_nonce` (`LargeBinary`) + `secret_key_version`; soft-tombstone `revoked_at`; informational `last_seen_at`. No `secret`/`secret_hash`/`online` column. | `backend/src/api/models/command.py:12` |
+| `Command` → `commands` | The audit record of one "Scan now"; UUID PK; `org_id` + `agent_id` FKs (indexed); `scan_id` FK → `scans` **NOT NULL + unique** (1:1 Command→Scan); `scan_mode`/`subnet` request-of-record; unconstrained `status` (guarded by [`command_lifecycle`](/backend/services.md), no ENUM/CHECK); nullable `error_code`; exactly four timestamps `created_at`/`delivered_at`/`started_at`/`completed_at` (no `uploading_at`). | `backend/src/api/models/command.py:26` |
+
 ## How it connects
 
 - [`persist_scan` and the enrichment services](/backend/services.md) read and write these records;
@@ -65,6 +73,11 @@ imports `utc_now` from `persistence.py`, so import order is irrelevant.
   [glossary](/glossary.md).
 - **Identity is dormant.** `Org`/`User`/`Invite` back the OpenAPI auth/invite endpoints but nothing in
   the running app (`api/main.py`) uses them yet.
+- **Command channel is schema-only (DMI-59).** `Agent`/`Command` land the tables and the lifecycle
+  rulebook that later epic issues (WS endpoint DMI-62, ingest DMI-63, enqueue/delivery DMI-64) build
+  on. DMI-59 defines the encrypted-secret *columns* but writes no secret and no crypto — HMAC
+  encrypt/decrypt and delivery logic are out of scope here. A `Command`'s `status` is the source of
+  truth; the linked `Scan`'s status is a pure projection (see [`command_lifecycle`](/backend/services.md)).
 - JSON columns (`metadata_json`, `references_json`, `source_labels_json`, cache `*_json`, `raw_json`)
   use SQLAlchemy `JSON` via explicit `sa_column`.
 
@@ -74,3 +87,6 @@ imports `utc_now` from `persistence.py`, so import order is irrelevant.
 [2] [docs/adr/ADR-003-backend-stack.md](../../../docs/adr/ADR-003-backend-stack.md)
 [3] [docs/adr/ADR-014-host-identity-resolution.md](../../../docs/adr/ADR-014-host-identity-resolution.md)
 [4] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)
+[5] [docs/adr/ADR-011-pi-command-channel.md](../../../docs/adr/ADR-011-pi-command-channel.md)
+[6] [docs/adr/ADR-015-agent-secret-storage-at-rest.md](../../../docs/adr/ADR-015-agent-secret-storage-at-rest.md)
+[7] [specs/016-command-channel-data-model](../../../specs/016-command-channel-data-model/TRUTH.md)

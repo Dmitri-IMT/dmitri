@@ -13,13 +13,13 @@ contract-defined only, and `persist_scan`/the worker are exercised directly by t
 
 ## Data model
 
-* [Backend ORM models](./models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, and dormant identity.
+* [Backend ORM models](./models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, dormant identity, and the command channel.
 * [Backend wire schemas](./schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), and the new read-path response schemas.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and six revisions that own the schema — baseline through host-identity resolution — plus Supabase RLS hardening and the dmitri_runtime role.
+* [Backend database migrations](./migrations.md) — The Alembic env and seven revisions that own the schema — baseline through the command channel — plus Supabase RLS hardening and the dmitri_runtime role.

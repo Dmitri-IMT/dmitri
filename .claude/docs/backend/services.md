@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The real work — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
+description: The real work — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
 resource: backend/src/api/services/persistence.py
-tags: [backend, services, persistence, read, enrichment, worker, risk]
-timestamp: 2026-07-22T00:00:00Z
+tags: [backend, services, persistence, read, enrichment, worker, risk, command-channel]
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -47,6 +47,9 @@ read path is the one route group actually reached over HTTP.
 | `KevClient` + `parse_kev_record()` + `upsert_kev_record()` | Fetches the full CISA KEV JSON feed, scans `vulnerabilities[]` for the CVE (`date_added`, `known_ransomware` from `knownRansomwareCampaignUse`, `required_action`); per-CVE `KevCacheRecord` (24h TTL). | `backend/src/api/services/kev.py:13` |
 | `EpssClient` + `parse_epss_record()` + `upsert_epss_record()` | FIRST EPSS query by CVE (`?cve=`), `epss_score` (0–1) + `percentile`; per-CVE `EpssCacheRecord` (24h TTL). | `backend/src/api/services/epss.py:13` |
 | `refresh_risk_snapshot()` | Deterministic scorer (see below); upserts one `RiskSnapshotRecord` per finding. | `backend/src/api/services/risk.py:28` |
+| `next_status()` | The **single** command-transition guard. Returns `target` for a legal edge in `_LEGAL_EDGES` (`queued→delivered/expired`, `delivered→running/expired`, `running→uploading/failed`, `uploading→done/failed`; `done`/`failed`/`expired` are hard sinks); `target == current` is a no-op success (absorbs duplicate agent frames); any illegal edge raises `InvalidCommandTransition`. | `backend/src/api/services/command_lifecycle.py:32` |
+| `scan_status_for()` | Pure projection of a command status → Scan status (`queued`/`delivered`→`pending`, `running`→`accepted`, `uploading`→`processing`, `done`→`completed`, `failed`/`expired`→`failed`). Kept separate from `next_status` so the read path can reuse it without a transition. | `backend/src/api/services/command_lifecycle.py:40` |
+| `InvalidCommandTransition` | Custom domain exception (not `ValueError`); message names `current` and `target`. | `backend/src/api/services/command_lifecycle.py:25` |
 
 ## The risk score
 
@@ -87,9 +90,15 @@ ML/AI scoring is future work.
   concurrent workers are only safe against Postgres (the deployed DB).
 - **Findings are hosts' findings** — they reference `ScanHostRecord` (per-scan observation) rows via
   `scan_host_id`; the durable `HostRecord` is resolved separately. See [glossary](/glossary.md).
+- **`command_lifecycle.py` is pure and not-yet-wired (DMI-59).** It has no DB or model imports — it is
+  the transition rulebook every later command-channel issue builds on. Nothing calls it yet; the
+  enqueue/delivery/ingest callers that will drive `Command` state and project it onto the
+  [`Command`/`Agent` tables](/backend/models.md) arrive in DMI-62/63/64.
 
 # Citations
 
 [1] [docs/adr/ADR-003-backend-stack.md](../../../docs/adr/ADR-003-backend-stack.md)
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [3] [specs/013-backend-app-shell-rebuild](../../../specs/013-backend-app-shell-rebuild/TRUTH.md)
+[4] [docs/adr/ADR-011-pi-command-channel.md](../../../docs/adr/ADR-011-pi-command-channel.md)
+[5] [specs/016-command-channel-data-model](../../../specs/016-command-channel-data-model/TRUTH.md)
