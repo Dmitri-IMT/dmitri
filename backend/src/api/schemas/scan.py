@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, IPvAnyAddress, constr
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
 
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
@@ -13,8 +13,7 @@ SubnetCIDR = constr(
 
 
 ArtifactKind = Literal["nmap_xml", "nse_output"]
-ScanProfile = Literal["single-host", "lab", "lan", "deep"]
-TargetMode = Literal["single_host", "subnet", "multi_host"]
+ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 
 
 class Artifact(BaseModel):
@@ -33,7 +32,7 @@ class Port(BaseModel):
     cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
-class Device(BaseModel):
+class Host(BaseModel):
     ip: IPvAnyAddress
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
@@ -59,12 +58,13 @@ class Finding(BaseModel):
 
 
 class ScanResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     scan_id: UUID
     timestamp: datetime
     subnet: SubnetCIDR
-    target_mode: TargetMode
-    scan_profile: ScanProfile
-    devices: list[Device] = Field(default_factory=list)
+    scan_mode: ScanMode
+    hosts: list[Host] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None
@@ -73,4 +73,4 @@ class ScanResult(BaseModel):
 class ScanIngestResponse(BaseModel):
     message: str
     scan_id: UUID
-    devices_received: int
+    hosts_received: int

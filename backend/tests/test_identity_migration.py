@@ -207,8 +207,7 @@ def test_scan_accepts_org_scope(administrative_session: Session) -> None:
         org_id=org.id,
         timestamp=datetime.now(timezone.utc),
         subnet="10.0.0.0/24",
-        target_mode="subnet",
-        scan_profile="lan",
+        scan_mode="standard",
     )
     administrative_session.add(scan)
     administrative_session.commit()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import get_args
@@ -7,8 +8,8 @@ from uuid import uuid4
 
 import yaml
 from agent.normalize.contracts import (
-    DevicePayload,
     FindingPayload,
+    HostPayload,
     PortPayload,
     ScanPayload,
 )
@@ -27,8 +28,8 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
         timestamp=datetime.now(timezone.utc),
         subnet="192.168.0.0/24",
         scan_mode="quick",
-        devices=[
-            DevicePayload(
+        hosts=[
+            HostPayload(
                 ip="192.168.0.20",
                 mac=None,
                 hostname="192.168.0.20",
@@ -65,7 +66,7 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
         metadata={"elapsed_seconds": 12.5},
     )
 
-    assert payload.devices[0].mac is None
+    assert payload.hosts[0].mac is None
     assert payload.findings[0].cve_id == "CVE-2024-12345"
 
 
@@ -76,7 +77,7 @@ def test_scan_payload_accepts_extensive_nspi_and_max() -> None:
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.0.0/24",
             scan_mode=mode,
-            devices=[],
+            hosts=[],
             findings=[],
         )
         assert payload.scan_mode == mode
@@ -107,6 +108,80 @@ def test_health_response_example_uses_backend_release_version() -> None:
     schema = spec["components"]["schemas"]["HealthResponse"]
     assert set(schema["properties"]) == {"status", "version"}
     assert schema["additionalProperties"] is False
+
+
+def test_openapi_has_no_device_payload_or_devices_received() -> None:
+    text = OPENAPI_PATH.read_text(encoding="utf-8")
+    assert "DevicePayload" not in text
+    assert "devices_received" not in text
+
+
+def test_host_summary_requires_first_seen_at() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    schema = spec["components"]["schemas"]["HostSummary"]
+    assert "first_seen_at" in schema["required"]
+    assert schema["properties"]["first_seen_at"]["format"] == "date-time"
+
+
+def test_scan_host_view_requires_host_id_and_is_used_by_scan_detail_response() -> (
+    None
+):
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    scan_host_view = spec["components"]["schemas"]["ScanHostView"]
+    assert "host_id" in scan_host_view["required"]
+    assert scan_host_view["properties"]["host_id"]["format"] == "uuid"
+
+    detail_response = spec["components"]["schemas"]["ScanDetailResponse"]
+    assert detail_response["properties"]["hosts"]["items"] == {
+        "$ref": "#/components/schemas/ScanHostView"
+    }
+
+
+def test_scan_ingest_example_uses_hosts_not_devices() -> None:
+    example_path = (
+        Path(__file__).resolve().parents[2]
+        / "contracts"
+        / "examples"
+        / "scan_result.example.json"
+    )
+    payload = json.loads(example_path.read_text(encoding="utf-8"))
+    assert "hosts" in payload
+    assert "devices" not in payload
+    assert "target_mode" not in payload
+    assert "scan_profile" not in payload
+    assert "scan_mode" in payload
+
+
+def test_host_payload_importable_from_contracts_and_normalize() -> None:
+    from agent.normalize import HostPayload as NormalizeHostPayload
+    from agent.normalize.contracts import HostPayload as ContractsHostPayload
+
+    assert NormalizeHostPayload is ContractsHostPayload
+
+
+def test_scan_payload_hosts_accepts_host_payload_list() -> None:
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.0.0/24",
+        scan_mode="quick",
+        hosts=[HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")],
+        findings=[],
+    )
+    assert isinstance(payload.hosts[0], HostPayload)
+
+
+def test_scan_payload_rejects_devices_keyword() -> None:
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.0.0/24",
+        scan_mode="quick",
+        devices=[HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")],
+        findings=[],
+    )
+    assert payload.hosts == []
+    assert not hasattr(payload, "devices")
 
 
 def test_health_503_references_database_unavailable_error() -> None:

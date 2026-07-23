@@ -99,8 +99,7 @@ class PersistedScanSummary(BaseModel):
     scan_id: UUID
     timestamp: datetime
     subnet: str
-    target_mode: str
-    scan_profile: str
+    scan_mode: str
     device_count: int
     finding_count: int
 
@@ -109,8 +108,8 @@ class PersistedScanDetail(BaseModel):
     scan_id: UUID
     timestamp: datetime
     subnet: str
-    target_mode: str
-    scan_profile: str
+    scan_mode: str
+    status: str
     metadata: dict[str, str | int | float | bool] | None
     devices: list[PersistedDevice]
     findings: list[PersistedFinding]

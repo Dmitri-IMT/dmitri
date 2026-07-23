@@ -2,14 +2,13 @@
   "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
   "timestamp": "2026-03-05T14:12:45Z",
   "subnet": "192.168.1.0/24",
-  "target_mode": "subnet",
-  "scan_profile": "lan",
+  "scan_mode": "standard",
   "metadata": {
     "agent_version": "0.2.0",
     "nmap_arguments": "-sS -sV -O --top-ports 200",
     "elapsed_seconds": 187
   },
-  "devices": [
+  "hosts": [
     {
       "ip": "192.168.1.10",
       "mac": "B8:27:EB:44:55:66",

@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import context
 from alembic.config import Config
 from api.models import persistence
-from api.models.persistence import DeviceRecord, ScanRecord
+from api.models.persistence import ScanHostRecord, ScanRecord
 from conftest import _assert_test_database, _migrate
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
@@ -188,12 +188,41 @@ def test_baseline_matches_model_metadata_and_security_fence(
     assert tuple(created) == baseline.APPLICATION_TABLES
     # The baseline owns a subset of the model metadata; later migrations
     # (e.g. the identity schema) add their own tables and may extend baseline
-    # tables (scans gains org_id). Assert the baseline reproduces exactly its
-    # own tables' models, tolerating columns/indexes added by later migrations.
-    assert set(created) <= set(persistence.SQLModel.metadata.tables)
+    # tables (scans gains org_id), and the scan-host rename migration renames
+    # "devices" to "scan_hosts". Assert the baseline reproduces exactly its
+    # own tables' models, tolerating columns/indexes added by later
+    # migrations and the later table rename.
+    renamed_tables = {"devices": "scan_hosts"}
+    renamed_columns = {
+        ("ports", "device_id"): "scan_host_id",
+        ("findings", "device_id"): "scan_host_id",
+    }
+    rename_affected_tables = {"devices", "ports", "findings", "scans"}
+    dropped_columns = {("scans", "target_mode"), ("scans", "scan_profile")}
+    model_table_names = {renamed_tables.get(name, name) for name in created}
+    assert model_table_names <= set(persistence.SQLModel.metadata.tables)
     for name, table in created.items():
+        model_name = renamed_tables.get(name, name)
         created_shape = _table_shape(table)
-        model_shape = _table_shape(persistence.SQLModel.metadata.tables[name])
+        model_shape = _table_shape(persistence.SQLModel.metadata.tables[model_name])
+        if name in rename_affected_tables:
+            created_columns, created_fks, *_ = created_shape
+            model_columns, model_fks, *_ = model_shape
+            created_columns = {
+                (renamed_columns.get((name, column_name), column_name), *fields)
+                for column_name, *fields in created_columns
+                if (name, column_name) not in dropped_columns
+            }
+            created_fks = {
+                (
+                    renamed_columns.get((name, parent), parent),
+                    target.replace("devices.", "scan_hosts."),
+                )
+                for parent, target in created_fks
+            }
+            assert created_columns <= set(model_columns)
+            assert created_fks <= set(model_fks)
+            continue
         for created_group, model_group in zip(created_shape, model_shape):
             assert set(created_group) <= set(model_group)
 
@@ -504,12 +533,11 @@ def test_runtime_role_allows_engine_work_and_rejects_privilege_expansion(
             scan_id=scan_id,
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.1.0/24",
-            target_mode="subnet",
-            scan_profile="lan",
+            scan_mode="standard",
         )
     )
     runtime_session.commit()
-    device = DeviceRecord(
+    device = ScanHostRecord(
         scan_id=scan_id,
         ip="192.168.1.10",
         hostname="camera",

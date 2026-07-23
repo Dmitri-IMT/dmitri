@@ -22,7 +22,7 @@ class PortPayload(BaseModel):
     version: str | None = None
 
 
-class DevicePayload(BaseModel):
+class HostPayload(BaseModel):
     ip: IPvAnyAddress
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
@@ -52,6 +52,6 @@ class ScanPayload(BaseModel):
     timestamp: datetime
     subnet: SubnetCIDR
     scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"]
-    devices: list[DevicePayload] = Field(default_factory=list)
+    hosts: list[HostPayload] = Field(default_factory=list)
     findings: list[FindingPayload] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None

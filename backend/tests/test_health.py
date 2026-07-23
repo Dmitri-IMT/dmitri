@@ -11,11 +11,21 @@ from fastapi.routing import APIRoute
 from sqlmodel import Session
 from starlette.testclient import TestClient
 
+
+def _flatten_api_routes(routes: list) -> list[APIRoute]:
+    flattened: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            flattened.append(route)
+        elif hasattr(route, "original_router"):
+            flattened.extend(_flatten_api_routes(route.original_router.routes))
+    return flattened
+
+
 DISCARDED_BUSINESS_PATHS = (
     "/scans",
     "/api/v1/scans",
     "/findings",
-    "/api/v1/findings",
 )
 
 
@@ -70,9 +80,16 @@ def test_route_surface_exposes_only_canonical_health() -> None:
 
     assert client.options("/api/v1/health").status_code == 405
 
-    api_routes = [route for route in app.routes if isinstance(route, APIRoute)]
-    assert [route.path for route in api_routes] == ["/api/v1/health"]
-    assert api_routes[0].methods == {"GET"}
+    api_routes = _flatten_api_routes(app.routes)
+    assert {route.path for route in api_routes} == {
+        "/api/v1/health",
+        "/api/v1/hosts",
+        "/api/v1/hosts/{host_id}",
+        "/api/v1/scans/{scan_id}",
+        "/api/v1/findings",
+    }
+    for route in api_routes:
+        assert route.methods == {"GET"}
 
 
 def test_app_has_no_lifespan_hook_or_middleware() -> None:
@@ -86,6 +103,5 @@ def test_smoke_test_module_is_not_importable() -> None:
         importlib.import_module("api.smoke_test")
 
 
-def test_routers_package_is_not_importable() -> None:
-    with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("api.routers")
+def test_routers_package_is_importable() -> None:
+    importlib.import_module("api.routers")
