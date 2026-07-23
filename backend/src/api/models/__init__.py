@@ -5,4 +5,4 @@ Import every model module so their tables register on the shared
 ``persistence`` itself (it reuses ``utc_now``), so import order is irrelevant.
 """
 
-from . import identity, persistence  # noqa: F401
+from . import command, identity, persistence  # noqa: F401
