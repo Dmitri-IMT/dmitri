@@ -5,7 +5,7 @@ drives the whole pipeline; the rest are the pieces it composes. Source lives at
 `hardware-agent/src/agent/scanner/`.
 
 * [runner](./runner.md) — `ScanRunner`: the worker thread, cancellation, deadline guards, and the `_run()` pipeline body that drives discovery → ports → deep inspection → normalize.
-* [stages](./stages.md) — The threaded port and deep-inspection stages, with per-unit retry, circuit breaker, and the `HostInfo`→`DevicePayload` builder.
+* [stages](./stages.md) — The threaded port and deep-inspection stages, with per-unit retry, circuit breaker, and the `HostInfo`→`HostPayload` builder.
 * [nmap](./nmap.md) — `NmapRunner` / `LoggedNmapRunner`: run Nmap as a subprocess, parse XML, classify failures, and stream per-invocation logs.
 * [models](./models.md) — The in-memory scan dataclasses: `HostInfo`, `PortInfo`, `ServiceInfo`, `ScriptResult`.
 * [errors](./errors.md) — The scan exception hierarchy that encodes the contingency policy (fatal / unit / transient / cancelled / budget / circuit-breaker).

@@ -4,7 +4,7 @@ title: scanner/runner — ScanRunner
 description: ScanRunner — the worker thread, cancellation, deadline guards, and the _run() pipeline body that drives the whole scan.
 resource: hardware-agent/src/agent/scanner/runner.py
 tags: [hardware-agent, scanner, pipeline, threading]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # scanner/runner — ScanRunner
@@ -27,7 +27,7 @@ every failure mode into either a completed payload, a partial payload, or an err
 | `request_cancel()` | Sets the cancel event and calls `terminate_active()` on the live Nmap runner. | `runner.py:61` |
 | `_check_cancel()` | Raises `ScanCancelled` if the event is set. | `runner.py:72` |
 | `_check_deadline()` | Raises `BudgetExceeded` once the wall-clock deadline passes. | `runner.py:76` |
-| `_build_payload()` | Assembles devices + findings + metadata into a `ScanPayload`. | `runner.py:84` |
+| `_build_payload()` | Assembles hosts + findings + metadata into a `ScanPayload`. | `runner.py:84` |
 | `_finalize_partial()` | Builds a partial payload tagged with `terminated_by`, or emits `failed` if nothing usable exists. | `runner.py:120` |
 | `_run()` | The pipeline body: connectivity check → settings/network/runner build → discovery → ports → deep inspection → normalize, with per-stage guards and a layered `except` ladder. | `runner.py:163` |
 
@@ -38,7 +38,7 @@ every failure mode into either a completed payload, a partial payload, or an err
 - **Downstream** — `check_network_connectivity` ([utils](/hardware-agent/utils.md)),
   `build_runner` ([nmap](/hardware-agent/scanner/nmap.md)), `discover_hosts`
   ([discovery](/hardware-agent/discovery.md)), `run_port_stage` / `run_deep_inspection_stage` /
-  `build_device_payload` / `build_metadata` ([stages](/hardware-agent/scanner/stages.md)),
+  `build_host_payload` / `build_metadata` ([stages](/hardware-agent/scanner/stages.md)),
   `extract_findings` and `ScanPayload` ([normalize](/hardware-agent/normalize.md)),
   `ScanEvent` ([progress](/hardware-agent/scanner/progress.md)).
 - Emits [`ScanEvent`](/hardware-agent/scanner/progress.md)s through the reporter; reports the final

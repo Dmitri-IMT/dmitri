@@ -5,6 +5,25 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-07-22
 
+* **Update**: Documented spec 015's read path. Backend: three new routers (`hosts.py`, `scans.py`,
+  `findings.py`) mounted in `main.py` alongside `GET /api/v1/health` (new `backend/routers.md`
+  doc); `services/read.py` (`list_hosts`/`get_host_detail`/`get_scan_detail`/`list_findings`) and
+  `schemas/read.py` (nine read-response models, incl. `ScanHostView` with required `host_id` and
+  `HostSummary` with `first_seen_at`). Persistence: `DeviceRecord`/`devices` renamed to
+  `ScanHostRecord`/`scan_hosts` (a per-scan host observation); new durable `HostRecord`/`hosts`
+  table (cross-scan identity, resolved by `services/hosts.py::upsert_hosts_for_scan`, ADR-014);
+  `FindingRecord` gained a `finding_id` UUID; `ScanRecord` moved from `target_mode`/`scan_profile`
+  to `scan_mode` + `status`. Four chained Alembic migrations (`20260722_03`–`_06`) implement this.
+  Updated `backend/models.md`, `backend/schemas.md`, `backend/services.md`, `backend/migrations.md`,
+  `backend/api.md`, `backend/overview.md`, `backend/index.md`. Contracts/Pi: ADR-013 retires
+  `device`/`Device`/`DevicePayload` from the wire — `ScanIngestRequest.devices`→`hosts`,
+  `DevicePayload`→`HostPayload`, `devices_received`→`hosts_received`; the prior `scan_mode` vs
+  `target_mode`/`scan_profile` contract divergence is resolved (both sides now use `scan_mode`).
+  Updated `contracts.md`, `hardware-agent/normalize.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/scanner/runner.md`, `hardware-agent/scanner/models.md`,
+  `hardware-agent/scanner/index.md`, `hardware-agent/tui.md`, `hardware-agent/overview.md`, and
+  `glossary.md` (new `ScanHost` term; `Device` now "retired" not "deprecated, ingest-only").
+  Refreshed `index.md` and `overview.md` at the repo root and `backend/index.md`.
 * **Creation**: Added the `frontend/**` code-map section (`overview`, `api`, `app`, `index`) for the
   greenfield SPA scaffold shipped by spec 014 (frontend/): the two-Axios-instance auth client with
   the single-flight 401→refresh interceptor, the in-memory token store, the contract-typed API

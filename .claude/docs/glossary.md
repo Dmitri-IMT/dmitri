@@ -1,10 +1,10 @@
 ---
 type: Domain Glossary
 title: Domain glossary
-description: The core domain terms — agent, host, device, command, scan, org — and their code meanings.
+description: The core domain terms — agent, host, scan_host, command, scan, org — and their code meanings.
 resource: CONTEXT.md
 tags: [glossary, domain]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Domain glossary
@@ -21,23 +21,34 @@ A **Raspberry Pi appliance** running `dmitri agent` — the thing that *performs
 
 ## Host
 
-A **machine discovered on the network by a scan** — the thing the product *reports on*. Has `ip`,
-`mac`, `hostname`, `vendor`, open ports, and findings. In the agent, an in-memory host is
-[`HostInfo`](/hardware-agent/scanner/models.md); persisted, it is a `DeviceRecord`
-([backend/models](/backend/models.md)).
+A **machine tracked on the network across scans** — the thing the product *reports on*. Has `ip`,
+`mac`, `hostname`, `vendor`, open ports, and findings. Identified by `host_id` (UUID), **stable
+across scans**: the same physical machine seen in two scans is one Host. Identity resolution is by
+**MAC when the scan observed one, otherwise IP**, within an org
+([ADR-014](../../docs/adr/ADR-014-host-identity-resolution.md)). In the agent, an in-memory host is
+[`HostInfo`](/hardware-agent/scanner/models.md); persisted, the durable identity is a `HostRecord`
+(table `hosts`) — see [backend/models](/backend/models.md).
 
-## Device — deprecated, ingest-only
+## ScanHost
 
-**"Device" is not a domain term.** It survives only in the **ingest payload the Pi sends**
-(`devices[]`, `DevicePayload`, `devices_received`), whose field names are frozen by
-[ADR-011 §5](../../docs/adr/ADR-011-pi-command-channel.md). Everywhere else the word is **host**.
+**One Host as observed in a single scan** — the per-scan snapshot (`ip`/`mac`/`hostname`/`vendor` at
+scan time, its ports), linked to its durable Host by `host_id`. Findings hang off the ScanHost. In
+storage this is `ScanHostRecord` (table `scan_hosts`) — the record formerly named `DeviceRecord`
+(table `devices`); see [backend/models](/backend/models.md).
 
-> **The rename boundary is the ingest endpoint: the Pi reports *devices*; the backend stores and
-> serves *hosts*.** Historically "device" meant both the Pi and the machines it found — which is why
-> `X-Device-Id` identifies an **agent**, not a host. That header name is a permanent scar.
+## Device — retired
 
-The agent's [`DevicePayload`](/hardware-agent/normalize.md) and the backend's
-[`schemas/scan.py`](/backend/schemas.md) `Device` are the two code sites that keep the word.
+**"Device" is not a domain term and no longer appears on the wire.** As of
+[ADR-013](../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md), the ingest payload the Pi
+sends also speaks **host** (`POST /api/v1/scans` → `hosts[]`, `HostPayload`, `hosts_received`); the
+earlier "ingest stays `devices`" boundary ([ADR-011 §5–§6](../../docs/adr/ADR-011-pi-command-channel.md))
+is superseded. The scanner and backend speak one vocabulary end to end — the agent's
+[`HostPayload`](/hardware-agent/normalize.md) and the backend's [`schemas/scan.py`](/backend/schemas.md)
+`Host` are the same shape.
+
+> The **one** surviving scar is `X-Device-Id` — an HMAC-signed header that identifies the **agent**
+> (the Pi itself), *not* a discovered host. Its name is frozen by ADR-005 and is unrelated to the
+> retired host/device vocabulary.
 
 ## Command
 
@@ -66,3 +77,5 @@ in [backend/models](/backend/models.md) (`identity.py`); not yet enforced in cod
 [1] [CONTEXT.md](../../CONTEXT.md)
 [2] [docs/adr/ADR-011-pi-command-channel.md](../../docs/adr/ADR-011-pi-command-channel.md)
 [3] [docs/adr/ADR-005-security-model.md](../../docs/adr/ADR-005-security-model.md)
+[4] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
+[5] [docs/adr/ADR-014-host-identity-resolution.md](../../docs/adr/ADR-014-host-identity-resolution.md)

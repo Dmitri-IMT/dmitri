@@ -1,46 +1,47 @@
 ---
 type: Package Overview
 title: Backend — API + enrichment worker
-description: The FastAPI ingest/persistence backend and the CVE-enrichment worker — working code that nothing calls yet.
+description: The FastAPI backend — its read path is wired — and the CVE-enrichment worker.
 resource: backend/src/api
-tags: [backend, fastapi, worker, persistence, enrichment]
-timestamp: 2026-07-21T00:00:00Z
+tags: [backend, fastapi, worker, persistence, enrichment, read]
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Backend — API + enrichment worker
 
-> **Planned / not yet wired.** This backend is working, tested code, but **nothing calls it over
-> HTTP today.** `api/main.py` registers **only** `GET /api/v1/health`; the ingest and read routes
-> exist in the [contracts](/contracts.md) OpenAPI surface but are **not** wired into FastAPI. The
-> real persistence and enrichment logic (`persist_scan`, the worker) is exercised **directly by
-> tests**, not through the API. The agent→backend upload link does not exist yet. Treat everything
-> below as the shape the code *has*, not a live pipeline. `docs/architecture/ARCHITECTURE.md`
-> describes the target state.
+> **Read path wired; ingest still not.** `api/main.py` registers `GET /api/v1/health` plus the three
+> [read routers](/backend/routers.md) (`GET /hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
+> `/findings`) — spec 015 wired these over HTTP. The ingest route (`POST /api/v1/scans`) and auth
+> still exist only in the [contracts](/contracts.md) OpenAPI surface. `persist_scan` and the worker
+> are still exercised **directly by tests**, not through the API — the agent→backend upload link does
+> not exist yet. `docs/architecture/ARCHITECTURE.md` describes the target state.
 
 ## Purpose
 
 The backend is the cloud half of Dmitri: it receives a normalized scan result from a Pi
-[agent](/hardware-agent/overview.md), persists the hosts/ports/services/CVEs it found, and then
-enriches every CVE against three public feeds — **NVD**, **CISA KEV**, and **FIRST EPSS** — to
-produce an explainable, deterministic risk score per finding. It is two Python processes sharing one
+[agent](/hardware-agent/overview.md), persists the hosts/ports/services/CVEs it found, resolves each
+host to a durable cross-scan identity, and then enriches every CVE against three public feeds —
+**NVD**, **CISA KEV**, and **FIRST EPSS** — to produce an explainable, deterministic risk score per
+finding. Read access to that data is now served over HTTP. It is two Python processes sharing one
 Postgres database: a FastAPI **API** service and a long-running enrichment **worker**.
 
 ## Layout
 
 | Area | Doc | What lives there |
 |------|-----|------------------|
-| Entry points & config | [api](/backend/api.md) | `main.py` (health only), `worker_main.py`, `core/config.py`, `db/session.py`. |
+| Entry points & config | [api](/backend/api.md) | `main.py` (health + read routers), `worker_main.py`, `core/config.py`, `db/session.py`. |
+| Routers | [routers](/backend/routers.md) | `routers/hosts.py`, `routers/scans.py`, `routers/findings.py` — the wired HTTP surface. |
 | ORM / tables | [models](/backend/models.md) | `models/persistence.py` + `models/identity.py` — SQLModel tables on the metadata Alembic owns. |
-| Wire schemas | [schemas](/backend/schemas.md) | `schemas/scan.py` (ingest input) + `schemas/persistence.py` (read projections). |
-| Business logic | [services](/backend/services.md) | `persist_scan`, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
-| Database schema | [migrations](/backend/migrations.md) | Alembic env + two revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
+| Wire schemas | [schemas](/backend/schemas.md) | `schemas/scan.py` (ingest input), `schemas/read.py` (wired read responses), `schemas/persistence.py` (legacy read projections). |
+| Business logic | [services](/backend/services.md) | `persist_scan`, `upsert_hosts_for_scan`, the read-path queries, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
+| Database schema | [migrations](/backend/migrations.md) | Alembic env + six revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
 
 ## Two processes, one database
 
 Deployed as two Railway services (per `docs/adr/ADR-007`), both importing the `api` package
 (`backend/src/api`):
 
-- **API** — `uvicorn api.main:app`. Serves `GET /api/v1/health` (a real `SELECT 1` round-trip).
+- **API** — `uvicorn api.main:app`. Serves `GET /api/v1/health` and the read path.
 - **Worker** — `python -m api.worker_main` (also the `backend-worker` console script). Polls
   `enrichment_jobs` forever and calls the upstream feeds.
 
@@ -52,8 +53,9 @@ target and to map queries.
 
 1. An agent `POST`s a `ScanResult`, validated by [`schemas/scan.py`](/backend/schemas.md). *(Route
    not wired — tests call `persist_scan` directly.)*
-2. [`persist_scan`](/backend/services.md) writes, synchronously, `scan → devices → ports → services →
-   cpes → findings`, computes an **initial risk snapshot** per finding, and enqueues
+2. [`persist_scan`](/backend/services.md) writes, synchronously, `scan → scan_hosts → ports →
+   services → cpes → findings`, computes an **initial risk snapshot** per finding, calls
+   `upsert_hosts_for_scan` to resolve each `scan_host` to a durable `host`, and enqueues
    `enrichment_jobs` (one `nvd_cpe` per observed CPE; `nvd_cve` + `kev_cve` + `epss_cve` per finding
    that carries a CVE).
 3. The separate [worker](/backend/services.md) claims job batches (`FOR UPDATE SKIP LOCKED` on
@@ -61,14 +63,19 @@ target and to map queries.
    findings; a CVE hit **promotes confidence** (`probable → confirmed`), attaches KEV/EPSS data and
    source labels, and re-runs the [risk scorer](/backend/services.md).
 4. Every finding ends with an explainable `risk_score` row in `risk_snapshots`.
+5. **Wired:** [`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`](/backend/routers.md) read that
+   persisted state back out over HTTP.
 
 ## Notes / gotchas
 
-- **Persisted hosts are `DeviceRecord`** (table `devices`) — the frozen ingest word. Everywhere else
-  the domain term is *host*; see [glossary](/glossary.md).
-- **Contract divergence.** The OpenAPI `ScanIngestRequest` uses `scan_mode`, while the implemented
-  `schemas/scan.py` (and the example JSON) use `target_mode` + `scan_profile`. Reference
-  [contracts](/contracts.md); do not reconcile here.
+- **Per-scan observation vs durable identity.** Persisted hosts are `ScanHostRecord` (table
+  `scan_hosts`, formerly `DeviceRecord`/`devices`) — one row per host per scan. The durable,
+  cross-scan identity is `HostRecord` (table `hosts`), resolved by `upsert_hosts_for_scan`. See
+  [glossary](/glossary.md) and [models](/backend/models.md).
+- **Contract divergence resolved.** The OpenAPI `ScanIngestRequest` and the implemented
+  `schemas/scan.py` (and example JSON) now both use `scan_mode`. Resolved by spec 015 /
+  [ADR-013](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md); see
+  [contracts](/contracts.md).
 - **Identity is dormant.** `orgs`/`users`/`invites` tables and models exist to back the OpenAPI
   auth/invite surface, but no auth code runs — `main.py` has no such routes.
 
@@ -78,3 +85,6 @@ target and to map queries.
 [2] [docs/adr/ADR-009-database-stack.md](../../../docs/adr/ADR-009-database-stack.md)
 [3] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [4] [specs/013-backend-app-shell-rebuild](../../../specs/013-backend-app-shell-rebuild/TRUTH.md)
+[5] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
+[6] [docs/adr/ADR-014-host-identity-resolution.md](../../../docs/adr/ADR-014-host-identity-resolution.md)
+[7] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)

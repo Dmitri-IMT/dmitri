@@ -4,7 +4,7 @@ title: hardware-agent — package overview
 description: What the hardware-agent package is, its scan pipeline, and the three front doors that drive it.
 resource: hardware-agent/src/agent/
 tags: [hardware-agent, scan-pipeline, overview]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # hardware-agent — package overview
@@ -25,8 +25,9 @@ There is no separate orchestrator class:
 2. **Port discovery** — hosts chunked into batches, scanned across a thread pool (`-F` / top-ports /
    `-p-` per mode). See [stages](/hardware-agent/scanner/stages.md).
 3. **Deep inspection** — per host, `-sV` + NSE scripts with `vulners` CVE correlation.
-4. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → devices; assembled
-   into a `ScanPayload` and written to `results/` by [workspace](/hardware-agent/scanner/workspace.md).
+4. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → `HostPayload`s;
+   assembled into a `ScanPayload` and written to `results/` by
+   [workspace](/hardware-agent/scanner/workspace.md).
 
 Each stage runs under cancellation and deadline guards, with a per-unit retry + circuit-breaker
 contingency policy (ADR-010) so a partial result is preserved when a late stage fails.
