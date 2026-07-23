@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from agent.normalize.contracts import (
-    DevicePayload,
     FindingPayload,
+    HostPayload,
     PortPayload,
     ScanPayload,
 )
@@ -21,8 +21,8 @@ def _make_payload() -> ScanPayload:
         timestamp=datetime(2026, 5, 3, 14, 30, 0, tzinfo=timezone.utc),
         subnet="192.168.1.0/24",
         scan_mode="quick",
-        devices=[
-            DevicePayload(
+        hosts=[
+            HostPayload(
                 ip="192.168.1.1",
                 hostname="router.local",
                 vendor="Netgear",
@@ -125,7 +125,7 @@ def test_load_from_file(tmp_path):
     loaded = screen._load_payload()
     assert loaded is not None
     assert loaded.subnet == "192.168.1.0/24"
-    assert len(loaded.devices) == 1
+    assert len(loaded.hosts) == 1
 
 
 def test_load_prefers_payload_over_file(tmp_path):

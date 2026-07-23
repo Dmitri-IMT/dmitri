@@ -155,8 +155,13 @@ pipeline completed. The daemon may retain the returned payload in memory, but mu
 After enqueue, scan exists before ingest. Return **`200`** with stub body:
 
 - `status: pending`
-- empty `hosts` / `findings` arrays (ingest payload field names unchanged in `POST /scans`)
+- empty `hosts` / `findings` arrays
 - optional `command_id` link
+
+> **Superseded in part by [`ADR-013`](ADR-013-ingest-host-vocabulary-unification.md) (2026-07-22):**
+> this section originally kept the `POST /api/v1/scans` ingest payload field names as `devices`
+> while the read side used `hosts`. That freeze is lifted — ingest now speaks `hosts` /
+> `HostPayload` / `hosts_received` too. `X-Device-Id` (§2, the agent identity header) is unaffected.
 
 When ingest completes, same endpoint returns full scan (`status: completed` or `failed`).
 

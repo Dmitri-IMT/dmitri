@@ -96,13 +96,13 @@ class ScanRunner:
     ) -> ScanPayload:
         findings = extract_findings(hosts)
         elapsed_seconds = round(perf_counter() - started_counter, 2)
-        devices = [stages.build_device_payload(h) for h in hosts]
+        hosts_payload = [stages.build_host_payload(h) for h in hosts]
         return ScanPayload(
             scan_id=scan_id,
             timestamp=datetime.now(timezone.utc),
             subnet=self.subnet,
             scan_mode=self.scan_mode,
-            devices=devices,
+            hosts=hosts_payload,
             findings=findings,
             metadata=stages.build_metadata(
                 runner=runner,

@@ -169,4 +169,4 @@ class TestCancelDuringStage:
         )
         runner._run()
 
-        assert [str(device.ip) for device in completed[0].devices] == ["192.168.1.10"]
+        assert [str(device.ip) for device in completed[0].hosts] == ["192.168.1.10"]

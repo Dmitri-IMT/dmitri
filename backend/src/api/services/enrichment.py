@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from sqlmodel import Session, select
 
 from api.models.persistence import (
-    DeviceRecord,
     EnrichmentJobRecord,
     FindingRecord,
     PortRecord,
+    ScanHostRecord,
     ServiceRecord,
 )
 from api.schemas.scan import Finding
@@ -122,7 +122,7 @@ def _process_cpe_job(
     port_record = session.get(PortRecord, job.port_id)
     if port_record is None:
         return
-    device = session.get(DeviceRecord, port_record.device_id)
+    device = session.get(ScanHostRecord, port_record.scan_host_id)
     service = session.exec(
         select(ServiceRecord).where(ServiceRecord.port_id == port_record.id)
     ).first()
@@ -154,7 +154,7 @@ def _process_cpe_job(
             session,
             scan_id=job.scan_id,
             finding=finding,
-            device_record=device,
+            scan_host_record=device,
             port_record=port_record,
             confidence="probable",
             extra_source="nvd",

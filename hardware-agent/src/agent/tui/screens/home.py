@@ -94,8 +94,8 @@ class HomeScreen(DmitriScreen):
             except OSError as exc:
                 self.notify(f"Failed to save scan: {exc}", severity="error")
 
-        devices = len(payload.devices)
-        ports = sum(len(d.ports) for d in payload.devices)
+        devices = len(payload.hosts)
+        ports = sum(len(d.ports) for d in payload.hosts)
         findings = len(payload.findings)
         summary = (
             f"Last scan: {payload.subnet}\n"

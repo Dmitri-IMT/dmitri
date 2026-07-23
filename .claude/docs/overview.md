@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -18,17 +18,19 @@ Current deployment target: the university's **NSPi** industrial-robotics lab (PL
 Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 
 > **Build status.** Only the **Pi agent + TUI** ([`hardware-agent`](/hardware-agent/overview.md)) is
-> in active development. The [`backend`](/backend/overview.md) is working code but **nothing calls it
-> yet**, Pi hardware is not yet acquired, and there is no frontend. The only live coupling between
-> agent and backend today is the shared [`contracts`](/contracts.md) schema. Treat backend/contract
-> docs as **planned / not yet wired**. `docs/architecture/ARCHITECTURE.md` describes target state.
+> in active development. The [`backend`](/backend/overview.md) is working code; its **read path**
+> (`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) is wired, but **ingest is not** —
+> nothing uploads a scan over HTTP yet, Pi hardware is not yet acquired, and there is no frontend.
+> The only live coupling between agent and backend today is the shared [`contracts`](/contracts.md)
+> schema. Treat the ingest side of backend/contract docs as **planned / not yet wired**.
+> `docs/architecture/ARCHITECTURE.md` describes target state.
 
 ## Components
 
 | Component | Doc | Status | Purpose |
 |-----------|-----|--------|---------|
 | Hardware agent + TUI | [hardware-agent](/hardware-agent/overview.md) | **active** | Runs the Nmap scan pipeline, normalizes output, Textual TUI + headless CLI. |
-| Backend API + worker | [backend](/backend/overview.md) | coded, not wired | FastAPI ingest + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
+| Backend API + worker | [backend](/backend/overview.md) | read path wired, ingest not | FastAPI read endpoints + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
 | Shared contracts | [contracts](/contracts.md) | active seam | OpenAPI + example JSON binding agent, backend, and (future) frontend. |
 | Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, Railway deploy config. |
 | Frontend (React) | — | planned | Not scaffolded (ADR-008). |
@@ -48,13 +50,16 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 4. [`workspace`](/hardware-agent/scanner/workspace.md) writes the normalized JSON to disk. **The flow
    ends here today — no upload.** Headless returns an outcome with exit codes 0/10/20 (ADR-012).
 
-**Backend side (coded, not yet wired):**
+**Backend side (ingest not yet wired; read path is):**
 
 5. (Planned) Pi `POST /api/v1/scans` (HMAC) → [`persist_scan`](/backend/services.md) writes
-   scans/devices/ports/services/cpes/findings and enqueues `enrichment_jobs`.
+   scans/scan_hosts/ports/services/cpes/findings, resolves each host's durable identity
+   (`upsert_hosts_for_scan`), and enqueues `enrichment_jobs`.
 6. A separate [worker](/backend/services.md) claims jobs (`FOR UPDATE SKIP LOCKED`), enriches CVEs
    against **NVD**, **CISA KEV**, and **FIRST EPSS**, upgrades finding confidence, and re-runs the
    explainable [risk scorer](/backend/services.md).
+7. **(Wired)** `GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings` —
+   [routers](/backend/routers.md) — read that persisted state back over HTTP.
 
 ## Scan modes
 
@@ -84,3 +89,4 @@ Legacy `full` mode is being removed in favor of `max`.
 [2] [CONTEXT.md](../../CONTEXT.md) — domain glossary
 [3] [docs/architecture/ARCHITECTURE.md](../../docs/architecture/ARCHITECTURE.md) — target-state architecture
 [4] [docs/README.md](../../docs/README.md) — human knowledge-base index
+[5] [specs/015-read-path](../../specs/015-read-path/TRUTH.md)

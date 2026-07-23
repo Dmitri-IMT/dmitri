@@ -346,7 +346,7 @@ class ScanProgressScreen(DmitriScreen):
             return
 
     def _done_line(self, payload) -> str:
-        devices = len(payload.devices)
+        devices = len(payload.hosts)
         findings = len(payload.findings)
         return (
             f"[bold green]✓ Done — {devices} devices, "
@@ -386,7 +386,7 @@ class ScanProgressScreen(DmitriScreen):
         self.query_one("#btn-view-scan", Button).focus()
 
     def _handle_partial(self, payload) -> None:
-        if not payload.devices:
+        if not payload.hosts:
             self.dismiss(None)
             return
         self._done = True
@@ -402,7 +402,7 @@ class ScanProgressScreen(DmitriScreen):
         badge.update(f"[black on yellow] PARTIAL [/] {reason}")
         badge.display = True
 
-        devices = len(payload.devices)
+        devices = len(payload.hosts)
         findings = len(payload.findings)
         self.query_one("#activity-log", RichLog).write(
             f"[yellow]⚠ Partial — {devices} devices, "

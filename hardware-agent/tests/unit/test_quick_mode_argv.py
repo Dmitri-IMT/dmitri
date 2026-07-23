@@ -203,7 +203,7 @@ class TestStandardModeScanPayload:
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.1.0/24",
             scan_mode="standard",
-            devices=[],
+            hosts=[],
             findings=[],
         )
         dumped = payload.model_dump(mode="json")
@@ -216,7 +216,7 @@ class TestStandardModeScanPayload:
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.1.0/24",
             scan_mode="standard",
-            devices=[],
+            hosts=[],
             findings=[],
             metadata={"elapsed_seconds": 5.0},
         )
@@ -232,7 +232,7 @@ class TestQuickModeScanPayload:
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.1.0/24",
             scan_mode="quick",
-            devices=[],
+            hosts=[],
             findings=[],
         )
         dumped = payload.model_dump(mode="json")
@@ -245,7 +245,7 @@ class TestQuickModeScanPayload:
             timestamp=datetime.now(timezone.utc),
             subnet="192.168.1.0/24",
             scan_mode="quick",
-            devices=[],
+            hosts=[],
             findings=[],
             metadata={"elapsed_seconds": 5.0},
         )

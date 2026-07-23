@@ -4,7 +4,7 @@ title: tui — Textual application
 description: The Textual application — app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.
 resource: hardware-agent/src/agent/tui/
 tags: [hardware-agent, tui, textual, ui]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # tui — Textual application
@@ -30,7 +30,7 @@ the CLAUDE.md integration rule requires to stay in sync.
 | `NetworkScreen` (S2) | Lists IPv4 interfaces/subnets via `psutil` (`ctrl+r` refresh) → `ScanCategoryScreen`. | `tui/screens/network.py:36` |
 | `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker (General: quick/standard/extensive/max; NSPi: nspi) → dismisses `(subnet, mode)`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
 | `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., reporter=_ScreenReporter, on_complete, on_error, workspace_root)` and `.start()`s it; smoothed `ProgressBar` (`ProgressMapper`), `RichLog` feed, terminal success/partial/fatal states; `ctrl+x` → `runner.request_cancel()`. | `tui/screens/scan_progress.py:26` |
-| `ScanViewScreen` (S7) | Renders a `ScanPayload` (in-memory or JSON) into devices/ports/vulns/summary; `MODE_LABELS`, `SEVERITY_COLORS`, IO-Link banner detection. | `tui/screens/scan_view.py:49` |
+| `ScanViewScreen` (S7) | Renders a `ScanPayload` (in-memory or JSON) into hosts/ports/vulns/summary; `MODE_LABELS`, `SEVERITY_COLORS`, IO-Link banner detection. | `tui/screens/scan_view.py:49` |
 | `PastScansScreen` (S6) | Lists `results/*.json` (`ScanEntry`), newest-first (`ctrl+r`) → `ScanViewScreen`. | `tui/screens/past_scans.py:29` |
 
 ## How it connects
@@ -51,7 +51,9 @@ modal.
 - `ScanProgressScreen._ScreenReporter.emit` runs on the worker thread and only `post_message`s into
   Textual; `on_complete`/`on_error` cross back via `call_from_thread`. This thread boundary is why
   the reporter/callback seam exists.
-- The screen surfaces the **device** wording from the payload (e.g. "Done — N devices"); the
-  in-agent concept is a [host](/glossary.md) — the rename boundary is the ingest payload only.
-- A partial result with no devices dismisses silently; a fatal error keeps nothing and hides the
+- Screens read `payload.hosts` (was `payload.devices`); the UI wording (e.g. "Done — N devices" in
+  `home.py`/`scan_progress.py`) still uses "devices" as a display label even though the payload field
+  and the domain term are both **host** — ADR-013 retired `device` from the wire, not from every
+  string. See [glossary](/glossary.md).
+- A partial result with no hosts dismisses silently; a fatal error keeps nothing and hides the
   "View scan" button.

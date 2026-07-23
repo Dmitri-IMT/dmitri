@@ -4,7 +4,7 @@ title: scanner/models — in-memory scan dataclasses
 description: The in-memory scan dataclasses HostInfo, PortInfo, ServiceInfo, and ScriptResult that carry state across pipeline stages.
 resource: hardware-agent/src/agent/scanner/models.py
 tags: [hardware-agent, scanner, models, dataclasses]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # scanner/models — in-memory scan models
@@ -31,14 +31,14 @@ fills identity, the port stage sets `ports`, deep inspection merges services and
 - **Upstream** — produced/mutated by the [discovery](/hardware-agent/discovery.md) functions and the
   [stages](/hardware-agent/scanner/stages.md); built by the XML parsers in
   [utils](/hardware-agent/utils.md).
-- **Downstream** — consumed by [stages](/hardware-agent/scanner/stages.md) `build_device_payload`
+- **Downstream** — consumed by [stages](/hardware-agent/scanner/stages.md) `build_host_payload`
   and by `extract_findings` in [normalize](/hardware-agent/normalize.md) on the way to the
   [`ScanPayload`](/hardware-agent/normalize.md) contract.
 
 ## Notes / gotchas
 
-- These models are the in-agent representation of a [host](/glossary.md); they only become
-  contract-shaped **devices** at `build_device_payload`.
+- These models are the in-agent representation of a [host](/glossary.md); they become contract-shaped
+  **`HostPayload`**s at `build_host_payload`.
 - `ScriptResult.data` is `Any` — the recursive NSE table parsed by
   [`parse_nse_node`](/hardware-agent/utils.md) into nested dicts/lists that
   [findings](/hardware-agent/normalize.md) walks.

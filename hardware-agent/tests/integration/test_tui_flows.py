@@ -10,8 +10,8 @@ from uuid import uuid4
 
 import pytest
 from agent.normalize.contracts import (
-    DevicePayload,
     FindingPayload,
+    HostPayload,
     PortPayload,
     ScanPayload,
 )
@@ -41,8 +41,8 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
         timestamp=datetime(2026, 5, 3, 14, 30, 0, tzinfo=timezone.utc),
         subnet=subnet,
         scan_mode="quick",
-        devices=[
-            DevicePayload(
+        hosts=[
+            HostPayload(
                 ip="192.168.1.1",
                 hostname="router.local",
                 vendor="Netgear",

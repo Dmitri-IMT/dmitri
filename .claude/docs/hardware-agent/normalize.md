@@ -1,10 +1,10 @@
 ---
 type: Module
 title: normalize — contracts & findings extraction
-description: The Pydantic wire contracts (ScanPayload) and the NSE-to-findings extractor that produce the shared on-disk payload.
+description: The Pydantic wire contracts (ScanPayload, HostPayload) and the NSE-to-findings extractor that produce the shared on-disk payload.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -20,8 +20,8 @@ object — the seam that binds the agent to the (planned) backend.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `devices`, `findings`, `metadata`. | `contracts.py:50` |
-| `DevicePayload` | A host on the wire: `ip`, `mac` (regex), `hostname`, `vendor`, `ports`. | `contracts.py:25` |
+| `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `hosts`, `findings`, `metadata`. | `contracts.py:50` |
+| `HostPayload` | A host on the wire: `ip`, `mac` (regex), `hostname`, `vendor`, `ports`. Formerly `DevicePayload`. | `contracts.py:25` |
 | `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`. | `contracts.py:17` |
 | `FindingPayload` | A vulnerability/observation: ip/port/service, `cve_id` (regex), `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, references. | `contracts.py:33` |
 | `extract_findings()` | Walks each host's host-scripts and port-scripts, dispatches per script id, dedups by `(ip, port, script, cve/title)`. | `findings.py:17` |
@@ -31,7 +31,7 @@ object — the seam that binds the agent to the (planned) backend.
 
 ## How it connects
 
-- **Upstream** — `extract_findings` and `build_device_payload` are called by
+- **Upstream** — `extract_findings` and `build_host_payload` are called by
   [`ScanRunner._build_payload`](/hardware-agent/scanner/runner.md) /
   [stages](/hardware-agent/scanner/stages.md); it consumes
   [models](/hardware-agent/scanner/models.md) (`HostInfo`, `PortInfo`, `ScriptResult`) whose NSE
@@ -42,15 +42,17 @@ object — the seam that binds the agent to the (planned) backend.
 
 ## Notes / gotchas
 
-- **`DevicePayload` keeps the frozen word "device".** It is the ingest-payload term (`devices[]`,
-  frozen by ADR-011); everywhere else in the agent the concept is a **host**. See
-  [glossary](/glossary.md).
+- **`HostPayload` (formerly `DevicePayload`).** ADR-013 retired the frozen ingest word "device" from
+  the wire; the agent now emits `ScanPayload.hosts` (`HostPayload[]`) end to end, matching the
+  domain term **host** used everywhere else in the agent. See [glossary](/glossary.md).
 - `scan_mode` is `Literal["quick","standard","extensive","nspi","max"]` — no `full`; the legacy mode
   is being removed in favor of `max`.
-- The full OpenAPI surface diverges from what is implemented today; treat the backend side of this
-  contract as planned / not yet wired (see [contracts](/contracts.md)).
+- The full OpenAPI surface diverges from what is implemented on the backend today; the backend's
+  read path (`GET /hosts`, `/scans/{id}`, `/findings`) is wired, ingest is not — see
+  [contracts](/contracts.md).
 
 # Citations
 
 [1] [ADR-011 — Pi command channel](../../../docs/adr/ADR-011-pi-command-channel.md)
 [2] [ADR-004 — scan methodology](../../../docs/adr/ADR-004-scan-methodology.md)
+[3] [ADR-013 — ingest host-vocabulary unification](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)

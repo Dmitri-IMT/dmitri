@@ -18,23 +18,38 @@ job, never the org admin's ([`AUTH.md`](docs/roadmap/AUTH.md), B2B model).
 
 ### Host
 
-A **machine discovered on the network by a scan** — the thing the product *reports on*. Has an
-`ip`, `mac`, `hostname`, `vendor`, open ports and findings. Identified by `host_id`.
+A **machine tracked on the network across scans** — the thing the product *reports on*. Has an
+`ip`, `mac`, `hostname`, `vendor`, open ports and findings. Identified by `host_id` (a UUID), which
+is **stable across scans**: the same physical machine seen in two scans is one Host.
 
-### Device — deprecated, ingest-only
+**Identity resolution** (how two observations are judged the same Host): by **MAC when the scan
+observed one, otherwise by IP**, within an `org`. MAC comes from ARP and is present for hosts on the
+Pi's local segment; a MAC-less host (routed/remote subnet) is identified by IP and so can fracture
+under DHCP churn — an accepted v1 limitation ([`ADR-014`](docs/adr/ADR-014-host-identity-resolution.md)).
 
-**"Device" is not a domain term. Do not use it in new work.** It survives in exactly one place: the
-**ingest payload the Pi sends** (`POST /api/v1/scans` → `devices[]`, `DevicePayload`,
-`devices_received`), whose field names are frozen by [`ADR-011` §5](docs/adr/ADR-011-pi-command-channel.md).
+A Host carries a **`first_seen_at`** (earliest observing scan; never moves) and **`last_seen_at`**
+(most recent). Its mutable attributes — shown `ip`/`mac`/`hostname`/`vendor`, open ports, highest
+severity — reflect its **most recent** observation, not a union across history.
 
-Everywhere else — paths, read models, filters, the UI — the word is **host**.
+### ScanHost
 
-> **The rename boundary is the ingest endpoint: the Pi reports *devices*; the backend stores and
-> serves *hosts*.** Decided 2026-07-13 (contract ask C11, [`BACKEND.md` B7](docs/roadmap/BACKEND.md)).
+**One Host as observed in a single scan** — what that scan saw at that machine (`ip`/`mac`/`hostname`
+/`vendor` at scan time, its ports), linked to its durable `Host` by `host_id`. Findings hang off the
+ScanHost. This is the per-scan row; the durable machine is the **Host**. (In storage this is the
+record formerly named `DeviceRecord`.)
 
-Historically "device" was overloaded to mean *both* the Pi and the machines it found — which is why
-`X-Device-Id` identifies an **agent**, not a host. That header name is frozen by ADR-005 and is the
-one permanent scar from the old vocabulary.
+### Device — retired
+
+**"Device" is not a domain term and no longer appears on the wire.** As of
+[`ADR-013`](docs/adr/ADR-013-ingest-host-vocabulary-unification.md) the ingest payload the Pi sends
+also speaks **host** (`POST /api/v1/scans` → `hosts[]`, `HostPayload`, `hosts_received`); the earlier
+"ingest stays `devices`" boundary ([`ADR-011` §5–§6](docs/adr/ADR-011-pi-command-channel.md)) is
+superseded. The scanner and backend speak one vocabulary end to end.
+
+The **one** surviving scar is `X-Device-Id` — an HMAC-signed header that identifies the **agent** (the
+Pi itself), *not* a discovered host. Its name is frozen by ADR-005 and is unrelated to the retired
+host/device vocabulary; historically "device" was overloaded to mean both the Pi and the machines it
+found, which is why that header still reads "device".
 
 ### Command
 

@@ -95,7 +95,7 @@ class TestPostDiscoveryFatal:
         runner._run()
 
         payload = completed[0]
-        assert [str(device.ip) for device in payload.devices] == ["192.168.1.10"]
+        assert [str(device.ip) for device in payload.hosts] == ["192.168.1.10"]
 
 
 class TestPostDiscoveryUnexpected:
@@ -115,7 +115,7 @@ class TestPostDiscoveryUnexpected:
         payload = completed[0]
         assert payload.metadata["partial_result"] is True
         assert payload.metadata["terminated_by"] == "error"
-        assert [str(device.ip) for device in payload.devices] == ["192.168.1.10"]
+        assert [str(device.ip) for device in payload.hosts] == ["192.168.1.10"]
 
     def test_unexpected_before_discovery_calls_on_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -227,4 +227,4 @@ class TestZeroHosts:
         runner, completed, _, _ = _build_runner(monkeypatch, hosts=[])
         runner._run()
 
-        assert completed[0].devices == []
+        assert completed[0].hosts == []

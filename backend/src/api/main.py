@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from api.core.config import get_settings
 from api.db.session import get_session
+from api.routers import findings, hosts, scans
 
 APP_VERSION = importlib.metadata.version("backend-api")
 
@@ -40,3 +41,8 @@ def read_health(session: Session = Depends(get_session)):
             },
         )
     return {"status": "ok", "version": app.version}
+
+
+app.include_router(hosts.router)
+app.include_router(scans.router)
+app.include_router(findings.router)

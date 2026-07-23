@@ -8,14 +8,15 @@ from sqlmodel import Session, select
 from api.models.persistence import (
     ArtifactRecord,
     CPERecord,
-    DeviceRecord,
     EnrichmentJobRecord,
     FindingRecord,
     PortRecord,
+    ScanHostRecord,
     ScanRecord,
     ServiceRecord,
 )
-from api.schemas.scan import Device, Finding, Port, ScanResult
+from api.schemas.scan import Finding, Host, Port, ScanResult
+from api.services.hosts import upsert_hosts_for_scan
 from api.services.risk import refresh_risk_snapshot
 
 
@@ -28,15 +29,14 @@ def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
         subnet=scan.subnet,
-        target_mode=scan.target_mode,
-        scan_profile=scan.scan_profile,
+        scan_mode=scan.scan_mode,
         metadata_json=scan.metadata,
     )
     session.add(scan_record)
     session.commit()
     session.refresh(scan_record)
 
-    device_index: dict[str, DeviceRecord] = {}
+    scan_host_index: dict[str, ScanHostRecord] = {}
     port_index: dict[tuple[str, int, str], PortRecord] = {}
 
     for artifact in scan.artifacts:
@@ -50,18 +50,18 @@ def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
             )
         )
 
-    for device in scan.devices:
-        device_record = _persist_device(session, scan.scan_id, device)
-        device_index[str(device.ip)] = device_record
-        for port in device.ports:
-            port_record = _persist_port(session, device_record.id, port)
-            port_index[(str(device.ip), port.port, port.protocol)] = port_record
+    for host in scan.hosts:
+        scan_host_record = _persist_scan_host(session, scan.scan_id, host)
+        scan_host_index[str(host.ip)] = scan_host_record
+        for port in host.ports:
+            port_record = _persist_port(session, scan_host_record.id, port)
+            port_index[(str(host.ip), port.port, port.protocol)] = port_record
 
     session.commit()
 
     for finding in scan.findings:
-        device_record = (
-            device_index.get(str(finding.ip)) if finding.ip is not None else None
+        scan_host_record = (
+            scan_host_index.get(str(finding.ip)) if finding.ip is not None else None
         )
         port_record = None
         if (
@@ -76,9 +76,11 @@ def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
             session,
             scan_id=scan.scan_id,
             finding=finding,
-            device_record=device_record,
+            scan_host_record=scan_host_record,
             port_record=port_record,
         )
+
+    upsert_hosts_for_scan(session, scan_record, scan)
 
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
     session.commit()
@@ -90,7 +92,7 @@ def upsert_finding(
     *,
     scan_id,
     finding: Finding,
-    device_record: DeviceRecord | None,
+    scan_host_record: ScanHostRecord | None,
     port_record: PortRecord | None,
     confidence: str | None = None,
     extra_source: str | None = None,
@@ -122,7 +124,7 @@ def upsert_finding(
     if existing is None:
         record = FindingRecord(
             scan_id=scan_id,
-            device_id=device_record.id if device_record is not None else None,
+            scan_host_id=scan_host_record.id if scan_host_record is not None else None,
             port_id=port_record.id if port_record is not None else None,
             ip=str(finding.ip) if finding.ip is not None else None,
             port=finding.port,
@@ -186,25 +188,25 @@ def initial_confidence_for_finding(finding: Finding) -> str:
     return "tentative"
 
 
-def _persist_device(session: Session, scan_id, device: Device) -> DeviceRecord:
-    record = DeviceRecord(
+def _persist_scan_host(session: Session, scan_id, host: Host) -> ScanHostRecord:
+    record = ScanHostRecord(
         scan_id=scan_id,
-        ip=str(device.ip),
-        mac=device.mac,
-        hostname=device.hostname,
-        vendor=device.vendor,
+        ip=str(host.ip),
+        mac=host.mac,
+        hostname=host.hostname,
+        vendor=host.vendor,
     )
     session.add(record)
     session.flush()
     return record
 
 
-def _persist_port(session: Session, device_id: int | None, port: Port) -> PortRecord:
-    if device_id is None:
-        raise ValueError("device_id is required to persist a port")
+def _persist_port(session: Session, scan_host_id: int | None, port: Port) -> PortRecord:
+    if scan_host_id is None:
+        raise ValueError("scan_host_id is required to persist a port")
 
     port_record = PortRecord(
-        device_id=device_id,
+        scan_host_id=scan_host_id,
         port=port.port,
         protocol=port.protocol,
         state=port.state,

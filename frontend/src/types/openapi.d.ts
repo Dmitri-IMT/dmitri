@@ -381,7 +381,18 @@ export interface components {
             service: string;
             version?: string | null;
         };
-        DevicePayload: {
+        HostPayload: {
+            /** Format: ipv4 */
+            ip: string;
+            mac: string | null;
+            hostname: string;
+            vendor: string;
+            /** @default [] */
+            ports: components["schemas"]["Port"][];
+        };
+        ScanHostView: {
+            /** Format: uuid */
+            host_id: string;
             /** Format: ipv4 */
             ip: string;
             mac: string | null;
@@ -417,7 +428,7 @@ export interface components {
             subnet: string;
             scan_mode: components["schemas"]["ScanMode"];
             /** @default [] */
-            devices: components["schemas"]["DevicePayload"][];
+            hosts: components["schemas"]["HostPayload"][];
             /** @default [] */
             findings: components["schemas"]["FindingPayload"][];
             metadata?: {
@@ -429,7 +440,7 @@ export interface components {
             message: string;
             /** Format: uuid */
             scan_id: string;
-            devices_received: number;
+            hosts_received: number;
             /** @enum {string} */
             status: "accepted";
         };
@@ -452,8 +463,8 @@ export interface components {
             timestamp: string;
             subnet: string;
             scan_mode: components["schemas"]["ScanMode"];
-            /** @description Machines discovered by this scan. Items reuse the ingest `DevicePayload` shape; they gain a `host_id` under contract ask C9. */
-            hosts: components["schemas"]["DevicePayload"][];
+            /** @description Machines discovered by this scan. Items reuse the ingest `HostPayload` shape; they gain a `host_id` under contract ask C9. */
+            hosts: components["schemas"]["ScanHostView"][];
             findings: components["schemas"]["FindingRecord"][];
             metadata?: {
                 [key: string]: string | number | boolean;
@@ -477,6 +488,8 @@ export interface components {
             mac: string;
             hostname: string;
             vendor: string;
+            /** Format: date-time */
+            first_seen_at: string;
             /** Format: date-time */
             last_seen_at: string;
             open_ports_count: number;

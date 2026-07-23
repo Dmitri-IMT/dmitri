@@ -7,8 +7,8 @@ from uuid import uuid4
 import agent.tui.app as _agent_app
 import pytest
 from agent.normalize.contracts import (
-    DevicePayload,
     FindingPayload,
+    HostPayload,
     PortPayload,
     ScanPayload,
 )
@@ -61,7 +61,7 @@ async def _post(pilot, screen: ScanProgressScreen, event: ScanEvent) -> None:
 
 def _make_payload(n_devices: int, n_findings: int) -> ScanPayload:
     devices = [
-        DevicePayload(
+        HostPayload(
             ip=f"192.168.1.{i + 1}",
             hostname=f"host-{i}.local",
             vendor="ACME",
@@ -98,7 +98,7 @@ def _make_payload(n_devices: int, n_findings: int) -> ScanPayload:
         timestamp=datetime(2026, 5, 3, 14, 30, 0, tzinfo=timezone.utc),
         subnet="192.168.1.0/24",
         scan_mode="max",
-        devices=devices,
+        hosts=devices,
         findings=findings,
         metadata={"hosts_discovered": n_devices, "findings_count": n_findings},
     )

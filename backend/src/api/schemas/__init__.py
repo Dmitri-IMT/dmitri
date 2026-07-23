@@ -6,11 +6,11 @@ from .persistence import (
     PersistedScanRiskSummary,
     PersistedScanSummary,
 )
-from .scan import Device, Finding, Port, ScanIngestResponse, ScanResult
+from .scan import Finding, Host, Port, ScanIngestResponse, ScanResult
 
 __all__ = [
-    "Device",
     "Finding",
+    "Host",
     "Port",
     "PersistedFinding",
     "PersistedScanDetail",

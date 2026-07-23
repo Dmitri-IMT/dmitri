@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and two revisions that own the schema, plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and six revisions that own the schema — baseline through host-identity resolution — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Backend database migrations
@@ -13,9 +13,11 @@ timestamp: 2026-07-21T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on, and the two revisions build the
-scan/enrichment schema and then the identity schema — each followed by Supabase Row-Level-Security
-hardening and grants to a dedicated `dmitri_runtime` login role.
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Six chained revisions build the
+scan/enrichment schema, the identity schema, then the read-path/host-identity schema (spec
+015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
+and the `findings.finding_id` UUID — each DDL-only step followed by Supabase Row-Level-Security
+hardening and grants to a dedicated `dmitri_runtime` login role where it touches a new table.
 
 ## Key classes / functions
 
@@ -27,6 +29,10 @@ hardening and grants to a dedicated `dmitri_runtime` login role.
 | `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. | `backend/alembic/versions/20260715_01_baseline.py:64` |
 | RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. | `backend/alembic/versions/20260715_01_baseline.py:293` |
 | `upgrade()` (rev `20260716_02`) | Adds `orgs`/`users`/`invites` (role checks + case-insensitive email unique index), a nullable `org_id` FK on `scans`, and extends RLS/revoke/grant to the identity tables. | `backend/alembic/versions/20260716_02_identity_schema.py:35` |
+| `upgrade()` (rev `20260722_03`, `scan_mode_status`) | Drops `scans.target_mode`/`scans.scan_profile`, adds `scans.scan_mode` (not null) and `scans.status` (not null, server default `completed`). | `backend/alembic/versions/20260722_03_scan_mode_status.py:13` |
+| `upgrade()` (rev `20260722_04`, `scan_host_rename`) | Renames table `devices`→`scan_hosts` (and its id sequence), renames `ports.device_id`/`findings.device_id`→`scan_host_id`. | `backend/alembic/versions/20260722_04_scan_host_rename.py:11` |
+| `upgrade()` (rev `20260722_05`, `host_identity`) | Creates the `hosts` table (`identity_key`, ip/mac/hostname/vendor, `open_ports_count`, `highest_severity`, `first_seen_at`/`last_seen_at`) with a `(org_id, identity_key)` unique index (`NULLS NOT DISTINCT`); adds nullable `scan_hosts.host_id` FK → `hosts`; RLS + revoke + `dmitri_runtime` grant on `hosts`. | `backend/alembic/versions/20260722_05_host_identity.py:13` |
+| `upgrade()` (rev `20260722_06`, `finding_uuid`) | Adds `findings.finding_id` (UUID, nullable), backfills via `gen_random_uuid()`, sets `NOT NULL`, then a unique index. | `backend/alembic/versions/20260722_06_finding_uuid.py:12` |
 
 ## How it connects
 
@@ -51,3 +57,6 @@ hardening and grants to a dedicated `dmitri_runtime` login role.
 [1] [docs/adr/ADR-009-database-stack.md](../../../docs/adr/ADR-009-database-stack.md)
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [3] [specs/013-backend-app-shell-rebuild](../../../specs/013-backend-app-shell-rebuild/TRUTH.md)
+[4] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
+[5] [docs/adr/ADR-014-host-identity-resolution.md](../../../docs/adr/ADR-014-host-identity-resolution.md)
+[6] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)

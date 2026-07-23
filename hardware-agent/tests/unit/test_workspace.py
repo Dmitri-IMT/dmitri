@@ -731,7 +731,7 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
         timestamp=datetime(2026, 5, 3, 14, 30, 0, tzinfo=timezone.utc),
         subnet=subnet,
         scan_mode="quick",
-        devices=[],
+        hosts=[],
         findings=[],
         metadata={"hosts_discovered": 0, "findings_count": 0},
     )
@@ -758,7 +758,7 @@ def test_written_json_is_valid(tmp_path):
     data = json.loads(result_path.read_text(encoding="utf-8"))
     assert data["subnet"] == "192.168.1.0/24"
     assert data["scan_mode"] == "quick"
-    assert isinstance(data["devices"], list)
+    assert isinstance(data["hosts"], list)
     assert isinstance(data["findings"], list)
 
 
@@ -769,7 +769,7 @@ def test_two_scans_create_two_files(tmp_path):
         timestamp=datetime(2026, 5, 3, 14, 35, 0, tzinfo=timezone.utc),
         subnet="192.168.1.0/24",
         scan_mode="max",
-        devices=[],
+        hosts=[],
         findings=[],
         metadata={},
     )

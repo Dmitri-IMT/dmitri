@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Column, UniqueConstraint
 from sqlalchemy.types import JSON
@@ -20,8 +20,8 @@ class ScanRecord(SQLModel, table=True):
     org_id: UUID | None = Field(default=None, foreign_key="orgs.id", index=True)
     timestamp: datetime
     subnet: str
-    target_mode: str
-    scan_profile: str
+    scan_mode: str
+    status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -37,12 +37,13 @@ class ArtifactRecord(SQLModel, table=True):
     host_ip: str | None = None
 
 
-class DeviceRecord(SQLModel, table=True):
-    __tablename__ = "devices"
+class ScanHostRecord(SQLModel, table=True):
+    __tablename__ = "scan_hosts"
     __table_args__ = (UniqueConstraint("scan_id", "ip"),)
 
     id: int | None = Field(default=None, primary_key=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    host_id: UUID | None = Field(default=None, index=True, foreign_key="hosts.id")
     ip: str = Field(index=True)
     mac: str | None = None
     hostname: str
@@ -50,12 +51,35 @@ class DeviceRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class HostRecord(SQLModel, table=True):
+    __tablename__ = "hosts"
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "identity_key", postgresql_nulls_not_distinct=True
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    org_id: UUID | None = Field(default=None, foreign_key="orgs.id", index=True)
+    identity_key: str = Field(index=True)
+    ip: str
+    mac: str | None = None
+    hostname: str
+    vendor: str
+    open_ports_count: int
+    highest_severity: str | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class PortRecord(SQLModel, table=True):
     __tablename__ = "ports"
-    __table_args__ = (UniqueConstraint("device_id", "port", "protocol"),)
+    __table_args__ = (UniqueConstraint("scan_host_id", "port", "protocol"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    device_id: int = Field(index=True, foreign_key="devices.id")
+    scan_host_id: int = Field(index=True, foreign_key="scan_hosts.id")
     port: int
     protocol: str
     state: str
@@ -86,8 +110,11 @@ class FindingRecord(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("scan_id", "dedupe_key"),)
 
     id: int | None = Field(default=None, primary_key=True)
+    finding_id: UUID = Field(default_factory=uuid4, unique=True, index=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
-    device_id: int | None = Field(default=None, index=True, foreign_key="devices.id")
+    scan_host_id: int | None = Field(
+        default=None, index=True, foreign_key="scan_hosts.id"
+    )
     port_id: int | None = Field(default=None, index=True, foreign_key="ports.id")
     ip: str | None = Field(default=None, index=True)
     port: int | None = None

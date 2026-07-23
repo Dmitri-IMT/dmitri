@@ -1,10 +1,10 @@
 ---
 type: Data Contract
 title: Shared contracts (OpenAPI + example)
-description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — and its known divergences.
+description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Shared contracts
@@ -33,28 +33,38 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
 `RefreshCookieAuth` (httpOnly `dmitri_refresh` cookie). CORS restricted to the SPA origins.
 
-> **Only `GET /api/v1/health` is implemented** in the backend shell today
-> ([backend/api](/backend/api.md)). The ingest and read routes above are contract-defined but not yet
-> wired; `persist_scan` is exercised directly by tests, not over HTTP.
+> **The read path is wired** in the backend shell today ([backend/routers](/backend/routers.md)):
+> `GET /api/v1/health`, `/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`. Ingest
+> (`POST /api/v1/scans`) and auth above are still contract-defined but not yet wired; `persist_scan`
+> is exercised directly by tests, not over HTTP.
 
 ## The payload shape
 
 The agent emits a [`ScanPayload`](/hardware-agent/normalize.md); the backend validates a `ScanResult`
-([backend/schemas](/backend/schemas.md)). Both carry a scan header (`scan_id`, `timestamp`, `subnet`),
-a list of **devices** (ip/mac/hostname/vendor + ports), a list of **findings** (cve_id, cvss,
-severity, confidence, evidence), and metadata.
+([backend/schemas](/backend/schemas.md)). Both carry a scan header (`scan_id`, `timestamp`, `subnet`,
+`scan_mode`), a list of **hosts** (ip/mac/hostname/vendor + ports), a list of **findings** (cve_id,
+cvss, severity, confidence, evidence), and metadata.
 
-The example fixture (`scan_result.example.json`) is loaded by
+The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestResponse` returns
+`hosts_received` (ADR-013 retired `Device`/`devices`/`devices_received` from the wire — ingest is
+now `POST`ed as `hosts[]`, per contract asks C1–C5). Read responses add: `ScanHostView` — the
+`HostPayload` shape plus a **required** `host_id` (C9, resolved host identity per host observation
+in a scan); `HostSummary` — the `GET /hosts` list row, adding `first_seen_at`/`last_seen_at` (C6).
+
+The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
+(previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by
 `backend/tests/test_ingest_scan.py` to drive `persist_scan` and the enrichment tests offline.
 
-## Known divergences (note, do not "fix")
+## Resolved divergence (was: "note, do not fix" — now reconciled)
 
-- **`scan_mode` vs `target_mode`/`scan_profile`.** The OpenAPI `ScanIngestRequest` uses `scan_mode`
-  (enum quick/standard/extensive/nspi/max), while the implemented `schemas/scan.py` and the example
-  JSON use `target_mode` (single_host/subnet/multi_host) + `scan_profile` (single-host/lab/lan/deep).
-  The Pydantic model and the example agree with each other; the OpenAPI `ScanIngestRequest` is the
-  one out of step.
-- **device → host** translation happens at this ingest boundary (see [glossary](/glossary.md)).
+- **`scan_mode`, unified.** The OpenAPI `ScanIngestRequest` and the implemented `schemas/scan.py` +
+  example JSON both now use `scan_mode` (enum quick/standard/extensive/nspi/max). The prior
+  `target_mode`/`scan_profile` fields on the Pydantic model and example are gone. Resolved by
+  spec [015-read-path](../../specs/015-read-path/TRUTH.md) /
+  [ADR-013](../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md).
+- **device → host, unified on the wire too.** ADR-013 retires `device`/`Device`/`DevicePayload` from
+  the ingest boundary entirely: the wire vocabulary is now `hosts`/`HostPayload` end to end. See
+  [glossary](/glossary.md).
 
 # Citations
 
@@ -62,3 +72,6 @@ The example fixture (`scan_result.example.json`) is loaded by
 [2] [contracts/examples/scan_result.example.json](../../contracts/examples/scan_result.example.json)
 [3] [docs/adr/ADR-011-pi-command-channel.md](../../docs/adr/ADR-011-pi-command-channel.md)
 [4] [docs/adr/ADR-005-security-model.md](../../docs/adr/ADR-005-security-model.md)
+[5] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
+[6] [docs/adr/ADR-014-host-identity-resolution.md](../../docs/adr/ADR-014-host-identity-resolution.md)
+[7] [specs/015-read-path](../../specs/015-read-path/TRUTH.md)

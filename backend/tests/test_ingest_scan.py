@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from api.models.persistence import (
-    DeviceRecord,
     EnrichmentJobRecord,
     EpssCacheRecord,
     EpssRecord,
@@ -13,6 +12,7 @@ from api.models.persistence import (
     KevCacheRecord,
     KevRecord,
     RiskSnapshotRecord,
+    ScanHostRecord,
 )
 from api.schemas import ScanResult
 from api.services import worker
@@ -88,10 +88,12 @@ def test_ingest_scan_accepts_enriched_findings_example(
     payload, scan = _example_scan()
 
     record = persist_scan(runtime_session, scan)
-    devices = runtime_session.exec(select(DeviceRecord)).all()
+    scan_hosts = runtime_session.exec(select(ScanHostRecord)).all()
 
-    assert len(devices) == 2
+    assert len(scan_hosts) == 2
     assert str(record.scan_id) == payload["scan_id"]
+    assert record.scan_mode == scan.scan_mode
+    assert record.status == "completed"
 
 
 def test_worker_processes_pending_jobs_separately(

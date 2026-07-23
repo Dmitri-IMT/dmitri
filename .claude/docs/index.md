@@ -12,8 +12,8 @@ knowledge base. See [MAINTAINING.md](./MAINTAINING.md) for how this bundle is ke
 ## Start here
 
 * [overview](./overview.md) — What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
-* [glossary](./glossary.md) — The core domain terms — agent, host, device, command, scan, org — and their code meanings.
-* [contracts](./contracts.md) — The OpenAPI + example-JSON seam binding agent, backend, and frontend — and its known divergences.
+* [glossary](./glossary.md) — The core domain terms — agent, host, scan_host, command, scan, org — and their code meanings.
+* [contracts](./contracts.md) — The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 
 ## Hardware agent (active)
 
@@ -39,17 +39,18 @@ Full listing in [hardware-agent/scanner/index.md](./hardware-agent/scanner/index
 * [scanner/progress](./hardware-agent/scanner/progress.md) — The ScanEvent stream, the ScanReporter protocol, and the progress mapper.
 * [scanner/workspace](./hardware-agent/scanner/workspace.md) — The on-disk results/ + logs/ layout — serialization, per-run logging, pruning.
 
-## Backend (coded, not yet wired)
+## Backend (read path wired, ingest not)
 
-FastAPI ingest/persistence + the CVE-enrichment worker. Full listing in
+FastAPI API (read path wired) + the CVE-enrichment worker. Full listing in
 [backend/index.md](./backend/index.md).
 
-* [backend/overview](./backend/overview.md) — The ingest/persistence backend and the enrichment worker — working code that nothing calls yet.
-* [backend/api](./backend/api.md) — The FastAPI app (health-only), the worker entry, settings, and the DB engine/session.
-* [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, enrichment/cache, risk snapshots, dormant identity.
-* [backend/schemas](./backend/schemas.md) — The Pydantic ingest input (ScanResult) and the read/output projections.
-* [backend/services](./backend/services.md) — persist_scan, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions that own the schema, plus Supabase RLS hardening.
+* [backend/overview](./backend/overview.md) — The FastAPI backend (read path wired) and the CVE-enrichment worker.
+* [backend/api](./backend/api.md) — The FastAPI app (health + the wired read path), the worker entry, settings, and the DB engine/session.
+* [backend/routers](./backend/routers.md) — The three FastAPI routers that wire the read path — GET /hosts, /hosts/{id}, /scans/{id}, /findings.
+* [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, dormant identity.
+* [backend/schemas](./backend/schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections, and the new read-path response schemas.
+* [backend/services](./backend/services.md) — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, and the explainable risk scorer.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and six revisions that own the schema, plus Supabase RLS hardening.
 
 ## Frontend (scaffold only)
 
