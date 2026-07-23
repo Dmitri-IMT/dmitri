@@ -16,6 +16,13 @@ Humans read the agent's `display_name`, never its id. An agent belongs to exactl
 **Not** a piece of software the customer installs themselves — Pi provisioning is the installer's
 job, never the org admin's ([`AUTH.md`](docs/roadmap/AUTH.md), B2B model).
 
+**Revoke ≠ rotate.** *Revoking* an agent is a soft, timestamped tombstone (`revoked_at`) that kills it
+for good — every future HMAC verify returns `403`, but its history is kept. *Rotating* an agent's secret
+just re-issues the HMAC secret (ADR-005) and leaves the agent active. Secret storage is encrypted at
+rest, not hashed ([`ADR-015`](docs/adr/ADR-015-agent-secret-storage-at-rest.md)). `online` is never
+stored — it is derived from the live WS registry; `last_seen_at` is a persisted heartbeat for the UI,
+never an auth input.
+
 ### Host
 
 A **machine tracked on the network across scans** — the thing the product *reports on*. Has an
@@ -70,6 +77,17 @@ The **result** of a command: what was found, when. Created as a **stub** (`statu
 `hosts` / `findings`) the moment a command is enqueued, and filled in when the agent uploads. So a
 scan always exists before it has any content — the UI can link to it immediately.
 
+A Scan's `status` is a **projection of its Command's status**, never set independently — one lifecycle,
+two faces:
+
+| Command | Scan |
+|---------|------|
+| `queued`, `delivered` | `pending` |
+| `running` | `accepted` |
+| `uploading` | `processing` |
+| `done` | `completed` |
+| `failed`, `expired` | `failed` |
+
 ### Org
 
 One customer company. The tenancy boundary: `org_id` scopes agents, commands, scans and users.
@@ -79,3 +97,13 @@ Multi-user, single-org per customer in September ([`BACKEND.md` B1](docs/roadmap
 
 The two September roles. **`admin`** may trigger scans and invite users; **`viewer`** may only read.
 Neither provisions Pi secrets — that is the installer's job.
+
+## Relationships
+
+- An **Org** owns many **Agents**, **Commands**, **Scans** and **Users**; `org_id` is the tenancy
+  boundary on all of them.
+- An **Agent** executes many **Commands** over its life; each **Command** targets exactly one Agent.
+- A **Command** produces **exactly one Scan** — born together at enqueue (the Scan as a `pending`
+  stub). A re-scan is a *new* Command, never a reused one; idempotent re-delivery of the same
+  `command_id` reuses the same Scan.
+- A **Scan** contains many **ScanHosts**; each **ScanHost** resolves to one durable **Host**.
