@@ -64,6 +64,8 @@ When domain relationships are being discussed, stress-test them with specific sc
 
 When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 
+If the repo keeps a **code-map** under `.claude/docs/` (an Open Knowledge Format bundle mapping concept→code), use it as a router instead of grepping blind: start at `.claude/docs/index.md`, follow the component `index.md` to the concept doc for the area under discussion, and jump to the real source via its `path:line` refs. The code-map tells you where code lives and how modules connect; the `docs/` KB and `CONTEXT.md` hold decisions and domain language — cross-reference the user's claims against the actual source the code-map points to.
+
 ### Update CONTEXT.md inline
 
 When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).

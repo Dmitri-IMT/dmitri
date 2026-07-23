@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and six revisions that own the schema — baseline through host-identity resolution — plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and seven revisions that own the schema — baseline through the command channel — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Backend database migrations
@@ -13,17 +13,18 @@ timestamp: 2026-07-22T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Six chained revisions build the
-scan/enrichment schema, the identity schema, then the read-path/host-identity schema (spec
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Seven chained revisions build the
+scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
-and the `findings.finding_id` UUID — each DDL-only step followed by Supabase Row-Level-Security
-hardening and grants to a dedicated `dmitri_runtime` login role where it touches a new table.
+and the `findings.finding_id` UUID — then the command-channel schema (spec 016): the `agents` and
+`commands` tables. Each DDL-only step is followed by Supabase Row-Level-Security hardening and grants
+to a dedicated `dmitri_runtime` login role where it touches a new table.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `target_metadata` | `persistence.SQLModel.metadata` — importing `api.models.persistence` pulls in the shared metadata (identity tables register via the models package). | `backend/alembic/env.py:16` |
+| `target_metadata` | `persistence.SQLModel.metadata` — `env.py` imports `api.models` `command`, `identity`, `persistence` so all tables register on the shared metadata before autogenerate. | `backend/alembic/env.py:16` |
 | `_migration_url()` | Requires a **separate** `DATABASE_URL_DIRECT` env var (the runtime pooler runs in transaction mode and cannot run DDL); normalized via `normalize_postgres_url`. | `backend/alembic/env.py:19` |
 | `run_migrations_online()` | Builds a `NullPool` engine from the direct URL and runs migrations. | `backend/alembic/env.py:42` |
 | `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. | `backend/alembic/versions/20260715_01_baseline.py:64` |
@@ -33,6 +34,7 @@ hardening and grants to a dedicated `dmitri_runtime` login role where it touches
 | `upgrade()` (rev `20260722_04`, `scan_host_rename`) | Renames table `devices`→`scan_hosts` (and its id sequence), renames `ports.device_id`/`findings.device_id`→`scan_host_id`. | `backend/alembic/versions/20260722_04_scan_host_rename.py:11` |
 | `upgrade()` (rev `20260722_05`, `host_identity`) | Creates the `hosts` table (`identity_key`, ip/mac/hostname/vendor, `open_ports_count`, `highest_severity`, `first_seen_at`/`last_seen_at`) with a `(org_id, identity_key)` unique index (`NULLS NOT DISTINCT`); adds nullable `scan_hosts.host_id` FK → `hosts`; RLS + revoke + `dmitri_runtime` grant on `hosts`. | `backend/alembic/versions/20260722_05_host_identity.py:13` |
 | `upgrade()` (rev `20260722_06`, `finding_uuid`) | Adds `findings.finding_id` (UUID, nullable), backfills via `gen_random_uuid()`, sets `NOT NULL`, then a unique index. | `backend/alembic/versions/20260722_06_finding_uuid.py:12` |
+| `upgrade()` (rev `20260723_07`, `command_channel`) | Creates `agents` (encrypted-secret columns `secret_ciphertext`/`secret_nonce`/`secret_key_version`, `revoked_at`, `last_seen_at`), then `commands` (agent FK, `scan_id` FK **UNIQUE** via `uq_commands_scan_id`, VARCHAR `status`, four timestamps); indexes `ix_agents_org_id`/`ix_commands_org_id`/`ix_commands_agent_id`; RLS + revoke + `dmitri_runtime` grant on both. Downgrade revokes then drops `commands`→`agents`. | `backend/alembic/versions/20260723_07_command_channel.py` |
 
 ## How it connects
 

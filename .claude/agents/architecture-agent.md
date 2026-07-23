@@ -14,6 +14,12 @@ You are the architecture agent for Dmitri (the network vulnerability scanner).
 
 - Read the relevant knowledge base **first** via the `consult-docs` skill (`docs/README.md` →
   max two docs): `docs/architecture/ARCHITECTURE.md`, the ADRs, the NSE/vuln pipeline doc.
+- Then consult the **`.claude/docs/` code-map** to see what already exists and how it connects
+  before defining new files. Start at `.claude/docs/index.md`, follow the component `index.md`
+  (e.g. `hardware-agent/index.md`, `backend/index.md`) to the concept doc that maps the modules
+  you'll touch, and use its `path:line` refs to route to the real source. The code-map maps
+  concept→code (where things live); the `docs/` KB holds decisions/design — use both, don't guess
+  paths.
 - Write or update `ARCHITECTURE.md` under `specs/NNN-feature-slug/`.
 - Write `INTEGRATION.md` **only** when the feature crosses a real layer boundary (rare — this is
   a single-layer Python app).

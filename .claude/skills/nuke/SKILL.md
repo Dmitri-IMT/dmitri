@@ -34,17 +34,26 @@ worsened**. Pre-existing debt is out of scope unless the diff made it harder to 
 
 ## Primary questions (delta-only)
 
-For each meaningful change in the diff:
+Applies across every layer the diff touches — `hardware-agent/` (scanner + TUI),
+`backend/` (FastAPI / SQLModel / Alembic), and `frontend/` (TypeScript UI). For each
+meaningful change in the diff:
 
 1. Did this branch add **spaghetti** — ad-hoc conditionals or scattered special cases in
-   **shared** paths (e.g. `config.py` helpers, the nmap runner, `_merge_ports`, normalization)?
+   **shared** paths (e.g. `config.py` helpers, the nmap runner, `_merge_ports`, normalization;
+   backend service/dependency helpers; shared frontend hooks/api clients)?
 2. Did any **touched** file cross ~1000 lines because of this branch?
-3. Did **feature logic leak** across boundaries (scan logic in TUI screens, TUI concerns in the
-   discovery layer, pipeline rules in CLI glue)?
-4. Did the diff add **unsafe types** (bare `except`, untyped pydantic escapes), or **duplicate
-   helpers** where a canonical utility already exists?
+3. Did **feature logic leak** across boundaries — scan logic in TUI screens, TUI concerns in the
+   discovery layer, pipeline rules in CLI glue; **business logic in FastAPI route handlers instead
+   of a service, or raw SQL/model queries in routes**; **fetch/business logic in frontend
+   components instead of the generated api client / hooks**?
+4. Did the diff add **unsafe types** (bare `except`, untyped pydantic escapes; `any`/non-null `!`
+   escapes or `@ts-ignore` in TS), or **duplicate helpers** where a canonical utility already
+   exists?
 5. Did the diff **break the CLAUDE.md integration rule** — a new orchestrator/runner parameter
    that was *not* threaded through `ScanRunner` and `ScanProgressScreen`?
+6. **Backend:** does a new/changed table or column ship a matching Alembic migration that follows
+   the existing pattern (RLS, `_revoke_supabase_roles`, `dmitri_runtime` grant), and were the
+   generated frontend OpenAPI types regenerated when a route contract changed?
 
 ## Project rules (new violations only)
 
@@ -53,7 +62,10 @@ For each meaningful change in the diff:
 | `hardware-agent/src/agent/` | ruff-clean new lines; typed; named per `ARCHITECTURE.md` |
 | Discovery / pipeline | reuse existing nmap runner / merge helpers; no parallel scan paths |
 | TUI screens | new screens follow existing `screens/` patterns; no scan logic embedded |
-| Tests | new behavior has unit tests under `hardware-agent/tests/` |
+| `backend/src/api/` | routes stay thin (logic in `services/`); models/migrations mirror existing patterns; ruff-clean, typed |
+| `backend/alembic/versions/` | new migration registered in `models/__init__.py` + `env.py`; RLS + grant pattern matches siblings; reversible `downgrade()` |
+| `frontend/` | components consume the generated api client / hooks, not ad-hoc fetch; regenerated OpenAPI types committed when contracts change; no stray `any`/`@ts-ignore` |
+| Tests | new behavior has unit tests in the matching suite (`hardware-agent/tests/`, `backend/tests/`, frontend tests) |
 
 Do **not** block on pre-existing violations in untouched lines.
 
@@ -80,11 +92,11 @@ FIX BEFORE PUSH
 
 Then:
 
-### Blockers (max 5)
+### Blockers (max 7)
 Issues **introduced by this branch** to fix before push. Each: file path, what changed, why it's
 a regression, minimal fix direction (no drive-by refactors).
 
-### Optional (max 3)
+### Optional (max 5)
 Improvements **confined to files already changed** in this branch. Prefix each with `Optional:`.
 
 ### Pre-existing debt ignored
