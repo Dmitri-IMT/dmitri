@@ -54,6 +54,13 @@ Also read the stable knowledge base when terms are fuzzy:
 - `docs/implementation/NSE-VULNERABILITY-PIPELINE.md` — NSE/vuln pipeline
 - `hardware-agent/src/agent/` — existing code (read-only)
 
+To locate that code without reading it all, use the **`.claude/docs/` code-map** as a router:
+start at `.claude/docs/index.md`, follow the component `index.md` to the concept doc for the
+modules in question, and jump to source via its `path:line` refs. The code-map maps concept→code
+(what exists, how modules connect); the `docs/` KB above holds decisions/design. When a spec's
+claim about how something works is in doubt, route through the code-map to the real source and
+confirm before challenging.
+
 ### Challenge against TRUTH and the ADRs
 
 When the operator or a spec uses a term that conflicts with `TRUTH.md`, the ADRs, or

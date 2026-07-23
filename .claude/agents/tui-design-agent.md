@@ -19,7 +19,11 @@ is no UI — say so and write nothing.
 
 - Write `DESIGN.md` under `specs/NNN-feature-slug/`.
 - Match the existing Textual screen patterns — read the nearest sibling under
-  `tui/screens/` before specifying anything new.
+  `tui/screens/` before specifying anything new. To find it fast, consult the
+  **`.claude/docs/` code-map** first: start at `.claude/docs/index.md` →
+  `hardware-agent/tui.md`, which maps the app root, screens, and shared widgets to their source
+  `path:line`s. The code-map routes you to the right screen to mirror; don't guess widget ids or
+  screen structure.
 - Specify: screen flow (which screen pushes which; dismiss results), layout (widgets top to
   bottom), key bindings, exact copy strings, states (loading / empty / error), and widget ids.
 - **Build the visual frontend design** — render each new or changed screen as an ASCII /
