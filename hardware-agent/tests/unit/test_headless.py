@@ -73,7 +73,7 @@ class TestSameShape:
 
         assert loaded_payload.subnet == direct_payload.subnet
         assert loaded_payload.scan_mode == direct_payload.scan_mode
-        assert loaded_payload.devices == direct_payload.devices
+        assert loaded_payload.hosts == direct_payload.hosts
         assert loaded_payload.findings == direct_payload.findings
         assert set(loaded_payload.metadata) == set(direct_payload.metadata)
         assert loaded_payload.metadata["partial_result"] == (

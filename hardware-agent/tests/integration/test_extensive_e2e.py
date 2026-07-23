@@ -7,7 +7,7 @@ from uuid import uuid4
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo
-from agent.scanner.stages import build_device_payload
+from agent.scanner.stages import build_host_payload
 from agent.tui.screens.scan_view import ScanViewScreen
 from agent.utils.nmap_xml import parse_ports
 
@@ -56,7 +56,7 @@ def test_extensive_scan_surfaces_tls_and_ftp_findings_in_view() -> None:
         timestamp=datetime.now(timezone.utc),
         subnet="192.168.1.0/24",
         scan_mode="extensive",
-        devices=[build_device_payload(host)],
+        hosts=[build_host_payload(host)],
         findings=findings,
         metadata={"elapsed_seconds": 1500},
     )

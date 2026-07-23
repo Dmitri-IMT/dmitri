@@ -100,7 +100,7 @@ class ScanViewScreen(DmitriScreen):
             lines.append(f"Duration: {format_duration(elapsed)}")
         lines.append("")
 
-        device_count = len(payload.devices)
+        device_count = len(payload.hosts)
         lines.append(
             f"[bold]── Devices ({device_count}) ──────────────────────────────[/bold]"
         )
@@ -111,7 +111,7 @@ class ScanViewScreen(DmitriScreen):
             ip_key = str(f.ip) if f.ip else "_global"
             findings_by_ip.setdefault(ip_key, []).append(f)
 
-        for device in payload.devices:
+        for device in payload.hosts:
             ip_str = str(device.ip)
             vendor_str = f" — {device.vendor}" if device.vendor else ""
             lines.append(f"[bold]▶ {ip_str}[/bold] ({device.hostname}){vendor_str}")
@@ -145,7 +145,7 @@ class ScanViewScreen(DmitriScreen):
             lines.append("")
 
         lines.append("[bold]── Summary ──────────────────────────────────[/bold]")
-        total_ports = sum(len(d.ports) for d in payload.devices)
+        total_ports = sum(len(d.ports) for d in payload.hosts)
         lines.append(f"Total devices:          {device_count}")
         lines.append(f"Total open ports:       {total_ports}")
         lines.append(f"Vulnerabilities found:  {len(payload.findings)}")

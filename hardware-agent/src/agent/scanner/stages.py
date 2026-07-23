@@ -15,7 +15,7 @@ from agent.discovery.port_discovery import (
     scan_ports_batch,
 )
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
-from agent.normalize.contracts import DevicePayload, PortPayload
+from agent.normalize.contracts import HostPayload, PortPayload
 from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
@@ -267,8 +267,8 @@ def run_deep_inspection_stage(
     )
 
 
-def build_device_payload(host: HostInfo) -> DevicePayload:
-    return DevicePayload(
+def build_host_payload(host: HostInfo) -> HostPayload:
+    return HostPayload(
         ip=host.ip,
         mac=host.mac,
         hostname=host.hostname or host.ip,
