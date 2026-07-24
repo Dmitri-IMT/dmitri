@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: Backend entry points & config
-description: The FastAPI app (health + the wired read path), the worker process entry, settings, and the DB engine/session.
+description: The FastAPI app (health + the wired read path + auth), the worker process entry, settings, and the DB engine/session.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -20,12 +20,15 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `app` | The `FastAPI` instance, title `"Dmitri Backend"`, version read from installed `backend-api` metadata. `docs_url`/`redoc_url`/`openapi_url` are **all `None`** — interactive docs and the generated schema are disabled because the published contract is the system of record. Mounts the three [read-path routers](/backend/routers.md) (`hosts`, `scans`, `findings`). | `backend/src/api/main.py:19` |
+| `app` | The `FastAPI` instance, title `"Dmitri Backend"`, version read from installed `backend-api` metadata. `docs_url`/`redoc_url`/`openapi_url` are **all `None`** — interactive docs and the generated schema are disabled because the published contract is the system of record. Mounts the three [read-path routers](/backend/routers.md) (`hosts`, `scans`, `findings`) plus the [auth router](/backend/auth.md), and adds the request-id + CORS middleware. | `backend/src/api/main.py:19` |
+| `app.add_middleware(NoContentCorsMiddleware / RequestIdMiddleware)` | Registers the 204-preflight CORS middleware (built from `CORS_ALLOWED_ORIGINS`) and the `X-Request-Id` middleware — see [auth](/backend/auth.md). | `backend/src/api/main.py:32` |
+| `options_health()` | `OPTIONS /api/v1/health` → 204, so a real browser preflight is answered by the CORS middleware. | `backend/src/api/main.py:54` |
+| `app.include_router(auth.router)` | Wires the 6 auth POST routes + preflights — see [auth](/backend/auth.md). | `backend/src/api/main.py:59` |
 | `get_settings()` (import-time call) | Called at module import so a missing/invalid `DATABASE_URL` **fails fast** at startup. | `backend/src/api/main.py:17` |
 | `read_health()` | `GET /api/v1/health`. Runs a real `SELECT 1` through a `get_session` dependency; returns `{"status": "ok", "version": ...}`, or a `503` `database_unreachable` error envelope on `SQLAlchemyError`. | `backend/src/api/main.py:28` |
 | `app.include_router(hosts.router / scans.router / findings.router)` | Wires `GET /api/v1/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — see [routers](/backend/routers.md). | `backend/src/api/main.py:46` |
 | `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |
-| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, and `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10). | `backend/src/api/core/config.py:22` |
+| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins`, `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2). | `backend/src/api/core/config.py:22` |
 | `normalize_postgres_url()` | Rewrites any accepted Postgres scheme to `postgresql+psycopg://`; **rejects** unknown schemes (no SQLite). Used by both config validation and the engine. | `backend/src/api/core/config.py:16` |
 | `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:62` |
 | `get_engine()` | `lru_cache`d engine from the normalized `DATABASE_URL`, with `pool_pre_ping=True` and `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — required for the pgbouncer/Supabase pooler. | `backend/src/api/db/session.py:11` |
@@ -45,11 +48,13 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 ## Notes / gotchas
 
-- **Read path wired, ingest still not.** `GET /api/v1/health` plus the three
+- **Read path + auth wired, ingest still not.** `GET /api/v1/health`, the three
   [read routers](/backend/routers.md) (`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
-  `/findings`) are registered in `main.py`. The ingest route (`POST /api/v1/scans`) and auth
-  described in [contracts](/contracts.md) are still contract-defined but absent from `main.py`;
-  `persist_scan` and the worker are still driven by tests, not HTTP.
+  `/findings`), and the [auth routes](/backend/auth.md) are registered in `main.py`. The ingest
+  route (`POST /api/v1/scans`) in [contracts](/contracts.md) is still contract-defined but absent
+  from `main.py`; `persist_scan` and the worker are still driven by tests, not HTTP.
+- **`JWT_SIGNING_SECRET` is required** — `Settings()` (instantiated at import) fails fast without it;
+  `conftest.py` sets it for the test suite.
 - Disabling `openapi_url` means FastAPI serves **no** generated schema; the hand-authored
   `contracts/openapi/openapi.yaml` is authoritative.
 - The worker uses `time.sleep`, not FastAPI — it never imports `app`.

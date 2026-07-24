@@ -25,10 +25,10 @@ The UI is shaped in this order: [`ui/REFERENCE.md`](../ui/REFERENCE.md) (princip
 [`ui/SCREENS.md`](../ui/SCREENS.md) (states, copy, layouts). Do not introduce a screen or
 interaction in implementation before it has passed through that sequence.
 
-- **Public auth:** login, accept invite, forgot/reset password, and forced password change.
+- **Public auth:** login, accept invite, forgot/reset password, and voluntary change password.
 - **Inside shell:** Home, Scans, Hosts, Agents, Users & invites (admin only), and **Settings**.
 - **Settings** is in the MVP after all: a logged-in user has nowhere to change their own password
-  ([`AUTH.md`](AUTH.md) mandates 90-day rotation; B1 covers only the *forced* flow). Holds change-password
+  (B1 covers only the invite/reset flows). Holds change-password
   and profile. It does **not** hold the scan target network — that is a property of the Pi (below).
 - **Home** is the root route (`/`). It is deliberately not a metrics wall:
   it gives a plain-language verdict, only shows actionable critical/high findings, failed scans,
@@ -81,9 +81,9 @@ interaction in implementation before it has passed through that sequence.
   The heavy ones: **there is no `/users` path in the contract at all** (C3, C4), which leaves
   **Users & invites mostly unbuildable** as breadboarded — only `POST /invites` exists, so listing
   users or invites, changing a role and revoking an invite have no endpoints. Then `GET /agents`
-  (C1) and the Pi's target network (C2). Also: forced-password-change credentials (C5),
+  (C1) and the Pi's target network (C2). Also:
   `HostSummary.first_seen_at` (C6), invite auto-login (C7), and whether `FindingRecord` carries a
-  `cve_id` (C8).
+  `cve_id` (C8). (C5 forced-password-change is void — forced rotation dropped, ADR-015.)
 - **Open design decisions (2):** the stale-coverage threshold (N days) and the 409 busy-Pi copy.
 
 ## Milestones
@@ -92,8 +92,7 @@ interaction in implementation before it has passed through that sequence.
    flows; resolve the contract blockers needed by those screens.
 2. Scaffold `frontend/` (Vite + TS + Router + Query + shadcn) + Axios client + OpenAPI type-gen.
 3. First vertical slice: login → Home, including blank, regular, and error states with live data.
-4. Admin auth and user-management surfaces: invite acceptance, forgot/reset, forced rotation
-   (after its contract gap is resolved), and Users & invites.
+4. Admin auth and user-management surfaces: invite acceptance, forgot/reset, and Users & invites.
 5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.

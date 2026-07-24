@@ -1,20 +1,21 @@
 ---
 type: Package Overview
 title: Backend — API + enrichment worker
-description: The FastAPI backend — its read path is wired — and the CVE-enrichment worker.
+description: The FastAPI backend — its read path and auth are wired — and the CVE-enrichment worker.
 resource: backend/src/api
-tags: [backend, fastapi, worker, persistence, enrichment, read]
-timestamp: 2026-07-22T00:00:00Z
+tags: [backend, fastapi, worker, persistence, enrichment, read, auth]
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Backend — API + enrichment worker
 
-> **Read path wired; ingest still not.** `api/main.py` registers `GET /api/v1/health` plus the three
-> [read routers](/backend/routers.md) (`GET /hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
-> `/findings`) — spec 015 wired these over HTTP. The ingest route (`POST /api/v1/scans`) and auth
-> still exist only in the [contracts](/contracts.md) OpenAPI surface. `persist_scan` and the worker
-> are still exercised **directly by tests**, not through the API — the agent→backend upload link does
-> not exist yet. `docs/architecture/ARCHITECTURE.md` describes the target state.
+> **Read path + auth wired; ingest still not.** `api/main.py` registers `GET /api/v1/health`, the
+> three [read routers](/backend/routers.md) (`GET /hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
+> `/findings`) — spec 015 — and the [auth routes](/backend/auth.md) (spec 016). The ingest route
+> (`POST /api/v1/scans`) still exists only in the [contracts](/contracts.md) OpenAPI surface;
+> `persist_scan` and the worker are still exercised **directly by tests**, not through the API — the
+> agent→backend upload link does not exist yet. `docs/architecture/ARCHITECTURE.md` describes the
+> target state.
 
 ## Purpose
 
@@ -34,7 +35,8 @@ Postgres database: a FastAPI **API** service and a long-running enrichment **wor
 | ORM / tables | [models](/backend/models.md) | `models/persistence.py` + `models/identity.py` — SQLModel tables on the metadata Alembic owns. |
 | Wire schemas | [schemas](/backend/schemas.md) | `schemas/scan.py` (ingest input), `schemas/read.py` (wired read responses), `schemas/persistence.py` (legacy read projections). |
 | Business logic | [services](/backend/services.md) | `persist_scan`, `upsert_hosts_for_scan`, the read-path queries, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
-| Database schema | [migrations](/backend/migrations.md) | Alembic env + six revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
+| Auth subsystem | [auth](/backend/auth.md) | Login/refresh/logout + password change/reset, JWT + refresh families, argon2 password policy, `require_user`, and the request-id/CORS middleware. |
+| Database schema | [migrations](/backend/migrations.md) | Alembic env + seven revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
 
 ## Two processes, one database
 
@@ -76,8 +78,9 @@ target and to map queries.
   `schemas/scan.py` (and example JSON) now both use `scan_mode`. Resolved by spec 015 /
   [ADR-013](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md); see
   [contracts](/contracts.md).
-- **Identity is dormant.** `orgs`/`users`/`invites` tables and models exist to back the OpenAPI
-  auth/invite surface, but no auth code runs — `main.py` has no such routes.
+- **Auth is now wired.** The [auth routes](/backend/auth.md) (login/refresh/logout + password
+  change/reset) run in `main.py` over the `users` table + refresh/reset session tokens (spec 016).
+  `orgs`/`invites` remain dormant — no invite endpoints run yet.
 
 # Citations
 

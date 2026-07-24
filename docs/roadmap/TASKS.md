@@ -50,8 +50,8 @@
   HMAC-SHA256 ([`PI.md` milestone 0](PI.md#milestones)). Testable against a local backend.
 - [ ] **T6 · Auth Phase 1 — identity schema + middleware.** Alembic migrations (`org_id`, users,
   invites, roles); JWT Bearer on business routes; HMAC verify on Pi routes; `/auth/login`,
-  `/auth/refresh`, `/auth/logout`, `/auth/change-password`; invite flow; password policy + 3-month
-  rotation; 15-min access / 7-day refresh sessions. Fully specced in [`AUTH.md` Phase 1](AUTH.md#phase-1--nspi--september-).
+  `/auth/refresh`, `/auth/logout`, `/auth/change-password`; invite flow; breach-screened password
+  policy (no forced rotation, ADR-015); 15-min access / 7-day refresh sessions. Fully specced in [`AUTH.md` Phase 1](AUTH.md#phase-1--nspi--september-).
 - [ ] **T7 · Backend command-channel skeleton.** `agents` / `commands` / `hosts` / `scans` tables,
   lifecycle state machine (`queued`→`delivered`→`running`→`uploading`→`done`/`failed`/`expired`),
   WS endpoint + connection registry, `POST …/agents/{id}/commands` enqueue (stub scan row). Drive

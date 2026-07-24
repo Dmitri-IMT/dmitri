@@ -138,6 +138,39 @@ Or follow the manual guide:
 
 → [docs/DEV-SETUP.md](docs/DEV-SETUP.md)
 
+### Local database (backend tests)
+
+`install.sh` is the one-time bootstrap: it installs everything and brings up the local
+Supabase stack, but it **drops and recreates** `dmitri_test` on every run. For day-to-day
+work use `database.sh` instead — it is idempotent and never deletes volumes, so the local
+database survives:
+
+```bash
+./database.sh          # start Docker + Supabase, ensure dmitri_test exists, tidy images
+./database.sh --test   # ...and run the backend suite against it
+```
+
+It also recovers from the state where the Supabase CLI still believes the stack is running
+after a container has exited, which otherwise makes `supabase start` refuse to run.
+
+| Flag | Effect |
+| ---- | ------ |
+| `--test` | run the backend suite after setup |
+| `--no-clean` | skip the Docker image cleanup |
+| `--deep-clean` | also remove unused Supabase images — note `supabase start` re-pulls its whole image set, so these come back |
+
+To run the suite yourself:
+
+```bash
+cd backend
+DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test uv run pytest
+```
+
+The database name must be exactly `dmitri_test` — `conftest.py` aborts otherwise. Alembic is
+the sole schema owner (`conftest.py` migrates to head itself), so never point
+`supabase db reset|push|migration` at this schema. Without `DATABASE_URL_TEST` the DB-backed
+tests skip rather than fail, so a bare `uv run pytest` stays green — it just proves much less.
+
 ## Contribuindo
 
 Veja [CONTRIBUTING.md](CONTRIBUTING.md)

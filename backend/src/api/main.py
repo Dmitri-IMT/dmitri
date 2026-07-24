@@ -10,11 +10,16 @@ from sqlmodel import Session
 
 from api.core.config import get_settings
 from api.db.session import get_session
-from api.routers import findings, hosts, scans
+from api.middleware import (
+    NoContentCorsMiddleware,
+    RequestIdMiddleware,
+    build_cors_middleware_kwargs,
+)
+from api.routers import auth, findings, hosts, scans
 
 APP_VERSION = importlib.metadata.version("backend-api")
 
-get_settings()
+settings = get_settings()
 
 app = FastAPI(
     title="Dmitri Backend",
@@ -23,6 +28,9 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+app.add_middleware(NoContentCorsMiddleware, **build_cors_middleware_kwargs(settings))
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.get("/api/v1/health")
@@ -43,6 +51,12 @@ def read_health(session: Session = Depends(get_session)):
     return {"status": "ok", "version": app.version}
 
 
+@app.options("/api/v1/health", status_code=204)
+def options_health() -> None:
+    return None
+
+
+app.include_router(auth.router)
 app.include_router(hosts.router)
 app.include_router(scans.router)
 app.include_router(findings.router)

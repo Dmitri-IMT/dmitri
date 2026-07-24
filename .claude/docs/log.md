@@ -3,6 +3,21 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-07-24
+
+* **Creation**: `backend/auth.md` — the spec 016 (DMI-60) auth subsystem, now wired in `main.py`:
+  the 6 auth routes (`routers/auth.py`, `dmitri_refresh` cookie), the auth services (`auth.py`
+  orchestration, `tokens.py` JWT + rotating refresh families, `passwords.py` argon2 + policy +
+  HIBP screen, `mailer.py` seam), the `require_user` dependency (`dependencies/auth.py`), and the
+  app middleware (`middleware.py` — `RequestIdMiddleware`, `NoContentCorsMiddleware` 204 preflight).
+* **Update**: threaded auth through the neighboring docs — `models.md` (new `session.py`:
+  `RefreshToken`/`refresh_tokens`, `PasswordResetToken`/`password_reset_tokens`; auth no longer
+  dormant), `migrations.md` (rev `20260722_07_auth_sessions`), `schemas.md` (`schemas/auth.py`
+  request/response models), `api.md` (required `JWT_SIGNING_SECRET` + the seven auth `Settings`
+  fields, middleware + auth-router wiring in `main.py`), `services.md`/`routers.md` cross-links,
+  `overview.md` + `index.md` ("read path + auth wired"). Standing fact updated: the auth half of
+  the "identity dormant" note is now wired; `orgs`/`invites` and the ingest route remain unwired.
+
 ## 2026-07-23
 
 * **Update**: Documented spec 016's command-channel data model (DMI-59) — schema + lifecycle only,

@@ -37,8 +37,8 @@ that function built. `main.py` mounts all three via `app.include_router(...)`.
 
 - No pagination query params are exposed yet on `read_hosts`/`read_findings` — `list_hosts` /
   `list_findings` default to `page=1, per_page=20` internally; the routers don't forward `page`.
-- Ingest (`POST /api/v1/scans`) and auth are not part of this package — see the "Not wired" note in
-  [api](/backend/api.md).
+- Auth routes live in `routers/auth.py` but are documented separately — see [auth](/backend/auth.md).
+  Ingest (`POST /api/v1/scans`) is still not wired — see the note in [api](/backend/api.md).
 
 # Citations
 

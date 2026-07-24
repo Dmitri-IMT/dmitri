@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, UniqueConstraint
+from sqlalchemy import Column, DateTime, UniqueConstraint
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
 
@@ -13,17 +13,24 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Every datetime the application stores comes from utc_now() and is therefore
+# timezone-aware. Columns must be timestamptz to round-trip that: psycopg returns
+# naive datetimes from a plain `timestamp` column, and comparing one against
+# utc_now() raises "can't compare offset-naive and offset-aware datetimes".
+UTC_TIMESTAMP = DateTime(timezone=True)
+
+
 class ScanRecord(SQLModel, table=True):
     __tablename__ = "scans"
 
     scan_id: UUID = Field(primary_key=True)
     org_id: UUID | None = Field(default=None, foreign_key="orgs.id", index=True)
-    timestamp: datetime
+    timestamp: datetime = Field(sa_type=UTC_TIMESTAMP)
     subnet: str
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class ArtifactRecord(SQLModel, table=True):
@@ -48,7 +55,7 @@ class ScanHostRecord(SQLModel, table=True):
     mac: str | None = None
     hostname: str
     vendor: str
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class HostRecord(SQLModel, table=True):
@@ -68,10 +75,10 @@ class HostRecord(SQLModel, table=True):
     vendor: str
     open_ports_count: int
     highest_severity: str | None = None
-    first_seen_at: datetime
-    last_seen_at: datetime
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class PortRecord(SQLModel, table=True):
@@ -83,7 +90,7 @@ class PortRecord(SQLModel, table=True):
     port: int
     protocol: str
     state: str
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class ServiceRecord(SQLModel, table=True):
@@ -133,8 +140,8 @@ class FindingRecord(SQLModel, table=True):
     references_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     source_labels_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     dedupe_key: str = Field(index=True)
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class EnrichmentJobRecord(SQLModel, table=True):
@@ -149,9 +156,9 @@ class EnrichmentJobRecord(SQLModel, table=True):
     status: str = Field(default="pending", index=True)
     attempts: int = Field(default=0)
     last_error: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    started_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    completed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
 
 
 class NvdCacheRecord(SQLModel, table=True):
@@ -162,20 +169,20 @@ class NvdCacheRecord(SQLModel, table=True):
     query_kind: str = Field(index=True)
     query_value: str
     response_json: dict[str, Any] = Field(sa_column=Column(JSON))
-    fetched_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(index=True)
+    fetched_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
 
 
 class KevRecord(SQLModel, table=True):
     __tablename__ = "kev_records"
 
     cve_id: str = Field(primary_key=True)
-    date_added: datetime | None = None
+    date_added: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     known_ransomware: bool = Field(default=False)
     required_action: str | None = None
     raw_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    fetched_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    fetched_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class EpssRecord(SQLModel, table=True):
@@ -184,10 +191,10 @@ class EpssRecord(SQLModel, table=True):
     cve_id: str = Field(primary_key=True)
     epss_score: float
     percentile: float | None = None
-    scored_at: datetime | None = None
+    scored_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     raw_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    fetched_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    fetched_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class KevCacheRecord(SQLModel, table=True):
@@ -195,8 +202,8 @@ class KevCacheRecord(SQLModel, table=True):
 
     cve_id: str = Field(primary_key=True)
     response_json: dict[str, Any] = Field(sa_column=Column(JSON))
-    fetched_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(index=True)
+    fetched_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
 
 
 class EpssCacheRecord(SQLModel, table=True):
@@ -204,8 +211,8 @@ class EpssCacheRecord(SQLModel, table=True):
 
     cve_id: str = Field(primary_key=True)
     response_json: dict[str, Any] = Field(sa_column=Column(JSON))
-    fetched_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(index=True)
+    fetched_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
 
 
 class RiskSnapshotRecord(SQLModel, table=True):
@@ -218,5 +225,5 @@ class RiskSnapshotRecord(SQLModel, table=True):
     exploitability: float
     risk_score: float
     rationale: str
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
