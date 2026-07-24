@@ -235,7 +235,6 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Accept invite | `/invite/:token` | outside | public | B2 | ◐ (C14) |
 | Forgot password | `/forgot-password` | outside | public | B1 | ◐ |
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ◐ (C15) |
-| Forced password change | `/change-password` | outside | public | B1 | ◐ (C5 mechanism decided; contract pending — DMI-77) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
 | Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
 | Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C9, C10) |
@@ -308,7 +307,7 @@ No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log 
   disabled while in flight. Never a bare spinner (§7).
 - **Password managers are a feature, not an edge case.** Real `<form>`, real `autocomplete`
   (`email`, `current-password`, `new-password`), submit on Enter, first field autofocused. An org
-  admin rotating a 12-character password every 3 months without a manager will pick a bad one.
+  admin forced to type a 12-character password without a manager will pick a bad one.
 
 ---
 
@@ -322,11 +321,9 @@ No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log 
 - `POST /api/v1/auth/login` → `LoginResponse` (`access_token`, `token_type`, `expires_in`); the
   refresh token arrives as an httpOnly `Set-Cookie` and the SPA never sees it
   ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client).
-- `401` → wrong credentials. `403` → **password expired**: the body carries
-  `error.code: "password_expired"` and a **`password_change_token`** (scope `password:change`). LOGIN
-  routes to FORCED PASSWORD CHANGE and hands the token over **in router state — never
-  `localStorage`** (it is a credential, and it is not a session). **C5 decided 2026-07-13**; the
-  contract still has to say so (DMI-77).
+- `401` → wrong credentials. There is no other failure branch: login is `200`/`401` only
+  ([`ADR-015`](../adr/ADR-015-password-policy.md) — forced password rotation is dropped, so there
+  is no expired-password 403 to route anywhere).
 
 **Where the role comes from — 🔓 C16.** `LoginResponse` carries **only a token**. Every "absent, not
 disabled" decision in this product (rule 3) — the `Users` nav item, `[Scan now]`, the invite form —
@@ -352,7 +349,6 @@ to decide what to render.
 | Link | "Forgot password?" |
 | Error — 401 | "That email and password don't match." |
 | Error — server/network | "Couldn't reach Dmitri. Try again in a moment." |
-| Error — 403 expired | *(no message — routes to FORCED PASSWORD CHANGE)* |
 
 **Layout:**
 ```text
@@ -381,8 +377,6 @@ to decide what to render.
 
 **Open questions:**
 1. **C16** — the role is not in the contract. Blocks role gating everywhere, not just here.
-2. **C5** — the 403 branch cannot be built. Until it is, an expired password is a dead end: the user
-   is told nothing and cannot get in.
 
 ---
 
@@ -615,110 +609,6 @@ submit. It shows the dead-link state directly.
 **Open questions:**
 1. **C15** — the `400` cannot be disambiguated. The screen's most common failure (a stale link,
    because reset emails sit in inboxes) is the one it cannot word correctly.
-
----
-
-### FORCED PASSWORD CHANGE
-
-**Route:** `/change-password` · **Shell:** outside · **Roles:** public (holder of a scoped token) ·
-**Flow:** B1
-
-**Epicenter** — the new-password field. This screen exists to be left; every element that does not
-help the user leave it is a tax on someone who is already annoyed.
-
-**Why this screen is not SETTINGS → change password.** The user has **no session**. They cannot
-reach the app shell, so there is no nav, no top bar, and no way out except forward. SETTINGS'
-password form is the *voluntary* rotation; this is the *forced* one, and it is the only screen in
-the product the user cannot navigate away from.
-
-**How the user gets here — C5, decided 2026-07-13.** `POST /auth/login` with a correct but
-**expired** password returns **`403`** carrying `error.code: "password_expired"` **and a
-`password_change_token`** — short-lived, single-purpose, scope `password:change`. It is accepted by
-**`POST /auth/change-password` and nothing else**; every business route rejects it. LOGIN routes here
-and hands the token over **in memory** (router state, never `localStorage` — it is a credential).
-
-Three consequences the build must honor:
-
-- **The user does not re-type their old password.** They typed it seconds ago at login and the
-  server accepted it — that is what minted the token. Asking again is friction charged to someone
-  being forced to do a chore. So `current_password` is **not required** when the bearer is
-  change-scoped, and this screen has **two fields, not three**.
-- **The scoped token never touches the refresh interceptor.** It is not a session and is never
-  stored as one ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client). A `401` here means
-  *the token died*, and the only honest answer is to send the user back to LOGIN.
-- **Reloading the page loses the token.** In-memory state does not survive F5, and the token is not
-  persisted on purpose. A reload therefore lands on the dead-token state, not a blank form — see
-  Error below. This is a real cost of not persisting a credential, and it is the right trade.
-
-**Data:**
-- Arrives with `password_change_token` from LOGIN's `403` (router state).
-- `POST /api/v1/auth/change-password` — `Authorization: Bearer <password_change_token>`, body
-  `{ new_password }` (`minLength: 12`).
-- `204` → **the session that follows.** The user has no session and must get one: route to **LOGIN**
-  with success copy and let them sign in with the password they just set. Same edge as RESET
-  PASSWORD, and for the same reason — it proves the new password works
-  ([`AUTH.md`](../roadmap/AUTH.md) → Sessions).
-- `400` → the new password was rejected by policy. Inline; the form stays.
-- `401` → the scoped token expired or was already spent. The form cannot be saved; go back to LOGIN.
-- **Rejecting the old password as the new one is a policy `400`,** not a special case. "Pick a
-  password you haven't used" is the message; the backend owns the rule.
-
-**Three states:**
-- **Regular:** the form, under one sentence explaining why the user is here. The explanation is not
-  optional — a stranger who typed the right password and did not get in will otherwise assume
-  something is broken.
-- **Blank:** **not applicable.** Like LOGIN, the form is its own content.
-- **Error — policy (`400`):** inline, above the button. The form stays; the token is still good.
-- **Error — dead token (`401`, or a reload):** the form is **removed** — nothing typed here can
-  revive a spent token, and leaving a form that cannot submit is the §7 sin. `[Back to sign in]` →
-  LOGIN. Same shape as RESET PASSWORD's dead-link state, deliberately.
-- **Error — server/network:** a `5xx` is a *different* error from a rejected password and says so.
-  The form stays and the button re-arms.
-
-**Copy:**
-| Element | Copy |
-| --- | --- |
-| Title | "Your password has expired" |
-| Explainer | "Passwords are changed every 3 months. Set a new one to continue." |
-| Fields | "New password" / "Confirm new password" |
-| Policy hint | "At least 12 characters. Avoid names, dates, and passwords you've used elsewhere." |
-| Button | "Set password" · in flight: "Setting your password…" |
-| Success (on LOGIN) | "Password set. Sign in with your new password." |
-| Error — policy | "That password isn't strong enough. Try a longer one that isn't based on a name or a date." |
-| Error — reused password | "Pick a password you haven't used before." |
-| Error — mismatch (client) | "Those two passwords don't match." |
-| Error — dead token (heading) | "This session has timed out." |
-| Error — dead token (body) | "Sign in again and we'll bring you straight back here." · [Back to sign in] |
-| Error — server/network | "Couldn't reach Dmitri. Try again in a moment." |
-
-**Layout:**
-```text
-              +------------------------------------------+
-              |  YOUR PASSWORD HAS EXPIRED               |
-              |                                          |
-              |  Passwords are changed every 3 months.   |
-              |  Set a new one to continue.      (muted) |
-              |                                          |
-              |  New password                            |
-              |  [__________________________________]    |
-              |  At least 12 characters. Avoid names,    |
-              |  dates, and passwords you've used        |
-              |  elsewhere.                     (muted)  |
-              |                                          |
-              |  Confirm new password                    |
-              |  [__________________________________]    |
-              |                                          |
-              |         [ ▓   Set password   ]           |
-              +------------------------------------------+
-```
-
-There is **no "Forgot password?" link and no way back.** A user who cannot set a new password here
-can still reach FORGOT PASSWORD from LOGIN — but offering the escape hatch *on this screen* invites
-them to take the long way round (email, inbox, link) to do the exact thing this form does in two
-fields. Absent, not disabled (rule 3).
-
-**Open questions:** none. C5's mechanism is decided (above) and specced in
-[DMI-77](https://linear.app/dmitri-imt/issue/DMI-77); the contract still has to say so.
 
 ---
 
@@ -1467,8 +1357,10 @@ Created — the form is replaced by the confirmation:
 **Route:** `/settings` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B5
 
 **Epicenter** — change your own password. It is the only thing here that works, and the only reason
-this screen exists: [`AUTH.md`](AUTH.md) mandates **rotation every 3 months**, but the sole
-change-password flow in B1 is the *forced* one after a 403. Voluntary rotation had nowhere to live.
+this screen exists: voluntary self-service password change is the **only** change-password screen
+in the product — there is no forced rotation and no 403-triggered flow
+([`ADR-015`](../adr/ADR-015-password-policy.md) — forced periodic rotation is rejected as
+NIST-misaligned).
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
 pointed at one network, identical for every admin in the org. It lives on AGENTS (B4).
@@ -1506,7 +1398,6 @@ simple suffixes); no names or birth dates.
 | Section — profile | "Your details" |
 | Profile fields | "Display name" / "Email" |
 | Profile button | "Save" |
-| Rotation notice (⚠️ needs C3) | "Your password expires in 12 days." |
 
 **Layout:**
 ```text
@@ -1537,10 +1428,7 @@ simple suffixes); no names or birth dates.
 ```
 
 **Open questions:**
-1. **C3** — no user resource. The profile section cannot be built, and neither can the
-   *"Your password expires in 12 days"* notice, which needs a `password_expires_at` the contract has
-   nowhere to put. Worth folding into C3 rather than raising separately: whatever `GET /users/me`
-   returns should carry it, or the 3-month rotation will always arrive as a surprise 403.
+1. **C3** — no user resource. The profile section cannot be built.
 2. **Wrong current password: `400` or `401`?** The contract lists both and doesn't say which one a
    bad `current_password` produces. A `401` would trip the Axios refresh interceptor
    ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and could bounce the user to login

@@ -16,9 +16,18 @@ from api.models.persistence import ScanHostRecord, ScanRecord
 from conftest import _assert_test_database, _migrate
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# `baseline.APPLICATION_TABLES` / `APPLICATION_SEQUENCES` describe what the *baseline*
+# revision created, so they are correct for the tests that exercise that revision in
+# isolation but wrong for head: migration 20260722_04 renamed `devices` -> `scan_hosts`
+# (identity sequence included) and later revisions added the identity, host and session
+# tables. Head tables come from the model metadata, which makes the live round-trip test
+# double as a model-vs-migration drift check.
+HEAD_APPLICATION_TABLES = frozenset(SQLModel.metadata.tables)
+SEQUENCES_RENAMED_AFTER_BASELINE = {"devices_id_seq": "scan_hosts_id_seq"}
 
 
 def _load_alembic_env(monkeypatch: pytest.MonkeyPatch):
@@ -50,12 +59,24 @@ def _load_baseline():
     return module
 
 
+def _normalise_type(compiled: str) -> str:
+    """Collapse timestamp variants so baseline and model shapes stay comparable.
+
+    Migration 20260724_08 converts every naive timestamp column to timestamptz, so
+    the baseline compiles to ``TIMESTAMP WITHOUT TIME ZONE`` where the current model
+    compiles to ``TIMESTAMP WITH TIME ZONE``. `_table_shape` only ever compares the
+    baseline revision against current models, and the live round-trip test is what
+    verifies the real column types at head, so that difference is noise here.
+    """
+    return "TIMESTAMP" if compiled.startswith("TIMESTAMP") else compiled
+
+
 def _table_shape(table: sa.Table) -> tuple[object, ...]:
     dialect = postgresql.dialect()
     columns = tuple(
         (
             column.name,
-            column.type.compile(dialect=dialect),
+            _normalise_type(column.type.compile(dialect=dialect)),
             column.nullable,
             column.primary_key,
         )
@@ -364,6 +385,10 @@ def _has_privilege(
 
 def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None:
     baseline = _load_baseline()
+    head_sequences = tuple(
+        SEQUENCES_RENAMED_AFTER_BASELINE.get(sequence, sequence)
+        for sequence in baseline.APPLICATION_SEQUENCES
+    )
 
     _migrate(postgres_engine, "base")
     with postgres_engine.connect() as connection:
@@ -372,7 +397,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
             sa.text("SELECT count(*) FROM pg_roles WHERE rolname = 'dmitri_runtime'")
         ).scalar_one()
 
-    assert set(baseline.APPLICATION_TABLES).isdisjoint(tables_after_down)
+    assert set(HEAD_APPLICATION_TABLES).isdisjoint(tables_after_down)
     assert role_after_down == 0
 
     _migrate(postgres_engine, "head")
@@ -384,14 +409,14 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                 "FROM pg_class JOIN pg_namespace ON pg_namespace.oid = relnamespace "
                 "WHERE nspname = 'public' AND relname = ANY(:tables)"
             ),
-            {"tables": list(baseline.APPLICATION_TABLES)},
+            {"tables": sorted(HEAD_APPLICATION_TABLES)},
         ).all()
         policies = connection.execute(
             sa.text(
                 "SELECT count(*) FROM pg_policies "
                 "WHERE schemaname = 'public' AND tablename = ANY(:tables)"
             ),
-            {"tables": list(baseline.APPLICATION_TABLES)},
+            {"tables": sorted(HEAD_APPLICATION_TABLES)},
         ).scalar_one()
         role = connection.execute(
             sa.text(
@@ -422,8 +447,8 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
             )
         ).one()
 
-        assert set(baseline.APPLICATION_TABLES) <= tables_after_up
-        assert {row[0] for row in rls_rows} == set(baseline.APPLICATION_TABLES)
+        assert set(HEAD_APPLICATION_TABLES) <= tables_after_up
+        assert {row[0] for row in rls_rows} == set(HEAD_APPLICATION_TABLES)
         assert all(row[1] is True and row[2] is False for row in rls_rows)
         assert policies == 0
         assert tuple(role) == (True, True, False, False, False, False)
@@ -433,7 +458,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
         assert tuple(api_role_memberships) == (False, False)
 
         for api_role in ("anon", "authenticated"):
-            for table in baseline.APPLICATION_TABLES:
+            for table in HEAD_APPLICATION_TABLES:
                 for privilege in (
                     "SELECT",
                     "INSERT",
@@ -446,7 +471,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                     assert not _has_privilege(
                         connection, api_role, f"public.{table}", privilege
                     )
-            for sequence in baseline.APPLICATION_SEQUENCES:
+            for sequence in head_sequences:
                 for privilege in ("SELECT", "UPDATE", "USAGE"):
                     assert not _has_privilege(
                         connection,
@@ -456,7 +481,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                         sequence=True,
                     )
 
-        for table in baseline.APPLICATION_TABLES:
+        for table in HEAD_APPLICATION_TABLES:
             for privilege in ("SELECT", "INSERT", "UPDATE"):
                 assert _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
@@ -465,7 +490,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                 assert not _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )
-        for sequence in baseline.APPLICATION_SEQUENCES:
+        for sequence in head_sequences:
             for privilege in ("SELECT", "USAGE"):
                 assert _has_privilege(
                     connection,

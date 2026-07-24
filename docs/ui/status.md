@@ -14,7 +14,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 
 | Area | Screens | Status |
 | --- | --- | --- |
-| Auth | Login, accept invite, forgot/reset password, forced password change | B1/B2 **corrected against the contract**; **all five screen specs drafted 2026-07-13**. Login needs C16, accept invite C14, reset password C15. **Forced password change is now specced** — C5's mechanism is decided (scoped `password_change_token` in the `403`); the contract must still say so (DMI-77). |
+| Auth | Login, accept invite, forgot/reset password, voluntary change password | B1/B2 **corrected against the contract**. Login needs C16, accept invite C14, reset password C15. **Forced password change was dropped** — forced rotation is abandoned (ADR-015), so C5 is void and there is no forced-change screen. |
 | Home | `/`; a verdict-led security review | Drafted. The only screen spec so far. |
 | Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C9/C10. **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2. **C12 resolved** — terminal state splits on `delivered_at` (never delivered → `expired`; delivered then broke → `failed`). |
@@ -31,7 +31,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 - Home has all-clear, needs-review, first-run, and error states. First-run sends admins to Agents to run the first scan.
 - Scan now shows: queued → delivered → running → uploading → done. Done links to the scan.
 - MVP excludes Pi setup, notifications, charts/metric cards, and the LLM explainer.
-- Settings **is** in the MVP: change your own password (otherwise homeless — B1 only covers *forced* rotation) and profile. The scan target network is **not** in Settings; it is a property of the Pi, chosen on Agents.
+- Settings **is** in the MVP: change your own password (voluntary self-service — there is no forced rotation) and profile. The scan target network is **not** in Settings; it is a property of the Pi, chosen on Agents.
 - Single agent: exactly one Pi. It is dual-homed, so a human picks which network to scan, once, on Agents. Scan mode is not a choice — the product picks `quick`.
 - Visual direction: quiet paper/dark surfaces, deep purple accent, square components, engraving details, plain professional copy.
 - App shell is a top bar, not a sidebar. ADR-008 was narrowed to match.
@@ -53,7 +53,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 - **Fourteen contract asks + one doc contradiction** block the UI — see [`FLOWS.md` § Contract asks](FLOWS.md#contract-asks). The heavy ones: no `GET /agents` (C1), no way to set the Pi's target network (C2), and **no `/users` resource at all** (C3, C4, C16), which leaves Users & invites mostly unbuildable — and, via **C16**, leaves the frontend with no documented way to learn the user's **role**, which every "absent, not disabled" affordance in the product depends on. C8 resolved (`cve_id` exists); C7 resolved (accepting an invite **does** issue a session → lands on Home); C12 is a BACKEND.md self-contradiction, not a contract gap.
 - One design call left: the stale-coverage threshold (N days). The 409 busy-Pi copy is now proposed in the Agents spec.
 - Lock B3 and B4 (both clarified; B4 needs C1 + C2 landed). B1/B2 wait on C14, C15, C16.
-- **All 13 screens are specced.** Home, the four B3 read screens, Agents, Settings, Users & invites, and the five auth screens including **forced password change** (2026-07-13, the last one).
+- **All screens are specced.** Home, the four B3 read screens, Agents, Settings, Users & invites, and the auth screens (login, accept invite, forgot/reset password, voluntary change password). The forced-password-change screen was dropped — forced rotation is abandoned (ADR-015).
 - Build the first vertical slice: login → Home with live data.
 
 ## Later, not MVP
