@@ -45,6 +45,19 @@ class Settings(BaseSettings):
         default=10,
         alias="ENRICHMENT_BATCH_SIZE",
     )
+    jwt_signing_secret: SecretStr = Field(alias="JWT_SIGNING_SECRET")
+    access_token_ttl_minutes: int = Field(
+        default=15, alias="ACCESS_TOKEN_TTL_MINUTES"
+    )
+    refresh_token_ttl_days: int = Field(default=7, alias="REFRESH_TOKEN_TTL_DAYS")
+    refresh_cookie_secure: bool = Field(default=True, alias="REFRESH_COOKIE_SECURE")
+    cors_allowed_origins: str = Field(
+        default="http://localhost:5173,https://app.vscanner.example.com",
+        alias="CORS_ALLOWED_ORIGINS",
+    )
+    reset_token_ttl_minutes: int = Field(default=60, alias="RESET_TOKEN_TTL_MINUTES")
+    hibp_enabled: bool = Field(default=True, alias="HIBP_ENABLED")
+    hibp_timeout_seconds: float = Field(default=2, alias="HIBP_TIMEOUT_SECONDS")
 
     model_config = SettingsConfigDict(
         env_file=".env",
