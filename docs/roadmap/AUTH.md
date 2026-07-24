@@ -85,11 +85,11 @@ September (not a self-serve admin UI flow). The viewer UI omits the trigger rath
 | **First org admin** | **Same invite flow (E2).** Vendor creates org and sends the first **admin** an invite link — not a separately seeded password. |
 | **Invite link TTL** | **Short (D1).** Links expire after a brief window (target **24–72 h** at implementation). **Single-use** — consumed on successful signup. |
 | **Password policy** | **Strong**, enforced at invite completion, login password change, and reset: minimum length; reject common/breached passwords; reject obvious patterns — repeated characters (e.g. `111`), keyboard/simple suffixes (e.g. `1!`), **repeated number sequences**, **birth dates**, **names** (user name, org name — implementation defines matching). |
-| **Password rotation** | **Every 3 months.** User must set a new password when expired; block normal API use until changed (login may succeed only to reach change-password flow). |
-| **Forgot password** | **Self-serve email reset (C2).** “Forgot password?” → email with one-time reset link → set new password (same policy + rotation clock). |
+| **Password rotation** | **No forced periodic rotation** ([`ADR-015`](../adr/ADR-015-password-policy.md), NIST SP 800-63B §5.1.1.2) — supersedes the prior "every 3 months" decision. Passwords change only voluntarily or via reset; instead, every password set is screened against known-breached passwords (HIBP Pwned-Passwords range API). |
+| **Forgot password** | **Self-serve email reset (C2).** “Forgot password?” → email with one-time reset link → set new password (same policy). |
 | **Transactional email** ✅ | **In scope — the backend sends invite links and reset links.** Decided 2026-07-13; **provider TBD** (Resend / Postmark / SES). Previously *nothing in the roadmap sent mail*, which left self-serve reset unbuildable — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. Code is small (`httpx` already a dependency); **the real work is a sending domain with SPF + DKIM + DMARC** — a one-time login link from a security product looks exactly like phishing and gets filtered without them. **Invites also keep a copyable link in the admin UI** as a fallback ([`ui/SCREENS.md` → Users & invites](../ui/SCREENS.md#users--invites)). |
 
-**Frontend surfaces:** invite acceptance page, login, forgot password, reset password, **forced change-password** when rotation due. Client mechanics (token storage, silent-refresh interceptor, route guards): [`ADR-008`](../adr/ADR-008-frontend-stack.md).
+**Frontend surfaces:** invite acceptance page, login, forgot password, reset password. Client mechanics (token storage, silent-refresh interceptor, route guards): [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
 ### Sessions ✅
 
@@ -102,12 +102,10 @@ Per ADR-005 pattern (Bearer on business APIs; refresh on `/auth/*` only).
 | **Refresh lifetime** | **Fixed 7 days from login** (C2) — no sliding extension. After 7 days user must **log in with password** again (helps password recall; intentional tradeoff). |
 | **Refresh rotation** | **Rotate on each refresh** (D1); detect reuse / invalidate token family. |
 | **Logout** | **Server revoke** (F2) — `POST /auth/logout` invalidates refresh server-side and clears cookie; not client-only. |
-| **Extra session cap** | **None** (H deferred) — 7-day refresh + 3-month password rotation is sufficient for September. |
+| **Extra session cap** | **None** (H deferred) — 7-day refresh is sufficient for September. |
 | **Auth endpoints** | `POST /auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/change-password` (G). |
 
-**Password rotation interaction:** if password expired, login/refresh may only allow change-password until updated.
-
-**SPA:** Axios Bearer on API client; `withCredentials` on `/auth/*` only. On **401**, try refresh once then redirect to login.
+**SPA:** Axios Bearer on API client; `withCredentials` on `/auth/*` only. On **401**, try refresh once then redirect to login. **Single-flight the refresh** — all concurrent 401s must await one shared in-flight refresh promise, never fire one refresh per request. The backend rotates refresh tokens with strict reuse detection (no grace window, DMI-60): presenting an already-rotated token kills the whole family, so two parallel refreshes of the same cookie would look like theft and log the user out. Interceptor mechanics: [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
 **Depends on:** [`BACKEND.md`](BACKEND.md) B10 Control ✅ — HMAC on **ingest** + **WebSocket handshake** (confirmed).
 

@@ -25,7 +25,6 @@ Matches the screen inventory in ADR-008. The LLM explainer panel is deferred and
 | ACCEPT INVITE | outside (email link) | public |
 | FORGOT PASSWORD | outside | public |
 | RESET PASSWORD | outside (email link) | public |
-| FORCED PASSWORD CHANGE | outside | public (post-403) |
 | HOME | inside | admin, viewer |
 | SCAN LIST | inside | admin, viewer |
 | SCAN DETAIL | inside | admin, viewer |
@@ -46,7 +45,6 @@ LOGIN
   [email] [password] [Log in]  ["Forgot password?"]
   [Log in] ok ................→ HOME
   [Log in] 401 ...............→ stay; inline error
-  [Log in] 403 pw-expired ....→ FORCED PASSWORD CHANGE
   ["Forgot password?"] .......→ FORGOT PASSWORD
 
 FORGOT PASSWORD
@@ -61,19 +59,11 @@ RESET PASSWORD                     (?token=… — the token posts in the BODY, 
   400 dead/used token ........→ form removed; [Request a new link] → FORGOT PASSWORD
                                 ⚠️ both failures are the SAME 400 — contract ask C15
 
-FORCED PASSWORD CHANGE
-  [current] [new] [confirm] [Change password]
-  ok .........................→ HOME
-
 Session edges (from any authenticated place)
   access expired ..............→ silent refresh → retry (invisible to user)
   refresh expired/revoked .....→ LOGIN
   [Log out] (shell top bar) ...→ LOGIN
 ```
-
-⚠️ FORCED PASSWORD CHANGE is **blocked on the contract gap** recorded in ADR-008 (§Auth Client):
-expired-password login returns 403 with no token, but `change-password` requires Bearer. Resolve
-in contract + AUTH.md before this flow reaches SCREENS.md.
 
 ## B2 — Admin day one: invite → first scan
 
@@ -217,8 +207,9 @@ It is withheld because sending an operator to an empty scan is worse than making
 ## B5 — Settings
 
 Both roles. Settings exists because **a logged-in user currently has nowhere to change their own
-password**: [`AUTH.md`](../roadmap/AUTH.md) mandates 90-day rotation, but the only change-password
-flow in B1 is the *forced* one after a 403. Voluntary rotation is homeless.
+password**: voluntary self-service change-password is the only change-password flow the product
+has ([`ADR-015`](../adr/ADR-015-password-policy.md) — forced periodic rotation was rejected as
+NIST-misaligned, so there is no forced flow for it to compete with).
 
 The scan target network is **not** here — it is a property of the Pi, not of the user (see B4).
 
@@ -251,7 +242,7 @@ Raised against [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openap
 | C2 | `AgentDetail.available_subnets` (reported by the Pi over its WS channel) + `target_subnet`, and a way to set it. Without these, `POST /commands` demands a `subnet` CIDR from a non-technical admin. **◐ Half-closed 2026-07-13: the WS half is locked** — the Pi sends a **`hello` frame on connect** carrying `available_subnets` (`interface` + `cidr`), now in the contract ([`ADR-011` §3](../adr/ADR-011-pi-command-channel.md)). **Still open: the HTTP half** — exposing them on `AgentDetail`, and the endpoint an admin uses to pick `target_subnet`. | B2, B4 |
 | C3 | A user resource: `GET /users/me` + a way to update it. There is **no `/users` path in the contract at all**, and `LoginResponse` returns only a token. | B5 profile |
 | C4 | Users & invites: list users, list pending invites, change role, revoke invite. Only `POST /invites` exists — the USERS & INVITES place is **mostly unbuildable** as breadboarded in B2. | B2, USERS & INVITES |
-| C5 | Forced password change: login with an expired password returns 403 **without a token**, but `POST /auth/change-password` requires Bearer. **✅ DECIDED 2026-07-13 — the `403` carries `error.code: "password_expired"` plus a short-lived `password_change_token` (scope `password:change`), accepted by `change-password` and nothing else.** Because the user proved the old password seconds earlier at login, **`current_password` is not required when the bearer is change-scoped** — the screen has two fields, not three. The FORCED PASSWORD CHANGE screen is now specced against this. **Still an ask:** the contract must say all of it (DMI-77). | B1 |
+| ~~C5~~ | ~~Forced password change: login with an expired password returns 403 without a token, but `POST /auth/change-password` requires Bearer.~~ **✅ VOID 2026-07-13 — [`ADR-015`](../adr/ADR-015-password-policy.md) drops forced rotation entirely (NIST SP 800-63B §5.1.1.2); the mechanism this ask was about no longer exists.** Login is `200`/`401` only; there is no forced password-change flow or screen. | — |
 | C6 | `HostSummary.first_seen_at`, to power the "new device on your network" item on HOME. **Narrowed:** the field already exists on `HostDetailResponse`, so this is projecting an existing column into the list, not new data. | B3 (item cut from v1 until then) |
 | ~~C7~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ **✅ RESOLVED 2026-07-13** — **yes.** It returns `201` with a full `LoginResponse`, so the invitee lands on HOME, not LOGIN. B2 above said the opposite and was corrected. Expiry is **`410`**, not `400`. | — |
 | ~~C8~~ | ~~Does `FindingRecord` carry a `cve_id`?~~ **✅ RESOLVED 2026-07-13** — it does, along with `cvss_score` and `references`. Home copy stands. | — |

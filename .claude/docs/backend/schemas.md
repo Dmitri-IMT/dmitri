@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), and the new read-path response schemas.
+description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -43,6 +43,20 @@ the ingest input plus the main persisted projections.
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts. | `backend/src/api/schemas/read.py:98` |
 | `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:114` |
 | `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:122` |
+
+## Key classes / functions — `auth.py` (auth request/response)
+
+| Name | What it validates | Ref |
+|------|-------------------|-----|
+| `LoginRequest` | `email`, `password` (min length 1); `extra="forbid"`. | `backend/src/api/schemas/auth.py:8` |
+| `LoginResponse` | `access_token`, `token_type` (`Literal["bearer"]`), `expires_in`. | `backend/src/api/schemas/auth.py:15` |
+| `ChangePasswordRequest` | `current_password`, `new_password` (min length 12). | `backend/src/api/schemas/auth.py:23` |
+| `ForgotPasswordRequest` | `email`. | `backend/src/api/schemas/auth.py:30` |
+| `ResetPasswordRequest` | `token`, `new_password` (min length 12). | `backend/src/api/schemas/auth.py:36` |
+
+These match the frozen `openapi.yaml` `auth` tag exactly and are consumed by the
+[auth router](/backend/auth.md). `email` is plain `str` (no `EmailStr` — `email-validator` isn't a
+dependency); the contract's `format: email` is advisory.
 
 ## Key classes / functions — `persistence.py` (legacy read projections)
 

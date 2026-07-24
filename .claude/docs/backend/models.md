@@ -1,22 +1,23 @@
 ---
 type: Module
 title: Backend ORM models
-description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, and dormant identity.
+description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, and auth session tokens.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Backend ORM models
 
 ## Purpose
 
-`models/` defines every persisted table as a `SQLModel` class (`table=True`). Two modules —
-`persistence.py` (the scan/enrichment domain) and `identity.py` (orgs/users/invites) — register
-their tables on one shared `SQLModel.metadata`, which is the object [Alembic](/backend/migrations.md)
-targets. The models are the query mapping; they **do not** create tables (`create_all` is never
-called). `models/__init__.py` imports both modules so their tables are registered; `identity.py`
-imports `utc_now` from `persistence.py`, so import order is irrelevant.
+`models/` defines every persisted table as a `SQLModel` class (`table=True`). Three modules —
+`persistence.py` (the scan/enrichment domain), `identity.py` (orgs/users/invites), and `session.py`
+(refresh/reset tokens) — register their tables on one shared `SQLModel.metadata`, which is the object
+[Alembic](/backend/migrations.md) targets. The models are the query mapping; they **do not** create
+tables (`create_all` is never called). `models/__init__.py` imports all three modules so their tables
+are registered; `identity.py`/`session.py` import `utc_now` from `persistence.py`, so import order is
+irrelevant.
 
 ## Key classes / functions — `persistence.py`
 
@@ -45,6 +46,13 @@ imports `utc_now` from `persistence.py`, so import order is irrelevant.
 | `User` → `users` | Case-insensitive unique index `(org_id, lower(email))`; `role` check `admin`/`viewer`; `password_hash`, `password_changed_at`. | `backend/src/api/models/identity.py:22` |
 | `Invite` → `invites` | Unique `token_hash`; `role` check; `expires_at`, `consumed_at`. | `backend/src/api/models/identity.py:38` |
 
+## Key classes / functions — `session.py`
+
+| Model → table | Notable columns / constraints | Ref |
+|---------------|------------------------------|-----|
+| `RefreshToken` → `refresh_tokens` | UUID PK; `user_id` FK → `users`; `family_id` (indexed); `token_hash` (unique+indexed); `family_expires_at`; nullable `rotated_at`/`revoked_at`; `created_at`. Backs the rotating refresh-token family — see [auth](/backend/auth.md). | `backend/src/api/models/session.py:11` |
+| `PasswordResetToken` → `password_reset_tokens` | UUID PK; `user_id` FK → `users`; `token_hash` (unique+indexed); `expires_at`; nullable `consumed_at`; `created_at`. Single-use reset token. | `backend/src/api/models/session.py:24` |
+
 ## How it connects
 
 - [`persist_scan` and the enrichment services](/backend/services.md) read and write these records;
@@ -63,8 +71,8 @@ imports `utc_now` from `persistence.py`, so import order is irrelevant.
   keyed by `identity_key` (MAC if present, else IP) and updated across scans via
   `upsert_hosts_for_scan`. See [ADR-014](../../../docs/adr/ADR-014-host-identity-resolution.md) and
   [glossary](/glossary.md).
-- **Identity is dormant.** `Org`/`User`/`Invite` back the OpenAPI auth/invite endpoints but nothing in
-  the running app (`api/main.py`) uses them yet.
+- **Auth is now wired.** `User` + the `session.py` tokens back the live auth routes (spec 016) — see
+  [auth](/backend/auth.md). `Org`/`Invite` remain dormant (no invite endpoints run yet).
 - JSON columns (`metadata_json`, `references_json`, `source_labels_json`, cache `*_json`, `raw_json`)
   use SQLAlchemy `JSON` via explicit `sa_column`.
 

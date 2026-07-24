@@ -19,7 +19,9 @@ findings. `worker.py` is the long-running poll loop. `enrichment.py` claims and 
 calling the three upstream clients — `nvd.py`, `kev.py`, `epss.py` — each of which caches in the DB.
 `risk.py` computes a deterministic, explainable risk score. (`services/__init__.py` is a
 placeholder.) `persist_scan` and the worker are still exercised by tests, not the live agent; the
-read path is the one route group actually reached over HTTP.
+read path and the [auth routes](/backend/auth.md) are the route groups actually reached over HTTP.
+The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
+[auth](/backend/auth.md).
 
 ## Key classes / functions
 
