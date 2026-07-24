@@ -57,7 +57,7 @@ devices, and Pis.
 |------|--------|
 | Pi HMAC (ingest + WSS) | ✅ |
 | Login, invites, roles | ✅ |
-| Passwords (policy, breach screening, reset — no forced rotation, [`ADR-015`](../adr/ADR-015-password-policy.md)) | ✅ |
+| Passwords (policy, breach screening, reset — no forced rotation, [`ADR-016`](../adr/ADR-016-password-policy.md)) | ✅ |
 | Sessions (15 min access, 7-day refresh, server logout) | ✅ |
 | Device secrets (installer provisioning) | ✅ provision model; Pi secret rotation Phase 2 |
 
@@ -267,7 +267,7 @@ most screens.
 | **C2** ◐ | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | **WS half LOCKED 2026-07-13:** the Pi sends a **`hello` frame on connect** with `available_subnets` (`interface` + `cidr`) — in the contract and in [`ADR-011` §3](../adr/ADR-011-pi-command-channel.md). Decided *now*, while the envelope was being defined, rather than reopening it later. **HTTP half still open:** surfacing them on `AgentDetail` + the endpoint an admin uses to pick one, once. `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
 | **C3** | `GET /users/me` (+ update) | SETTINGS → profile | No `/users` resource exists. Unknown whether the user model even has a `display_name`. |
 | **C4** | Users & invites: list users, list pending invites, change role, revoke invite | USERS & INVITES | Only `POST /invites` exists. The whole admin surface in [`ui/FLOWS.md` B2](../ui/FLOWS.md#b2--admin-day-one-invite--first-scan) has no endpoints behind it. |
-| ~~**C5**~~ | ~~Forced password change: 403 on expired-password login carries no token, but `POST /auth/change-password` requires Bearer~~ | — | **✅ MOOT 2026-07-23 — [`ADR-015`](../adr/ADR-015-password-policy.md) drops forced password rotation.** With no password expiry, this deadlock cannot occur: login is `200`/`401` only. No change needed. |
+| ~~**C5**~~ | ~~Forced password change: 403 on expired-password login carries no token, but `POST /auth/change-password` requires Bearer~~ | — | **✅ MOOT 2026-07-23 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced password rotation.** With no password expiry, this deadlock cannot occur: login is `200`/`401` only. No change needed. |
 | **C6** | `HostSummary.first_seen_at` | HOME "new device" item | Item is **cut from v1** until this exists. **Cheap:** the field is already on `HostDetailResponse` — this is projecting an existing column into the list. |
 | ~~**C7**~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |
 | ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |

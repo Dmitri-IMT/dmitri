@@ -322,7 +322,7 @@ No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log 
   refresh token arrives as an httpOnly `Set-Cookie` and the SPA never sees it
   ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client).
 - `401` → wrong credentials. There is no other failure branch: login is `200`/`401` only
-  ([`ADR-015`](../adr/ADR-015-password-policy.md) — forced password rotation is dropped, so there
+  ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced password rotation is dropped, so there
   is no expired-password 403 to route anywhere).
 
 **Where the role comes from — 🔓 C16.** `LoginResponse` carries **only a token**. Every "absent, not
@@ -1359,7 +1359,7 @@ Created — the form is replaced by the confirmation:
 **Epicenter** — change your own password. It is the only thing here that works, and the only reason
 this screen exists: voluntary self-service password change is the **only** change-password screen
 in the product — there is no forced rotation and no 403-triggered flow
-([`ADR-015`](../adr/ADR-015-password-policy.md) — forced periodic rotation is rejected as
+([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
 NIST-misaligned).
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box

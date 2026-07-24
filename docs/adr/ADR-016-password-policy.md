@@ -1,4 +1,4 @@
-# ADR-015: Password policy — strong policy + breach screening, no forced rotation
+# ADR-016: Password policy — strong policy + breach screening, no forced rotation
 
 > **Status:** Accepted (2026-07-23). **Supersedes** the "Password rotation — Every 3 months" row
 > in [`AUTH.md`](../roadmap/AUTH.md) (Phase 1, Passwords). Research backing this decision:

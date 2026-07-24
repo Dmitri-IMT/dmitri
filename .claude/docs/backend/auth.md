@@ -75,6 +75,6 @@ ingest link is still unwired, but auth itself now runs in `main.py`.
 
 [1] [specs/016-sessions-auth-routes](../../../specs/016-sessions-auth-routes/TRUTH.md)
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
-[3] [docs/adr/ADR-015-password-policy.md](../../../docs/adr/ADR-015-password-policy.md)
+[3] [docs/adr/ADR-016-password-policy.md](../../../docs/adr/ADR-016-password-policy.md)
 [4] [docs/roadmap/AUTH.md](../../../docs/roadmap/AUTH.md)
 [5] [contracts/openapi/openapi.yaml](../../../contracts/openapi/openapi.yaml)
