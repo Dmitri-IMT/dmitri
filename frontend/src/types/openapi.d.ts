@@ -1400,17 +1400,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /**
-             * @description Password expired — the 3-month rotation is due and only the change-password flow is
-             *     permitted (AUTH Phase 1). **The wire mechanism for reaching that flow is contract ask
-             *     C5 and is not yet specified here** — see DMI-77. No refresh cookie is issued.
-             */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
         };
     };
     optionsLogin: {
