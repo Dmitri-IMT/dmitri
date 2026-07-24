@@ -28,6 +28,28 @@ DISCARDED_BUSINESS_PATHS = (
     "/findings",
 )
 
+# Every (path, method) the app is allowed to expose. Adding a route without
+# updating this set is a deliberate decision, not an accident.
+EXPECTED_ROUTE_SURFACE = {
+    ("/api/v1/health", "GET"),
+    ("/api/v1/health", "OPTIONS"),
+    ("/api/v1/hosts", "GET"),
+    ("/api/v1/hosts/{host_id}", "GET"),
+    ("/api/v1/scans/{scan_id}", "GET"),
+    ("/api/v1/findings", "GET"),
+} | {
+    (f"/api/v1/auth/{name}", method)
+    for name in (
+        "login",
+        "refresh",
+        "logout",
+        "change-password",
+        "forgot-password",
+        "reset-password",
+    )
+    for method in ("POST", "OPTIONS")
+}
+
 
 def test_health_ok_after_live_db_round_trip(runtime_session: Session) -> None:
     def _override_get_session():
@@ -78,22 +100,20 @@ def test_route_surface_exposes_only_canonical_health() -> None:
     for path in ("/", "/docs", "/redoc", "/openapi.json") + DISCARDED_BUSINESS_PATHS:
         assert client.get(path).status_code == 404
 
-    assert client.options("/api/v1/health").status_code == 405
+    assert client.options("/api/v1/health").status_code == 204
 
-    api_routes = _flatten_api_routes(app.routes)
-    assert {route.path for route in api_routes} == {
-        "/api/v1/health",
-        "/api/v1/hosts",
-        "/api/v1/hosts/{host_id}",
-        "/api/v1/scans/{scan_id}",
-        "/api/v1/findings",
+
+def test_route_surface_is_exactly_the_declared_contract() -> None:
+    surface = {
+        (route.path, method)
+        for route in _flatten_api_routes(app.routes)
+        for method in route.methods
     }
-    for route in api_routes:
-        assert route.methods == {"GET"}
+
+    assert surface == EXPECTED_ROUTE_SURFACE
 
 
-def test_app_has_no_lifespan_hook_or_middleware() -> None:
-    assert app.user_middleware == []
+def test_app_has_no_lifespan_hook() -> None:
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []
 

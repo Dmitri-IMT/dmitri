@@ -115,6 +115,42 @@ def test_carried_fields_default_when_env_unset(
     assert settings.enrichment_batch_size == 10
 
 
+def test_auth_settings_default_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    for var in (
+        "ACCESS_TOKEN_TTL_MINUTES",
+        "REFRESH_TOKEN_TTL_DAYS",
+        "REFRESH_COOKIE_SECURE",
+        "CORS_ALLOWED_ORIGINS",
+        "RESET_TOKEN_TTL_MINUTES",
+        "HIBP_ENABLED",
+        "HIBP_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    settings = Settings()
+
+    assert settings.access_token_ttl_minutes == 15
+    assert settings.refresh_token_ttl_days == 7
+    assert settings.refresh_cookie_secure is True
+    assert settings.cors_allowed_origins == (
+        "http://localhost:5173,https://app.vscanner.example.com"
+    )
+    assert settings.reset_token_ttl_minutes == 60
+    assert settings.hibp_enabled is True
+    assert settings.hibp_timeout_seconds == 2
+
+
+def test_missing_jwt_signing_secret_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    monkeypatch.delenv("JWT_SIGNING_SECRET", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
 def test_unused_auth_and_cors_settings_are_absent() -> None:
     assert "jwt_secret" not in Settings.model_fields
     assert "agent_hmac_secret" not in Settings.model_fields

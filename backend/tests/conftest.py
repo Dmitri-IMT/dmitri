@@ -20,11 +20,18 @@ if str(SRC) not in sys.path:
 DATABASE_URL_TEST = os.environ.get("DATABASE_URL_TEST")
 RUNTIME_URL = DATABASE_URL_TEST or "postgresql+psycopg://u:p@127.0.0.1:1/x"
 os.environ["DATABASE_URL"] = RUNTIME_URL
+os.environ.setdefault("JWT_SIGNING_SECRET", "test-jwt-signing-secret")
 if DATABASE_URL_TEST is not None:
     os.environ["DATABASE_URL_DIRECT"] = DATABASE_URL_TEST
 
+from api.core.config import Settings  # noqa: E402
 from api.db.session import get_engine, reset_db_state  # noqa: E402
 from api.models import persistence  # noqa: E402, F401
+
+# A developer's local backend/.env must not leak into the suite. CI has no such file, so
+# reading it makes local runs disagree with CI: tests that explicitly unset DATABASE_URL
+# or NVD_API_KEY still see values, and their assertions fail for environmental reasons.
+Settings.model_config["env_file"] = None
 
 EXPECTED_DATABASE = "dmitri_test"
 SUPABASE_API_ROLES = ("anon", "authenticated")
