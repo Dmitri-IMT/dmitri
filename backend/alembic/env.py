@@ -11,7 +11,10 @@ from sqlalchemy import engine_from_config, pool
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which would silence every logger
+    # already created at import time (e.g. api.services.*) for the rest of the
+    # process — breaking log assertions in any test that runs after a migration.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = persistence.SQLModel.metadata
 

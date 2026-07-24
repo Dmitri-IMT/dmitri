@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import CheckConstraint, Index, text
 from sqlmodel import Field, SQLModel
 
-from api.models.persistence import utc_now
+from api.models.persistence import UTC_TIMESTAMP, utc_now
 
 _ROLE_CHECK = "role IN ('admin', 'viewer')"
 
@@ -16,7 +16,7 @@ class Org(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class User(SQLModel, table=True):
@@ -31,8 +31,10 @@ class User(SQLModel, table=True):
     email: str
     password_hash: str
     role: str
-    password_changed_at: datetime = Field(default_factory=utc_now)
-    created_at: datetime = Field(default_factory=utc_now)
+    password_changed_at: datetime = Field(
+        default_factory=utc_now, sa_type=UTC_TIMESTAMP
+    )
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class Invite(SQLModel, table=True):
@@ -44,6 +46,6 @@ class Invite(SQLModel, table=True):
     email: str
     role: str
     token_hash: str = Field(unique=True, index=True)
-    expires_at: datetime
-    consumed_at: datetime | None = None
-    created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    consumed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
