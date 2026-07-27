@@ -510,6 +510,34 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                 assert not _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )
+
+        # `_table_shape` normalises timestamp variants away, so nothing else
+        # catches a model that declares a timestamp column naive while its
+        # migration creates it timestamptz (or the reverse). That divergence is
+        # invisible until `alembic revision --autogenerate` "corrects" the column
+        # back to the model and utc_now() comparisons start raising
+        # "can't compare offset-naive and offset-aware datetimes" — the bug
+        # 20260724_08 exists to eliminate.
+        timestamp_types = {
+            (row.table_name, row.column_name): row.data_type
+            for row in connection.execute(
+                sa.text(
+                    "SELECT table_name, column_name, data_type "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = 'public' "
+                    "AND data_type LIKE 'timestamp%'"
+                )
+            )
+        }
+        for table_name in HEAD_APPLICATION_TABLES:
+            for column in SQLModel.metadata.tables[table_name].columns:
+                if not isinstance(column.type, sa.DateTime):
+                    continue
+                data_type = timestamp_types.get((table_name, column.name))
+                assert data_type is not None, f"{table_name}.{column.name} missing"
+                assert column.type.timezone == (
+                    data_type == "timestamp with time zone"
+                ), f"{table_name}.{column.name} model/database timezone mismatch"
         for sequence in head_sequences:
             for privilege in ("SELECT", "USAGE"):
                 assert _has_privilege(
