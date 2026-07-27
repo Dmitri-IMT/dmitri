@@ -32,7 +32,8 @@ from api.db.session import get_engine, reset_db_state  # noqa: E402
 from api.models import persistence  # noqa: E402, F401
 from api.models.command import Agent  # noqa: E402
 from api.models.identity import Org  # noqa: E402
-from api.services import device_sig  # noqa: E402
+from api.models.persistence import utc_now  # noqa: E402
+from api.services import agent_connections, device_sig  # noqa: E402
 from api.services.tokens import create_access_token  # noqa: E402
 
 # A developer's local backend/.env must not leak into the suite. CI has no such file, so
@@ -193,6 +194,33 @@ def bearer_headers() -> Callable[[UUID, str], dict[str, str]]:
         return {"Authorization": f"Bearer {token}"}
 
     return _bearer_headers
+
+
+def ws_upgrade_headers(
+    private_key: bytes, agent_id: UUID, *, path: str | None = None
+) -> dict[str, str]:
+    resolved_path = path or f"/api/v1/agents/{agent_id}/commands"
+    timestamp_str = utc_now().isoformat()
+    nonce_value = uuid4().hex
+    body_hash = device_sig.body_sha256(b"")
+    canonical = device_sig.canonical_string(
+        "GET", resolved_path, str(agent_id), timestamp_str, nonce_value, body_hash
+    )
+    signature = device_sig.sign(private_key, canonical)
+    return {
+        "X-Device-Id": str(agent_id),
+        "X-Timestamp": timestamp_str,
+        "X-Nonce": nonce_value,
+        "X-Body-SHA256": body_hash,
+        "X-Signature": signature,
+    }
+
+
+@pytest.fixture(autouse=True)
+def clear_agent_connections_registry() -> Generator[None, None, None]:
+    agent_connections._registry.clear()
+    yield
+    agent_connections._registry.clear()
 
 
 @pytest.fixture
