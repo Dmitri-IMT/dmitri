@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
 import typing
 from datetime import timedelta
@@ -20,7 +21,7 @@ from api.main import app as main_app
 from api.models.command import Agent
 from api.models.persistence import utc_now
 from api.services import device_sig
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, WebSocket
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -528,8 +529,53 @@ def test_require_agent_delegates_fully_to_authenticate_agent(
     assert unauth_response.status_code == 401
 
 
-def test_require_agent_ws_not_written():
-    assert not hasattr(agent_auth, "require_agent_ws")
+def test_require_agent_ws_delegates_fully_to_authenticate_agent(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    agent_id = uuid4()
+    org_id = uuid4()
+    expected_path = f"/api/v1/agents/{agent_id}/commands"
+    session = Mock()
+    websocket = Mock(spec=WebSocket)
+    websocket.url = Mock()
+    websocket.url.path = expected_path
+    websocket.headers = {}
+    websocket.accept = Mock()
+    captured: dict = {}
+
+    def _stub_success(session_arg, **kwargs):
+        captured["session"] = session_arg
+        captured.update(kwargs)
+        return AgentIdentity(agent_id=agent_id, org_id=org_id)
+
+    monkeypatch.setattr(agent_auth, "authenticate_agent", _stub_success)
+    identity = asyncio.run(
+        agent_auth.require_agent_ws(websocket, agent_id, session=session)
+    )
+    assert identity.agent_id == agent_id
+    assert captured["session"] is session
+    assert captured["method"] == "GET"
+    assert captured["path"] == expected_path
+    assert captured["headers"] is websocket.headers
+    assert captured["body"] == b""
+    assert captured["expected_agent_id"] == agent_id
+    websocket.accept.assert_not_called()
+
+    def _stub_revoked(session_arg, **kwargs):
+        raise AgentRevoked("device is revoked")
+
+    monkeypatch.setattr(agent_auth, "authenticate_agent", _stub_revoked)
+    with pytest.raises(HTTPException) as revoked_exc:
+        asyncio.run(agent_auth.require_agent_ws(websocket, agent_id, session=session))
+    assert revoked_exc.value.status_code == 403
+
+    def _stub_unauthenticated(session_arg, **kwargs):
+        raise AgentUnauthenticated("nope")
+
+    monkeypatch.setattr(agent_auth, "authenticate_agent", _stub_unauthenticated)
+    with pytest.raises(HTTPException) as unauth_exc:
+        asyncio.run(agent_auth.require_agent_ws(websocket, agent_id, session=session))
+    assert unauth_exc.value.status_code == 401
 
 
 def test_no_product_route_mounts_require_agent():
