@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import jwt
 import pytest
+from api.core.config import get_settings
 from api.db.session import get_session
 from api.main import app
+from api.models.identity import Org
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
@@ -13,6 +16,7 @@ from api.models.persistence import (
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
+    utc_now,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -46,8 +50,18 @@ def client(session: Session) -> TestClient:
 
 def _seed(session: Session) -> dict:
     now = datetime.now(timezone.utc)
+
+    org = Org(name="Org A")
+    session.add(org)
+    session.flush()
+
+    other_org = Org(name="Org B")
+    session.add(other_org)
+    session.flush()
+
     scan = ScanRecord(
         scan_id=uuid4(),
+        org_id=org.id,
         timestamp=now,
         subnet="192.168.1.0/24",
         scan_mode="quick",
@@ -59,6 +73,7 @@ def _seed(session: Session) -> dict:
 
     host = HostRecord(
         identity_key="aa:bb:cc:dd:ee:ff",
+        org_id=org.id,
         ip="192.168.1.10",
         mac="aa:bb:cc:dd:ee:ff",
         hostname="host-a",
@@ -114,6 +129,7 @@ def _seed(session: Session) -> dict:
 
     other_host = HostRecord(
         identity_key="11:22:33:44:55:66",
+        org_id=org.id,
         ip="192.168.1.20",
         mac="11:22:33:44:55:66",
         hostname="host-b",
@@ -153,20 +169,137 @@ def _seed(session: Session) -> dict:
         dedupe_key="dedupe-2",
     )
     session.add(other_finding)
+    session.flush()
+
+    foreign_scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=other_org.id,
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json={},
+    )
+    session.add(foreign_scan)
+    session.flush()
+
+    foreign_host = HostRecord(
+        identity_key="ff:ff:ff:ff:ff:ff",
+        org_id=other_org.id,
+        ip="10.0.0.10",
+        mac="ff:ff:ff:ff:ff:ff",
+        hostname="host-foreign",
+        vendor="Acme",
+        open_ports_count=0,
+        highest_severity=None,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    session.add(foreign_host)
+    session.flush()
+
+    foreign_scan_host = ScanHostRecord(
+        scan_id=foreign_scan.scan_id,
+        host_id=foreign_host.id,
+        ip="10.0.0.10",
+        mac="ff:ff:ff:ff:ff:ff",
+        hostname="host-foreign",
+        vendor="Acme",
+    )
+    session.add(foreign_scan_host)
+    session.flush()
+
+    foreign_finding = FindingRecord(
+        finding_id=uuid4(),
+        scan_id=foreign_scan.scan_id,
+        scan_host_id=foreign_scan_host.id,
+        ip="10.0.0.10",
+        port=443,
+        protocol="tcp",
+        service="https",
+        severity="low",
+        title="Foreign finding",
+        description="Belongs to another org.",
+        recommendation="N/A",
+        evidence="N/A",
+        dedupe_key="dedupe-foreign",
+    )
+    session.add(foreign_finding)
     session.commit()
 
     return {
+        "org": org,
+        "other_org": other_org,
         "scan": scan,
         "host": host,
         "finding": finding,
         "other_host": other_host,
         "other_finding": other_finding,
+        "foreign_scan": foreign_scan,
+        "foreign_host": foreign_host,
+        "foreign_finding": foreign_finding,
     }
 
 
-def test_list_hosts_happy_path(client: TestClient, session: Session) -> None:
+READ_PATHS = (
+    "/api/v1/hosts",
+    "/api/v1/hosts/{host_id}",
+    "/api/v1/scans/{scan_id}",
+    "/api/v1/findings",
+)
+
+
+def _resolved_path(path: str, seeded: dict) -> str:
+    return path.format(
+        host_id=seeded["host"].id, scan_id=seeded["scan"].scan_id
+    )
+
+
+def _expired_bearer_headers(org_id: UUID, role: str) -> dict[str, str]:
+    settings = get_settings()
+    now = utc_now()
+    claims = {
+        "sub": str(uuid4()),
+        "org_id": str(org_id),
+        "role": role,
+        "iat": now - timedelta(minutes=10),
+        "exp": now - timedelta(minutes=1),
+    }
+    token = jwt.encode(
+        claims, settings.jwt_signing_secret.get_secret_value(), algorithm="HS256"
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_read_route_without_bearer_returns_401(
+    client: TestClient, session: Session, path: str
+) -> None:
     seeded = _seed(session)
-    response = client.get("/api/v1/hosts")
+    response = client.get(_resolved_path(path, seeded))
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_read_route_with_garbage_bearer_returns_401(
+    client: TestClient, session: Session, path: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        _resolved_path(path, seeded),
+        headers={"Authorization": "Bearer not-a-jwt"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("role", ["viewer", "admin"])
+def test_list_hosts_happy_path(
+    client: TestClient, session: Session, bearer_headers, role: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        "/api/v1/hosts", headers=bearer_headers(seeded["org"].id, role)
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 2
@@ -179,9 +312,14 @@ def test_list_hosts_happy_path(client: TestClient, session: Session) -> None:
     assert seeded_row["first_seen_at"] == seeded["host"].first_seen_at.isoformat()
 
 
-def test_get_host_by_id_happy_path(client: TestClient, session: Session) -> None:
+def test_get_host_by_id_happy_path(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
     seeded = _seed(session)
-    response = client.get(f"/api/v1/hosts/{seeded['host'].id}")
+    response = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["host_id"] == str(seeded["host"].id)
@@ -193,16 +331,36 @@ def test_get_host_by_id_happy_path(client: TestClient, session: Session) -> None
 
 
 def test_get_host_by_id_unknown_returns_404(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, bearer_headers
 ) -> None:
-    _seed(session)
-    response = client.get(f"/api/v1/hosts/{uuid4()}")
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/hosts/{uuid4()}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
     assert response.status_code == 404
 
 
-def test_get_scan_by_id_happy_path(client: TestClient, session: Session) -> None:
+def test_get_host_by_id_cross_org_returns_404_not_403(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
     seeded = _seed(session)
-    response = client.get(f"/api/v1/scans/{seeded['scan'].scan_id}")
+    response = client.get(
+        f"/api/v1/hosts/{seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 404
+    assert response.status_code != 403
+
+
+def test_get_scan_by_id_happy_path(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["scan_id"] == str(seeded["scan"].scan_id)
@@ -216,18 +374,36 @@ def test_get_scan_by_id_happy_path(client: TestClient, session: Session) -> None
 
 
 def test_get_scan_by_id_unknown_returns_404(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, bearer_headers
 ) -> None:
-    _seed(session)
-    response = client.get(f"/api/v1/scans/{uuid4()}")
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/scans/{uuid4()}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
     assert response.status_code == 404
 
 
-def test_list_findings_filtered_by_host_id(
-    client: TestClient, session: Session
+def test_get_scan_by_id_cross_org_returns_404_not_403(
+    client: TestClient, session: Session, bearer_headers
 ) -> None:
     seeded = _seed(session)
-    response = client.get(f"/api/v1/findings?host_id={seeded['host'].id}")
+    response = client.get(
+        f"/api/v1/scans/{seeded['foreign_scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 404
+    assert response.status_code != 403
+
+
+def test_list_findings_filtered_by_host_id(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 1
@@ -242,12 +418,95 @@ def test_list_findings_filtered_by_host_id(
 
 
 def test_list_findings_unfiltered_returns_all_hosts(
-    client: TestClient, session: Session
+    client: TestClient, session: Session, bearer_headers
 ) -> None:
     seeded = _seed(session)
-    response = client.get("/api/v1/findings")
+    response = client.get(
+        "/api/v1/findings", headers=bearer_headers(seeded["org"].id, "viewer")
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 2
     host_ids = {f["host_id"] for f in body["data"]}
     assert host_ids == {str(seeded["host"].id), str(seeded["other_host"].id)}
+
+
+def test_list_findings_filtered_by_foreign_host_id_returns_empty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_read_route_with_expired_bearer_returns_401(
+    client: TestClient, session: Session, path: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        _resolved_path(path, seeded),
+        headers=_expired_bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("path", READ_PATHS)
+def test_read_route_with_viewer_token_never_returns_403(
+    client: TestClient, session: Session, bearer_headers, path: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        _resolved_path(path, seeded), headers=bearer_headers(seeded["org"].id, "viewer")
+    )
+    assert response.status_code != 403
+    assert response.status_code == 200
+
+
+def test_nonexistent_org_token_list_hosts_returns_empty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    _seed(session)
+    response = client.get("/api/v1/hosts", headers=bearer_headers(uuid4(), "admin"))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_nonexistent_org_token_list_findings_returns_empty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    _seed(session)
+    response = client.get("/api/v1/findings", headers=bearer_headers(uuid4(), "admin"))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_nonexistent_org_token_get_host_returns_404(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}", headers=bearer_headers(uuid4(), "admin")
+    )
+    assert response.status_code == 404
+
+
+def test_nonexistent_org_token_get_scan_returns_404(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(uuid4(), "admin"),
+    )
+    assert response.status_code == 404

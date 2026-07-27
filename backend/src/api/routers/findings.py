@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from api.db.session import get_session
+from api.dependencies.auth import CallerIdentity, require_user
 from api.schemas.read import FindingListResponse
 from api.services.read import list_findings
 
@@ -16,5 +17,6 @@ router = APIRouter()
 def read_findings(
     host_id: UUID | None = None,
     session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
 ) -> FindingListResponse:
-    return list_findings(session, host_id=host_id)
+    return list_findings(session, org_id=caller.org_id, host_id=host_id)

@@ -26,10 +26,17 @@ from api.schemas.read import (
 from api.services.hosts import highest_severity, open_ports_count
 
 
-def list_hosts(session: Session, page: int = 1, per_page: int = 20) -> HostListResponse:
-    total = session.exec(select(func.count()).select_from(HostRecord)).one()
+def list_hosts(
+    session: Session, *, org_id: UUID, page: int = 1, per_page: int = 20
+) -> HostListResponse:
+    total = session.exec(
+        select(func.count())
+        .select_from(HostRecord)
+        .where(HostRecord.org_id == org_id)
+    ).one()
     hosts = session.exec(
         select(HostRecord)
+        .where(HostRecord.org_id == org_id)
         .order_by(HostRecord.last_seen_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -41,8 +48,14 @@ def list_hosts(session: Session, page: int = 1, per_page: int = 20) -> HostListR
     )
 
 
-def get_host_detail(session: Session, host_id: UUID) -> HostDetailResponse | None:
-    host = session.get(HostRecord, host_id)
+def get_host_detail(
+    session: Session, host_id: UUID, *, org_id: UUID
+) -> HostDetailResponse | None:
+    host = session.exec(
+        select(HostRecord).where(
+            HostRecord.id == host_id, HostRecord.org_id == org_id
+        )
+    ).first()
     if host is None:
         return None
 
@@ -50,6 +63,7 @@ def get_host_detail(session: Session, host_id: UUID) -> HostDetailResponse | Non
         select(ScanHostRecord)
         .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
         .where(ScanHostRecord.host_id == host_id)
+        .where(ScanRecord.org_id == org_id)
         .order_by(ScanRecord.timestamp.desc())
     ).first()
     ports = (
@@ -60,6 +74,7 @@ def get_host_detail(session: Session, host_id: UUID) -> HostDetailResponse | Non
         select(ScanHostRecord, ScanRecord)
         .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
         .where(ScanHostRecord.host_id == host_id)
+        .where(ScanRecord.org_id == org_id)
         .order_by(ScanRecord.timestamp.desc())
     ).all()
     scan_history = [
@@ -88,8 +103,14 @@ def get_host_detail(session: Session, host_id: UUID) -> HostDetailResponse | Non
     )
 
 
-def get_scan_detail(session: Session, scan_id: UUID) -> ScanDetailResponse | None:
-    scan = session.get(ScanRecord, scan_id)
+def get_scan_detail(
+    session: Session, scan_id: UUID, *, org_id: UUID
+) -> ScanDetailResponse | None:
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id, ScanRecord.org_id == org_id
+        )
+    ).first()
     if scan is None:
         return None
 
@@ -132,18 +153,23 @@ def get_scan_detail(session: Session, scan_id: UUID) -> ScanDetailResponse | Non
 
 def list_findings(
     session: Session,
+    *,
+    org_id: UUID,
     host_id: UUID | None = None,
     page: int = 1,
     per_page: int = 20,
 ) -> FindingListResponse:
+    base = (
+        select(FindingRecord, ScanHostRecord.host_id)
+        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
+        .where(ScanRecord.org_id == org_id)
+    )
     if host_id is not None:
-        base = (
-            select(FindingRecord, ScanHostRecord.host_id)
-            .join(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
-            .where(ScanHostRecord.host_id == host_id)
-        )
+        base = base.join(
+            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
+        ).where(ScanHostRecord.host_id == host_id)
     else:
-        base = select(FindingRecord, ScanHostRecord.host_id).outerjoin(
+        base = base.outerjoin(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
         )
 
