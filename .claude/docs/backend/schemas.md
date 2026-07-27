@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth and invite request/response models.
+description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-27T18:00:00Z
+timestamp: 2026-07-27T21:00:00Z
 ---
 
 # Backend wire schemas
@@ -43,6 +43,14 @@ the ingest input plus the main persisted projections.
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts. | `backend/src/api/schemas/read.py:98` |
 | `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:114` |
 | `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:122` |
+
+## Key classes / functions — `users.py` (self profile)
+
+| Name | What it validates | Ref |
+|------|-------------------|-----|
+| `UserProfileResponse` | `user_id` (`UUID`), `email` (`str`), `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. No `password_expires_at` — ADR-016 removed forced rotation. | `backend/src/api/schemas/users.py` |
+
+Consumed by [`routers/users.py`](/backend/routers.md) for `GET /api/v1/users/me`.
 
 ## Key classes / functions — `auth.py` (auth request/response)
 
@@ -123,3 +131,4 @@ All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame 
 [3] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
 [4] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)
 [5] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
+[6] [specs/019-users-me-and-error-envelope](../../../specs/019-users-me-and-error-envelope/TRUTH.md)

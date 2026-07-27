@@ -5,6 +5,17 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-07-27
 
+* **Update**: spec 019 (DMI-72) `GET /users/me` + global error envelope — `errors.py`
+  (`ApiError`, `_DEFAULT_CODES_BY_STATUS`), global `StarletteHTTPException` + `Exception`
+  handlers in `main.py`, WS denial envelope, C13 change-password codes, `routers/users.py`,
+  `schemas/users.py`, contract + `openapi.d.ts` updates. Created `backend/errors.md`; updated
+  `backend/api.md`, `routers.md`, `schemas.md`, `auth.md`, `index.md`.
+  Pre-push follow-up: `http_exception_handler` now forwards `exc.headers` (the router's `405`
+  had lost its RFC-required `Allow`); `validation_exception_handler` pulls `422` into the
+  envelope and stops pydantic echoing the rejected password back via `input`; `errors.py` gained
+  `error_envelope`/`field_path` and lost the underscore on `DEFAULT_CODES_BY_STATUS`; the four
+  pinned-code responses in `openapi.yaml` gained `required:` so their `code` discriminator
+  actually narrows in the generated TS.
 * **Update**: spec 018 (DMI-62) agent WebSocket command channel — `routers/agents.py`
   (`connect_agent_commands`), `services/agent_connections.py` (in-process registry),
   `services/agent_ws.py` (frame dispatch), `schemas/agent_frames.py`, `require_agent_ws` adapter,
