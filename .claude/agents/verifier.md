@@ -4,7 +4,6 @@
   summary of what passed, what is incomplete, and what is broken. Never modifies
   code or config — report only.
 name: verifier
-model: model: claude-opus-4-8
 description: >-
 readonly: true
 ---
