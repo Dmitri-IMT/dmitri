@@ -35,13 +35,8 @@ class InvalidResetTokenError(ValueError):
     pass
 
 
-def login(session: Session, *, email: str, password: str) -> tuple[str, str, int]:
+def issue_session(session: Session, *, user: User) -> tuple[str, str, int]:
     settings = get_settings()
-    user = session.exec(
-        select(User).where(func.lower(User.email) == email.lower())
-    ).first()
-    if user is None or not verify_password(password, user.password_hash):
-        raise InvalidCredentialsError("invalid email or password")
     access_token = create_access_token(
         user_id=user.id, org_id=user.org_id, role=user.role
     )
@@ -49,16 +44,25 @@ def login(session: Session, *, email: str, password: str) -> tuple[str, str, int
     return access_token, refresh_token, settings.access_token_ttl_minutes * 60
 
 
+def login(session: Session, *, email: str, password: str) -> tuple[str, str, int]:
+    user = session.exec(
+        select(User).where(func.lower(User.email) == email.lower())
+    ).first()
+    if user is None or not verify_password(password, user.password_hash):
+        raise InvalidCredentialsError("invalid email or password")
+    return issue_session(session, user=user)
+
+
 def refresh_session(
     session: Session, *, refresh_token: str
 ) -> tuple[str, str, int]:
-    settings = get_settings()
     user_id, new_refresh_token = rotate_refresh_token(
         session, raw_token=refresh_token
     )
     user = session.get(User, user_id)
     if user is None:
         raise RefreshTokenError("invalid refresh token")
+    settings = get_settings()
     access_token = create_access_token(
         user_id=user.id, org_id=user.org_id, role=user.role
     )
