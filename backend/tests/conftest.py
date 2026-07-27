@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlmodel import Session, SQLModel
 
@@ -27,6 +30,10 @@ if DATABASE_URL_TEST is not None:
 from api.core.config import Settings  # noqa: E402
 from api.db.session import get_engine, reset_db_state  # noqa: E402
 from api.models import persistence  # noqa: E402, F401
+from api.models.command import Agent  # noqa: E402
+from api.models.identity import Org  # noqa: E402
+from api.services import device_sig  # noqa: E402
+from api.services.tokens import create_access_token  # noqa: E402
 
 # A developer's local backend/.env must not leak into the suite. CI has no such file, so
 # reading it makes local runs disagree with CI: tests that explicitly unset DATABASE_URL
@@ -71,7 +78,19 @@ def _migrate(engine: Engine, revision: str) -> None:
     if revision == "base":
         command.downgrade(_alembic_config(), "base")
     else:
-        command.upgrade(_alembic_config(), revision)
+        config = _alembic_config()
+        script = ScriptDirectory.from_config(config)
+        with engine.connect() as connection:
+            current = MigrationContext.configure(connection).get_current_revision()
+        ancestors = (
+            {rev.revision for rev in script.iterate_revisions(current, None)}
+            if current is not None
+            else set()
+        )
+        if revision in ancestors and revision != current:
+            command.downgrade(config, revision)
+        else:
+            command.upgrade(config, revision)
         with engine.begin() as connection:
             _assert_test_database(DATABASE_URL_TEST, connection)
             connection.execute(
@@ -117,6 +136,7 @@ def postgres_engine() -> Generator[Engine, None, None]:
         _migrate(engine, "head")
         yield engine
     finally:
+        _truncate_application_tables(engine)
         _migrate(engine, "base")
         with engine.begin() as connection:
             _assert_test_database(DATABASE_URL_TEST, connection)
@@ -155,3 +175,42 @@ def runtime_session(migrated_database: Engine) -> Generator[Session, None, None]
             yield session
         connection.execute(sa.text("RESET ROLE"))
         connection.commit()
+
+
+@pytest.fixture
+def seeded_org(administrative_session: Session) -> Org:
+    org = Org(name="Test Org")
+    administrative_session.add(org)
+    administrative_session.commit()
+    administrative_session.refresh(org)
+    return org
+
+
+@pytest.fixture
+def bearer_headers() -> Callable[[UUID, str], dict[str, str]]:
+    def _bearer_headers(org_id: UUID, role: str) -> dict[str, str]:
+        token = create_access_token(user_id=uuid4(), org_id=org_id, role=role)
+        return {"Authorization": f"Bearer {token}"}
+
+    return _bearer_headers
+
+
+@pytest.fixture
+def agent_keypair() -> tuple[bytes, bytes]:
+    return device_sig.generate_keypair()
+
+
+@pytest.fixture
+def provisioned_agent(
+    administrative_session: Session,
+    seeded_org: Org,
+    agent_keypair: tuple[bytes, bytes],
+) -> Agent:
+    _private_key, public_key = agent_keypair
+    agent = Agent(
+        org_id=seeded_org.id, display_name="Test Agent", public_key=public_key
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    return agent
