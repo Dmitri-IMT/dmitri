@@ -5,6 +5,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-07-27
 
+* **Update**: spec 018 (DMI-62) agent WebSocket command channel — `routers/agents.py`
+  (`connect_agent_commands`), `services/agent_connections.py` (in-process registry),
+  `services/agent_ws.py` (frame dispatch), `schemas/agent_frames.py`, `require_agent_ws` adapter,
+  `main.py` WS validation→403 handler, `websockets>=13` dependency. Updated
+  `backend/routers.md`, `services.md`, `schemas.md`, `device-auth.md`, `api.md`, `index.md`.
+  Device gate now mounted on WS; HTTP `require_agent` still unmounted; no command delivery yet.
 * **Creation**: `backend/device-auth.md` — the spec 017 (DMI-61) device gate: Ed25519 canonical-string
   signing (`services/device_sig.py`, the repo's only `cryptography` importer), insert-or-replay nonce
   handling (`services/nonces.py`), and the transport-agnostic `authenticate_agent` core with its thin

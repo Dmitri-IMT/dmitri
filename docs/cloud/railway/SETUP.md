@@ -173,11 +173,33 @@ railway up --detach --service api --environment "$ENV" --project "$PROJECT"
 railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
 ```
 
-Its active DMI-56 setup does not ask operators to provision `JWT_SIGNING_SECRET` or any device-auth
-variable — auth is not wired in this shell yet. Note that device auth is **Ed25519 signatures**
-(ADR-005 amended 2026-07-24): the backend stores only each device's public key, so there is **no**
-`AGENT_HMAC_SECRET` or device-secret encryption key to provision. The features that add auth will
-add their own Railway variable guidance (e.g. `JWT_SIGNING_SECRET`) when they land.
+### Required: `JWT_SIGNING_SECRET`
+
+`api.core.config.Settings` requires `JWT_SIGNING_SECRET` with no default — both `api` and
+`worker` call `get_settings()` at startup (`worker.py`'s poll loop does so immediately), so a
+missing value fails Pydantic validation before either process finishes starting. On `api` this
+surfaces as a failed healthcheck; on `worker` there is no healthcheck to catch it, so it silently
+crash-loops instead. Seal a strong random secret on both services:
+
+```bash
+railway variable set JWT_SIGNING_SECRET="$(openssl rand -hex 32)" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set JWT_SIGNING_SECRET="$(openssl rand -hex 32)" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
+```
+
+Generate the secret once and reuse the same value for both `variable set` calls — the two
+invocations above each generate their own, which is wrong. Then redeploy so the running
+containers pick it up. Use `railway redeploy` (restart the existing build), not `railway up` —
+`up` re-uploads and rebuilds, and Railway will report `SKIPPED` / "No changes to watched files"
+when only an env var changed, not a rebuild:
+
+```bash
+railway redeploy --service api --environment "$ENV" --project "$PROJECT" --yes
+railway redeploy --service worker --environment "$ENV" --project "$PROJECT" --yes
+```
+
+Note that device auth is **Ed25519 signatures** (ADR-005 amended 2026-07-24): the backend stores
+only each device's public key, so there is **no** `AGENT_HMAC_SECRET` or device-secret encryption
+key to provision.
 
 ## Rollback
 

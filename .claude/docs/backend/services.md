@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: The real work — persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, read, enrichment, worker, risk, command-channel, tenancy]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-27T18:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -52,6 +52,8 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `next_status()` | The **single** command-transition guard. Returns `target` for a legal edge in `_LEGAL_EDGES` (`queued→delivered/expired`, `delivered→running/expired`, `running→uploading/failed`, `uploading→done/failed`; `done`/`failed`/`expired` are hard sinks); `target == current` is a no-op success (absorbs duplicate agent frames); any illegal edge raises `InvalidCommandTransition`. | `backend/src/api/services/command_lifecycle.py:32` |
 | `scan_status_for()` | Pure projection of a command status → Scan status (`queued`/`delivered`→`pending`, `running`→`accepted`, `uploading`→`processing`, `done`→`completed`, `failed`/`expired`→`failed`). Kept separate from `next_status` so the read path can reuse it without a transition. | `backend/src/api/services/command_lifecycle.py:40` |
 | `InvalidCommandTransition` | Custom domain exception (not `ValueError`); message names `current` and `target`. | `backend/src/api/services/command_lifecycle.py:25` |
+| `register()` / `unregister()` / `set_hello()` / `touch()` / `is_online()` / `get_socket()` / `last_seen_at()` / `get_hello()` | In-process WebSocket connection registry — one live socket per `agent_id`, identity-aware unregister/hello/touch (reconnect race fix), displaced sockets closed with `4000`/`replaced`. | `backend/src/api/services/agent_connections.py` |
+| `run_agent_channel()` / `handle_agent_frame()` / `send_error()` / `touch_agent_last_seen()` | WS receive loop (`iter_text()`), dispatches `hello`/`status` frames to the registry and bumps `agents.last_seen_at`; malformed frames get an `AgentErrorFrame` reply without closing the socket. No `commands` writes. | `backend/src/api/services/agent_ws.py` |
 
 ## The risk score
 
@@ -98,10 +100,11 @@ ML/AI scoring is future work.
   concurrent workers are only safe against Postgres (the deployed DB).
 - **Findings are hosts' findings** — they reference `ScanHostRecord` (per-scan observation) rows via
   `scan_host_id`; the durable `HostRecord` is resolved separately. See [glossary](/glossary.md).
-- **`command_lifecycle.py` is pure and not-yet-wired (DMI-59).** It has no DB or model imports — it is
-  the transition rulebook every later command-channel issue builds on. Nothing calls it yet; the
-  enqueue/delivery/ingest callers that will drive `Command` state and project it onto the
-  [`Command`/`Agent` tables](/backend/models.md) arrive in DMI-62/63/64.
+- **`command_lifecycle.py` is pure and not-yet-wired for delivery (DMI-59).** It has no DB or model imports — it is
+  the transition rulebook every later command-channel issue builds on. DMI-62 wires the WS channel and
+  accepts `status` frames but does **not** call `next_status` or write `commands` rows — that is DMI-64+.
+- **`agent_connections` is process-local.** Single Railway replica; not shared across workers. Online is
+  derived from `is_online()`, not a DB column.
 
 # Citations
 
@@ -110,3 +113,4 @@ ML/AI scoring is future work.
 [3] [specs/013-backend-app-shell-rebuild](../../../specs/013-backend-app-shell-rebuild/TRUTH.md)
 [4] [docs/adr/ADR-011-pi-command-channel.md](../../../docs/adr/ADR-011-pi-command-channel.md)
 [5] [specs/016-command-channel-data-model](../../../specs/016-command-channel-data-model/TRUTH.md)
+[6] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
