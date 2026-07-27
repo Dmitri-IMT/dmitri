@@ -8,7 +8,7 @@ from api.main import app
 from api.models.identity import Org, User
 from api.models.persistence import utc_now
 from api.models.session import RefreshToken
-from api.services.passwords import hash_password
+from api.services.passwords import hash_password, verify_password
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -202,23 +202,27 @@ def test_change_password_wrong_current_returns_400_not_401(
     )
 
     assert response.status_code == 400
+    assert response.status_code != 401
+    assert response.json()["error"]["code"] == "wrong_current_password"
 
 
 def test_change_password_weak_new_password_returns_400(
     client: TestClient, administrative_session: Session
 ) -> None:
-    _seed_user(administrative_session)
+    user = _seed_user(administrative_session)
     access_token = _login_and_get_access_token(client)
 
     response = client.post(
         "/api/v1/auth/change-password",
-        # Long enough to clear the schema's minLength (which would 422), but trips
-        # the repeated-character policy rule, so the 400 comes from the policy.
         json={"current_password": VALID_PASSWORD, "new_password": "aaabbbcccddd"},
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
     assert response.status_code == 400
+    assert response.status_code != 401
+    assert response.json()["error"]["code"] == "password_policy_violation"
+    administrative_session.refresh(user)
+    assert verify_password(VALID_PASSWORD, user.password_hash)
 
 
 def test_forgot_password_returns_204_for_real_and_fake_email(

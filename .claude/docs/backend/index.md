@@ -1,24 +1,24 @@
 # Backend
 
 The cloud half of Dmitri — a FastAPI API and a CVE-enrichment worker over a Supabase-managed
-Postgres. **Read path + auth + invites + agent WS wired, ingest not:** `GET /api/v1/health`, the read routes
+Postgres. **Read path + auth + users/me + agent WS wired, ingest not:** `GET /api/v1/health`, the read routes
 (`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — behind `require_user` and
-scoped to the caller's org), the auth routes (login/refresh/logout + password change/reset), the
-invite routes, and `WebSocket /api/v1/agents/{agent_id}/commands` (behind `require_agent_ws`) are
-served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
+scoped to the caller's org), `GET /api/v1/users/me` (role from the DB row), the auth routes
+(login/refresh/logout + password change/reset), the invite routes, and
+`WebSocket /api/v1/agents/{agent_id}/commands` (behind `require_agent_ws`) are served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
 `persist_scan`/the worker are exercised directly by tests. No Pi client dials the WS channel yet.
 
 ## Overview & entry points
 
 * [Backend — API + enrichment worker](./overview.md) — The FastAPI backend (read path wired) and the CVE-enrichment worker.
-* [Backend entry points & config](./api.md) — The FastAPI app (health + the wired read path), the worker process entry, settings, and the DB engine/session.
-* [Backend routers](./routers.md) — The read-path GET routers plus the agent WebSocket command channel — behind require_user / require_agent_ws respectively.
+* [Backend entry points & config](./api.md) — The FastAPI app (health + wired routes + global error envelope), the worker process entry, settings, and the DB engine/session.
+* [Backend routers](./routers.md) — The read-path GET routers, GET /users/me, plus the agent WebSocket command channel — behind require_user / require_agent_ws respectively.
 * [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 
 ## Data model
 
 * [Backend ORM models](./models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel.
-* [Backend wire schemas](./schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth request/response models.
+* [Backend wire schemas](./schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, UserProfileResponse, and the auth/invite request/response models.
 
 ## Services
 
@@ -27,6 +27,7 @@ served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
 ## Auth
 
 * [Backend auth — sessions, tokens, passwords, routes](./auth.md) — Login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+* [Backend API error envelope](./errors.md) — ApiError with per-site code overrides and the global handlers that shape every HTTPException into the contract ErrorResponse.
 * [Backend device auth — Ed25519 signatures, nonces, the agent gate](./device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 
 ## Migrations

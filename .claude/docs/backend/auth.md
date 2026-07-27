@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-27T21:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -46,8 +46,9 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
 | `Mailer` / `LogMailer` | Protocol `send_reset_link(email, token)` + `send_invite_link(email, token)`, plus a dev impl that only logs them (real provider is DMI-71). Both take a **raw token, never a URL** — there is no invite-link base-URL setting. | `backend/src/api/services/mailer.py:10` |
 | `create_invite()` | Admin-side: refuses an email already a user in **this** org (`AlreadyMemberError`), stores only `sha256(raw)` in `token_hash`, `expires_at = now + INVITE_TTL_HOURS`, returns the raw token once. | `backend/src/api/services/invites.py:35` |
 | `accept_invite()` | Consumes a valid, unexpired, unconsumed invite: rejects an email that already exists in **any** org (`DuplicateUserError`), validates policy, hashes the password, creates the `User`, and writes `consumed_at` **in the same commit**; returns the same triple `login` returns. | `backend/src/api/services/invites.py:67` |
-| `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:24` |
-| `require_admin()` / `ROLE_ADMIN` / `ROLE_VIEWER` | Depends on `require_user` (never re-decodes the token) and raises 403 unless the role is exactly `admin` — an allowlist, so an unknown role is denied rather than waved through. | `backend/src/api/dependencies/auth.py:41` |
+| `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:25` |
+| `require_user_row()` | Depends on `require_user`, then loads the caller's `User` row; a signed token whose subject no longer exists → **401** (a dead session), not 404. Used by the two routes that need the row itself — `GET /users/me` and `change-password` — so neither queries the model inline. | `backend/src/api/dependencies/auth.py:42` |
+| `require_admin()` / `ROLE_ADMIN` / `ROLE_VIEWER` | Depends on `require_user` (never re-decodes the token) and raises 403 unless the role is exactly `admin` — an allowlist, so an unknown role is denied rather than waved through. | `backend/src/api/dependencies/auth.py:54` |
 | auth routes | 6 POST routes (`login`/`refresh`/`logout`/`change-password`/`forgot-password`/`reset-password`) + OPTIONS preflights; set/clear the `dmitri_refresh` cookie. | `backend/src/api/routers/auth.py:62` |
 | invite routes | `POST /api/v1/invites` (`Depends(require_admin)`, `org_id` from the caller identity) → 201 `{invite_token, expires_at}`; `POST /api/v1/invites/{token}/accept` (unauthenticated, 201) → a `LoginResponse` **plus** the refresh cookie; + OPTIONS preflights. | `backend/src/api/routers/invites.py:32`, `:51` |
 | `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=Lax`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. | `backend/src/api/routers/auth.py:38` |
@@ -67,8 +68,10 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
   (`refresh_tokens`, `password_reset_tokens`), created by
   [migration `20260722_07`](/backend/migrations.md); users and invites come from `identity.py`.
 - `routers/auth.py` maps the service exception types to HTTP status: `InvalidCredentialsError` →
-  401; `WrongCurrentPasswordError` + `PasswordPolicyError` → **400** (contract C13);
-  `InvalidResetTokenError` per contract.
+  401; `WrongCurrentPasswordError` → `ApiError(400, code="wrong_current_password")`;
+  `PasswordPolicyError` on change-password → `ApiError(400, code="password_policy_violation")`
+  (contract C13 — both stay 400, never 401); other routes still raise bare `HTTPException` and get
+  the [default envelope codes](/backend/errors.md); `InvalidResetTokenError` per contract.
 - `routers/invites.py` maps `AlreadyMemberError`/`InviteEmailMismatchError`/`DuplicateUserError`/
   `PasswordPolicyError` → **400**, `InviteTokenError` → **410**, and lets a non-admin caller fall
   through `require_admin` as **403**.
@@ -82,6 +85,8 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
   copied verbatim on each rotation, so the 7-day window never slides.
 - **Both password errors are 400, not 401.** A wrong *current* password and a policy-violating
   *new* password are caller errors (contract C13); only a missing/invalid/expired Bearer is 401.
+  Change-password now raises [`ApiError`](/backend/errors.md) with distinct `error.code` values so
+  the SPA can branch without decoding JWT claims.
 - **`refresh_session` cannot reuse `issue_session`.** `issue_session` calls `issue_refresh_token`,
   which mints a token in a **new** `family_id`; refresh must call `rotate_refresh_token` to stay in
   the **same** family. Routing refresh through `issue_session` orphans a token row in an unlinked

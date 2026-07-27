@@ -4,7 +4,8 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from sqlmodel import Session
 
 from api.db.session import get_session
-from api.dependencies.auth import CallerIdentity, require_user
+from api.dependencies.auth import require_user_row
+from api.errors import ApiError
 from api.models.identity import User
 from api.schemas.auth import (
     ChangePasswordRequest,
@@ -79,12 +80,9 @@ def logout_route(
 @router.post("/api/v1/auth/change-password", status_code=204)
 def change_password_route(
     body: ChangePasswordRequest,
-    caller: CallerIdentity = Depends(require_user),
+    user: User = Depends(require_user_row),
     session: Session = Depends(get_session),
 ) -> None:
-    user = session.get(User, caller.sub)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         change_password(
             session,
@@ -92,8 +90,10 @@ def change_password_route(
             current_password=body.current_password,
             new_password=body.new_password,
         )
-    except (WrongCurrentPasswordError, PasswordPolicyError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except WrongCurrentPasswordError as exc:
+        raise ApiError(400, str(exc), code="wrong_current_password") from exc
+    except PasswordPolicyError as exc:
+        raise ApiError(400, str(exc), code="password_policy_violation") from exc
 
 
 @router.post("/api/v1/auth/forgot-password", status_code=204)
