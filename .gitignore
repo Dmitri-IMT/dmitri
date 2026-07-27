@@ -219,6 +219,9 @@ node_modules/
 # Specs before 010 (keep 010+ tracked)
 specs/00[0-9]-*/
 
+# Agent execution ledger (local-only, written during orchestration)
+POOP.md
+
 # UI references
 docs/ui/nous-research/
 
