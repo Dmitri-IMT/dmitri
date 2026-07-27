@@ -1,9 +1,17 @@
 # ADR-005: Modelo de Seguranca v1
 
-> **Status:** Aceito. §1 (direcionalidade do canal do agente) **emendado por
+> **Status:** Aceito, com duas emendas.
+> **(a)** §1 (direcionalidade do canal do agente) **emendado por
 > [ADR-011](ADR-011-pi-command-channel.md)** — o canal do agente passa a ser **bidirecional**
-> (resultados sobem via `POST /scans`; comandos descem via WSS). As decisoes de HMAC, JWT Bearer,
-> CORS e transporte desta ADR permanecem em vigor.
+> (resultados sobem via `POST /scans`; comandos descem via WSS).
+> **(b)** §1 (algoritmo de autenticacao do agente) **emendado em 2026-07-24**: a autenticacao
+> agente→API passa de **HMAC-SHA256 simetrico** para **assinatura assimetrica Ed25519**. O
+> backend passa a guardar apenas a **chave publica** de cada device; nao existe mais segredo
+> recuperavel no servidor, o que **aposenta a [ADR-015](ADR-015-agent-secret-storage-at-rest.md)**
+> (armazenamento cifrado do segredo). O envelope de assinatura (string canonica, headers, skew,
+> nonce) permanece **identico** — muda apenas o algoritmo e o lado de verificacao. Fundamentacao:
+> [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
+> As decisoes de JWT Bearer, CORS e transporte desta ADR permanecem em vigor.
 
 ## Contexto
 
@@ -25,18 +33,27 @@ Escopo confirmado para v1:
 
 ### 1. Agent -> API na v1
 
-A autenticacao do agente para a API sera feita por **HMAC-SHA256 por device**.
-`X-API-Key` simples nao faz parte da v1.
+> **Emenda 2026-07-24 (algoritmo):** esta secao foi originalmente decidida com **HMAC-SHA256 por
+> device**. Ela agora usa **assinatura assimetrica Ed25519 por device**. Motivo: HMAC e simetrico,
+> entao o backend precisaria guardar o segredo do device de forma **recuperavel** (foi o que
+> originou a ADR-015). Com Ed25519 o backend guarda **apenas a chave publica**; um vazamento do
+> banco nao entrega nada forjavel, e a ADR-015 deixa de ser necessaria. Todo o restante desta
+> secao — string canonica, headers, skew, nonce, codigos de erro — permanece **inalterado**.
+> Fundamentacao: [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
+
+A autenticacao do agente para a API sera feita por **assinatura Ed25519 por device**
+(chave privada no device, chave publica registrada no backend). `X-API-Key` simples nao faz
+parte da v1, e nao ha segredo simetrico compartilhado.
 
 Headers obrigatorios em `POST /api/v1/scans`:
 
-- `X-Device-Id`: identificador unico do dispositivo
+- `X-Device-Id`: identificador unico do dispositivo (`agent_id`)
 - `X-Timestamp`: timestamp UTC em ISO 8601
 - `X-Nonce`: valor unico por request para anti-replay
 - `X-Body-SHA256`: hash SHA-256 do corpo bruto da requisicao em hex lowercase
-- `X-Signature`: HMAC-SHA256 da string canonica em hex lowercase
+- `X-Signature`: assinatura **Ed25519** da string canonica, em hex lowercase (64 bytes → 128 chars)
 
-String canonica da v1:
+String canonica da v1 (inalterada):
 
 ```text
 METHOD
@@ -49,7 +66,7 @@ X-Body-SHA256
 
 Regras da v1:
 
-- algoritmo: HMAC-SHA256
+- algoritmo: **Ed25519** (assinatura assimetrica; o backend verifica com a chave publica do device)
 - tolerancia de relogio: 5 minutos
 - nonce deve ser unico por device dentro da janela de validacao
 - `401 Unauthorized`: assinatura ausente, invalida, expirada ou replay detectado
@@ -57,16 +74,21 @@ Regras da v1:
 
 Provisionamento e rotacao:
 
-- cada device recebe um segredo proprio
-- o segredo e provisionado por processo administrativo/backend antes da operacao
-- rotacao ocorre emitindo novo segredo por device e invalidando o anterior
-- o segredo deve ser armazenado no dispositivo fora do codigo-fonte e fora de artefatos versionados
+- **cada device gera o proprio par de chaves** (Ed25519) localmente; a chave privada **nunca sai
+  do device**
+- apenas a **chave publica** e registrada no backend, ligada ao `agent_id`/`org_id` no
+  provisionamento — canal de registro precisa de **integridade**, nao de sigilo (chave publica
+  nao e segredo)
+- rotacao ocorre gerando novo par no device e substituindo a chave publica registrada;
+  nao ha segredo a transmitir nem a invalidar de forma confidencial
+- a chave privada deve ser armazenada no dispositivo fora do codigo-fonte e fora de artefatos
+  versionados (mesma exigencia de antes, agora sobre a chave privada)
 
 > **Emenda (ADR-011):** a v1 assumia o agente como *one-way push* (apenas `POST /api/v1/scans`).
 > O escopo Control passou a exigir um canal **backend -> Pi**, tornando o canal do agente
 > **bidirecional**: resultados sobem por `POST /api/v1/scans` e comandos descem por WSS
-> `…/agents/{agent_id}/commands`. **As mesmas regras de HMAC desta secao** se aplicam ao upgrade do
-> WebSocket (string canonica e headers analogos, com hash de corpo vazio). Detalhe em
+> `…/agents/{agent_id}/commands`. **As mesmas regras de assinatura desta secao** se aplicam ao
+> upgrade do WebSocket (string canonica e headers analogos, com hash de corpo vazio). Detalhe em
 > [ADR-011](ADR-011-pi-command-channel.md).
 
 ### 2. Frontend -> API na v1
@@ -106,7 +128,7 @@ VPN/Tailscale podem aparecer como evolucao futura, mas nao sao requisito, pre-co
 
 ## Consequencias
 
-- o OpenAPI deve modelar HMAC no agente, nao `X-API-Key`
+- o OpenAPI deve modelar **assinatura Ed25519** no agente (scheme `AgentSignatureAuth`), nao `X-API-Key` nem HMAC
 - os endpoints atuais do frontend devem exigir apenas JWT Bearer
 - a documentacao de cookie fica restrita ao fluxo futuro de refresh/login, nao como alternativa generica de auth para os endpoints atuais
 - CORS e `servers` do OpenAPI devem deixar explicito: HTTPS em producao, HTTP apenas local
@@ -117,12 +139,13 @@ Itens que podem ser adicionados depois, sem reabrir a decisao da v1:
 
 - endpoints dedicados de login, refresh e logout
 - refresh token em cookie `httpOnly` com contrato OpenAPI proprio
-- mTLS para agente
-- rotacao automatica de segredo do device e onboarding mais forte
+- mTLS para agente (avaliado e descartado para a v1: o edge da Railway termina o TLS, entao um
+  client cert nao chega ao processo FastAPI — ver research note)
+- rotacao automatica de chave do device e onboarding mais forte
 
 ## Resumo executivo da v1
 
-- **Agent -> API**: HMAC-SHA256 por device
+- **Agent -> API**: assinatura **Ed25519** por device (backend guarda so a chave publica; sem segredo recuperavel)
 - **Frontend -> API**: JWT Bearer nos endpoints atuais
 - **Cookie de refresh**: somente fluxo futuro de auth, nao como auth alternativa do contrato atual
 - **CORS**: apenas localhost dev + dominio web de producao
@@ -133,5 +156,6 @@ Itens que podem ser adicionados depois, sem reabrir a decisao da v1:
 - FastAPI Docs: CORS e HTTPS.
 - OWASP REST Security Cheat Sheet.
 - OWASP Session Management Cheat Sheet.
-- RFC 2104: HMAC.
+- RFC 8032: EdDSA / Ed25519 (assinatura assimetrica do agente).
+- RFC 2104: HMAC (algoritmo original, substituido pela emenda de 2026-07-24).
 

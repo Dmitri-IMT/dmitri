@@ -1,5 +1,13 @@
 # ADR-011: Pi command channel (WebSocket v1)
 
+> **Amendment 2026-07-24 (algorithm):** this ADR reuses ADR-005's agent-auth rules on the WS
+> upgrade. [`ADR-005`](ADR-005-security-model.md) §1 was amended from **HMAC-SHA256** to **Ed25519
+> asymmetric signatures** (backend stores only the device's public key; ADR-015 retired). Wherever
+> this ADR says "HMAC," read **Ed25519 signature** — the upgrade envelope (canonical string,
+> headers, empty-body hash, skew, nonce, `401`/`403` rules) is **unchanged**; only the signature
+> algorithm and the stored credential change. Decision record:
+> [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
+
 ## Context
 
 September MVP scope is **Control** ([`BACKEND.md` B10](../roadmap/BACKEND.md)): operators trigger scans from the web UI; the Pi executes and pushes results via the existing ingest path.
@@ -10,7 +18,7 @@ Constraints:
 
 - Pi sits behind NAT — **outbound-only** connectivity ([`PI.md`](../roadmap/PI.md)).
 - No external broker ([`ADR-009`](ADR-009-database-stack.md)).
-- Agent auth: **HMAC-SHA256** per device ([`ADR-005`](ADR-005-security-model.md), [`AUTH.md`](../roadmap/AUTH.md) Phase 1).
+- Agent auth: **Ed25519 signature** per device ([`ADR-005`](ADR-005-security-model.md) as amended 2026-07-24, [`AUTH.md`](../roadmap/AUTH.md) Phase 1).
 - Browser auth: **JWT Bearer** on business APIs; refresh on `/auth/*` only.
 
 ## Decision
@@ -27,9 +35,9 @@ The Pi daemon maintains a persistent **WSS** connection:
 
 HTTP long-poll fallback remains documented in [`PI.md`](../roadmap/PI.md) only if WebSocket blocks cutover; not v1.
 
-### 2. HMAC on WebSocket upgrade
+### 2. Ed25519 signature on WebSocket upgrade
 
-Use the **same HMAC rules as ADR-005** on the HTTP upgrade request (not a separate ticket protocol).
+Use the **same signature rules as ADR-005** (Ed25519 as amended 2026-07-24) on the HTTP upgrade request (not a separate ticket protocol).
 
 Required headers on upgrade: `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256` (empty body hash), `X-Signature`.
 
@@ -169,12 +177,12 @@ When ingest completes, same endpoint returns full scan (`status: completed` or `
 
 | Method | Path | Auth |
 |--------|------|------|
-| WSS | `/api/v1/agents/{agent_id}/commands` | HMAC upgrade |
+| WSS | `/api/v1/agents/{agent_id}/commands` | Ed25519-signed upgrade |
 | POST | `/api/v1/agents/{agent_id}/commands` | JWT |
 | GET | `/api/v1/agents/{agent_id}` | JWT |
 | GET | `/api/v1/commands/{command_id}` | JWT |
 | GET | `/api/v1/hosts/…` | JWT |
-| POST | `/api/v1/scans` | HMAC |
+| POST | `/api/v1/scans` | Ed25519 signature |
 | GET | `/api/v1/scans/{scan_id}` | JWT |
 | POST | `/api/v1/auth/*`, invites | JWT or public accept |
 
@@ -211,7 +219,7 @@ DDL detail: **Alembic migrations** (source of truth for columns). This ADR does 
 
 ## References
 
-- [`ADR-005`](ADR-005-security-model.md) — HMAC + JWT
+- [`ADR-005`](ADR-005-security-model.md) — Ed25519 device signature + JWT
 - [`BACKEND.md` B6](../roadmap/BACKEND.md) — roadmap decision log
 - [`AUTH.md`](../roadmap/AUTH.md) — browser sessions and invites
 - [`PI.md`](../roadmap/PI.md) — daemon and installer provisioning

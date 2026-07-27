@@ -1,5 +1,12 @@
 # Research: storing a per-device HMAC-SHA256 shared secret at rest in Postgres
 
+> **⚠️ Superseded (2026-07-24).** This note backed ADR-015 (encrypt the device secret at rest),
+> which existed only because HMAC is symmetric and forces the backend to hold a recoverable
+> secret. ADR-005 was amended to **Ed25519 asymmetric signing** — the backend stores only a
+> **public** key, so there is no secret to store at rest and **ADR-015 is retired**. This note is
+> kept for history; the current decision and its rationale are in
+> [`device-auth-hmac-vs-asymmetric.md`](device-auth-hmac-vs-asymmetric.md).
+
 > **Scope note.** This concerns the ADR-005 agent auth path: each Raspberry Pi
 > agent shares an HMAC-SHA256 secret with the backend, which recomputes
 > `HMAC-SHA256(secret, canonical_string)` on every `POST /api/v1/scans` and on

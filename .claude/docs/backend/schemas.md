@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth request/response models.
+description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -57,6 +57,18 @@ the ingest input plus the main persisted projections.
 These match the frozen `openapi.yaml` `auth` tag exactly and are consumed by the
 [auth router](/backend/auth.md). `email` is plain `str` (no `EmailStr` — `email-validator` isn't a
 dependency); the contract's `format: email` is advisory.
+
+## Key classes / functions — `invites.py` (invite request/response)
+
+| Name | What it validates | Ref |
+|------|-------------------|-----|
+| `CreateInviteRequest` | `email`, `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. | `backend/src/api/schemas/invites.py:11` |
+| `InviteCreatedResponse` | `invite_token`, `expires_at`. | `backend/src/api/schemas/invites.py:18` |
+| `AcceptInviteRequest` | `email`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. | `backend/src/api/schemas/invites.py:25` |
+
+`extra="forbid"` on all three is load-bearing, not stylistic: it is what turns an `org_id` smuggled
+into the create-invite body into a **422** instead of a silently ignored field. The invited org
+always comes from the caller's JWT.
 
 ## Key classes / functions — `persistence.py` (legacy read projections)
 

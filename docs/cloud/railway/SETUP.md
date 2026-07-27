@@ -173,9 +173,11 @@ railway up --detach --service api --environment "$ENV" --project "$PROJECT"
 railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
 ```
 
-Its active DMI-56 setup does not ask operators to provision `JWT_SECRET` or
-`AGENT_HMAC_SECRET` — neither authentication mechanism exists in this shell; the features that
-introduce them will add their own Railway variable guidance when they land.
+Its active DMI-56 setup does not ask operators to provision `JWT_SIGNING_SECRET` or any device-auth
+variable — auth is not wired in this shell yet. Note that device auth is **Ed25519 signatures**
+(ADR-005 amended 2026-07-24): the backend stores only each device's public key, so there is **no**
+`AGENT_HMAC_SECRET` or device-secret encryption key to provision. The features that add auth will
+add their own Railway variable guidance (e.g. `JWT_SIGNING_SECRET`) when they land.
 
 ## Rollback
 

@@ -1,9 +1,14 @@
 # Roadmap — Authentication & authorization
 
-> **Status:** **Phase 1 ✅ decided** (roadmap). **Identity schema shipped** (DMI-58 — `orgs`/`users`/`invites`
-> tables + `org_id` on tenant data); routes, sessions, and middleware still pending (DMI-60+). Implement the
-> remaining sections below; update ADR-005 to match once the auth layer lands. **Neighbours:** [`BACKEND.md`](BACKEND.md),
-> [`SECURITY.md`](SECURITY.md), [`FRONTEND.md`](FRONTEND.md), [`PI.md`](PI.md).
+> **Status:** **Phase 1 ✅ decided** (roadmap), **in progress in code**. Shipped: the identity schema
+> (DMI-58 — `orgs`/`users`/`invites` tables + `org_id` on tenant data), sessions and the auth routes
+> (DMI-60), and the auth middleware + invite flow (DMI-61 — `require_user`/`require_admin`, org-scoped
+> reads, the invite create/accept flow, and Ed25519 device-signature verification).
+> **Still open — and still Phase 1:** the WebSocket command channel (DMI-62) and scan ingest (DMI-63).
+> Phase 1 is **not** complete until those land; the device gate built in DMI-61 is deliberately mounted
+> on no route until they do. Update ADR-005 to match once the whole layer lands.
+> **Neighbours:** [`BACKEND.md`](BACKEND.md), [`SECURITY.md`](SECURITY.md),
+> [`FRONTEND.md`](FRONTEND.md), [`PI.md`](PI.md).
 
 ---
 
@@ -21,7 +26,7 @@ From [`BACKEND.md`](BACKEND.md) B1:
 
 | Phase | When | Goal |
 |-------|------|------|
-| **1 — NSPi / September** | ~September | Login + invite onboarding + coarse roles + HMAC on Pi paths |
+| **1 — NSPi / September** | ~September | Login + invite onboarding + coarse roles + Ed25519 device signatures on Pi paths |
 | **2 — Product-ready** | End of year | Hardening, rotation, multi-org, audit, prod secrets |
 | **3 — Enterprise & beyond** | Deal-driven | Customer cloud, SSO, stricter identity — per [`BACKEND.md`](BACKEND.md) B9b |
 
@@ -29,7 +34,7 @@ From [`BACKEND.md`](BACKEND.md) B1:
 
 ## Phase 1 — NSPi / September ✅
 
-**Goal:** support the September demo on Supabase + Railway — real users, least privilege, Pi HMAC.
+**Goal:** support the September demo on Supabase + Railway — real users, least privilege, Pi Ed25519 signatures.
 
 ### Decided ✅
 
@@ -38,8 +43,8 @@ From [`BACKEND.md`](BACKEND.md) B1:
 | **Browser** | **Login required.** JWT Bearer on all web API routes per [`BACKEND.md`](BACKEND.md) B6. No shared team account, no URL-only gate. |
 | **Signup** | **Invite-only (org invite links).** Bootstrap: create one **admin** per company (`org`). Admin generates **invite links**; invitee opens link and **creates their own account** inside that org. No open/self-serve signup. |
 | **Roles** | **`admin`** and **`viewer`** in September. Enforce on API (mutate vs read). Permission matrix for each role — refine with device/agent actions below. |
-| **Pi → API** | **HMAC required** for September — `POST /api/v1/scans` and WSS upgrade on `/api/v1/agents/{agent_id}/commands` per B6. |
-| **Device secrets** | **B2B installer provisioning** — see below. **Rotation deferred** to Phase 2 (E1). |
+| **Pi → API** | **Ed25519 device signature required** for September (ADR-005, amended 2026-07-24) — `POST /api/v1/scans` and WSS upgrade on `/api/v1/agents/{agent_id}/commands` per B6. |
+| **Device keys** | **B2B installer provisioning** — device keypair generated on the Pi, public key registered with the backend; see below. **Rotation deferred** to Phase 2 (E1). |
 
 **Signup pattern name:** commonly **invite-only registration** or **admin-initiated org invites** (admin issues link → user self-completes account creation scoped to one `org_id`).
 
@@ -50,23 +55,29 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 
 | Audience | Who | September responsibility |
 |----------|-----|---------------------------|
-| **Installer** | Technical person on-site (vendor, integrator, or customer IT) | Physically deploy Pi; apply **most secure practical** provisioning (HMAC secret on device, `/etc/dmitri/agent.env`, systemd, network). May use SSH and vendor playbook — acceptable for this role. |
-| **Org admin** | Non-technical operator in the web app | **Easy day-to-day use only:** login, invite users, view agents (online/offline), trigger scans, read results. **Does not** provision Pi secrets or run pairing wizards. |
+| **Installer** | Technical person on-site (vendor, integrator, or customer IT) | Physically deploy Pi; generate the device **keypair on the Pi**, register its **public key** with the backend (`/etc/dmitri/agent.env`, systemd, network). May use SSH and vendor playbook — acceptable for this role. |
+| **Org admin** | Non-technical operator in the web app | **Easy day-to-day use only:** login, invite users, view agents (online/offline), trigger scans, read results. **Does not** provision Pi keys or run pairing wizards. |
+
+> **Auth model updated 2026-07-24 (ADR-005 amended):** the Pi authenticates with **Ed25519
+> asymmetric signing**, not a symmetric HMAC secret. The device holds a **private key**; the
+> backend stores only the device's **public key**. There is no shared secret and nothing to
+> encrypt at rest — [`ADR-015`](../adr/ADR-015-agent-secret-storage-at-rest.md) is retired. This
+> shrinks the provisioning blast radius: no secret is ever transmitted (see flow below).
 
 **September provisioning flow:**
 
-1. **Backend** generates `agent_id` + secret; stores `secret_hash` on `agents` row scoped to `org_id`.
-2. **Installer** receives plaintext secret **once** via vendor channel (install playbook, secure handoff — not exposed in routine admin UI).
-3. **Installer** writes Pi config (`DEVICE_ID`, `DEVICE_SECRET`, `BACKEND_URL`), enables `dmitri-agent.service`, verifies WSS + ingest.
+1. **Installer** generates an Ed25519 **keypair on the Pi**; the private key never leaves the device.
+2. **Installer** registers the device's **public key** with the backend (vendor-run provisioning command), creating the `agents` row scoped to `org_id`. The public key is **not a secret** — the channel needs integrity (bind the right public key to the right `agent_id`/`org_id`), not confidentiality.
+3. **Installer** writes Pi config (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`), enables `dmitri-agent.service`, verifies WSS + ingest.
 4. **Org admin** sees agent online in admin UI; uses product without touching device credentials.
 
-**Binding (C1):** Pi authenticates with `agent_id` + HMAC only. `org_id` is set on the `agents` row at provisioning time; backend resolves tenant from DB lookup — Pi does not carry `org_id`.
+**Binding (C1):** Pi authenticates with `agent_id` + **Ed25519 signature** only. `org_id` is set on the `agents` row at provisioning time; backend resolves tenant from DB lookup — Pi does not carry `org_id`.
 
 **Agent admin (D1):** both roles may view agent state; only org **`admin`** may trigger scans.
-Creating/revoking agent rows and secret handoff to installer is **vendor/installer ops** in
+Creating/revoking agent rows and public-key registration by the installer is **vendor/installer ops** in
 September (not a self-serve admin UI flow). The viewer UI omits the trigger rather than disabling it.
 
-**Rotation (E1):** no rotate/revoke UX in September; `revoked_at` column may exist. Rotation + revoke + re-pair → Phase 2.
+**Rotation (E1):** no rotate/revoke UX in September; `revoked_at` column may exist. Rotation = new keypair on the Pi + replace the stored public key (no confidential secret to invalidate). Rotation + revoke + re-pair UX → Phase 2.
 
 **Phase 2+:** optional self-service pairing if customers deploy Pis without vendor on-site; installer playbook remains the secure default.
 
@@ -107,7 +118,7 @@ Per ADR-005 pattern (Bearer on business APIs; refresh on `/auth/*` only).
 
 **SPA:** Axios Bearer on API client; `withCredentials` on `/auth/*` only. On **401**, try refresh once then redirect to login. **Single-flight the refresh** — all concurrent 401s must await one shared in-flight refresh promise, never fire one refresh per request. The backend rotates refresh tokens with strict reuse detection (no grace window, DMI-60): presenting an already-rotated token kills the whole family, so two parallel refreshes of the same cookie would look like theft and log the user out. Interceptor mechanics: [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
-**Depends on:** [`BACKEND.md`](BACKEND.md) B10 Control ✅ — HMAC on **ingest** + **WebSocket handshake** (confirmed).
+**Depends on:** [`BACKEND.md`](BACKEND.md) B10 Control ✅ — Ed25519 device signature on **ingest** + **WebSocket handshake** (confirmed; ADR-005 amended 2026-07-24).
 
 ---
 
@@ -122,8 +133,8 @@ Per ADR-005 pattern (Bearer on business APIs; refresh on `/auth/*` only).
 | **Users** | Second org on same stack; `org_id` isolation tested |
 | **Sessions** | Logout everywhere (all devices), optional idle timeout |
 | **Authorization** | Finer permissions matrix; document role semantics |
-| **Agent** | Secret **rotation + revoke** story; optional self-service pairing if no on-site installer |
-| **Ops** | JWT signing key + device secrets in managed secrets (not plain Railway env for prod) |
+| **Agent** | Key **rotation + revoke** story; optional self-service pairing if no on-site installer |
+| **Ops** | JWT signing key in managed secrets (not plain Railway env for prod). Device auth no longer needs a stored secret — backend holds only public keys (ADR-005 Ed25519). |
 | **Audit** | Who logged in, who triggered scans (minimum trail) |
 
 **Open questions for Phase 2 planning:**
@@ -153,10 +164,13 @@ SSO and BYOC packaging are **one epic**, not background work.
 
 | Caller | Mechanism | Phase 1 |
 |--------|-----------|---------|
-| **Pi agent** | HMAC-SHA256 per device ([`ADR-005`](../adr/ADR-005-security-model.md)) | ✅ Required |
+| **Pi agent** | Ed25519 per-device signature ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; backend stores only the public key) | ✅ Required |
 | **Web browser** | JWT Bearer + httpOnly refresh on `/auth/*` ([`ADR-005`](../adr/ADR-005-security-model.md)) | ✅ |
 
-**Next:** implement Phase 1 in code; reconcile and update ADR-005 when shipped.
+**Next:** both mechanisms are now implemented (DMI-60, DMI-61). The Pi-agent gate
+(`dependencies/agent_auth.py`) verifies Ed25519 signatures with replay protection but is **mounted on
+no route** pending DMI-62/63; the browser gate is live on every business read route. Reconcile and
+update ADR-005 once DMI-62/63 land and Phase 1 is complete.
 
 ---
 
@@ -164,18 +178,28 @@ SSO and BYOC packaging are **one epic**, not background work.
 
 | Control | State |
 |---------|--------|
-| Everything | **Not built** — ingestion and reads are open in code |
+| Identity schema (`orgs`/`users`/`invites`, `org_id` on tenant data) | ✅ Built (DMI-58) |
+| Sessions + auth routes (login/refresh/logout, password change/reset) | ✅ Built (DMI-60) |
+| JWT gate + role matrix (`require_user`, `require_admin`) | ✅ Built (DMI-61) |
+| Org scoping on business reads (`/hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) | ✅ Built (DMI-61) — enforced in SQL; a foreign row is 404, never 403 |
+| Invite flow (admin creates, invitee accepts → session) | ✅ Built (DMI-61) |
+| Ed25519 device-signature verify + nonce replay protection | ✅ Built (DMI-61) — **mounted on no route** until DMI-62/63 |
+| Agent→backend command channel (WebSocket) | ⏳ DMI-62 — Phase 1, in progress |
+| Scan ingest (`POST /api/v1/scans`) | ⏳ DMI-63 — Phase 1, in progress; still contract-only |
+| Transactional email for invites / password reset | ⏳ DMI-71 — until then `LogMailer` writes the raw token to the log stream |
 
 ---
 
 ## Sequencing
 
-1. **Implement** Phase 1 (identity tables, invite flow, sessions, roles middleware, HMAC verify)  
-2. Plan Phase 2 before December (multi-org, device secret rotation, audit, prod secrets)  
+1. **Implement** Phase 1 — identity tables ✅, sessions ✅, roles middleware ✅, invite flow ✅,
+   Ed25519 device-signature verify ✅; **remaining: mount the device gate on the command channel
+   (DMI-62) and scan ingest (DMI-63)**  
+2. Plan Phase 2 before December (multi-org, device key rotation, audit, prod secrets)  
 3. Phase 3 when a deal names requirements  
 
 ---
 
 ## Ripple
 
-Phase changes affect [`FRONTEND.md`](FRONTEND.md) (login + invite UX), [`PI.md`](PI.md) (device secrets, HMAC client), [`SECURITY.md`](SECURITY.md), [`BACKEND.md`](BACKEND.md) (tables, middleware, `requested_by` on commands).
+Phase changes affect [`FRONTEND.md`](FRONTEND.md) (login + invite UX), [`PI.md`](PI.md) (device keypair, Ed25519 signing client), [`SECURITY.md`](SECURITY.md), [`BACKEND.md`](BACKEND.md) (tables, middleware, `requested_by` on commands).

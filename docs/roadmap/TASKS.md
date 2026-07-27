@@ -17,7 +17,7 @@
   scan schemas. *No longer blocks backend work.*
 - [x] **T3 · Reconcile ADR-005.** ✅ **Amended, not superseded:** ADR-005 stays the v1 security
   baseline; its §1 agent directionality is amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md)
-  (agent channel now bidirectional; HMAC rules reused for the WS upgrade). Added the amendment +
+  (agent channel now bidirectional; signature rules reused for the WS upgrade). Added the amendment +
   status note to ADR-005, cleared the ⚠️ REVALIDATE flag in [`PI.md`](PI.md), and replaced the stale
   "proposal" framing in [`SECURITY.md`](SECURITY.md) with an authority map.
 
@@ -46,12 +46,12 @@
   callable headlessly, separate from the Textual TUI — a `dmitri agent` entrypoint that runs the
   **same** pipeline without a screen ([`PI.md` Pi runtime](PI.md#pi-runtime-september-control)).
   ⚠️ Honor the CLAUDE.md integration rule: trace every `ScanRunner` / `ScanProgressScreen` call site.
-- [ ] **T5 · Pi HTTP ingest client + HMAC signing.** Build the `POST /api/v1/scans` client with
-  HMAC-SHA256 ([`PI.md` milestone 0](PI.md#milestones)). Testable against a local backend.
+- [ ] **T5 · Pi HTTP ingest client + Ed25519 signing.** Build the `POST /api/v1/scans` client with
+  per-device Ed25519 signatures ([`PI.md` milestone 0](PI.md#milestones)). Testable against a local backend.
 - [ ] **T6 · Auth Phase 1 — identity schema + middleware.** Alembic migrations (`org_id`, users,
-  invites, roles); JWT Bearer on business routes; HMAC verify on Pi routes; `/auth/login`,
+  invites, roles); JWT Bearer on business routes; Ed25519 signature verify on Pi routes; `/auth/login`,
   `/auth/refresh`, `/auth/logout`, `/auth/change-password`; invite flow; breach-screened password
-  policy (no forced rotation, ADR-015); 15-min access / 7-day refresh sessions. Fully specced in [`AUTH.md` Phase 1](AUTH.md#phase-1--nspi--september-).
+  policy (no forced rotation, [`ADR-016`](../adr/ADR-016-password-policy.md)); 15-min access / 7-day refresh sessions. Fully specced in [`AUTH.md` Phase 1](AUTH.md#phase-1--nspi--september-).
 - [ ] **T7 · Backend command-channel skeleton.** `agents` / `commands` / `hosts` / `scans` tables,
   lifecycle state machine (`queued`→`delivered`→`running`→`uploading`→`done`/`failed`/`expired`),
   WS endpoint + connection registry, `POST …/agents/{id}/commands` enqueue (stub scan row). Drive

@@ -15,13 +15,13 @@
 - **Hardware: none in possession.** Target BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md): Raspberry Pi 4 (4 GB), headless, ALFA Wi-Fi adapter. **Must acquire and configure before September E2E** — see [Hardware acquisition](#hardware-acquisition--open).
 - **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
 - **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
-- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **HMAC-SHA256** ([`ADR-005`](../adr/ADR-005-security-model.md)) — **not implemented** on either side.
+- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **not implemented** on either side.
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.
 
 ✅ **RECONCILED:** ADR-005 originally assumed a *one-way push* agent. Control requires the backend
 to **command** the Pi, so the agent channel is now **bidirectional** — amended in
-[`ADR-011`](../adr/ADR-011-pi-command-channel.md) and reflected in the ADR-005 status note. The HMAC
-rules are reused for the WebSocket upgrade.
+[`ADR-011`](../adr/ADR-011-pi-command-channel.md) and reflected in the ADR-005 status note. The Ed25519
+signature rules are reused for the WebSocket upgrade.
 
 ## The gap: remote-commandable Pi
 
@@ -92,7 +92,7 @@ So the Pi **reports**, a human **chooses once**, and the backend **stores** the 
 **Blocker:** no Raspberry Pi owned yet. September Scenario B needs a real appliance on the network.
 
 **B2B model ([`AUTH.md`](AUTH.md)):** a **technical installer** deploys the Pi on-site (vendor,
-integrator, or customer IT). The **org admin** never provisions secrets — they only use the web app
+integrator, or customer IT). The **org admin** never provisions keys — they only use the web app
 after the agent is online. Consumer pairing flows (QR, local setup pages for business users) are
 **out of scope** for September.
 
@@ -101,8 +101,8 @@ after the agent is online. Consumer pairing flows (QR, local setup pages for bus
 | Procure BOM per ADR-001 (Pi 4 4GB, PSU, microSD, case/cooling, ALFA Wi-Fi) | Vendor | 🔓 |
 | Flash Raspberry Pi OS Lite; headless SSH; static IP or DHCP reservation | Installer | 🔓 |
 | Install `nmap`, `uv`, agent package; verify scan on hardware | Installer | 🔓 |
-| Create `agents` row + secret on backend; hand secret to installer once | Vendor playbook | 🔓 |
-| Write `/etc/dmitri/agent.env` (`DEVICE_ID`, `DEVICE_SECRET`, `BACKEND_URL`) | Installer (SSH) | 🔓 |
+| Generate the Ed25519 keypair **on the Pi**; register its **public key** with the backend (creates the `agents` row). No secret leaves the device. | Installer + vendor playbook | 🔓 |
+| Write `/etc/dmitri/agent.env` (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`) | Installer (SSH) | 🔓 |
 | Enable `dmitri-agent.service`; verify WSS + ingest | Installer | 🔓 |
 | Scheduled reboot policy — daemon reconnects via systemd | Installer / docs | 🔓 |
 
@@ -124,14 +124,14 @@ Production Pi runs a **headless daemon** (`dmitri agent`), not the TUI:
 
 ## Other Pi-layer direction
 
-- **Provisioning:** B2B **installer playbook** only for September — secret on Pi via `/etc/dmitri/agent.env`; rotation Phase 2 ([`AUTH.md`](AUTH.md)).
+- **Provisioning:** B2B **installer playbook** only for September — Ed25519 private key on Pi via `/etc/dmitri/agent.env`, public key registered with the backend; rotation Phase 2 ([`AUTH.md`](AUTH.md)).
 - **Packaging:** ship the agent as a service (systemd) on Raspberry Pi OS Lite; today it is run interactively on dev machines.
 - **Health/heartbeat:** the command channel naturally carries "Pi is alive" — surface it in the frontend device view.
 
 ## Milestones
 
 -1. **Hardware acquisition + base configure** — procure Pi per ADR-001; OS Lite, SSH, nmap, agent smoke test on real hardware.
-0. HTTP transport client + HMAC signing (Pi submit + backend verify) — closes the unwired contract gap.
+0. HTTP transport client + Ed25519 signing (Pi submit + backend verify) — closes the unwired contract gap.
 1. ADR-011 ✅ ([`ADR-011`](../adr/ADR-011-pi-command-channel.md)). → *unblocks everything below*
 2. `dmitri agent` daemon + systemd; **WebSocket client** + connection registry on API; Postgres command table for lifecycle/audit.
 2b. **Interface reporting** — daemon enumerates its subnets and reports them on connect; backend stores the operator's `target_subnet`. Blocks the first web-triggered scan ([B11-C2](BACKEND.md#b11--frontend-contract-asks-)).

@@ -31,7 +31,7 @@ Three things make now the right time:
    `hardware-agent/src/agent/normalize/contracts.py` (`ScanPayload.devices: list[DevicePayload]`),
    serializes that internal model back down to "device". This is a rename of one serialization
    boundary, not a change to the Pi's scanning or normalization logic.
-3. **Not blocked by HMAC.** [`ADR-005`](ADR-005-security-model.md)'s v1 canonical string is
+3. **Not blocked by device signing.** [`ADR-005`](ADR-005-security-model.md)'s v1 canonical string is
    `METHOD / PATH / X-Device-Id / X-Timestamp / X-Nonce / X-Body-SHA256` — header **names**, not body
    field names, and not header values. `X-Body-SHA256` is a hash of the raw body, so a renamed field
    inside that body re-verifies exactly the same way after a coordinated client+server deploy. The
@@ -51,7 +51,7 @@ Unify the ingest vocabulary to **host**, end to end:
   across both the ingest and read paths.
 
 **`X-Device-Id` is explicitly out of scope and unaffected.** It identifies the *agent* (the Pi
-itself), not a discovered host, and is frozen by ADR-005 as an HMAC-signed header name. Do not rename
+itself), not a discovered host, and is frozen by ADR-005 as a signed header name. Do not rename
 it, and do not read this ADR as license to touch it — the two are unrelated identifiers that happen to
 share a word by historical accident (see `CONTEXT.md`'s note on why "device" used to mean both the Pi
 and the machines it found).
@@ -89,7 +89,7 @@ existing `POST /api/v1/scans` ingest payload and its accepted-response.
 
 ## Out of scope
 
-- Any change to transport, HMAC scheme, or the `POST /api/v1/scans` canonical string (ADR-005
+- Any change to transport, signature scheme, or the `POST /api/v1/scans` canonical string (ADR-005
   unchanged).
 - `X-Device-Id` (agent identity header) — stays exactly as named.
 - The command-channel WebSocket envelope (`command`/`status`/`hello` frames) — untouched, no "device"
@@ -101,7 +101,7 @@ existing `POST /api/v1/scans` ingest payload and its accepted-response.
 
 - [`ADR-011`](ADR-011-pi-command-channel.md) — §5 (stub scan) and §6 (HTTP surface), whose
   ingest-naming freeze this ADR supersedes.
-- [`ADR-005`](ADR-005-security-model.md) — HMAC canonical string (header names only; unaffected by
+- [`ADR-005`](ADR-005-security-model.md) — signed canonical string (header names only; unaffected by
   this rename).
 - [`CONTEXT.md`](../../CONTEXT.md) — domain glossary; "Device" entry to be retired as a follow-up.
 - [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) — `ScanIngestRequest`,

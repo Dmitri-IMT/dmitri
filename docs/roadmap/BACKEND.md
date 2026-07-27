@@ -17,7 +17,7 @@
 | ID | Topic | Status | Notes |
 |----|-------|--------|-------|
 | B1 | User model (organizational) | ✅ | Multi-user, single org; `org_id` — [B1](#b1--user-model-organizational-) |
-| B2 | Agent auth | ✅ | HMAC September — [`AUTH.md`](AUTH.md) Phase 1 |
+| B2 | Agent auth | ✅ | Ed25519 device signature September (ADR-005 amended 2026-07-24) — [`AUTH.md`](AUTH.md) Phase 1 |
 | B3 | Frontend auth | ✅ | [`AUTH.md`](AUTH.md) Phase 1 |
 | B4 | Database hosting | ✅ | Supabase → AWS RDS; [B4/B5](#b4--b5--hosted-stack-) |
 | B5 | App hosting | ✅ | Railway → AWS; single `nspi` env for September |
@@ -43,8 +43,8 @@ devices, and Pis.
 | Multi-user, single org for NSPi pilot | — |
 | `org_id` on tenant-owned data from first identity migration | — |
 | Invite-only signup; roles `admin` / `viewer` | — |
-| Pi HMAC; passwords; sessions (7-day fixed refresh) | Device secret rotation (Phase 2) |
-| Device secrets: B2B installer provisioning | Self-service Pi pairing (if needed later) |
+| Pi Ed25519 signatures; passwords; sessions (7-day fixed refresh) | Device key rotation (Phase 2) |
+| Device keys: B2B installer provisioning (register device public key) | Self-service Pi pairing (if needed later) |
 | Design toward many orgs + enterprise later | — |
 
 ---
@@ -55,11 +55,11 @@ devices, and Pis.
 
 | Area | Status |
 |------|--------|
-| Pi HMAC (ingest + WSS) | ✅ |
+| Pi Ed25519 signature (ingest + WSS) | ✅ |
 | Login, invites, roles | ✅ |
 | Passwords (policy, breach screening, reset — no forced rotation, [`ADR-016`](../adr/ADR-016-password-policy.md)) | ✅ |
 | Sessions (15 min access, 7-day refresh, server logout) | ✅ |
-| Device secrets (installer provisioning) | ✅ provision model; Pi secret rotation Phase 2 |
+| Device keys (installer provisioning) | ✅ provision model (register public key); Pi key rotation Phase 2 |
 
 Cross-cutting: [`SECURITY.md`](SECURITY.md).
 
@@ -159,19 +159,19 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 
 ### API surface ✅
 
-**Namespace (5a):** **`/agents/`** = scanner Pis (JWT reads + HMAC WSS). **`/hosts/`** = discovered network machines (JWT). **`/commands/`** = command lifecycle (JWT). OpenAPI today calls hosts **`/devices`** — rename in [B7](#b7--openapi-contract-).
+**Namespace (5a):** **`/agents/`** = scanner Pis (JWT reads + Ed25519-signed WSS). **`/hosts/`** = discovered network machines (JWT). **`/commands/`** = command lifecycle (JWT). OpenAPI today calls hosts **`/devices`** — rename in [B7](#b7--openapi-contract-).
 
 **Transport:** production uses **HTTPS** and **WSS** only (TLS everywhere; local dev HTTP exception per ADR-005).
 
 | Method | Path | Caller | Auth | Purpose |
 |--------|------|--------|------|---------|
-| **WSS** | `/api/v1/agents/{agent_id}/commands` | Pi daemon | HMAC on upgrade | Persistent connection; receive commands; send status |
+| **WSS** | `/api/v1/agents/{agent_id}/commands` | Pi daemon | Ed25519 signature on upgrade | Persistent connection; receive commands; send status |
 | **POST** | `/api/v1/agents/{agent_id}/commands` | Web | JWT | **Scan now** — body: `scan_mode`, `subnet` (frontend sends `quick` + the agent's `target_subnet`) |
 | **GET** | `/api/v1/agents` | Web | JWT | **List agents** — array of one in the MVP. 🔓 **missing** ([B11-C1](#b11--frontend-contract-asks-)); without it the frontend cannot discover `agent_id` |
 | **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, `active_command_id`. 🔓 must also carry `available_subnets` + `target_subnet` ([B11-C2](#b11--frontend-contract-asks-)) |
 | **GET** | `/api/v1/commands/{command_id}` | Web | JWT | Command lifecycle |
 | **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(OpenAPI `/devices` → `/hosts` in B7)* |
-| **POST** | `/api/v1/scans` | Pi | HMAC | Upload scan results *(exists in OpenAPI)* |
+| **POST** | `/api/v1/scans` | Pi | Ed25519 signature | Upload scan results *(exists in OpenAPI)* |
 | **GET** | `/api/v1/scans/{scan_id}` | Web | JWT | Scan results when ready *(exists)* |
 
 **Trigger errors** (distinct HTTP status + `code` for logs/metrics):
@@ -185,7 +185,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 
 ### Data model ✅
 
-**Two concepts (5a):** **`agents`** = Pis running `dmitri agent` (`agent_id` = HMAC `X-Device-Id`). **`hosts`** = machines discovered by scans (today's backend `devices` table / OpenAPI `DeviceSummary` — rename to `hosts` in B7).
+**Two concepts (5a):** **`agents`** = Pis running `dmitri agent` (`agent_id` = the signed `X-Device-Id`). **`hosts`** = machines discovered by scans (today's backend `devices` table / OpenAPI `DeviceSummary` — rename to `hosts` in B7).
 
 ```
 org
@@ -195,7 +195,7 @@ org
                 └── hosts  ← discovered machines (ports, findings, …)
 ```
 
-**`agents`** (5b): `agent_id` (PK, **UUID** — decided 2026-07-13; it must equal `X-Device-Id`, and every other id in the system is a UUID. Backend mints it at provisioning; `display_name` is what humans read), `org_id`, `display_name`, `secret_hash`, `revoked_at`, `last_seen_at`, `created_at`, **`target_subnet`** (🔓 [B11-C2](#b11--frontend-contract-asks-) — the network the operator chose to scan; nullable until chosen). **`online`** derived from open WS in API registry (5e) — not a persisted boolean. **`available_subnets`** is *reported*, not stored: the Pi sends its interfaces over the WS channel.
+**`agents`** (5b): `agent_id` (PK, **UUID** — decided 2026-07-13; it must equal `X-Device-Id`, and every other id in the system is a UUID. Backend mints it at provisioning; `display_name` is what humans read), `org_id`, `display_name`, `public_key` (32-byte Ed25519 public key, plaintext — ADR-005 amended 2026-07-24; **not** a stored secret, ADR-015 retired), `revoked_at`, `last_seen_at`, `created_at`, **`target_subnet`** (🔓 [B11-C2](#b11--frontend-contract-asks-) — the network the operator chose to scan; nullable until chosen). **`online`** derived from open WS in API registry (5e) — not a persisted boolean. **`available_subnets`** is *reported*, not stored: the Pi sends its interfaces over the WS channel.
 
 **`commands`** (5c): `command_id`, `org_id`, `agent_id` (FK), `scan_id` (FK), `scan_mode`, `subnet`, `status`, `requested_by` (audit, optional Phase 1), `error_code`, timestamps (`created_at`, `delivered_at`, `started_at`, `completed_at`).
 
@@ -203,7 +203,7 @@ org
 
 **`org_id` (5d):** on `agents`, `commands`, `scans`; hosts scoped via `scan.org_id`.
 
-**ADR-011 ✅:** [`ADR-011`](../adr/ADR-011-pi-command-channel.md) — WS typed envelope, HMAC upgrade, stub scan `pending`, `/hosts` rename, timeouts config-only, single API replica NSPi.
+**ADR-011 ✅:** [`ADR-011`](../adr/ADR-011-pi-command-channel.md) — WS typed envelope, Ed25519-signed upgrade, stub scan `pending`, `/hosts` rename, timeouts config-only, single API replica NSPi.
 
 Auth → [`AUTH.md`](AUTH.md). Pi runtime → [`PI.md`](PI.md). Trigger UX → [`FRONTEND.md`](FRONTEND.md).
 
@@ -235,7 +235,7 @@ Minimum technical path:
 - [ ] **Pi hardware acquired and base-configured** — see [`PI.md`](PI.md) (blocker: no Pi in possession today)  
 - [ ] Supabase + Railway `nspi` live  
 - [ ] Alembic + identity schema per [`AUTH.md`](AUTH.md) Phase 1  
-- [ ] Pi daemon + Pi → backend ingest (HMAC per AUTH Phase 1)  
+- [ ] Pi daemon + Pi → backend ingest (Ed25519 signature per AUTH Phase 1)  
 - [ ] Command queue + "Scan now" E2E (web → backend → Pi → results → web)  
 
 ---
@@ -293,7 +293,7 @@ have.
 
 **Decision:** **September slice** — update [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml) to match B6 + AUTH Phase 1 **before** frontend type-gen. No `/devices` alias (breaking rename to `/hosts`; no consumers today).
 
-Locked with [`ADR-011`](../adr/ADR-011-pi-command-channel.md): stub scan `200` + `status: pending`, typed WS envelope, HMAC upgrade same as ADR-005, auth + invite routes, trigger error `code`s.
+Locked with [`ADR-011`](../adr/ADR-011-pi-command-channel.md): stub scan `200` + `status: pending`, typed WS envelope, Ed25519-signed upgrade same as ADR-005, auth + invite routes, trigger error `code`s.
 
 **Baseline, not a freeze (decided 2026-07-13).** B7 originally said *freeze*. It was written before
 [B11](#b11--frontend-contract-asks-) existed, and B11's asks each amend this same file **after** B7

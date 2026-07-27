@@ -13,10 +13,11 @@
 
 Decided in roadmap, **not yet built in code**. Source of truth per area:
 
-- **Agent HMAC + CORS/transport baseline** — [`ADR-005`](../adr/ADR-005-security-model.md) (v1
-  baseline; §1 agent directionality amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md)).
-- **Pi command channel** (bidirectional agent, WSS HMAC upgrade) —
-  [`ADR-011`](../adr/ADR-011-pi-command-channel.md), reusing ADR-005's HMAC rules.
+- **Agent Ed25519 signature + CORS/transport baseline** — [`ADR-005`](../adr/ADR-005-security-model.md)
+  (v1 baseline; §1 agent directionality amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md);
+  §1 algorithm amended 2026-07-24 from HMAC to Ed25519, retiring [`ADR-015`](../adr/ADR-015-agent-secret-storage-at-rest.md)).
+- **Pi command channel** (bidirectional agent, WSS Ed25519-signed upgrade) —
+  [`ADR-011`](../adr/ADR-011-pi-command-channel.md), reusing ADR-005's signature rules.
 - **Identity** (login, sessions, invites, roles, password policy) — [`AUTH.md`](AUTH.md) **Phase 1 ✅**
   (roadmap); the detailed authority over ADR-005's frontend-auth sketch.
 
@@ -28,12 +29,12 @@ Decided in roadmap, **not yet built in code**. Source of truth per area:
 
 | Control | State |
 |---------|--------|
-| Agent HMAC | **Decided** (September); **not built** |
+| Agent Ed25519 signature | **Decided** (September); **not built** |
 | Frontend JWT / login | **Decided**; **not built** |
 | Authorization (roles) | **`admin` / `viewer`** — [`AUTH.md`](AUTH.md); **not built** |
-| Device secrets | **✅** B2B installer provisioning — [`AUTH.md`](AUTH.md); rotation Phase 2 |
-| Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH |
-| Pi command-channel auth | WSS HMAC upgrade per [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |
+| Device keys | **✅** B2B installer provisioning (register public key) — [`AUTH.md`](AUTH.md); rotation Phase 2 |
+| Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH. Device auth needs no stored secret — backend holds only public keys |
+| Pi command-channel auth | WSS Ed25519-signed upgrade per [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |
 
 ---
 
@@ -41,8 +42,8 @@ Decided in roadmap, **not yet built in code**. Source of truth per area:
 
 | Phase | When | Security focus |
 |-------|------|----------------|
-| **1 — NSPi / September** | ~September | AUTH Phase 1 + HMAC ingest + **WebSocket** command channel (B10 Control) |
-| **2 — Product-ready** | End of year | Full login model, HMAC, roles, prod secrets, audit baseline |
+| **1 — NSPi / September** | ~September | AUTH Phase 1 + Ed25519-signed ingest + **WebSocket** command channel (B10 Control) |
+| **2 — Product-ready** | End of year | Full login model, device signatures, roles, prod secrets, audit baseline |
 | **3 — Enterprise** | Deal-driven | SSO, customer IdP, BYOC hardening |
 
 ---
