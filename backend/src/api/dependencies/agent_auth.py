@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -118,6 +118,27 @@ async def require_agent(
             headers=request.headers,
             body=body,
             now=utc_now(),
+        )
+    except AgentRevoked as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except AgentUnauthenticated as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+async def require_agent_ws(
+    websocket: WebSocket,
+    agent_id: UUID,
+    session: Session = Depends(get_session),
+) -> AgentIdentity:
+    try:
+        return authenticate_agent(
+            session,
+            method="GET",
+            path=websocket.url.path,
+            headers=websocket.headers,
+            body=b"",
+            now=utc_now(),
+            expected_agent_id=agent_id,
         )
     except AgentRevoked as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

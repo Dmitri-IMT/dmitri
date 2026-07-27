@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from api.dependencies.auth import require_user
 from api.main import app
+from starlette.routing import WebSocketRoute
 from starlette.testclient import TestClient
 
 AUTH_POST_PATHS = (
@@ -97,6 +98,16 @@ def _flatten_routes(routes):
             yield from _flatten_routes(nested.routes)
         else:
             yield route
+
+
+def test_agent_commands_websocket_route_is_registered() -> None:
+    websocket_paths = {
+        route.path
+        for route in _flatten_routes(app.routes)
+        if isinstance(route, WebSocketRoute)
+    }
+
+    assert "/api/v1/agents/{agent_id}/commands" in websocket_paths
 
 
 def test_invite_routes_and_preflights_appear_in_app_routes() -> None:

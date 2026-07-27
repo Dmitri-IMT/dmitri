@@ -1,18 +1,18 @@
 # Backend
 
 The cloud half of Dmitri — a FastAPI API and a CVE-enrichment worker over a Supabase-managed
-Postgres. **Read path + auth + invites wired, ingest not:** `GET /api/v1/health`, the read routes
-(`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — now behind `require_user` and
-scoped to the caller's org), the auth routes (login/refresh/logout + password change/reset), and the
-invite routes are served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
-`persist_scan`/the worker are exercised directly by tests. The device-authentication gate is built
-but mounted on no route, awaiting the command channel (DMI-62/63).
+Postgres. **Read path + auth + invites + agent WS wired, ingest not:** `GET /api/v1/health`, the read routes
+(`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — behind `require_user` and
+scoped to the caller's org), the auth routes (login/refresh/logout + password change/reset), the
+invite routes, and `WebSocket /api/v1/agents/{agent_id}/commands` (behind `require_agent_ws`) are
+served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
+`persist_scan`/the worker are exercised directly by tests. No Pi client dials the WS channel yet.
 
 ## Overview & entry points
 
 * [Backend — API + enrichment worker](./overview.md) — The FastAPI backend (read path wired) and the CVE-enrichment worker.
 * [Backend entry points & config](./api.md) — The FastAPI app (health + the wired read path), the worker process entry, settings, and the DB engine/session.
-* [Backend routers](./routers.md) — The three FastAPI routers that wire the read path — GET /hosts, /hosts/{id}, /scans/{id}, /findings — now behind require_user and scoped to the caller's org.
+* [Backend routers](./routers.md) — The read-path GET routers plus the agent WebSocket command channel — behind require_user / require_agent_ws respectively.
 * [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 
 ## Data model

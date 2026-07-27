@@ -1,6 +1,5 @@
 ---
 name: test-engineer
-model: claude-sonnet-5
 description: >-
   Adds or updates pytest / pytest-asyncio tests for the files a coder changed in one TASKS.md
   task. Mirrors existing test patterns under hardware-agent/tests/, asserts behavior over

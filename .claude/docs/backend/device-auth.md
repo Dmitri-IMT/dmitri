@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend device auth — Ed25519 signatures, nonces, the agent gate
-description: The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
+description: The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, the transport-agnostic authenticate_agent core, and its require_agent / require_agent_ws adapters.
 resource: backend/src/api/dependencies/agent_auth.py
-tags: [backend, auth, device, ed25519, signatures, nonces, replay, agents]
-timestamp: 2026-07-27T00:00:00Z
+tags: [backend, auth, device, ed25519, signatures, nonces, replay, agents, websocket]
+timestamp: 2026-07-27T18:00:00Z
 ---
 
 # Backend device auth — Ed25519 signatures, nonces, the agent gate
@@ -19,8 +19,8 @@ database leak therefore exposes nothing forgeable, which is why ADR-015 (secret-
 was retired rather than implemented.
 
 Three modules make it up — a pure signature layer, a nonce store, and the gate that sequences them.
-**Nothing mounts this gate yet**: it is built ahead of the WebSocket/ingest work (DMI-62/63) so that
-those attach a ready-made gate rather than inventing device auth twice.
+**DMI-62 mounts the WebSocket adapter** on `WebSocket /api/v1/agents/{agent_id}/commands`; the HTTP
+`require_agent` adapter remains built but still unmounted (ingest/DMI-63).
 
 ## Key classes / functions
 
@@ -36,6 +36,7 @@ those attach a ready-made gate rather than inventing device auth twice.
 | `prune_expired_nonces()` | One indexed `DELETE … WHERE expires_at < :now`, strict `<`, so a row expiring exactly at `now` survives. | `backend/src/api/services/nonces.py:27` |
 | `authenticate_agent()` | The transport-agnostic core holding the 8-step order exactly once: parse headers → `expected_agent_id` check → agent lookup → revoked check → skew → body hash → signature → nonce. Imports nothing from FastAPI. | `backend/src/api/dependencies/agent_auth.py:37` |
 | `require_agent()` | The thin HTTP adapter — awaits the body, passes `request.url.path` (resolved, never a route template), and maps `AgentRevoked`→403 / `AgentUnauthenticated`→401. Holds no skew, signature, or nonce logic of its own. | `backend/src/api/dependencies/agent_auth.py:109` |
+| `require_agent_ws()` | The thin WebSocket adapter — passes `websocket.url.path`, `body=b""`, `expected_agent_id=agent_id`, same error mapping via pre-accept `HTTPException`. Never calls `accept()`. | `backend/src/api/dependencies/agent_auth.py:128` |
 | `AgentIdentity` | The gate's result: `agent_id` + `org_id`, both read from the `agents` row. | `backend/src/api/dependencies/agent_auth.py:20` |
 
 ## How it connects
@@ -48,7 +49,8 @@ those attach a ready-made gate rather than inventing device auth twice.
   `expires_at` bounds retention.
 - **Provisioning** — an agent's public key reaches the database through
   [`backend-provision-agent`](/backend/management.md), never over HTTP.
-- **Downstream** — no route mounts `require_agent` today; DMI-62/63 will.
+- **Downstream** — `require_agent_ws` is mounted on the [agents router](/backend/routers.md)
+  (`connect_agent_commands`); `require_agent` (HTTP) is still unmounted.
 
 ## Notes / gotchas
 
@@ -67,8 +69,9 @@ those attach a ready-made gate rather than inventing device auth twice.
   `device_sig.verify` for the signature; no `==` on either.
 - **`device_sig.py` is the only module in the repo that imports `cryptography`**, pinned by a
   structural test.
-- **`require_agent_ws` does not exist yet** — the WebSocket adapter belongs to the command-channel
-  work, not here.
+- **`require_agent_ws` maps validation failures to 403** — `main.py` registers a
+  `WebSocketRequestValidationError` handler that denies malformed `{agent_id}` paths with HTTP 403
+  before the gate runs (see [api](/backend/api.md)).
 
 # Citations
 
@@ -76,3 +79,4 @@ those attach a ready-made gate rather than inventing device auth twice.
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [3] [docs/adr/ADR-011-pi-command-channel.md](../../../docs/adr/ADR-011-pi-command-channel.md)
 [4] [docs/roadmap/AUTH.md](../../../docs/roadmap/AUTH.md)
+[5] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
