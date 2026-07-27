@@ -37,7 +37,7 @@ export interface paths {
         put?: never;
         /**
          * Ingest a full scan payload
-         * @description Hardware agents submit completed scan results through this endpoint. Security v1 requires HMAC-signed requests with the headers `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`. The server validates the signature, rejects replay attempts, and returns 401 for invalid or expired signatures and 403 for revoked devices.
+         * @description Hardware agents submit completed scan results through this endpoint. Security v1 requires Ed25519-signed requests with the headers `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`. The server verifies the signature with the device's stored public key, rejects replay attempts, and returns 401 for invalid or expired signatures and 403 for revoked devices.
          */
         post: operations["ingestScan"];
         delete?: never;
@@ -143,7 +143,7 @@ export interface paths {
         /**
          * WebSocket command channel (upgrade)
          * @description Pi daemon opens an **outbound WebSocket** on this URL (`wss://` in production).
-         *     HMAC-SHA256 on the HTTP upgrade request uses the same rules as ADR-005 (GET canonical string).
+         *     The Ed25519 device signature on the HTTP upgrade request uses the same rules as ADR-005 (GET canonical string).
          *     `{agent_id}` MUST equal `X-Device-Id`; a mismatch is rejected.
          *
          *     **OpenAPI cannot describe WebSocket frames**, so the envelope is defined as schemas and
@@ -862,7 +862,7 @@ export interface components {
         NonceHeader: string;
         /** @description Lowercase hex SHA-256 of the raw request body. */
         BodySha256Header: string;
-        /** @description Lowercase hex HMAC-SHA256 over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+        /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
         SignatureHeader: string;
     };
     requestBodies: never;
@@ -978,7 +978,7 @@ export interface operations {
                 "X-Nonce": components["parameters"]["NonceHeader"];
                 /** @description Lowercase hex SHA-256 of the raw request body. */
                 "X-Body-SHA256": components["parameters"]["BodySha256Header"];
-                /** @description Lowercase hex HMAC-SHA256 over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
                 "X-Signature": components["parameters"]["SignatureHeader"];
             };
             path?: never;
@@ -1225,7 +1225,7 @@ export interface operations {
                 "X-Nonce": components["parameters"]["NonceHeader"];
                 /** @description Lowercase hex SHA-256 of the raw request body. */
                 "X-Body-SHA256": components["parameters"]["BodySha256Header"];
-                /** @description Lowercase hex HMAC-SHA256 over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
                 "X-Signature": components["parameters"]["SignatureHeader"];
             };
             path: {
@@ -1618,6 +1618,10 @@ export interface operations {
                     "application/json": components["schemas"]["InviteCreatedResponse"];
                 };
             };
+            /** @description The email is already a member of the caller's own org. An email belonging to a **different** org is not reported here and returns `201` — surfacing it would let an admin probe for accounts at other tenants. That case fails at acceptance instead. */
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     optionsInvites: {

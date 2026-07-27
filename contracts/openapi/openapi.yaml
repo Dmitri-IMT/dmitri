@@ -11,8 +11,8 @@ info:
 
     Security v1 documented in this spec:
     - Base path is `/api/v1`
-    - Agent ingestion uses HMAC-signed requests, not a simple API key
-    - Required HMAC headers are `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`
+    - Agent ingestion uses Ed25519-signed requests (ADR-005, amended 2026-07-24), not a simple API key or HMAC
+    - Required signature headers are `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`
     - Frontend business endpoints use JWT Bearer tokens
     - Refresh cookies on `/api/v1/auth/*` only; business endpoints use Bearer JWT
     - Pi command channel: outbound WSS `/api/v1/agents/{agent_id}/commands` (see ADR-011)
@@ -102,15 +102,15 @@ paths:
       tags:
         - scans
       summary: Ingest a full scan payload
-      description: Hardware agents submit completed scan results through this 
-        endpoint. Security v1 requires HMAC-signed requests with the headers 
-        `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and 
-        `X-Signature`. The server validates the signature, rejects replay 
-        attempts, and returns 401 for invalid or expired signatures and 403 for 
-        revoked devices.
+      description: Hardware agents submit completed scan results through this
+        endpoint. Security v1 requires Ed25519-signed requests with the headers
+        `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and
+        `X-Signature`. The server verifies the signature with the device's stored
+        public key, rejects replay attempts, and returns 401 for invalid or
+        expired signatures and 403 for revoked devices.
       operationId: ingestScan
       security:
-        - AgentHmacAuth: []
+        - AgentSignatureAuth: []
       requestBody:
         required: true
         content:
@@ -431,7 +431,7 @@ paths:
       summary: WebSocket command channel (upgrade)
       description: |
         Pi daemon opens an **outbound WebSocket** on this URL (`wss://` in production).
-        HMAC-SHA256 on the HTTP upgrade request uses the same rules as ADR-005 (GET canonical string).
+        The Ed25519 device signature on the HTTP upgrade request uses the same rules as ADR-005 (GET canonical string).
         `{agent_id}` MUST equal `X-Device-Id`; a mismatch is rejected.
 
         **OpenAPI cannot describe WebSocket frames**, so the envelope is defined as schemas and
@@ -446,7 +446,7 @@ paths:
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
       operationId: connectAgentCommandsWebSocket
       security:
-        - AgentHmacAuth: []
+        - AgentSignatureAuth: []
       parameters:
         - $ref: '#/components/parameters/AgentId'
         - $ref: '#/components/parameters/DeviceIdHeader'
@@ -793,6 +793,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InviteCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+          description: The email is already a member of the caller's own org. An email belonging
+            to a **different** org is not reported here and returns `201` — surfacing it would let
+            an admin probe for accounts at other tenants. That case fails at acceptance instead.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     options:
       tags:
         - auth
@@ -847,13 +856,15 @@ paths:
 
 components:
   securitySchemes:
-    AgentHmacAuth:
+    AgentSignatureAuth:
       type: apiKey
       in: header
       name: X-Signature
-      description: HMAC-SHA256 signature for device-to-API requests. This scheme
-        must be used together with the required headers `X-Device-Id`, 
-        `X-Timestamp`, `X-Nonce`, and `X-Body-SHA256`.
+      description: Ed25519 signature for device-to-API requests (ADR-005, amended
+        2026-07-24). The backend verifies the signature with the device's stored
+        public key — it holds no shared secret. This scheme must be used together
+        with the required headers `X-Device-Id`, `X-Timestamp`, `X-Nonce`, and
+        `X-Body-SHA256`.
     FrontendBearerAuth:
       type: http
       scheme: bearer
@@ -1032,11 +1043,12 @@ components:
       name: X-Signature
       in: header
       required: true
-      description: Lowercase hex HMAC-SHA256 over the canonical string 
+      description: Lowercase hex Ed25519 signature (64-byte signature → 128 hex
+        chars) over the canonical string
         `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`.
       schema:
         type: string
-        pattern: ^[0-9a-f]{64}$
+        pattern: ^[0-9a-f]{128}$
   headers:
     X-Request-Id:
       description: Correlation identifier for logs and tracing.
