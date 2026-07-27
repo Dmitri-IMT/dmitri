@@ -61,11 +61,28 @@ def test_migration_matches_model_metadata_and_security_fence(
 
     from api.models import persistence  # noqa: F401 - registers metadata
 
+    agents_columns_replaced_by_task_4 = {
+        "secret_ciphertext",
+        "secret_nonce",
+        "secret_key_version",
+    }
+
     for name, table in created.items():
         created_shape = _table_shape(table)
         model_shape = _table_shape(persistence.SQLModel.metadata.tables[name])
-        for created_group, model_group in zip(created_shape, model_shape):
-            assert set(created_group) <= set(model_group)
+        created_columns = set(created_shape.columns)
+        if name == "agents":
+            created_columns = {
+                column
+                for column in created_columns
+                if column[0] not in agents_columns_replaced_by_task_4
+            }
+        assert created_columns <= set(model_shape.columns)
+        assert set(created_shape.foreign_keys) <= set(model_shape.foreign_keys)
+        assert set(created_shape.unique_constraints) <= set(
+            model_shape.unique_constraints
+        )
+        assert set(created_shape.indexes) <= set(model_shape.indexes)
 
     agents_columns = {column.name for column in created["agents"].columns}
     assert {"secret_ciphertext", "secret_nonce", "secret_key_version"} <= agents_columns
@@ -212,9 +229,7 @@ def test_live_commands_scan_id_unique_constraint(
         agent = Agent(
             org_id=org.id,
             display_name="agent-1",
-            secret_ciphertext=b"cipher",
-            secret_nonce=b"nonce",
-            secret_key_version=1,
+            public_key=b"\x01" * 32,
         )
         session.add(agent)
         session.commit()

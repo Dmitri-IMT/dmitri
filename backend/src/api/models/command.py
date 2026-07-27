@@ -4,9 +4,9 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import LargeBinary
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, UniqueConstraint
 
-from api.models.persistence import utc_now
+from api.models.persistence import UTC_TIMESTAMP, utc_now
 
 
 class Agent(SQLModel, table=True):
@@ -15,12 +15,23 @@ class Agent(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     org_id: UUID = Field(foreign_key="orgs.id", index=True)
     display_name: str
-    secret_ciphertext: bytes = Field(sa_type=LargeBinary)
-    secret_nonce: bytes = Field(sa_type=LargeBinary)
-    secret_key_version: int
+    public_key: bytes = Field(sa_type=LargeBinary)
     revoked_at: datetime | None = None
     last_seen_at: datetime | None = None
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class AgentNonce(SQLModel, table=True):
+    __tablename__ = "agent_nonces"
+    __table_args__ = (
+        UniqueConstraint("agent_id", "nonce", name="uq_agent_nonces_agent_id_nonce"),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    agent_id: UUID = Field(foreign_key="agents.id")
+    nonce: str
+    expires_at: datetime = Field(index=True, sa_type=UTC_TIMESTAMP)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class Command(SQLModel, table=True):
