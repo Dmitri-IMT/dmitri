@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     reset_token_ttl_minutes: int = Field(default=60, alias="RESET_TOKEN_TTL_MINUTES")
     hibp_enabled: bool = Field(default=True, alias="HIBP_ENABLED")
     hibp_timeout_seconds: float = Field(default=2, alias="HIBP_TIMEOUT_SECONDS")
+    device_sig_max_skew_seconds: int = Field(
+        default=300, alias="DEVICE_SIG_MAX_SKEW_SECONDS"
+    )
+    invite_ttl_hours: int = Field(default=48, alias="INVITE_TTL_HOURS")
 
     model_config = SettingsConfigDict(
         env_file=".env",

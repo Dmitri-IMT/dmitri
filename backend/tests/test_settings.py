@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+from collections.abc import Callable
+from uuid import UUID
 
 import api.main as main
 import api.services.nvd as nvd_module
@@ -10,8 +12,10 @@ import sqlalchemy as sa
 from api.core.config import Settings, get_settings
 from api.db import session
 from api.db.session import reset_db_state
+from api.models.identity import Org
 from api.models.persistence import NvdCacheRecord
 from api.services.nvd import NvdClient
+from api.services.tokens import decode_access_token
 from pydantic import ValidationError
 from sqlmodel import Session
 
@@ -141,6 +145,46 @@ def test_auth_settings_default_when_env_unset(
     assert settings.reset_token_ttl_minutes == 60
     assert settings.hibp_enabled is True
     assert settings.hibp_timeout_seconds == 2
+
+
+def test_device_sig_and_invite_settings_default_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    for var in ("DEVICE_SIG_MAX_SKEW_SECONDS", "INVITE_TTL_HOURS"):
+        monkeypatch.delenv(var, raising=False)
+
+    settings = Settings()
+
+    assert settings.device_sig_max_skew_seconds == 300
+    assert settings.invite_ttl_hours == 48
+
+
+def test_device_sig_and_invite_settings_read_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
+    monkeypatch.setenv("DEVICE_SIG_MAX_SKEW_SECONDS", "120")
+    monkeypatch.setenv("INVITE_TTL_HOURS", "72")
+
+    settings = Settings()
+
+    assert settings.device_sig_max_skew_seconds == 120
+    assert settings.invite_ttl_hours == 72
+
+
+def test_bearer_headers_fixture_builds_token_for_seeded_org(
+    seeded_org: Org,
+    bearer_headers: Callable[[UUID, str], dict[str, str]],
+) -> None:
+    headers = bearer_headers(seeded_org.id, "admin")
+
+    scheme, token = headers["Authorization"].split(" ", 1)
+    claims = decode_access_token(token)
+
+    assert scheme == "Bearer"
+    assert claims["org_id"] == str(seeded_org.id)
+    assert claims["role"] == "admin"
 
 
 def test_missing_jwt_signing_secret_raises(monkeypatch: pytest.MonkeyPatch) -> None:
