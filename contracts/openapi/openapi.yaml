@@ -29,6 +29,8 @@ tags:
     description: Scan-now command lifecycle.
   - name: auth
     description: Login, refresh, logout, password, and invite acceptance.
+  - name: users
+    description: Read-only self profile.
   - name: findings
     description: Finding query endpoints for the frontend.
   - name: health
@@ -711,11 +713,7 @@ paths:
         '204':
           description: Password updated.
         '400':
-          $ref: '#/components/responses/BadRequest'
-          description: |
-            Wrong `current_password`, or the new password fails the policy. **This must be `400`,
-            not `401`** — a `401` trips the SPA's refresh interceptor and bounces the user to login
-            over a mistyped field (contract ask C13).
+          $ref: '#/components/responses/PasswordChangeRejected'
         '401':
           $ref: '#/components/responses/Unauthorized'
     options:
@@ -857,6 +855,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '410':
           description: Invite expired or already used (single-use). Distinct from `400` on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     options:
       tags:
         - auth
@@ -868,6 +870,33 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/users/me:
+    get:
+      tags:
+        - users
+      summary: Get current user profile
+      operationId: getCurrentUser
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Caller profile.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
 components:
   securitySchemes:
@@ -885,7 +914,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: JWT bearer token used by frontend clients. Short-lived (~15 min) and held
-        in SPA memory only — never in localStorage.
+        in SPA memory only — never in localStorage. The token's internal claims are an
+        implementation detail of the session machinery and are not part of this contract — do
+        not decode it client-side. Call `GET /api/v1/users/me` for the caller's identity and
+        role.
     RefreshCookieAuth:
       type: apiKey
       in: cookie
@@ -1220,9 +1252,13 @@ components:
             allOf:
               - $ref: '#/components/schemas/ErrorResponse'
               - type: object
+                required:
+                  - error
                 properties:
                   error:
                     type: object
+                    required:
+                      - code
                     properties:
                       code:
                         const: device_busy
@@ -1243,9 +1279,13 @@ components:
             allOf:
               - $ref: '#/components/schemas/ErrorResponse'
               - type: object
+                required:
+                  - error
                 properties:
                   error:
                     type: object
+                    required:
+                      - code
                     properties:
                       code:
                         const: device_offline
@@ -1256,6 +1296,43 @@ components:
                   code: device_offline
                   message: Pi seems to be offline.
                   details: {}
+    PasswordChangeRejected:
+      description: |
+        Wrong `current_password`, or the new password fails the policy. **This must be `400`,
+        not `401`** — a `401` trips the SPA's refresh interceptor and bounces the user to login
+        over a mistyped field (contract ask C13). The `code` is pinned: the SPA switches on it
+        to choose which field to flag.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - wrong_current_password
+                          - password_policy_violation
+          examples:
+            wrongCurrentPassword:
+              value:
+                error:
+                  code: wrong_current_password
+                  message: Current password is incorrect.
+                  details: {}
+            passwordPolicyViolation:
+              value:
+                error:
+                  code: password_policy_violation
+                  message: Password does not meet policy requirements.
+                  details: {}
     DatabaseUnavailableError:
       description: |
         The health check's live database round-trip failed. The `code` is pinned.
@@ -1265,9 +1342,13 @@ components:
             allOf:
               - $ref: '#/components/schemas/ErrorResponse'
               - type: object
+                required:
+                  - error
                 properties:
                   error:
                     type: object
+                    required:
+                      - code
                     properties:
                       code:
                         const: database_unreachable
@@ -2124,6 +2205,25 @@ components:
         expires_in:
           type: integer
           description: Access token lifetime in seconds (~900 for 15 min).
+    UserProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - email
+        - role
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - admin
+            - viewer
     ChangePasswordRequest:
       type: object
       additionalProperties: false

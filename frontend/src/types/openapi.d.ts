@@ -375,6 +375,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current user profile */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -656,6 +673,14 @@ export interface components {
             /** @description Access token lifetime in seconds (~900 for 15 min). */
             expires_in: number;
         };
+        UserProfileResponse: {
+            /** Format: uuid */
+            user_id: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "viewer";
+        };
         ChangePasswordRequest: {
             current_password: string;
             new_password: string;
@@ -808,9 +833,9 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"] & {
-                    error?: {
+                    error: {
                         /** @constant */
-                        code?: "device_busy";
+                        code: "device_busy";
                     };
                 };
             };
@@ -825,9 +850,28 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"] & {
-                    error?: {
+                    error: {
                         /** @constant */
-                        code?: "device_offline";
+                        code: "device_offline";
+                    };
+                };
+            };
+        };
+        /**
+         * @description Wrong `current_password`, or the new password fails the policy. **This must be `400`,
+         *     not `401`** — a `401` trips the SPA's refresh interceptor and bounces the user to login
+         *     over a mistyped field (contract ask C13). The `code` is pinned: the SPA switches on it
+         *     to choose which field to flag.
+         */
+        PasswordChangeRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "wrong_current_password" | "password_policy_violation";
                     };
                 };
             };
@@ -839,9 +883,9 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"] & {
-                    error?: {
+                    error: {
                         /** @constant */
-                        code?: "database_unreachable";
+                        code: "database_unreachable";
                     };
                 };
             };
@@ -1527,12 +1571,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /**
-             * @description Wrong `current_password`, or the new password fails the policy. **This must be `400`,
-             *     not `401`** — a `401` trips the SPA's refresh interceptor and bounces the user to login
-             *     over a mistyped field (contract ask C13).
-             */
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["PasswordChangeRejected"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -1694,7 +1733,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
         };
     };
@@ -1711,6 +1752,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caller profile. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }
