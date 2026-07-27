@@ -18,6 +18,18 @@ def _ws_path(agent_id: UUID) -> str:
     return f"/api/v1/agents/{agent_id}/commands"
 
 
+def _assert_ws_denial_envelope(
+    denial: WebSocketDenialResponse, status_code: int, code: str
+) -> None:
+    assert denial.status_code == status_code
+    body = denial.json()
+    assert "detail" not in body
+    assert set(body.keys()) == {"error"}
+    assert set(body["error"].keys()) == {"code", "message", "details"}
+    assert body["error"]["code"] == code
+    assert body["error"]["details"] == {}
+
+
 @pytest.fixture
 def client(administrative_session: Session) -> TestClient:
     def _override_get_session():
@@ -55,7 +67,7 @@ def test_bad_signature_refused(
         ):
             pass
 
-    assert exc_info.value.status_code == 401
+    _assert_ws_denial_envelope(exc_info.value, 401, "unauthorized")
     assert not agent_connections.is_online(provisioned_agent.id)
 
 
@@ -150,7 +162,7 @@ def test_revoked_device_refused_with_403(
         ):
             pass
 
-    assert exc_info.value.status_code == 403
+    _assert_ws_denial_envelope(exc_info.value, 403, "forbidden")
     assert not agent_connections.is_online(provisioned_agent.id)
 
 
@@ -183,7 +195,7 @@ def test_malformed_agent_id_path_refused_without_burning_nonce(
         with client.websocket_connect(malformed_path, headers=headers):
             pass
 
-    assert exc_info.value.status_code == 403
+    _assert_ws_denial_envelope(exc_info.value, 403, "forbidden")
     assert not agent_connections.is_online(provisioned_agent.id)
 
     with client.websocket_connect(

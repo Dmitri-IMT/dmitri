@@ -53,6 +53,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/invites", "OPTIONS"),
     ("/api/v1/invites/{token}/accept", "POST"),
     ("/api/v1/invites/{token}/accept", "OPTIONS"),
+    ("/api/v1/users/me", "GET"),
 }
 
 
