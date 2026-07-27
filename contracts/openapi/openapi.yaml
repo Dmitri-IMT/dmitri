@@ -442,8 +442,23 @@ paths:
         | `hello` | Pi → backend, on connect | `AgentHelloFrame` |
         | `command` | backend → Pi | `AgentCommandFrame` |
         | `status` | Pi → backend | `AgentStatusFrame` |
+        | `error` | backend → Pi | `AgentErrorFrame` |
 
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
+
+        Frames must be **text**, not binary; a binary frame ends the connection.
+
+        **Close codes — the Pi keys its reconnect behaviour on these:**
+
+        | Code | Meaning | Client action |
+        |------|---------|---------------|
+        | `1012` | Backend restarting (deploy). | Redial promptly with backoff. |
+        | `1000` | Normal closure. | Redial with backoff. |
+        | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Stay down.** Redialling makes the two connections evict each other. |
+
+        A `403` on the upgrade means the device is revoked **or** `{agent_id}` is not a well-formed
+        UUID; both are permanent without human intervention. A `401` is retryable only after fixing
+        the signature envelope (clock skew, fresh nonce).
       operationId: connectAgentCommandsWebSocket
       security:
         - AgentSignatureAuth: []
@@ -2062,6 +2077,23 @@ components:
           type:
             - string
             - 'null'
+    AgentErrorFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Backend → Pi.** Sent when an inbound frame cannot be parsed or fails validation
+        (malformed JSON, missing/unknown `type`, unknown `status` value, a `command` frame from
+        the Pi). The connection stays open — the Pi may keep sending frames.
+      required:
+        - type
+        - message
+      properties:
+        type:
+          type: string
+          const: error
+        message:
+          type: string
+          example: unknown frame type
     LoginRequest:
       type: object
       additionalProperties: false
