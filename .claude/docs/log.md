@@ -3,6 +3,37 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-07-27
+
+* **Creation**: `backend/device-auth.md` — the spec 017 (DMI-61) device gate: Ed25519 canonical-string
+  signing (`services/device_sig.py`, the repo's only `cryptography` importer), insert-or-replay nonce
+  handling (`services/nonces.py`), and the transport-agnostic `authenticate_agent` core with its thin
+  `require_agent` HTTP adapter (`dependencies/agent_auth.py`). Records the 8-step order, the
+  403-for-revoked / 401-for-everything-else split, and the accepted "a burned nonce is not rolled
+  back" property that DMI-62/63 must build against.
+* **Creation**: `backend/management.md` — the two operator CLIs (`backend-bootstrap-org`,
+  `backend-provision-agent`), including why `bootstrap_org` passes a local `_SilentMailer` rather than
+  `LogMailer` (the raw admin invite token must never reach a log stream).
+* **Update**: `backend/auth.md` — `require_admin` + `ROLE_ADMIN`/`ROLE_VIEWER`, the extracted
+  `issue_session` / `login_response` / `set_refresh_cookie` seams, `Mailer.send_invite_link`, the
+  invite service and routes, the error→status map (400/410/403), and three new gotchas: why
+  `refresh_session` cannot reuse `issue_session` (refresh-token family semantics), the asymmetric
+  two-scope duplicate rule, and same-commit `consumed_at` atomicity.
+* **Update**: `backend/routers.md` — the four read routes now carry `Depends(require_user)` and pass
+  `org_id=caller.org_id`; foreign rows are 404 not 403; `host_id` is not a tenant escape.
+* **Update**: `backend/services.md` — `read.py`'s four entry points take a required keyword-only
+  `org_id`, both count and page queries are scoped, and a `NULL org_id` row is visible to nobody.
+* **Update**: `backend/migrations.md` — revisions `20260724_09` (`agent_nonces`), `_10`
+  (`ix_users_email`, global email uniqueness), `_11` (`agents.public_key` replacing the three secret
+  columns). Corrected the standing "no `DELETE` grant" note: `agent_nonces` is the deliberate
+  exception (`SELECT/INSERT/DELETE`, no `UPDATE`).
+* **Update**: `backend/models.md` (`AgentNonce`, `Agent.public_key` replacing the secret columns,
+  global user-email uniqueness, `Invite` no longer dormant), `backend/schemas.md` (`schemas/invites.py`
+  and why `extra="forbid"` is load-bearing), `backend/api.md` (`DEVICE_SIG_MAX_SKEW_SECONDS`,
+  `INVITE_TTL_HOURS`), `backend/overview.md` + `backend/index.md` ("read path + auth + invites wired").
+* Standing fact updated: the `orgs`/`invites` half of the "identity dormant" note is now wired.
+  Ingest remains unwired, and the device gate is built but mounted on no route.
+
 ## 2026-07-24
 
 * **Creation**: `backend/auth.md` — the spec 016 (DMI-60) auth subsystem, now wired in `main.py`:

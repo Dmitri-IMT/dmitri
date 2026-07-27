@@ -109,7 +109,7 @@ flowchart TB
     end
 
     %% === FLUXOS ===
-    A -->|"1. POST /scans<br/>JSON payload + HMAC signature<br/>HTTPS"| NGINX
+    A -->|"1. POST /scans<br/>JSON payload + assinatura Ed25519<br/>HTTPS"| NGINX
     NGINX -->|"2. Proxy<br/>/api/* → FastAPI"| B
     
     B -->|"3. Enqueue scan job"| Q
@@ -132,7 +132,7 @@ flowchart TB
 
 ## Fluxo principal
 
-- Pi Agent realiza varredura → normaliza → envia via POST com HMAC  
+- Pi Agent realiza varredura → normaliza → envia via POST com assinatura Ed25519  
 - Backend valida, enfileira job no PostgreSQL  
 - Background Worker processa e persiste via **SQLModel + psycopg3 síncrono** no Supabase  
 - Frontend React consulta via JWT e exibe os resultados  
@@ -198,7 +198,7 @@ De acordo com as decisões dos ADRs:
 | **Frontend**        | Biblioteca de componentes UI                     | **shadcn/ui**                                   | ADR-008           | Componentes copiados para o projeto |
 | **Frontend**        | Gráficos (se entrarem no escopo)                 | **Recharts**                                    | ADR-008           | Fora do MVP Home |
 | **Frontend**        | Cliente HTTP                                     | **Axios (v. 1.13.6)**                           | ADR-008           | Instância centralizada em `/src/api/client.ts` |
-| **Segurança**       | Autenticação Agent → Backend                     | **HMAC** (secret único por device)              | ADR-005           | Assinatura + timestamp + nonce |
+| **Segurança**       | Autenticação Agent → Backend                     | **Assinatura Ed25519** (chave pública por device; backend não guarda segredo) | ADR-005 (emendado 2026-07-24) | Assinatura + timestamp + nonce |
 | **Segurança**       | Autenticação Frontend → Backend                  | **JWT** (access + refresh token) + httpOnly cookies | ADR-005     | — |
 | **Segurança**       | Transporte                                       | **HTTPS** obrigatório                           | ADR-005 / ADR-007 | Let’s Encrypt em produção |
 | **Infraestrutura**  | Deploy                                           | **Docker + Docker Compose (v. 27.1+)**          | ADR-007           | Multi-stage (Nginx + FastAPI) |
@@ -213,7 +213,7 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 
 ### 6.1 Pi Agent → Backend API
 - **Método**: `POST /scans`
-- **Autenticação**: HMAC signature (secret único por dispositivo)
+- **Autenticação**: assinatura Ed25519 (chave privada no dispositivo; backend verifica com a chave pública, sem guardar segredo)
 - **Payload**: JSON contendo:
   - Metadados do scan (timestamp, device_id, rede escaneada)
   - Resultados normalizados de Nmap + NSE + vulners NSE
@@ -254,7 +254,7 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 
 ### 6.5 Resumo das Restrições de Interface
 - Todas as comunicações externas ocorrem sobre **HTTPS**
-- O Pi Agent utiliza apenas comunicação **one-way** (push) via HMAC
+- O Pi Agent autentica com assinatura Ed25519 (ADR-005). *(O canal do agente passou a ser bidirecional — ver ADR-011 — mas a autenticação da requisição segue as mesmas regras de assinatura.)*
 - O React Frontend nunca acessa diretamente o Pi Agent
 - Nenhum componente expõe endpoints sem autenticação em produção
 - A comunicação interna entre Backend API e Background Worker é feita via **fila no PostgreSQL** (assíncrona e desacoplada)
@@ -307,7 +307,7 @@ Durante o desenvolvimento, o backend aceitará requisições vindas das portas n
 ### Considerações Gerais
 
 - Em produção, **não será usado wildcard (`*`)** para origens, pois isso é incompatível com `allow_credentials = True` e reduziria a segurança.
-- A configuração precisa permitir alguns headers customizados usados pelo Pi Agent (como os relacionados à assinatura HMAC), mas isso será tratado na implementação.
+- A configuração precisa permitir alguns headers customizados usados pelo Pi Agent (como os relacionados à assinatura Ed25519), mas isso será tratado na implementação.
 - Qualquer alteração na lista de origens permitidas deve ser revisada para evitar expor a API desnecessariamente.
 
-Essa configuração garante o equilíbrio entre **segurança** (em produção) e **praticidade** (no desenvolvimento), alinhada com as decisões de autenticação JWT e HMAC definidas nos ADRs 005 e 007.
+Essa configuração garante o equilíbrio entre **segurança** (em produção) e **praticidade** (no desenvolvimento), alinhada com as decisões de autenticação JWT e assinatura Ed25519 definidas nos ADRs 005 e 007.

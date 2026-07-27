@@ -48,6 +48,11 @@ EXPECTED_ROUTE_SURFACE = {
         "reset-password",
     )
     for method in ("POST", "OPTIONS")
+} | {
+    ("/api/v1/invites", "POST"),
+    ("/api/v1/invites", "OPTIONS"),
+    ("/api/v1/invites/{token}/accept", "POST"),
+    ("/api/v1/invites/{token}/accept", "OPTIONS"),
 }
 
 

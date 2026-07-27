@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend ORM models
-description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel.
+description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Backend ORM models
@@ -44,7 +44,7 @@ order is irrelevant.
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
 | `Org` → `orgs` | UUID PK, `name`. | `backend/src/api/models/identity.py:14` |
-| `User` → `users` | Case-insensitive unique index `(org_id, lower(email))`; `role` check `admin`/`viewer`; `password_hash`, `password_changed_at`. | `backend/src/api/models/identity.py:22` |
+| `User` → `users` | Case-insensitive unique index `ix_users_email` on `lower(email)` — **global, not per-org**, since migration `20260724_10`; `role` check `admin`/`viewer`; `password_hash`, `password_changed_at`. | `backend/src/api/models/identity.py:22` |
 | `Invite` → `invites` | Unique `token_hash`; `role` check; `expires_at`, `consumed_at`. | `backend/src/api/models/identity.py:38` |
 
 ## Key classes / functions — `session.py`
@@ -58,7 +58,8 @@ order is irrelevant.
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; the AES-256-GCM device secret stored **recoverable, not hashed** across `secret_ciphertext`/`secret_nonce` (`LargeBinary`) + `secret_key_version`; soft-tombstone `revoked_at`; informational `last_seen_at`. No `secret`/`secret_hash`/`online` column. | `backend/src/api/models/command.py:12` |
+| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; `public_key` (`LargeBinary`) — the device's 32 raw Ed25519 public-key bytes, stored **in the clear**; soft-tombstone `revoked_at`; informational `last_seen_at`. No secret, hash, or `online` column: since DMI-61 the backend holds nothing that could impersonate a device. | `backend/src/api/models/command.py:12` |
+| `AgentNonce` → `agent_nonces` | One row per accepted device request: `agent_id` FK → `agents`, `nonce`, `expires_at`. `UniqueConstraint("agent_id", "nonce")` **is** the replay detector; `expires_at` is indexed for pruning. No `agent_id`-only index. | `backend/src/api/models/command.py` |
 | `Command` → `commands` | The audit record of one "Scan now"; UUID PK; `org_id` + `agent_id` FKs (indexed); `scan_id` FK → `scans` **NOT NULL + unique** (1:1 Command→Scan); `scan_mode`/`subnet` request-of-record; unconstrained `status` (guarded by [`command_lifecycle`](/backend/services.md), no ENUM/CHECK); nullable `error_code`; exactly four timestamps `created_at`/`delivered_at`/`started_at`/`completed_at` (no `uploading_at`). | `backend/src/api/models/command.py:26` |
 
 ## How it connects
@@ -79,13 +80,22 @@ order is irrelevant.
   keyed by `identity_key` (MAC if present, else IP) and updated across scans via
   `upsert_hosts_for_scan`. See [ADR-014](../../../docs/adr/ADR-014-host-identity-resolution.md) and
   [glossary](/glossary.md).
-- **Auth is now wired.** `User` + the `session.py` tokens back the live auth routes (spec 016,
-  DMI-60) — see [auth](/backend/auth.md). `Org`/`Invite` remain dormant (no invite endpoints run yet).
-- **Command channel is schema-only (DMI-59).** `Agent`/`Command` land the tables and the lifecycle
-  rulebook that later epic issues (WS endpoint DMI-62, ingest DMI-63, enqueue/delivery DMI-64) build
-  on. DMI-59 defines the encrypted-secret *columns* but writes no secret and no crypto — HMAC
-  encrypt/decrypt and delivery logic are out of scope here. A `Command`'s `status` is the source of
-  truth; the linked `Scan`'s status is a pure projection (see [`command_lifecycle`](/backend/services.md)).
+- **Auth is now wired, and so are invites.** `User` + the `session.py` tokens back the live auth
+  routes (spec 016, DMI-60); `Invite` is live too as of spec 017 / DMI-61 — see
+  [auth](/backend/auth.md). `Org` is written by [`backend-bootstrap-org`](/backend/management.md),
+  not by any route.
+- **User emails are globally unique, not per-org.** Migration `20260724_10` replaced the
+  `(org_id, lower(email))` index with `lower(email)` alone, so one address maps to at most one user
+  across the whole system. This is why `create_invite` and `accept_invite` use *different* duplicate
+  scopes — see the invites note in [auth](/backend/auth.md).
+- **Command channel is still schema-only (DMI-59).** `Agent`/`Command` land the tables and the
+  lifecycle rulebook that later epic issues (WS endpoint DMI-62, ingest DMI-63, enqueue/delivery
+  DMI-64) build on; no delivery logic runs yet. A `Command`'s `status` is the source of truth; the
+  linked `Scan`'s status is a pure projection (see [`command_lifecycle`](/backend/services.md)).
+- **`agents` no longer stores a device secret.** DMI-59's `secret_ciphertext`/`secret_nonce`/
+  `secret_key_version` columns were dropped in `20260724_11` in favour of a plaintext `public_key`,
+  per ADR-005 as amended — which is why ADR-015 (secret encryption at rest) was retired rather than
+  implemented. See [device auth](/backend/device-auth.md).
 - JSON columns (`metadata_json`, `references_json`, `source_labels_json`, cache `*_json`, `raw_json`)
   use SQLAlchemy `JSON` via explicit `sa_column`.
 

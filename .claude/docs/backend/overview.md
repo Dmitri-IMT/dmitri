@@ -9,13 +9,15 @@ timestamp: 2026-07-24T00:00:00Z
 
 # Backend — API + enrichment worker
 
-> **Read path + auth wired; ingest still not.** `api/main.py` registers `GET /api/v1/health`, the
-> three [read routers](/backend/routers.md) (`GET /hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
-> `/findings`) — spec 015 — and the [auth routes](/backend/auth.md) (spec 016). The ingest route
-> (`POST /api/v1/scans`) still exists only in the [contracts](/contracts.md) OpenAPI surface;
-> `persist_scan` and the worker are still exercised **directly by tests**, not through the API — the
-> agent→backend upload link does not exist yet. `docs/architecture/ARCHITECTURE.md` describes the
-> target state.
+> **Read path + auth + invites wired; ingest still not.** `api/main.py` registers
+> `GET /api/v1/health`, the three [read routers](/backend/routers.md) (`GET /hosts`,
+> `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`) — spec 015, now gated by `require_user` and
+> org-scoped — the [auth routes](/backend/auth.md) (spec 016), and the invite routes (spec 017).
+> The ingest route (`POST /api/v1/scans`) still exists only in the [contracts](/contracts.md)
+> OpenAPI surface; `persist_scan` and the worker are still exercised **directly by tests**, not
+> through the API — the agent→backend upload link does not exist yet, and the
+> [device gate](/backend/device-auth.md) built for it is mounted on no route.
+> `docs/architecture/ARCHITECTURE.md` describes the target state.
 
 ## Purpose
 

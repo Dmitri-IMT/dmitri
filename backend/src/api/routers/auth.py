@@ -3,7 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from sqlmodel import Session
 
-from api.core.config import get_settings
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
 from api.models.identity import User
@@ -28,35 +27,9 @@ from api.services.auth import (
 from api.services.mailer import LogMailer
 from api.services.passwords import PasswordPolicyError
 from api.services.tokens import RefreshTokenError
+from api.session_response import clear_refresh_cookie, login_response
 
 router = APIRouter()
-
-COOKIE_NAME = "dmitri_refresh"
-COOKIE_PATH = "/api/v1/auth"
-
-
-def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    settings = get_settings()
-    response.set_cookie(
-        COOKIE_NAME,
-        refresh_token,
-        max_age=settings.refresh_token_ttl_days * 24 * 60 * 60,
-        httponly=True,
-        samesite="lax",
-        secure=settings.refresh_cookie_secure,
-        path=COOKIE_PATH,
-    )
-
-
-def _clear_refresh_cookie(response: Response) -> None:
-    settings = get_settings()
-    response.delete_cookie(
-        COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
-        secure=settings.refresh_cookie_secure,
-        path=COOKIE_PATH,
-    )
 
 
 @router.post("/api/v1/auth/login", response_model=LoginResponse)
@@ -71,10 +44,7 @@ def login_route(
         )
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    _set_refresh_cookie(response, refresh_token)
-    return LoginResponse(
-        access_token=access_token, token_type="bearer", expires_in=expires_in
-    )
+    return login_response(response, access_token, refresh_token, expires_in)
 
 
 @router.post("/api/v1/auth/refresh", response_model=LoginResponse)
@@ -91,10 +61,7 @@ def refresh_route(
         )
     except RefreshTokenError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
-    _set_refresh_cookie(response, new_refresh_token)
-    return LoginResponse(
-        access_token=access_token, token_type="bearer", expires_in=expires_in
-    )
+    return login_response(response, access_token, new_refresh_token, expires_in)
 
 
 @router.post("/api/v1/auth/logout", status_code=204)
@@ -106,7 +73,7 @@ def logout_route(
     if dmitri_refresh is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     logout(session, refresh_token=dmitri_refresh)
-    _clear_refresh_cookie(response)
+    clear_refresh_cookie(response)
 
 
 @router.post("/api/v1/auth/change-password", status_code=204)

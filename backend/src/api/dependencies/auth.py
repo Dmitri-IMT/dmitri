@@ -11,6 +11,7 @@ from api.services.tokens import decode_access_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
+ROLE_ADMIN = "admin"
 
 class CallerIdentity(BaseModel):
     sub: UUID
@@ -33,3 +34,11 @@ def require_user(
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+
+def require_admin(
+    caller: CallerIdentity = Depends(require_user),
+) -> CallerIdentity:
+    if caller.role != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return caller

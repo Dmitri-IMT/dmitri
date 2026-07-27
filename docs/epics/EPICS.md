@@ -41,7 +41,7 @@ Use **epics** (milestones) + small **issues** — one concern per issue, one dep
 ## Epic 5 — Backend cloud readiness
 
 - Replace SQLite / `create_all` with Postgres + Alembic path
-- Settings: load all secrets from env (JWT/HMAC placeholders)
+- Settings: load all secrets from env (JWT placeholder; device auth is Ed25519 — no shared secret to store)
 - Health/readiness endpoints for deploy checks
 - Smoke test: ingest → worker → read (against hosted stack)
 

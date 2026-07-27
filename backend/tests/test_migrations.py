@@ -5,6 +5,7 @@ import tomllib
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 from uuid import uuid4
 
 import pytest
@@ -28,6 +29,15 @@ ROOT = Path(__file__).resolve().parents[1]
 # double as a model-vs-migration drift check.
 HEAD_APPLICATION_TABLES = frozenset(SQLModel.metadata.tables)
 SEQUENCES_RENAMED_AFTER_BASELINE = {"devices_id_seq": "scan_hosts_id_seq"}
+
+# `agent_nonces` deliberately withholds UPDATE and grants DELETE instead (nonces are
+# insert-then-expire-and-delete, never mutated in place; see
+# 20260724_09_agent_nonces.py). Every other table keeps the default grant set.
+DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
+RUNTIME_GRANTS_BY_TABLE = {"agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"})}
+ALL_TABLE_PRIVILEGES = frozenset(
+    {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
+)
 
 
 def _load_alembic_env(monkeypatch: pytest.MonkeyPatch):
@@ -71,7 +81,14 @@ def _normalise_type(compiled: str) -> str:
     return "TIMESTAMP" if compiled.startswith("TIMESTAMP") else compiled
 
 
-def _table_shape(table: sa.Table) -> tuple[object, ...]:
+class TableShape(NamedTuple):
+    columns: tuple[object, ...]
+    foreign_keys: tuple[object, ...]
+    unique_constraints: tuple[object, ...]
+    indexes: tuple[object, ...]
+
+
+def _table_shape(table: sa.Table) -> TableShape:
     dialect = postgresql.dialect()
     columns = tuple(
         (
@@ -102,7 +119,7 @@ def _table_shape(table: sa.Table) -> tuple[object, ...]:
             for index in table.indexes
         )
     )
-    return columns, foreign_keys, unique_constraints, indexes
+    return TableShape(columns, foreign_keys, unique_constraints, indexes)
 
 
 @pytest.mark.parametrize(
@@ -172,7 +189,9 @@ def test_alembic_artifacts_and_backend_package_configuration() -> None:
         for dependency in project["project"]["dependencies"]
     )
     assert project["project"]["scripts"] == {
-        "backend-worker": "api.worker_main:main"
+        "backend-worker": "api.worker_main:main",
+        "backend-bootstrap-org": "api.management.bootstrap_org:main",
+        "backend-provision-agent": "api.management.provision_agent:main",
     }
 
 
@@ -482,14 +501,43 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
                     )
 
         for table in HEAD_APPLICATION_TABLES:
-            for privilege in ("SELECT", "INSERT", "UPDATE"):
+            expected_grants = RUNTIME_GRANTS_BY_TABLE.get(table, DEFAULT_RUNTIME_GRANTS)
+            for privilege in expected_grants:
                 assert _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )
-            for privilege in ("DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+            for privilege in ALL_TABLE_PRIVILEGES - expected_grants:
                 assert not _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )
+
+        # `_table_shape` normalises timestamp variants away, so nothing else
+        # catches a model that declares a timestamp column naive while its
+        # migration creates it timestamptz (or the reverse). That divergence is
+        # invisible until `alembic revision --autogenerate` "corrects" the column
+        # back to the model and utc_now() comparisons start raising
+        # "can't compare offset-naive and offset-aware datetimes" — the bug
+        # 20260724_08 exists to eliminate.
+        timestamp_types = {
+            (row.table_name, row.column_name): row.data_type
+            for row in connection.execute(
+                sa.text(
+                    "SELECT table_name, column_name, data_type "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = 'public' "
+                    "AND data_type LIKE 'timestamp%'"
+                )
+            )
+        }
+        for table_name in HEAD_APPLICATION_TABLES:
+            for column in SQLModel.metadata.tables[table_name].columns:
+                if not isinstance(column.type, sa.DateTime):
+                    continue
+                data_type = timestamp_types.get((table_name, column.name))
+                assert data_type is not None, f"{table_name}.{column.name} missing"
+                assert column.type.timezone == (
+                    data_type == "timestamp with time zone"
+                ), f"{table_name}.{column.name} model/database timezone mismatch"
         for sequence in head_sequences:
             for privilege in ("SELECT", "USAGE"):
                 assert _has_privilege(

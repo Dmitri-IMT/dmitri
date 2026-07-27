@@ -30,7 +30,7 @@ flowchart TB
     end
 
     %% === FLUXOS ===
-    A -->|"1. POST /scans<br/>JSON payload + HMAC signature<br/>HTTPS"| NGINX
+    A -->|"1. POST /scans<br/>JSON payload + assinatura Ed25519<br/>HTTPS"| NGINX
     NGINX -->|"2. Proxy<br/>/api/* → FastAPI"| B
     
     B -->|"3. Enqueue scan job"| Q

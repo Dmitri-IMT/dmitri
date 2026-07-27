@@ -1,6 +1,20 @@
 # ADR-015: Agent HMAC secret storage at rest
 
-**Status:** accepted — amends [`ADR-005`](ADR-005-security-model.md) (which specified per-device
+> **Status: SUPERSEDED / REVERSED (2026-07-24).** This ADR exists only because HMAC is symmetric,
+> which forces the backend to hold a **recoverable** per-device secret. [`ADR-005`](ADR-005-security-model.md)
+> was amended on 2026-07-24 to use **Ed25519 asymmetric signing** for the agent: the backend now
+> stores only each device's **public key** (plaintext — a public key is not a secret), and holds
+> **no recoverable secret at all**. There is therefore nothing to encrypt at rest, and this ADR no
+> longer applies. The `agents` table drops `secret_ciphertext` / `secret_nonce` /
+> `secret_key_version` in favour of a single plaintext `public_key` column; the sealed Railway AES
+> key, the `secret_key_version` rotation tag, the ASVS-6.4.2 MVP-debt note, and the Supabase-Vault /
+> KMS end-state below all fall away. Decision record and rationale:
+> [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
+> **The text below is retained for history only and is no longer in force.**
+
+---
+
+**Status (original):** accepted — amends [`ADR-005`](ADR-005-security-model.md) (which specified per-device
 HMAC-SHA256 but never how the backend stores the secret).
 
 ## Context

@@ -22,7 +22,7 @@ class Org(SQLModel, table=True):
 class User(SQLModel, table=True):
     __tablename__ = "users"
     __table_args__ = (
-        Index("ix_users_org_email", "org_id", text("lower(email)"), unique=True),
+        Index("ix_users_email", text("lower(email)"), unique=True),
         CheckConstraint(_ROLE_CHECK, name="ck_users_role"),
     )
 

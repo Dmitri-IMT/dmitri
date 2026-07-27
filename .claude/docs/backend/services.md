@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The real work — persist_scan, host-identity upsert, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
+description: The real work — persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
 resource: backend/src/api/services/persistence.py
-tags: [backend, services, persistence, read, enrichment, worker, risk, command-channel]
-timestamp: 2026-07-23T00:00:00Z
+tags: [backend, services, persistence, read, enrichment, worker, risk, command-channel, tenancy]
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -34,10 +34,10 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:229` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
 | `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:23` |
-| `list_hosts()` | Paginated `HostRecord` list ordered by `last_seen_at desc` → `HostListResponse`. | `backend/src/api/services/read.py:29` |
-| `get_host_detail()` | One host's latest `ScanHostRecord` (for current ports) + full scan history (ordered by `ScanRecord.timestamp desc`) → `HostDetailResponse`. | `backend/src/api/services/read.py:44` |
-| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings (host_id resolved via outer join) → `ScanDetailResponse`. | `backend/src/api/services/read.py:91` |
-| `list_findings()` | Paginated `FindingRecord` list, optionally filtered by `host_id` (via join on `ScanHostRecord`) → `FindingListResponse`. | `backend/src/api/services/read.py:133` |
+| `list_hosts()` | Paginated `HostRecord` list ordered by `last_seen_at desc` → `HostListResponse`. Requires keyword-only `org_id`; **both** the `count()` and the page query are scoped. | `backend/src/api/services/read.py:29` |
+| `get_host_detail()` | One host's latest `ScanHostRecord` (for current ports) + full scan history (ordered by `ScanRecord.timestamp desc`) → `HostDetailResponse`. Requires `org_id`; the two inline `ScanRecord` queries are scoped too, so a foreign org's scan cannot surface through a host's detail. | `backend/src/api/services/read.py:44` |
+| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings (host_id resolved via outer join) → `ScanDetailResponse`. Requires `org_id`. | `backend/src/api/services/read.py:91` |
+| `list_findings()` | Paginated `FindingRecord` list, optionally filtered by `host_id` → `FindingListResponse`. Requires `org_id`; joins `ScanRecord` on `scan_id` **before** the `host_id` branch so the count and page queries share the org predicate. | `backend/src/api/services/read.py:133` |
 | `run_worker_loop()` | Reads poll interval + batch size from `Settings`, loops forever calling `run_worker_once()`, sleeps `poll_interval` when idle or after a logged exception. | `backend/src/api/services/worker.py:13` |
 | `run_worker_once()` | Opens a session via `get_session()` and delegates to `process_pending_enrichment_jobs`. | `backend/src/api/services/worker.py:34` |
 | `claim_pending_enrichment_jobs()` | Selects `pending` jobs by `created_at,id`; on Postgres uses `SELECT ... FOR UPDATE SKIP LOCKED`; flips them to `running`, bumps `attempts`, commits. | `backend/src/api/services/enrichment.py:22` |
@@ -81,6 +81,12 @@ ML/AI scoring is future work.
 
 ## Notes / gotchas
 
+- **The read path is org-scoped in SQL, and `org_id` is required.** All four `read.py` entry points
+  take a keyword-only `org_id: UUID` with no default, so a caller cannot silently omit it. Scoping is
+  a plain `WHERE org_id = :org_id` — there is no `OR org_id IS NULL` and no fallback branch, which
+  means a row with a `NULL org_id` (legacy pre-tenancy data) is visible to **nobody**. That is
+  deliberate: no backfill and no `NOT NULL` tightening were done. Private helpers stay unscoped
+  because they only ever receive already-scoped ids.
 - **Confidence ladder.** `tentative` → `probable` (agent CVE or CPE match) → `confirmed` (NVD-by-CVE).
   `upsert_finding` only ever raises confidence via `_max_confidence`, never lowers it.
 - **Idempotency.** `persist_scan` returns early if the `scan_id` already exists — re-ingest is safe.

@@ -70,7 +70,13 @@ always exists before it has content. In the agent, a completed scan is a
 An **org** is one customer company — the tenancy boundary (`org_id` scopes agents, commands, scans,
 users). Two roles: **`admin`** (trigger scans, invite users) and **`viewer`** (read only). Neither
 provisions Pi secrets — that is the installer's job. Backed by the `orgs`/`users`/`invites` tables
-in [backend/models](/backend/models.md) (`identity.py`); not yet enforced in code.
+in [backend/models](/backend/models.md) (`identity.py`).
+
+**Enforced in code as of spec 017 / DMI-61**: `require_user` gates every business read route and
+`require_admin` gates invitation, while the read queries themselves filter on `org_id`, so the
+boundary holds in SQL rather than only in the handler — see [auth](/backend/auth.md) and
+[routers](/backend/routers.md). A user's email is unique **globally**, not per org, so one address
+belongs to at most one org.
 
 # Citations
 

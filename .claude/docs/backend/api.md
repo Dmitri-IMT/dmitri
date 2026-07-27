@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health + the wired read path + auth), the worker process entry, settings, and the DB engine/session.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -28,7 +28,7 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | `read_health()` | `GET /api/v1/health`. Runs a real `SELECT 1` through a `get_session` dependency; returns `{"status": "ok", "version": ...}`, or a `503` `database_unreachable` error envelope on `SQLAlchemyError`. | `backend/src/api/main.py:28` |
 | `app.include_router(hosts.router / scans.router / findings.router)` | Wires `GET /api/v1/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — see [routers](/backend/routers.md). | `backend/src/api/main.py:46` |
 | `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |
-| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins`, `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2). | `backend/src/api/core/config.py:22` |
+| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins`, `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the **device/invite knobs** added by DMI-61: `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48). | `backend/src/api/core/config.py:22` |
 | `normalize_postgres_url()` | Rewrites any accepted Postgres scheme to `postgresql+psycopg://`; **rejects** unknown schemes (no SQLite). Used by both config validation and the engine. | `backend/src/api/core/config.py:16` |
 | `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:62` |
 | `get_engine()` | `lru_cache`d engine from the normalized `DATABASE_URL`, with `pool_pre_ping=True` and `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — required for the pgbouncer/Supabase pooler. | `backend/src/api/db/session.py:11` |
@@ -48,13 +48,16 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 ## Notes / gotchas
 
-- **Read path + auth wired, ingest still not.** `GET /api/v1/health`, the three
+- **Read path + auth + invites wired, ingest still not.** `GET /api/v1/health`, the three
   [read routers](/backend/routers.md) (`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`,
-  `/findings`), and the [auth routes](/backend/auth.md) are registered in `main.py`. The ingest
-  route (`POST /api/v1/scans`) in [contracts](/contracts.md) is still contract-defined but absent
-  from `main.py`; `persist_scan` and the worker are still driven by tests, not HTTP.
+  `/findings`), the [auth routes](/backend/auth.md), and the invite routes are registered in
+  `main.py`. The ingest route (`POST /api/v1/scans`) in [contracts](/contracts.md) is still
+  contract-defined but absent from `main.py`; `persist_scan` and the worker are still driven by
+  tests, not HTTP. The [device gate](/backend/device-auth.md) exists but is mounted on **no** route.
 - **`JWT_SIGNING_SECRET` is required** — `Settings()` (instantiated at import) fails fast without it;
-  `conftest.py` sets it for the test suite.
+  `conftest.py` sets it for the test suite. The two DMI-61 additions
+  (`DEVICE_SIG_MAX_SKEW_SECONDS`, `INVITE_TTL_HOURS`) are plain optional fields with defaults — no
+  validator, no required secret, and deliberately **no** nonce-retention knob.
 - Disabling `openapi_url` means FastAPI serves **no** generated schema; the hand-authored
   `contracts/openapi/openapi.yaml` is authoritative.
 - The worker uses `time.sleep`, not FastAPI — it never imports `app`.

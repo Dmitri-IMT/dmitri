@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlalchemy as sa
 from api.models import command  # noqa: F401
 from api.models.persistence import SQLModel
 
@@ -18,9 +19,7 @@ def test_agent_columns_match_expected_set():
         "id",
         "org_id",
         "display_name",
-        "secret_ciphertext",
-        "secret_nonce",
-        "secret_key_version",
+        "public_key",
         "revoked_at",
         "last_seen_at",
         "created_at",
@@ -68,3 +67,11 @@ def test_command_scan_id_is_not_nullable_and_unique():
     column = SQLModel.metadata.tables["commands"].columns["scan_id"]
     assert column.nullable is False
     assert column.unique is True
+
+
+def test_agent_nonce_timestamp_columns_are_timezone_aware():
+    table = SQLModel.metadata.tables["agent_nonces"]
+    assert isinstance(table.c.expires_at.type, sa.DateTime)
+    assert table.c.expires_at.type.timezone is True
+    assert isinstance(table.c.created_at.type, sa.DateTime)
+    assert table.c.created_at.type.timezone is True
