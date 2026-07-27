@@ -15,7 +15,7 @@ from api.middleware import (
     RequestIdMiddleware,
     build_cors_middleware_kwargs,
 )
-from api.routers import auth, findings, hosts, scans
+from api.routers import auth, findings, hosts, invites, scans
 
 APP_VERSION = importlib.metadata.version("backend-api")
 
@@ -60,3 +60,4 @@ app.include_router(auth.router)
 app.include_router(hosts.router)
 app.include_router(scans.router)
 app.include_router(findings.router)
+app.include_router(invites.router)
