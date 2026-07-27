@@ -6,7 +6,10 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from sqlmodel import Session
 
+from api.db.session import get_session
+from api.models.identity import User
 from api.services.tokens import decode_access_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -34,6 +37,18 @@ def require_user(
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+
+def require_user_row(
+    caller: CallerIdentity = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> User:
+    # A signed token whose subject no longer has a row is not an authenticated caller:
+    # 401, not 404, so the SPA's refresh interceptor treats it as a dead session.
+    user = session.get(User, caller.sub)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
 
 
 def require_admin(
