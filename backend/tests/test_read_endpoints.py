@@ -244,9 +244,12 @@ def _seed(session: Session) -> dict:
 READ_PATHS = (
     "/api/v1/hosts",
     "/api/v1/hosts/{host_id}",
+    "/api/v1/scans",
     "/api/v1/scans/{scan_id}",
     "/api/v1/findings",
 )
+
+LIST_ENDPOINTS = ("/api/v1/scans", "/api/v1/findings")
 
 
 def _resolved_path(path: str, seeded: dict) -> str:
@@ -278,6 +281,7 @@ def test_read_route_without_bearer_returns_401(
     seeded = _seed(session)
     response = client.get(_resolved_path(path, seeded))
     assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
 
 
 @pytest.mark.parametrize("path", READ_PATHS)
@@ -290,6 +294,7 @@ def test_read_route_with_garbage_bearer_returns_401(
         headers={"Authorization": "Bearer not-a-jwt"},
     )
     assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
 
 
 @pytest.mark.parametrize("role", ["viewer", "admin"])
@@ -455,6 +460,7 @@ def test_read_route_with_expired_bearer_returns_401(
         headers=_expired_bearer_headers(seeded["org"].id, "admin"),
     )
     assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
 
 
 @pytest.mark.parametrize("path", READ_PATHS)
@@ -510,3 +516,203 @@ def test_nonexistent_org_token_get_scan_returns_404(
         headers=bearer_headers(uuid4(), "admin"),
     )
     assert response.status_code == 404
+
+
+def test_list_scans_empty_org_returns_200_not_404(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    _seed(session)
+    response = client.get(
+        "/api/v1/scans", headers=bearer_headers(uuid4(), "admin")
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_scans_page_past_end_returns_empty_200(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    now = datetime.now(timezone.utc)
+    for offset in (1, 2):
+        session.add(
+            ScanRecord(
+                scan_id=uuid4(),
+                org_id=seeded["org"].id,
+                timestamp=now - timedelta(hours=offset),
+                subnet="192.168.2.0/24",
+                scan_mode="quick",
+                status="completed",
+                metadata_json={},
+            )
+        )
+    session.commit()
+
+    response = client.get(
+        "/api/v1/scans?page=5&per_page=20",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["data"] == []
+    assert body["total"] == 3
+
+
+def test_list_scans_zero_finding_scan_reports_null_highest_severity(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    now = datetime.now(timezone.utc)
+    empty_scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded["org"].id,
+        timestamp=now - timedelta(days=1),
+        subnet="192.168.3.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json={},
+    )
+    session.add(empty_scan)
+    session.commit()
+
+    response = client.get(
+        "/api/v1/scans",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    row = next(
+        item for item in body["data"] if item["scan_id"] == str(empty_scan.scan_id)
+    )
+    assert row["finding_count"] == 0
+    assert row["highest_severity"] is None
+
+
+def test_list_findings_critical_filter_empty_returns_200(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['scan'].scan_id}&severity=critical",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_findings_filtered_by_foreign_scan_id_returns_empty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['foreign_scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_findings_filtered_by_foreign_scan_and_host_returns_empty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['foreign_scan'].scan_id}"
+        f"&host_id={seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+    assert seeded["foreign_finding"].finding_id not in {
+        UUID(item["finding_id"]) for item in body["data"]
+    }
+
+
+@pytest.mark.parametrize("endpoint", LIST_ENDPOINTS)
+@pytest.mark.parametrize(
+    "query",
+    ("per_page=101", "per_page=0", "page=0", "page=-1"),
+)
+def test_list_invalid_paging_returns_validation_error(
+    client: TestClient,
+    session: Session,
+    bearer_headers,
+    endpoint: str,
+    query: str,
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"{endpoint}?{query}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.parametrize("endpoint", LIST_ENDPOINTS)
+def test_list_per_page_at_max_succeeds(
+    client: TestClient, session: Session, bearer_headers, endpoint: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"{endpoint}?per_page=100",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("query",),
+    (
+        ("sort_by=nope",),
+        ("sort_order=sideways",),
+        ("status=bogus",),
+    ),
+)
+def test_list_scans_invalid_query_returns_validation_error(
+    client: TestClient, session: Session, bearer_headers, query: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/scans?{query}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.parametrize(
+    ("query",),
+    (
+        ("severity=urgent",),
+        ("scan_id=not-a-uuid",),
+    ),
+)
+def test_list_findings_invalid_query_returns_validation_error(
+    client: TestClient, session: Session, bearer_headers, query: str
+) -> None:
+    seeded = _seed(session)
+    response = client.get(
+        f"/api/v1/findings?{query}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
