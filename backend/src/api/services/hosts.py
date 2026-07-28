@@ -9,9 +9,8 @@ from api.models.persistence import (
     ScanHostRecord,
     ScanRecord,
 )
+from api.schemas.read import SEVERITY_ORDER
 from api.schemas.scan import ScanResult
-
-_SEVERITY_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
 def identity_key(mac: str | None, ip: str) -> str:
@@ -80,7 +79,7 @@ def highest_severity(session: Session, scan_host_id: int | None) -> str | None:
     highest: str | None = None
     for finding in findings:
         if highest is None or (
-            _SEVERITY_ORDER[finding.severity] > _SEVERITY_ORDER[highest]
+            SEVERITY_ORDER[finding.severity] > SEVERITY_ORDER[highest]
         ):
             highest = finding.severity
     return highest
