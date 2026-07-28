@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and eleven revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, and agent public keys — plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and twelve revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, and the findings severity check — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-27T22:15:00Z
 ---
 
 # Backend database migrations
@@ -13,7 +13,7 @@ timestamp: 2026-07-27T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Eleven chained revisions build the
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Twelve chained revisions build the
 scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
 and the `findings.finding_id` UUID — then the auth session tables (spec 016, DMI-60) and the
@@ -43,6 +43,7 @@ new table.
 | `upgrade()` (rev `20260724_09`, `agent_nonces`) | Creates `agent_nonces` (`agent_id` FK → `agents`, `nonce`, `expires_at`) with `uq_agent_nonces_agent_id_nonce` and `ix_agent_nonces_expires_at` — and deliberately **no** separate `agent_id` index. RLS + revoke + a grant of exactly `SELECT, INSERT, DELETE` to `dmitri_runtime`. Backs [device auth](/backend/device-auth.md). | `backend/alembic/versions/20260724_09_agent_nonces.py` |
 | `upgrade()` (rev `20260724_10`, `users_email_global_unique`) | Drops `ix_users_org_email` and creates `ix_users_email` — a unique index on `lower(email)` with **no** `org_id` component, making user emails globally unique. Unguarded on purpose: a genuine cross-org duplicate must fail loudly. Exact-inverse downgrade. | `backend/alembic/versions/20260724_10_users_email_global_unique.py` |
 | `upgrade()` (rev `20260724_11`, `agents_public_key`) | Drops `agents.secret_ciphertext`/`secret_nonce`/`secret_key_version` and adds `public_key` (`LargeBinary`, NOT NULL, no server default — the table is empty). The `agents` security fence is untouched. `downgrade()` restores the three columns exactly as `20260723_07` declared them and documents that it is knowingly lossy if rows exist. | `backend/alembic/versions/20260724_11_agents_public_key.py` |
+| `upgrade()` (rev `20260727_12`, `finding_severity_domain`) | Adds check `ck_findings_severity` on `findings.severity` (`IN ('low','medium','high','critical')`); `upgrade()` guards for out-of-domain rows before applying. No RLS change — constraint only. | `backend/alembic/versions/20260727_12_finding_severity_domain.py` |
 
 ## How it connects
 

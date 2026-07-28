@@ -5,6 +5,19 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-07-27
 
+* **Update**: spec 021 (DMI-82) scan list + finding filters — `GET /api/v1/scans`
+  (`list_scans`, `ScanSummary`/`ScanListResponse`), widened `GET /api/v1/findings`
+  (`severity`/`scan_id` filters, stable `FindingRecord.id` paging), `ck_findings_severity`
+  migration, `SEVERITY_ORDER` promotion, `test_contract_fidelity.py`. Updated
+  `backend/routers.md`, `services.md`, `schemas.md`, `models.md`, `migrations.md`, `log.md`.
+  Pre-push follow-up (nuke): `SEVERITY_ORDER` moved from `services/hosts.py` to
+  `schemas/read.py`, derived from the `Severity` literal — `models/persistence.py` had been
+  importing a *service* to build its check constraint, whose import cycle forced deferred
+  model imports and an untyped `scan_record` param in `hosts.py`; both reverted. Migration
+  `20260727_12` no longer imports `api.*` (a revision is frozen history), with a drift test
+  in `test_finding_severity_migration.py`. `list_scans`/`list_findings` now take
+  `ScanStatus`/`Severity` instead of `str`. `test_read_service.py` split — scan-list cases to
+  `test_read_service_scans.py`, shared builders to `tests/read_factories.py`.
 * **Update**: spec 019 (DMI-72) `GET /users/me` + global error envelope — `errors.py`
   (`ApiError`, `_DEFAULT_CODES_BY_STATUS`), global `StarletteHTTPException` + `Exception`
   handlers in `main.py`, WS denial envelope, C13 change-password codes, `routers/users.py`,

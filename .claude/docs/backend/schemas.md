@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-27T21:00:00Z
+timestamp: 2026-07-27T22:15:00Z
 ---
 
 # Backend wire schemas
@@ -14,8 +14,9 @@ timestamp: 2026-07-27T21:00:00Z
 `schemas/` holds the Pydantic v2 models at the HTTP boundary — separate from the
 [ORM models](/backend/models.md). `scan.py` is the **ingestion input**: it validates the `ScanResult`
 an agent submits. `persistence.py` is the legacy read/output side: `Persisted*` projections used
-mainly by tests. `read.py` is the **wired read path**: the nine response models the
-[hosts/scans/findings routers](/backend/routers.md) actually return. `schemas/__init__.py` re-exports
+mainly by tests. `read.py` is the **wired read path**: the eleven response models the
+[hosts/scans/findings routers](/backend/routers.md) actually return (plus `ScanSortBy`/`SortOrder`
+literal aliases used only on the scan-list route, and `SEVERITY_ORDER`). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)
@@ -34,15 +35,18 @@ the ingest input plus the main persisted projections.
 
 | Name | What it shapes | Ref |
 |------|-----------------|-----|
+| `SEVERITY_ORDER` | Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order. The single severity-domain definition: read by host ranking (`services/hosts.py`), the scan-list severity rank (`services/read.py`), and the `findings.severity` check constraint (`models/persistence.py`). Lives beside the domain it ranks so the model layer imports it without depending on a service. | `backend/src/api/schemas/read.py:21` |
 | `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:14` |
 | `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). | `backend/src/api/schemas/read.py:24` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:35` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `open_ports_count`/`highest_severity`. | `backend/src/api/schemas/read.py:58` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:72` |
 | `HostDetailResponse` | `GET /hosts/{host_id}`: identity + latest `ports` + full `scan_history`. | `backend/src/api/schemas/read.py:82` |
-| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts. | `backend/src/api/schemas/read.py:98` |
-| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:114` |
-| `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:122` |
+| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts. | `backend/src/api/schemas/read.py:100` |
+| `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:116` |
+| `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:129` |
+| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:137` |
+| `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:145` |
 
 ## Key classes / functions — `users.py` (self profile)
 
@@ -131,4 +135,4 @@ All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame 
 [3] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
 [4] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)
 [5] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
-[6] [specs/019-users-me-and-error-envelope](../../../specs/019-users-me-and-error-envelope/TRUTH.md)
+[7] [specs/021-scan-list-and-finding-filters](../../../specs/021-scan-list-and-finding-filters/TRUTH.md)
