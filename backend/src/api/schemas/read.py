@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
@@ -9,6 +9,16 @@ from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
 Severity = Literal["low", "medium", "high", "critical"]
+ScanSortBy = Literal["timestamp", "status", "scan_mode"]
+SortOrder = Literal["asc", "desc"]
+
+# The single severity-domain definition, ranked in ``Severity`` declaration order
+# (low=1 … critical=4). Read by host ranking, the scan-list aggregates, and the
+# ``findings.severity`` check constraint. Lives here, next to the domain it ranks,
+# so the model layer can import it without depending on a service.
+SEVERITY_ORDER: dict[str, int] = {
+    name: rank for rank, name in enumerate(get_args(Severity), start=1)
+}
 
 
 class Port(BaseModel):
@@ -109,6 +119,27 @@ class ScanDetailResponse(BaseModel):
     command_id: UUID | None = None
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
+
+
+class ScanSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    timestamp: datetime
+    subnet: str
+    scan_mode: ScanMode
+    status: ScanStatus
+    host_count: Annotated[int, Field(ge=0)]
+    finding_count: Annotated[int, Field(ge=0)]
+    highest_severity: Severity | None = None
+
+
+class ScanListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[ScanSummary]
+    total: Annotated[int, Field(ge=0)]
+    page: Annotated[int, Field(ge=1)]
 
 
 class HostListResponse(BaseModel):
