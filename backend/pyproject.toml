@@ -30,7 +30,7 @@ backend-bootstrap-org = "api.management.bootstrap_org:main"
 backend-provision-agent = "api.management.provision_agent:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "pyyaml"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/api"]
