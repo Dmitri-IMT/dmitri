@@ -15,6 +15,8 @@ from api.schemas.read import (
     Port,
     ScanDetailResponse,
     ScanHostView,
+    ScanListResponse,
+    ScanSummary,
 )
 
 
@@ -46,7 +48,22 @@ def _host_summary_payload(**overrides: object) -> dict:
     return payload
 
 
-def test_all_nine_read_models_importable():
+def _scan_summary_payload(**overrides: object) -> dict:
+    payload = {
+        "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
+        "timestamp": "2026-03-05T14:12:45Z",
+        "subnet": "192.168.1.0/24",
+        "scan_mode": "standard",
+        "status": "completed",
+        "host_count": 12,
+        "finding_count": 4,
+        "highest_severity": "critical",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_all_eleven_read_models_importable():
     models = [
         Port,
         ScanHostView,
@@ -55,10 +72,12 @@ def test_all_nine_read_models_importable():
         HostScanHistoryEntry,
         HostDetailResponse,
         ScanDetailResponse,
+        ScanSummary,
+        ScanListResponse,
         HostListResponse,
         FindingListResponse,
     ]
-    assert len(models) == 9
+    assert len(models) == 11
     for model in models:
         assert issubclass(model, pydantic.BaseModel)
 
@@ -136,3 +155,32 @@ def test_scan_detail_response_nests_scan_host_view_and_finding_read():
     )
 
     assert isinstance(detail.hosts[0], ScanHostView)
+
+
+def test_scan_summary_subnet_accepts_unpatterned_string():
+    summary = ScanSummary.model_validate(_scan_summary_payload(subnet="not-a-cidr"))
+
+    assert summary.subnet == "not-a-cidr"
+
+
+def test_scan_summary_highest_severity_optional():
+    summary = ScanSummary.model_validate(
+        _scan_summary_payload(finding_count=0, highest_severity=None)
+    )
+
+    assert summary.highest_severity is None
+
+
+def test_scan_summary_rejects_extra_fields():
+    with pytest.raises(pydantic.ValidationError):
+        ScanSummary.model_validate(_scan_summary_payload(extra_field="nope"))
+
+
+def test_scan_list_response_envelope_shape():
+    envelope = ScanListResponse.model_validate(
+        {"data": [_scan_summary_payload()], "total": 1, "page": 1}
+    )
+
+    assert envelope.total == 1
+    assert isinstance(envelope.data[0], ScanSummary)
+    assert "per_page" not in ScanListResponse.model_fields

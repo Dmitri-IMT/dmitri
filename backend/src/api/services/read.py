@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import case
 from sqlmodel import Session, func, select
 
 from api.models.persistence import (
@@ -13,6 +14,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.read import (
+    SEVERITY_ORDER,
     FindingListResponse,
     FindingRead,
     HostDetailResponse,
@@ -22,8 +24,22 @@ from api.schemas.read import (
     Port,
     ScanDetailResponse,
     ScanHostView,
+    ScanListResponse,
+    ScanSortBy,
+    ScanStatus,
+    ScanSummary,
+    Severity,
+    SortOrder,
 )
 from api.services.hosts import highest_severity, open_ports_count
+
+_SCAN_SORT_COLUMNS = {
+    "timestamp": ScanRecord.timestamp,
+    "status": ScanRecord.status,
+    "scan_mode": ScanRecord.scan_mode,
+}
+_SEVERITY_RANK = case(SEVERITY_ORDER, value=FindingRecord.severity, else_=0)
+_SEVERITY_RANK_TO_LABEL = {rank: label for label, rank in SEVERITY_ORDER.items()}
 
 
 def list_hosts(
@@ -151,11 +167,82 @@ def get_scan_detail(
     )
 
 
+def list_scans(
+    session: Session,
+    *,
+    org_id: UUID,
+    page: int = 1,
+    per_page: int = 20,
+    status: ScanStatus | None = None,
+    sort_by: ScanSortBy = "timestamp",
+    sort_order: SortOrder = "desc",
+) -> ScanListResponse:
+    predicates = [ScanRecord.org_id == org_id]
+    if status is not None:
+        predicates.append(ScanRecord.status == status)
+
+    total = session.exec(
+        select(func.count()).select_from(ScanRecord).where(*predicates)
+    ).one()
+
+    column = _SCAN_SORT_COLUMNS[sort_by]
+    direction = column.desc() if sort_order == "desc" else column.asc()
+    scans = session.exec(
+        select(ScanRecord)
+        .where(*predicates)
+        .order_by(direction, ScanRecord.scan_id.asc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    ).all()
+
+    ids = [scan.scan_id for scan in scans]
+    host_counts: dict[UUID, int] = {}
+    finding_agg: dict[UUID, tuple[int, int | None]] = {}
+    if ids:
+        host_counts = dict(
+            session.exec(
+                select(ScanHostRecord.scan_id, func.count())
+                .where(ScanHostRecord.scan_id.in_(ids))
+                .group_by(ScanHostRecord.scan_id)
+            ).all()
+        )
+        finding_agg = {
+            scan_id: (count, rank)
+            for scan_id, count, rank in session.exec(
+                select(
+                    FindingRecord.scan_id,
+                    func.count(),
+                    func.max(_SEVERITY_RANK),
+                )
+                .where(FindingRecord.scan_id.in_(ids))
+                .group_by(FindingRecord.scan_id)
+            ).all()
+        }
+
+    return ScanListResponse(
+        data=[
+            _to_scan_summary(
+                scan,
+                host_count=host_counts.get(scan.scan_id, 0),
+                finding_count=finding_agg.get(scan.scan_id, (0, None))[0],
+                highest_severity=_severity_from_rank(
+                    finding_agg.get(scan.scan_id, (0, None))[1]
+                ),
+            )
+            for scan in scans
+        ],
+        total=total,
+        page=page,
+    )
+
+
 def list_findings(
     session: Session,
     *,
     org_id: UUID,
     host_id: UUID | None = None,
+    severity: Severity | None = None,
+    scan_id: UUID | None = None,
     page: int = 1,
     per_page: int = 20,
 ) -> FindingListResponse:
@@ -172,12 +259,18 @@ def list_findings(
         base = base.outerjoin(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
         )
+    if severity is not None:
+        base = base.where(FindingRecord.severity == severity)
+    if scan_id is not None:
+        base = base.where(FindingRecord.scan_id == scan_id)
 
     total = session.exec(
         select(func.count()).select_from(base.subquery())
     ).one()
     rows = session.exec(
-        base.offset((page - 1) * per_page).limit(per_page)
+        base.order_by(FindingRecord.id.asc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
     ).all()
 
     return FindingListResponse(
@@ -206,6 +299,31 @@ def _ports_for_scan_host(session: Session, scan_host_id: int | None) -> list[Por
             )
         )
     return ports
+
+
+def _severity_from_rank(rank: int | None) -> str | None:
+    if not rank:
+        return None
+    return _SEVERITY_RANK_TO_LABEL.get(rank)
+
+
+def _to_scan_summary(
+    scan: ScanRecord,
+    *,
+    host_count: int,
+    finding_count: int,
+    highest_severity: str | None,
+) -> ScanSummary:
+    return ScanSummary(
+        scan_id=scan.scan_id,
+        timestamp=scan.timestamp,
+        subnet=scan.subnet,
+        scan_mode=scan.scan_mode,
+        status=scan.status,
+        host_count=host_count,
+        finding_count=finding_count,
+        highest_severity=highest_severity,
+    )
 
 
 def _to_host_summary(host: HostRecord) -> HostSummary:

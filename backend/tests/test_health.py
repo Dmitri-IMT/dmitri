@@ -24,7 +24,6 @@ def _flatten_api_routes(routes: list) -> list[APIRoute]:
 
 DISCARDED_BUSINESS_PATHS = (
     "/scans",
-    "/api/v1/scans",
     "/findings",
 )
 
@@ -35,6 +34,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/health", "OPTIONS"),
     ("/api/v1/hosts", "GET"),
     ("/api/v1/hosts/{host_id}", "GET"),
+    ("/api/v1/scans", "GET"),
     ("/api/v1/scans/{scan_id}", "GET"),
     ("/api/v1/findings", "GET"),
 } | {

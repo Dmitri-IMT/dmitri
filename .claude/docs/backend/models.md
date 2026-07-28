@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-27T22:15:00Z
 ---
 
 # Backend ORM models
@@ -32,7 +32,7 @@ order is irrelevant.
 | `PortRecord` → `ports` | Unique `(scan_host_id, port, protocol)`; `state`. | `backend/src/api/models/persistence.py:77` |
 | `ServiceRecord` → `services` | Unique `port_id` (one service per port); `name`, `version`. | `backend/src/api/models/persistence.py:89` |
 | `CPERecord` → `cpes` | Unique `(port_id, cpe)`. | `backend/src/api/models/persistence.py:99` |
-| `FindingRecord` → `findings` | Unique `(scan_id, dedupe_key)`; `finding_id` (UUID, `default_factory=uuid4`, unique+indexed — a stable public identifier separate from the integer PK); `cve_id`, `cvss_score`, `severity`, `confidence` (default `tentative`), title/description/recommendation/evidence, JSON `references_json` + `source_labels_json`, `dedupe_key`; FKs scan_host/port/scan. | `backend/src/api/models/persistence.py:108` |
+| `FindingRecord` → `findings` | Unique `(scan_id, dedupe_key)`; check `ck_findings_severity` on `severity` (`low`/`medium`/`high`/`critical`); `finding_id` (UUID, `default_factory=uuid4`, unique+indexed — a stable public identifier separate from the integer PK); `cve_id`, `cvss_score`, `severity`, `confidence` (default `tentative`), title/description/recommendation/evidence, JSON `references_json` + `source_labels_json`, `dedupe_key`; FKs scan_host/port/scan. | `backend/src/api/models/persistence.py:121` |
 | `EnrichmentJobRecord` → `enrichment_jobs` | `job_type` (`nvd_cpe`/`nvd_cve`/`kev_cve`/`epss_cve`), `target_value`, `status` (default `pending`), `attempts`, `last_error`; FKs scan/port/finding. | `backend/src/api/models/persistence.py:140` |
 | `NvdCacheRecord` → `nvd_cache` | Unique `query_key`, `query_kind`/`query_value`, `response_json`, `expires_at`. | `backend/src/api/models/persistence.py:157` |
 | `KevRecord` / `EpssRecord` | Normalized per-CVE results (PK `cve_id`): KEV `date_added`/`known_ransomware`/`required_action`; EPSS `epss_score`/`percentile`/`scored_at`. | `backend/src/api/models/persistence.py:169` |
