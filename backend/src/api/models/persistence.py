@@ -4,9 +4,15 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
+
+from api.schemas.read import SEVERITY_ORDER
+
+_FINDING_SEVERITY_CHECK = (
+    "severity IN (" + ", ".join(f"'{k}'" for k in SEVERITY_ORDER) + ")"
+)
 
 
 def utc_now() -> datetime:
@@ -114,7 +120,10 @@ class CPERecord(SQLModel, table=True):
 
 class FindingRecord(SQLModel, table=True):
     __tablename__ = "findings"
-    __table_args__ = (UniqueConstraint("scan_id", "dedupe_key"),)
+    __table_args__ = (
+        UniqueConstraint("scan_id", "dedupe_key"),
+        CheckConstraint(_FINDING_SEVERITY_CHECK, name="ck_findings_severity"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     finding_id: UUID = Field(default_factory=uuid4, unique=True, index=True)
