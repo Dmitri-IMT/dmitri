@@ -22,6 +22,11 @@ needs an exception, it changes the rule here or it doesn't ship.
 items (Home · Scans · Hosts · Agents · Users · Settings), `[Log out]` right. **Users** is omitted
 for viewers, not disabled.
 
+**While the nav holds exactly one item, that item is centred in the bar**; from the second item
+on the nav returns to left-adjacent as described above. A lone link sitting beside the wordmark
+reads as an orphaned control rather than as navigation. This is a transitional state — v1 ships
+`Home` alone — and the feature that adds the second nav item reverts it. *Decided 2026-07-31.*
+
 **The nav names domains, not actions.** *Users* is the place user-related things live, and it keeps
 that name even in v1, when the only thing in it is the invite form. Nav is muscle memory — an item
 that renames itself between releases costs more than the thin page it was protecting the operator
@@ -105,14 +110,16 @@ Two borders, deliberately: `--rule` is decoration and may be as faint as it like
 of an *input* is a control boundary and owes 3:1 (WCAG 1.4.11). Using the faint one for both is the
 common way a paper-white UI ends up with invisible form fields.
 
-#### Accent and severity — 🔓 deferred to the build
+#### Accent and severity
 
-The deep purple and the four severity hexes are **deliberately not chosen here.** Purple is the
-single most visible decision in the product and the one worth auditioning against real screens
-rather than picking from a description; it gets tried in many variations when the frontend is
-actually being built.
+The deep purple and the four severity hexes were auditioned against real screens during the
+build and are now locked, measured against `--paper` `#FAF8F4`, the only surface they appear on.
 
-The **hues are assigned** and the rules are locked; only the hexes wait.
+| Token | Hex | Contrast on `--paper` | White text on it | Role |
+| --- | --- | --- | --- | --- |
+| `--accent` | `#7C3AED` | **5.37:1** (AA) | **5.70:1** (AA) | active nav item, primary buttons, the review-item label. Nothing else. |
+
+The **hues are assigned** and the rules are locked.
 
 - **Purple is the brand accent, and nothing else.** It marks focal points — the active nav item,
   primary buttons, the review-item label on Home — the role the muted blue plays in
@@ -126,21 +133,68 @@ The **hues are assigned** and the rules are locked; only the hexes wait.
 - **Every value clears AA on `--paper`** before it ships. Severity badges are text, so they owe
   **4.5:1**, not the 3:1 control floor — the usual trap when picking a red that "looks right".
 
-| Severity | Hue | Hex | Usage |
-| --- | --- | --- | --- |
-| Critical | **red** | `<tbd>` | the loudest thing in the product; surfaces on Home |
-| High | **orange** | `<tbd>` | surfaces on Home |
-| Medium | **amber** | `<tbd>` | never surfaces on Home |
-| Low | **blue** | `<tbd>` | never surfaces on Home |
-| Informational | **ink-muted** | `#6B6862` | visual token only — not a contract severity |
+| Severity | Hue | Hex | Contrast on `--paper` | Usage |
+| --- | --- | --- | --- | --- |
+| Critical | **red** | `#B91C1C` | **6.1:1** (AA) | the loudest thing in the product; surfaces on Home |
+| High | **orange** | `#C2410C` | **4.9:1** (AA) | surfaces on Home |
+| Medium | **amber** | `#A16207` | **4.6:1** (AA) | never surfaces on Home |
+| Low | **blue** | `#1D4ED8` | **6.3:1** (AA) | never surfaces on Home |
+| Informational | **ink-muted** | `#6B6862` | **5.2:1** (AA) | visual token only — not a contract severity |
 
 Blue appears here and nowhere else. The old "no blue anywhere" rule existed to protect the accent,
 and it still does in that form: **no blue as a brand color** — but as a low-severity semantic token
 it is doing a different job, exactly as red does at critical.
 
-**These hexes are the only unfilled values in Foundations.** Nothing else waits on them: the
-neutrals carry every screen, and a screen spec may reference `--accent` or `--sev-critical` by name
-long before they resolve to a color.
+**These were the only unfilled values in Foundations**, now resolved.
+
+### Spacing and rhythm
+
+Building rule 1 says spacing comes from the token set. This is that set. **Whitespace is the
+loudest thing on these screens** — on a normal day Home is one sentence in a lot of paper, and
+that emptiness is the design, not an unfinished layout. Spacing is therefore specified as
+deliberately as color.
+
+**The base unit is 4px** — Tailwind v4's `--spacing` default, so the `p-*` / `gap-*` / `space-y-*`
+utilities already resolve to it and no custom token layer is needed.
+
+**Use these steps and no others:**
+
+| Step | Value | Used for |
+| --- | --- | --- |
+| `1` | 4px | icon-to-text, badge internals |
+| `2` | 8px | label-to-value, items inside one group |
+| `3` | 12px | tight stack — table cell padding |
+| `4` | 16px | default gap between related elements |
+| `6` | 24px | card internal padding |
+| `8` | 32px | between cards in a list |
+| `12` | 48px | between sections of a screen |
+| `16` | 64px | around the epicenter — the verdict's breathing room |
+| `24` | 96px | top offset for a vertically-centred, near-empty screen |
+
+Anything else — `p-5`, `gap-7`, `mt-[13px]` — is a bug by Building rule 1. An arbitrary-value
+utility (`p-[13px]`) is the same bug wearing brackets: if a value is worth using it is worth
+being a step.
+
+**Four rhythm rules, binding:**
+
+1. **The parent owns the space between children.** Components ship with **no outer margin** —
+   they render flush to their own bounding box, and the layout that places them supplies the
+   gap. A component with `mb-4` baked in dictates its own spacing everywhere it is ever reused,
+   and the second use site always fights it. This is the single rule that keeps a component
+   library composable.
+2. **Gap, not margins between siblings.** Use flex/grid `gap-*` on the container. Sibling margins
+   collapse unpredictably, leave orphaned space when an item is conditionally absent, and make
+   "what is the space here" a question with two answers.
+3. **Space groups things; it does not decorate.** Related elements sit closer than unrelated ones
+   — proximity is how the eye parses the page, and it does more work than any rule or border.
+   Where a rule and whitespace would both separate two regions, prefer the whitespace: the
+   near-monochrome surface earns its calm by having fewer lines on it, not more.
+4. **Vertical rhythm is consistent; horizontal is generous.** A screen uses at most three vertical
+   step sizes (intra-group, inter-group, inter-section). Horizontal padding inside the content
+   column never drops below step `6`, so text never runs to the edge of its card.
+
+**One screen, one spacing owner.** A screen's page-level layout sets its section rhythm in one
+place. A nested component never reaches out to adjust the space around itself.
 
 ### Viewport
 

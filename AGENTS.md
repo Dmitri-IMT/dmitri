@@ -10,6 +10,23 @@ receive it. Before marking an integration task complete, grep for every
 constructor/call site of the changed class and verify each one passes the new
 parameter.
 
+## Formatting and lint gates
+
+**Never run a repo-wide formatter.** Not `ruff format`, not `black .`, not `./lint.sh`
+from the root. Automated formatting is scoped to `hardware-agent/` (see
+`.pre-commit-config.yaml`); `backend/` has never been formatted by either tool, so
+`uv run ruff format` rewrites ~32 unrelated files and buries your diff. Decided
+2026-07-30: **`ruff check` is the backend's only Python gate** — backend code is
+formatted by hand to match its neighbours.
+
+Per-layer gates:
+
+| Layer | Gate |
+|-------|------|
+| `hardware-agent/` | `uv run pytest`; black + ruff run from the pre-push hooks |
+| `backend/` | `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
+| `frontend/` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
+
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.

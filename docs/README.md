@@ -65,7 +65,7 @@
 | [`ui/FLOWS.md`](ui/FLOWS.md) | Add or change a web SPA user flow (breadboards) |
 | [`ui/SCREENS.md`](ui/SCREENS.md) | Spec a web screen (epicenter, three states, copy, layout) |
 | [`ui/IDEAS.md`](ui/IDEAS.md) | Park an unvalidated UI idea |
-| [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent |
+| [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent, database, backend or frontend locally |
 
 ## Global conventions (apply everywhere)
 

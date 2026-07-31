@@ -26,7 +26,7 @@
 | B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
-| B11 | Frontend contract asks | 🔓 | 14 contract gaps + 1 self-contradiction — [B11](#b11--frontend-contract-asks-) |
+| B11 | Frontend contract asks | 🔓 | **10 of 18 still open** (C2, C3 partial) — C5–C8, C11, C12, C16, C17 closed — [B11](#b11--frontend-contract-asks-) |
 | B12 | Transactional email | 🔓 | Decided (invites + password reset); **provider and sending domain TBD** — [B11-C17](#b11--frontend-contract-asks-) |
 
 ✅ = decided here · 🔓 = open (auth details → [`AUTH.md`](AUTH.md))
@@ -247,28 +247,26 @@ Minimum technical path:
 [`ui/FLOWS.md`](../ui/FLOWS.md#contract-asks); none are frontend-solvable. The UI is designed and
 waiting.
 
-**The big one: there is no `/users` path in the contract at all.** Not a missing field — a missing
-resource. `POST /invites` and `POST /invites/{token}/accept` are the *only* identity-adjacent write
-routes, and `LoginResponse` returns a bare token with no user object. This leaves **USERS & INVITES
-mostly unbuildable** as breadboarded (B1 promised "multi-user, single org… invite-only signup, roles
-`admin`/`viewer`" — the UI to operate that does not have endpoints), and leaves a logged-in user
-unable to see or change their own profile.
+**The big one: `/users` is still listing-less.** `GET /users/me` landed (DMI-72), but it is the only
+`/users` route: `POST /invites` and `POST /invites/{token}/accept` remain the *only* other
+identity-adjacent routes. This still leaves **USERS & INVITES mostly unbuildable** as breadboarded
+(B1 promised "multi-user, single org… invite-only signup, roles `admin`/`viewer`" — the UI to
+operate that does not have endpoints), and a logged-in user still cannot *change* their profile.
 
-**And it goes one level deeper than "no profile page" (C16):** with no user object anywhere, the
-frontend has **no documented way to learn the logged-in user's role** — so it cannot decide whether
-to render `[Scan now]`, the `Users` nav item, or the invite form. The entire `admin`/`viewer` split
-promised in [B1](#b1--user-model-organizational-) and [`AUTH.md`](AUTH.md) rests on a JWT claim that
-the contract never specifies. That is the cheapest fix on this list and the one that unblocks the
-most screens.
+**The role half of this is now closed.** `GET /users/me` returns the user object, so the frontend
+has a documented way to learn the logged-in user's role and does not have to read a JWT claim the
+contract never specified — spec 020's session layer does exactly that, and nothing in the SPA
+decodes a token. What that unblocks is the `admin`/`viewer` split for `[Scan now]`, the `Users` nav
+item and the invite form, once those screens exist.
 
 | # | Ask | Blocks | Notes |
 |---|-----|--------|-------|
-| **C1** | `GET /api/v1/agents` — list agents | AGENTS, "Scan now" | Array of one in the MVP. `agent_id` is the provisioning `X-Device-Id`, so the frontend has **no way to discover it**. Cheap, and correct under [B1](#b1--user-model-organizational-)'s "design toward many orgs". |
+| **C1** | `GET /api/v1/agents` — list agents | AGENTS, "Scan now", **HOME Pi-status line** | Array of one in the MVP. `agent_id` is the provisioning `X-Device-Id`, so the frontend has **no way to discover it**. Cheap, and correct under [B1](#b1--user-model-organizational-)'s "design toward many orgs". **Live cost:** `GET /agents/{agent_id}` is in the contract but **unimplemented** (DMI-78), and without C1 there is no id to call it with — so spec 020 shipped `frontend/src/api/agents.ts` deliberately **called by nothing** and left HOME's Pi-status footer line unbuilt rather than faking an id. |
 | **C2** ◐ | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | **WS half LOCKED 2026-07-13:** the Pi sends a **`hello` frame on connect** with `available_subnets` (`interface` + `cidr`) — in the contract and in [`ADR-011` §3](../adr/ADR-011-pi-command-channel.md). Decided *now*, while the envelope was being defined, rather than reopening it later. **HTTP half still open:** surfacing them on `AgentDetail` + the endpoint an admin uses to pick one, once. `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
-| **C3** | `GET /users/me` (+ update) | SETTINGS → profile | No `/users` resource exists. Unknown whether the user model even has a `display_name`. |
+| **C3** ◐ | ~~`GET /users/me`~~ (+ update) | SETTINGS → profile | **Read half ✅ shipped** (DMI-72 / spec 019): `GET /api/v1/users/me` is in the contract and implemented; spec 020's session layer reads identity **and role** from it, and nothing decodes a JWT. **Still open:** the update half (profile edit) for SETTINGS. |
 | **C4** | Users & invites: list users, list pending invites, change role, revoke invite | USERS & INVITES | Only `POST /invites` exists. The whole admin surface in [`ui/FLOWS.md` B2](../ui/FLOWS.md#b2--admin-day-one-invite--first-scan) has no endpoints behind it. |
 | ~~**C5**~~ | ~~Forced password change: 403 on expired-password login carries no token, but `POST /auth/change-password` requires Bearer~~ | — | **✅ MOOT 2026-07-23 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced password rotation.** With no password expiry, this deadlock cannot occur: login is `200`/`401` only. No change needed. |
-| **C6** | `HostSummary.first_seen_at` | HOME "new device" item | Item is **cut from v1** until this exists. **Cheap:** the field is already on `HostDetailResponse` — this is projecting an existing column into the list. |
+| ~~**C6**~~ | ~~`HostSummary.first_seen_at`~~ | — | **✅ RESOLVED** — `first_seen_at` is now a required property on `HostSummary` in the contract. The HOME "new device" item is unblocked (it is still not built; HOME ships critical/high findings, failed scans and stale coverage only). |
 | ~~**C7**~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |
 | ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |
 | **C9** | `host_id` on `DevicePayload` | SCAN DETAIL | The `devices` array on `ScanDetailResponse` has no id — only `ip`/`mac`/`hostname`/`vendor`. A host row on a scan therefore **cannot link to that host's page**. (Findings do carry `device_id`, so the id exists server-side.) |
@@ -278,7 +276,7 @@ most screens.
 | **C13** | Bad `current_password` → **400, not 401** | SETTINGS | `POST /auth/change-password` documents both. It must be **400**: a `401` trips the SPA's refresh interceptor ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and bounces the user to login for a mistyped field. Confirm or change. |
 | **C14** | `GET /api/v1/invites/{token}` — read an invite before accepting | ACCEPT INVITE | The screen currently knows **nothing**: not the org, not the role, not the invited email. So (a) it cannot tell a stranger the link is legitimate, and (b) the invitee must **type their own email from memory** to match `AcceptInviteRequest.email` — a typo then fails identically to a dead link. Public route, single-use token, returns `{ email, role, org_name }`. |
 | **C15** | Distinct `error.code`s on `POST /auth/reset-password`'s `400` | RESET PASSWORD | A **dead/used link** and a **weak password** share one status, and `ErrorBody.code` is an unconstrained `string`. The two need *opposite* instructions ("request a new link" vs "pick a better password"), and a stale link is this screen's most likely failure. Same treatment would help ACCEPT INVITE's `400`. |
-| **C16** | **The user's role is nowhere in the contract** | **all role-gated UI** | `LoginResponse` is a bare token; no user object exists anywhere. [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis says the role rides in **JWT claims** — but the contract documents **no claims**, so the SPA would decode an unspecified payload to decide what to render. Every *absent, not disabled* decision depends on it: the `Users` nav item, `[Scan now]`, the network chooser, the invite form. **Either document the claims or return the role** (cheapest: fold into **C3**'s `/users/me`). |
+| ~~**C16**~~ | ~~**The user's role is nowhere in the contract**~~ | — | **✅ RESOLVED — the cheapest option was taken:** the role is returned by **C3**'s `GET /users/me`, not read from an undocumented JWT claim. Spec 020's session layer is the only reader, and nothing in the SPA decodes a token — a token payload claiming a different role does not change what renders. ⚠️ **REVALIDATE:** [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and now contradicts the shipped code; it needs an amendment. |
 | ~~**C17**~~ | ~~No email delivery exists anywhere~~ | — | **✅ DECIDED 2026-07-13 — transactional email is in scope. Provider TBD.** The backend sends **invite links** and **password-reset links**. <br>**Cost is small:** `httpx` is already a backend dependency, so no new library — a `services/mailer.py` plus two call sites (`POST /invites`, `POST /auth/forgot-password`), both already the points where a token is minted, and two plain-text templates. <br>**The real work is deliverability, not code:** a sending domain with **SPF + DKIM + DMARC**. A security product's one-time login link is structurally indistinguishable from phishing and will be filtered without them. <br>**Reset is what made this mandatory** — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. <br>**Invites keep the copyable link in the UI anyway** (email is the convenience, the link is the guarantee). <br>**Open:** pick the provider (Resend / Postmark / SES) and own the sending domain. |
 | **C18** | `POST /invites` documents **only a `201`** | USERS & INVITES | No error responses at all. Inviting an address that **already has an account**, or that **already has a live invite**, is undefined behavior — and re-inviting is the likeliest repeat action on that screen. Needs a defined status + `error.code`. |
 
