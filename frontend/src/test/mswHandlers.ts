@@ -9,6 +9,11 @@ type FindingListResponse = components['schemas']['FindingListResponse']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
+const NOW_MS = Date.now()
+function minutesAgo(minutes: number): string {
+  return new Date(NOW_MS - minutes * 60 * 1000).toISOString()
+}
+
 export const validLoginResponse = {
   access_token: 'test-access-token',
   token_type: 'bearer',
@@ -29,7 +34,7 @@ export const viewerProfile: UserProfileResponse = {
 
 export const latestScan: ScanSummary = {
   scan_id: '33333333-3333-4333-8333-333333333333',
-  timestamp: '2026-07-28T10:00:00Z',
+  timestamp: minutesAgo(5),
   subnet: '192.168.1.0/24',
   scan_mode: 'standard',
   status: 'processing',
@@ -40,7 +45,7 @@ export const latestScan: ScanSummary = {
 
 export const latestSuccessfulScan: ScanSummary = {
   scan_id: '88888888-8888-4888-8888-888888888888',
-  timestamp: '2026-07-28T09:00:00Z',
+  timestamp: minutesAgo(65),
   subnet: '192.168.1.0/24',
   scan_mode: 'standard',
   status: 'completed',
@@ -67,7 +72,7 @@ export const criticalFinding: FindingRecord = {
   recommendation: 'Upgrade OpenSSH to the latest patched release.',
   evidence: 'SSH-2.0-OpenSSH_8.2',
   references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-38408'],
-  detected_at: '2026-07-28T09:05:00Z',
+  detected_at: minutesAgo(60),
 }
 
 export const highFinding: FindingRecord = {
@@ -88,7 +93,7 @@ export const highFinding: FindingRecord = {
   recommendation: 'Upgrade Apache Struts to the latest patched release.',
   evidence: 'Server: Apache-Coyote/1.1',
   references: ['https://nvd.nist.gov/vuln/detail/CVE-2017-5638'],
-  detected_at: '2026-07-28T09:06:00Z',
+  detected_at: minutesAgo(59),
 }
 
 function scanListResponse(data: ScanSummary[]): ScanListResponse {
