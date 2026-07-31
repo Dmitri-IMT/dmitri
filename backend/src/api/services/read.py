@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import case
 from sqlmodel import Session, func, select
 
+from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
@@ -14,7 +15,6 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.read import (
-    SEVERITY_ORDER,
     FindingListResponse,
     FindingRead,
     HostDetailResponse,
@@ -28,7 +28,6 @@ from api.schemas.read import (
     ScanSortBy,
     ScanStatus,
     ScanSummary,
-    Severity,
     SortOrder,
 )
 from api.services.hosts import highest_severity, open_ports_count

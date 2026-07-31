@@ -21,7 +21,9 @@ Decided in roadmap, **not yet built in code**. Source of truth per area:
 - **Identity** (login, sessions, invites, roles, password policy) — [`AUTH.md`](AUTH.md) **Phase 1 ✅**
   (roadmap); the detailed authority over ADR-005's frontend-auth sketch.
 
-"Decided" ≠ "built" — none of the above exists in code yet (see [Built vs. gap](#built-vs-gap)).
+"Decided" ≠ "built" — the identity layer is now partly in code (auth routes, middleware, roles, and
+the SPA's login/session), the agent and command-channel controls are not (see
+[Built vs. gap](#built-vs-gap)).
 
 ---
 
@@ -30,8 +32,8 @@ Decided in roadmap, **not yet built in code**. Source of truth per area:
 | Control | State |
 |---------|--------|
 | Agent Ed25519 signature | **Decided** (September); **not built** |
-| Frontend JWT / login | **Decided**; **not built** |
-| Authorization (roles) | **`admin` / `viewer`** — [`AUTH.md`](AUTH.md); **not built** |
+| Frontend JWT / login | **Decided**; **built** — in-memory token, single-flight refresh, route guard (specs 014 + 020) |
+| Authorization (roles) | **`admin` / `viewer`** — [`AUTH.md`](AUTH.md); **built server-side** (`require_user`/`require_admin`, org-scoped reads, DMI-61). SPA reads the role from `GET /users/me`, not a JWT claim — no role-gated screen exists yet to consume it |
 | Device keys | **✅** B2B installer provisioning (register public key) — [`AUTH.md`](AUTH.md); rotation Phase 2 |
 | Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH. Device auth needs no stored secret — backend holds only public keys |
 | Pi command-channel auth | WSS Ed25519-signed upgrade per [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |

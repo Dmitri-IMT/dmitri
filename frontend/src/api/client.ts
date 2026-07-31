@@ -2,6 +2,7 @@ import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { apiClient, authClient } from './instances'
 import { clearAccessToken, getAccessToken } from './tokenStore'
 import { refresh } from './auth'
+import { emitSessionExpired } from './authEvents'
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean
@@ -42,7 +43,7 @@ apiClient.interceptors.response.use(
       return apiClient(config)
     } catch (refreshError) {
       clearAccessToken()
-      window.location.href = '/login'
+      emitSessionExpired()
       return Promise.reject(refreshError)
     }
   },

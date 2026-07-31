@@ -1,10 +1,22 @@
-# Development setup — **hardware-agent** & **Dmitri** (TUI)
+# Development setup
 
-This guide covers **only** the `**hardware-agent`** Python package and the **Textual TUI** (`dmitri` / `dmitri start`).
+This guide covers every layer of the repo. Each part is independent — run only what you
+need:
+
+| Part | Layer | You need it when |
+|------|-------|------------------|
+| [1](#part-1--hardware-agent--tui) | `hardware-agent/` + Textual TUI | Working on scanning, discovery, or the terminal UI |
+| [2](#part-2--local-database) | Local Postgres (Supabase CLI + Docker) | Anything that touches the backend or its tests |
+| [3](#part-3--backend-api) | `backend/` FastAPI + worker | Working on the API, or serving data to the frontend |
+| [4](#part-4--frontend) | `frontend/` React SPA | Working on the web UI |
+
+**Working on the web UI end to end?** You need parts 2 → 3 → 4, in that order, and the
+[full-stack walkthrough](#running-the-whole-stack) chains them into one sequence.
 
 **Deployment context:** o agente **Dmitri** está orientado ao laboratório **NSPi** (robótica industrial na universidade). Equipamentos típicos (CLPs em Ethernet, Pi em Wi‑Fi) e o foco só-TUI estão descritos no [README](../README.md) (secções *Foco atual do desenvolvimento* e *Ambiente de implantação: laboratório NSPi*).
 
-**Not in scope right now:** Docker Compose, the **backend** API, and the **frontend** web app. You do not need Node.js, `npm`, or backend `.env` / `docker compose` to work on Dmitri. The API and frontend will be added later; when that happens, extend this doc or add a separate full-stack guide.
+**Still not in scope:** Docker Compose for the app itself. The backend and frontend run as
+plain local processes; only Postgres runs in Docker, via the Supabase CLI.
 
 ---
 
@@ -37,6 +49,11 @@ Windows (PowerShell):
 
 The root installer auto-installs **uv** and **nmap**, runs `uv sync --extra dev` in both packages (required for `uv run pytest`), seeds `backend/.env` when missing, and — if Docker and the Supabase CLI are present — starts local Postgres and runs Alembic migrations. It also installs a `dmitri` launcher in `~/.local/bin` (and adds that directory to your shell `PATH` on macOS/Linux when missing).
 
+**What the installer does not do:** it never touches `frontend/` (no `npm install`, no
+`frontend/.env`), and the `backend/.env` it seeds is a verbatim copy of the example — you
+still have to set `JWT_SIGNING_SECRET` and `REFRESH_COOKIE_SECURE` yourself before the API
+is usable. See [part 3](#part-3--backend-api) and [part 4](#part-4--frontend).
+
 After `./install.sh`, run the TUI from anywhere:
 
 ```bash
@@ -51,10 +68,24 @@ Manual steps below remain valid if you prefer not to use the scripts.
 
 ## Prerequisites
 
+Always:
+
 - **Git**
-- **Python 3.11+** (matches `requires-python` in `hardware-agent/pyproject.toml`)
+- **Python 3.11+** (matches `requires-python` in `hardware-agent/pyproject.toml` and `backend/pyproject.toml`)
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — required for syncing dependencies (supported path; `pip` is an unsupported escape hatch per product specs)
+
+For the agent / TUI (part 1):
+
 - **Nmap** — install on the host yourself. It must be available for **real** scans when you run the TUI. Verify with `nmap --version`. Automated **tests** mock nmap; CI does not install it — see `[specs/001-agent-tui/tech-stack/testing-tooling.md](../specs/001-agent-tui/tech-stack/testing-tooling.md)`.
+
+For the database and backend (parts 2–3):
+
+- **Docker** — [Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) on macOS/Windows, [Engine](https://docs.docker.com/engine/install/) on Linux. Only Postgres runs in it.
+- **Supabase CLI** — `brew install supabase/tap/supabase` (macOS), `scoop install supabase` (Windows), or the [Linux instructions](https://supabase.com/docs/guides/local-development/cli/getting-started).
+
+For the frontend (part 4):
+
+- **Node.js 22.x** — pinned by `engines` in `frontend/package.json`. Verify with `node --version`.
 
 ### Nmap (local runs)
 
@@ -65,7 +96,9 @@ Manual steps below remain valid if you prefer not to use the scripts.
 
 ---
 
-## Install dependencies (**uv**)
+## Part 1 — hardware-agent & TUI
+
+### Install dependencies (**uv**)
 
 From `**hardware-agent/**`:
 
@@ -78,13 +111,13 @@ This installs runtime and dev dependencies (including **pytest**). Plain `uv syn
 
 **Advanced (unsupported):** `pip install -e .` inside `hardware-agent/` may work in some environments (e.g. air-gapped mirrors), but it is **not** the supported install path — prefer **uv** — `[specs/001-agent-tui/tech-stack/package-and-distribution.md](../specs/001-agent-tui/tech-stack/package-and-distribution.md)`.
 
-### Persisted prefs (TUI)
+#### Persisted prefs (TUI)
 
 When saving app config (e.g. under `%LOCALAPPDATA%\Dmitri\`, XDG `~/.config/dmitri/`, etc.), use **write a `*.tmp`next to the real file → flush →`os.replace`/`Path.replace`** so a crash never leaves a half-written config. Details:` [specs/001-agent-tui/tech-stack/persistence-and-io.md](../specs/001-agent-tui/tech-stack/persistence-and-io.md) `(**Atomic save**). Default scan output for **Use default** is under `**…/Dmitri/results`** —` [specs/001-agent-tui/ui/screens.md](../specs/001-agent-tui/ui/screens.md)`.
 
 ---
 
-## Run the TUI
+### Run the TUI
 
 From `**hardware-agent/`** (after `uv sync`):
 
@@ -100,6 +133,239 @@ The `**dmitri**` console script is declared in `hardware-agent/pyproject.toml` (
 ```bash
 uv run python -m agent.cli
 ```
+
+---
+
+## Part 2 — local database
+
+Postgres runs in Docker through the Supabase CLI. **Alembic owns the schema** — never
+`supabase db reset|push|migration`.
+
+The repo ships `./database.sh`, which starts Docker if needed, brings the stack up, creates
+the dedicated **test** database, and tidies unused Docker images:
+
+```bash
+./database.sh              # start + create dmitri_test
+./database.sh --test       # ... then run the backend suite against it
+./database.sh --no-clean   # skip the Docker image cleanup
+./database.sh --help
+```
+
+It is idempotent and never deletes volumes, so your local data survives re-runs. If you
+only want the stack up, plain `supabase start` from the repo root is enough.
+
+Two databases live on the same server, and they are not interchangeable:
+
+| Database | URL | Used by |
+|----------|-----|---------|
+| `postgres` | `postgresql+psycopg://postgres:postgres@127.0.0.1:54322/postgres` | the running API and worker (`DATABASE_URL`) |
+| `dmitri_test` | `postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test` | `uv run pytest` (`DATABASE_URL_TEST`) |
+
+`conftest.py` refuses to run against a database not named exactly `dmitri_test`, so the
+suite can never touch your dev data. Ports come from `supabase/config.toml` (API `54321`,
+db `54322`) — read them from there rather than hardcoding if you change them.
+
+Stop the stack with `supabase stop` (add `--no-backup` only if you want the data gone).
+
+---
+
+## Part 3 — backend API
+
+### Install and configure
+
+```bash
+cd backend
+uv sync --extra dev
+cp .env.example .env          # ./install.sh does this for you
+```
+
+Then edit `backend/.env`. Two values in the example are **not** usable as shipped:
+
+```bash
+# Ships EMPTY, and an empty value boots without complaint — generate a real one:
+#   openssl rand -hex 32
+JWT_SIGNING_SECRET=<64 hex chars>
+
+# Must be false for local http:// development. See Gotchas.
+REFRESH_COOKIE_SECURE=false
+```
+
+`DATABASE_URL` already points at the local `postgres` database, and
+`CORS_ALLOWED_ORIGINS` already allows `http://localhost:5173`, so the frontend works
+without further edits.
+
+> `Settings` reads `.env` automatically, and **`.env` beats variables exported in your
+> shell** — including during tests. If something behaves unexpectedly, suspect a stale
+> value in that file first.
+
+### Migrate (required before the first boot)
+
+The app never creates tables at boot. Alembic runs against `DATABASE_URL_DIRECT`, a
+**shell-only** variable — never put it in `.env`:
+
+```bash
+cd backend
+export DATABASE_URL_DIRECT=postgresql+psycopg://postgres:postgres@127.0.0.1:54322/postgres
+uv run alembic upgrade head
+unset DATABASE_URL_DIRECT
+```
+
+### Run
+
+```bash
+cd backend
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Serving on `http://127.0.0.1:8000`. Check it:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+# {"status":"ok","version":"0.1.0"}
+```
+
+That endpoint does a real `SELECT 1`, so a `503` means the database, not the API.
+`/docs`, `/redoc` and `/openapi.json` are **disabled by design** — the published contract
+is `contracts/openapi/openapi.yaml`.
+
+The enrichment worker is a separate process, and is optional for UI work:
+
+```bash
+cd backend
+uv run python -m api.worker_main
+```
+
+### Create the first user
+
+A fresh database has no accounts, and the SPA has no sign-up screen — bootstrapping is a
+CLI plus one HTTP call. First, create the org and an admin invite:
+
+```bash
+cd backend
+uv run backend-bootstrap-org --org-name "NSPi Lab" --email you@example.com
+# org_id=...
+# invite_token=<TOKEN>
+# expires_at=...
+```
+
+Then redeem the token to set a password (**minimum 12 characters**):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/invites/<TOKEN>/accept" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"correct-horse-battery"}'
+```
+
+A `201` returns tokens and confirms the account exists. Those are the credentials you type
+into the login screen. Re-running `backend-bootstrap-org` with the same org name exits `1`
+rather than creating a duplicate.
+
+> Password checks call **HaveIBeenPwned** by default. Offline, set `HIBP_ENABLED=false` in
+> `.env` or the accept call fails.
+
+### Tests
+
+```bash
+cd backend
+uv run ruff check src tests
+DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test uv run pytest
+```
+
+Without `DATABASE_URL_TEST` the database-backed tests skip and the rest still run.
+`./database.sh --test` does both steps for you.
+
+**Never run `ruff format`** (or `black`, or `./lint.sh` from the root) over `backend/`.
+Formatters are scoped to `hardware-agent/`; `ruff check` is the backend's only gate. See
+`AGENTS.md` § Formatting and lint gates.
+
+---
+
+## Part 4 — frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env          # sets VITE_API_URL=http://localhost:8000
+npm run dev
+```
+
+Vite serves on `http://localhost:5173`. That origin is already in the backend's
+`CORS_ALLOWED_ORIGINS` default.
+
+The dev server proxies nothing — it calls the backend directly at `VITE_API_URL`, so the
+API from part 3 must be running or every request fails.
+
+Other scripts:
+
+| Command | Does |
+|---------|------|
+| `npm run dev` | Vite dev server with HMR on `:5173` |
+| `npm test` | Vitest suite (MSW-mocked; **no** backend needed) |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc -b --noEmit` |
+| `npm run build` | Type-check then production build |
+| `npm run gen:types` | Regenerate `src/types/openapi.d.ts` from `contracts/openapi/openapi.yaml` |
+
+Run `gen:types` and commit the result whenever a route contract changes — API types are
+never hand-written.
+
+---
+
+## Running the whole stack
+
+Four terminals, in order:
+
+```bash
+# 1 — database (once; leave Docker running)
+./database.sh
+
+# 2 — migrate (once per schema change)
+cd backend
+export DATABASE_URL_DIRECT=postgresql+psycopg://postgres:postgres@127.0.0.1:54322/postgres
+uv run alembic upgrade head && unset DATABASE_URL_DIRECT
+
+# 3 — API
+cd backend && uv run uvicorn api.main:app --port 8000 --reload
+
+# 4 — frontend
+cd frontend && npm run dev
+```
+
+Then open `http://localhost:5173` and log in with the account from
+[Create the first user](#create-the-first-user).
+
+**A fresh database has no scans**, so Home renders its blank state. That is correct
+behaviour, not a bug — ingest a scan through the agent to see populated data.
+
+---
+
+## Gotchas
+
+Each of these has cost someone an afternoon:
+
+- **`REFRESH_COOKIE_SECURE=true` over `http://`.** The default is `true` (correct for
+  production). Browsers silently discard a `Secure` cookie sent over plain http, so login
+  appears to work and then every refresh logs you out. Set it to `false` locally.
+- **Missing `frontend/.env`.** Only `.env.example` is committed. Without the copy,
+  `VITE_API_URL` is `undefined` and every request goes to `undefined/api/v1` — a 404 with
+  no obvious cause.
+- **`backend/.env` overrides your shell.** Exported variables lose to the file, including
+  under pytest.
+- **Empty `JWT_SIGNING_SECRET`.** A fresh copy of `.env.example` boots *successfully* with
+  an **empty** signing key — nothing warns you, and every token is signed with `""`.
+  Generate one with `openssl rand -hex 32`. Under 32 bytes you also get
+  `InsecureKeyLengthWarning` from PyJWT.
+- **Starting the API from the repo root.** `Settings` resolves `env_file=".env"` relative to
+  the **current working directory**, and there is no `.env` at the root. Run
+  `uv run uvicorn …` from the root and it dies with
+  `JWT_SIGNING_SECRET Field required [type=missing]` — which reads like a broken `.env`
+  when the real problem is that no `.env` was found at all. Always `cd backend` first.
+- **Forgetting `alembic upgrade head`.** The app never creates tables, so the first request
+  fails against an empty database rather than self-healing.
+- **`DATABASE_URL_DIRECT` in `.env`.** It is shell-only. The pooled `DATABASE_URL` cannot
+  run DDL in transaction mode.
+- **Running a formatter.** `uv run ruff format` rewrites ~32 backend files that have
+  nothing to do with your change.
 
 ---
 

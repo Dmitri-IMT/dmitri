@@ -69,9 +69,51 @@ Use the [decomposition guide](REFERENCE.md#decomposition-guide) to categorize at
 cross-check that **every acceptance-criteria scenario in `TRUTH.md` maps to at least one
 task**.
 
-### 3. Order and group
+### 3. Merge every atom that cannot carry its own test
 
-Split scope finely, in this default order:
+**This step runs before ordering, and it is the one that protects the token budget.** Splitting
+finely is cheap to write and expensive to execute: every task costs a full
+coder → tester → reviewer cycle regardless of how little it changes. A task that edits
+`package.json`, adds a four-line typed wrapper, or renames a constant burns three agent
+invocations to land a diff no test can meaningfully assert.
+
+Apply the **test viability check** to every atom from step 2:
+
+> Can a reviewer verify this task by reading a test that would **fail** if the task were done
+> wrong — a test this task itself delivers?
+
+- **Yes** → it stands alone as a task.
+- **No** → it is **not a task**. Merge it into the neighbour whose tests already cover it —
+  normally its only consumer, or the task that first renders/calls it.
+
+Atoms that almost never survive the check on their own:
+
+| Atom | Merge into |
+|---|---|
+| Dependency adds/removes, `package.json`/`pyproject.toml` edits, lockfiles | The first task that uses the dependency |
+| Token/theme/CSS layers, fonts, config constants with no branching | The first component or module that consumes them |
+| Thin typed wrappers over an HTTP client or ORM (no logic beyond the URL and the type) | The hook, service, or screen that calls them — where they get exercised end-to-end |
+| Test fixtures, MSW/mock handlers, shared test renderers | The first suite that consumes them |
+| Copy-only or token-only presentational components | The page whose test asserts their rendered output |
+| Doc write-backs, `<tbd>` replacements, and "run the gate" steps | The last implementation task in the feature |
+| A module and its sole caller, when the caller is what makes it observable | One task |
+
+Two rules that keep the merge honest:
+
+- **A merge changes no scope.** Every path in the `ARCHITECTURE.md` naming table is still
+  built and every acceptance criterion is still gated — the work moves, it does not vanish.
+  Record what moved in an **`Absorbed:`** line on the receiving task, naming the atom and why
+  it could not carry a test. That line is how a reviewer confirms nothing was quietly dropped.
+- **Never merge to dodge a test that should exist.** If an atom has real branching, a rule, a
+  boundary, or an error path, it *can* carry a test and it stays its own task. The check asks
+  whether a meaningful test is *possible*, not whether writing one is inconvenient.
+
+The signal that you have split too finely: a task whose `Target Files` contains no
+`*.test.*` path and whose `Success Criteria` are all greps and build commands.
+
+### 4. Order and group
+
+Split scope finely **within the limits of step 3**, in this default order:
 
 ```
 config/constants → discovery/pipeline → normalization (ScanPayload) → TUI screens → tests
@@ -83,7 +125,7 @@ config/constants → discovery/pipeline → normalization (ScanPayload) → TUI 
 - **Group into parallel tracks** when atoms share no dependencies (e.g. "Config &
   Pipeline" vs "TUI Screens"), as in `specs/004-nspi-scan-mode/TASKS.md`
 
-### 4. Write TASKS.md
+### 5. Write TASKS.md
 
 Write **`specs/NNN-feature-slug/TASKS.md`** by copying `specs/_templates/TASKS.md` and
 filling it in. Each task uses the canonical orchestrator shape:
@@ -91,12 +133,17 @@ filling it in. Each task uses the canonical orchestrator shape:
 ```markdown
 ## Task N: {Task name}
 - **Description**: {what to implement; reference the governing spec file}
+- **Absorbed**: {atoms merged in per step 3 and why — omit the line when nothing was merged}
 - **Dependencies**: {task numbers, or —}
 - **Target Files**: [{exact paths from the ARCHITECTURE.md naming table / DESIGN.md}]
+- **Tests**: {the test file(s) this task delivers and what they prove}
 - **Success Criteria**: {verifiable goals the reviewer can check}
 - **Status**: PENDING
 - **Review Rejections**: 0
 ```
+
+`Absorbed` and `Tests` are additive — the orchestrator reads `Status` and `Review Rejections`
+and ignores the rest, so adding them breaks nothing.
 
 Then add the **dependency graph** and the **status table** (see the template). Header
 line: `{N} tasks. **Unblocked now: #…**`.
@@ -106,7 +153,19 @@ line: `{N} tasks. **Unblocked now: #…**`.
 - Every task starts `Status: PENDING` and `Review Rejections: 0` — the orchestrator owns
   these fields from here on; don't pre-fill statuses.
 
-### 5. Honor the CLAUDE.md integration rule
+### 6. Name the layer's test and review agents when the feature is not Python
+
+`agent-developer` codes every layer and needs no note. The **test and review** agents do:
+`test-engineer` writes **pytest under `hardware-agent/tests/`** and `code-reviewer` gates on
+**`uv run pytest` + `uv run ruff check`**, neither of which exists in `frontend/`. When the feature's blast radius is not the Python layers, say so at
+the top of `TASKS.md`, name the agents to spawn instead, and state the gate command:
+
+| Blast radius | Test agent | Review agent | Gate |
+|---|---|---|---|
+| `hardware-agent/`, `backend/` | `test-engineer` | `code-reviewer` | `uv run pytest` + `uv run ruff check` |
+| `frontend/` | `frontend-test-engineer` | `frontend-code-reviewer` | `npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build` |
+
+### 7. Honor the CLAUDE.md integration rule
 
 When any task adds a parameter to `ScanOrchestrator` / `ScanRunner`, you **must** add
 explicit task(s) (or `Target Files` entries) threading it through
@@ -114,10 +173,11 @@ explicit task(s) (or `Target Files` entries) threading it through
 `hardware-agent/src/agent/tui/screens/scan_progress.py` (`ScanProgressScreen`). TUI scans
 bypass `ScanOrchestrator.run()`, so a parameter that isn't threaded reaches no TUI scan.
 
-### 6. Report
+### 8. Report
 
-Print the path you wrote and a short summary: total task count, parallel tracks, and which
-tasks are **unblocked now**. Then tell the operator the next step is **`/feature-orchestrator`**.
+Print the path you wrote and a short summary: total task count, parallel tracks, which tasks
+are **unblocked now**, and — when step 3 merged anything — what was absorbed and into what.
+Then tell the operator the next step is **`/feature-orchestrator`**.
 
 ## Rules
 
@@ -125,12 +185,20 @@ tasks are **unblocked now**. Then tell the operator the next step is **`/feature
   `TaskUpdate`.
 - **Reference spec files** in each `Description` (e.g. "per ARCHITECTURE.md naming table").
 - **Verifiable `Success Criteria`** in every task — the reviewer gates on them.
-- **One task per testable unit** — don't combine unrelated changes.
+- **One task per testable unit** — don't combine unrelated changes, and don't split a unit
+  that cannot be tested on its own (step 3).
+- **Every task delivers at least one test file**, named in `Tests`. A task with no test file
+  in its `Target Files` is a merge candidate, not a task. The only exception is a task whose
+  spec genuinely defines no testable artifact anywhere in the feature — say so explicitly and
+  justify it, because it means the reviewer has nothing but greps to gate on.
 - **Never create tasks for out-of-scope items** marked "out of scope (v1)", "deferred", or
   "not v1" in `TRUTH.md` / `decisions/`, or anything in `open-questions/`.
 - **Don't overwrite a TASKS.md the orchestrator is already driving** — if one exists with
   non-`PENDING` statuses or `Review Rejections > 0`, stop and confirm before regenerating.
-- **Cap at ~15 tasks** — if decomposition yields more, merge related atoms.
+- **Aim for 6–12 tasks; hard cap ~15.** If decomposition yields more, merge related atoms —
+  step 3 usually removes the overflow on its own. Under-splitting is recoverable (the coder
+  does more in one pass); over-splitting is not, because every extra task is three agent
+  invocations spent whether or not it earned them.
 
 ## Depth
 

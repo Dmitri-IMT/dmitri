@@ -5,9 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
+from api.core.severity import Severity
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
-from api.schemas.read import FindingListResponse, Severity
+from api.schemas.read import FindingListResponse
 from api.services.read import list_findings
 
 router = APIRouter()

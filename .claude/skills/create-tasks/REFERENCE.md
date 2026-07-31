@@ -5,8 +5,14 @@ Maps the flat Peirce specs (`TRUTH.md`, `ARCHITECTURE.md`, `DESIGN.md`,
 
 ## Decomposition guide
 
-Each category produces a distinct type of task. The `Target Files` of every task come
+Each category produces a distinct type of **atom**. The `Target Files` of every task come
 from the `ARCHITECTURE.md` **"New files and naming" table** (or `DESIGN.md` widget ids).
+
+> **An atom is not automatically a task.** Categories below are how you *find* the work, not
+> how you *package* it. After listing atoms, run SKILL.md step 3's test viability check and
+> merge every atom that cannot deliver a test that would fail if the atom were done wrong.
+> Category 1 atoms in particular are usually merged, not shipped alone: a constant with no
+> branching is verified by whatever consumes it. Category 6 is the extreme case — see its note.
 
 ### Category 1: Config & constants
 
@@ -73,7 +79,13 @@ Atoms:
 - Tests asserting behavior for each acceptance-criteria scenario
 - Follow the nearest existing test (e.g. `test_scan_mode_scripts.py`) for patterns
 
-Task pattern: "Unit tests for {thing}" — one task per coherent test target
+Task pattern: "Unit tests for {thing}" — one task per coherent test target.
+
+**Prefer tests inside the task that builds the thing.** A separate test task is worth it only
+when the suite is large enough to stand alone (a full rule table, a state matrix) or when it
+spans several earlier tasks. Otherwise the test belongs in the implementing task's
+`Target Files`, named in its `Tests` field — that is what makes step 3's viability check pass
+and what stops thin atoms from becoming their own review cycles.
 
 ## Acceptance criteria → task mapping
 
@@ -120,8 +132,11 @@ Fill the canonical orchestrator shape (matches `specs/_templates/TASKS.md`):
 ```markdown
 ## Task N: {imperative verb + what}
 - **Description**: {2–3 sentences: what to implement, which spec file governs it}
+- **Absorbed**: {atoms merged in per SKILL.md step 3, and why each could not carry a test —
+  omit the line entirely when nothing was merged}
 - **Dependencies**: {task numbers, or —}
 - **Target Files**: [{exact paths from the ARCHITECTURE.md naming table / DESIGN.md}]
+- **Tests**: {the test file(s) this task delivers and what they prove}
 - **Success Criteria**:
   - {Verifiable goal 1 — what the reviewer checks}
   - {Verifiable goal 2}

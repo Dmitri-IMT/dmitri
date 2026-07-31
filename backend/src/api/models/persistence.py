@@ -8,7 +8,7 @@ from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
 
-from api.schemas.read import SEVERITY_ORDER
+from api.core.severity import SEVERITY_ORDER
 
 _FINDING_SEVERITY_CHECK = (
     "severity IN (" + ", ".join(f"'{k}'" for k in SEVERITY_ORDER) + ")"

@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
 
+from api.core.severity import Severity
+
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
-Severity = Literal["low", "medium", "high", "critical"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 SortOrder = Literal["asc", "desc"]
-
-# The single severity-domain definition, ranked in ``Severity`` declaration order
-# (low=1 … critical=4). Read by host ranking, the scan-list aggregates, and the
-# ``findings.severity`` check constraint. Lives here, next to the domain it ranks,
-# so the model layer can import it without depending on a service.
-SEVERITY_ORDER: dict[str, int] = {
-    name: rank for rank, name in enumerate(get_args(Severity), start=1)
-}
 
 
 class Port(BaseModel):

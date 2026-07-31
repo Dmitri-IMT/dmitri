@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health + read path + auth + users/me + agent WS command channel + global error envelope), the worker process entry, settings, and the DB engine/session.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-07-27T21:00:00Z
+timestamp: 2026-07-31T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -37,6 +37,7 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins`, `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the **device/invite knobs** added by DMI-61: `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48). | `backend/src/api/core/config.py:22` |
 | `normalize_postgres_url()` | Rewrites any accepted Postgres scheme to `postgresql+psycopg://`; **rejects** unknown schemes (no SQLite). Used by both config validation and the engine. | `backend/src/api/core/config.py:16` |
 | `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:62` |
+| `Severity` / `SEVERITY_ORDER` | The severity domain and its `low→1 … critical→4` ranking, derived from the literal's declaration order. Dependency-free on purpose: it sits in `core/` so [models](/backend/models.md) can spell the `findings.severity` check constraint without importing the schema layer above them. Read by `services/hosts.py` (host ranking), `services/read.py` (scan-list rank), `routers/findings.py` (the `severity` query param) and `schemas/read.py`. Moved here from `schemas/read.py` on 2026-07-31. | `backend/src/api/core/severity.py:5` |
 | `get_engine()` | `lru_cache`d engine from the normalized `DATABASE_URL`, with `pool_pre_ping=True` and `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — required for the pgbouncer/Supabase pooler. | `backend/src/api/db/session.py:11` |
 | `get_session()` | Generator yielding a `Session` in a context manager; the FastAPI dependency and the worker's session source. | `backend/src/api/db/session.py:22` |
 | `reset_db_state()` | Test helper clearing the engine + settings caches. | `backend/src/api/db/session.py:27` |

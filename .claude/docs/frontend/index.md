@@ -1,17 +1,23 @@
 # frontend
 
-The React 19 + TypeScript SPA (Vite). This feature (spec 014 / roadmap T9) is the greenfield
-*scaffold* only: contract-typed API access and the full auth-client plumbing, with a throwaway
-stub UI. Source lives at `frontend/src/`.
+The React 19 + TypeScript SPA (Vite). Spec 014 built the scaffold — contract-typed API access and
+the auth-client plumbing behind a stub UI; spec 020 replaced the stubs with the first real vertical
+slice: routing, a session layer, and the login → Home screens. Source lives at `frontend/src/`.
 
 ## Overview
 
-* [Package overview](./overview.md) — The React 19 + TypeScript SPA scaffold — contract-typed API access and the auth-client plumbing, with only a throwaway stub UI.
+* [Package overview](./overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
 
 ## API layer
 
-* [api](./api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the auth resource module, and the in-memory token store.
+* [api](./api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read resource modules.
 
-## App root & stub UI
+## Session & routing
 
-* [app](./app.md) — The React root, the boot-time silent-refresh gate, and the throwaway login stub + signed-in placeholder.
+* [auth](./auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
+* [app](./app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
+
+## Domain & screens
+
+* [review](./review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [screens](./screens.md) — The LOGIN and HOME screens, the not-found page, the two shells and top bar, and the shared presentation components.

@@ -1,8 +1,9 @@
 # Roadmap — Frontend (React SPA)
 
-> **Status:** **greenfield.** No `frontend/` directory exists yet. The stack is already decided
-> in [`ADR-008`](../adr/ADR-008-frontend-stack.md); this doc is about *what to build and in what
-> order*, not re-deciding the stack.
+> **Status:** **first vertical slice shipped.** `frontend/` exists: the spec-014 scaffold plus the
+> spec-020 login → Home slice (routing, session layer, Home verdict screen). The stack is already
+> decided in [`ADR-008`](../adr/ADR-008-frontend-stack.md); this doc is about *what to build and in
+> what order*, not re-deciding the stack.
 >
 > **Sources:** [`ADR-008`](../adr/ADR-008-frontend-stack.md), [`ADR-005`](../adr/ADR-005-security-model.md),
 > [`ui/REFERENCE.md`](../ui/REFERENCE.md), [`ui/FLOWS.md`](../ui/FLOWS.md), [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openapi.yaml).
@@ -65,34 +66,50 @@ interaction in implementation before it has passed through that sequence.
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
 - **Host inventory:** discovered machines → **`/hosts`** (OpenAPI `/devices` rename per B7) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
-- **UI status:** flows are drafted, the Home screen is drafted, and all other screen specs are
-  pending. Shared visual foundations are **written** in
+- **UI status:** flows are drafted, **LOGIN and Home are built** (spec 020), and all other screen
+  specs are pending. Shared visual foundations are **written** in
   [`ui/SCREENS.md` §Foundations](../ui/SCREENS.md#foundations) — app shell (top bar, no sidebar),
   light-only theme, typography (IM Fell English titles + IBM Plex Mono for everything else),
   viewport (desktop-only but fluid, 1440/1280), locked neutral palette, shared components, building
-  rules, and consistency rules. **The deep purple and the severity hexes are deferred on purpose**
-  to the build, so the accent can be auditioned against real screens; the rules constraining them
-  are already locked and nothing else waits on them.
+  rules, and consistency rules. **The deep purple and the severity hexes are now locked** — they
+  were deferred to the build so the accent could be auditioned against real screens, and spec 020
+  wrote them into [`ui/SCREENS.md` §Color](../ui/SCREENS.md#color) with measured contrast ratios.
   [`ui/SCREENS.md`](../ui/SCREENS.md) is the source of truth for the UI: where it disagrees with an
   ADR or a roadmap doc, those get reconciled to it (ADR-008's `AppShell` was narrowed to a top bar
   on 2026-07-13). The active UI documents replaced the removed March-era `ui/wireframes.md`.
-- **Contract asks (8).** Raised 2026-07-13 against `contracts/openapi/openapi.yaml`; each blocks a
-  flow and none are frontend-solvable — see [`ui/FLOWS.md` § Contract asks](../ui/FLOWS.md#contract-asks).
-  The heavy ones: **there is no `/users` path in the contract at all** (C3, C4), which leaves
-  **Users & invites mostly unbuildable** as breadboarded — only `POST /invites` exists, so listing
-  users or invites, changing a role and revoking an invite have no endpoints. Then `GET /agents`
-  (C1) and the Pi's target network (C2). Also:
-  `HostSummary.first_seen_at` (C6), invite auto-login (C7), and whether `FindingRecord` carries a
-  `cve_id` (C8). (C5 forced-password-change is void — forced rotation dropped, ADR-015.)
-- **Open design decisions (2):** the stale-coverage threshold (N days) and the 409 busy-Pi copy.
+- **Contract asks — 4 of the original 8 still open.** Raised 2026-07-13 against
+  `contracts/openapi/openapi.yaml`; each blocks a flow and none are frontend-solvable — see
+  [`ui/FLOWS.md` § Contract asks](../ui/FLOWS.md#contract-asks) and
+  [`BACKEND.md` B11](BACKEND.md#b11--frontend-contract-asks-) for the full 18-row list.
+  The heavy ones: **`/users` is still listing-less** (C3 ◐, C4) — spec 019 added `GET /users/me`, but
+  only `POST /invites` exists beyond it, so listing users or invites, changing a role and revoking
+  an invite still have no endpoints, leaving **Users & invites mostly unbuildable** as breadboarded.
+  Then `GET /agents` (C1) and the Pi's target network (C2 ◐ — `AgentDetail.available_subnets`
+  landed, but nothing persists the chosen `target_subnet`).
+  **Closed since:** `HostSummary.first_seen_at` (C6) and `FindingRecord.cve_id` (C8) are both in the
+  contract; invite-accept does auto-log-in (C7, returns a full `LoginResponse`). (C5
+  forced-password-change is void — forced rotation dropped, ADR-015.)
+- **Role comes from `GET /users/me`, not a JWT claim** (B11-C16, closed). Spec 020's session layer is
+  its only reader and nothing in the SPA decodes a token. ⚠️ **REVALIDATE:**
+  [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and
+  now contradicts the shipped code — it needs an amendment.
+- **`GET /agents/{agent_id}` is in the contract but unimplemented backend-side** (DMI-78). Spec 020
+  wrote `src/api/agents.ts` against it and left it **called by nothing**; Home's Pi-status footer
+  line is deliberately not built rather than faked from a `VITE_AGENT_ID` or a scan.
+- **Open design decisions (1):** the 409 busy-Pi copy. *(The stale-coverage threshold is decided —
+  spec 020 locked it at **3 days**, owned by `STALE_COVERAGE_DAYS` in `frontend/src/lib/review.ts`.)*
 
 ## Milestones
 
-1. Lock shared UI foundations (written; typography + severity hexes open) and the auth/Home/Agents
-   flows; resolve the contract blockers needed by those screens.
-2. Scaffold `frontend/` (Vite + TS + Router + Query + shadcn) + Axios client + OpenAPI type-gen.
-3. First vertical slice: login → Home, including blank, regular, and error states with live data.
-4. Admin auth and user-management surfaces: invite acceptance, forgot/reset, and Users & invites.
+1. ◐ Lock shared UI foundations (done — typography and the accent + severity hexes now locked) and
+   the auth/Home/Agents flows; resolve the contract blockers needed by those screens. **Auth and
+   Home cleared; Agents still blocked on C1** (no `GET /agents`, so no `agent_id` to read).
+2. ✅ Scaffold `frontend/` (Vite + TS + Router + Query + shadcn) + Axios client + OpenAPI type-gen —
+   spec 014.
+3. ✅ First vertical slice: login → Home, including blank, regular, and error states with live data —
+   spec 020.
+4. **Next.** Admin auth and user-management surfaces: invite acceptance, forgot/reset, and Users &
+   invites — **blocked on C3/C4** (no `/users` listing endpoints).
 5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.

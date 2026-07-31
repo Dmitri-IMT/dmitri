@@ -34,7 +34,7 @@ the team's source of truth for how features move from idea to merged code.
 | Planner | `feature-planning` skill | Phase 1 — writes specs, stops for approval |
 | Refiner | `refine-specs` skill | Phase 1.5 — grills specs, edits them inline |
 | Orchestrator | `feature-orchestrator` skill | Phases 2–5 — TASKS.md, spawns subagents, never edits app code |
-| Subagents | `architecture-agent`, `tui-design-agent`, `agent-developer`, `test-engineer`, `code-reviewer` | Plan, implement, test, approve/reject |
+| Subagents | `architecture-agent`, `tui-design-agent`, `frontend-design-agent`, `agent-developer`, `test-engineer`, `code-reviewer` | Plan, implement, test, approve/reject |
 | Nuke | Human only — `nuke` skill | Pre-push branch-delta audit; report only |
 | Commit / PR | Human only — `commit`, `create-pr` skills | Local commits, then open the PR |
 
@@ -65,7 +65,7 @@ Phases 5–7 are **human-only** and must never run inside the orchestrator.
 |------|-------|---------|
 | `TRUTH.md` | Planner | Domain narrative, business rules, verifiable acceptance criteria |
 | `ARCHITECTURE.md` | architecture-agent | Pipeline fit, contracts, mandatory file/naming table, testing |
-| `DESIGN.md` | tui-design-agent | Textual screen flow, bindings, copy, states, widget ids (UI only) |
+| `DESIGN.md` | tui-design-agent / frontend-design-agent | Screen flow, mockups, copy, states, and widget ids (Textual) or `data-testid`s (React web) — UI only |
 | `INTEGRATION.md` | architecture-agent | Cross-layer contract (rare) |
 | `TASKS.md` | Orchestrator | Execution checklist + status |
 | `POOP.md` | Subagents | Append-only execution ledger |

@@ -23,11 +23,17 @@ Two things govern the scope. **The role is read from the server, never inferred*
 "absent, not disabled" decision in the product depends on it. And **role-gated affordances are
 omitted from the page, not greyed out**: a viewer never learns what they are missing.
 
-> **⚠️ This feature is blocked.** Home's verdict needs the latest scan, that scan's
-> critical/high findings, and the agent's last-seen time. All three are **defined in the frozen
-> contract and unimplemented in the backend**. **DMI-82** must land first — implementation
-> only, no contract change. See "Dependencies" below. The spec is written now so the build can
-> start the day that blocker clears.
+The second rule ships here as a *guarantee*, not yet as a demonstration: after this feature's
+fences were drawn, nothing on either screen is admin-only. So this feature proves the first half —
+the role is fetched from the server and available — and enforces the second structurally, by
+ensuring nothing anywhere renders in a disabled state. The first admin-only affordance, and the
+machinery that hides it, arrive with the screen that needs one.
+
+> **✅ Unblocked (2026-07-28).** **DMI-82** landed: `GET /scans` and the `severity`/`scan_id`
+> filters on `GET /findings` are implemented, tested and contract-verified. Home's verdict reads
+> are all served. The one remaining gap is the agent's last-seen time (**DMI-78**), which costs
+> only the Pi-status footer — not an acceptance criterion. See "Dependencies" below. This
+> feature is buildable today.
 
 ## Business rules
 
@@ -40,6 +46,15 @@ omitted from the page, not greyed out**: a viewer never learns what they are mis
   never replace it.
 - **Only actionable things reach Home.** Critical and high findings, failed scans, and stale
   coverage. Medium and low findings, and routine successful scans, never appear.
+- **The count states what is true, not what is shown.** When Home says how many things need
+  review, that number counts everything that matched — never the number of items currently on
+  screen. A screen that shows fewer than it counts is correct; a screen that counts only what it
+  shows under-reports danger at exactly the moment it matters.
+- **Serious findings are reviewed one at a time.** Home presents one finding, and the operator
+  steps forward and back through the rest. Home never becomes an endless scroll, and stepping
+  never waits on the network — everything the operator can step to is already loaded.
+- **A failed scan and stale coverage are never stepped past.** They are not findings and are not
+  part of that sequence; they stay in view so neither can go unseen.
 - **Coverage is stale after 3 days.** If the most recent successful scan finished more than
   3 days ago, Home says so. (Decided 2026-07-27; closes the FRONTEND.md open decision.)
 - **Every screen ships three designed states.** Regular, blank, and error — none inherited by
@@ -60,8 +75,8 @@ omitted from the page, not greyed out**: a viewer never learns what they are mis
    can use the product without touching an API client.
 2. As an operator, I want a plain-language verdict on Home, so that I know my network's state
    at a glance without interpreting a chart.
-3. As an operator with something to fix, I want each item stated in plain words with a way to
-   go deal with it, so that I know what to do next.
+3. As an operator with something to fix, I want each item stated in plain words — what it is,
+   which machine it is on — so that I know what I am dealing with without opening anything else.
 4. As a viewer, I want never to see admin-only actions, so that the product does not tease me
    with things I cannot do.
 5. As an operator returning to a browser tab, I want to be sent to sign-in rather than shown a
@@ -81,23 +96,35 @@ omitted from the page, not greyed out**: a viewer never learns what they are mis
 | 4 | Network is down at sign-in | The backend is unreachable | The operator submits the sign-in form | An error distinguishable from "wrong credentials" appears in the form, and the operator stays on sign-in |
 | 5 | Protected route without a session | No session | The operator opens Home's address | They are sent to sign-in and no protected content is rendered |
 | 6 | Session recovery on reload | A valid long-lived session, the page is reloaded | The app boots | The operator stays signed in and is not shown sign-in |
-| 7 | Viewer role gating | A signed-in viewer | Home and the shell render | No admin-only affordance is present anywhere in the page — not present and disabled, but absent |
-| 8 | Admin role gating | A signed-in admin | Home and the shell render | The admin-only affordances are present |
+| 7 | Nothing is present-but-disabled | A signed-in operator of either role | Any screen in this feature renders | No element anywhere in the page is rendered in a disabled state, with one exception: the sign-in button while its request is in flight |
+| 8 | The role comes from the server | A signed-in operator | The app determines whether they are an admin or a viewer | It uses the server's answer about who they are; it never decodes a token to find out |
 | 9 | Home, all clear | A session, a recent successful scan, no critical or high findings | Home renders | The verdict states that nothing needs attention, with a context sentence naming when the last scan finished and what it covered. No review items are shown |
-| 10 | Home, items pending | A session, a recent scan with at least one critical or high finding | Home renders | The verdict states how many things need review, and each critical/high finding is listed in plain language with a way to go deal with it |
+| 10 | Home, items pending | A session, a recent scan with at least one critical or high finding | Home renders | The verdict states how many things need review, and the first critical/high finding is shown in plain language naming what it is and which machine it is on |
 | 11 | Home hides noise | A recent scan whose only findings are medium and low | Home renders | The verdict states nothing needs attention and no finding is listed |
-| 12 | Home, failed scan | The most recent scan did not finish | Home renders | A review item states that the last scan did not finish, with a way to see why |
-| 13 | Home, stale coverage | The most recent successful scan finished more than 3 days ago | Home renders | A review item states that coverage is stale, with a way to go deal with it |
-| 14 | Home, blank | A session and no scan has ever run | Home renders | First-run copy explains what a scan is; an admin is offered a way to run the first scan, a viewer is told to ask their admin and is offered no such affordance |
+| 12 | Home, failed scan | The most recent scan did not finish | Home renders | A review item states, in plain words, that the last scan did not finish |
+| 13 | Home, stale coverage | The most recent successful scan finished more than 3 days ago | Home renders | A review item states, in plain words, how long it has been since a scan succeeded |
+| 14 | Home, blank | A session and no scan has ever run | Home renders | First-run copy explains what a scan is and states where scanning is currently set up. No control for starting a scan is rendered, for either role |
 | 15 | Home, error | A session and the data load fails | Home renders | Plain error copy and a retry are shown; no partial content pretends to be a verdict |
 | 16 | Home, retry recovers | Home is in its error state and the backend recovers | The operator retries | The data loads and the appropriate regular or blank state renders |
-| 17 | Sign out | A signed-in operator | They sign out | The session ends on the server, in-memory state is cleared, and they are on sign-in. Going back does not restore protected content |
-| 18 | Quality gates | The feature's branch | Lint, format check, typecheck, test, and build run | All pass on the touched scope |
+| 17 | The count exceeds what is on screen | A scan with more critical and high findings than Home shows at once | Home renders | The verdict states the true number of things needing review — not the number visible |
+| 18 | Stepping through findings | A session and a scan with several critical and high findings | The operator steps forward and back through them | One finding is shown at a time, most serious first, with its position in the sequence stated. Stepping never waits on the network, and the sequence stops at both ends rather than wrapping |
+| 19 | Unknown address | A signed-in operator | They open an address the product does not have | A page states plainly that it does not exist and offers a way back to Home; they keep the shell they can navigate by. Signed out, the same address sends them to sign-in instead |
+| 20 | Sign out | A signed-in operator | They sign out | The session ends on the server, in-memory state is cleared, and they are on sign-in. Going back does not restore protected content |
+| 21 | Quality gates | The feature's branch | Lint, format check, typecheck, test, and build run | All pass on the touched scope |
 
 ## Out of scope (v1)
 
 - Scans, Hosts, scan detail, host inventory, and host detail screens.
-- "Scan now" and any command-status UI.
+- **Any affordance that navigates off Home.** A review item states what is wrong; it does not
+  carry a control that opens the thing it names, because the screens those controls point at do
+  not exist yet. The product does not render a control that goes nowhere — the same reason this
+  feature ships no "forgot password?" link. Each control arrives with the screen it points at.
+- **Reaching beyond the first 100 critical or 100 high findings of a scan.** The sequence holds
+  the first 100 of each; the verdict still states the true total, so the operator is told the real
+  number even when they cannot step to every one. The screens that would list them all are out of
+  scope below.
+- **"Scan now", any command-status UI, and any control that starts a scan** — including on the
+  first-run screen, where the operator is told in plain words where scanning lives instead.
 - The Users & invites admin surface, invite acceptance, forgot password, reset password, and
   the Settings screen.
 - Charts, metric cards, and any numeric dashboard on Home — excluded by decision, not by
@@ -116,13 +143,19 @@ omitted from the page, not greyed out**: a viewer never learns what they are mis
 | Sign-in, refresh, sign-out, and session machinery (DMI-60) | ✅ Done |
 | Signed-in user's identity and role (DMI-72) | ✅ Done |
 | The scaffold: typed API access and auth plumbing (DMI-20) | ✅ Done |
-| **Home's reads: the latest scan, and that scan's critical/high findings** | ⛔ **DMI-82** — `GET /scans` (list) and the `severity`/`scan_id` filters on `GET /findings`. Both frozen in the contract, neither implemented; the residue DMI-74 deferred. Implementation only, no contract change |
+| **Home's reads: the latest scan, and that scan's critical/high findings** | ✅ **DMI-82 — Done** (`specs/021-scan-list-and-finding-filters/`). `GET /scans` is mounted with `page`/`per_page`/`status`/`sort_by`/`sort_order`; `GET /findings` now takes `severity` and `scan_id` alongside the existing `host_id`. Shipped against the frozen contract with a fidelity test — no shape changed |
 | The Pi's online state and last-seen time | ⛔ **DMI-78** (contract ask C1). The SPA has no way to learn an `agent_id`; there is no `/agents` collection in the contract. Costs the Home footer only — see `DESIGN.md` |
 
-Acceptance criteria 9–13, 15 and 16 cannot be met until the first blocker lands. Criteria 1–8,
-14, 17 and 18 are buildable against what exists today. DMI-78 costs the Pi-status footer, which
-is not an acceptance criterion — the 3-day staleness rule (criterion 13) needs only the scan
-timestamp and survives without it.
+**Every acceptance criterion is now buildable.** DMI-78 costs the Pi-status footer, which is not
+an acceptance criterion — criterion 13's staleness rule needs only a scan timestamp and survives
+without it.
+
+Two properties DMI-82 shipped that this feature must build against:
+
+- **One severity per request.** `severity` takes a single value, not a list or a range. Home asks
+  twice — once for critical, once for high.
+- **Findings have no caller-chosen sort.** They come back in a fixed, stable-for-paging order.
+  Home must not assume the response is ordered by severity, time, or anything else.
 
 ## Related specs
 

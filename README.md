@@ -125,6 +125,7 @@ As versões **v1**, **v2** e **v3** descrevem fases da **capacidade de varredura
 | Arquitetura de sistema | [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) |
 | Pipeline NSE / modos | [docs/implementation/NSE-VULNERABILITY-PIPELINE.md](docs/implementation/NSE-VULNERABILITY-PIPELINE.md) |
 | Agente + TUI (setup) | [hardware-agent/README.md](hardware-agent/README.md), [docs/DEV-SETUP.md](docs/DEV-SETUP.md) |
+| Rodar tudo localmente (db + backend + frontend) | [docs/DEV-SETUP.md](docs/DEV-SETUP.md) |
 
 ## Setup
 

@@ -1,0 +1,218 @@
+import { StrictMode } from 'react'
+import { describe, expect, it } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { delay, http, HttpResponse } from 'msw'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { server } from '@/test/setup'
+import { renderWithProviders } from '@/test/renderWithProviders'
+import { viewerProfile } from '@/test/mswHandlers'
+import { getAccessToken, setAccessToken } from '@/api/tokenStore'
+import { emitSessionExpired } from '@/api/authEvents'
+import { SessionProvider } from './SessionProvider'
+import { useSession } from './useSession'
+import { RequireSession } from './RequireSession'
+
+const baseURL = 'http://localhost:8000/api/v1'
+
+function SessionProbe() {
+  const { status, user, signOut } = useSession()
+  if (status === 'booting') return null
+  if (status === 'anonymous') return <div>Login form</div>
+  return (
+    <div>
+      <div>Signed in as {user?.role}</div>
+      <button onClick={() => void signOut()}>Log out</button>
+    </div>
+  )
+}
+
+function BackProbe() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate(-1)}>Go back</button>
+}
+
+function renderNavigableApp(queryClient: QueryClient) {
+  return render(
+    <MemoryRouter initialEntries={['/first', '/']} initialIndex={1}>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <Routes>
+            <Route path="/first" element={<div>first-route</div>} />
+            <Route path="/" element={<SessionProbe />} />
+            <Route
+              path="/login"
+              element={
+                <>
+                  <div>login-route</div>
+                  <BackProbe />
+                </>
+              }
+            />
+          </Routes>
+        </SessionProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  )
+}
+
+function newQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+}
+
+describe('SessionProvider', () => {
+  it('never renders the login form when the boot refresh succeeds (AC 6)', async () => {
+    renderWithProviders(<SessionProbe />)
+
+    expect(screen.queryByText('Login form')).not.toBeInTheDocument()
+    await screen.findByText('Signed in as admin')
+    expect(screen.queryByText('Login form')).not.toBeInTheDocument()
+  })
+
+  it('exposes the role from GET /users/me, never a role decoded from the token (AC 8)', async () => {
+    const tokenClaimingAdmin = `header.${btoa(JSON.stringify({ role: 'admin' }))}.signature`
+    setAccessToken(tokenClaimingAdmin)
+    server.use(
+      http.get(`${baseURL}/users/me`, () => HttpResponse.json(viewerProfile)),
+    )
+
+    renderWithProviders(<SessionProbe />)
+
+    await screen.findByText('Signed in as viewer')
+  })
+
+  it('signs out on a succeeding logout: fires POST /auth/logout, clears the token, empties the cache, navigates to /login with replace (AC 20)', async () => {
+    const queryClient = newQueryClient()
+    const seen: string[] = []
+    server.events.on('request:match', ({ request }) => {
+      seen.push(request.url)
+    })
+
+    renderNavigableApp(queryClient)
+    await screen.findByText('Signed in as admin')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
+
+    await screen.findByText('login-route')
+    expect(seen.some((url) => url.endsWith('/auth/logout'))).toBe(true)
+    expect(getAccessToken()).toBeNull()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go back' }))
+    await screen.findByText('first-route')
+    expect(screen.queryByText('Signed in as admin')).not.toBeInTheDocument()
+
+    server.events.removeAllListeners()
+  })
+
+  it('signs out on a failing logout too: clears the token, empties the cache, navigates to /login regardless (AC 20)', async () => {
+    server.use(
+      http.post(
+        `${baseURL}/auth/logout`,
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    )
+    const queryClient = newQueryClient()
+    const seen: string[] = []
+    server.events.on('request:match', ({ request }) => {
+      seen.push(request.url)
+    })
+
+    renderNavigableApp(queryClient)
+    await screen.findByText('Signed in as admin')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
+
+    await screen.findByText('login-route')
+    expect(seen.some((url) => url.endsWith('/auth/logout'))).toBe(true)
+    expect(getAccessToken()).toBeNull()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+
+    server.events.removeAllListeners()
+  })
+
+  it('clears the token, empties the cache and navigates to /login when a session-expired event reaches the mounted provider', async () => {
+    const queryClient = newQueryClient()
+
+    renderNavigableApp(queryClient)
+    await screen.findByText('Signed in as admin')
+
+    emitSessionExpired()
+
+    await screen.findByText('login-route')
+    expect(getAccessToken()).toBeNull()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+  })
+
+  it('renders no protected content and no navigation while booting', () => {
+    server.use(
+      http.post(`${baseURL}/auth/refresh`, async () => {
+        await delay('infinite')
+        return HttpResponse.json({
+          access_token: 'never-resolves',
+          token_type: 'bearer',
+          expires_in: 3600,
+        })
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <QueryClientProvider client={newQueryClient()}>
+          <SessionProvider>
+            <Routes>
+              <Route element={<RequireSession />}>
+                <Route path="/" element={<div>protected-content</div>} />
+              </Route>
+              <Route path="/login" element={<div>login-route</div>} />
+            </Routes>
+          </SessionProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByText('protected-content')).not.toBeInTheDocument()
+    expect(screen.queryByText('login-route')).not.toBeInTheDocument()
+  })
+
+  it('issues exactly one POST /auth/refresh on boot under StrictMode', async () => {
+    let refreshCount = 0
+    server.use(
+      http.post(`${baseURL}/auth/refresh`, () => {
+        refreshCount += 1
+        return HttpResponse.json({
+          access_token: 'strict-mode-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+        })
+      }),
+    )
+
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/']}>
+          <QueryClientProvider client={newQueryClient()}>
+            <SessionProvider>
+              <SessionProbe />
+            </SessionProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
+      </StrictMode>,
+    )
+
+    await screen.findByText('Signed in as admin')
+    expect(refreshCount).toBe(1)
+  })
+
+  it('throws when used outside a SessionProvider', () => {
+    function Consumer() {
+      useSession()
+      return null
+    }
+
+    expect(() => render(<Consumer />)).toThrow(
+      'useSession must be used within a SessionProvider',
+    )
+  })
+})

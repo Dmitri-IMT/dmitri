@@ -21,15 +21,17 @@
 
 Both change what the implementer must build. Neither is a judgement call.
 
-1. **`GET /api/v1/scans` *is* in the frozen contract.** `TRUTH.md` line 28 and line 119 state
+1. **`GET /api/v1/scans` *is* in the frozen contract.** `TRUTH.md`'s original blocked-reads note and line 119 state
    that "a scan *list* is not in the frozen contract, so it needs a contract amendment as well
    as an implementation". That is false: `contracts/openapi/openapi.yaml` line 164 defines
    `operationId: listScans` on `/api/v1/scans`, secured by `FrontendBearerAuth`, with
    `Page`/`PerPage`/`ScanStatusFilter`/`ScanSortBy`/`SortOrder` parameters (lines 173–178) and
-   a `ScanListResponse` body (line 194, schema at line 1810). **The blocker is a missing backend
-   implementation only — no contract amendment is required.** `backend/src/api/routers/scans.py`
-   line 16 registers only `GET /api/v1/scans/{scan_id}`. This should be corrected in `TRUTH.md`
-   and in the blocking backend feature's scope (it is smaller than TRUTH claims).
+   a `ScanListResponse` body (line 194, schema at line 1810). **The blocker was a missing backend
+   implementation only — no contract amendment was required.**
+   **Resolved 2026-07-28:** `TRUTH.md` was corrected, and DMI-82 shipped the route against the
+   frozen contract with no shape change — `routers/scans.py:22` now registers `GET /api/v1/scans`
+   alongside the detail route. Kept here as the record of why the blocking feature's scope was
+   smaller than TRUTH originally claimed.
 2. **`GET /api/v1/users/me` does not return `display_name`.** `UserProfileResponse`
    (`contracts/openapi/openapi.yaml` lines 2208–2226) has exactly three required properties —
    `user_id`, `email`, `role` (`enum: [admin, viewer]`) — with `additionalProperties: false`.
@@ -61,13 +63,14 @@ on, and none of it is re-litigated here:
 - contract-generated types, `frontend/src/types/openapi.d.ts` (`npm run gen:types`).
 
 **This feature builds:** React Router v7 (library mode) and the route table, a session context
-fed by `GET /users/me`, a session route guard, the `AppShell` top bar (no sidebar), the real
-LOGIN screen, the HOME screen with its four designed states, the pure verdict/review-items
-derivation, the resource modules and query hooks for Home's reads, the SCREENS.md-compliant
-token and font layer, and the tests for all of it.
+fed by `GET /users/me`, a session route guard, the `AppShell` top bar (no sidebar, and only the
+`Home` item in v1 — `DESIGN.md` §Top bar), the real LOGIN screen, the HOME screen with its four
+designed states and its one-at-a-time finding deck, a not-found page for unknown addresses, the
+pure verdict/review-items derivation, the resource modules and query hooks for Home's reads, the
+SCREENS.md-compliant token and font layer, and the tests for all of it.
 
 **This feature does not build:** Scans, Hosts, Agents, Users, Settings, Scan detail, Host
-detail (`TRUTH.md` lines 99–110); accept-invite / forgot / reset password; "Scan now"; polling
+detail (`TRUTH.md` §Out of scope); accept-invite / forgot / reset password; "Scan now"; polling
 or websockets; dark mode; tablet/mobile layouts; any backend, contract, or Pi change.
 
 **Nav destinations that do not exist yet.** SCREENS.md §App shell (lines 21–24) fixes the top
@@ -83,7 +86,8 @@ rendered `disabled` (SCREENS.md consistency rule 3, line 211).
 ### 2.1 Endpoints consumed
 
 Auth column: `authClient` = credentialed cookie call; `apiClient` = `Authorization: Bearer`.
-Status: ✅ implemented in the backend today · ⛔ in the contract but not implemented.
+Status: ✅ implemented in the backend today · ⛔ in the contract but not implemented. Rows 5
+and 6 flipped to ✅ on 2026-07-28 when DMI-82 landed (`specs/021-scan-list-and-finding-filters/`).
 
 | # | Path | Method | Auth | Request | Response | Error branches the UI handles | Contract | Backend | Status |
 |---|---|---|---|---|---|---|---|---|---|
@@ -91,8 +95,8 @@ Status: ✅ implemented in the backend today · ⛔ in the contract but not impl
 | 2 | `/api/v1/auth/refresh` | POST | `authClient`, `RefreshCookieAuth` | none | `LoginResponse` + rotated cookie | `401` → no session; boot guard falls through to `/login` | `openapi.yaml:636` | `routers/auth.py:51` | ✅ |
 | 3 | `/api/v1/auth/logout` | POST | `authClient`, `RefreshCookieAuth` | none | `204`, cookie cleared | Any failure still clears client state and navigates to `/login` (§5) | `openapi.yaml:670` | `routers/auth.py:68` | ✅ |
 | 4 | `/api/v1/users/me` | GET | `apiClient` | none | `UserProfileResponse` `{ user_id, email, role }` (2208–2226) | `401` → interceptor refreshes once, then session failure → `/login`. A failure here is a **session** failure, not a Home data failure | `openapi.yaml:874` | `routers/users.py:12` | ✅ |
-| 5 | `/api/v1/scans?per_page=1&sort_by=timestamp&sort_order=desc` | GET | `apiClient` | query only | `ScanListResponse` `{ data: ScanSummary[], total, page }` (1810–1827); `ScanSummary` = `scan_id, timestamp, subnet, scan_mode, status, host_count, finding_count, highest_severity?` (1718–1751) | `data: []` → Home **blank**; `4xx`/`5xx`/network → Home **error** + `[Retry]` | `openapi.yaml:164` | **not registered** — `routers/scans.py:16` has only the detail route | ⛔ |
-| 6 | `/api/v1/findings?scan_id={id}&severity=critical` and `&severity=high` | GET | `apiClient` | query only | `FindingListResponse` `{ data: FindingRecord[], total, page }` (2388–2405); `FindingRecord` carries `finding_id, scan_id, severity, title, cve_id?, host_id?, host_ip?, detected_at` (2300–2387) | any failure → Home **error** (a partial verdict is forbidden, `TRUTH.md` line 92) | `openapi.yaml:379`; `ScanIdFilter` 1005, `SeverityFilter` 991 | **partial** — `routers/findings.py:17-22` accepts `host_id` only; `scan_id` and `severity` are silently ignored | ⛔ |
+| 5 | `/api/v1/scans?per_page=1&sort_by=timestamp&sort_order=desc` | GET | `apiClient` | query only | `ScanListResponse` `{ data: ScanSummary[], total, page }` (1810–1827); `ScanSummary` = `scan_id, timestamp, subnet, scan_mode, status, host_count, finding_count, highest_severity?` (1718–1751) | `data: []` → Home **blank**; `4xx`/`5xx`/network → Home **error** + `[Retry]` | `openapi.yaml:164` | `routers/scans.py:22` `read_scans` — all five params honoured | ✅ |
+| 6 | `/api/v1/findings?scan_id={id}&severity=critical` and `&severity=high` | GET | `apiClient` | query only | `FindingListResponse` `{ data: FindingRecord[], total, page }` (2388–2405); `FindingRecord` carries `finding_id, scan_id, severity, title, cve_id?, host_id?, host_ip?, detected_at` (2300–2387) | any failure → Home **error** (a partial verdict is forbidden, `TRUTH.md` AC 15) | `openapi.yaml:379`; `ScanIdFilter` 1005, `SeverityFilter` 991 | `routers/findings.py:17` `read_findings` — `severity` and `scan_id` land as conjunctive filters beside `host_id` | ✅ |
 | 7 | `/api/v1/agents/{agent_id}` | GET | `apiClient` | path param | `AgentDetail` `{ agent_id, display_name, online, last_seen_at, active_command_id? }` (2039–2065) | failure → the Pi-status footer line and the stale-coverage item are omitted; it must **not** take the whole page to error (footer is chrome, not the verdict) | `openapi.yaml:526` | **not registered** — `routers/agents.py:17` has only the WebSocket route | ⛔ |
 | 8 | `/api/v1/scans/{scan_id}` | GET | `apiClient` | path param | `ScanDetailResponse` (1752–1809) | — | `openapi.yaml:213` | `routers/scans.py:16` | ✅ (not consumed by this feature; scan detail is out of scope — listed because review-item links target `/scans/:scanId`, a route this feature does not build) |
 
@@ -115,46 +119,61 @@ cookie, and the SPA never reads it. No hand-written type may model any body abov
 from `frontend/src/types/openapi.d.ts` via `components['schemas'][...]`, the pattern already set
 by `frontend/src/api/auth.ts` lines 3–6.
 
-### 2.2 Blocked reads
+### 2.2 Read availability
 
-Home's verdict is a function of three reads; **none is served today**. All three are already
-frozen in the contract — `GET /api/v1/scans` (line 164), the `scan_id`/`severity` filters on
-`GET /api/v1/findings` (parameters at lines 1005 and 991), and `GET /api/v1/agents/{agent_id}`
-(line 526). **Every one of them is an implementation gap in the backend, not a contract gap: no
-contract amendment is needed by anyone**, and this feature still touches no backend code.
+Home's verdict is a function of three reads. **The two that gate acceptance criteria are now
+served** — DMI-82 landed 2026-07-28 (`specs/021-scan-list-and-finding-filters/`, 12/12 tasks
+complete, contract-fidelity test green). Only the agent read remains unserved, and it costs no
+acceptance criterion.
 
-**Ownership of the blockers (filed 2026-07-27):**
-- **DMI-82** — `GET /scans` (list) and the `severity`/`scan_id`/`page`/`per_page` filters on
-  `GET /findings`. The two reads Home's verdict actually needs. Blocks this feature.
-- **DMI-78** — the whole agents surface, including `GET /agents/{agent_id}` and the missing
-  `/agents` collection (contract ask C1). Costs only the Pi-status footer, which `DESIGN.md`
-  removes from this feature's build. **Not** a blocker on any acceptance criterion.
-
-This document designs
-against the contract shapes and **does not build a fallback, a client-side substitute, or a
-mock-backed data path.** Against the current backend, Home's query layer fails and Home renders
-its designed error state (`TRUTH.md` AC 15) — that is the specified behaviour, not a workaround.
-
-| Blocked read | What Home needs from it | Nature of the block | Gates |
+| Read | What Home needs from it | State | Gates |
 |---|---|---|---|
-| `GET /api/v1/scans` (list) | The latest scan: `timestamp` (verdict recency + footer), `status: failed` (failed-scan review item), `host_count`, `scan_mode`, `finding_count`, `highest_severity` (context sentence), and `scan_id` (to fetch findings). Also `total === 0` → the blank state | **Implementation only.** Contract already defines it (`openapi.yaml:164`, §0.1). Backend must register the route and honour `page/per_page/status/sort_by/sort_order` | AC 9, 10, 11, 12, 13, 15, 16 |
-| `GET /api/v1/findings?scan_id=&severity=` | Critical and high findings of the latest scan: `title`, `cve_id`, `host_ip`, `severity` | **Implementation only.** Contract defines both filters (`ScanIdFilter` 1005, `SeverityFilter` 991); `routers/findings.py:17` accepts neither | AC 10, 11 |
-| `GET /api/v1/agents/{agent_id}` | `online`, `last_seen_at` for the Pi-status footer and, with the scan timestamp, the stale-coverage item | **Implementation only** for the endpoint (`openapi.yaml:526`); `routers/agents.py` has no HTTP route at all | AC 13 (partially — see below), footer |
-| **Agent discovery** | The SPA has no way to learn an `agent_id`: there is **no `/api/v1/agents` collection path anywhere in the contract** (only `/agents/{agent_id}` at 526 and `/agents/{agent_id}/commands` at 429). This is contract ask **C1**, `docs/roadmap/FRONTEND.md` §Direction | **Contract gap, genuinely open.** This document does **not** pick a workaround (no `VITE_AGENT_ID`, no hardcoded UUID, no inference from a scan). The blocking backend feature must either add `GET /agents` or the ambiguity must be resolved before the footer/Pi item is implementable | Pi-status footer; the `online: false` half of AC 13 |
+| `GET /api/v1/scans` (list) | The latest scan: `timestamp` (verdict recency + footer), `status: failed` (failed-scan review item), `host_count`, `scan_mode`, `finding_count`, `highest_severity` (context sentence), and `scan_id` (to fetch findings). Also `total === 0` → the blank state | ✅ `routers/scans.py:22`; `page`/`per_page`/`status`/`sort_by`/`sort_order` all honoured, newest-first by default | AC 9, 10, 11, 12, 13, 15, 16 |
+| `GET /api/v1/findings?scan_id=&severity=` | Critical and high findings of the latest scan: `title`, `cve_id`, `host_ip`, `severity` | ✅ `routers/findings.py:17`; filters combine conjunctively with each other and with `host_id` | AC 10, 11 |
+| `GET /api/v1/agents/{agent_id}` | `online`, `last_seen_at` for the Pi-status footer | ⛔ **DMI-78.** `routers/agents.py` still has no HTTP route; the endpoint is frozen in the contract (`openapi.yaml:526`) but unimplemented | footer only |
+| **Agent discovery** | The SPA has no way to learn an `agent_id`: there is **no `/api/v1/agents` collection path anywhere in the contract** (only `/agents/{agent_id}` at 526 and `/agents/{agent_id}/commands` at 429). This is contract ask **C1**, `docs/roadmap/FRONTEND.md` §Direction | ⛔ **Contract gap, genuinely open** — DMI-78. This document does **not** pick a workaround (no `VITE_AGENT_ID`, no hardcoded UUID, no inference from a scan) | Pi-status footer; the `online: false` half of AC 13 |
 
-**Consequence for AC 13 (stale coverage).** The 3-day rule (`TRUTH.md` line 44) is computable
-from the latest scan's `timestamp` alone and needs **no** agent read. Only the *"The Pi hasn't
-been seen since Tuesday."* variant (SCREENS.md line 661) needs `AgentDetail`. Implement the
-timestamp-based rule in `src/lib/review.ts`; leave the agent-based one behind the blocked read.
+`DESIGN.md` already removes the Pi-status footer line from this feature's build (§"The Pi-status
+footer is blocked"). Nothing else waits on anything. **No fallback, client-side substitute, or
+mock-backed data path is built** for the agent read — the footer line is simply absent.
+
+**Consequence for AC 13 (stale coverage).** The 3-day rule (`TRUTH.md`) is computable from scan
+timestamps alone and needs **no** agent read. Only the *"The Pi hasn't been seen since Tuesday."*
+variant (SCREENS.md line 661) needs `AgentDetail`; leave that one behind DMI-78.
+
+#### As-built properties of the two unblocked reads — binding on this feature
+
+These are behaviours DMI-82 shipped that the query layer must be written against. Each is a
+`TRUTH.md` rule of `specs/021-scan-list-and-finding-filters/`, verified by its test suite.
+
+- **One severity per request.** `severity` takes a single value — not a list, not a
+  comma-separated string, not a range. `HOME_SEVERITIES` therefore drives **two** requests, which
+  is what §2.3 already specifies. Do not "optimise" it into one.
+- **Findings have no caller-chosen sort.** The contract declares none and none was invented.
+  Order is fixed and stable-for-paging but unspecified. `deriveReview()` must not assume the
+  response arrives severity-ordered or newest-first; if review items need an order, `review.ts`
+  imposes it.
+- **Invalid paging is refused, not clamped.** `per_page` outside 1–100 or `page < 1` is a `422`,
+  as is an unknown `sort_by`/`sort_order`. `LATEST_SCAN_QUERY` (`per_page: 1`) is inside the
+  range; no other paging value is sent by this feature.
+- **Empty is a `200`, never a `404`.** An organisation with no scans gets `{ data: [], total: 0 }`.
+  Home's blank state is driven by that, and a `404` must **not** be treated as "no scans".
+- **`highest_severity` is genuinely absent for a scan with zero findings** — not `"low"`, not
+  `0`. The context sentence must handle the missing key rather than assume a floor value.
+- **Per-scan aggregates are per-scan.** `host_count` and `finding_count` on a `ScanSummary`
+  describe that scan, not the organisation's running totals — the context sentence can state them
+  directly.
 
 ### 2.3 Constants
 
 | Constant | Value | Where |
 |---|---|---|
-| `STALE_COVERAGE_DAYS` | `3` (`TRUTH.md` line 44) | `frontend/src/lib/review.ts` — the only place the number appears |
+| `STALE_COVERAGE_DAYS` | `3` (`TRUTH.md` §Business rules, *Coverage is stale after 3 days*) | `frontend/src/lib/review.ts` — the only place the number appears |
 | `LATEST_SCAN_QUERY` | `{ per_page: 1, sort_by: 'timestamp', sort_order: 'desc' }` (defaults confirmed at `openapi.yaml:968-978` and `951-960`) | `frontend/src/api/scans.ts` |
-| `HOME_SEVERITIES` | `['critical', 'high']` (`TRUTH.md` line 41; SCREENS.md line 647) | `frontend/src/api/findings.ts` |
-| Query keys | `['session']`, `['scans','latest']`, `['findings', scanId, severity]`, `['agent', agentId]` | colocated with each hook |
+| `LATEST_SUCCESSFUL_SCAN_QUERY` | `{ ...LATEST_SCAN_QUERY, status: 'completed' }` — see §2.5 | `frontend/src/api/scans.ts` |
+| `HOME_SEVERITIES` | `['critical', 'high']` (`TRUTH.md`; SCREENS.md line 647) | `frontend/src/api/findings.ts` |
+| `HOME_FINDINGS_PER_PAGE` | `100` — the contract's maximum (`openapi.yaml` `PerPage`, and `Query(..., le=100)` at `routers/findings.py:20`). Fetched once so the deck never issues a request while stepping (§2.6) | `frontend/src/api/findings.ts` |
+| Query keys | `['session']`, `['scans','latest']`, `['scans','latest','completed']`, `['findings', scanId, severity]`, `['agent', agentId]` | colocated with each hook |
 | `VITE_API_URL` | unchanged, `http://localhost:8000` | `frontend/.env.example` |
 
 No new environment variable is introduced.
@@ -248,6 +267,81 @@ light-only and forbids authoring `dark:` variants. Decisions:
 | `frontend/src/test/mswHandlers.ts` | **Edited** — new handlers (§7) |
 | `frontend/src/types/openapi.d.ts` | **Unchanged** — the contract does not move |
 
+### 2.5 Two scan reads, not one — staleness is measured against the last *successful* scan
+
+`TRUTH.md` states the rule as: coverage is stale when **the most recent successful scan** finished
+more than `STALE_COVERAGE_DAYS` ago. The most recent scan and the most recent *successful* scan
+are not the same record. A scan that failed an hour ago is the latest scan, and reading staleness
+off it would tell an operator their coverage is fresh at the exact moment it stopped being so —
+the failure mode the rule exists to catch.
+
+DMI-82 shipped the `status` filter on `GET /scans`, so this is one extra request:
+
+| Read | Query | Feeds |
+|---|---|---|
+| Latest scan, any status | `LATEST_SCAN_QUERY` | The failed-scan review item (AC 12), and the `scan_id` the two finding reads filter on (AC 10, 11). Also `total === 0` → the blank state (AC 14) |
+| Latest successful scan | `LATEST_SUCCESSFUL_SCAN_QUERY` | The stale-coverage review item (AC 13) and the context sentence's "when the last scan finished and what it covered" (AC 9) — which must describe a scan that actually completed |
+
+`deriveReview()` therefore takes both:
+`deriveReview({ latestScan, latestSuccessfulScan, criticalFindings, highFindings, now })`.
+
+Consequences, all binding:
+
+- **Both reads are part of the verdict.** If either fails, Home renders its error state — a
+  verdict built on one of the two is a partial verdict, which `TRUTH.md` forbids.
+- **`latestSuccessfulScan === null` while `latestScan !== null`** is a real state: an organisation
+  whose only scans have failed. It is **not** the blank state (a scan has run). The failed-scan
+  item covers it; the stale-coverage item is omitted rather than computed against nothing, since
+  "stale since never" is not a sentence Home says.
+- **Blank is keyed off `latestScan`,** the unfiltered read — "no scan has ever run", not "no scan
+  has ever succeeded".
+- **The two can be the same scan.** When the latest scan completed successfully, both reads return
+  it. Home must not double-count it into two review items.
+- `status: 'completed'` is the success value — `ScanStatus` is
+  `pending | accepted | processing | completed | failed`, and there is no separate "success".
+
+### 2.6 The count is not the render — and stepping is not paging
+
+Two independent decisions, both easy to get subtly wrong and neither visible in a fixture with
+fewer than twenty findings.
+
+**The verdict's number comes from `total`, never from `data.length`.**
+`GET /findings` pages, so a scan with 37 criticals returns 20 rows and `total: 37`. A verdict
+built from the rows says *"20 things need your review"* while 37 do — a screen that under-reports
+danger in exact proportion to how much of it there is, and one that passes every test written
+against a small fixture. `deriveReview()` therefore receives the two `FindingListResponse`
+envelopes rather than their `data` arrays, and:
+
+```
+reviewCount = criticalFindings.total
+            + highFindings.total
+            + (latestScan.status === 'failed' ? 1 : 0)
+            + (coverageIsStale ? 1 : 0)
+```
+
+`review.test.ts` must include a case where `total` exceeds `data.length` (`TRUTH.md` AC 17).
+
+**The deck steps through memory, never over the network.** Both finding reads are issued once, on
+load, at `HOME_FINDINGS_PER_PAGE = 100` — the contract's maximum. `FindingDeck` holds an index
+into the already-fetched array; `←`/`→` move the index and nothing else. No `useQuery` is keyed on
+the deck index, no `page` parameter is ever sent after the first load, and no request is issued by
+any interaction on Home except `[Retry]`.
+
+This is what separates a deck from pagination wearing different chrome: an arrow that fetches
+stutters on a slow link and can fail halfway through a review, leaving the operator unsure what
+they have seen. The test asserts it structurally — `src/test/setup.ts` runs MSW with
+`onUnhandledRequest: 'error'`, so `FindingDeck.test.tsx` steps through every card with no handler
+registered beyond the initial load and fails if anything reaches the network.
+
+**Consequence, stated rather than discovered:** past 100 findings of one severity, the deck holds
+the first 100 while the verdict still counts all of them. `TRUTH.md` fences this as out of scope —
+the screens that would list the remainder are later features.
+
+**Arrow keys are bound to the deck, not the document.** `FindingDeck` is one tab stop with
+`onKeyDown` on its own root. A `document`-level listener would hijack page scrolling and fight
+screen-reader navigation everywhere else on the page — an accessibility defect no test catches
+unless it is specified, so it is specified here and asserted in `FindingDeck.test.tsx`.
+
 ---
 
 ## 3. New files and naming (mandatory)
@@ -261,7 +355,7 @@ default exports for pages/components as in `src/pages/LoginStub.tsx`.
 | Path | New/Touch | Note |
 |---|---|---|
 | `frontend/src/main.tsx` | touch | `BrowserRouter` → `QueryClientProvider` → `SessionProvider` → `App` |
-| `frontend/src/App.tsx` | rewrite | The route table only: `/login` → `Login`; `/` → `RequireSession` → `AppShell` → `Home`; `*` → `<Navigate to="/" replace />`. SCREENS.md specs no 404 screen, so the catch-all redirects rather than inventing one |
+| `frontend/src/App.tsx` | rewrite | The route table only: `/login` → `Login`; `/` → `RequireSession` → `AppShell` → `Home`; `*` → `NotFound`. **The catch-all renders, it does not redirect** — silently sending a mistyped URL to Home makes the app look like it ignored the operator (`DESIGN.md` §HOME — not found). `*` sits inside the `RequireSession`/`AppShell` branch so a signed-in operator keeps the top bar and can navigate away; signed-out, `RequireSession` sends them to `/login` first, which is correct — an unknown path is not a reason to skip the session check |
 | `frontend/src/App.test.tsx` | new | Routing-level tests: guard redirect, boot-refresh no-flash, post-login landing |
 
 ### Session and role
@@ -271,9 +365,7 @@ default exports for pages/components as in `src/pages/LoginStub.tsx`.
 | `frontend/src/auth/SessionProvider.tsx` | new | Owns boot silent refresh (`refresh()` from `@/api/auth`), then the `['session']` query over `GET /users/me`; exposes `{ status: 'booting' \| 'authenticated' \| 'anonymous', user, signIn, signOut }`; registers the `onSessionExpired` handler from decision (b) |
 | `frontend/src/auth/useSession.ts` | new | `useSession()` hook; throws outside the provider. **The only** way any component reads identity or role |
 | `frontend/src/auth/RequireSession.tsx` | new | Route guard. `booting` → renders nothing protected (§5); `anonymous` → `<Navigate to="/login" replace />`; `authenticated` → `<Outlet />` |
-| `frontend/src/auth/AdminOnly.tsx` | new | `<AdminOnly>{children}</AdminOnly>` — renders children when `role === 'admin'`, otherwise **`null`**. No `fallback` prop, no `disabled` prop (§4) |
 | `frontend/src/auth/SessionProvider.test.tsx` | new | Boot refresh success/failure, `/users/me` wiring, sign-out clearing |
-| `frontend/src/auth/AdminOnly.test.tsx` | new | Admin renders children; viewer renders nothing (asserted by absence, not by `disabled`) |
 | `frontend/src/api/authEvents.ts` | new | `onSessionExpired(handler)` / `emitSessionExpired()`; module-scoped, no React import |
 
 ### API resource modules (`frontend/src/api/`)
@@ -285,23 +377,23 @@ Each is a thin function over `apiClient`, typed from `@/types/openapi`, mirrorin
 | Path | New/Touch | Note |
 |---|---|---|
 | `frontend/src/api/users.ts` | new | `getCurrentUser(): Promise<UserProfileResponse>` → `GET /users/me` |
-| `frontend/src/api/scans.ts` | new | `getLatestScan(): Promise<ScanSummary \| null>` → `GET /scans` with `LATEST_SCAN_QUERY`; returns `null` when `data` is empty ⛔ |
-| `frontend/src/api/findings.ts` | new | `listFindings({ scan_id, severity }): Promise<FindingListResponse>` → `GET /findings` ⛔ |
+| `frontend/src/api/scans.ts` | new | `getLatestScan(): Promise<ScanSummary \| null>` → `GET /scans` with `LATEST_SCAN_QUERY`, and `getLatestSuccessfulScan(): Promise<ScanSummary \| null>` → the same call with `LATEST_SUCCESSFUL_SCAN_QUERY` (§2.5). Both return `null` when `data` is empty (a `200` with `total: 0`, never a `404` — §2.2) |
+| `frontend/src/api/findings.ts` | new | `listFindings({ scan_id, severity }): Promise<FindingListResponse>` → `GET /findings` at `per_page: HOME_FINDINGS_PER_PAGE`. `severity` is a single value per call — two calls, one per entry in `HOME_SEVERITIES` (§2.2). Returns the whole envelope, **`total` included** — callers need it and it is not the same as `data.length` (§2.6) |
 | `frontend/src/api/agents.ts` | new | `getAgent(agentId): Promise<AgentDetail>` → `GET /agents/{agent_id}` ⛔ — **written but not called** until agent discovery (C1) is resolved (§2.2) |
 
 ### Query hooks (`frontend/src/hooks/`)
 
 | Path | New/Touch | Note |
 |---|---|---|
-| `frontend/src/hooks/useHomeReview.ts` | new | Composes `getLatestScan` + the two `listFindings` calls via TanStack Query, feeds `deriveReview()`, and returns one discriminated union: `{ state: 'loading' \| 'blank' \| 'clear' \| 'pending' \| 'error', … }` plus a `retry()`. Home renders a `switch` over it, so no partial-data path can leak into the verdict |
+| `frontend/src/hooks/useHomeReview.ts` | new | Composes `getLatestScan` + `getLatestSuccessfulScan` (§2.5) + the two `listFindings` calls via TanStack Query, feeds `deriveReview()`, and returns one discriminated union: `{ state: 'loading' \| 'blank' \| 'clear' \| 'pending' \| 'error', … }` plus a `retry()`. Home renders a `switch` over it, so no partial-data path can leak into the verdict; any of the four reads failing means `error` |
 | `frontend/src/hooks/useHomeReview.test.ts` | new | MSW-driven state matrix, including the error and retry paths |
 
 ### Pure derivation (`frontend/src/lib/`)
 
 | Path | New/Touch | Note |
 |---|---|---|
-| `frontend/src/lib/review.ts` | new | `deriveReview({ latestScan, criticalFindings, highFindings, now })` → verdict + ordered review items. Owns `STALE_COVERAGE_DAYS = 3`, the failed-scan rule, and the critical/high-only filter. No React, no network — the whole verdict logic is unit-testable |
-| `frontend/src/lib/review.test.ts` | new | The rule table: all-clear, items pending, medium/low hidden, failed scan, stale coverage, empty history |
+| `frontend/src/lib/review.ts` | new | `deriveReview({ latestScan, latestSuccessfulScan, criticalFindings, highFindings, now })` → `{ reviewCount, deckFindings, scanItem, coverageItem }`. Takes the two **envelopes**, not their `data` arrays: `reviewCount` sums `total`s (§2.6), `deckFindings` is the concatenated `data` ordered critical→high then newest-first (the response has no caller-chosen sort — §2.2). Owns `STALE_COVERAGE_DAYS = 3` and the failed-scan rule. No React, no network — the whole verdict logic is unit-testable |
+| `frontend/src/lib/review.test.ts` | new | The rule table: all-clear, items pending, medium/low hidden, failed scan, stale coverage, empty history, and **`reviewCount` from `total` when `total > data.length`** |
 | `frontend/src/lib/utils.ts` | keep | Existing `cn()` helper, untouched |
 
 ### Shell and shared components (`frontend/src/components/`)
@@ -309,8 +401,8 @@ Each is a thin function over `apiClient`, typed from `@/types/openapi`, mirrorin
 | Path | New/Touch | Note |
 |---|---|---|
 | `frontend/src/components/AppShell.tsx` | new | Inside-shell frame: `<TopBar />` + `<Outlet />` inside the fluid content column (`max-w-*`, never a fixed width — SCREENS.md lines 156–163). **No sidebar** |
-| `frontend/src/components/TopBar.tsx` | new | Wordmark left, nav centre, `[Log out]` right. `Users` wrapped in `<AdminOnly>`. `min-w-0` on flex children (SCREENS.md building rule 3) |
-| `frontend/src/components/TopBar.test.tsx` | new | Viewer sees no `Users`; admin does; log-out calls `signOut` |
+| `frontend/src/components/TopBar.tsx` | new | Wordmark left, the single `Home` nav item, `[Log out]` right. `min-w-0` on flex children (SCREENS.md building rule 3). No role branch — it does not read `useSession().user.role` |
+| `frontend/src/components/TopBar.test.tsx` | new | Renders identically for admin and viewer; the tree contains no `[disabled]` element; log-out calls `signOut` |
 | `frontend/src/components/AuthShell.tsx` | new | Outside-shell frame (SCREENS.md lines 290–311): wordmark + `Ornament` + one centered card in the 720px prose column. No top bar |
 | `frontend/src/components/Ornament.tsx` | new | The engraving detail; used by `AuthShell` and Home |
 | `frontend/src/components/Timestamp.tsx` | new | Owns consistency rule 7 (relative inside 7 days, absolute beyond, exact value in `title`) |
@@ -324,11 +416,15 @@ Each is a thin function over `apiClient`, typed from `@/types/openapi`, mirrorin
 |---|---|---|
 | `frontend/src/pages/Login.tsx` | new | Real `<form>`, `autocomplete="email"` / `"current-password"`, autofocus, submit on Enter; in-flight button copy; inline error above the button distinguishing 401 from network/`5xx`. Copy from SCREENS.md lines 344–351 via `DESIGN.md`. Redirects to `/` when already authenticated |
 | `frontend/src/pages/Login.test.tsx` | new | Replaces `LoginStub.test.tsx` |
-| `frontend/src/pages/Home.tsx` | new | Switches on `useHomeReview()`; renders exactly one of the four state components. Never renders a skeleton in the verdict's place (`TRUTH.md` line 45) |
-| `frontend/src/pages/Home.test.tsx` | new | The state matrix, role gating, and retry |
+| `frontend/src/pages/Home.tsx` | new | Switches on `useHomeReview()`; renders exactly one of the four state components. Never renders a skeleton in the verdict's place (`TRUTH.md` §Business rules, *Every screen ships three designed states*) |
+| `frontend/src/pages/Home.test.tsx` | new | The state matrix and retry |
+| `frontend/src/pages/NotFound.tsx` | new | `That page doesn't exist.` + a link to Home. Copy from `DESIGN.md`; rendered inside the shell |
+| `frontend/src/pages/NotFound.test.tsx` | new | An unknown path renders it with the top bar intact; the link returns to `/`; signed-out, an unknown path lands on `/login` instead |
 | `frontend/src/pages/home/Verdict.tsx` | new | The one-sentence verdict + context sentence (all-clear and items-pending share it) |
-| `frontend/src/pages/home/ReviewItemCard.tsx` | new | One square-edged card per item: label, plain sentence, link to where it is dealt with |
-| `frontend/src/pages/home/HomeBlank.tsx` | new | First-run copy; `[Run first scan]` wrapped in `<AdminOnly>`; the viewer line rendered only when `role === 'viewer'` |
+| `frontend/src/pages/home/FindingDeck.tsx` | new | One finding at a time plus the `←`/`→` controls and the `{i} of {n}` line. Owns the index state, the end-stop logic, and the **deck-scoped** `onKeyDown` — never a `document` listener (§2.6). Renders the card alone, with no arrows and no position line, when there is exactly one finding. Renders nothing when there are none |
+| `frontend/src/pages/home/FindingDeck.test.tsx` | new | Stepping both ways, both end-stops, arrow keys only while focused, the one-finding case, `aria-live` on the card region, and that no request is issued while stepping (MSW would fail the test under `onUnhandledRequest: 'error'`) |
+| `frontend/src/pages/home/ReviewItemCard.tsx` | new | One square-edged card per item: label, severity badge (findings only), plain sentence. **No action button and no link** — every destination is out of scope, so none is rendered (`DESIGN.md` §The review-item buttons are drawn but not built). The component takes no `href`/`onAction` prop, so there is no API through which a dead control can be added without a visible diff |
+| `frontend/src/pages/home/HomeBlank.tsx` | new | First-run copy plus the sentence naming where scanning lives. **No CTA and no role branch** — it does not import `useSession` (`DESIGN.md` §HOME — blank) |
 | `frontend/src/pages/home/HomeError.tsx` | new | "Couldn't load the review." + `[Retry]` |
 | `frontend/src/pages/home/HomeFooter.tsx` | new | Muted footer: last-scan line via `Timestamp`; the Pi-status line stays behind the blocked agent read (§2.2) |
 | `frontend/src/pages/LoginStub.tsx`, `LoginStub.test.tsx`, `SignedInPlaceholder.tsx` | **delete** | Throwaways from DMI-20 |
@@ -339,7 +435,7 @@ Each is a thin function over `apiClient`, typed from `@/types/openapi`, mirrorin
 |---|---|---|
 | `frontend/src/index.css` | rewrite | Decisions (c) and (d): font imports, `@theme inline` tokens, locked neutrals, accent/severity token names, type scale; `.dark` and `@custom-variant dark` removed |
 | `frontend/package.json` | touch | `+ react-router@^7`, `+ @fontsource/im-fell-english`, `+ @fontsource/ibm-plex-mono`, `− @fontsource-variable/geist`. **No new scripts** — `dev`/`build`/`gen:types`/`lint`/`format:check`/`typecheck`/`test` already exist and are unchanged |
-| `frontend/src/test/mswHandlers.ts` | touch | Add `GET /users/me`, `GET /scans`, `GET /findings`, `GET /agents/:agentId` plus exported fixture objects (`adminProfile`, `viewerProfile`, `latestScan`, `criticalFinding`, …). Required: `setup.ts` line 9 runs with `onUnhandledRequest: 'error'`, so any unhandled call fails the test |
+| `frontend/src/test/mswHandlers.ts` | touch | Add `GET /users/me`, `GET /scans`, `GET /findings`, `GET /agents/:agentId` plus exported fixture objects (`adminProfile`, `viewerProfile`, `latestScan`, `criticalFinding`, …). The `/scans` handler must branch on the `status` query param so the two scan reads (§2.5) can return different records; the `/findings` handler must branch on `severity` so critical and high differ. Required: `setup.ts` line 9 runs with `onUnhandledRequest: 'error'`, so any unhandled call fails the test |
 | `frontend/src/test/renderWithProviders.tsx` | new | One helper wrapping `MemoryRouter` + a per-test `QueryClient` + `SessionProvider`; used by every component/page test so provider wiring is not duplicated |
 | `frontend/src/test/setup.ts` | keep | Unchanged; already clears the token store per test (lines 10–13) |
 | `frontend/vitest.config.ts`, `eslint.config.js`, `tsconfig*.json` | keep | No change needed; the `@` alias and jsdom env already cover the new files |
@@ -349,35 +445,40 @@ No `jwt-decode` (or equivalent) dependency is added — see §4.
 
 ---
 
-## 4. Role gating mechanism
+## 4. Role: read from the server, gated nowhere yet
 
 **Where the role comes from.** `useSession().user.role`, populated by `GET /users/me`
 (`openapi.yaml:874`, `UserProfileResponse.role` enum `admin|viewer` at 2220–2226). **Never from
 the access token.** ADR-008 §Papéis (line 193) says the role arrives "nas claims do JWT"; SCREENS.md
 line 328–333 (open question **C16**) records that the contract documents no claims and that
-decoding them would mean reading an undocumented payload. `TRUTH.md` line 34 settles it: the
-server is asked. **C16 is therefore resolved by `GET /users/me`** — `docs/adr/ADR-008-frontend-stack.md`
-§Papéis and SCREENS.md §LOGIN should be reconciled to that (documentation follow-up, not this
-feature's code).
+decoding them would mean reading an undocumented payload. `TRUTH.md` §Business rules settles it:
+the server is asked. **C16 is therefore resolved by `GET /users/me`** —
+`docs/adr/ADR-008-frontend-stack.md` §Papéis and SCREENS.md §LOGIN should be reconciled to that
+(documentation follow-up, not this feature's code). No `jwt-decode` or equivalent is added, and
+its absence from `package.json` is asserted (AC 8).
 
-**Structural enforcement of "absent, not disabled"** (SCREENS.md consistency rule 3, line 211;
-`TRUTH.md` line 24) rests on three properties, in order of strength:
+**No `AdminOnly` component ships in this feature.** After the blank state's `[Run first scan]` was
+dropped (`DESIGN.md` §HOME — blank) and the nav was reduced to `Home` alone (`DESIGN.md` §Top bar),
+**this feature contains no admin-only affordance**. A role-gating primitive with zero call sites is
+speculative code — `.claude/CLAUDE.md` §2, *no abstractions for single-use code, nothing
+speculative* — so it is not built here. It arrives with the first screen that has something to
+hide, together with the test that proves the hiding. Filed separately.
 
-1. **`AdminOnly` has no disabled path.** It is the single exported role primitive, and its only
-   two outcomes are *children* or *`null`*. It accepts no `fallback` and no `disabled` prop, so
-   there is no API through which a developer can produce a greyed-out control. Adding one is a
-   visible change to a shared component, reviewable in a diff — as opposed to a `disabled={!isAdmin}`
-   scattered across pages, which is invisible.
-2. **`useSession()` exposes `role`, not booleans on props.** No component receives `isAdmin` as
-   a prop, so no component can thread it into a `disabled` attribute at a distance.
-3. **The tests assert absence.** `TopBar.test.tsx` and `Home.test.tsx` render as a viewer and
-   assert `queryByRole(...)` is `null` for every admin affordance, *and* assert that the rendered
-   tree contains no `[disabled]` element — a `disabled` fallback fails the suite rather than
-   passing it silently.
+**What still enforces "absent, not disabled"** in the meantime:
+
+1. **No component receives the role as a prop.** `useSession()` is the only reader, and nothing in
+   this feature calls it for gating — so there is no path by which `role` reaches a `disabled`
+   attribute.
+2. **The tests assert the invariant directly, not a proxy for it.** `TopBar.test.tsx` and
+   `Home.test.tsx` assert the rendered tree contains **no `[disabled]` element at all**, for both
+   roles, and that both roles render identically. That is a stronger property than "the admin
+   control is absent for viewers" and it holds even as pages are added — the day someone ships a
+   greyed-out control, the suite fails.
+3. **The one legitimate `disabled`** is the sign-in button while its request is in flight, owned
+   and asserted by `Login.test.tsx` (AC 3). It is scoped to a screen that renders before any
+   session exists, so it can never be confused with role gating.
 
 Client-side gating is UX only; the backend remains the authority (ADR-008 line 196).
-
----
 
 ## 5. Session lifecycle
 
@@ -396,7 +497,7 @@ Client-side gating is UX only; the backend remains the authority (ADR-008 line 1
    (`client.ts` lines 31–49).
 5. **Refresh failure.** `clearAccessToken()` (line 44) then `emitSessionExpired()` (decision (b));
    the provider drops to `anonymous`, clears the TanStack Query cache, and navigates to `/login`
-   with `replace: true` — so browser Back does not restore protected content (`TRUTH.md` AC 17).
+   with `replace: true` — so browser Back does not restore protected content (`TRUTH.md` AC 20).
 6. **Sign-out.** `signOut()` calls `logout()` (`src/api/auth.ts:23`, server-side revoke + cookie
    clear), then — **whether or not the call succeeds** — clears the token store, clears the query
    cache, sets `anonymous`, and navigates to `/login` with `replace: true`. What is cleared: the
@@ -414,17 +515,17 @@ Client-side gating is UX only; the backend remains the authority (ADR-008 line 1
 - **The page body never scrolls horizontally** (SCREENS.md line 162). Home has no table, so this
   binds the top bar and the review cards.
 - **Light only.** No `dark:` utility, no `prefers-color-scheme` branch, no theme toggle
-  (SCREENS.md lines 39–57; `TRUTH.md` line 108). Removing `@custom-variant dark` makes a stray
+  (SCREENS.md lines 39–57; `TRUTH.md` §Out of scope, *Dark mode*). Removing `@custom-variant dark` makes a stray
   `dark:` a build-time failure.
-- **No backend, contract, or Pi change** (`TRUTH.md` line 110). `contracts/openapi/openapi.yaml`
+- **No backend, contract, or Pi change** (`TRUTH.md` §Out of scope, *Any backend, contract, or Pi-agent change*). `contracts/openapi/openapi.yaml`
   is read-only here; the generated types are the only thing derived from it, and `npm run gen:types`
   must produce a clean diff.
 - **No hand-written API types**, per ADR-008 §Geração de Tipos.
-- **No fallback for the blocked reads** — no client-side scan-list emulation, no mock-backed data
+- **No fallback for the one remaining blocked read** (the agent read, §2.2) — no mock-backed data
   path shipped in `src/`. MSW handlers live under `src/test/` and are test-only.
 - **No new infrastructure.** Everything is local tooling already provisioned by the DMI-20 CI job.
-  **No `HUMAN_INFRA_REQUIRED` items in this feature.** (The blocked reads are a software
-  dependency on a backend feature, not an infrastructure need.)
+  **No `HUMAN_INFRA_REQUIRED` items in this feature.** (The agent read is a software dependency
+  on a backend feature, not an infrastructure need.)
 
 ---
 
@@ -448,18 +549,21 @@ Home reads to `mswHandlers.ts` is not optional. Fixtures use real hostnames, IPs
 | 4 | Network down ≠ bad credentials | `src/pages/Login.test.tsx` — `HttpResponse.error()`; asserts the *other* copy | no |
 | 5 | Protected route without a session | `src/App.test.tsx` — render at `/` with a failing refresh; asserts redirect to `/login` and that no Home text ever appears | no |
 | 6 | Session recovery on reload | `src/App.test.tsx` + `src/auth/SessionProvider.test.tsx` — successful refresh; asserts the login form is **never** rendered (no flash) | no |
-| 7 | Viewer gating | `src/components/TopBar.test.tsx`, `src/pages/Home.test.tsx` — absence assertions + no `[disabled]` element | no |
-| 8 | Admin gating | same two files, admin profile | no |
-| 9 | Home, all clear | `src/lib/review.test.ts` (rule) + `src/pages/Home.test.tsx` (render, MSW) | ⛔ end-to-end gated on `GET /scans` |
-| 10 | Home, items pending | `src/lib/review.test.ts` + `src/pages/Home.test.tsx` | ⛔ gated on `GET /scans` + `/findings` filters |
-| 11 | Home hides medium/low | `src/lib/review.test.ts` + `src/pages/Home.test.tsx` | ⛔ same |
-| 12 | Home, failed scan | `src/lib/review.test.ts` (`status: 'failed'`) + `src/pages/Home.test.tsx` | ⛔ gated on `GET /scans` |
-| 13 | Home, stale coverage | `src/lib/review.test.ts` — both sides of the 3-day boundary | ⛔ gated on `GET /scans`; the Pi-not-seen variant additionally gated on agent discovery (C1) |
-| 14 | Home, blank | `src/pages/Home.test.tsx` — `total: 0`; admin sees the CTA, viewer sees the line and **no** CTA | ⛔ needs `GET /scans` to answer "no scans"; the render logic is testable now under MSW |
-| 15 | Home, error | `src/pages/Home.test.tsx` + `src/hooks/useHomeReview.test.ts` — MSW 500; asserts copy + `[Retry]` and that no verdict text is present | ⛔ end-to-end gated |
-| 16 | Retry recovers | `src/hooks/useHomeReview.test.ts` — fail-then-succeed handler; asserts the correct terminal state | ⛔ end-to-end gated |
-| 17 | Sign out | `src/auth/SessionProvider.test.tsx` — asserts `POST /auth/logout` fired, token store cleared, query cache empty, navigation to `/login` with `replace` | no |
-| 18 | Quality gates | The existing `frontend` CI job (`.github/workflows/ci.yml`) running the unchanged scripts in `frontend/package.json`; not a Vitest test | no |
+| 7 | Nothing present-but-disabled | `src/components/TopBar.test.tsx` and `src/pages/Home.test.tsx` — each asserts `container.querySelectorAll('[disabled]')` is empty for both roles. `src/pages/Login.test.tsx` owns the one exception and asserts the submit button is disabled **only** while in flight, and enabled before and after | no |
+| 8 | Role comes from the server | `src/auth/SessionProvider.test.tsx` — the role on the `GET /users/me` response is what `useSession()` exposes; a token whose payload claims a different role does not change it, and no token-decoding dependency exists in `package.json` | no |
+| 9 | Home, all clear | `src/lib/review.test.ts` (rule) + `src/pages/Home.test.tsx` (render, MSW) | no |
+| 10 | Home, items pending | `src/lib/review.test.ts` + `src/pages/Home.test.tsx` — the deck's first card names the CVE, host and IP | no |
+| 11 | Home hides medium/low | `src/lib/review.test.ts` + `src/pages/Home.test.tsx` | no |
+| 12 | Home, failed scan | `src/lib/review.test.ts` (`status: 'failed'`) + `src/pages/Home.test.tsx` | no |
+| 13 | Home, stale coverage | `src/lib/review.test.ts` — both sides of the 3-day boundary, measured against `latestSuccessfulScan`; plus the case where a *recent failed* scan must not mask stale coverage, and `latestSuccessfulScan: null` with a non-null `latestScan` (§2.5) | no; only the Pi-not-seen *variant* stays gated on agent discovery (C1, DMI-78) |
+| 14 | Home, blank | `src/pages/Home.test.tsx` — `total: 0` on a `200`, never a `404`; the blank note renders and no scan-triggering control exists in the tree for either role | no |
+| 15 | Home, error | `src/pages/Home.test.tsx` + `src/hooks/useHomeReview.test.ts` — MSW 500; asserts copy + `[Retry]` and that no verdict text is present | no |
+| 16 | Retry recovers | `src/hooks/useHomeReview.test.ts` — fail-then-succeed handler; asserts the correct terminal state | no |
+| 17 | Count exceeds what is shown | `src/lib/review.test.ts` — `total: 37` with 20 rows; asserts `reviewCount` is 37. Plus `src/pages/Home.test.tsx` asserting the rendered verdict text | no |
+| 18 | Stepping through findings | `src/pages/home/FindingDeck.test.tsx` — forward and back, `←` disabled on the first card and `→` on the last (no wrap), arrow keys act only while the deck has focus and not from `document`, `{i} of {n}` tracks the card, the one-finding case renders no arrows, and **no request is issued while stepping** | no |
+| 19 | Unknown address | `src/pages/NotFound.test.tsx` + `src/App.test.tsx` — signed in, an unknown path renders the copy with the top bar intact and the link returns to `/`; signed out, the same path lands on `/login` | no |
+| 20 | Sign out | `src/auth/SessionProvider.test.tsx` — asserts `POST /auth/logout` fired, token store cleared, query cache empty, navigation to `/login` with `replace` | no |
+| 21 | Quality gates | The existing `frontend` CI job (`.github/workflows/ci.yml`) running the unchanged scripts in `frontend/package.json`; not a Vitest test | no |
 
 Additionally, `src/api/client.test.ts` is updated (not extended in scope): its refresh-failure
 case asserts `emitSessionExpired` fired instead of inspecting the stubbed `window.location`
