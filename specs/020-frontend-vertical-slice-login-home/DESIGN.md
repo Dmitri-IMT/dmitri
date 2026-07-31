@@ -141,46 +141,93 @@ it, because the verdict *is* the header.
 
 ### HOME — regular, items pending
 
+One finding is shown at a time. The operator steps through the rest with the arrows — the deck
+never grows into a scroll, however bad the day is.
+
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ DMITRI    Home  Scans  Hosts  Agents  Users  Settings         [Log out]    │
 ├────────────────────────────────────────────────────────────────────────────┤
 │                                                                            │
-│              3 things need your review.                                    │  #home-verdict
+│              7 things need your review.                                    │  #home-verdict
 │                    [IM Fell 40]                                            │
 │                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │ FINDING                                              ┌─────────────┐ │  │  #home-item-0
+│  ┌──────────────────────────────────────────────────────────────────────┐  │  #home-deck
+│  │ FINDING                                              ┌─────────────┐ │  │  #home-deck-card
 │  │ [--accent, 11px, letterspaced]                       │  Critical   │ │  │
 │  │                                                      └─────────────┘ │  │
 │  │ CVE-2024-4577 on synology-nas (192.168.1.42).                        │  │
-│  │ Found in last night's scan.                                          │  │
+│  │ Found in yesterday's 21:40 scan.                                     │  │
 │  │                                                                      │  │
-│  │ [View finding]                                                       │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │ FINDING                                              ┌─────────────┐ │  │  #home-item-1
-│  │                                                      │    High     │ │  │
-│  │                                                      └─────────────┘ │  │
-│  │ Outdated OpenSSH on hp-printer (192.168.1.17).                       │  │
-│  │ Found in last night's scan.                                          │  │
-│  │                                                                      │  │
-│  │ [View finding]                                                       │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
+│           ┌───┐                                          ┌───┐             │
+│           │ ← │            1 of 5                        │ → │             │  #home-deck-prev
+│           └───┘         #home-deck-position              └───┘             │  #home-deck-next
+│          disabled                                                          │
 │                                                                            │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │ SCAN                                                                 │  │  #home-item-2
+│  │ SCAN                                                                 │  │  #home-item-scan
 │  │                                                                      │  │
 │  │ Last night's scan didn't finish.                                     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ COVERAGE                                                             │  │  #home-item-coverage
 │  │                                                                      │  │
-│  │ [See why]                                                            │  │
+│  │ No successful scan in 6 days.                                        │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                            │
 ├────────────────────────────────────────────────────────────────────────────┤
 │  Pi · online · last seen 2 min ago                                         │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**The verdict counts everything; the deck shows one thing.** `7` above is
+`critical total + high total + failed scan + stale coverage` as reported by the API — *not* the
+five findings in the deck, and not the number of cards on screen. A screen that counts only what
+it renders under-reports danger precisely when there is most of it (`TRUTH.md` acceptance
+criterion 17).
+
+**Stepping to the second card:**
+
+```text
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ FINDING                                              ┌─────────────┐ │  │
+│  │                                                      │    High     │ │  │
+│  │                                                      └─────────────┘ │  │
+│  │ Outdated OpenSSH on hp-printer (192.168.1.17).                       │  │
+│  │ Found in yesterday's 21:40 scan.                                     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+│           ┌───┐                                          ┌───┐             │
+│           │ ← │            2 of 5                        │ → │             │
+│           └───┘                                          └───┘             │
+```
+
+**One finding only** — no deck, no arrows, no position line. A single card with navigation
+chrome around it reads as though something is being withheld.
+
+```text
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ FINDING                                              ┌─────────────┐ │  │
+│  │                                                      │  Critical   │ │  │
+│  │                                                      └─────────────┘ │  │
+│  │ CVE-2024-4577 on synology-nas (192.168.1.42).                        │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+```
+
+### How the deck behaves
+
+| Rule | Why |
+|---|---|
+| **Stepping never fetches.** Both finding reads happen once, on load, at the contract's maximum page size. The arrows move through data already in memory | An arrow that issues a request is pagination in costume: it stutters on a slow link and can fail halfway through a review, leaving the operator unsure what they have seen |
+| **It stops at both ends; it does not wrap.** At the first card `←` is disabled; at the last, `→` is | Wrapping leaves an operator unable to tell whether they have seen everything — the one doubt this screen must never create |
+| **Arrow keys work only when focus is inside the deck.** The deck is a single tab stop; `←`/`→` step while it holds focus. There is **no document-level key handler** | A global arrow listener hijacks page scrolling and fights screen-reader navigation. Scoping it is an accessibility requirement, not a preference |
+| **The card region is `aria-live="polite"`** and the position line is real text, not decoration | Stepping changes content without moving focus, so the change must be announced or it is invisible to a screen reader |
+| **Order is critical → high, and within a severity newest first** | `ARCHITECTURE.md` §2.2: findings arrive in no caller-chosen order, so `review.ts` imposes this |
+| **The scan and coverage cards are not in the deck** | They are not findings, there are at most two, and burying a failed scan behind an arrow press means it can go unseen |
+| **The deck's position resets when the underlying data changes** and holds otherwise | Returning to card 1 on an unrelated re-render loses the operator's place; keeping a stale index past a data change shows the wrong finding |
 
 Square-edged cards on `--card` over `--paper`, separated by whitespace rather than by rules.
 The **item label** (`FINDING`, `SCAN`, `COVERAGE`) is the only place `--accent` appears on this
@@ -193,9 +240,28 @@ The verdict is **left-aligned in the items-pending state** and centred in the al
 This is deliberate: with cards below it, a centred sentence floats away from the column of
 left-aligned content beneath it. The all-clear state has no such column, so centring holds.
 
-Cards are ordered **critical findings → high findings → failed scan → stale coverage**, and
-within a severity by detection time, newest first. The order is stable across renders so the
-page does not reshuffle under the operator between visits.
+The page is ordered **finding deck → failed scan → stale coverage**, and inside the deck
+**critical before high**, within a severity newest first. The order is stable across renders so
+the page does not reshuffle under the operator between visits.
+
+### The review-item buttons are drawn but not built
+
+`[View finding]`, `[See why]` and `[Check the Pi]` appear in every mockup above and in the copy
+table below. **None of them is rendered in this feature.** Their destinations do not exist:
+there is no finding-detail screen anywhere in the product (a finding opens as local state inside
+scan detail — SCREENS.md line 834), scan detail is out of scope, and the Agents screen belongs to
+DMI-78. A button that navigates nowhere is worse than no button: it is tab-reachable, announced
+to a screen reader as an action, and does nothing when pressed — and no test can tell "not wired
+yet" apart from "someone forgot to wire it".
+
+This is the same treatment the Pi-status footer gets, for the same reason, and the same reason
+LOGIN ships no "forgot password?" link. Drawing them here locks the card's final shape so the
+feature that builds each destination adds the button without re-litigating the layout, and so the
+screen does not visibly change under the operator when it arrives.
+
+**The card without its button is still the whole promise:** label, severity badge, and a sentence
+naming the CVE, the host and the IP. That is what `TRUTH.md` acceptance criteria 10, 12 and 13
+now require.
 
 ### HOME — stale coverage item
 
@@ -225,24 +291,29 @@ page does not reshuffle under the operator between visits.
 │        running software with known vulnerabilities. It takes about         │
 │        ten minutes and changes nothing on them.                            │
 │                                                                            │
-│                    ┌──────────────────────┐                                │
-│                    │   Run first scan     │                                │  #home-first-scan
-│                    └──────────────────────┘        ADMIN ONLY — omitted    │
-│                                                    entirely for viewers    │
+│                 Scanning is set up on the Pi itself.                       │  #home-blank-note
+│                                                                            │
 │                             ·  ·  ❦  ·  ·                                  │
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Viewer variant — the button is **absent from the DOM**, replaced by a sentence. This is the
-literal test of consistency rule 3 and acceptance criterion 7:
+**No scan-triggering control ships in this feature, for either role.** `TRUTH.md` fences "Scan
+now" and all command-status UI out of scope, and the SPA could not fire one anyway: dispatching a
+command needs an `agent_id`, which is the exact thing contract ask C1 leaves unavailable
+(§The Pi-status footer is blocked). A `[Run first scan]` button on a first-run screen would be the
+worst possible dead control — the one thing the page asks the operator to do, doing nothing.
 
-```text
-│                    Ask your admin to run the first scan.                   │  #home-viewer-note
-```
+So the blank state ends on a plain sentence, identical for admins and viewers, that tells the
+truth about where scanning currently lives. It is not a CTA and is not styled as one.
+
+**Consequence for role gating:** the blank state no longer splits by role, so this feature's
+proof of "absent, not disabled" (`TRUTH.md` AC 7) rests entirely on the `Users` nav item in the
+top bar. That is real, rendered, and asserted absent for viewers — one honest instance beats two
+where one is theatre.
 
 The footer is omitted in the blank state: there is no scan history to summarise, and a Pi
-status line under first-run onboarding competes with the one thing the page is asking for.
+status line under first-run onboarding competes with the one thing the page is explaining.
 
 ### HOME — error
 
@@ -266,12 +337,41 @@ The top bar stays — the operator can still navigate away from a broken Home. N
 partial cards: SCREENS.md §HOME forbids a skeleton standing in for a verdict, and a half-
 rendered Home is indistinguishable from an all-clear Home, which is the dangerous failure.
 
+### Not found — any unknown path
+
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│ DMITRI    Home                                                [Log out]    │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│                                                                            │
+│                     That page doesn't exist.                               │  #not-found
+│                          [IM Fell 32]                                      │
+│                                                                            │
+│                          Go to Home                                        │  #not-found-home
+│                                                                            │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+Rendered, **not redirected**. Silently bouncing a mistyped URL to Home makes the product look as
+though it ignored the operator, and a stale bookmark then gives no clue why it stopped working.
+
+It sits **inside the shell** when there is a session, so the top bar is still there to leave by —
+the same reasoning as the error state. With no session, the route guard runs first and sends the
+operator to `/login`: an unknown path is not a reason to skip the session check.
+
+`Go to Home` is a link, not a button. It navigates somewhere that exists, which is the whole
+difference between this control and the ones removed elsewhere in this feature.
+
 ### HOME — loading
 
 The first load renders **nothing below the top bar** — no skeleton, no spinner, no placeholder
 sentence. Same reason as the error state: any placeholder in the verdict's position is read as
-a verdict. The gap is a plain read of two or three fast endpoints; if it ever stops being fast,
-that is a backend problem to fix rather than a spinner to add.
+a verdict. The gap is four plain reads issued together — the latest scan, the latest successful
+scan, and the critical and high findings — and it is the only wait on this screen: stepping
+through the deck afterwards touches no network at all. If the load ever stops being fast, that is
+a backend problem to fix rather than a spinner to add.
 
 ---
 
@@ -280,23 +380,47 @@ that is a backend problem to fix rather than a spinner to add.
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ DMITRI    Home  Scans  Hosts  Agents  Users  Settings         [Log out]    │
-│           ▔▔▔▔                                                             │
+│           ▔▔▔▔   └──────────── not in v1 ─────────────┘                    │
 └────────────────────────────────────────────────────────────────────────────┘
   wordmark   nav (left)                                        action (right)
 ```
 
 - Wordmark left, nav items left-adjacent, `[Log out]` right (SCREENS.md §App shell).
+- **While the nav holds exactly one item, that item is centred in the bar. From the second
+  item on it returns to left-adjacent, as drawn above. Decided 2026-07-31.** A single link
+  floating beside the wordmark reads as an orphan rather than as navigation; a group of six
+  does not. As shipped in v1:
+
+  ```text
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ DMITRI                        Home                            [Log out]    │
+  │                               ▔▔▔▔                                         │
+  └────────────────────────────────────────────────────────────────────────────┘
+    wordmark                   nav (centred)                     action (right)
+  ```
+
+  The centring is true bar-centring, not the midpoint between the wordmark and `[Log out]` —
+  those have different widths, and splitting the difference lands a few pixels off in a way
+  that reads as a mistake. `TopBar` uses three grid tracks with equal `1fr` sides for this.
+  **The feature that adds the second nav item owns reverting this**, and the rule is stated
+  here rather than encoded in `TopBar` because a count-driven layout branch would be
+  speculative machinery for a transition that happens exactly once.
 - The active item is marked with `--accent` — a 2px underline plus `--ink` text weight, not a
   filled pill. Nav is the only other place `--accent` appears in this feature.
-- **`Users` is omitted for viewers**, not disabled. It is the shell's instance of rule 3.
-- **Open question for the build — nav items whose screens do not exist yet.** Only `Home`
-  exists in this feature; `Scans`, `Hosts`, `Agents`, `Users`, `Settings` all arrive in later
-  features. Rendering them as links to a 404 teaches the operator the product is broken.
-  Recommended: **render only `Home` in this feature and add each item with the feature that
-  builds its screen.** SCREENS.md §App shell argues the nav is muscle memory and that items
-  should not churn — but that argument is about *renaming* an existing destination, not about
-  shipping links to nothing. Flag for approval; the mockups above draw the full nav so the
-  final shape is visible.
+- **When `Users` arrives it is omitted for viewers**, never disabled — the shell's instance of
+  rule 3. It is not in this feature; see below.
+- **Only `Home` is rendered in this feature.** `Scans`, `Hosts`, `Agents`, `Users` and
+  `Settings` arrive with the features that build their screens. Rendering them now would mean
+  links to nothing — the same decision taken for the review-item buttons and the blank state's
+  CTA, for the same reason. SCREENS.md §App shell argues the nav is muscle memory and should not
+  churn, but that argument is about *renaming* a destination that exists, not about shipping
+  links to screens that do not. **The mockups above draw the full nav** so the final shape stays
+  visible and reviewable; only `Home` ships. (Decided 2026-07-28.)
+- **In v1 the top bar renders `Home` alone, identically for admins and viewers.** `Users` is the
+  role-gated item, and it arrives with the Users screen — carrying the role-gating primitive and
+  the test that proves a viewer never sees it. Consequence: **this feature has no admin-only
+  affordance at all**, so its guarantee is the stronger negative one — nothing anywhere renders
+  in a disabled state (`ARCHITECTURE.md` §4).
 
 ---
 
@@ -310,12 +434,22 @@ deliberately, to be auditioned against real screens during this build. These are
 
 | Token | Hex | Contrast on `--paper` | White text on it | Role |
 |---|---|---|---|---|
-| `--accent` | `#5B21B6` | **8.5:1** (AAA) | **9.0:1** (AAA) | active nav item, primary buttons, the review-item label. Nothing else. |
+| `--accent` | `#7C3AED` | **5.37:1** (AA) | **5.70:1** (AA) | active nav item, primary buttons, the review-item label. Nothing else. |
 
-It clears AAA both as text on paper and as a button ground under white text, which is what lets
-one value do both jobs instead of needing a darker "on-paper" variant and a lighter "button"
-variant. Deep and saturated rather than lavender — on a warm paper surface a lighter purple
-goes muddy and stops reading as the one loud thing.
+**Chosen 2026-07-28**, replacing the earlier `#5B21B6` proposal. It clears AA both as text on
+paper and as a button ground under white text, which is what lets one value do both jobs instead
+of needing a darker "on-paper" variant and a lighter "button" variant.
+
+It is brighter and more violet than the deep `#5B21B6` first proposed, and that is the point —
+the accent should read as the one loud thing on a quiet page without going sombre. The trade is
+real and worth stating: `#5B21B6` cleared **AAA** on both counts (8.5:1 and 9.0:1) where this
+clears AA. Both are conformant for the uses above; only `#5B21B6` had headroom to spare.
+
+**The floor is 4.5:1, not 3:1**, because `--accent` is used as *text* — the review-item label and
+the active nav item — not merely as a control boundary. A lighter purple in this family fails
+that bar: `#9F55D9`, considered and rejected the same day, measures 4.15:1 on paper and 4.40:1
+under white text. Any future adjustment to this token must be re-measured against both numbers,
+not eyeballed.
 
 ### Severity ramp
 
@@ -356,7 +490,7 @@ badge legible as a label while the sentence beneath it stays the thing being rea
 | Prose column | `max-width: 720px`, centred. Both screens (SCREENS.md §Viewport: Home and all auth screens are prose-led). |
 | Top bar | Full-bleed `--card` ground, `--rule` bottom border, contents constrained to the same 720px column so the wordmark aligns with the verdict. |
 | Home vertical rhythm | All-clear: verdict block vertically centred in the viewport minus chrome. Items-pending: verdict at the top of the column, cards below, page scrolls normally. |
-| Review card | Square edges (`--radius: 0`), `--card` ground, 1px `--rule` border, generous internal padding. Full column width. |
+| Review card | Square edges (`--radius: 0`), `--card` ground, 1px `--rule` border, generous internal padding. Full column width. The card's action button is drawn in the mockups but **not built in this feature** — see below. |
 | Footer | `--ink-muted`, small, pinned below the content — not fixed to the viewport bottom. **⛔ Not implementable in this feature** — see below. |
 | Long values | Hostnames and IPs in review items wrap; they never widen the column (§Building rules 4). UUIDs do not appear on either screen. |
 | Horizontal scroll | Never on the page body. Neither screen has wide content in this feature. |
@@ -371,7 +505,8 @@ badge legible as a label while the sentence beneath it stays the thing being rea
 | Login error | The error region is `role="alert"` so it is announced, not just drawn. |
 | Login submitting | Button `disabled` — Enter and repeat clicks cannot double-submit. |
 | Top bar | Nav items are real links, tab-reachable in reading order, `[Log out]` last. |
-| Home | Nothing is autofocused; the page is read, not operated. Review-item buttons are tab-reachable in card order. |
+| Home | Nothing is autofocused; the page is read, not operated. No review-item buttons and no scan CTA ship in this feature. |
+| Home — finding deck | One tab stop for the whole deck. While it holds focus, `←` and `→` step between findings; the handler is bound to the deck, **never to `document`**, so page scrolling and screen-reader keys are untouched elsewhere. The `←`/`→` buttons are separately tab-reachable and do the same thing on click or Enter. A disabled end arrow is skipped by Tab. The card region is `aria-live="polite"` so a step is announced without stealing focus. |
 | Focus ring | `--accent` at 2px offset, on every interactive element. Never removed. |
 
 ---
@@ -403,27 +538,30 @@ reset a password that was fine.
 | Element | Copy |
 |---|---|
 | Verdict — all clear | `Nothing needs your attention.` |
-| Context — all clear | `Last scan finished yesterday at 21:40 — 12 hosts, no critical findings.` |
+| Context — all clear | `Last scan finished yesterday at 21:40 — 12 hosts, no critical findings.` Sourced from the most recent **successful** scan and its own `host_count` (`ARCHITECTURE.md` §2.5) — "finished" must not describe a scan that failed |
 | Verdict — one item | `1 thing needs your review.` |
 | Verdict — several items | `{n} things need your review.` |
 | Item label — finding | `FINDING` |
 | Item label — scan | `SCAN` |
 | Item label — coverage | `COVERAGE` |
 | Review item — finding | `{CVE or title} on {hostname} ({ip}). Found in last night's scan.` |
-| Review item — finding button | `View finding` |
+| Deck position | `{i} of {n}` — `i` is the card in view, `n` the findings in the deck. Not the verdict's count, which is larger whenever a scan failed or coverage is stale |
+| Deck previous | `←`, accessible name `Previous finding` |
+| Deck next | `→`, accessible name `Next finding` |
+| Review item — finding button | `View finding` ⛔ not built in this feature |
 | Review item — scan failed | `Last night's scan didn't finish.` |
-| Review item — scan failed button | `See why` |
+| Review item — scan failed button | `See why` ⛔ not built in this feature |
 | Review item — stale coverage | `No successful scan in {n} days.` |
-| Review item — stale coverage button | `Check the Pi` |
+| Review item — stale coverage button | `Check the Pi` ⛔ not built in this feature |
 | Footer — Pi online | `Pi · online · last seen {relative}` ⛔ blocked |
 | Footer — Pi offline | `Pi · offline · last seen {relative}` ⛔ blocked |
 | Blank — verdict | `No scans yet.` |
 | Blank — body | `A scan looks at every machine on your network and reports what an attacker could see: which are exposed, and which are running software with known vulnerabilities. It takes about ten minutes and changes nothing on them.` |
-| Blank — admin button | `Run first scan` |
-| Blank — viewer note | `Ask your admin to run the first scan.` |
+| Blank — how scanning works | `Scanning is set up on the Pi itself.` — one sentence, both roles, not a button |
 | Error | `Couldn't load your network's status.` |
 | Error button | `Retry` |
-| Not found (any other route) | `That page doesn't exist.` + `Go to Home` |
+| Not found — heading | `That page doesn't exist.` |
+| Not found — link | `Go to Home` |
 
 `last night's` is only correct when the scan ran overnight. The build renders the scan's
 recency through the shared `Timestamp` rule instead: relative inside 7 days, absolute beyond
@@ -442,11 +580,14 @@ visible and reviewable rather than silently "fixed".
 | Login | credential error | backend rejects | inline error above the button, form re-enabled, password preserved |
 | Login | network error | request never lands | inline error above the button, different string |
 | Home | loading | first load | nothing below the top bar |
-| Home | blank | no scan has ever run | first-run onboarding, admin CTA or viewer note |
+| Home | blank | no scan has ever run | first-run onboarding + the sentence about where scanning lives; no CTA, no role split |
 | Home | regular, all clear | recent scan, no critical/high, coverage fresh | verdict + context + ornament + footer |
-| Home | regular, items pending | ≥1 critical/high finding, or last scan failed, or coverage stale | verdict + cards + footer |
+| Home | regular, items pending | ≥1 critical/high finding, or last scan failed, or coverage stale | verdict + finding deck (when there are findings) + scan/coverage cards + footer |
+| Home | items pending, one finding | exactly 1 critical/high finding | the card alone — no arrows, no position line |
+| Home | items pending, no findings | 0 critical/high, but the scan failed or coverage is stale | no deck at all; the scan/coverage cards carry the page |
 | Home | error | any required read fails | error copy + `[Retry]`, top bar intact |
-| Any other route | not found | unknown path | not-found copy + link to Home, inside the shell if signed in |
+| Any other route | not found | unknown path, signed in | not-found copy + link to Home, inside the shell |
+| Any other route | — | unknown path, signed out | the route guard wins: redirect to `/login` |
 
 **Blank vs all-clear is not the same emptiness.** Blank means *nothing has ever happened* and
 teaches; all-clear means *something happened and it was fine* and reassures. Collapsing them
@@ -471,12 +612,19 @@ Named here so the tests in `ARCHITECTURE.md`'s testing table have stable anchors
 | `log-out` | log out button |
 | `home-verdict` | the verdict sentence |
 | `home-context` | the all-clear context sentence |
-| `home-item` | each review card (queried as a set, ordered) |
-| `home-item-severity` | severity badge inside a finding card |
-| `home-first-scan` | blank-state admin CTA — **asserted absent for viewers** (criterion 14) |
-| `home-viewer-note` | blank-state viewer sentence |
+| `home-deck` | the finding deck wrapper — the single tab stop, owns the arrow-key handler |
+| `home-deck-card` | the finding card currently in view (`aria-live="polite"`) |
+| `home-deck-position` | the `{i} of {n}` line — **absent when there is only one finding** |
+| `home-deck-prev` | previous arrow — **asserted `disabled` on the first card** |
+| `home-deck-next` | next arrow — **asserted `disabled` on the last card** |
+| `home-item-scan` | the failed-scan card, outside the deck |
+| `home-item-coverage` | the stale-coverage card, outside the deck |
+| `home-item-severity` | severity badge inside the finding card |
+| `home-blank-note` | blank-state sentence about where scanning lives — same for both roles |
 | `home-error` | error copy |
 | `home-retry` | retry button |
+| `not-found` | not-found heading |
+| `not-found-home` | the link back to Home |
 | `home-footer` | Pi status footer |
 
 ---
@@ -495,9 +643,15 @@ the agent from a scan. Each would harden a guess into the first real screen of t
 **Consequence:** the footer is drawn in the mockups above but **is not built in this feature**.
 The all-clear and items-pending states render without it. It arrives when DMI-78 lands.
 
-**The stale-coverage item survives**, because the 3-day rule is computable from the latest
-scan's `timestamp` alone and needs no agent read. Only SCREENS.md's *"The Pi hasn't been seen
-since Tuesday."* variant is blocked; `No successful scan in {n} days.` is not.
+**The stale-coverage item survives**, because the 3-day rule is computable from the timestamp of
+the most recent *successful* scan and needs no agent read — that record is fetched with
+`status: 'completed'` (`ARCHITECTURE.md` §2.5), which is why the copy can honestly say
+"successful". Only SCREENS.md's *"The Pi hasn't been seen since Tuesday."* variant is blocked;
+`No successful scan in {n} days.` is not.
+
+One state that copy must cover: an organisation whose scans have **all** failed has no successful
+scan to count days from. Show the failed-scan item alone and omit the stale-coverage line — Home
+does not say "stale since never".
 
 ---
 
@@ -507,16 +661,12 @@ since Tuesday."* variant is blocked; `No successful scan in {n} days.` is not.
    this feature also writes them into `docs/ui/SCREENS.md` §Color, replacing the `<tbd>`s.
 2. **Nav items for screens that do not exist yet** (§Top bar) — recommendation is Home-only,
    growing as screens land.
-3. **The `View finding` and `See why` destinations do not exist.** Both point at scan detail
-   (`/scans/:scanId`), which is out of scope for this feature. Options: render the buttons and
-   let them land on the not-found page (bad), omit the buttons until scan detail ships
-   (leaves review items with no next step, violating consistency rule 2), or ship a minimal
-   scan-detail route in this feature (scope creep). **Recommendation: omit the buttons in this
-   feature and state the finding fully enough to be actionable without one** — the item still
-   names the CVE, the host and the IP. Needs a decision; it is the one place where this
-   feature's fence and SCREENS.md's copy genuinely conflict.
-4. **`Run first scan` in the blank state points at Agents**, which is also out of scope, and
-   "Scan now" is explicitly fenced out of this feature. Same problem as (3). Recommendation:
-   keep the blank-state copy, omit the CTA for both roles in this feature, and show the viewer
-   sentence to everyone until Agents ships. This weakens acceptance criterion 14's admin half —
-   flagging rather than silently dropping it.
+3. ~~**The `View finding` and `See why` destinations do not exist.**~~ **Resolved 2026-07-28:**
+   the buttons are drawn in the mockups and **not rendered** in this feature. The item states the
+   CVE, the host and the IP, which is what makes it actionable; each button arrives with the
+   screen it points at. `TRUTH.md` story 3 and acceptance criteria 10, 12 and 13 were reworded to
+   promise plain words rather than a control. See §The review-item buttons are drawn but not built.
+4. ~~**`Run first scan` in the blank state.**~~ **Resolved 2026-07-28:** dropped for both roles.
+   The blank state ends on `Scanning is set up on the Pi itself.` — a sentence, not a CTA.
+   `TRUTH.md` acceptance criterion 14 was rewritten to drop its admin/viewer split, which now
+   rests solely on the `Users` nav item. See §HOME — blank.
