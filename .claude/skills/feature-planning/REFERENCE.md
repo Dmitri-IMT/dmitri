@@ -17,7 +17,7 @@ scaffolding; the skeletons below are the same shapes inlined for quick reference
 |------|-------|-----------|
 | `TRUTH.md` | feature-planning | always |
 | `ARCHITECTURE.md` | architecture-agent | always |
-| `DESIGN.md` | tui-design-agent | only when Textual screens change |
+| `DESIGN.md` | tui-design-agent (Textual) / frontend-design-agent (React web) | only when UI screens change |
 | `INTEGRATION.md` | architecture-agent | only for a real cross-layer contract (rare here) |
 | `TASKS.md` | feature-orchestrator | written in Phase 2, not now |
 | `POOP.md` | subagents | created during orchestration |

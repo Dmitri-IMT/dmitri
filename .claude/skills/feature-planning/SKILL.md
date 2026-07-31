@@ -2,7 +2,7 @@
 name: feature-planning
 description: >-
   Phase 1 of the document-driven pipeline. Creates specs/NNN-feature-slug/, writes
-  flat TRUTH.md, and spawns the architecture (and TUI design) agents to write
+  flat TRUTH.md, and spawns the architecture (and TUI or web design) agents to write
   ARCHITECTURE.md / DESIGN.md with mandatory file/naming tables and verifiable
   acceptance criteria. Stops at a human approval gate — never implements. Use when
   the user invokes /feature-planning, says "create spec" / "plan feature" / "start a
@@ -55,13 +55,16 @@ only pasted requirements.
    **`ARCHITECTURE.md`** (+ `INTEGRATION.md` only if the feature genuinely crosses a layer
    boundary; this is a single-layer Python app, so usually omit it). It must produce the
    **mandatory New files and naming** table and per-area testing expectations.
-6. **Spawn the TUI design agent** (`subagent_type: tui-design-agent`) to write
-   **`DESIGN.md`** **only when** the feature adds or changes Textual screens
-   (`hardware-agent/src/agent/tui/screens/`). It must include a **visual frontend mockup**
-   (ASCII / box-drawing render) of each screen with a prose explanation. Skip for pure
-   pipeline/config features.
+6. **Spawn a design agent** to write **`DESIGN.md`** — pick by which UI the feature touches:
+   - `subagent_type: tui-design-agent` for Textual screens (`hardware-agent/src/agent/tui/screens/`).
+   - `subagent_type: frontend-design-agent` for React web screens (`frontend/src/`); it works
+     from `docs/ui/` and inherits `SCREENS.md` §Foundations.
+   - Both, if a feature genuinely changes both UIs. Neither, for pure pipeline/config features.
+
+   Either way it must include a **visual mockup** (ASCII / box-drawing render) of each screen and
+   materially different state, with a prose explanation.
 7. **Naming is mandatory** — both agents must list the exact files/paths implementers will
-   create or touch under `hardware-agent/src/agent/`.
+   create or touch (under `hardware-agent/src/agent/`, or `frontend/src/` for web work).
 
 Pass the agents **paths**, not pasted spec contents.
 
