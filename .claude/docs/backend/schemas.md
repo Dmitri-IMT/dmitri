@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-27T22:15:00Z
+timestamp: 2026-07-31T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -16,7 +16,7 @@ timestamp: 2026-07-27T22:15:00Z
 an agent submits. `persistence.py` is the legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
 [hosts/scans/findings routers](/backend/routers.md) actually return (plus `ScanSortBy`/`SortOrder`
-literal aliases used only on the scan-list route, and `SEVERITY_ORDER`). `schemas/__init__.py` re-exports
+literal aliases used only on the scan-list route). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)
@@ -35,7 +35,7 @@ the ingest input plus the main persisted projections.
 
 | Name | What it shapes | Ref |
 |------|-----------------|-----|
-| `SEVERITY_ORDER` | Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order. The single severity-domain definition: read by host ranking (`services/hosts.py`), the scan-list severity rank (`services/read.py`), and the `findings.severity` check constraint (`models/persistence.py`). Lives beside the domain it ranks so the model layer imports it without depending on a service. | `backend/src/api/schemas/read.py:21` |
+| `Severity` / `SEVERITY_ORDER` | **Moved out of this module 2026-07-31** to [`core/severity.py`](/backend/api.md); `read.py` now imports `Severity` from there. Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order — the single severity-domain definition. | `backend/src/api/core/severity.py:5` |
 | `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:14` |
 | `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). | `backend/src/api/schemas/read.py:24` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:35` |

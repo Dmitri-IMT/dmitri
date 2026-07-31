@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -20,7 +20,9 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 > **Build status.** Only the **Pi agent + TUI** ([`hardware-agent`](/hardware-agent/overview.md)) is
 > in active development. The [`backend`](/backend/overview.md) is working code; its **read path**
 > (`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) is wired, but **ingest is not** —
-> nothing uploads a scan over HTTP yet, Pi hardware is not yet acquired, and there is no frontend.
+> nothing uploads a scan over HTTP yet, and Pi hardware is not yet acquired. The
+> [`frontend`](/frontend/overview.md) now has its first real vertical slice (login → Home) reading
+> that wired read path.
 > The only live coupling between agent and backend today is the shared [`contracts`](/contracts.md)
 > schema. Treat the ingest side of backend/contract docs as **planned / not yet wired**.
 > `docs/architecture/ARCHITECTURE.md` describes target state.
@@ -33,7 +35,7 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 | Backend API + worker | [backend](/backend/overview.md) | read path wired, ingest not | FastAPI read endpoints + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
 | Shared contracts | [contracts](/contracts.md) | active seam | OpenAPI + example JSON binding agent, backend, and (future) frontend. |
 | Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, Railway deploy config. |
-| Frontend (React) | — | planned | Not scaffolded (ADR-008). |
+| Frontend (React) | [frontend](/frontend/overview.md) | login → Home slice wired | Vite + React 19 SPA on the frozen contract: session layer, routing, and the Home verdict screen (ADR-008). |
 
 ## End-to-end flow
 

@@ -55,15 +55,17 @@ FastAPI API (read path + auth + invites wired) + the CVE-enrichment worker. Full
 * [backend/services](./backend/services.md) — persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
 * [backend/migrations](./backend/migrations.md) — The Alembic env and eleven revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, and agent public keys — plus Supabase RLS hardening and the dmitri_runtime role.
 
-## Frontend (scaffold only)
+## Frontend (first vertical slice)
 
-The React 19 + TypeScript SPA. Only the greenfield scaffold exists — contract-typed API access
-and the auth-client plumbing, with a throwaway stub UI. Full listing in
-[frontend/index.md](./frontend/index.md).
+The React 19 + TypeScript SPA. The scaffold plus the first real screens — routing, a session
+layer, and login → Home. Full listing in [frontend/index.md](./frontend/index.md).
 
-* [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA scaffold — contract-typed API access and the auth-client plumbing, with only a throwaway stub UI.
-* [frontend/api](./frontend/api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the auth resource module, and the in-memory token store.
-* [frontend/app](./frontend/app.md) — The React root, the boot-time silent-refresh gate, and the throwaway login stub + signed-in placeholder.
+* [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
+* [frontend/api](./frontend/api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read resource modules.
+* [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
+* [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
+* [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [frontend/screens](./frontend/screens.md) — The LOGIN and HOME screens, the not-found page, the two shells and top bar, and the shared presentation components.
 
 ## Infrastructure
 

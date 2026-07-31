@@ -3,6 +3,42 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-07-31
+
+* **Update**: `frontend/api.md` — corrected a mapping that was actively misleading. `apiClient`/
+  `authClient` were documented at `client.ts:7`/`:9`; they are created in `instances.ts`, which the
+  doc did not mention at all. The recorded "deliberate lazy circular import" between `client.ts` and
+  `auth.ts` no longer exists. Both errors sat over a **live bug**: `users`/`scans`/`findings`
+  imported `apiClient` from `instances.ts`, so nothing in the app imported `client.ts`, the
+  interceptors were never attached, and every authenticated request in the browser 401'd while the
+  suite stayed green (the only importer of `./client` was its own test). Fixed in code; the import
+  direction and the isolation the guard test needs are now both recorded.
+* **Update**: `frontend/overview.md` (`src/api/` layout row split `instances.ts` from `client.ts`;
+  `agents.ts` + its MSW handler deleted as unused), `frontend/review.md` (`useQueries` over
+  `HOME_SEVERITIES`; `skipToken` replaces `enabled` + the `scanId as string` cast),
+  `frontend/screens.md` (`TopBar` three-track grid centring its lone nav item — transitional, see
+  SCREENS.md §App shell; `cursor-pointer` added to the vendored shadcn button base because Tailwind
+  v4 preflight sets `cursor: default`).
+* **Update**: `backend/api.md`, `backend/schemas.md`, `backend/models.md` — `Severity` and
+  `SEVERITY_ORDER` moved from `schemas/read.py` to a new dependency-free `core/severity.py`, so the
+  model layer spells the `ck_findings_severity` constraint without importing the schema layer above
+  it. Importers updated in `models/persistence.py`, `services/read.py`, `services/hosts.py`,
+  `routers/findings.py`.
+
+## 2026-07-29
+
+* **Creation**: `frontend/auth.md` (SessionProvider / useSession / RequireSession),
+  `frontend/review.md` (`deriveReview` + `useHomeReview`), `frontend/screens.md` (Login, Home,
+  NotFound, the two shells, top bar, shared components).
+* **Update**: spec 020 frontend vertical slice login → Home — the SPA is no longer stub-only.
+  `frontend/overview.md` (real screens, light-only token layer, the blocked `GET /agents/{id}`
+  read), `frontend/api.md` (`authEvents` replaces the hard `window.location` redirect; new
+  `users`/`scans`/`findings`/`agents` read modules), `frontend/app.md` (rewritten: provider nest +
+  route table only, no session state), `frontend/index.md`. Notable seams recorded: the boot
+  refresh is a query, not an Effect (StrictMode × rotating refresh token); sign-out cannot use a
+  bare `queryClient.clear()` while the `['session']` observer is live; end-stop deck arrows are
+  absent rather than disabled.
+
 ## 2026-07-27
 
 * **Update**: spec 021 (DMI-82) scan list + finding filters — `GET /api/v1/scans`
