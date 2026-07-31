@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
 import { apiClient, authClient } from './client'
 import { getAccessToken, setAccessToken } from './tokenStore'
+import { onSessionExpired } from './authEvents'
 import { validLoginResponse } from '@/test/mswHandlers'
 
 const baseURL = 'http://localhost:8000/api/v1'
@@ -37,7 +38,7 @@ describe('apiClient interceptor', () => {
     expect(getAccessToken()).toBe(validLoginResponse.access_token)
   })
 
-  it('clears the token store and redirects to login when refresh also fails, without a second refresh', async () => {
+  it('clears the token store and emits a session-expired event when refresh also fails, without a second refresh', async () => {
     let refreshCallCount = 0
     server.use(
       http.get(
@@ -50,22 +51,16 @@ describe('apiClient interceptor', () => {
       }),
     )
 
-    const originalLocation = window.location
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...originalLocation, href: originalLocation.href },
-    })
+    const onExpired = vi.fn()
+    const unsubscribe = onSessionExpired(onExpired)
 
     await expect(apiClient.get('/hosts')).rejects.toBeTruthy()
 
     expect(getAccessToken()).toBeNull()
-    expect(window.location.href).toBe('/login')
+    expect(onExpired).toHaveBeenCalledTimes(1)
     expect(refreshCallCount).toBe(1)
 
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: originalLocation,
-    })
+    unsubscribe()
   })
 
   it('single-flights concurrent 401s into exactly one refresh, retrying every queued request', async () => {
