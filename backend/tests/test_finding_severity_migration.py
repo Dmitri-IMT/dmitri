@@ -8,9 +8,9 @@ from uuid import uuid4
 import pytest
 import sqlalchemy as sa
 from alembic import command
+from api.core.severity import SEVERITY_ORDER
 from api.models.identity import Org
 from api.models.persistence import FindingRecord, ScanRecord
-from api.schemas.read import SEVERITY_ORDER
 from conftest import _alembic_config, _migrate
 from sqlalchemy.engine import Engine
 from sqlmodel import Session

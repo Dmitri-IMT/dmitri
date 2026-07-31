@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, select
 
+from api.core.severity import SEVERITY_ORDER
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
@@ -9,7 +10,6 @@ from api.models.persistence import (
     ScanHostRecord,
     ScanRecord,
 )
-from api.schemas.read import SEVERITY_ORDER
 from api.schemas.scan import ScanResult
 
 
