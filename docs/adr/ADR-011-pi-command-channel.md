@@ -136,31 +136,56 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 | `queued`, `delivered`, `expired` | Backend |
 | `running`, `uploading`, `done`, `failed` (reported) | Pi via WS (+ ingest for `done`) |
 
-**Enqueue:** `POST /api/v1/agents/{agent_id}/commands` creates `commands` row + **stub** `scans` row (`scan_id` assigned at enqueue).
+**Enqueue:** `POST /api/v1/agents/{agent_id}/commands` creates a `commands` row only
+(`status=queued`, `scan_id` null). No stub scan yet.
 
 **Delivery:**
 
-- Pi **online** (open WS): deliver immediately.
-- Pi **offline:** up to **2** delivery retries, then **`503`** + `code: device_offline`.
+- Pi **online** (open WS): send the command frame; on **successful delivery** set
+  `delivered`, persist `scan_id`, and create the **stub** `scans` row.
+- Pi **offline** / send fails after retries: set `expired` (still no `scan_id`), return
+  **`503`** + `code: device_offline`.
 
-**Concurrency:** one active scan per Pi (`running` or `uploading`). New trigger → **`409`** + `code: device_busy`.
+**Why the stub waits for delivery.** `expired →` scan status `"failed"`, and `GET /scans`
+lists by org without hiding host-less stubs. Creating a scan on every offline click would
+pollute the operator's primary screen with failed empty scans. The command row is the audit
+trail; a scan row means *a Pi accepted work*. An `expired` command therefore carries
+**no `scan_id`**. The null is a *consequence* of `expired`, never a *marker* of it —
+`command.status` is the signal. Enforced in DDL:
+
+```sql
+CHECK (scan_id IS NOT NULL OR status IN ('queued', 'expired'))
+```
+
+**Why two statuses.** A `scans` row exists **iff** a Pi accepted the command, so the null is
+legal exactly in the pre-delivery window. `queued` (written by `enqueue()` before the frame is
+sent) and `expired` (delivery gave up) are the only two pre-delivery statuses; every other
+status implies a Pi took the job and therefore a persisted `scan_id`. Nothing infers failure
+from the null — `command.status` stays the only signal.
+
+**Concurrency:** one active scan per Pi (any non-terminal status). New trigger → **`409`** +
+`code: device_busy`.
 
 **Terminal states — the split is `delivered_at`** (C12, decided 2026-07-13):
 
 | Case | State | When it is set |
 |------|-------|----------------|
-| Delivery gave up after the 2 retries — the Pi **never took the job** | `expired` | Synchronously, with the `503 device_offline` |
-| Pi error, ingest failure, WS drop mid-scan, or stale `running` — the Pi **took the job and broke** | `failed` | On report, or by the running timeout |
+| Delivery gave up — the Pi **never took the job** | `expired` | Synchronously with `503 device_offline`, or by the worker/enqueue stale sweep for a stuck `queued` command |
+| Pi error, ingest failure, WS drop mid-scan, or stale post-delivery — the Pi **took the job and broke** | `failed` | On report, or by the stale sweeper |
 
 A headless `fatal` is a Pi-reported `failed`, including a result-write failure after the scan
 pipeline completed. The daemon may retain the returned payload in memory, but must not report
 `uploading` or `done` when no result JSON was persisted.
 
-**Timeouts:** the `running` stale threshold is **config/env** (not fixed in this ADR). WS drop mid-scan uses that same running timeout → `failed`; operator re-triggers. There is **no second timeout for `expired`** — an undelivered command is resolved at enqueue, not swept later.
+**Timeouts / stale sweep:** connection-loss grace is **config/env**
+(`COMMAND_DISCONNECT_GRACE_SECONDS`). The enrichment worker sweeps globally on its poll; enqueue
+sweeps the target agent before the busy check. Stale `queued` → `expired`; stale
+`delivered`/`running`/`uploading` → `failed` (and mirrored scan status). Staleness is
+**written**, not derived at read time.
 
 ### 5. Stub scan (`GET /api/v1/scans/{scan_id}`)
 
-After enqueue, scan exists before ingest. Return **`200`** with stub body:
+After **successful delivery**, the stub scan exists before ingest. Return **`200`** with stub body:
 
 - `status: pending`
 - empty `hosts` / `findings` arrays
@@ -194,7 +219,7 @@ Host inventory path is **`/hosts`** (breaking rename from `/devices`). OpenAPI: 
 org
  └── agents
       └── commands
-           └── scans (stub at enqueue)
+           └── scans (stub on successful delivery)
                 └── hosts (discovered machines)
 ```
 

@@ -214,30 +214,41 @@ def test_upgrade_guard_fails_on_out_of_domain_severity(
     finding_id = uuid4()
     with engine.begin() as connection:
         connection.execute(
-            sa.text("INSERT INTO orgs (id, name) VALUES (:id, :name)"),
+            sa.text(
+                "INSERT INTO orgs (id, name, created_at) "
+                "VALUES (:id, :name, NOW())"
+            ),
             {"id": org_id, "name": "guard-org"},
         )
         connection.execute(
             sa.text(
                 "INSERT INTO scans "
                 "(scan_id, org_id, timestamp, subnet, scan_mode, status, "
-                "metadata_json) "
+                "metadata_json, created_at) "
                 "VALUES (:scan_id, :org_id, NOW(), '10.0.0.0/24', 'standard', "
-                "'completed', '{}')"
+                "'completed', '{}', NOW())"
             ),
             {"scan_id": scan_id, "org_id": org_id},
         )
         connection.execute(
             sa.text(
                 "INSERT INTO findings "
-                "(finding_id, scan_id, severity, title, description, "
-                "recommendation, evidence, dedupe_key) "
-                "VALUES (:finding_id, :scan_id, 'urgent', 't', 'd', 'r', 'e', 'bad-dk')"
+                "(finding_id, scan_id, severity, confidence, title, description, "
+                "recommendation, evidence, references_json, source_labels_json, "
+                "dedupe_key, created_at, updated_at) "
+                "VALUES (:finding_id, :scan_id, 'urgent', 'tentative', 't', 'd', "
+                "'r', 'e', '[]', '[]', 'bad-dk', NOW(), NOW())"
             ),
             {"finding_id": finding_id, "scan_id": scan_id},
         )
 
     with pytest.raises(RuntimeError, match="'urgent'"):
         command.upgrade(_alembic_config(), "20260727_12")
+
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("DELETE FROM findings WHERE finding_id = :finding_id"),
+            {"finding_id": finding_id},
+        )
 
     _migrate(engine, "head")

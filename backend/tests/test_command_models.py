@@ -22,6 +22,7 @@ def test_agent_columns_match_expected_set():
         "public_key",
         "revoked_at",
         "last_seen_at",
+        "connected_at",
         "created_at",
     }
 
@@ -63,9 +64,9 @@ def test_command_has_exactly_four_timestamp_columns_no_uploading_at():
     assert "uploading_at" not in table.columns
 
 
-def test_command_scan_id_is_not_nullable_and_unique():
+def test_command_scan_id_is_nullable_and_unique():
     column = SQLModel.metadata.tables["commands"].columns["scan_id"]
-    assert column.nullable is False
+    assert column.nullable is True
     assert column.unique is True
 
 

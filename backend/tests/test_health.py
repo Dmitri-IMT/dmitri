@@ -54,6 +54,10 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/invites/{token}/accept", "POST"),
     ("/api/v1/invites/{token}/accept", "OPTIONS"),
     ("/api/v1/users/me", "GET"),
+    ("/api/v1/agents/{agent_id}/commands", "POST"),
+    ("/api/v1/agents/{agent_id}/commands", "OPTIONS"),
+    ("/api/v1/commands/{command_id}", "GET"),
+    ("/api/v1/commands/{command_id}", "OPTIONS"),
 }
 
 
@@ -119,9 +123,10 @@ def test_route_surface_is_exactly_the_declared_contract() -> None:
     assert surface == EXPECTED_ROUTE_SURFACE
 
 
-def test_app_has_no_lifespan_hook() -> None:
+def test_app_registers_lifespan_not_startup_hooks() -> None:
     assert app.router.on_startup == []
     assert app.router.on_shutdown == []
+    assert app.router.lifespan_context is not None
 
 
 def test_smoke_test_module_is_not_importable() -> None:

@@ -20,7 +20,6 @@ scaffolding; the skeletons below are the same shapes inlined for quick reference
 | `DESIGN.md` | tui-design-agent (Textual) / frontend-design-agent (React web) | only when UI screens change |
 | `INTEGRATION.md` | architecture-agent | only for a real cross-layer contract (rare here) |
 | `TASKS.md` | feature-orchestrator | written in Phase 2, not now |
-| `POOP.md` | subagents | created during orchestration |
 | `STRUCTURAL_REEVAL.md` | orchestrator | only on 4th rejection |
 
 ## TRUTH.md
@@ -54,7 +53,6 @@ scaffolding; the skeletons below are the same shapes inlined for quick reference
 ## Related specs
 
 - Implementation: `ARCHITECTURE.md`{, `DESIGN.md` if UI}
-- Execution ledger: `POOP.md` (written during orchestration)
 ```
 
 `TRUTH.md` is **not** implementation detail — no file paths, no nmap flags, no code, no config

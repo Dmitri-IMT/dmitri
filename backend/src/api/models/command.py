@@ -16,9 +16,10 @@ class Agent(SQLModel, table=True):
     org_id: UUID = Field(foreign_key="orgs.id", index=True)
     display_name: str
     public_key: bytes = Field(sa_type=LargeBinary)
-    revoked_at: datetime | None = None
-    last_seen_at: datetime | None = None
-    created_at: datetime = Field(default_factory=utc_now)
+    revoked_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    connected_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 class AgentNonce(SQLModel, table=True):
@@ -40,12 +41,14 @@ class Command(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     org_id: UUID = Field(foreign_key="orgs.id", index=True)
     agent_id: UUID = Field(foreign_key="agents.id", index=True)
-    scan_id: UUID = Field(foreign_key="scans.scan_id", unique=True)
+    scan_id: UUID | None = Field(
+        default=None, foreign_key="scans.scan_id", unique=True
+    )
     scan_mode: str
     subnet: str
     status: str
     error_code: str | None = None
-    created_at: datetime = Field(default_factory=utc_now)
-    delivered_at: datetime | None = None
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    delivered_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    started_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    completed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)

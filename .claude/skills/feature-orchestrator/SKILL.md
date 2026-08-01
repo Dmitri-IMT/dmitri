@@ -13,7 +13,7 @@ disable-model-invocation: true
 # Feature Orchestrator
 
 You are the **project manager** — not the implementer, not the reviewer, not the test runner.
-You drive subagents and maintain `TASKS.md` / `POOP.md`.
+You drive subagents and maintain `TASKS.md`.
 
 ## Allowed
 
@@ -21,7 +21,6 @@ You drive subagents and maintain `TASKS.md` / `POOP.md`.
 - Spawn Task subagents — the layer-matched coder / test / review trio (see *Pick the agents by
   layer*), plus the planning agents during a structural re-eval
 - Run the `docs-sync` skill **once** at the end of the pipeline (docs only — never app code)
-- Append `STRUCTURAL_REEVAL — Task N` blocks to `POOP.md`
 - Read-only `Read` / `Grep` / `Glob` on `hardware-agent/**`, `backend/**` and `frontend/**`
 
 ## Forbidden
@@ -67,9 +66,9 @@ add explicit tasks (or target files) covering `ScanRunner` and `ScanProgressScre
 
 | Step | Agent (`subagent_type`) | Notes |
 |------|-------------------------|-------|
-| 1 | `agent-developer` | Spec + doc paths only; implements every Success Criterion; lists changed files; appends POOP |
-| 2 | test agent (see below) | Tests for the changed files; lists test files; appends POOP |
-| 3 | review agent (see below) | Runs the layer's gate on scope; first line `[APPROVE]` / `[REJECT]`; appends POOP |
+| 1 | `agent-developer` | Spec + doc paths only; implements every Success Criterion; lists changed files |
+| 2 | test agent (see below) | Tests for the changed files; lists test files |
+| 3 | review agent (see below) | Runs the layer's gate on scope; first line `[APPROVE]` / `[REJECT]` |
 | 4 | on `[REJECT]` | Increment `Review Rejections`; if **≥ 4** → structural re-eval; else spawn a **new** `agent-developer` (+ the layer's test agent if tests failed) with the full rejection text, then re-run step 3 |
 
 Pass subagents **paths**, not pasted spec contents. The reviewer is the authoritative gate.
@@ -95,14 +94,13 @@ both. Step 1 is `agent-developer` either way.
 ## Structural re-evaluation (4th rejection)
 
 1. Set the task `BLOCKED_STRUCTURAL`.
-2. Append a `STRUCTURAL_REEVAL — Task N` block to `POOP.md` (trigger, symptom).
-3. Spawn `architecture-agent` (+ the matching design agent if UI — `tui-design-agent` for
+2. Spawn `architecture-agent` (+ the matching design agent if UI — `tui-design-agent` for
    Textual, `frontend-design-agent` for React web) to write
    `specs/NNN-feature-slug/STRUCTURAL_REEVAL.md` (symptom → root cause → revised plan → spec
    changes → human gate).
-4. Revise the specs and `TASKS.md`.
-5. **Human approval required** before any more code.
-6. Reset that task's `Review Rejections` to 0 and spawn a fresh coder from step 1.
+3. Revise the specs and `TASKS.md`.
+4. **Human approval required** before any more code.
+5. Reset that task's `Review Rejections` to 0 and spawn a fresh coder from step 1.
 
 ## Phase 5 — state
 
@@ -111,10 +109,3 @@ On `[APPROVE]`: mark the task `COMPLETED`, move to the next. When all tasks are 
 vs the base branch), to update `.claude/docs` + apply narrow `docs/` patches; report any contested
 docs drift to the operator. Then report completion and remind them the human-only tail is:
 `nuke` → `commit` → `create-pr`.
-
-## POOP.md
-
-`POOP.md` is the append-only "poop" of the subagents (a joke about subagents producing messy
-code) — every coder, test engineer, and reviewer writes one section before returning. The
-orchestrator appends only `STRUCTURAL_REEVAL` blocks. Each subagent entry has: Order Given /
-What, How & Why / Decisions Made / Code Changed (or Reviewed) — file paths only, no snippets.

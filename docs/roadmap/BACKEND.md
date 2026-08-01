@@ -120,12 +120,15 @@ Pi ever took the job*. Never delivered → `expired`; delivered then broke → `
 
 ### Payload (3b)
 
-Backend generates **`command_id`** and **`scan_id`** at enqueue. Pi must use the given `scan_id` in the ingest payload.
+Backend generates **`command_id`** at enqueue. **`scan_id`** is minted for the WS delivery
+payload and **persisted** (with the stub `scans` row) only on successful delivery — an
+`expired` command has `scan_id: null` (ADR-011 §4 / D1). Pi must use the given `scan_id` in
+the ingest payload.
 
 | Field | Source |
 |-------|--------|
-| `command_id` | Backend (UUID) |
-| `scan_id` | Backend (UUID) — assigned at enqueue |
+| `command_id` | Backend (UUID) — assigned at enqueue |
+| `scan_id` | Backend (UUID) — generated for delivery; persisted only on successful delivery |
 | `agent_id` | Backend (target Pi — `agents` table) |
 | `scan_mode` | ~~Operator~~ → **product picks `quick`**; the other four are not surfaced in the UI ([`FRONTEND.md`](FRONTEND.md), [`ui/FLOWS.md` B4](../ui/FLOWS.md#b4--scan-now-command-flow)) |
 | `subnet` | ~~Operator — CIDR~~ → **`agent.target_subnet`**, chosen once on AGENTS. See [B11-C2](#b11--frontend-contract-asks-) |
@@ -191,7 +194,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 org
  └── agents          ← Pi appliances, secrets, online/last_seen
       └── commands   ← "Scan now"
-           └── scans  ← pre-created at enqueue (5c); filled on ingest
+           └── scans  ← stub on successful delivery (5c); filled on ingest
                 └── hosts  ← discovered machines (ports, findings, …)
 ```
 
@@ -199,7 +202,9 @@ org
 
 **`commands`** (5c): `command_id`, `org_id`, `agent_id` (FK), `scan_id` (FK), `scan_mode`, `subnet`, `status`, `requested_by` (audit, optional Phase 1), `error_code`, timestamps (`created_at`, `delivered_at`, `started_at`, `completed_at`).
 
-**Enqueue (5c-A):** `POST …/agents/{id}/commands` inserts **`commands`** + stub **`scans`** row (same `scan_id`) before WS delivery.
+**Enqueue (5c-A):** `POST …/agents/{id}/commands` inserts a **`commands`** row (`queued`,
+`scan_id` null). The stub **`scans`** row is created only after WS delivery succeeds (same
+`scan_id` persisted on the command).
 
 **`org_id` (5d):** on `agents`, `commands`, `scans`; hosts scoped via `scan.org_id`.
 

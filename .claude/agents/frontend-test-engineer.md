@@ -3,10 +3,9 @@ name: frontend-test-engineer
 description: >-
   Adds or updates Vitest + Testing Library + MSW tests for the files a coder changed in one
   TASKS.md task, in frontend/ (React 19 + TypeScript + Vite). Mirrors existing test patterns
-  under frontend/src/, asserts user-visible behavior over implementation detail, and appends a
-  POOP.md entry before terminating. Spawned by the feature-orchestrator after the
-  agent-developer, for frontend-layer features only — the Python test-engineer handles
-  hardware-agent/ and backend/.
+  under frontend/src/, asserts user-visible behavior over implementation detail. Spawned by the
+  feature-orchestrator after the agent-developer, for frontend-layer features only — the Python
+  test-engineer handles hardware-agent/ and backend/.
 readonly: false
 ---
 
@@ -147,15 +146,6 @@ render helpers beyond `renderWithProviders`, no per-component suites for copy-on
 no test for a thin typed wrapper whose behavior is already proven end-to-end through MSW. A
 trivial component needs no test file; don't add one to pad coverage. If a task's `Tests` field
 names the suite you should write, that is the scope — do not expand it.
-
-## POOP.md (mandatory before terminating)
-
-Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
-
-- **Order Given** — the exact task scope you were given.
-- **What, How, and Why** — what you tested, how, and why.
-- **Decisions Made** — query choices, MSW boundaries, cases chosen/skipped.
-- **Code Changed** — test file paths only, no snippets.
 
 Then return the list of every test file you created or modified.
 

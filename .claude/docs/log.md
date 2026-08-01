@@ -5,7 +5,28 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-07-31
 
-* **Update**: `frontend/api.md` — corrected a mapping that was actively misleading. `apiClient`/
+* **Update**: post-DMI-64 cleanup — `MAINTAINING.md`'s "current vs target state" standing fact
+  rewritten (the backend is no longer "working code but nothing calls it"; ingest and the Pi daemon
+  are the two remaining gaps), `backend/api.md` (`command_running_timeout_seconds` deleted from
+  `Settings` — it had no consumer), `backend/services.md` (`apply_status` gains an
+  `AND scan_id IS NOT NULL` predicate and `deliver` a zero-rowcount rollback, closing both races in
+  the delivery `await` window; recorded that D9's "rank resolves the early-`running` race" claim is
+  inaccurate once D1's CHECK exists).
+* **Update**: backend command channel wired end to end (spec 022 / DMI-64) — `backend/services.md`
+  (new `commands.py` rows for `enqueue`/`active_command_for`/`apply_status`/`sweep_stale_commands`/
+  `deliver`, new `agent_presence.py` rows, `command_lifecycle`'s pairwise `_LEGAL_EDGES` replaced by
+  `status_rank`/`is_terminal`, `agent_ws` now takes a session **factory** and opens one session per
+  frame in a threadpool, `run_worker_once` sweeps before enriching; the "schema-only / not-yet-wired"
+  notes are gone and are replaced by notes on owner-split transitions, silent zero-rowcount,
+  written-not-derived staleness, and connection-loss rather than elapsed-time timeouts),
+  `backend/routers.md` (`POST /agents/{id}/commands`, `GET /commands/{id}`, presence calls on the WS
+  handler; 403-not-404 and the shared 409 body), `backend/models.md` (`commands.scan_id` nullable
+  under `CHECK (scan_id IS NOT NULL OR status IN ('queued','expired'))`, the partial unique index,
+  `agents.connected_at`), `backend/migrations.md` (rev `20260731_13`; the baseline's `CREATE ROLE`
+  guard and why cluster-scoped roles vs database-scoped migrations made the whole DB suite skip),
+  `backend/schemas.md` (new `schemas/commands.py` section; optional `scan_id`), `backend/api.md`
+  (startup `reconcile_all`, the commands router, the two new settings — and that
+  `command_running_timeout_seconds` has no consumer), `backend/index.md` and `contracts.md`. `apiClient`/
   `authClient` were documented at `client.ts:7`/`:9`; they are created in `instances.ts`, which the
   doc did not mention at all. The recorded "deliberate lazy circular import" between `client.ts` and
   `auth.ts` no longer exists. Both errors sat over a **live bug**: `users`/`scans`/`findings`

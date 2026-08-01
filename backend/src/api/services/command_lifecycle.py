@@ -1,15 +1,27 @@
 """Pure command lifecycle logic (no DB)."""
 from __future__ import annotations
 
-_LEGAL_EDGES: dict[str, set[str]] = {
-    "queued": {"delivered", "expired"},
-    "delivered": {"running", "expired"},
-    "running": {"uploading", "failed"},
-    "uploading": {"done", "failed"},
-    "done": set(),
-    "failed": set(),
-    "expired": set(),
+# The canonical command status domain. `services/commands.py` builds its SQL
+# rank expression and status filters from these, so the Python rule and the
+# SQL rule cannot drift apart.
+RANK: dict[str, int] = {
+    "queued": 0,
+    "delivered": 1,
+    "running": 2,
+    "uploading": 3,
+    "done": 4,
+    "failed": 4,
+    "expired": 4,
 }
+
+# Statuses only a Pi may report over the command channel.
+PI_OWNED = frozenset({"running", "uploading", "done", "failed"})
+
+TERMINAL = frozenset({"done", "failed", "expired"})
+
+# The "agent is busy" set, matching the partial-unique-index predicate in
+# alembic/versions/20260731_13_command_delivery.py.
+NON_TERMINAL: tuple[str, ...] = tuple(s for s in RANK if s not in TERMINAL)
 
 _SCAN_STATUS_BY_COMMAND_STATUS: dict[str, str] = {
     "queued": "pending",
@@ -22,19 +34,12 @@ _SCAN_STATUS_BY_COMMAND_STATUS: dict[str, str] = {
 }
 
 
-class InvalidCommandTransition(Exception):
-    def __init__(self, current: str, target: str) -> None:
-        super().__init__(f"Cannot transition command from {current!r} to {target!r}")
-        self.current = current
-        self.target = target
+def is_terminal(status: str) -> bool:
+    return status in TERMINAL
 
 
-def next_status(current: str, target: str) -> str:
-    if target == current:
-        return current
-    if target not in _LEGAL_EDGES.get(current, set()):
-        raise InvalidCommandTransition(current, target)
-    return target
+def status_rank(status: str) -> int:
+    return RANK[status]
 
 
 def scan_status_for(command_status: str) -> str:

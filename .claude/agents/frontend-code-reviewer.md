@@ -4,9 +4,8 @@ description: >-
   Per-task review gate in the orchestration loop for frontend/ features. Reviews a coder +
   frontend-test-engineer's work against the TASKS.md success criteria and the specs, runs the
   npm lint/format/typecheck/test/build gate on the scope, and returns [APPROVE] or [REJECT] on
-  the first line. Appends a POOP.md entry. Spawned by the feature-orchestrator; this is the
-  authoritative gate for React work — the Python code-reviewer handles hardware-agent/ and
-  backend/.
+  the first line. Spawned by the feature-orchestrator; this is the authoritative gate for React
+  work — the Python code-reviewer handles hardware-agent/ and backend/.
 readonly: false
 ---
 
@@ -95,15 +94,6 @@ If `[APPROVE]`: before finishing, strip every `// ponytail:` marker comment the 
 the touched files — this is the **single, mechanical exception** to "review only" (delete the
 marker lines, change no logic). Then re-run `npm run lint` and `npm run typecheck` on those
 files to confirm the strip broke nothing.
-
-## POOP.md (mandatory before terminating)
-
-Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
-
-- **Order Given** — the exact review scope you were given.
-- **What, How, and Why** — what you reviewed, how (commands run + results), and why.
-- **Decisions Made** — approve/reject rationale.
-- **Code Reviewed** — file paths only, no snippets.
 
 ## Behavioral guidelines
 

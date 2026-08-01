@@ -26,7 +26,11 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   `X-Nonce`, `X-Body-SHA256`, `X-Signature`; returns `202 Accepted`).
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
   stub is returned before ingest completes).
-- `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (HMAC; frames
+- `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
+  `CommandSummary`, `409 device_busy`, `503 device_offline`. **Wired** (DMI-64).
+- `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
+  on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
+- `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (Ed25519; frames
   `hello`/`command`/`status`). Scan results never travel this socket.
 - `auth` (`login`/`refresh`/`logout`/…) + `invites` — identity surface.
 

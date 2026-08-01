@@ -66,6 +66,9 @@ def test_migration_matches_model_metadata_and_security_fence(
         "secret_nonce",
         "secret_key_version",
     }
+    commands_columns_altered_by_task_3 = {
+        "scan_id",
+    }
 
     for name, table in created.items():
         created_shape = _table_shape(table)
@@ -76,6 +79,12 @@ def test_migration_matches_model_metadata_and_security_fence(
                 column
                 for column in created_columns
                 if column[0] not in agents_columns_replaced_by_task_4
+            }
+        if name == "commands":
+            created_columns = {
+                column
+                for column in created_columns
+                if column[0] not in commands_columns_altered_by_task_3
             }
         assert created_columns <= set(model_shape.columns)
         assert set(created_shape.foreign_keys) <= set(model_shape.foreign_keys)
@@ -92,7 +101,6 @@ def test_migration_matches_model_metadata_and_security_fence(
 
     commands_columns = created["commands"].columns
     assert "org_id" in commands_columns
-    assert not commands_columns["scan_id"].nullable
     timestamps = {"created_at", "delivered_at", "started_at", "completed_at"}
     assert timestamps <= {column.name for column in commands_columns}
     assert "uploading_at" not in {column.name for column in commands_columns}

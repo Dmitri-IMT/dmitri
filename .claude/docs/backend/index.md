@@ -1,12 +1,16 @@
 # Backend
 
 The cloud half of Dmitri — a FastAPI API and a CVE-enrichment worker over a Supabase-managed
-Postgres. **Read path + auth + users/me + agent WS wired, ingest not:** `GET /api/v1/health`, the read routes
-(`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — behind `require_user` and
-scoped to the caller's org), `GET /api/v1/users/me` (role from the DB row), the auth routes
-(login/refresh/logout + password change/reset), the invite routes, and
-`WebSocket /api/v1/agents/{agent_id}/commands` (behind `require_agent_ws`) are served today; `POST /api/v1/scans` (ingest) is still contract-defined only, and
-`persist_scan`/the worker are exercised directly by tests. No Pi client dials the WS channel yet.
+Postgres. **Read path + auth + users/me + the command channel wired, ingest not:** `GET /api/v1/health`, the
+read routes (`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — behind `require_user`
+and scoped to the caller's org), `GET /api/v1/users/me` (role from the DB row), the auth routes
+(login/refresh/logout + password change/reset), the invite routes, and the command channel —
+`POST /api/v1/agents/{agent_id}/commands` (behind `require_admin`),
+`GET /api/v1/commands/{command_id}`, and `WebSocket /api/v1/agents/{agent_id}/commands` (behind
+`require_agent_ws`), which now delivers commands outbound and applies the Pi's reported status
+transitions — are served today. `POST /api/v1/scans` (ingest) is still contract-defined only, and
+`persist_scan`/the enrichment worker are exercised directly by tests. No Pi client dials the WS
+channel yet (the daemon is DMI-66), so delivery is exercised against fake sockets.
 
 ## Overview & entry points
 

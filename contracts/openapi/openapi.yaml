@@ -573,7 +573,7 @@ paths:
         - $ref: '#/components/parameters/CommandId'
       responses:
         '200':
-          description: Command status and linked scan_id.
+          description: Command lifecycle; scan_id when delivery created a linked scan.
           content:
             application/json:
               schema:
@@ -1972,7 +1972,6 @@ components:
       additionalProperties: false
       required:
         - command_id
-        - scan_id
         - agent_id
         - status
       properties:
@@ -1980,8 +1979,10 @@ components:
           type: string
           format: uuid
         scan_id:
-          type: string
-          format: uuid
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
         agent_id:
           type: string
           format: uuid
@@ -1992,7 +1993,6 @@ components:
       additionalProperties: false
       required:
         - command_id
-        - scan_id
         - agent_id
         - scan_mode
         - subnet
@@ -2003,8 +2003,10 @@ components:
           type: string
           format: uuid
         scan_id:
-          type: string
-          format: uuid
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
         agent_id:
           type: string
           format: uuid
@@ -2015,27 +2017,27 @@ components:
         status:
           $ref: '#/components/schemas/CommandStatus'
         error_code:
-          type:
-            - string
-            - 'null'
+          anyOf:
+            - type: string
+            - type: 'null'
         created_at:
           type: string
           format: date-time
         delivered_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
         started_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
         completed_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
     AgentDetail:
       type: object
       additionalProperties: false

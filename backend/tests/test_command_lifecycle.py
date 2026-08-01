@@ -2,70 +2,43 @@ from __future__ import annotations
 
 import pytest
 from api.services.command_lifecycle import (
-    InvalidCommandTransition,
-    next_status,
+    NON_TERMINAL,
+    PI_OWNED,
+    RANK,
+    TERMINAL,
+    is_terminal,
     scan_status_for,
+    status_rank,
 )
 
 STATUSES = ["queued", "delivered", "running", "uploading", "done", "failed", "expired"]
 
-LEGAL_EDGES = [
-    ("queued", "delivered"),
-    ("queued", "expired"),
-    ("delivered", "running"),
-    ("delivered", "expired"),
-    ("running", "uploading"),
-    ("running", "failed"),
-    ("uploading", "done"),
-    ("uploading", "failed"),
-]
 
-ILLEGAL_EDGES = [
-    (current, target)
-    for current in STATUSES
-    for target in STATUSES
-    if current != target and (current, target) not in LEGAL_EDGES
-]
-
-TERMINAL_STATUSES = ["done", "failed", "expired"]
+def test_rank_covers_every_status():
+    assert set(RANK) == set(STATUSES)
 
 
-@pytest.mark.parametrize("current,target", LEGAL_EDGES)
-def test_legal_edge_returns_target(current, target):
-    assert next_status(current, target) == target
+def test_non_terminal_is_rank_ordered_and_excludes_terminal():
+    assert NON_TERMINAL == ("queued", "delivered", "running", "uploading")
+    assert not set(NON_TERMINAL) & TERMINAL
 
 
-@pytest.mark.parametrize("current,target", ILLEGAL_EDGES)
-def test_illegal_edge_raises_with_current_and_target_named(current, target):
-    with pytest.raises(InvalidCommandTransition) as excinfo:
-        next_status(current, target)
-    message = str(excinfo.value)
-    assert current in message
-    assert target in message
+def test_pi_owned_statuses_outrank_delivered():
+    assert all(status_rank(s) > status_rank("delivered") for s in PI_OWNED)
 
 
-@pytest.mark.parametrize("terminal", TERMINAL_STATUSES)
-@pytest.mark.parametrize("target", STATUSES)
-def test_terminal_is_hard_sink(terminal, target):
-    if target == terminal:
-        assert next_status(terminal, target) == terminal
-    else:
-        with pytest.raises(InvalidCommandTransition):
-            next_status(terminal, target)
+def test_terminal_statuses_share_the_top_rank():
+    assert {status_rank(s) for s in TERMINAL} == {max(RANK.values())}
 
 
-def test_delivered_to_expired_is_legal():
-    assert next_status("delivered", "expired") == "expired"
+@pytest.mark.parametrize("status", ["done", "failed", "expired"])
+def test_is_terminal_true_for_terminal_statuses(status):
+    assert is_terminal(status) is True
 
 
-def test_delivered_to_failed_is_rejected():
-    with pytest.raises(InvalidCommandTransition):
-        next_status("delivered", "failed")
-
-
-@pytest.mark.parametrize("status", STATUSES)
-def test_duplicate_frame_absorbed(status):
-    assert next_status(status, status) == status
+@pytest.mark.parametrize("status", ["queued", "delivered", "running", "uploading"])
+def test_is_terminal_false_for_non_terminal_statuses(status):
+    assert is_terminal(status) is False
 
 
 @pytest.mark.parametrize(

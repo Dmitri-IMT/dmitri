@@ -5,13 +5,20 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlmodel import Session
-from starlette.websockets import WebSocket
+from sqlmodel import select
+from starlette.concurrency import run_in_threadpool
+from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
-from api.models.command import Agent
+from api.models.command import Command
 from api.models.persistence import utc_now
 from api.schemas.agent_frames import AgentErrorFrame, AgentHelloFrame, AgentStatusFrame
 from api.services import agent_connections
+from api.services.agent_presence import (
+    SessionFactory,
+    async_touch_agent_last_seen,
+    touch_agent_last_seen,
+)
+from api.services.commands import apply_status
 
 
 async def send_error(websocket: WebSocket, message: str) -> None:
@@ -19,16 +26,46 @@ async def send_error(websocket: WebSocket, message: str) -> None:
     await websocket.send_text(frame.model_dump_json())
 
 
-def touch_agent_last_seen(session: Session, agent_id: UUID, now: datetime) -> None:
-    agent = session.get(Agent, agent_id)
-    if agent is None:
-        return
-    agent.last_seen_at = now
-    session.commit()
+async def _apply_status_frame(
+    session_factory: SessionFactory,
+    *,
+    agent_id: UUID,
+    frame: AgentStatusFrame,
+    now: datetime,
+) -> bool:
+    def sync_work() -> bool:
+        session = session_factory()
+        try:
+            applied = apply_status(
+                session,
+                agent_id=agent_id,
+                command_id=frame.command_id,
+                status=frame.status,
+                now=now,
+                error_code=frame.error_code,
+            )
+            unknown = False
+            if not applied:
+                exists = (
+                    session.exec(
+                        select(Command.id).where(
+                            Command.id == frame.command_id,
+                            Command.agent_id == agent_id,
+                        )
+                    ).first()
+                    is not None
+                )
+                unknown = not exists
+            touch_agent_last_seen(session, agent_id, now)
+            return unknown
+        finally:
+            session.close()
+
+    return await run_in_threadpool(sync_work)
 
 
 async def handle_agent_frame(
-    session: Session,
+    session_factory: SessionFactory,
     websocket: WebSocket,
     *,
     agent_id: UUID,
@@ -59,17 +96,21 @@ async def handle_agent_frame(
             available_subnets=frame.available_subnets,
             now=now,
         )
-        touch_agent_last_seen(session, agent_id, now)
+        await async_touch_agent_last_seen(session_factory, agent_id, now)
         return
 
     if frame_type == "status":
         try:
-            AgentStatusFrame.model_validate(data)
+            frame = AgentStatusFrame.model_validate(data)
         except ValidationError:
             await send_error(websocket, "invalid status frame")
             return
         await agent_connections.touch(agent_id, websocket, now=now)
-        touch_agent_last_seen(session, agent_id, now)
+        unknown = await _apply_status_frame(
+            session_factory, agent_id=agent_id, frame=frame, now=now
+        )
+        if unknown:
+            await send_error(websocket, "unknown command_id")
         return
 
     if frame_type == "command":
@@ -85,13 +126,24 @@ async def handle_agent_frame(
 
 async def run_agent_channel(
     websocket: WebSocket,
-    session: Session,
+    session_factory: SessionFactory,
     *,
     agent_id: UUID,
 ) -> None:
-    async for raw_text in websocket.iter_text():
+    while websocket.application_state == WebSocketState.CONNECTED:
+        # Not `iter_text()`: it only swallows WebSocketDisconnect. When a second
+        # connection for this agent arrives, `agent_connections.register()`
+        # closes this socket from under the loop, and the next `receive_text()`
+        # raises a bare RuntimeError instead. Whether the displaced handler was
+        # parked inside `receive()` (clean disconnect) or at the loop boundary
+        # (RuntimeError) is pure scheduling luck, so check the state ourselves.
+        # Being replaced is a normal end of life, not an error.
+        try:
+            raw_text = await websocket.receive_text()
+        except WebSocketDisconnect:
+            return
         await handle_agent_frame(
-            session,
+            session_factory,
             websocket,
             agent_id=agent_id,
             raw_text=raw_text,

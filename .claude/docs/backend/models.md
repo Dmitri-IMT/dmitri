@@ -58,9 +58,9 @@ order is irrelevant.
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; `public_key` (`LargeBinary`) — the device's 32 raw Ed25519 public-key bytes, stored **in the clear**; soft-tombstone `revoked_at`; informational `last_seen_at`. No secret, hash, or `online` column: since DMI-61 the backend holds nothing that could impersonate a device. | `backend/src/api/models/command.py:12` |
+| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; `public_key` (`LargeBinary`) — the device's 32 raw Ed25519 public-key bytes, stored **in the clear**; soft-tombstone `revoked_at`; informational `last_seen_at`; nullable `connected_at` — the durable projection of the in-memory socket registry, written by the API and read in SQL by the worker's sweeper. No secret or hash column: since DMI-61 the backend holds nothing that could impersonate a device, and "online" is `connected_at IS NOT NULL` rather than a separate flag. | `backend/src/api/models/command.py:12` |
 | `AgentNonce` → `agent_nonces` | One row per accepted device request: `agent_id` FK → `agents`, `nonce`, `expires_at`. `UniqueConstraint("agent_id", "nonce")` **is** the replay detector; `expires_at` is indexed for pruning. No `agent_id`-only index. | `backend/src/api/models/command.py` |
-| `Command` → `commands` | The audit record of one "Scan now"; UUID PK; `org_id` + `agent_id` FKs (indexed); `scan_id` FK → `scans` **NOT NULL + unique** (1:1 Command→Scan); `scan_mode`/`subnet` request-of-record; unconstrained `status` (guarded by [`command_lifecycle`](/backend/services.md), no ENUM/CHECK); nullable `error_code`; exactly four timestamps `created_at`/`delivered_at`/`started_at`/`completed_at` (no `uploading_at`). | `backend/src/api/models/command.py:26` |
+| `Command` → `commands` | The audit record of one "Scan now"; UUID PK; `org_id` + `agent_id` FKs (indexed); `scan_id` FK → `scans` **nullable + unique** (1:1 Command→Scan, written only once delivery succeeds) under `CHECK (scan_id IS NOT NULL OR status IN ('queued', 'expired'))`; `scan_mode`/`subnet` request-of-record; unconstrained `status` (guarded by [`command_lifecycle`](/backend/services.md), no ENUM/CHECK); nullable `error_code`; exactly four timestamps `created_at`/`delivered_at`/`started_at`/`completed_at` (no `uploading_at`). A partial unique index on `agent_id` over the four non-terminal statuses enforces one active command per Pi. | `backend/src/api/models/command.py:26` |
 
 ## How it connects
 
@@ -88,10 +88,14 @@ order is irrelevant.
   `(org_id, lower(email))` index with `lower(email)` alone, so one address maps to at most one user
   across the whole system. This is why `create_invite` and `accept_invite` use *different* duplicate
   scopes — see the invites note in [auth](/backend/auth.md).
-- **Command channel is still schema-only (DMI-59).** `Agent`/`Command` land the tables and the
-  lifecycle rulebook that later epic issues (WS endpoint DMI-62, ingest DMI-63, enqueue/delivery
-  DMI-64) build on; no delivery logic runs yet. A `Command`'s `status` is the source of truth; the
-  linked `Scan`'s status is a pure projection (see [`command_lifecycle`](/backend/services.md)).
+- **The command channel is wired end to end as of DMI-64** — enqueue, WS delivery, Pi-reported status
+  transitions and the staleness sweep all run (ingest, DMI-63, is the remaining gap). A `Command`'s
+  `status` is the source of truth; the linked `Scan`'s status is a pure projection (see
+  [`command_lifecycle`](/backend/services.md)), and every writer mirrors it in the same transaction so
+  `GET /commands/{id}` and `GET /scans` cannot disagree.
+- **A null `scan_id` is a consequence, never a marker.** It means the command has not been delivered
+  (`queued`) or never will be (`expired`) — the DB CHECK makes that equivalence provable. Do not infer
+  failure from it; read `status`.
 - **`agents` no longer stores a device secret.** DMI-59's `secret_ciphertext`/`secret_nonce`/
   `secret_key_version` columns were dropped in `20260724_11` in favour of a plaintext `public_key`,
   per ADR-005 as amended — which is why ADR-015 (secret encryption at rest) was retired rather than

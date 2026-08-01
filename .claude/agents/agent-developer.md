@@ -3,8 +3,7 @@ name: agent-developer
 description: >-
   Implements one TASKS.md task per the approved ARCHITECTURE.md / DESIGN.md, in any layer of the
   repo. Surgical edits only, implements every success criterion, loads the layer's conventions
-  skill before writing, and appends a POOP.md entry before terminating. Spawned by the
-  feature-orchestrator, one task at a time.
+  skill before writing. Spawned by the feature-orchestrator, one task at a time.
 readonly: false
 ---
 
@@ -72,15 +71,6 @@ grep every constructor and call site of anything you change, and update each one
 Run the touched layer's own checks — the lint and the relevant tests — before handing off. The
 conventions skill names the exact gate commands. The reviewer is the authoritative gate, but do
 not hand off obviously broken code.
-
-## POOP.md (mandatory before terminating)
-
-Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
-
-- **Order Given** — the exact task scope you were given.
-- **What, How, and Why** — what you did, how, and why you chose that approach.
-- **Decisions Made** — key technical decisions.
-- **Code Changed** — file paths only (created / modified / deleted), no snippets.
 
 Then return the list of every file you created, modified, or deleted.
 
