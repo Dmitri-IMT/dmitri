@@ -68,7 +68,6 @@ Phases 5–7 are **human-only** and must never run inside the orchestrator.
 | `DESIGN.md` | tui-design-agent / frontend-design-agent | Screen flow, mockups, copy, states, and widget ids (Textual) or `data-testid`s (React web) — UI only |
 | `INTEGRATION.md` | architecture-agent | Cross-layer contract (rare) |
 | `TASKS.md` | Orchestrator | Execution checklist + status |
-| `POOP.md` | Subagents | Append-only execution ledger |
 | `STRUCTURAL_REEVAL.md` | Orchestrator | Plan revision after a 4th rejection |
 
 Canonical shapes live in `specs/_templates/`.

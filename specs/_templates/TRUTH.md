@@ -28,4 +28,3 @@ Domain language and verifiable behaviour only. No file paths, no nmap flags, no 
 ## Related specs
 
 - Implementation: `ARCHITECTURE.md`{, `DESIGN.md` if UI}
-- Execution ledger: `POOP.md` (written during orchestration)

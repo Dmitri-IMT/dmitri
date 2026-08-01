@@ -48,7 +48,7 @@ and exit early.
    default). Leave decisions and target-state claims alone.
 4. **Report contested items.** Anything you did not edit because it needs a human call goes into the
    run's report to the operator (orchestrator mode: also append a "Docs drift" list to the feature's
-   `POOP.md`).
+   `TRUTU.md` at the end of the file).
 
 ## Modes
 

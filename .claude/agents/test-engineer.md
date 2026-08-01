@@ -3,8 +3,7 @@ name: test-engineer
 description: >-
   Adds or updates pytest / pytest-asyncio tests for the files a coder changed in one TASKS.md
   task. Mirrors existing test patterns under hardware-agent/tests/, asserts behavior over
-  snapshots, and appends a POOP.md entry before terminating. Spawned by the feature-orchestrator
-  after the agent-developer.
+  snapshots. Spawned by the feature-orchestrator after the agent-developer.
 readonly: false
 ---
 
@@ -35,15 +34,6 @@ that matters — success, empty, failure — with the fewest cases that would ca
 a real regression. No frameworks, no fixtures, no per-function suites beyond
 what the task needs. A trivial one-liner needs no test; don't add one to pad
 coverage.
-
-## POOP.md (mandatory before terminating)
-
-Append one section to `specs/NNN-feature-slug/POOP.md` — never overwrite prior entries:
-
-- **Order Given** — the exact task scope you were given.
-- **What, How, and Why** — what you tested, how, and why.
-- **Decisions Made** — mocking boundaries, cases chosen/skipped.
-- **Code Changed** — test file paths only, no snippets.
 
 Then return the list of every test file you created or modified.
 
