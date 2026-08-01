@@ -47,12 +47,14 @@ Windows (PowerShell):
 .\install.ps1 -Hooks
 ```
 
-The root installer auto-installs **uv** and **nmap**, runs `uv sync --extra dev` in both packages (required for `uv run pytest`), seeds `backend/.env` when missing, and — if Docker and the Supabase CLI are present — starts local Postgres and runs Alembic migrations. It also installs a `dmitri` launcher in `~/.local/bin` (and adds that directory to your shell `PATH` on macOS/Linux when missing).
+The root installer auto-installs **uv** and **nmap**, runs `uv sync --extra dev` in both packages (required for `uv run pytest`), seeds `backend/.env` when missing, runs `npm install` and seeds `frontend/.env`, and — if the Supabase CLI is present — starts local Postgres and runs Alembic migrations. Docker only has to be *installed*: if the daemon is down the installer starts it (Docker Desktop on macOS/Windows, `systemctl` on Linux) and waits up to 180s. It also installs a `dmitri` launcher in `~/.local/bin` (and adds that directory to your shell `PATH` on macOS/Linux when missing).
 
-**What the installer does not do:** it never touches `frontend/` (no `npm install`, no
-`frontend/.env`), and the `backend/.env` it seeds is a verbatim copy of the example — you
-still have to set `JWT_SIGNING_SECRET` and `REFRESH_COOKIE_SECURE` yourself before the API
-is usable. See [part 3](#part-3--backend-api) and [part 4](#part-4--frontend).
+**What the installer does not do:** it never installs **Node.js** — without a `node` on
+`PATH` it prints instructions and skips the frontend entirely — and the `backend/.env` it
+seeds is a verbatim copy of the example, so you still have to set `JWT_SIGNING_SECRET` and
+`REFRESH_COOKIE_SECURE` yourself before the API is usable. `--agent-only` skips the
+frontend along with the backend. See [part 3](#part-3--backend-api) and
+[part 4](#part-4--frontend).
 
 After `./install.sh`, run the TUI from anywhere:
 
@@ -288,6 +290,9 @@ npm install
 cp .env.example .env          # sets VITE_API_URL=http://localhost:8000
 npm run dev
 ```
+
+`./install.sh` already did the `npm install` and the `.env` copy — the manual steps above
+are for a machine where Node arrived after the installer ran.
 
 Vite serves on `http://localhost:5173`. That origin is already in the backend's
 `CORS_ALLOWED_ORIGINS` default.
