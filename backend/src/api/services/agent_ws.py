@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlmodel import select
 from starlette.concurrency import run_in_threadpool
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from api.models.command import Command
 from api.models.persistence import utc_now
@@ -130,7 +130,18 @@ async def run_agent_channel(
     *,
     agent_id: UUID,
 ) -> None:
-    async for raw_text in websocket.iter_text():
+    while websocket.application_state == WebSocketState.CONNECTED:
+        # Not `iter_text()`: it only swallows WebSocketDisconnect. When a second
+        # connection for this agent arrives, `agent_connections.register()`
+        # closes this socket from under the loop, and the next `receive_text()`
+        # raises a bare RuntimeError instead. Whether the displaced handler was
+        # parked inside `receive()` (clean disconnect) or at the loop boundary
+        # (RuntimeError) is pure scheduling luck, so check the state ourselves.
+        # Being replaced is a normal end of life, not an error.
+        try:
+            raw_text = await websocket.receive_text()
+        except WebSocketDisconnect:
+            return
         await handle_agent_frame(
             session_factory,
             websocket,

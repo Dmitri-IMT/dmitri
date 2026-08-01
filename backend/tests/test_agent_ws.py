@@ -12,6 +12,7 @@ from api.schemas.agent_frames import AgentErrorFrame
 from api.services import agent_connections, agent_ws
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 AGENT_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 COMMAND_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -190,20 +191,51 @@ def test_invalid_frames_send_error_and_keep_socket_usable(raw_text: str):
     assert session_factory.closed_sessions == session_factory.open_sessions
 
 
+def _feed(ws: AsyncMock, frames: list[str], *, before_each=None) -> None:
+    """Drive run_agent_channel from `frames`, then disconnect.
+
+    The channel reads with receive_text() and guards on application_state, so a
+    bare AsyncMock would exit before the first frame. `before_each` runs ahead
+    of every frame after the first, for asserting between-frame state.
+    """
+    ws.application_state = WebSocketState.CONNECTED
+    pending = list(frames)
+
+    async def receive_text() -> str:
+        if before_each is not None and len(pending) < len(frames):
+            before_each()
+        if not pending:
+            raise WebSocketDisconnect(code=1000)
+        return pending.pop(0)
+
+    ws.receive_text = receive_text
+
+
 def test_two_frames_use_distinct_sessions_closed_per_frame():
     ws = AsyncMock()
     session_factory = _tracking_session_factory()
     asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
 
-    async def frames():
-        yield _hello_payload()
+    seen: list[int] = []
+
+    def between_frames() -> None:
+        # Only meaningful before the second frame: the first frame's session
+        # must already be open and closed by the time the next read happens.
+        if seen:
+            return
+        seen.append(1)
         assert len(session_factory.open_sessions) == 1
         assert session_factory.closed_sessions == session_factory.open_sessions
-        yield _status_payload()
 
-    ws.iter_text = frames
+    _feed(
+        ws,
+        [_hello_payload(), _status_payload()],
+        before_each=between_frames,
+    )
 
     asyncio.run(agent_ws.run_agent_channel(ws, session_factory, agent_id=AGENT_ID))
+
+    assert seen == [1]
 
     assert len(session_factory.open_sessions) == 2
     assert (
@@ -217,11 +249,7 @@ def test_no_session_outlives_ws_loop():
     session_factory = _tracking_session_factory()
     asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
 
-    async def frames():
-        yield _hello_payload()
-        yield _status_payload()
-
-    ws.iter_text = frames
+    _feed(ws, [_hello_payload(), _status_payload()])
 
     asyncio.run(agent_ws.run_agent_channel(ws, session_factory, agent_id=AGENT_ID))
 
@@ -235,12 +263,7 @@ def test_run_agent_channel_processes_frames_and_survives_errors(
     ws = AsyncMock()
     asyncio.run(agent_connections.register(provisioned_agent.id, ws, now=T0))
 
-    async def frames():
-        yield _hello_payload()
-        yield "not json"
-        yield _status_payload()
-
-    ws.iter_text = frames
+    _feed(ws, [_hello_payload(), "not json", _status_payload()])
 
     asyncio.run(
         agent_ws.run_agent_channel(
