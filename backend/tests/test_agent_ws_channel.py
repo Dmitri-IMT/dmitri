@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import json
 from contextlib import ExitStack
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 import pytest
 from api.db.session import get_session
 from api.main import app
-from api.models.command import Agent
+from api.models.command import Agent, Command
 from api.models.identity import Org
+from api.models.persistence import ScanRecord
 from api.services import agent_connections, device_sig
 from conftest import ws_upgrade_headers
 from sqlmodel import Session
 from starlette.testclient import TestClient, WebSocketTestSession
 
 COMMAND_ID = UUID("11111111-1111-4111-8111-111111111111")
+T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 
 
 def _ws_path(agent_id: UUID) -> str:
@@ -31,14 +34,20 @@ def _hello_payload() -> str:
     )
 
 
-def _status_payload() -> str:
-    return json.dumps(
-        {
-            "type": "status",
-            "command_id": str(COMMAND_ID),
-            "status": "running",
-        }
-    )
+def _status_payload(
+    *,
+    command_id: UUID = COMMAND_ID,
+    status: str = "running",
+    error_code: str | None = None,
+) -> str:
+    payload: dict = {
+        "type": "status",
+        "command_id": str(command_id),
+        "status": status,
+    }
+    if error_code is not None:
+        payload["error_code"] = error_code
+    return json.dumps(payload)
 
 
 def _sync(ws: WebSocketTestSession) -> None:
@@ -49,7 +58,46 @@ def _sync(ws: WebSocketTestSession) -> None:
     touches neither the registry nor the DB, so it is safe to use anywhere.
     """
     ws.send_text("not json")
-    assert ws.receive_json()["type"] == "error"
+    assert ws.receive_json() == {"type": "error", "message": "invalid JSON"}
+
+
+def _seed_scan(session: Session, org_id) -> ScanRecord:
+    scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org_id,
+        timestamp=T0,
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        status="pending",
+    )
+    session.add(scan)
+    session.commit()
+    session.refresh(scan)
+    return scan
+
+
+def _seed_command(
+    session: Session,
+    *,
+    org_id,
+    agent_id,
+    status: str,
+    scan_id=None,
+    command_id: UUID | None = None,
+) -> Command:
+    command = Command(
+        id=command_id or uuid4(),
+        org_id=org_id,
+        agent_id=agent_id,
+        scan_id=scan_id,
+        scan_mode="standard",
+        subnet="192.168.1.0/24",
+        status=status,
+    )
+    session.add(command)
+    session.commit()
+    session.refresh(command)
+    return command
 
 
 @pytest.fixture
@@ -82,10 +130,9 @@ def test_disconnect_marks_agent_offline_without_bumping_last_seen(
 
     assert not agent_connections.is_online(provisioned_agent.id)
     administrative_session.expire(provisioned_agent)
-    assert administrative_session.get(Agent, provisioned_agent.id).last_seen_at == (
-        last_seen_after_hello.replace(tzinfo=None)
-        if last_seen_after_hello is not None
-        else None
+    assert (
+        administrative_session.get(Agent, provisioned_agent.id).last_seen_at
+        == last_seen_after_hello
     )
 
 
@@ -234,6 +281,181 @@ def test_two_agents_isolated_on_malformed_frame(
         assert error["type"] == "error"
 
         assert agent_connections.is_online(agent_b.id)
-        ws_b.send_text(_status_payload())
+        ws_b.send_text(_hello_payload())
         _sync(ws_b)
-        assert agent_connections.last_seen_at(agent_b.id) is not None
+        assert agent_connections.get_hello(agent_b.id) is not None
+
+
+def test_running_frame_on_queued_applies_and_backfills_delivered_at(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="queued",
+        scan_id=scan.scan_id,
+    )
+    assert command.delivered_at is None
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(_status_payload(command_id=command.id, status="running"))
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == "running"
+    assert command.delivered_at is not None
+    assert command.started_at is not None
+    assert scan.status == "accepted"
+
+
+def test_duplicate_running_frame_silently_ignored(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+    administrative_session.refresh(command)
+    status_before = command.status
+    started_before = command.started_at
+    delivered_before = command.delivered_at
+    error_before = command.error_code
+    scan_status_before = scan.status
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(_status_payload(command_id=command.id, status="running"))
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == status_before
+    assert command.started_at == started_before
+    assert command.delivered_at == delivered_before
+    assert command.error_code == error_before
+    assert scan.status == scan_status_before
+
+
+def test_unknown_command_id_sends_error_and_keeps_socket_open(
+    client: TestClient,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(_status_payload(command_id=uuid4(), status="running"))
+        error = ws.receive_json()
+        assert error == {"type": "error", "message": "unknown command_id"}
+
+        ws.send_text(_hello_payload())
+        _sync(ws)
+        hello = agent_connections.get_hello(provisioned_agent.id)
+        assert hello is not None
+        assert hello[0] == "0.2.0"
+
+
+def test_other_agents_command_id_treated_as_unknown(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key_a, _ = agent_keypair
+    private_key_b, public_key_b = device_sig.generate_keypair()
+    agent_b = Agent(
+        org_id=seeded_org.id, display_name="Agent B", public_key=public_key_b
+    )
+    administrative_session.add(agent_b)
+    administrative_session.commit()
+    administrative_session.refresh(agent_b)
+
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    other_command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent_b.id,
+        status="queued",
+        scan_id=scan.scan_id,
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key_a, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(_status_payload(command_id=other_command.id, status="running"))
+        error = ws.receive_json()
+        assert error == {"type": "error", "message": "unknown command_id"}
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(other_command)
+    administrative_session.refresh(scan)
+    assert other_command.status == "queued"
+    assert other_command.delivered_at is None
+    assert other_command.started_at is None
+    assert scan.status == "pending"
+
+
+def test_failed_frame_persists_error_code(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(
+            _status_payload(
+                command_id=command.id, status="failed", error_code="scan_timeout"
+            )
+        )
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == "failed"
+    assert command.error_code == "scan_timeout"
+    assert scan.status == "failed"

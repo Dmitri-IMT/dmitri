@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, WebSocket
 from fastapi.exceptions import RequestValidationError, WebSocketRequestValidationError
@@ -12,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from api.core.config import get_settings
-from api.db.session import get_session
+from api.db.session import get_engine, get_session
 from api.errors import (
     DEFAULT_CODES_BY_STATUS,
     ApiError,
@@ -24,11 +26,22 @@ from api.middleware import (
     RequestIdMiddleware,
     build_cors_middleware_kwargs,
 )
-from api.routers import agents, auth, findings, hosts, invites, scans, users
+from api.routers import agents, auth, commands, findings, hosts, invites, scans, users
+from api.services.agent_presence import reconcile_all
 
 APP_VERSION = importlib.metadata.version("backend-api")
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # The connection registry is process-local, so no agent is connected yet on
+    # a fresh process: clear stale connected_at rows a previous crash left set.
+    with Session(get_engine()) as session:
+        reconcile_all(session)
+    yield
+
 
 app = FastAPI(
     title="Dmitri Backend",
@@ -36,6 +49,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 
 app.add_middleware(NoContentCorsMiddleware, **build_cors_middleware_kwargs(settings))
@@ -134,6 +148,7 @@ def options_health() -> None:
 
 
 app.include_router(agents.router)
+app.include_router(commands.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(hosts.router)
