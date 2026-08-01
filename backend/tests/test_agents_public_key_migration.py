@@ -209,9 +209,14 @@ def test_live_upgrade_leaves_other_agent_columns_unchanged(
     with postgres_engine.connect() as connection:
         before = _agents_untouched_columns(connection)
 
-    _migrate(postgres_engine, "head")
+    # Scoped to the revision under test, not `head`: later revisions may legally
+    # touch these columns (20260731_13 retypes them to timestamptz).
+    _migrate(postgres_engine, "20260724_11")
     with postgres_engine.connect() as connection:
         after = _agents_untouched_columns(connection)
+
+    # Leave the schema at head — the rest of the suite shares this database.
+    _migrate(postgres_engine, "head")
 
     assert set(before) == {"org_id", "display_name", "revoked_at", "last_seen_at"}
     assert before == after
