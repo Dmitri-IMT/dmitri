@@ -62,6 +62,9 @@ class Settings(BaseSettings):
         default=300, alias="DEVICE_SIG_MAX_SKEW_SECONDS"
     )
     invite_ttl_hours: int = Field(default=48, alias="INVITE_TTL_HOURS")
+    command_disconnect_grace_seconds: int = Field(
+        default=900, alias="COMMAND_DISCONNECT_GRACE_SECONDS"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
