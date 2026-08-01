@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC, datetime
 
 from api.core.config import get_settings
 from api.db.session import get_session
+from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,13 @@ def run_worker_once(*, batch_size: int | None = None) -> int:
     resolved_batch_size = batch_size or settings.enrichment_batch_size
 
     for session in get_session():
+        try:
+            sweep_stale_commands(session, now=datetime.now(UTC))
+        except Exception:
+            # The sweep is a janitor, not the point of the tick — a failure here
+            # must not stop enrichment from draining its queue.
+            logger.exception("stale command sweep failed; continuing")
+            session.rollback()
         return process_pending_enrichment_jobs(
             session,
             batch_size=resolved_batch_size,
