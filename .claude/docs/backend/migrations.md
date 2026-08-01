@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and twelve revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, and the findings severity check — plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and thirteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check and command delivery — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-07-27T22:15:00Z
+timestamp: 2026-07-31T00:00:00Z
 ---
 
 # Backend database migrations
@@ -17,7 +17,8 @@ constraint, and grant is created by a migration. `alembic/env.py` targets the sa
 scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
 and the `findings.finding_id` UUID — then the auth session tables (spec 016, DMI-60) and the
-command-channel schema (spec 016, DMI-59): the `agents` and `commands` tables — then the device-auth
+command-channel schema (spec 016, DMI-59): the `agents` and `commands` tables, later reshaped for
+delivery by `20260731_13` (spec 022, DMI-64) — then the device-auth
 schema (spec 017, DMI-61): `agent_nonces`, globally-unique user emails, and the `agents` secret
 columns replaced by a plaintext `public_key`. Each DDL-only step is followed by Supabase
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
@@ -31,7 +32,7 @@ new table.
 | `_migration_url()` | Requires a **separate** `DATABASE_URL_DIRECT` env var (the runtime pooler runs in transaction mode and cannot run DDL); normalized via `normalize_postgres_url`. | `backend/alembic/env.py:19` |
 | `run_migrations_online()` | Builds a `NullPool` engine from the direct URL and runs migrations. | `backend/alembic/env.py:42` |
 | `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. | `backend/alembic/versions/20260715_01_baseline.py:64` |
-| RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. | `backend/alembic/versions/20260715_01_baseline.py:293` |
+| RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. The `CREATE ROLE` is wrapped in an `IF NOT EXISTS (SELECT 1 FROM pg_roles ...)` guard and the downgrade's `DROP ROLE` swallows `dependent_objects_still_exist` — see the role note below. | `backend/alembic/versions/20260715_01_baseline.py:293` |
 | `upgrade()` (rev `20260716_02`) | Adds `orgs`/`users`/`invites` (role checks + case-insensitive email unique index), a nullable `org_id` FK on `scans`, and extends RLS/revoke/grant to the identity tables. | `backend/alembic/versions/20260716_02_identity_schema.py:35` |
 | `upgrade()` (rev `20260722_03`, `scan_mode_status`) | Drops `scans.target_mode`/`scans.scan_profile`, adds `scans.scan_mode` (not null) and `scans.status` (not null, server default `completed`). | `backend/alembic/versions/20260722_03_scan_mode_status.py:13` |
 | `upgrade()` (rev `20260722_04`, `scan_host_rename`) | Renames table `devices`→`scan_hosts` (and its id sequence), renames `ports.device_id`/`findings.device_id`→`scan_host_id`. | `backend/alembic/versions/20260722_04_scan_host_rename.py:11` |
@@ -44,6 +45,7 @@ new table.
 | `upgrade()` (rev `20260724_10`, `users_email_global_unique`) | Drops `ix_users_org_email` and creates `ix_users_email` — a unique index on `lower(email)` with **no** `org_id` component, making user emails globally unique. Unguarded on purpose: a genuine cross-org duplicate must fail loudly. Exact-inverse downgrade. | `backend/alembic/versions/20260724_10_users_email_global_unique.py` |
 | `upgrade()` (rev `20260724_11`, `agents_public_key`) | Drops `agents.secret_ciphertext`/`secret_nonce`/`secret_key_version` and adds `public_key` (`LargeBinary`, NOT NULL, no server default — the table is empty). The `agents` security fence is untouched. `downgrade()` restores the three columns exactly as `20260723_07` declared them and documents that it is knowingly lossy if rows exist. | `backend/alembic/versions/20260724_11_agents_public_key.py` |
 | `upgrade()` (rev `20260727_12`, `finding_severity_domain`) | Adds check `ck_findings_severity` on `findings.severity` (`IN ('low','medium','high','critical')`); `upgrade()` guards for out-of-domain rows before applying. No RLS change — constraint only. | `backend/alembic/versions/20260727_12_finding_severity_domain.py` |
+| `upgrade()` (rev `20260731_13`, `command_delivery`) | Makes `commands.scan_id` **nullable** (guarded by a pre-flight query for rows that would violate the new check), adds `ck_commands_scan_id_or_expired` — `scan_id IS NOT NULL OR status IN ('queued', 'expired')` — adds the partial unique index `uq_commands_active_agent ON commands (agent_id) WHERE status IN ('queued','delivered','running','uploading')`, and adds nullable `agents.connected_at`. `downgrade()` refuses to run while any null `scan_id` remains. | `backend/alembic/versions/20260731_13_command_delivery.py` |
 
 ## How it connects
 
@@ -58,6 +60,16 @@ new table.
 
 - **Two URLs.** Runtime connects via the pooled `DATABASE_URL` (see [config](/backend/api.md));
   migrations need `DATABASE_URL_DIRECT` (a direct, non-pooled connection) or `env.py` raises.
+- **Roles are cluster-scoped; migrations are database-scoped.** That mismatch is why the baseline's
+  `CREATE ROLE dmitri_runtime` is guarded and its `DROP ROLE` tolerates
+  `dependent_objects_still_exist`: once the role exists from one database in the cluster, migrating a
+  sibling database (typically `dmitri_test` next to the dev `postgres`) would otherwise raise
+  `DuplicateObject` — and a downgrade cannot drop a role still holding privileges elsewhere. Before
+  this guard landed the entire DB test suite silently skipped, which is how a delivery-path FK bug
+  reached review unnoticed. The exception handler catches **only** `2BP01`, never `WHEN OTHERS`.
+- **The DB tests only run when `DATABASE_URL_TEST` is set**, and it must name a database literally
+  called `dmitri_test` (`backend/tests/conftest.py:44`, asserted again at connect time). Unset, ~249
+  tests skip rather than fail.
 - **`BYPASSRLS` but not superuser.** `dmitri_runtime` bypasses the RLS policies (the app is the trust
   boundary) while `anon`/`authenticated` — Supabase's PostgREST roles — are fully revoked, so the
   tables are unreachable through Supabase's auto-generated API.

@@ -67,10 +67,13 @@ Keep it accurate over exhaustive. Reference real symbols and line numbers; do no
 
 ## Standing facts to preserve (do NOT "fix" these)
 
-- **Current vs target state.** Only the Pi agent + TUI is in active development. The backend is
-  working code but nothing calls it yet (`api/main.py` exposes only `GET /api/v1/health`); the
-  agent→backend link, Pi hardware, and frontend do not exist. Flag backend/contract docs as
-  **planned / not yet wired**.
+- **Current vs target state.** Three layers are in active development: the Pi agent + TUI, the
+  backend, and the React frontend. The backend serves the read path, auth, `users/me`, the invite
+  routes and — since DMI-64 — the full command channel (`POST /agents/{id}/commands`,
+  `GET /commands/{id}`, and the WS channel that delivers commands and applies the Pi's status
+  frames). Still **not wired**: ingest (`POST /api/v1/scans`) is contract-defined only, and no Pi
+  client dials the WS channel — the daemon is DMI-66, so delivery is exercised against fake sockets.
+  Flag those two as **planned / not yet wired**; do not describe the backend as a whole that way.
 - **`device` ↔ `host` rename.** The Pi ingest payload says `devices[]` (frozen by ADR-011);
   everywhere else the term is `host`. `X-Device-Id` identifies the *agent*, not a host.
 - **`ScanRunner` orchestration.** There is no `ScanOrchestrator` class; `ScanRunner._run()` is the

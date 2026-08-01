@@ -1,7 +1,7 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, and the auth and invite request/response models.
+description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
 timestamp: 2026-07-31T00:00:00Z
@@ -89,11 +89,24 @@ always comes from the caller's JWT.
 | `AvailableSubnet` | `interface` (min length 1), `cidr` (`SubnetCIDR`). | `backend/src/api/schemas/agent_frames.py` |
 | `AgentHelloFrame` | `type: "hello"`, `agent_version`, `available_subnets`. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentStatusFrame` | `type: "status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`), optional `error_code`. | `backend/src/api/schemas/agent_frames.py` |
-| `AgentCommandFrame` | `type: "command"`, `command_id`, `scan_id`, `scan_mode`, `subnet` — defined for symmetry; outbound only in later issues. | `backend/src/api/schemas/agent_frames.py` |
+| `AgentCommandFrame` | `type: "command"`, `command_id`, `scan_id`, `scan_mode`, `subnet` — the outbound frame `deliver()` pushes down the socket. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentErrorFrame` | `type: "error"`, `message` — graceful parse/validation failures on the WS channel. | `backend/src/api/schemas/agent_frames.py` |
 
 All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame schemas. Consumed by
-[`services/agent_ws.py`](/backend/services.md) for inbound dispatch.
+[`services/agent_ws.py`](/backend/services.md) for inbound dispatch and by
+[`services/commands.py`](/backend/services.md) for outbound delivery.
+
+## Key classes / functions — `commands.py` (command-channel HTTP shapes)
+
+| Name | What it validates | Ref |
+|------|-------------------|-----|
+| `CreateCommandRequest` | `POST /agents/{agent_id}/commands` body — `scan_mode` (`ScanMode`) and `subnet` (`SubnetCIDR`). `extra="forbid"`. | `backend/src/api/schemas/commands.py:22` |
+| `CommandSummary` | The `201` response: `command_id`, optional `scan_id`, `agent_id`, `status`. | `backend/src/api/schemas/commands.py:29` |
+| `CommandDetail` | `GET /commands/{command_id}` — `CommandSummary`'s fields plus `scan_mode`, `subnet`, optional `error_code`, and the four lifecycle timestamps (`created_at` required; `delivered_at`/`started_at`/`completed_at` nullable). | `backend/src/api/schemas/commands.py:38` |
+
+**`scan_id` is optional on both `CommandSummary` and `CommandDetail`** — a `queued` or `expired`
+command has none. The published contract was amended to drop it from `required` on both schemas;
+`tests/test_contract_fidelity.py` gates that the two agree.
 
 ## Key classes / functions — `persistence.py` (legacy read projections)
 
