@@ -565,8 +565,7 @@ export interface components {
         CommandSummary: {
             /** Format: uuid */
             command_id: string;
-            /** Format: uuid */
-            scan_id: string;
+            scan_id?: string | null;
             /** Format: uuid */
             agent_id: string;
             status: components["schemas"]["CommandStatus"];
@@ -574,8 +573,7 @@ export interface components {
         CommandDetail: {
             /** Format: uuid */
             command_id: string;
-            /** Format: uuid */
-            scan_id: string;
+            scan_id?: string | null;
             /** Format: uuid */
             agent_id: string;
             scan_mode: components["schemas"]["ScanMode"];
@@ -584,11 +582,8 @@ export interface components {
             error_code?: string | null;
             /** Format: date-time */
             created_at: string;
-            /** Format: date-time */
             delivered_at?: string | null;
-            /** Format: date-time */
             started_at?: string | null;
-            /** Format: date-time */
             completed_at?: string | null;
         };
         AgentDetail: {
@@ -1417,7 +1412,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Command status and linked scan_id. */
+            /** @description Command lifecycle; scan_id when delivery created a linked scan. */
             200: {
                 headers: {
                     [name: string]: unknown;

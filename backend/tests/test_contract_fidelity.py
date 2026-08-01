@@ -10,7 +10,12 @@ from api.main import app
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "contracts" / "openapi" / "openapi.yaml"
 
-SCHEMA_NAMES = ("ScanSummary", "ScanListResponse")
+SCHEMA_NAMES = (
+    "ScanSummary",
+    "ScanListResponse",
+    "CommandSummary",
+    "CommandDetail",
+)
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
 
