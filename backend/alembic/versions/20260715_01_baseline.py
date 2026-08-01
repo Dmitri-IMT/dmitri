@@ -295,9 +295,18 @@ def upgrade() -> None:
 
     _revoke_supabase_roles()
 
+    # dmitri_runtime is a cluster-wide role, not a per-database object, so a
+    # plain CREATE ROLE fails whenever this baseline is replayed against a
+    # cluster another database already provisioned — which is every upgrade
+    # after the first in a shared test/CI Postgres. Guarded here rather than in
+    # a later revision: the role must exist before the GRANTs below.
     op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_roles "
+        "WHERE rolname = 'dmitri_runtime') THEN "
         "CREATE ROLE dmitri_runtime WITH LOGIN PASSWORD NULL BYPASSRLS "
-        "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION"
+        "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; "
+        "END IF; END $$"
     )
     op.execute(
         "DO $$ BEGIN EXECUTE format("
@@ -336,4 +345,11 @@ def downgrade() -> None:
         "'REVOKE CONNECT ON DATABASE %I FROM dmitri_runtime', "
         "current_database()); END $$"
     )
-    op.execute("DROP ROLE dmitri_runtime")
+    # Mirror of the guarded CREATE above: another database in the same cluster
+    # may still grant to this role, and dropping it out from under them would
+    # break them. Only that specific error is swallowed — anything else still
+    # fails the downgrade.
+    op.execute(
+        "DO $$ BEGIN DROP ROLE dmitri_runtime; "
+        "EXCEPTION WHEN dependent_objects_still_exist THEN NULL; END $$"
+    )

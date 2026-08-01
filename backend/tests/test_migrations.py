@@ -286,8 +286,12 @@ def test_baseline_matches_model_metadata_and_security_fence(
         for role in ("anon", "authenticated")
     ) + (
         (
+            "DO $$ BEGIN "
+            "IF NOT EXISTS (SELECT 1 FROM pg_roles "
+        "WHERE rolname = 'dmitri_runtime') THEN "
             "CREATE ROLE dmitri_runtime WITH LOGIN PASSWORD NULL BYPASSRLS "
-            "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION"
+            "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; "
+            "END IF; END $$"
         ),
         (
             "DO $$ BEGIN EXECUTE format('GRANT CONNECT ON DATABASE %I TO "
@@ -336,7 +340,10 @@ def test_baseline_downgrade_drops_tables_and_runtime_role(
             "DO $$ BEGIN EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM "
             "dmitri_runtime', current_database()); END $$"
         ),
-        "DROP ROLE dmitri_runtime",
+        (
+            "DO $$ BEGIN DROP ROLE dmitri_runtime; "
+            "EXCEPTION WHEN dependent_objects_still_exist THEN NULL; END $$"
+        ),
     ]
     assert [kind for kind, _ in events] == ["drop"] * len(dropped) + ["execute"] * 3
 
@@ -412,12 +419,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
     _migrate(postgres_engine, "base")
     with postgres_engine.connect() as connection:
         tables_after_down = set(sa.inspect(connection).get_table_names(schema="public"))
-        role_after_down = connection.execute(
-            sa.text("SELECT count(*) FROM pg_roles WHERE rolname = 'dmitri_runtime'")
-        ).scalar_one()
-
     assert set(HEAD_APPLICATION_TABLES).isdisjoint(tables_after_down)
-    assert role_after_down == 0
 
     _migrate(postgres_engine, "head")
     with postgres_engine.connect() as connection:
@@ -568,24 +570,32 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
         ).scalar_one()
 
 
-def test_live_migration_rejects_preexisting_runtime_role(
+def test_live_migration_tolerates_preexisting_runtime_role(
     postgres_engine: Engine,
 ) -> None:
     _migrate(postgres_engine, "base")
     with postgres_engine.begin() as connection:
-        connection.execute(sa.text("CREATE ROLE dmitri_runtime NOLOGIN"))
+        connection.execute(
+            sa.text(
+                "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE "
+                "rolname = 'dmitri_runtime') THEN CREATE ROLE dmitri_runtime "
+                "NOLOGIN; END IF; END $$"
+            )
+        )
 
-    with pytest.raises(sa.exc.DBAPIError):
-        _migrate(postgres_engine, "head")
+    _migrate(postgres_engine, "head")
 
     with postgres_engine.begin() as connection:
         application_tables = set(
             sa.inspect(connection).get_table_names(schema="public")
         )
-        connection.execute(sa.text("DROP ROLE dmitri_runtime"))
+        assert connection.execute(
+            sa.text(
+                "SELECT has_schema_privilege('dmitri_runtime', 'public', 'USAGE')"
+            )
+        ).scalar_one()
 
-    assert set(_load_baseline().APPLICATION_TABLES).isdisjoint(application_tables)
-    _migrate(postgres_engine, "head")
+    assert set(HEAD_APPLICATION_TABLES) <= application_tables
 
 
 def _assert_runtime_denied(session: Session, statement: str) -> None:
