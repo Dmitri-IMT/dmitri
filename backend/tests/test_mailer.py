@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import json
 import logging
 
-import httpx
 import pytest
 from api.core.config import Settings, get_settings
 from api.services.mailer import (
+    BackgroundMailer,
     NullMailer,
     ResendMailer,
     get_mailer,
     invite_link,
     reset_link,
 )
+from fastapi import BackgroundTasks
+from pydantic import SecretStr
 
 TOKEN = "tok_abc123_secret"
 
@@ -30,31 +33,6 @@ def _mail_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     return settings
 
 
-def _configured(settings: Settings, **overrides: object) -> Settings:
-    from pydantic import SecretStr
-
-    return settings.model_copy(
-        update={"resend_api_key": SecretStr("re_test_key"), **overrides}
-    )
-
-
-def _transport(monkeypatch: pytest.MonkeyPatch, handler: object) -> list[httpx.Request]:
-    captured: list[httpx.Request] = []
-
-    def _handle(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return handler(request)  # type: ignore[operator]
-
-    real_client = httpx.Client
-
-    def _client(**kwargs: object) -> httpx.Client:
-        kwargs.pop("transport", None)
-        return real_client(transport=httpx.MockTransport(_handle), **kwargs)
-
-    monkeypatch.setattr("api.services.mailer.httpx.Client", _client)
-    return captured
-
-
 def test_invite_link_uses_documented_route() -> None:
     assert invite_link(TOKEN) == f"https://dmitri.peirce.dev/invite/{TOKEN}"
 
@@ -64,41 +42,50 @@ def test_reset_link_uses_documented_route() -> None:
 
 
 def test_get_mailer_returns_null_mailer_without_api_key() -> None:
-    assert isinstance(get_mailer(), NullMailer)
+    assert isinstance(get_mailer(BackgroundTasks()), NullMailer)
 
 
-def test_get_mailer_returns_resend_mailer_with_api_key(
-    monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
+def test_get_mailer_returns_backgrounded_resend_mailer_with_api_key(
+    sent_emails,
 ) -> None:
-    configured = _configured(_mail_settings)
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
+    sent_emails()
 
-    assert isinstance(get_mailer(), ResendMailer)
+    mailer = get_mailer(BackgroundTasks())
+
+    assert isinstance(mailer, BackgroundMailer)
+    assert isinstance(mailer.mailer, ResendMailer)
 
 
 def test_get_mailer_treats_blank_api_key_as_unconfigured(
     monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
 ) -> None:
-    from pydantic import SecretStr
-
     blank = _mail_settings.model_copy(update={"resend_api_key": SecretStr("")})
     monkeypatch.setattr("api.services.mailer.get_settings", lambda: blank)
 
-    assert isinstance(get_mailer(), NullMailer)
+    assert isinstance(get_mailer(BackgroundTasks()), NullMailer)
 
 
-def test_resend_mailer_omits_blank_reply_to(
-    monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
+def test_background_mailer_defers_the_send_until_the_response_is_out(
+    sent_emails,
 ) -> None:
-    configured = _configured(_mail_settings, mail_reply_to="")
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-    captured = _transport(
-        monkeypatch, lambda request: httpx.Response(200, json={"id": "1"})
-    )
+    captured = sent_emails()
+    tasks = BackgroundTasks()
+
+    get_mailer(tasks).send_invite_link("user@example.com", TOKEN)
+
+    # Nothing has left the process yet -- the request is free to return.
+    assert captured == []
+    assert len(tasks.tasks) == 1
+
+    tasks.tasks[0].func(*tasks.tasks[0].args)
+
+    assert len(captured) == 1
+
+
+def test_resend_mailer_omits_blank_reply_to(sent_emails) -> None:
+    captured = sent_emails(mail_reply_to="")
 
     ResendMailer().send_invite_link("user@example.com", TOKEN)
-
-    import json
 
     assert "reply_to" not in json.loads(captured[0].content)
 
@@ -114,14 +101,8 @@ def test_null_mailer_never_logs_the_token(caplog: pytest.LogCaptureFixture) -> N
     assert TOKEN not in caplog.text
 
 
-def test_resend_mailer_posts_plain_text_invite(
-    monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
-) -> None:
-    configured = _configured(_mail_settings)
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-    captured = _transport(
-        monkeypatch, lambda request: httpx.Response(200, json={"id": "1"})
-    )
+def test_resend_mailer_posts_plain_text_invite(sent_emails) -> None:
+    captured = sent_emails()
 
     ResendMailer().send_invite_link("user@example.com", TOKEN)
 
@@ -131,8 +112,6 @@ def test_resend_mailer_posts_plain_text_invite(
     assert str(request.url) == "https://api.resend.com/emails"
     assert request.headers["Authorization"] == "Bearer re_test_key"
 
-    import json
-
     payload = json.loads(request.content)
     assert payload["from"] == "Dmitri <no-reply@mail.peirce.dev>"
     assert payload["to"] == ["user@example.com"]
@@ -140,51 +119,27 @@ def test_resend_mailer_posts_plain_text_invite(
     assert f"https://dmitri.peirce.dev/invite/{TOKEN}" in payload["text"]
 
 
-def test_resend_mailer_posts_reset_link(
-    monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
-) -> None:
-    configured = _configured(_mail_settings)
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-    captured = _transport(
-        monkeypatch, lambda request: httpx.Response(200, json={"id": "1"})
-    )
+def test_resend_mailer_posts_reset_link(sent_emails) -> None:
+    captured = sent_emails()
 
     ResendMailer().send_reset_link("user@example.com", TOKEN)
-
-    import json
 
     payload = json.loads(captured[0].content)
     assert f"https://dmitri.peirce.dev/reset-password?token={TOKEN}" in payload["text"]
 
 
-def test_resend_mailer_includes_reply_to_when_configured(
-    monkeypatch: pytest.MonkeyPatch, _mail_settings: Settings
-) -> None:
-    configured = _configured(_mail_settings, mail_reply_to="support@peirce.dev")
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-    captured = _transport(
-        monkeypatch, lambda request: httpx.Response(200, json={"id": "1"})
-    )
+def test_resend_mailer_includes_reply_to_when_configured(sent_emails) -> None:
+    captured = sent_emails(mail_reply_to="support@peirce.dev")
 
     ResendMailer().send_invite_link("user@example.com", TOKEN)
-
-    import json
 
     assert json.loads(captured[0].content)["reply_to"] == "support@peirce.dev"
 
 
 def test_resend_mailer_swallows_transport_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    _mail_settings: Settings,
+    caplog: pytest.LogCaptureFixture, sent_emails
 ) -> None:
-    configured = _configured(_mail_settings)
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-
-    def _boom(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("provider down", request=request)
-
-    _transport(monkeypatch, _boom)
+    sent_emails(fail=True)
 
     with caplog.at_level(logging.DEBUG):
         result = ResendMailer().send_invite_link("user@example.com", TOKEN)
@@ -195,16 +150,9 @@ def test_resend_mailer_swallows_transport_failure(
 
 
 def test_resend_mailer_swallows_provider_rejection(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    _mail_settings: Settings,
+    caplog: pytest.LogCaptureFixture, sent_emails
 ) -> None:
-    configured = _configured(_mail_settings)
-    monkeypatch.setattr("api.services.mailer.get_settings", lambda: configured)
-    _transport(
-        monkeypatch,
-        lambda request: httpx.Response(422, json={"message": "invalid from"}),
-    )
+    sent_emails(status=422)
 
     with caplog.at_level(logging.DEBUG):
         result = ResendMailer().send_reset_link("user@example.com", TOKEN)

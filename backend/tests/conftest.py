@@ -6,12 +6,14 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from pydantic import SecretStr
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlmodel import Session, SQLModel
 
@@ -221,6 +223,52 @@ def clear_agent_connections_registry() -> Generator[None, None, None]:
     agent_connections._registry.clear()
     yield
     agent_connections._registry.clear()
+
+
+@pytest.fixture
+def sent_emails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[..., list[httpx.Request]]:
+    """Configure a real ResendMailer behind a mock transport.
+
+    Route-level callers get the production path -- get_mailer() builds a
+    backgrounded ResendMailer because the key is set -- with the provider's
+    HTTP call captured instead of made. Returns the list the requests land
+    in; TestClient drains background tasks before returning, so a request
+    that sent mail has already filled it by the time the test asserts. Pass
+    ``fail=True`` to simulate a provider outage, ``status=`` to make the
+    provider reject the message, and any Settings field as a keyword to
+    override it. Settings are layered onto whatever ``mailer.get_settings``
+    already returns, so a test module that pins its own values keeps them.
+    """
+
+    def _install(
+        *, fail: bool = False, status: int = 200, **overrides: object
+    ) -> list[httpx.Request]:
+        from api.services import mailer
+
+        configured = mailer.get_settings().model_copy(
+            update={"resend_api_key": SecretStr("re_test_key"), **overrides}
+        )
+        monkeypatch.setattr(mailer, "get_settings", lambda: configured)
+
+        captured: list[httpx.Request] = []
+        real_client = httpx.Client
+
+        def _handle(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            if fail:
+                raise httpx.ConnectError("provider down", request=request)
+            return httpx.Response(status, json={"id": "1"})
+
+        def _client(**kwargs: object) -> httpx.Client:
+            kwargs.pop("transport", None)
+            return real_client(transport=httpx.MockTransport(_handle), **kwargs)
+
+        monkeypatch.setattr(mailer.httpx, "Client", _client)
+        return captured
+
+    return _install
 
 
 @pytest.fixture

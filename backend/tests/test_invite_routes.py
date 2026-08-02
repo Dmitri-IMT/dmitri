@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import timedelta
 from http.cookies import SimpleCookie
 from uuid import UUID, uuid4
@@ -75,6 +76,59 @@ def test_admin_creates_invite_returns_201_exact_shape(
 
     assert response.status_code == 201
     assert set(response.json().keys()) == {"invite_token", "expires_at"}
+
+
+def test_admin_creates_invite_emails_a_working_invite_link(
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    bearer_headers,
+    sent_emails,
+) -> None:
+    captured = sent_emails()
+
+    response = client.post(
+        "/api/v1/invites",
+        json={"email": "new@corp.com", "role": "viewer"},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    assert len(captured) == 1
+
+    payload = json.loads(captured[0].content)
+    assert payload["to"] == ["new@corp.com"]
+
+    token = response.json()["invite_token"]
+    assert f"/invite/{token}" in payload["text"]
+
+    accepted = client.post(
+        f"/api/v1/invites/{token}/accept",
+        json={"email": "new@corp.com", "password": VALID_PASSWORD},
+    )
+    assert accepted.status_code == 201
+
+
+def test_create_invite_survives_a_downed_provider(
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    bearer_headers,
+    sent_emails,
+) -> None:
+    sent_emails(fail=True)
+
+    response = client.post(
+        "/api/v1/invites",
+        json={"email": "new@corp.com", "role": "viewer"},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    token = response.json()["invite_token"]
+
+    invite = administrative_session.exec(select(Invite)).one()
+    assert invite.token_hash == hash_token(token)
 
 
 def test_viewer_cannot_create_invite_and_no_invite_persists(

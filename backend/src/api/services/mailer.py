@@ -4,6 +4,7 @@ import logging
 from typing import Protocol
 
 import httpx
+from fastapi import BackgroundTasks
 
 from api.core.config import get_settings
 
@@ -72,25 +73,25 @@ class ResendMailer:
         self.sender = settings.mail_from
         self.reply_to = settings.mail_reply_to
         self.timeout = settings.mail_timeout_seconds
+        self.invite_ttl_hours = settings.invite_ttl_hours
+        self.reset_ttl_minutes = settings.reset_token_ttl_minutes
 
     def send_invite_link(self, email: str, token: str) -> None:
-        settings = get_settings()
         self._send(
             email,
             INVITE_SUBJECT,
             INVITE_BODY.format(
-                link=invite_link(token), ttl_hours=settings.invite_ttl_hours
+                link=invite_link(token), ttl_hours=self.invite_ttl_hours
             ),
             "invite",
         )
 
     def send_reset_link(self, email: str, token: str) -> None:
-        settings = get_settings()
         self._send(
             email,
             RESET_SUBJECT,
             RESET_BODY.format(
-                link=reset_link(token), ttl_minutes=settings.reset_token_ttl_minutes
+                link=reset_link(token), ttl_minutes=self.reset_ttl_minutes
             ),
             "password reset",
         )
@@ -128,8 +129,29 @@ class ResendMailer:
             )
 
 
-def get_mailer() -> Mailer:
+class BackgroundMailer:
+    """Runs the provider call after the response has been sent.
+
+    Two reasons, both about the request and not about the email: the request's
+    database session is released before background tasks run, so a slow
+    provider no longer pins a pooled connection, and the response time of
+    `forgot-password` stops depending on whether an email went out — otherwise
+    latency alone tells an attacker which addresses exist.
+    """
+
+    def __init__(self, tasks: BackgroundTasks, mailer: Mailer) -> None:
+        self.tasks = tasks
+        self.mailer = mailer
+
+    def send_invite_link(self, email: str, token: str) -> None:
+        self.tasks.add_task(self.mailer.send_invite_link, email, token)
+
+    def send_reset_link(self, email: str, token: str) -> None:
+        self.tasks.add_task(self.mailer.send_reset_link, email, token)
+
+
+def get_mailer(tasks: BackgroundTasks) -> Mailer:
     api_key = get_settings().resend_api_key
     if api_key is None or not api_key.get_secret_value():
         return NullMailer()
-    return ResendMailer()
+    return BackgroundMailer(tasks, ResendMailer())
