@@ -245,9 +245,9 @@ def test_reset_password_consumes_token_once(
     client: TestClient, administrative_session: Session
 ) -> None:
     from api.services.auth import forgot_password
-    from api.services.mailer import LogMailer
+    from api.services.mailer import NullMailer
 
-    class CapturingMailer(LogMailer):
+    class CapturingMailer(NullMailer):
         def __init__(self) -> None:
             self.token: str | None = None
 
@@ -275,9 +275,9 @@ def test_reset_password_revokes_all_refresh_families(
     client: TestClient, administrative_session: Session
 ) -> None:
     from api.services.auth import forgot_password
-    from api.services.mailer import LogMailer
+    from api.services.mailer import NullMailer
 
-    class CapturingMailer(LogMailer):
+    class CapturingMailer(NullMailer):
         def __init__(self) -> None:
             self.token: str | None = None
 

@@ -19,7 +19,7 @@ from api.services.invites import (
     accept_invite,
     create_invite,
 )
-from api.services.mailer import LogMailer
+from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
 from api.session_response import login_response
 
@@ -40,7 +40,7 @@ def create_invite_route(
             org_id=caller.org_id,
             email=body.email,
             role=body.role,
-            mailer=LogMailer(),
+            mailer=get_mailer(),
         )
     except AlreadyMemberError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

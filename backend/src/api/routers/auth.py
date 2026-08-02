@@ -25,7 +25,7 @@ from api.services.auth import (
     refresh_session,
     reset_password,
 )
-from api.services.mailer import LogMailer
+from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
 from api.services.tokens import RefreshTokenError
 from api.session_response import clear_refresh_cookie, login_response
@@ -101,7 +101,7 @@ def forgot_password_route(
     body: ForgotPasswordRequest,
     session: Session = Depends(get_session),
 ) -> None:
-    forgot_password(session, email=body.email, mailer=LogMailer())
+    forgot_password(session, email=body.email, mailer=get_mailer())
 
 
 @router.post("/api/v1/auth/reset-password", status_code=204)
