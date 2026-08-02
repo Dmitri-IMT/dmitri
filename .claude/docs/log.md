@@ -5,6 +5,14 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-02
 
+* **Update**: `GET /hosts` paging landed (DMI-84) — `backend/routers.md`'s `read_hosts()` row now
+  records the `page`/`per_page` query params, and the "`read_hosts` still ignores contract
+  `page`/`per_page`" gotcha is **gone**: all three list routes now declare the same
+  `Query(1, ge=1)` / `Query(20, ge=1, le=100)` constraints, so out-of-range paging is refused with a
+  422 rather than clamped. `backend/services.md`'s `list_hosts()` row gains the `HostRecord.id`
+  tie-breaker after `last_seen_at desc` (stable paging under tied timestamps, matching what
+  `list_scans` already did). Also repaired drifted `path:line` refs in both tables — every
+  `services/read.py` ref and the four router refs were stale by 1–22 lines.
 * **Update**: transactional email landed (DMI-71) — `backend/auth.md`'s `Mailer` row rewritten: the
   `LogMailer` dev stand-in is **gone**, replaced by `ResendMailer` (plain-text POST to the Resend
   API, failures swallowed into a token-free `logger.error`), `NullMailer` for the unset-key case,
