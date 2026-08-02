@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bootstrap Dmitri dev environment (hardware-agent + backend + local Supabase when available).
+# Bootstrap Dmitri dev environment (hardware-agent + backend + frontend + local Supabase
+# when available).
 # Usage: ./install.sh [--agent-only] [--skip-verify] [--hooks]
 set -euo pipefail
 
@@ -8,8 +9,20 @@ AGENT_ONLY=0
 SKIP_VERIFY=0
 INSTALL_HOOKS=0
 INFRA_OK=0
-LOCAL_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:54322/postgres"
-SUPABASE_DB_CONTAINER="supabase_db_dmitri"
+FRONTEND_OK=0
+
+# Read the project id and port from config.toml rather than hardcoding them, so this
+# keeps working if either is changed there. Same parse as database.sh.
+SUPABASE_CONFIG="${REPO_ROOT}/supabase/config.toml"
+SUPABASE_PROJECT="dmitri"
+SUPABASE_DB_PORT="54322"
+if [[ -f "$SUPABASE_CONFIG" ]]; then
+  SUPABASE_PROJECT="$(awk -F'"' '/^project_id/ {print $2; exit}' "$SUPABASE_CONFIG")"
+  SUPABASE_DB_PORT="$(awk '/^\[db\]/{f=1;next} /^\[/{f=0} f && /^port[[:space:]]*=/{print $3; exit}' "$SUPABASE_CONFIG")"
+fi
+SUPABASE_DB_CONTAINER="supabase_db_${SUPABASE_PROJECT}"
+LOCAL_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:${SUPABASE_DB_PORT}/postgres"
+TEST_DB_URL="postgresql+psycopg://postgres:postgres@127.0.0.1:${SUPABASE_DB_PORT}/dmitri_test"
 
 info() { printf '==> %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -19,12 +32,13 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [OPTIONS]
 
-Bootstrap Dmitri: uv + nmap, Python deps (with dev extras), backend/.env, and
-local Supabase/migrations when Docker + Supabase CLI are available.
+Bootstrap Dmitri: uv + nmap, Python deps (with dev extras), backend/.env,
+frontend npm deps + frontend/.env, and local Supabase/migrations when Docker +
+Supabase CLI are available (Docker Desktop is started for you if installed).
 
 Options:
-  --agent-only    Skip backend infra (Supabase, migrations); Pi-friendly
-  --skip-verify   Skip post-install pytest smoke checks
+  --agent-only    Skip backend infra and frontend; Pi-friendly
+  --skip-verify   Skip post-install pytest / vitest smoke checks
   --hooks         Install pre-commit pre-push hooks
   -h, --help      Show this help
 EOF
@@ -193,6 +207,93 @@ seed_backend_env() {
   info "Created backend/.env from backend/.env.example"
 }
 
+ensure_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    warn "Node.js not found — skipping frontend setup."
+    cat <<'EOF'
+
+Install Node 22.x, then re-run ./install.sh:
+  nvm:     nvm install 22 && nvm use 22
+  macOS:   brew install node@22
+  Linux:   https://nodejs.org/en/download/package-manager
+
+EOF
+    return 1
+  fi
+
+  # frontend/package.json pins engines.node to 22.x. npm does not enforce it by
+  # default, so a mismatch is a warning here rather than a hard stop.
+  local major
+  major="$(node -p 'process.versions.node.split(".")[0]')"
+  if [[ "$major" != "22" ]]; then
+    warn "Node $(node --version) found; frontend/package.json pins engines.node to 22.x."
+    note "Continuing anyway — switch with: nvm use 22"
+  else
+    info "node $(node --version)"
+  fi
+}
+
+setup_frontend() {
+  if [[ "$AGENT_ONLY" -eq 1 ]]; then
+    return 0
+  fi
+
+  ensure_node || return 0
+
+  info "Installing frontend dependencies..."
+  (cd "${REPO_ROOT}/frontend" && npm install)
+
+  local env_file="${REPO_ROOT}/frontend/.env"
+  local example="${REPO_ROOT}/frontend/.env.example"
+  if [[ -f "$env_file" ]]; then
+    note "frontend/.env already exists — not overwriting"
+  elif [[ ! -f "$example" ]]; then
+    warn "frontend/.env.example missing — skipping .env seed"
+  else
+    cp -n "$example" "$env_file"
+    info "Created frontend/.env from frontend/.env.example"
+  fi
+
+  FRONTEND_OK=1
+}
+
+# Docker being installed but idle is the normal state on a dev machine, so start it
+# rather than treating it as missing. Mirrors the wait loop in database.sh.
+start_docker_daemon() {
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+
+  info "Docker is installed but not running — starting it..."
+  case "$(uname -s)" in
+    Darwin) open -a Docker >/dev/null 2>&1 || return 1 ;;
+    Linux)
+      if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl start docker || return 1
+      else
+        warn "No systemctl — start the Docker daemon yourself and re-run."
+        return 1
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+
+  for _ in $(seq 1 90); do
+    if docker info >/dev/null 2>&1; then
+      info "Docker is up."
+      return 0
+    fi
+    sleep 2
+  done
+
+  warn "Docker did not come up within 180s."
+  return 1
+}
+
 print_docker_instructions() {
   warn "Docker is not running or not installed — skipping Supabase and migrations."
   cat <<'EOF'
@@ -218,6 +319,19 @@ EOF
 
 psql_exec() {
   docker exec "$SUPABASE_DB_CONTAINER" psql -U postgres "$@"
+}
+
+# `supabase start` returning does not mean Postgres accepts connections yet — without
+# this the first psql call below can lose the race.
+wait_for_postgres() {
+  for _ in $(seq 1 30); do
+    if docker exec "$SUPABASE_DB_CONTAINER" pg_isready -U postgres -q; then
+      return 0
+    fi
+    sleep 1
+  done
+  warn "Postgres in ${SUPABASE_DB_CONTAINER} never became ready."
+  return 1
 }
 
 recreate_dmitri_test_db() {
@@ -251,7 +365,7 @@ prepare_backend_test_database() {
 finalize_postgres_for_api() {
   info "Applying Alembic migrations on postgres for local API (DATABASE_URL_DIRECT in shell only)..."
   alembic_on_postgres upgrade head
-  info "Local Postgres ready at 127.0.0.1:54322"
+  info "Local Postgres ready at 127.0.0.1:${SUPABASE_DB_PORT}"
 }
 
 setup_backend_infra() {
@@ -259,7 +373,7 @@ setup_backend_infra() {
     return 0
   fi
 
-  if ! docker info >/dev/null 2>&1; then
+  if ! start_docker_daemon; then
     print_docker_instructions
     return 0
   fi
@@ -270,12 +384,20 @@ setup_backend_infra() {
   fi
 
   info "Starting local Supabase stack..."
+  # `supabase start` refuses to run if the CLI still thinks the stack is up while a
+  # container has actually exited. A stop first clears that stale bookkeeping; without
+  # --no-backup it leaves the data volume intact.
+  if ! docker ps --format '{{.Names}}' | grep -qx "$SUPABASE_DB_CONTAINER"; then
+    (cd "$REPO_ROOT" && supabase stop >/dev/null 2>&1) || true
+  fi
   (cd "$REPO_ROOT" && supabase start)
 
   if ! docker ps --format '{{.Names}}' | grep -qx "$SUPABASE_DB_CONTAINER"; then
     warn "Expected container ${SUPABASE_DB_CONTAINER} not running after supabase start."
     return 0
   fi
+
+  wait_for_postgres || return 0
 
   recreate_dmitri_test_db
 
@@ -327,11 +449,16 @@ run_verify() {
     prepare_backend_test_database
     note "Temporarily hiding backend/.env so settings tests match CI (no dotenv file)"
     with_backend_env_hidden env \
-      DATABASE_URL_TEST="postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test" \
+      DATABASE_URL_TEST="$TEST_DB_URL" \
       uv run pytest -q
   else
     note "Running backend tests without DATABASE_URL_TEST (DB-touching tests will skip)"
     with_backend_env_hidden uv run pytest -q
+  fi
+
+  if [[ "$FRONTEND_OK" -eq 1 ]]; then
+    info "Running frontend tests..."
+    (cd "${REPO_ROOT}/frontend" && npm test)
   fi
 }
 
@@ -352,6 +479,18 @@ EOF
   API:     cd backend && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
   Worker:  cd backend && uv run python -m api.worker_main
   Health:  curl http://127.0.0.1:8000/api/v1/health
+EOF
+  fi
+
+  if [[ "$FRONTEND_OK" -eq 1 ]]; then
+    cat <<EOF
+  Web:     cd frontend && npm run dev   (http://localhost:5173)
+EOF
+  elif [[ "$AGENT_ONLY" -eq 0 ]]; then
+    cat <<EOF
+
+Frontend was not set up (Node.js missing).
+Install Node 22.x, then: cd frontend && npm install && cp .env.example .env
 EOF
   fi
 
@@ -379,6 +518,7 @@ main() {
   sync_python_deps
   install_dmitri_cli
   seed_backend_env
+  setup_frontend
   setup_backend_infra
   install_hooks
   run_verify

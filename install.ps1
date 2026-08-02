@@ -1,4 +1,5 @@
-# Bootstrap Dmitri dev environment (hardware-agent + backend + local Supabase when available).
+# Bootstrap Dmitri dev environment (hardware-agent + backend + frontend + local Supabase
+# when available).
 # Usage: .\install.ps1 [-AgentOnly] [-SkipVerify] [-Hooks]
 param(
     [switch]$AgentOnly,
@@ -10,8 +11,23 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = $PSScriptRoot
 $InfraOk = $false
-$LocalDbUrl = 'postgresql+psycopg://postgres:postgres@127.0.0.1:54322/postgres'
-$SupabaseDbContainer = 'supabase_db_dmitri'
+$FrontendOk = $false
+
+# Read the project id and port from config.toml rather than hardcoding them, so this
+# keeps working if either is changed there. Same values database.sh parses.
+$SupabaseConfig = Join-Path $RepoRoot 'supabase\config.toml'
+$SupabaseProject = 'dmitri'
+$SupabaseDbPort = '54322'
+if (Test-Path $SupabaseConfig) {
+    $configText = Get-Content $SupabaseConfig -Raw
+    $projectMatch = [regex]::Match($configText, '(?m)^project_id\s*=\s*"([^"]+)"')
+    if ($projectMatch.Success) { $SupabaseProject = $projectMatch.Groups[1].Value }
+    $portMatch = [regex]::Match($configText, '(?ms)^\[db\].*?^port\s*=\s*(\d+)')
+    if ($portMatch.Success) { $SupabaseDbPort = $portMatch.Groups[1].Value }
+}
+$SupabaseDbContainer = "supabase_db_$SupabaseProject"
+$LocalDbUrl = "postgresql+psycopg://postgres:postgres@127.0.0.1:$SupabaseDbPort/postgres"
+$TestDbUrl = "postgresql+psycopg://postgres:postgres@127.0.0.1:$SupabaseDbPort/dmitri_test"
 
 function Write-Info([string]$Message) {
     Write-Host "==> $Message"
@@ -157,6 +173,98 @@ function Seed-BackendEnv {
     Write-Info 'Created backend\.env from backend\.env.example'
 }
 
+function Ensure-Node {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Warn 'Node.js not found — skipping frontend setup.'
+        @'
+
+Install Node 22.x, then re-run .\install.ps1:
+  winget install -e --id OpenJS.NodeJS.LTS
+  https://nodejs.org/en/download
+
+'@ | Write-Host
+        return $false
+    }
+
+    # frontend\package.json pins engines.node to 22.x. npm does not enforce it by
+    # default, so a mismatch is a warning here rather than a hard stop.
+    #
+    # Parsed here rather than with `node -p`: PowerShell strips the inner double quotes
+    # out of a native command's argument, so the script node actually received was
+    # `process.versions.node.split(.)[0]` — a SyntaxError on every run.
+    $nodeVersion = node --version
+    $major = ($nodeVersion -replace '^v', '').Split('.')[0]
+    if ($major -ne '22') {
+        Write-Warn "Node $nodeVersion found; frontend\package.json pins engines.node to 22.x."
+        Write-Note 'Continuing anyway — switch with: nvm use 22'
+    } else {
+        Write-Info "node $nodeVersion"
+    }
+    return $true
+}
+
+function Setup-Frontend {
+    if ($AgentOnly) { return }
+    if (-not (Ensure-Node)) { return }
+
+    Write-Info 'Installing frontend dependencies...'
+    Push-Location (Join-Path $RepoRoot 'frontend')
+    try {
+        npm install
+    } finally {
+        Pop-Location
+    }
+
+    $envFile = Join-Path $RepoRoot 'frontend\.env'
+    $example = Join-Path $RepoRoot 'frontend\.env.example'
+    if (Test-Path $envFile) {
+        Write-Note 'frontend\.env already exists — not overwriting'
+    } elseif (-not (Test-Path $example)) {
+        Write-Warn 'frontend\.env.example missing — skipping .env seed'
+    } else {
+        Copy-Item $example $envFile
+        Write-Info 'Created frontend\.env from frontend\.env.example'
+    }
+
+    $script:FrontendOk = $true
+}
+
+# Docker being installed but idle is the normal state on a dev machine, so start it
+# rather than treating it as missing.
+function Start-DockerDaemon {
+    try {
+        docker info *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+    } catch { }
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    $desktop = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
+    if (-not (Test-Path $desktop)) {
+        Write-Warn 'docker CLI found but Docker Desktop is not installed where expected — start Docker yourself and re-run.'
+        return $false
+    }
+
+    Write-Info 'Docker is installed but not running — starting Docker Desktop...'
+    Start-Process $desktop | Out-Null
+
+    foreach ($_ in 1..90) {
+        try {
+            docker info *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Info 'Docker is up.'
+                return $true
+            }
+        } catch { }
+        Start-Sleep -Seconds 2
+    }
+
+    Write-Warn 'Docker did not come up within 180s.'
+    return $false
+}
+
 function Print-DockerInstructions {
     Write-Warn 'Docker is not running or not installed — skipping Supabase and migrations.'
     @'
@@ -181,6 +289,18 @@ Install the Supabase CLI, then re-run .\install.ps1:
 function Invoke-Psql {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
     & docker exec $SupabaseDbContainer psql -U postgres @Args
+}
+
+# `supabase start` returning does not mean Postgres accepts connections yet — without
+# this the first psql call below can lose the race.
+function Wait-ForPostgres {
+    foreach ($_ in 1..30) {
+        docker exec $SupabaseDbContainer pg_isready -U postgres -q *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    Write-Warn "Postgres in $SupabaseDbContainer never became ready."
+    return $false
 }
 
 function Recreate-DmitriTestDb {
@@ -220,7 +340,7 @@ function Prepare-BackendTestDatabase {
 function Finalize-PostgresForApi {
     Write-Info 'Applying Alembic migrations on postgres for local API (DATABASE_URL_DIRECT in shell only)...'
     Invoke-AlembicOnPostgres upgrade head
-    Write-Info 'Local Postgres ready at 127.0.0.1:54322'
+    Write-Info "Local Postgres ready at 127.0.0.1:$SupabaseDbPort"
 }
 
 function Invoke-WithBackendEnvHidden {
@@ -245,9 +365,7 @@ function Invoke-WithBackendEnvHidden {
 function Setup-BackendInfra {
     if ($AgentOnly) { return }
 
-    try {
-        docker info *> $null
-    } catch {
+    if (-not (Start-DockerDaemon)) {
         Print-DockerInstructions
         return
     }
@@ -260,6 +378,13 @@ function Setup-BackendInfra {
     Write-Info 'Starting local Supabase stack...'
     Push-Location $RepoRoot
     try {
+        # `supabase start` refuses to run if the CLI still thinks the stack is up while a
+        # container has actually exited. A stop first clears that stale bookkeeping;
+        # without --no-backup it leaves the data volume intact.
+        $running = docker ps --format '{{.Names}}' | Where-Object { $_ -eq $SupabaseDbContainer }
+        if (-not $running) {
+            try { supabase stop *> $null } catch { }
+        }
         supabase start
     } finally {
         Pop-Location
@@ -270,6 +395,8 @@ function Setup-BackendInfra {
         Write-Warn "Expected container $SupabaseDbContainer not running after supabase start."
         return
     }
+
+    if (-not (Wait-ForPostgres)) { return }
 
     Recreate-DmitriTestDb
 
@@ -310,7 +437,7 @@ function Run-Verify {
         Prepare-BackendTestDatabase
         Write-Note 'Temporarily hiding backend\.env so settings tests match CI (no dotenv file)'
         Invoke-WithBackendEnvHidden {
-            $env:DATABASE_URL_TEST = 'postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test'
+            $env:DATABASE_URL_TEST = $TestDbUrl
             try {
                 uv run pytest -q
             } finally {
@@ -320,6 +447,16 @@ function Run-Verify {
     } else {
         Write-Note 'Running backend tests without DATABASE_URL_TEST (DB-touching tests will skip)'
         Invoke-WithBackendEnvHidden { uv run pytest -q }
+    }
+
+    if ($FrontendOk) {
+        Write-Info 'Running frontend tests...'
+        Push-Location (Join-Path $RepoRoot 'frontend')
+        try {
+            npm test
+        } finally {
+            Pop-Location
+        }
     }
 }
 
@@ -340,6 +477,18 @@ Next steps:
   API:     cd backend; uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
   Worker:  cd backend; uv run python -m api.worker_main
   Health:  curl http://127.0.0.1:8000/api/v1/health
+'@ | Write-Host
+    }
+
+    if ($FrontendOk) {
+        @'
+  Web:     cd frontend; npm run dev   (http://localhost:5173)
+'@ | Write-Host
+    } elseif (-not $AgentOnly) {
+        @'
+
+Frontend was not set up (Node.js missing).
+Install Node 22.x, then: cd frontend; npm install; Copy-Item .env.example .env
 '@ | Write-Host
     }
 
@@ -365,6 +514,7 @@ Ensure-Nmap
 Sync-PythonDeps
 Install-DmitriCli
 Seed-BackendEnv
+Setup-Frontend
 Setup-BackendInfra
 Install-Hooks
 Run-Verify
