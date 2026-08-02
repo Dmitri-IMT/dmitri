@@ -188,12 +188,17 @@ Install Node 22.x, then re-run .\install.ps1:
 
     # frontend\package.json pins engines.node to 22.x. npm does not enforce it by
     # default, so a mismatch is a warning here rather than a hard stop.
-    $major = node -p 'process.versions.node.split(".")[0]'
+    #
+    # Parsed here rather than with `node -p`: PowerShell strips the inner double quotes
+    # out of a native command's argument, so the script node actually received was
+    # `process.versions.node.split(.)[0]` — a SyntaxError on every run.
+    $nodeVersion = node --version
+    $major = ($nodeVersion -replace '^v', '').Split('.')[0]
     if ($major -ne '22') {
-        Write-Warn "Node $(node --version) found; frontend\package.json pins engines.node to 22.x."
+        Write-Warn "Node $nodeVersion found; frontend\package.json pins engines.node to 22.x."
         Write-Note 'Continuing anyway — switch with: nvm use 22'
     } else {
-        Write-Info "node $(node --version)"
+        Write-Info "node $nodeVersion"
     }
     return $true
 }

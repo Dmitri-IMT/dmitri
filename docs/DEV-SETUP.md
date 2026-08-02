@@ -153,6 +153,15 @@ the dedicated **test** database, and tidies unused Docker images:
 ./database.sh --help
 ```
 
+Windows (PowerShell) — `.\database.ps1` is the same script with switch-style flags:
+
+```powershell
+.\database.ps1             # start + create dmitri_test
+.\database.ps1 -Test       # ... then run the backend suite against it
+.\database.ps1 -NoClean    # skip the Docker image cleanup
+.\database.ps1 -Help
+```
+
 It is idempotent and never deletes volumes, so your local data survives re-runs. If you
 only want the stack up, plain `supabase start` from the repo root is enough.
 
