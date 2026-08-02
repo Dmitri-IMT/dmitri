@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from api.db.session import get_session
@@ -15,10 +15,12 @@ router = APIRouter()
 
 @router.get("/api/v1/hosts", response_model=HostListResponse)
 def read_hosts(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
 ) -> HostListResponse:
-    return list_hosts(session, org_id=caller.org_id)
+    return list_hosts(session, org_id=caller.org_id, page=page, per_page=per_page)
 
 
 @router.get("/api/v1/hosts/{host_id}", response_model=HostDetailResponse)
