@@ -241,13 +241,38 @@ def test_forgot_password_returns_204_for_real_and_fake_email(
     assert fake_response.status_code == 204
 
 
+def test_forgot_password_sends_nothing_for_an_unknown_email(
+    client: TestClient, administrative_session: Session, sent_emails
+) -> None:
+    _seed_user(administrative_session)
+    captured = sent_emails()
+
+    unknown = client.post(
+        "/api/v1/auth/forgot-password", json={"email": "nobody@corp.com"}
+    )
+
+    assert unknown.status_code == 204
+    assert captured == []
+
+    known = client.post(
+        "/api/v1/auth/forgot-password", json={"email": "alice@corp.com"}
+    )
+
+    # Same status, same empty body. The send is a background task, so it also
+    # lands after the response and cannot be timed: one email left the
+    # building, the other did not, and the caller cannot tell which.
+    assert known.status_code == unknown.status_code
+    assert known.content == unknown.content
+    assert len(captured) == 1
+
+
 def test_reset_password_consumes_token_once(
     client: TestClient, administrative_session: Session
 ) -> None:
     from api.services.auth import forgot_password
-    from api.services.mailer import LogMailer
+    from api.services.mailer import NullMailer
 
-    class CapturingMailer(LogMailer):
+    class CapturingMailer(NullMailer):
         def __init__(self) -> None:
             self.token: str | None = None
 
@@ -275,9 +300,9 @@ def test_reset_password_revokes_all_refresh_families(
     client: TestClient, administrative_session: Session
 ) -> None:
     from api.services.auth import forgot_password
-    from api.services.mailer import LogMailer
+    from api.services.mailer import NullMailer
 
-    class CapturingMailer(LogMailer):
+    class CapturingMailer(NullMailer):
         def __init__(self) -> None:
             self.token: str | None = None
 

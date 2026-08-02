@@ -3,6 +3,24 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-02
+
+* **Update**: transactional email landed (DMI-71) — `backend/auth.md`'s `Mailer` row rewritten: the
+  `LogMailer` dev stand-in is **gone**, replaced by `ResendMailer` (plain-text POST to the Resend
+  API, failures swallowed into a token-free `logger.error`), `NullMailer` for the unset-key case,
+  `BackgroundMailer`, the `invite_link`/`reset_link` builders, and `get_mailer(tasks)`. Tokens still
+  cross the service boundary raw; the mailer is now the one place a token becomes a URL, via
+  `APP_BASE_URL`. Two new gotchas: the no-enumeration guarantee now covers **timing** (the send is a
+  background task, so response latency no longer reveals whether mail went out, and the request's DB
+  session is released before the provider is called), and email is best-effort — a Resend outage
+  costs an email, never an invite.
+* **Update**: `backend/api.md` — six new `Settings` fields (`RESEND_API_KEY`, `RESEND_API_BASE_URL`,
+  `MAIL_FROM`, `MAIL_REPLY_TO`, `MAIL_TIMEOUT_SECONDS`, `APP_BASE_URL`), and an unset `RESEND_API_KEY`
+  recorded as a supported production state rather than a boot failure.
+* **Update**: `backend/management.md` — dropped the stale "`LogMailer` still logs the token on the
+  HTTP invite path" risk, which DMI-71 resolved, and recorded why `_SilentMailer` is still not
+  redundant with the new `NullMailer` (deliberate silence vs unconfigured).
+
 ## 2026-07-31
 
 * **Update**: post-DMI-64 cleanup — `MAINTAINING.md`'s "current vs target state" standing fact

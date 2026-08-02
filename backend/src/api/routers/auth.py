@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response
 from sqlmodel import Session
 
 from api.db.session import get_session
@@ -25,7 +25,7 @@ from api.services.auth import (
     refresh_session,
     reset_password,
 )
-from api.services.mailer import LogMailer
+from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
 from api.services.tokens import RefreshTokenError
 from api.session_response import clear_refresh_cookie, login_response
@@ -99,9 +99,10 @@ def change_password_route(
 @router.post("/api/v1/auth/forgot-password", status_code=204)
 def forgot_password_route(
     body: ForgotPasswordRequest,
+    background: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> None:
-    forgot_password(session, email=body.email, mailer=LogMailer())
+    forgot_password(session, email=body.email, mailer=get_mailer(background))
 
 
 @router.post("/api/v1/auth/reset-password", status_code=204)

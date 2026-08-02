@@ -62,6 +62,21 @@ class Settings(BaseSettings):
         default=300, alias="DEVICE_SIG_MAX_SKEW_SECONDS"
     )
     invite_ttl_hours: int = Field(default=48, alias="INVITE_TTL_HOURS")
+    resend_api_key: SecretStr | None = Field(default=None, alias="RESEND_API_KEY")
+    resend_api_base_url: str = Field(
+        default="https://api.resend.com/emails",
+        alias="RESEND_API_BASE_URL",
+    )
+    mail_from: str = Field(
+        default="Dmitri <no-reply@mail.peirce.dev>",
+        alias="MAIL_FROM",
+    )
+    mail_reply_to: str | None = Field(default=None, alias="MAIL_REPLY_TO")
+    mail_timeout_seconds: float = Field(default=10.0, alias="MAIL_TIMEOUT_SECONDS")
+    app_base_url: str = Field(
+        default="https://dmitri.peirce.dev",
+        alias="APP_BASE_URL",
+    )
     command_disconnect_grace_seconds: int = Field(
         default=900, alias="COMMAND_DISCONNECT_GRACE_SECONDS"
     )

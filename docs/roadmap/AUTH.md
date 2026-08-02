@@ -98,7 +98,7 @@ September (not a self-serve admin UI flow). The viewer UI omits the trigger rath
 | **Password policy** | **Strong**, enforced at invite completion, login password change, and reset: minimum length; reject common/breached passwords; reject obvious patterns — repeated characters (e.g. `111`), keyboard/simple suffixes (e.g. `1!`), **repeated number sequences**, **birth dates**, **names** (user name, org name — implementation defines matching). |
 | **Password rotation** | **No forced periodic rotation** ([`ADR-016`](../adr/ADR-016-password-policy.md), NIST SP 800-63B §5.1.1.2) — supersedes the prior "every 3 months" decision. Passwords change only voluntarily or via reset; instead, every password set is screened against known-breached passwords (HIBP Pwned-Passwords range API). |
 | **Forgot password** | **Self-serve email reset (C2).** “Forgot password?” → email with one-time reset link → set new password (same policy). |
-| **Transactional email** ✅ | **In scope — the backend sends invite links and reset links.** Decided 2026-07-13; **provider TBD** (Resend / Postmark / SES). Previously *nothing in the roadmap sent mail*, which left self-serve reset unbuildable — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. Code is small (`httpx` already a dependency); **the real work is a sending domain with SPF + DKIM + DMARC** — a one-time login link from a security product looks exactly like phishing and gets filtered without them. **Invites also keep a copyable link in the admin UI** as a fallback ([`ui/SCREENS.md` → Users & invites](../ui/SCREENS.md#users--invites)). |
+| **Transactional email** ✅ | **In scope — the backend sends invite links and reset links.** Decided 2026-07-13; **provider chosen 2026-08-02 — Resend** ([research](../research/transactional-email-provider-and-sending-domain.md)), integrated in DMI-71. Previously *nothing in the roadmap sent mail*, which left self-serve reset unbuildable — an admin can hand-carry an invite link, but a locked-out user has nobody in the loop. Code is small (`httpx` already a dependency); **the real work is a sending domain with SPF + DKIM + DMARC** — a one-time login link from a security product looks exactly like phishing and gets filtered without them. **Invites also keep a copyable link in the admin UI** as a fallback ([`ui/SCREENS.md` → Users & invites](../ui/SCREENS.md#users--invites)). |
 
 **Frontend surfaces:** invite acceptance page, login, forgot password, reset password. Client mechanics (token storage, silent-refresh interceptor, route guards): [`ADR-008`](../adr/ADR-008-frontend-stack.md).
 
@@ -186,7 +186,7 @@ update ADR-005 once DMI-62/63 land and Phase 1 is complete.
 | Ed25519 device-signature verify + nonce replay protection | ✅ Built (DMI-61) — **mounted on no route** until DMI-62/63 |
 | Agent→backend command channel (WebSocket) | ⏳ DMI-62 — Phase 1, in progress |
 | Scan ingest (`POST /api/v1/scans`) | ⏳ DMI-63 — Phase 1, in progress; still contract-only |
-| Transactional email for invites / password reset | ⏳ DMI-71 — until then `LogMailer` writes the raw token to the log stream |
+| Transactional email for invites / password reset | ✅ Code built (DMI-71) — Resend chosen, `ResendMailer` sends both links; `LogMailer` is gone, nothing logs a raw token. **Delivery still pending a verified sending domain** (SPF/DKIM/DMARC); with `RESEND_API_KEY` unset the backend falls back to `NullMailer` and both flows work off the returned link |
 
 ---
 

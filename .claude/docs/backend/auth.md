@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-07-27T21:00:00Z
+timestamp: 2026-08-02T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -34,7 +34,7 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
 | `refresh_session()` | Rotates the presented refresh token and mints a fresh access token (composes `rotate_refresh_token` + `create_access_token`). Deliberately does **not** call `issue_session` — see the rotation note below. | `backend/src/api/services/auth.py:56` |
 | `logout()` | Revokes the current refresh family; silently idempotent on an unknown/stale cookie. | `backend/src/api/services/auth.py:76` |
 | `change_password()` | `WrongCurrentPasswordError` on bad current pw, `PasswordPolicyError` on weak new pw (both → 400, never 401); on success updates `password_hash`/`password_changed_at` without touching sessions. | `backend/src/api/services/auth.py:80` |
-| `forgot_password()` | Sends a reset link **only** for a real account (via the `Mailer`) but never raises — no account enumeration. | `backend/src/api/services/auth.py:96` |
+| `forgot_password()` | Sends a reset link **only** for a real account (via the `Mailer`) but never raises — no account enumeration. | `backend/src/api/services/auth.py:92` |
 | `reset_password()` | Consumes the single-use token once (`InvalidResetTokenError` on missing/consumed/expired), validates policy, updates the password, and `revoke_all_refresh_tokens` to log out everywhere. | `backend/src/api/services/auth.py:115` |
 | `create_access_token()` / `decode_access_token()` | PyJWT HS256; claims `sub`/`org_id`/`role`/`iat`/`exp`, exp from `ACCESS_TOKEN_TTL_MINUTES` (15), signed with `JWT_SIGNING_SECRET`. | `backend/src/api/services/tokens.py:20` |
 | `issue_refresh_token()` | Raw = `secrets.token_urlsafe(32)`, stored as `sha256` hex; new `family_id`, `family_expires_at` = now + `REFRESH_TOKEN_TTL_DAYS` (7d). | `backend/src/api/services/tokens.py:42` |
@@ -43,7 +43,12 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
 | `hash_password()` / `verify_password()` | argon2-cffi hash + verify. | `backend/src/api/services/passwords.py:36` |
 | `validate_policy()` | Enforces the AUTH.md rules — min length 12, common/breached, repeated-char / keyboard-suffix / repeated-number, email/name/org substrings — raising a violation-listing `PasswordPolicyError`; includes the HIBP k-anonymity screen. | `backend/src/api/services/passwords.py:76` |
 | `_check_hibp()` | SHA-1 range-API screen (first 5 chars sent, 35-char suffix matched locally), gated by `HIBP_ENABLED`; skipped (not failed) on timeout/HTTP error. | `backend/src/api/services/passwords.py:57` |
-| `Mailer` / `LogMailer` | Protocol `send_reset_link(email, token)` + `send_invite_link(email, token)`, plus a dev impl that only logs them (real provider is DMI-71). Both take a **raw token, never a URL** — there is no invite-link base-URL setting. | `backend/src/api/services/mailer.py:10` |
+| `Mailer` | Protocol `send_reset_link(email, token)` + `send_invite_link(email, token)`. Both take a **raw token, never a URL**; the mailer builds the URL itself from `APP_BASE_URL`. | `backend/src/api/services/mailer.py:40` |
+| `invite_link()` / `reset_link()` | The two link shapes the emails point at — `{APP_BASE_URL}/invite/{token}` and `{APP_BASE_URL}/reset-password?token={token}`. The single place a token becomes a URL. | `backend/src/api/services/mailer.py:45`, `:50` |
+| `ResendMailer` | Posts a **plain-text** message to the Resend API (`RESEND_API_BASE_URL`, `Bearer RESEND_API_KEY`, `MAIL_FROM`, optional `MAIL_REPLY_TO`, `MAIL_TIMEOUT_SECONDS`). Snapshots every setting it needs in `__init__`. Swallows transport errors and ≥400 responses into a `logger.error` that never contains the token. | `backend/src/api/services/mailer.py:68` |
+| `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:55` |
+| `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:132` |
+| `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:153` |
 | `create_invite()` | Admin-side: refuses an email already a user in **this** org (`AlreadyMemberError`), stores only `sha256(raw)` in `token_hash`, `expires_at = now + INVITE_TTL_HOURS`, returns the raw token once. | `backend/src/api/services/invites.py:35` |
 | `accept_invite()` | Consumes a valid, unexpired, unconsumed invite: rejects an email that already exists in **any** org (`DuplicateUserError`), validates policy, hashes the password, creates the `User`, and writes `consumed_at` **in the same commit**; returns the same triple `login` returns. | `backend/src/api/services/invites.py:67` |
 | `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:25` |
@@ -62,8 +67,9 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
 - **Upstream** — the router and both middleware are registered in [`main.py`](/backend/api.md);
   `main.py` also answers `OPTIONS /api/v1/health` with 204 through the CORS middleware.
 - **Config** — every knob (`JWT_SIGNING_SECRET`, the TTLs, `REFRESH_COOKIE_SECURE`,
-  `CORS_ALLOWED_ORIGINS`, `RESET_TOKEN_TTL_MINUTES`, `HIBP_*`) is a `Settings` field — see
-  [config](/backend/api.md).
+  `CORS_ALLOWED_ORIGINS`, `RESET_TOKEN_TTL_MINUTES`, `HIBP_*`, and the mail block
+  `RESEND_API_KEY`/`RESEND_API_BASE_URL`/`MAIL_FROM`/`MAIL_REPLY_TO`/`MAIL_TIMEOUT_SECONDS`/
+  `APP_BASE_URL`) is a `Settings` field — see [config](/backend/api.md).
 - **Data** — refresh/reset rows live in [`models/session.py`](/backend/models.md)
   (`refresh_tokens`, `password_reset_tokens`), created by
   [migration `20260722_07`](/backend/migrations.md); users and invites come from `identity.py`.
@@ -100,7 +106,15 @@ authentication is a separate gate; see [device auth](/backend/device-auth.md).
 - **An invite's `consumed_at` is written in the same commit as the `User` insert.** Every failure
   path — unknown, expired, already-consumed, email mismatch, duplicate user, weak or breached
   password — leaves `consumed_at` NULL and no `User` row.
-- **No enumeration.** `forgot_password` always yields 204 whether or not the email exists.
+- **No enumeration — including in timing.** `forgot_password` always yields 204 whether or not the
+  email exists, and because `get_mailer` hands the route a `BackgroundMailer`, the provider call
+  runs *after* the response. Response latency therefore does not reveal whether mail went out. The
+  same deferral means a slow provider no longer holds the request's DB session: FastAPI exits
+  `yield` dependencies before background tasks run, so the pooled connection is already back.
+- **Email delivery is best-effort; the link is the guarantee.** `create_invite` commits and returns
+  the raw token *before* the mailer is called, and `ResendMailer` swallows provider failures. A
+  Resend outage therefore costs an email, never an invite — the admin still has a copyable link.
+  With `RESEND_API_KEY` unset (`NullMailer`) nothing is emailed at all and both flows still work.
 - **HIBP fails open.** A timeout or HTTP error on the pwnedpasswords range call skips the screen
   rather than blocking a password change; tests mock it and never hit the network.
 - **DB-backed tests skip without local Postgres** — `test_auth_routes.py`, `test_auth_service.py`,

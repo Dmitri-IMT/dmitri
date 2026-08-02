@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 from sqlmodel import Session
 
 from api.db.session import get_session
@@ -19,7 +19,7 @@ from api.services.invites import (
     accept_invite,
     create_invite,
 )
-from api.services.mailer import LogMailer
+from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
 from api.session_response import login_response
 
@@ -31,6 +31,7 @@ router = APIRouter()
 )
 def create_invite_route(
     body: CreateInviteRequest,
+    background: BackgroundTasks,
     caller: CallerIdentity = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> InviteCreatedResponse:
@@ -40,7 +41,7 @@ def create_invite_route(
             org_id=caller.org_id,
             email=body.email,
             role=body.role,
-            mailer=LogMailer(),
+            mailer=get_mailer(background),
         )
     except AlreadyMemberError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
