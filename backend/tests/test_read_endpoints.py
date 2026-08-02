@@ -317,6 +317,49 @@ def test_list_hosts_happy_path(
     assert seeded_row["first_seen_at"] == seeded["host"].first_seen_at.isoformat()
 
 
+def test_list_hosts_pages_beyond_the_first_twenty(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    now = datetime.now(timezone.utc)
+    for index in range(23):
+        session.add(
+            HostRecord(
+                identity_key=f"paging-{index}",
+                org_id=seeded["org"].id,
+                ip=f"192.168.9.{index + 1}",
+                mac=f"aa:bb:cc:00:00:{index:02x}",
+                hostname=f"paged-host-{index}",
+                vendor="Acme",
+                open_ports_count=0,
+                highest_severity=None,
+                first_seen_at=now,
+                last_seen_at=now - timedelta(minutes=index + 1),
+            )
+        )
+    session.commit()
+
+    headers = bearer_headers(seeded["org"].id, "admin")
+    first = client.get("/api/v1/hosts?page=1&per_page=20", headers=headers)
+    second = client.get("/api/v1/hosts?page=2&per_page=20", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_body = first.json()
+    second_body = second.json()
+
+    assert first_body["total"] == 25
+    assert second_body["total"] == 25
+    assert len(first_body["data"]) == 20
+    assert len(second_body["data"]) == 5
+    assert second_body["page"] == 2
+
+    first_ids = {row["host_id"] for row in first_body["data"]}
+    second_ids = {row["host_id"] for row in second_body["data"]}
+    assert first_ids.isdisjoint(second_ids)
+    assert len(first_ids | second_ids) == 25
+
+
 def test_get_host_by_id_happy_path(
     client: TestClient, session: Session, bearer_headers
 ) -> None:

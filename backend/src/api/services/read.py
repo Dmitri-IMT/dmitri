@@ -52,7 +52,7 @@ def list_hosts(
     hosts = session.exec(
         select(HostRecord)
         .where(HostRecord.org_id == org_id)
-        .order_by(HostRecord.last_seen_at.desc())
+        .order_by(HostRecord.last_seen_at.desc(), HostRecord.id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     ).all()
