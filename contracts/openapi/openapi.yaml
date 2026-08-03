@@ -716,6 +716,9 @@ paths:
           $ref: '#/components/responses/PasswordChangeRejected'
         '401':
           $ref: '#/components/responses/Unauthorized'
+          description: The `Authorization` header is missing, malformed, or its access token has
+            expired — a session failure only. A wrong `current_password` is **never** `401`; it is
+            the `400` above (contract ask C13).
     options:
       tags:
         - auth
@@ -770,11 +773,9 @@ paths:
         '204':
           description: Password reset.
         '400':
-          $ref: '#/components/responses/BadRequest'
-          description: |
-            Dead/used token **or** a password the policy rejects. These need opposite instructions
-            ("request a new link" vs "pick a better password") and currently share one status with
-            an unconstrained `code` — **contract ask C15, owned by DMI-77.** Not resolved here.
+          $ref: '#/components/responses/ResetPasswordRejected'
+        '410':
+          $ref: '#/components/responses/ResetTokenGone'
     options:
       tags:
         - auth
@@ -807,7 +808,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InviteCreatedResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/InviteCreateRejected'
           description: The email is already a member of the caller's own org. An email belonging
             to a **different** org is not reported here and returns `201` — surfacing it would let
             an admin probe for accounts at other tenants. That case fails at acceptance instead.
@@ -815,6 +816,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/InviteAlreadyPending'
     options:
       tags:
         - auth
@@ -825,15 +828,13 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
-  /api/v1/invites/{token}/accept:
+  /api/v1/invites/accept:
     post:
       tags:
         - auth
       summary: Accept invite and create account
       operationId: acceptInvite
       security: []
-      parameters:
-        - $ref: '#/components/parameters/InviteToken'
       requestBody:
         required: true
         content:
@@ -852,21 +853,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/AcceptInviteRejected'
         '410':
-          description: Invite expired or already used (single-use). Distinct from `400` on purpose.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/AcceptInviteTokenGone'
     options:
       tags:
         - auth
       summary: CORS preflight for invite acceptance
       operationId: optionsAcceptInvite
       security: []
-      parameters:
-        - $ref: '#/components/parameters/InviteToken'
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
@@ -1034,14 +1029,6 @@ components:
       schema:
         type: string
         format: uuid
-    InviteToken:
-      name: token
-      in: path
-      required: true
-      description: Single-use invite token from admin-generated link.
-      schema:
-        type: string
-        minLength: 16
     HostIdFilter:
       name: host_id
       in: query
@@ -1332,6 +1319,203 @@ components:
                 error:
                   code: password_policy_violation
                   message: Password does not meet policy requirements.
+                  details: {}
+    ResetPasswordRejected:
+      description: |
+        The reset token is good but the new password fails the policy. A dead token is `410`,
+        not this — the two need opposite instructions ("pick a better password" vs "request a
+        new link"), which is why they no longer share a status (contract ask C15). The `code`
+        is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - password_policy_violation
+          examples:
+            passwordPolicyViolation:
+              value:
+                error:
+                  code: password_policy_violation
+                  message: Password does not meet policy requirements.
+                  details: {}
+    ResetTokenGone:
+      description: |
+        The reset link is dead — never issued, already used (single-use), or expired. All three
+        emit the **same** code on purpose: telling them apart would let a token guesser confirm
+        which of its guesses once existed. Checked before the password policy, so a dead token
+        with a weak password answers `410`, not `400`. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - invalid_reset_token
+          examples:
+            invalidResetToken:
+              value:
+                error:
+                  code: invalid_reset_token
+                  message: Invalid or expired reset token.
+                  details: {}
+    AcceptInviteRejected:
+      description: |
+        The invite token is live but the request cannot be accepted: the address does not match
+        the one invited, that address already has an account, or the chosen password fails the
+        policy. A dead token is `410`, not this. The `code` is pinned: the SPA switches on it to
+        choose which field to flag. `email_already_registered` is **global** — the address has an
+        account somewhere, not necessarily in this org (contrast `email_already_member` on invite
+        creation, which is org-scoped).
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - invite_email_mismatch
+                          - email_already_registered
+                          - password_policy_violation
+          examples:
+            inviteEmailMismatch:
+              value:
+                error:
+                  code: invite_email_mismatch
+                  message: Email does not match the invite.
+                  details: {}
+            emailAlreadyRegistered:
+              value:
+                error:
+                  code: email_already_registered
+                  message: Email is already registered.
+                  details: {}
+            passwordPolicyViolation:
+              value:
+                error:
+                  code: password_policy_violation
+                  message: Password does not meet policy requirements.
+                  details: {}
+    AcceptInviteTokenGone:
+      description: |
+        The invite link is dead — never issued, already used (single-use), or expired. All three
+        emit the **same** code on purpose: telling them apart would let a token guesser confirm
+        which of its guesses once existed. Checked before the email match and the password policy,
+        so a dead token with a weak password answers `410`, not `400`. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - invalid_invite_token
+          examples:
+            invalidInviteToken:
+              value:
+                error:
+                  code: invalid_invite_token
+                  message: Invalid or expired invite token.
+                  details: {}
+    InviteCreateRejected:
+      description: |
+        The email is already a member of the caller's own org. An email belonging to a
+        **different** org is not reported here and returns `201` — surfacing it would let an
+        admin probe for accounts at other tenants. That case fails at acceptance instead. The
+        `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - email_already_member
+          examples:
+            emailAlreadyMember:
+              value:
+                error:
+                  code: email_already_member
+                  message: Email is already a member of this org.
+                  details: {}
+    InviteAlreadyPending:
+      description: |
+        The address already has a live invite — unconsumed and unexpired. The admin should wait
+        for it to be accepted or expire rather than resubmit, which is why this is `409`, not
+        `400` (RFC 9110's "the request could not be completed due to a conflict... the user might
+        be able to resolve the conflict and resubmit"). Precedence: if the address is **also**
+        already a member, `400 email_already_member` wins instead. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - invite_already_pending
+          examples:
+            inviteAlreadyPending:
+              value:
+                error:
+                  code: invite_already_pending
+                  message: Email already has a pending invite.
                   details: {}
     DatabaseUnavailableError:
       description: |
@@ -2293,9 +2477,13 @@ components:
       type: object
       additionalProperties: false
       required:
+        - token
         - email
         - password
       properties:
+        token:
+          type: string
+          minLength: 16
         email:
           type: string
           format: email
