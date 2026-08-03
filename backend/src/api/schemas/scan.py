@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from ipaddress import IPv4Address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
+from pydantic import BaseModel, ConfigDict, Field, constr
 
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
@@ -20,7 +21,7 @@ class Artifact(BaseModel):
     kind: ArtifactKind
     path: constr(min_length=1)
     stage: constr(min_length=1)
-    host_ip: IPvAnyAddress | None = None
+    host_ip: IPv4Address | None = None
 
 
 class Port(BaseModel):
@@ -33,7 +34,7 @@ class Port(BaseModel):
 
 
 class Host(BaseModel):
-    ip: IPvAnyAddress
+    ip: IPv4Address
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
@@ -41,7 +42,7 @@ class Host(BaseModel):
 
 
 class Finding(BaseModel):
-    ip: IPvAnyAddress | None = None
+    ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
     service: str | None = None
