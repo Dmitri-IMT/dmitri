@@ -16,7 +16,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 | --- | --- | --- |
 | Auth | Login, accept invite, forgot/reset password, voluntary change password | B1/B2 **corrected against the contract**. Login needs C16, accept invite C14, reset password C15. **Forced password change was dropped** — forced rotation is abandoned (ADR-015), so C5 is void and there is no forced-change screen. |
 | Home | `/`; a verdict-led security review | Drafted. The only screen spec so far. |
-| Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C9/C10. **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
+| Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C10 (**C9 resolved 2026-08-02** — `host_id` is required on `ScanHostView`). **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2. **C12 resolved** — terminal state splits on `delivered_at` (never delivered → `expired`; delivered then broke → `failed`). |
 | Admin | Users & invites | B2 drafted; **screen spec drafted 2026-07-13**. Ships as **invite-only** — `POST /invites` is the sole endpoint (C4). Stays at `/users` under the "Users" nav item; the user table lands inside it when C4 arrives. |
 | Settings | Change password; profile | B5 + **screen spec drafted 2026-07-13**. Password works; profile blocked (C3). |

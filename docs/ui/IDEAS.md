@@ -34,7 +34,7 @@ March-era `wireframes.md` (2026-07-10).
 - Fifth card with device/host count next to the four severity cards *(salvaged)*
 - Dedicated aggregated Home endpoint when findings volume makes client-side counting costly *(salvaged backend note)*
 - Backend finding-delta (new vs previously-seen finding) so Home can say "not seen before" honestly *(backend note; v1 approximates with latest-scan findings)*
-- `first_seen_at` on `HostSummary` to power the "new device on your network" Home item *(contract note; FLOWS.md open decision #4)*
+- The "new device on your network" Home item — the contract gap is closed (`first_seen_at` is on `HostSummary`), the item itself is still unbuilt *(C6 resolved)*
 
 ## Scans
 

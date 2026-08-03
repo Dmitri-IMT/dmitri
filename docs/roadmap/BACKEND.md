@@ -26,7 +26,7 @@
 | B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
-| B11 | Frontend contract asks | 🔓 | **10 of 18 still open** (C2, C3 partial) — C5–C8, C11, C12, C16, C17 closed — [B11](#b11--frontend-contract-asks-) |
+| B11 | Frontend contract asks | 🔓 | **9 of 18 still open** (C2, C3 partial) — C5–C9, C11, C12, C16, C17 closed — [B11](#b11--frontend-contract-asks-) |
 | B12 | Transactional email | 🔓 | Built in DMI-71 on **Resend** (invites + password reset); **sending domain still TBD** — [B11-C17](#b11--frontend-contract-asks-) |
 
 ✅ = decided here · 🔓 = open (auth details → [`AUTH.md`](AUTH.md))
@@ -162,7 +162,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 
 ### API surface ✅
 
-**Namespace (5a):** **`/agents/`** = scanner Pis (JWT reads + Ed25519-signed WSS). **`/hosts/`** = discovered network machines (JWT). **`/commands/`** = command lifecycle (JWT). OpenAPI today calls hosts **`/devices`** — rename in [B7](#b7--openapi-contract-).
+**Namespace (5a):** **`/agents/`** = scanner Pis (JWT reads + Ed25519-signed WSS). **`/hosts/`** = discovered network machines (JWT). **`/commands/`** = command lifecycle (JWT). The **`/devices`** → **`/hosts`** rename shipped with [B7](#b7--openapi-contract-); the contract has no `/devices` path.
 
 **Transport:** production uses **HTTPS** and **WSS** only (TLS everywhere; local dev HTTP exception per ADR-005).
 
@@ -173,7 +173,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 | **GET** | `/api/v1/agents` | Web | JWT | **List agents** — array of one in the MVP. 🔓 **missing** ([B11-C1](#b11--frontend-contract-asks-)); without it the frontend cannot discover `agent_id` |
 | **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, `active_command_id`. 🔓 must also carry `available_subnets` + `target_subnet` ([B11-C2](#b11--frontend-contract-asks-)) |
 | **GET** | `/api/v1/commands/{command_id}` | Web | JWT | Command lifecycle |
-| **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(OpenAPI `/devices` → `/hosts` in B7)* |
+| **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(renamed from `/devices` in B7; `GET /hosts` honours `page`/`per_page`)* |
 | **POST** | `/api/v1/scans` | Pi | Ed25519 signature | Upload scan results *(exists in OpenAPI)* |
 | **GET** | `/api/v1/scans/{scan_id}` | Web | JWT | Scan results when ready *(exists)* |
 
@@ -188,7 +188,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 
 ### Data model ✅
 
-**Two concepts (5a):** **`agents`** = Pis running `dmitri agent` (`agent_id` = the signed `X-Device-Id`). **`hosts`** = machines discovered by scans (today's backend `devices` table / OpenAPI `DeviceSummary` — rename to `hosts` in B7).
+**Two concepts (5a):** **`agents`** = Pis running `dmitri agent` (`agent_id` = the signed `X-Device-Id`). **`hosts`** = machines discovered by scans (the `hosts` table / `HostSummary`, renamed from `devices` / `DeviceSummary` in B7).
 
 ```
 org
@@ -274,7 +274,7 @@ item and the invite form, once those screens exist.
 | ~~**C6**~~ | ~~`HostSummary.first_seen_at`~~ | — | **✅ RESOLVED** — `first_seen_at` is now a required property on `HostSummary` in the contract. The HOME "new device" item is unblocked (it is still not built; HOME ships critical/high findings, failed scans and stale coverage only). |
 | ~~**C7**~~ | ~~Does `POST /invites/{token}/accept` issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |
 | ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |
-| **C9** | `host_id` on `DevicePayload` | SCAN DETAIL | The `devices` array on `ScanDetailResponse` has no id — only `ip`/`mac`/`hostname`/`vendor`. A host row on a scan therefore **cannot link to that host's page**. (Findings do carry `device_id`, so the id exists server-side.) |
+| ~~**C9**~~ | ~~`host_id` on `DevicePayload`~~ | — | **✅ RESOLVED 2026-08-02 (DMI-85)** — the array on `ScanDetailResponse` is `hosts: ScanHostView[]`, and `host_id` is a required property on it, so a host row on a scan links to that host's page. `FindingRead.host_id` carries the same identifier for findings. |
 | **C10** | A failed scan carries **no reason** | SCAN DETAIL, HOME | `ScanDetailResponse` has no error field. The UI must go `scan.command_id` → `GET /commands/{id}.error_code` — and `error_code` is a machine code, so it needs a **plain-language mapping** owned by the backend or the copy deck. A failed scan with a null `command_id` has no reason at all. B6 promised *"scan failed → readable failure reason"*; today that is unreachable. |
 | ~~**C11**~~ | ~~Does `GET /findings?device_id=…` accept a `host_id`?~~ | — | **✅ RESOLVED 2026-07-13 — the filter becomes `?host_id=`.** The question only existed because the [B7](#b7--openapi-contract-) rename stopped at the paths; finishing it into the read-model field names dissolves it. Same identifier, one name. HOST DETAIL can show findings. |
 | ~~**C12**~~ | ~~Dead Pi → `failed` or `expired`?~~ | — | **✅ RESOLVED 2026-07-13 — split on `delivered_at`.** Never delivered → **`expired`** (set with the `503`, no sweeper). Delivered then broke — Pi error, ingest failure, WS drop, stale `running` — → **`failed`**. Both statements in B6 were half-right; the [lifecycle table](#lifecycle-3a--full) and [Failure & timeout](#failure--timeout-3e) now say the same thing. **Not a contract gap** — `CommandStatus` already carries all seven states. |

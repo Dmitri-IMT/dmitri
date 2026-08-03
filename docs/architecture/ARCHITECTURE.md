@@ -212,7 +212,7 @@ De acordo com as decisões dos ADRs:
 Todas as interfaces seguem o padrão REST + JSON. A documentação completa da API é gerada automaticamente pelo FastAPI (OpenAPI/Swagger).
 
 ### 6.1 Pi Agent → Backend API
-- **Método**: `POST /scans`
+- **Método**: `POST /api/v1/scans` *(definido no contrato OpenAPI; ainda **não implementado** no backend — ver ADR-013 e DMI-63)*
 - **Autenticação**: assinatura Ed25519 (chave privada no dispositivo; backend verifica com a chave pública, sem guardar segredo)
 - **Payload**: JSON contendo:
   - Metadados do scan (timestamp, device_id, rede escaneada)
@@ -225,13 +225,18 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 ### 6.2 React Frontend → Backend API
 - **Autenticação**: JWT Bearer Token (access token short-lived) + refresh token em httpOnly cookie
 - **Métodos principais**:
-  - `GET /scans` → Lista de scans realizados
-  - `GET /scans/{scan_id}` → Detalhes de um scan específico
-  - `GET /devices` → Inventário de dispositivos descobertos
-  - `GET /devices/{device_id}` → Detalhes de um dispositivo
-  - `POST /auth/login` → Login (email/senha ou SSO)
-  - `POST /auth/register` → Registrar novo usuário
-  - `PATCH /auth/new-password` → Redefinir senha
+  - `GET /api/v1/scans` → Lista de scans realizados
+  - `GET /api/v1/scans/{scan_id}` → Detalhes de um scan específico
+  - `GET /api/v1/hosts` → Inventário de máquinas descobertas na rede
+  - `GET /api/v1/hosts/{host_id}` → Detalhes de uma máquina
+  - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)
+  - `POST /api/v1/auth/login` → Login (email/senha)
+  - `POST /api/v1/auth/refresh` / `POST /api/v1/auth/logout` → Ciclo de vida da sessão
+  - `POST /api/v1/invites` + `POST /api/v1/invites/{token}/accept` → Convite e criação de conta (não há auto-registro)
+  - `POST /api/v1/auth/change-password`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password` → Troca e redefinição de senha
+  - `GET /api/v1/users/me` → Perfil do usuário autenticado
+  - `POST /api/v1/agents/{agent_id}/commands` → Disparar um scan (**Scan now**)
+  - `GET /api/v1/commands/{command_id}` → Ciclo de vida do comando enfileirado
 - **Formato**: JSON completo (request e response)
 - **Contrato**: Tipos TypeScript gerados automaticamente via `openapi-typescript` a partir do schema OpenAPI do FastAPI
 - **Referência**: ADR-003, ADR-005, ADR-008

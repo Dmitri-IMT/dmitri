@@ -291,7 +291,7 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ◐ (C15) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
 | Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
-| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C9, C10) |
+| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C10) |
 | Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ |
 | Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
 | Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
@@ -682,13 +682,13 @@ attention since they last looked.
 **Data** — endpoints and fields consumed (contract names):
 - `GET /api/v1/scans?per_page=1` (default sort `timestamp` desc) — latest scan feeds the
   verdict, the scan-failed item (`status: failed`), and the context footer (`timestamp`,
-  `device_count`, `finding_count`, `highest_severity`, `scan_mode`)
+  `host_count`, `finding_count`, `highest_severity`, `scan_mode`)
 - `GET /api/v1/findings?scan_id={latest}&severity=critical` (and `severity=high`) — finding
   review items (`title`, `cve_id`, `ip`, `severity`)
 - `GET /api/v1/agents/{agent_id}` — `online`, `last_seen_at`, `display_name` feed the
   coverage-stale item and the footer Pi status
-- New-device item: **no contract support yet** — `HostSummary` lacks `first_seen_at`
-  (FLOWS.md open decision #4); the item is cut until the field exists
+- New-device item: `HostSummary` carries `first_seen_at` (**C6** resolved), so the item is no
+  longer contract-blocked; it is still not built, and shipping it in v1 is a product call
 
 **Three states** — each deliberately designed, none inherited by accident:
 - **Regular, all clear (the common case):** verdict + context sentence, centered, generous
@@ -790,8 +790,9 @@ Blank — first run (admin):
 ```
 
 **Open questions:**
-1. New-device review item — blocked on contract (`first_seen_at` on `HostSummary` — **C6**);
-   cut from v1 until resolved.
+1. ~~New-device review item — blocked on contract (`first_seen_at` on `HostSummary` — **C6**).~~
+   **✅ RESOLVED — `first_seen_at` is a required property on `HostSummary`.** The item is
+   unblocked but still unbuilt; whether it ships in v1 is a product call, not a contract gap.
 2. Coverage-stale thresholds: Pi `online: false` is immediate, but "no completed scan in
    N days" needs an N.
 3. "Not seen before" phrasing needs a backend finding-delta (IDEAS.md backend note); v1
@@ -811,7 +812,7 @@ one.
 - `GET /api/v1/scans?page&per_page=20&sort_by=timestamp&sort_order=desc` → `ScanListResponse`
   (`data: ScanSummary[]`, `total`, `page`). Server-driven sorting and pagination already exist in
   the contract; **no client-side sorting.**
-- `ScanSummary`: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `status`, `device_count`,
+- `ScanSummary`: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `status`, `host_count`,
   `finding_count`, `highest_severity` (nullable).
 
 `ScanStatus` is `pending | accepted | processing | completed | failed` — **not** the command
@@ -883,8 +884,8 @@ the header last.
 
 **Data:**
 - `GET /api/v1/scans/{scan_id}` → `ScanDetailResponse` — **one request, everything embedded**:
-  `findings: FindingRecord[]`, `devices: DevicePayload[]`, `timestamp`, `subnet`, `scan_mode`,
-  `status`, `device_count`, `finding_count`, `command_id` (nullable).
+  `findings: FindingRead[]`, `hosts: ScanHostView[]`, `timestamp`, `subnet`, `scan_mode`,
+  `status`, `host_count`, `finding_count`, `command_id` (nullable).
 - **No `GET /findings` call here, and no `GET /findings/{id}`.** `FindingRecord` arrives complete —
   `severity`, `title`, `description`, `recommendation`, `evidence`, `references`, `cve_id`,
   `cvss_score`, `device_ip`, `port`, `protocol`, `service`. Opening a finding is **local state**.
@@ -957,9 +958,10 @@ row, open its panel. Absent or unmatched → render normally. No extra fetch (B3
 ```
 
 **Open questions:**
-1. **C9** — `DevicePayload` (the `devices` array) carries **no `host_id`**, so a host row here
-   cannot link to HOST DETAIL. The panel-in-place works, but there is no route to that machine's
-   full history. Either the contract adds `host_id`, or the affordance stays absent.
+1. ~~**C9** — `DevicePayload` (the `devices` array) carries **no `host_id`**, so a host row here
+   cannot link to HOST DETAIL.~~ **✅ RESOLVED 2026-08-02 (DMI-85) — the array is `hosts:
+   ScanHostView[]` and `host_id` is required on it.** A host row can link to `/hosts/:hostId`;
+   the affordance is available whenever this screen is built.
 2. **C10** — `error_code` is a *code*, not a sentence. It needs a copy mapping
    (code → plain-language reason) before the failed state has real words.
 
@@ -976,15 +978,20 @@ wrong".
 **Data:**
 - `GET /api/v1/hosts?page&per_page=20&sort_by=last_seen_at&sort_order=desc` → `HostListResponse`
   (`data: HostSummary[]`, `total`, `page`).
-- `HostSummary`: `host_id`, `ip`, `mac`, `hostname`, `vendor`, `last_seen_at`, `open_ports_count`,
-  `highest_severity` (nullable).
+- `HostSummary`: `host_id`, `ip`, `mac` (nullable), `hostname`, `vendor`, `first_seen_at`,
+  `last_seen_at`, `open_ports_count`, `highest_severity` (nullable).
 
-**Search is cut from v1** ([`IDEAS.md`](IDEAS.md) → Hosts). The contract offers no search parameter,
-and one subnet does not produce a list you cannot read (§12). Sorting is server-driven; the contract
-allows `last_seen_at | hostname | vendor | ip`.
+**Search is cut from v1** ([`IDEAS.md`](IDEAS.md) → Hosts). The contract does define a free-text `q`
+parameter on this endpoint, but v1 does not send it and the backend does not implement it — one
+subnet does not produce a list you cannot read (§12). Sorting is server-driven; the contract allows
+`last_seen_at | hostname | vendor | ip`.
 
 **Hosts are cumulative, not per-scan** — this is the inventory of everything ever discovered, which
 is why `last_seen_at` is the default sort and why a machine that has gone away still appears.
+
+**`mac` can be null** — a host discovered across a router has no ARP entry, so there is no MAC to
+show. The column renders "—" rather than being hidden; the machine is real, one identifier is not
+observable from here.
 
 **Three states:**
 - **Regular:** one row per host, whole row navigates to `/hosts/:hostId`.
@@ -999,6 +1006,7 @@ is why `last_seen_at` is the default sort and why a machine that has gone away s
 | Subtitle | "Every device Dmitri has found on your network." |
 | Columns | "Host · IP · MAC · Vendor · Open ports · Highest severity · Last seen" |
 | Hostname missing | "(unnamed)" |
+| MAC — null | "—" |
 | Highest severity — null | "—" |
 | Blank — heading | "No hosts yet." |
 | Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here." |
@@ -1027,8 +1035,8 @@ is why `last_seen_at` is the default sort and why a machine that has gone away s
 +------------------------------------------------------------------------------+
 ```
 
-**Open questions:** none. (A "new device" badge would need **C6** — `first_seen_at` on
-`HostSummary`. The field exists on `HostDetailResponse`, so this is a projection, not new data.)
+**Open questions:** none. (A "new device" badge needs no contract work — **C6** is resolved and
+`first_seen_at` is a required property on `HostSummary` as well as `HostDetailResponse`.)
 
 ---
 
@@ -1040,15 +1048,15 @@ is why `last_seen_at` is the default sort and why a machine that has gone away s
 footnote; the attack surface is the page.
 
 **Data:**
-- `GET /api/v1/hosts/{host_id}` → `HostDetailResponse`: `ip`, `mac`, `hostname`, `vendor`,
-  `first_seen_at`, `last_seen_at`, `open_ports_count`, `highest_severity`, `ports: Port[]`,
-  `scan_history: HostScanHistoryEntry[]`.
+- `GET /api/v1/hosts/{host_id}` → `HostDetailResponse`: `ip`, `mac` (nullable — see HOST
+  INVENTORY), `hostname`, `vendor`, `first_seen_at`, `last_seen_at`, `open_ports_count`,
+  `highest_severity`, `ports: Port[]`, `scan_history: HostScanHistoryEntry[]`.
 - `Port`: `port`, `protocol`, `state`, `service`, `version` (nullable).
 - `HostScanHistoryEntry`: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`,
   `highest_severity`.
 - **Findings are a second call:** `HostDetailResponse` carries **no findings array**, but
   `highest_severity` is shown — so the page must explain that severity. Use
-  `GET /api/v1/findings?device_id={host_id}` → `FindingRecord[]`, rendered with the same row +
+  `GET /api/v1/findings?host_id={host_id}` → `FindingRead[]`, rendered with the same row +
   in-place panel as SCAN DETAIL.
 
 **Three states:**
@@ -1107,10 +1115,10 @@ footnote; the attack surface is the page.
 ```
 
 **Open questions:**
-1. Does `GET /findings?device_id=…` accept the **`host_id`** UUID? The parameter is named
-   `device_id` (pre-`/hosts` rename, [`BACKEND.md` B7](../roadmap/BACKEND.md#b7--openapi-contract-))
-   and `FindingRecord.device_id` is a UUID — assumed to be the same identifier. **Confirm before
-   building**; if not, host detail cannot show findings at all.
+1. ~~Does `GET /findings?device_id=…` accept the **`host_id`** UUID?~~ **✅ RESOLVED (C11) — the
+   filter is `?host_id=`.** `read_findings()` takes `host_id: UUID | None`, and `FindingRead`
+   carries `host_id`. The read model is `hosts` end to end; only the Pi ingest payload keeps
+   `devices[]` (ADR-011 §5). Host detail can show findings.
 
 ---
 
