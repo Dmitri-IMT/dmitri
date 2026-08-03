@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Shared contracts
@@ -54,6 +54,20 @@ The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestRespo
 now `POST`ed as `hosts[]`, per contract asks C1–C5). Read responses add: `ScanHostView` — the
 `HostPayload` shape plus a **required** `host_id` (C9, resolved host identity per host observation
 in a scan); `HostSummary` — the `GET /hosts` list row, adding `first_seen_at`/`last_seen_at` (C6).
+
+**Nullability and `required`, tightened 2026-08-02.** `mac` is nullable on `ScanHostView`,
+`HostSummary` and `HostDetailResponse` (a routed host has no MAC) but stays in each schema's
+`required` list — always present on the wire, sometimes `null`. The collection fields
+(`ScanHostView.ports`, `HostDetailResponse.ports`/`scan_history`, `ScanDetailResponse.hosts`/
+`findings`) are likewise `required`: the backend always emits them, so publishing them as optional
+would push needless `?.` into the generated frontend types. All address fields are `format: ipv4`,
+which the Pydantic models now match exactly with `IPv4Address`.
+
+`backend/tests/test_contract_fidelity.py` gates this file against the app's generated OpenAPI by
+fingerprinting `additionalProperties`, `required` and every property shape. Its `SCHEMA_NAMES`
+covers the read responses; `OPERATION_PATHS` covers query parameters on `/scans` and `/findings`
+only — `/api/v1/hosts` is **not** guarded, because the contract declares `sort_by`/`sort_order`/`q`
+there and the service implements none of them (DMI-100 closes the sort half and adds the path).
 
 The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
 (previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by

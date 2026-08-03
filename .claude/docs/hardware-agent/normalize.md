@@ -4,7 +4,7 @@ title: normalize — contracts & findings extraction
 description: The Pydantic wire contracts (ScanPayload, HostPayload) and the NSE-to-findings extractor that produce the shared on-disk payload.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -21,9 +21,9 @@ object — the seam that binds the agent to the (planned) backend.
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
 | `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `hosts`, `findings`, `metadata`. | `contracts.py:50` |
-| `HostPayload` | A host on the wire: `ip`, `mac` (regex), `hostname`, `vendor`, `ports`. Formerly `DevicePayload`. | `contracts.py:25` |
+| `HostPayload` | A host on the wire: `ip` (`IPv4Address`), `mac` (regex, nullable), `hostname`, `vendor`, `ports`. Formerly `DevicePayload`. | `contracts.py:26` |
 | `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`. | `contracts.py:17` |
-| `FindingPayload` | A vulnerability/observation: ip/port/service, `cve_id` (regex), `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, references. | `contracts.py:33` |
+| `FindingPayload` | A vulnerability/observation: `ip` (`IPv4Address`, nullable)/port/service, `cve_id` (regex), `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, references. | `contracts.py:34` |
 | `extract_findings()` | Walks each host's host-scripts and port-scripts, dispatches per script id, dedups by `(ip, port, script, cve/title)`. | `findings.py:17` |
 | `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:707` |
 | `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:104` |

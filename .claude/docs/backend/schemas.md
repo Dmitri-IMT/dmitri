@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -23,30 +23,30 @@ the ingest input plus the main persisted projections.
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:9` |
-| `ScanResult` | Top-level payload (`extra="forbid"`): `scan_id`, `timestamp`, `subnet`, `scan_mode` (`quick`/`standard`/`extensive`/`nspi`/`max`), `hosts`, `findings`, `artifacts`, `metadata`. | `backend/src/api/schemas/scan.py:60` |
-| `Host` | `ip` (`IPvAnyAddress`), MAC regex, `hostname`, `vendor`, `ports`. | `backend/src/api/schemas/scan.py:35` |
-| `Port` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `cpes`. | `backend/src/api/schemas/scan.py:26` |
-| `Finding` | Optional `ip`/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:43` |
-| `Artifact` | `kind` (`nmap_xml`/`nse_output`), `path`, `stage`, optional `host_ip`. | `backend/src/api/schemas/scan.py:19` |
-| `ScanIngestResponse` | `message`, `scan_id`, `hosts_received` — the `202` response body. | `backend/src/api/schemas/scan.py:73` |
+| `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
+| `ScanResult` | Top-level payload (`extra="forbid"`): `scan_id`, `timestamp`, `subnet`, `scan_mode` (`quick`/`standard`/`extensive`/`nspi`/`max`), `hosts`, `findings`, `artifacts`, `metadata`. | `backend/src/api/schemas/scan.py:61` |
+| `Host` | `ip` (`IPv4Address`), MAC regex, `hostname`, `vendor`, `ports`. | `backend/src/api/schemas/scan.py:36` |
+| `Port` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `cpes`. | `backend/src/api/schemas/scan.py:27` |
+| `Finding` | Optional `ip` (`IPv4Address`)/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:44` |
+| `Artifact` | `kind` (`nmap_xml`/`nse_output`), `path`, `stage`, optional `host_ip` (`IPv4Address`). | `backend/src/api/schemas/scan.py:20` |
+| `ScanIngestResponse` | `message`, `scan_id`, `hosts_received` — the `202` response body. | `backend/src/api/schemas/scan.py:74` |
 
 ## Key classes / functions — `read.py` (wired read responses)
 
 | Name | What it shapes | Ref |
 |------|-----------------|-----|
 | `Severity` / `SEVERITY_ORDER` | **Moved out of this module 2026-07-31** to [`core/severity.py`](/backend/api.md); `read.py` now imports `Severity` from there. Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order — the single severity-domain definition. | `backend/src/api/core/severity.py:5` |
-| `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:14` |
-| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). | `backend/src/api/schemas/read.py:24` |
-| `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:35` |
-| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `open_ports_count`/`highest_severity`. | `backend/src/api/schemas/read.py:58` |
-| `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:72` |
-| `HostDetailResponse` | `GET /hosts/{host_id}`: identity + latest `ports` + full `scan_history`. | `backend/src/api/schemas/read.py:82` |
-| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts. | `backend/src/api/schemas/read.py:100` |
-| `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:116` |
-| `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:129` |
-| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:137` |
-| `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:145` |
+| `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:18` |
+| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. | `backend/src/api/schemas/read.py:28` |
+| `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:39` |
+| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `open_ports_count`/`highest_severity`. `mac` is required and nullable. | `backend/src/api/schemas/read.py:62` |
+| `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:76` |
+| `HostDetailResponse` | `GET /hosts/{host_id}`: identity + latest `ports` + full `scan_history`; `ports`/`scan_history` are required (no `default_factory`). | `backend/src/api/schemas/read.py:86` |
+| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/counts; `hosts`/`findings` are required. | `backend/src/api/schemas/read.py:102` |
+| `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:118` |
+| `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |
+| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:139` |
+| `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:147` |
 
 ## Key classes / functions — `users.py` (self profile)
 
@@ -133,6 +133,17 @@ command has none. The published contract was amended to drop it from `required` 
 
 ## Notes / gotchas
 
+- **IPv4 only.** Every address field in `scan.py` and `read.py` is `IPv4Address`, not
+  `IPvAnyAddress` (changed 2026-08-02). This matches the contract, which has always said
+  `format: ipv4`, and `SubnetCIDR`, whose regex is IPv4-only. Ingest now **rejects** an IPv6 host or
+  finding address with a `422` instead of accepting it. `HostRecord.ip` is still an unconstrained
+  `str` column, so a pre-existing IPv6 row would fail response validation on read — none exist.
+- **Required vs nullable on the read models.** `mac` is `| None` with **no default** on
+  `ScanHostView`/`HostSummary`/`HostDetailResponse`: always present on the wire, sometimes `null`
+  (a routed host has no MAC). The list fields `ports`, `scan_history`, `hosts` and `findings`
+  likewise dropped `Field(default_factory=list)` — the service always passes them, and a default
+  would make FastAPI publish them as optional, weakening the generated frontend types. Keep them
+  defaultless so the contract's `required` list stays honest.
 - **`scan_mode`, resolved.** `ScanResult.scan_mode` and the OpenAPI `ScanIngestRequest.scan_mode` now
   agree — see [contracts](/contracts.md) for the ADR-013 resolution.
 - **`hosts`, not devices.** The ingest schema uses `Host`/`hosts`/`hosts_received` (ADR-013 retired
