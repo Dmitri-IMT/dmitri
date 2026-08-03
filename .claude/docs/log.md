@@ -3,6 +3,28 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-03
+
+* **Update**: IPv4 narrowing threaded to the agent side — `hardware-agent/normalize.md`'s
+  `HostPayload`/`FindingPayload` rows now read `IPv4Address` (was `IPvAnyAddress`) and note the
+  nullable `mac`/`ip`. Both ends of the ingest contract agree again: the backend began rejecting
+  IPv6 with a 422, so leaving the emitter on `IPvAnyAddress` would have turned an unreachable
+  mismatch into a lost scan submission at HTTP time rather than a clean error at normalize time.
+  Line refs shifted by one from the new `ipaddress` import.
+* **Update**: read-path link fields + nullability landed (DMI-85) — `backend/schemas.md` records
+  three changes to `schemas/read.py` and `schemas/scan.py`. **IPv4 only:** every address field is
+  now `IPv4Address` rather than `IPvAnyAddress`, matching the contract's long-standing
+  `format: ipv4` and the IPv4-only `SubnetCIDR` regex; ingest rejects an IPv6 host or finding with a
+  422. **`mac` is required-but-nullable** on `ScanHostView`/`HostSummary`/`HostDetailResponse` — a
+  routed host has no MAC, and the previous non-nullable `constr` meant any such host 500'd on
+  `GET /hosts`. **Collection fields lost their `default_factory`** (`ports`, `scan_history`,
+  `hosts`, `findings`): the service always passes them, and a default made FastAPI publish them as
+  optional, which weakened the generated frontend types. `contracts.md` gains the matching
+  `required`/nullability paragraph plus a note on what `test_contract_fidelity.py` does and does
+  not guard — `/api/v1/hosts` query params stay unguarded until DMI-100 implements
+  `sort_by`/`sort_order`. Line refs in both `read.py` and `scan.py` tables shifted by one from the
+  new `ipaddress` import.
+
 ## 2026-08-02
 
 * **Update**: `GET /hosts` paging landed (DMI-84) — `backend/routers.md`'s `read_hosts()` row now

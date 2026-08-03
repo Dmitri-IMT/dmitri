@@ -64,7 +64,7 @@ interaction in implementation before it has passed through that sequence.
   **Read `active_command_id` on mount** so the pill survives navigation and reloads during a
   ~10-minute scan. See [`ui/FLOWS.md`](../ui/FLOWS.md#b4--scan-now-command-flow)
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
-- **Host inventory:** discovered machines → **`/hosts`** (OpenAPI `/devices` rename per B7) — not the same as scanner **agents**.
+- **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
 - **UI status:** flows are drafted, **LOGIN and Home are built** (spec 020), and all other screen
   specs are pending. Shared visual foundations are **written** in
@@ -88,7 +88,7 @@ interaction in implementation before it has passed through that sequence.
   landed, but nothing persists the chosen `target_subnet`).
   **Closed since:** `HostSummary.first_seen_at` (C6) and `FindingRecord.cve_id` (C8) are both in the
   contract; invite-accept does auto-log-in (C7, returns a full `LoginResponse`). (C5
-  forced-password-change is void — forced rotation dropped, ADR-015.)
+  forced-password-change is void — forced rotation dropped, [`ADR-016`](../adr/ADR-016-password-policy.md).)
 - **Role comes from `GET /users/me`, not a JWT claim** (B11-C16, closed). Spec 020's session layer is
   its only reader and nothing in the SPA decodes a token. ⚠️ **REVALIDATE:**
   [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and

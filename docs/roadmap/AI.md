@@ -19,7 +19,7 @@ A read-only assistant that helps a non-expert operator understand their scan:
 
 ## Hard guardrails (inherited from the IA roadmap)
 
-- **Grounded only in persisted data.** Every answer cites the `scan_id` / `device_id` /
+- **Grounded only in persisted data.** Every answer cites the `scan_id` / `host_id` /
   `finding_id` it used. No invented CVEs or correlations.
 - **Read-only this phase.** The explainer **must not** trigger scans, change scope, or run active
   modules. Active/authorized assessment is a *later, separate* track (IA roadmap Phase 3C).

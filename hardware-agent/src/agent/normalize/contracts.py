@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from ipaddress import IPv4Address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, IPvAnyAddress, constr
+from pydantic import BaseModel, Field, constr
 
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
@@ -23,7 +24,7 @@ class PortPayload(BaseModel):
 
 
 class HostPayload(BaseModel):
-    ip: IPvAnyAddress
+    ip: IPv4Address
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
@@ -31,7 +32,7 @@ class HostPayload(BaseModel):
 
 
 class FindingPayload(BaseModel):
-    ip: IPvAnyAddress | None = None
+    ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
     service: str | None = None

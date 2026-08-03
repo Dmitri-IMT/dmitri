@@ -15,6 +15,12 @@ SCHEMA_NAMES = (
     "ScanListResponse",
     "CommandSummary",
     "CommandDetail",
+    "HostSummary",
+    "ScanHostView",
+    "HostDetailResponse",
+    "HostListResponse",
+    "ScanDetailResponse",
+    "FindingListResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
@@ -50,7 +56,11 @@ def _property_shape(spec: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any
     if "anyOf" in prop:
         parts = [_resolve_ref(spec, part) for part in prop["anyOf"]]
         shape["nullable"] = any(part.get("type") == "null" for part in parts)
-        non_null = [part for part in parts if part.get("type") != "null"]
+        non_null = [
+            part
+            for part in prop["anyOf"]
+            if _resolve_ref(spec, part).get("type") != "null"
+        ]
         if len(non_null) == 1:
             shape.update(_property_shape(spec, non_null[0]))
         return shape
@@ -58,10 +68,10 @@ def _property_shape(spec: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any
         shape["type"] = prop["type"]
     if "items" in prop:
         items = _resolve_ref(spec, prop["items"])
-        if "$ref" in items:
-            shape["items"] = items["$ref"].rsplit("/", 1)[-1]
+        if "properties" in items:
+            shape["items"] = _schema_fingerprint(spec, prop["items"])
         else:
-            shape["items"] = _property_shape(spec, items)
+            shape["items"] = _property_shape(spec, prop["items"])
     return shape
 
 

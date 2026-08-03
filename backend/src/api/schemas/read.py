@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from ipaddress import IPv4Address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, constr
+from pydantic import BaseModel, ConfigDict, Field, constr
 
 from api.core.severity import Severity
 
@@ -28,11 +29,11 @@ class ScanHostView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host_id: UUID
-    ip: IPvAnyAddress
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
+    ip: IPv4Address
+    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
-    ports: list[Port] = Field(default_factory=list)
+    ports: list[Port]
 
 
 class FindingRead(BaseModel):
@@ -41,7 +42,7 @@ class FindingRead(BaseModel):
     finding_id: UUID
     scan_id: UUID
     host_id: UUID | None = None
-    host_ip: IPvAnyAddress | None = None
+    host_ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
     service: str | None = None
@@ -62,8 +63,8 @@ class HostSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host_id: UUID
-    ip: IPvAnyAddress
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    ip: IPv4Address
+    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: str
     vendor: str
     first_seen_at: datetime
@@ -86,16 +87,16 @@ class HostDetailResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host_id: UUID
-    ip: IPvAnyAddress
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    ip: IPv4Address
+    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: str
     vendor: str
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
-    ports: list[Port] = Field(default_factory=list)
-    scan_history: list[HostScanHistoryEntry] = Field(default_factory=list)
+    ports: list[Port]
+    scan_history: list[HostScanHistoryEntry]
 
 
 class ScanDetailResponse(BaseModel):
@@ -105,8 +106,8 @@ class ScanDetailResponse(BaseModel):
     timestamp: datetime
     subnet: constr(pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$")
     scan_mode: ScanMode
-    hosts: list[ScanHostView] = Field(default_factory=list)
-    findings: list[FindingRead] = Field(default_factory=list)
+    hosts: list[ScanHostView]
+    findings: list[FindingRead]
     metadata: dict[str, str | int | float | bool] | None = None
     status: ScanStatus
     command_id: UUID | None = None
