@@ -69,6 +69,15 @@ covers the read responses; `OPERATION_PATHS` covers query parameters on `/scans`
 only — `/api/v1/hosts` is **not** guarded, because the contract declares `sort_by`/`sort_order`/`q`
 there and the service implements none of them (DMI-100 closes the sort half and adds the path).
 
+**Error responses are guarded too, since DMI-77.** `ERROR_RESPONSE_ROUTES` maps seven pinned
+`components/responses` entries — `PasswordChangeRejected`, `ResetPasswordRejected`, `ResetTokenGone`,
+`AcceptInviteRejected`, `AcceptInviteTokenGone`, `InviteCreateRejected`, `InviteAlreadyPending` — to
+`(router file, route function, status)`, AST-extracts that function's `ApiError(status, …, code="…")`
+literals, and asserts exact set equality with the response's pinned `error.code` `enum`. Before this,
+nothing cross-checked router literals against contract enums and a typo shipped green. Each pinned
+response follows one shape: `allOf` of `ErrorResponse` plus an `enum`-constrained `error.code`, with
+one example per code.
+
 The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
 (previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by
 `backend/tests/test_ingest_scan.py` to drive `persist_scan` and the enrichment tests offline.

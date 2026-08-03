@@ -7,7 +7,9 @@ from api.db.session import get_session
 from api.main import app
 from api.models.identity import Org, User
 from api.models.persistence import utc_now
-from api.models.session import RefreshToken
+from api.models.session import PasswordResetToken, RefreshToken
+from api.services.auth import forgot_password
+from api.services.mailer import NullMailer
 from api.services.passwords import hash_password, verify_password
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -266,22 +268,24 @@ def test_forgot_password_sends_nothing_for_an_unknown_email(
     assert len(captured) == 1
 
 
+class _CapturingResetMailer(NullMailer):
+    def __init__(self) -> None:
+        self.token: str | None = None
+
+    def send_reset_link(self, email: str, token: str) -> None:
+        self.token = token
+
+
+def _request_reset(session: Session, mailer: _CapturingResetMailer) -> None:
+    forgot_password(session, email="alice@corp.com", mailer=mailer)
+
+
 def test_reset_password_consumes_token_once(
     client: TestClient, administrative_session: Session
 ) -> None:
-    from api.services.auth import forgot_password
-    from api.services.mailer import NullMailer
-
-    class CapturingMailer(NullMailer):
-        def __init__(self) -> None:
-            self.token: str | None = None
-
-        def send_reset_link(self, email: str, token: str) -> None:
-            self.token = token
-
     _seed_user(administrative_session)
-    mailer = CapturingMailer()
-    forgot_password(administrative_session, email="alice@corp.com", mailer=mailer)
+    mailer = _CapturingResetMailer()
+    _request_reset(administrative_session, mailer)
 
     first_response = client.post(
         "/api/v1/auth/reset-password",
@@ -293,22 +297,93 @@ def test_reset_password_consumes_token_once(
         "/api/v1/auth/reset-password",
         json={"token": mailer.token, "new_password": VALID_PASSWORD},
     )
-    assert second_response.status_code == 400
+    assert second_response.status_code == 410
+    assert second_response.json()["error"]["code"] == "invalid_reset_token"
+
+
+def test_reset_password_unknown_token_returns_410(
+    client: TestClient, administrative_session: Session
+) -> None:
+    _seed_user(administrative_session)
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "never-issued", "new_password": OTHER_VALID_PASSWORD},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "invalid_reset_token"
+
+
+def test_reset_password_expired_token_returns_410(
+    client: TestClient, administrative_session: Session
+) -> None:
+    _seed_user(administrative_session)
+    mailer = _CapturingResetMailer()
+    _request_reset(administrative_session, mailer)
+
+    row = administrative_session.exec(select(PasswordResetToken)).one()
+    row.expires_at = utc_now() - timedelta(minutes=1)
+    administrative_session.add(row)
+    administrative_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": mailer.token, "new_password": OTHER_VALID_PASSWORD},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "invalid_reset_token"
+
+
+def test_reset_password_weak_password_returns_400(
+    client: TestClient, administrative_session: Session
+) -> None:
+    user = _seed_user(administrative_session)
+    mailer = _CapturingResetMailer()
+    _request_reset(administrative_session, mailer)
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": mailer.token, "new_password": "aaabbbcccddd"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "password_policy_violation"
+    administrative_session.refresh(user)
+    assert verify_password(VALID_PASSWORD, user.password_hash)
+
+    retry_response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": mailer.token, "new_password": OTHER_VALID_PASSWORD},
+    )
+    assert retry_response.status_code == 204
+
+
+def test_reset_password_dead_token_beats_weak_password(
+    client: TestClient, administrative_session: Session
+) -> None:
+    _seed_user(administrative_session)
+    mailer = _CapturingResetMailer()
+    _request_reset(administrative_session, mailer)
+
+    client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": mailer.token, "new_password": OTHER_VALID_PASSWORD},
+    )
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": mailer.token, "new_password": "aaabbbcccddd"},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "invalid_reset_token"
 
 
 def test_reset_password_revokes_all_refresh_families(
     client: TestClient, administrative_session: Session
 ) -> None:
-    from api.services.auth import forgot_password
-    from api.services.mailer import NullMailer
-
-    class CapturingMailer(NullMailer):
-        def __init__(self) -> None:
-            self.token: str | None = None
-
-        def send_reset_link(self, email: str, token: str) -> None:
-            self.token = token
-
     _seed_user(administrative_session)
     login_response = client.post(
         "/api/v1/auth/login",
@@ -316,8 +391,8 @@ def test_reset_password_revokes_all_refresh_families(
     )
     old_refresh = login_response.cookies.get(COOKIE_NAME)
 
-    mailer = CapturingMailer()
-    forgot_password(administrative_session, email="alice@corp.com", mailer=mailer)
+    mailer = _CapturingResetMailer()
+    _request_reset(administrative_session, mailer)
     client.post(
         "/api/v1/auth/reset-password",
         json={"token": mailer.token, "new_password": OTHER_VALID_PASSWORD},

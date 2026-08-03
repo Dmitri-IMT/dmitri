@@ -4,7 +4,7 @@ title: Backend routers — hosts, scans, findings, commands
 description: The FastAPI routers on the read path plus users/me, the command-channel write path (POST /agents/{id}/commands behind require_admin, GET /commands/{id}) and the agent WebSocket channel behind require_agent_ws.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, auth, tenancy, websocket, command-channel]
-timestamp: 2026-08-02T00:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Backend routers — hosts, scans, findings
@@ -24,8 +24,8 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:17` |
-| `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:27` |
+| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:22` |
+| `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:32` |
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:23` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:44` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
@@ -47,10 +47,13 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 - **All three list routes validate paging identically.** `read_hosts`, `read_scans` and
   `read_findings` each declare `page: int = Query(1, ge=1)` and
   `per_page: int = Query(20, ge=1, le=100)`, matching the contract's `Page`/`PerPage` parameters, so
-  an out-of-range value is refused with a 422 rather than clamped. `read_hosts` gained these in
-  DMI-84 — before that it accepted no paging params and `list_hosts` silently capped every response
-  at 20 rows while `total` reported the true count. Filter/sort query params remain specific to
-  `read_scans` and `read_findings`.
+  an out-of-range value is refused with a 422 rather than clamped. `read_hosts` spells the two
+  defaults as `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` imported from
+  [`services/read.py`](/backend/services.md) rather than repeating the literals its service already
+  defaults to; `read_scans` and `read_findings` still inline them. `read_hosts` gained these params
+  in DMI-84 — before that it accepted no paging params and `list_hosts` silently capped every
+  response at 20 rows while `total` reported the true count. Filter/sort query params remain
+  specific to `read_scans` and `read_findings`.
 - **A foreign row is 404, never 403.** The read service returns `None` for a row outside the
   caller's org and the router turns that into a 404; answering 403 would confirm the row exists in
   some other tenant.

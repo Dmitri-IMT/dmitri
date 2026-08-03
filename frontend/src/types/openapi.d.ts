@@ -357,7 +357,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/invites/{token}/accept": {
+    "/api/v1/invites/accept": {
         parameters: {
             query?: never;
             header?: never;
@@ -698,6 +698,7 @@ export interface components {
             expires_at: string;
         };
         AcceptInviteRequest: {
+            token: string;
             /** Format: email */
             email: string;
             password: string;
@@ -869,6 +870,123 @@ export interface components {
                 };
             };
         };
+        /**
+         * @description The reset token is good but the new password fails the policy. A dead token is `410`,
+         *     not this — the two need opposite instructions ("pick a better password" vs "request a
+         *     new link"), which is why they no longer share a status (contract ask C15). The `code`
+         *     is pinned.
+         */
+        ResetPasswordRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "password_policy_violation";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The reset link is dead — never issued, already used (single-use), or expired. All three
+         *     emit the **same** code on purpose: telling them apart would let a token guesser confirm
+         *     which of its guesses once existed. Checked before the password policy, so a dead token
+         *     with a weak password answers `410`, not `400`. The `code` is pinned.
+         */
+        ResetTokenGone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "invalid_reset_token";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The invite token is live but the request cannot be accepted: the address does not match
+         *     the one invited, that address already has an account, or the chosen password fails the
+         *     policy. A dead token is `410`, not this. The `code` is pinned: the SPA switches on it to
+         *     choose which field to flag. `email_already_registered` is **global** — the address has an
+         *     account somewhere, not necessarily in this org (contrast `email_already_member` on invite
+         *     creation, which is org-scoped).
+         */
+        AcceptInviteRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "invite_email_mismatch" | "email_already_registered" | "password_policy_violation";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The invite link is dead — never issued, already used (single-use), or expired. All three
+         *     emit the **same** code on purpose: telling them apart would let a token guesser confirm
+         *     which of its guesses once existed. Checked before the email match and the password policy,
+         *     so a dead token with a weak password answers `410`, not `400`. The `code` is pinned.
+         */
+        AcceptInviteTokenGone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "invalid_invite_token";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The email is already a member of the caller's own org. An email belonging to a
+         *     **different** org is not reported here and returns `201` — surfacing it would let an
+         *     admin probe for accounts at other tenants. That case fails at acceptance instead. The
+         *     `code` is pinned.
+         */
+        InviteCreateRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "email_already_member";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The address already has a live invite — unconsumed and unexpired. The admin should wait
+         *     for it to be accepted or expire rather than resubmit, which is why this is `409`, not
+         *     `400` (RFC 9110's "the request could not be completed due to a conflict... the user might
+         *     be able to resolve the conflict and resubmit"). Precedence: if the address is **also**
+         *     already a member, `400 email_already_member` wins instead. The `code` is pinned.
+         */
+        InviteAlreadyPending: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "invite_already_pending";
+                    };
+                };
+            };
+        };
         /** @description The health check's live database round-trip failed. The `code` is pinned. */
         DatabaseUnavailableError: {
             headers: {
@@ -913,8 +1031,6 @@ export interface components {
         /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
         AgentId: string;
         CommandId: string;
-        /** @description Single-use invite token from admin-generated link. */
-        InviteToken: string;
         /** @description Filter findings by host identifier. Same `host_id` as `GET /api/v1/hosts/{host_id}` — this is what lets HOST DETAIL show its findings. */
         HostIdFilter: string;
         /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
@@ -1565,6 +1681,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["PasswordChangeRejected"];
+            /** @description The `Authorization` header is missing, malformed, or its access token has expired — a session failure only. A wrong `current_password` is **never** `401`; it is the `400` above (contract ask C13). */
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -1634,12 +1751,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            /**
-             * @description Dead/used token **or** a password the policy rejects. These need opposite instructions
-             *     ("request a new link" vs "pick a better password") and currently share one status with
-             *     an unconstrained `code` — **contract ask C15, owned by DMI-77.** Not resolved here.
-             */
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["ResetPasswordRejected"];
+            410: components["responses"]["ResetTokenGone"];
         };
     };
     optionsResetPassword: {
@@ -1677,9 +1790,10 @@ export interface operations {
                 };
             };
             /** @description The email is already a member of the caller's own org. An email belonging to a **different** org is not reported here and returns `201` — surfacing it would let an admin probe for accounts at other tenants. That case fails at acceptance instead. */
-            400: components["responses"]["BadRequest"];
+            400: components["responses"]["InviteCreateRejected"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["InviteAlreadyPending"];
         };
     };
     optionsInvites: {
@@ -1698,10 +1812,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description Single-use invite token from admin-generated link. */
-                token: components["parameters"]["InviteToken"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -1720,26 +1831,15 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            /** @description Invite expired or already used (single-use). Distinct from `400` on purpose. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            400: components["responses"]["AcceptInviteRejected"];
+            410: components["responses"]["AcceptInviteTokenGone"];
         };
     };
     optionsAcceptInvite: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description Single-use invite token from admin-generated link. */
-                token: components["parameters"]["InviteToken"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

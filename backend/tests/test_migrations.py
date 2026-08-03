@@ -291,6 +291,8 @@ def test_baseline_matches_model_metadata_and_security_fence(
         "WHERE rolname = 'dmitri_runtime') THEN "
             "CREATE ROLE dmitri_runtime WITH LOGIN PASSWORD NULL BYPASSRLS "
             "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; "
+            "ELSE "
+            "ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS; "
             "END IF; END $$"
         ),
         (
@@ -592,6 +594,11 @@ def test_live_migration_tolerates_preexisting_runtime_role(
         assert connection.execute(
             sa.text(
                 "SELECT has_schema_privilege('dmitri_runtime', 'public', 'USAGE')"
+            )
+        ).scalar_one()
+        assert connection.execute(
+            sa.text(
+                "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'dmitri_runtime'"
             )
         ).scalar_one()
 

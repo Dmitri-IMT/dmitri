@@ -300,12 +300,24 @@ def upgrade() -> None:
     # cluster another database already provisioned — which is every upgrade
     # after the first in a shared test/CI Postgres. Guarded here rather than in
     # a later revision: the role must exist before the GRANTs below.
+    #
+    # The ELSE branch is not redundant. Every application table has RLS ENABLEd
+    # and no policy, so BYPASSRLS is the only reason dmitri_runtime can write at
+    # all. A pre-existing role without it would pass this guard silently and
+    # leave migrations reporting success against a database the app cannot
+    # write to, so converge the attributes instead of only ensuring existence.
+    # The ALTER names only LOGIN and BYPASSRLS: naming NOSUPERUSER (even to
+    # clear it) requires the executing role to be SUPERUSER, which the migration
+    # runner is not under Supabase. The NO* attributes stay on the CREATE, where
+    # they cost nothing.
     op.execute(
         "DO $$ BEGIN "
         "IF NOT EXISTS (SELECT 1 FROM pg_roles "
         "WHERE rolname = 'dmitri_runtime') THEN "
         "CREATE ROLE dmitri_runtime WITH LOGIN PASSWORD NULL BYPASSRLS "
         "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; "
+        "ELSE "
+        "ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS; "
         "END IF; END $$"
     )
     op.execute(

@@ -32,6 +32,9 @@ from api.schemas.read import (
 )
 from api.services.hosts import highest_severity, open_ports_count
 
+DEFAULT_PAGE = 1
+DEFAULT_PER_PAGE = 20
+
 _SCAN_SORT_COLUMNS = {
     "timestamp": ScanRecord.timestamp,
     "status": ScanRecord.status,
@@ -42,7 +45,11 @@ _SEVERITY_RANK_TO_LABEL = {rank: label for label, rank in SEVERITY_ORDER.items()
 
 
 def list_hosts(
-    session: Session, *, org_id: UUID, page: int = 1, per_page: int = 20
+    session: Session,
+    *,
+    org_id: UUID,
+    page: int = DEFAULT_PAGE,
+    per_page: int = DEFAULT_PER_PAGE,
 ) -> HostListResponse:
     total = session.exec(
         select(func.count())

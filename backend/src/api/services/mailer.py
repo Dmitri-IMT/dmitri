@@ -44,7 +44,7 @@ class Mailer(Protocol):
 
 def invite_link(token: str) -> str:
     base = get_settings().app_base_url.rstrip("/")
-    return f"{base}/invite/{token}"
+    return f"{base}/invite?token={token}"
 
 
 def reset_link(token: str) -> str:

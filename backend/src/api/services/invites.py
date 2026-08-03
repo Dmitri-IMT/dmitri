@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -33,6 +33,13 @@ class AlreadyMemberError(ValueError):
     pass
 
 
+class PendingInviteError(ValueError):
+    pass
+
+
+INVITE_LOCK_NAMESPACE = 8817
+
+
 def create_invite(
     session: Session,
     *,
@@ -41,6 +48,17 @@ def create_invite(
     role: str,
     mailer: Mailer,
 ) -> tuple[str, datetime]:
+    session.execute(
+        text(
+            "SELECT pg_advisory_xact_lock(:namespace, hashtext(:org_id || :email))"
+        ),
+        {
+            "namespace": INVITE_LOCK_NAMESPACE,
+            "org_id": str(org_id),
+            "email": email.lower(),
+        },
+    )
+
     existing = session.exec(
         select(User).where(
             func.lower(User.email) == email.lower(), User.org_id == org_id
@@ -48,6 +66,18 @@ def create_invite(
     ).first()
     if existing is not None:
         raise AlreadyMemberError("email is already a member of this org")
+
+    now = utc_now()
+    pending = session.exec(
+        select(Invite).where(
+            Invite.org_id == org_id,
+            func.lower(Invite.email) == email.lower(),
+            Invite.consumed_at.is_(None),
+            Invite.expires_at > now,
+        )
+    ).first()
+    if pending is not None:
+        raise PendingInviteError("email already has a pending invite")
 
     settings = get_settings()
     raw = secrets.token_urlsafe(32)

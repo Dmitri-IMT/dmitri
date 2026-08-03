@@ -8,15 +8,20 @@ from sqlmodel import Session
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
 from api.schemas.read import HostDetailResponse, HostListResponse
-from api.services.read import get_host_detail, list_hosts
+from api.services.read import (
+    DEFAULT_PAGE,
+    DEFAULT_PER_PAGE,
+    get_host_detail,
+    list_hosts,
+)
 
 router = APIRouter()
 
 
 @router.get("/api/v1/hosts", response_model=HostListResponse)
 def read_hosts(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    page: int = Query(DEFAULT_PAGE, ge=1),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=100),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
 ) -> HostListResponse:

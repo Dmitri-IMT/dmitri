@@ -112,8 +112,10 @@ def reset_password_route(
 ) -> None:
     try:
         reset_password(session, token=body.token, new_password=body.new_password)
-    except (InvalidResetTokenError, PasswordPolicyError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except InvalidResetTokenError as exc:
+        raise ApiError(410, str(exc), code="invalid_reset_token") from exc
+    except PasswordPolicyError as exc:
+        raise ApiError(400, str(exc), code="password_policy_violation") from exc
 
 
 def auth_preflight() -> None:

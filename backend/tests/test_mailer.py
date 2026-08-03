@@ -34,7 +34,7 @@ def _mail_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 
 def test_invite_link_uses_documented_route() -> None:
-    assert invite_link(TOKEN) == f"https://dmitri.peirce.dev/invite/{TOKEN}"
+    assert invite_link(TOKEN) == f"https://dmitri.peirce.dev/invite?token={TOKEN}"
 
 
 def test_reset_link_uses_documented_route() -> None:
@@ -116,7 +116,7 @@ def test_resend_mailer_posts_plain_text_invite(sent_emails) -> None:
     assert payload["from"] == "Dmitri <no-reply@mail.peirce.dev>"
     assert payload["to"] == ["user@example.com"]
     assert "html" not in payload
-    assert f"https://dmitri.peirce.dev/invite/{TOKEN}" in payload["text"]
+    assert f"https://dmitri.peirce.dev/invite?token={TOKEN}" in payload["text"]
 
 
 def test_resend_mailer_posts_reset_link(sent_emails) -> None:

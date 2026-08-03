@@ -19,7 +19,7 @@ AUTH_POST_PATHS = (
 
 INVITE_POST_PATHS = (
     "/api/v1/invites",
-    "/api/v1/invites/some-token/accept",
+    "/api/v1/invites/accept",
 )
 
 
@@ -119,8 +119,8 @@ def test_invite_routes_and_preflights_appear_in_app_routes() -> None:
 
     assert ("/api/v1/invites", "POST") in registered
     assert ("/api/v1/invites", "OPTIONS") in registered
-    assert ("/api/v1/invites/{token}/accept", "POST") in registered
-    assert ("/api/v1/invites/{token}/accept", "OPTIONS") in registered
+    assert ("/api/v1/invites/accept", "POST") in registered
+    assert ("/api/v1/invites/accept", "OPTIONS") in registered
 
 
 READ_ROUTES = (

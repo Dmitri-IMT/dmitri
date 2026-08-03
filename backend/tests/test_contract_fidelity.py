@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,17 @@ from api.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "contracts" / "openapi" / "openapi.yaml"
+ROUTERS_DIR = REPO_ROOT / "backend" / "src" / "api" / "routers"
+
+ERROR_RESPONSE_ROUTES = {
+    "PasswordChangeRejected": ("auth.py", "change_password_route", 400),
+    "ResetPasswordRejected": ("auth.py", "reset_password_route", 400),
+    "ResetTokenGone": ("auth.py", "reset_password_route", 410),
+    "AcceptInviteRejected": ("invites.py", "accept_invite_route", 400),
+    "AcceptInviteTokenGone": ("invites.py", "accept_invite_route", 410),
+    "InviteCreateRejected": ("invites.py", "create_invite_route", 400),
+    "InviteAlreadyPending": ("invites.py", "create_invite_route", 409),
+}
 
 SCHEMA_NAMES = (
     "ScanSummary",
@@ -159,3 +171,50 @@ def test_query_parameters_match_contract(path: str):
     assert set(contract_params) == set(app_params)
     for name in contract_params:
         assert contract_params[name] == app_params[name]
+
+
+def _contract_error_codes(spec: dict[str, Any], response_name: str) -> set[str]:
+    response = spec["components"]["responses"][response_name]
+    schema = response["content"]["application/json"]["schema"]
+    for part in schema["allOf"]:
+        part = _resolve_ref(spec, part)
+        properties = part.get("properties", {})
+        if "error" not in properties:
+            continue
+        error_schema = _resolve_ref(spec, properties["error"])
+        code_schema = error_schema.get("properties", {}).get("code", {})
+        if "enum" in code_schema:
+            return set(code_schema["enum"])
+    raise AssertionError(f"{response_name} has no error.code enum")
+
+
+def _route_error_codes_by_status(
+    router_file: str, function_name: str
+) -> dict[int, set[str]]:
+    tree = ast.parse((ROUTERS_DIR / router_file).read_text())
+    codes_by_status: dict[int, set[str]] = {}
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == function_name
+    )
+    for node in ast.walk(function):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        if node.func.id != "ApiError":
+            continue
+        status = node.args[0].value
+        code = next(kw.value.value for kw in node.keywords if kw.arg == "code")
+        codes_by_status.setdefault(status, set()).add(code)
+    return codes_by_status
+
+
+@pytest.mark.parametrize("response_name", list(ERROR_RESPONSE_ROUTES))
+def test_error_code_fidelity(response_name: str):
+    contract = _load_contract()
+    contract_codes = _contract_error_codes(contract, response_name)
+    router_file, function_name, status = ERROR_RESPONSE_ROUTES[response_name]
+    route_codes = _route_error_codes_by_status(router_file, function_name).get(
+        status, set()
+    )
+    assert route_codes == contract_codes

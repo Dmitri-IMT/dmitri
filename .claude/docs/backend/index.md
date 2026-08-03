@@ -36,4 +36,4 @@ channel yet (the daemon is DMI-66), so delivery is exercised against fake socket
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and eleven revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, and agent public keys — plus Supabase RLS hardening and the dmitri_runtime role.
+* [Backend database migrations](./migrations.md) — The Alembic env and thirteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check and command delivery — plus Supabase RLS hardening and the dmitri_runtime role.

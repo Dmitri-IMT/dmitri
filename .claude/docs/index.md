@@ -53,7 +53,7 @@ FastAPI API (read path + auth + invites wired) + the CVE-enrichment worker. Full
 * [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth and invite request/response models.
 * [backend/services](./backend/services.md) — persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and eleven revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, and agent public keys — plus Supabase RLS hardening and the dmitri_runtime role.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and thirteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check and command delivery — plus Supabase RLS hardening and the dmitri_runtime role.
 
 ## Frontend (first vertical slice)
 

@@ -25,5 +25,6 @@ class InviteCreatedResponse(BaseModel):
 class AcceptInviteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    token: str
     email: str
     password: constr(min_length=MIN_LENGTH)

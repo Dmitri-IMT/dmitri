@@ -128,6 +128,100 @@ def test_create_invite_same_org_member_raises_already_member(
     assert administrative_session.exec(select(Invite)).all() == []
 
 
+def test_create_invite_live_invite_raises_pending_invite_error_and_mints_none(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    mailer = FakeMailer()
+    invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email="new@corp.com",
+        role="viewer",
+        mailer=mailer,
+    )
+
+    with pytest.raises(invites.PendingInviteError):
+        invites.create_invite(
+            administrative_session,
+            org_id=org.id,
+            email="new@corp.com",
+            role="admin",
+            mailer=mailer,
+        )
+
+    rows = administrative_session.exec(select(Invite)).all()
+    assert len(rows) == 1
+    assert len(mailer.calls) == 1
+
+
+def test_create_invite_pending_check_is_case_insensitive(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    mailer = FakeMailer()
+    invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email="bob@corp.com",
+        role="viewer",
+        mailer=mailer,
+    )
+
+    with pytest.raises(invites.PendingInviteError):
+        invites.create_invite(
+            administrative_session,
+            org_id=org.id,
+            email="Bob@corp.com",
+            role="admin",
+            mailer=mailer,
+        )
+
+    rows = administrative_session.exec(select(Invite)).all()
+    assert len(rows) == 1
+    assert len(mailer.calls) == 1
+
+
+def test_create_invite_consumed_invite_can_be_reissued(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, _raw = _seed_invite(administrative_session, org_id=org.id, consumed=True)
+
+    raw_token, _expires_at = invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email=invite.email,
+        role="viewer",
+        mailer=FakeMailer(),
+    )
+
+    assert raw_token
+    rows = administrative_session.exec(select(Invite)).all()
+    assert len(rows) == 2
+
+
+def test_create_invite_expired_invite_can_be_reissued(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, _raw = _seed_invite(
+        administrative_session, org_id=org.id, expires_delta=timedelta(hours=-1)
+    )
+
+    raw_token, _expires_at = invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email=invite.email,
+        role="viewer",
+        mailer=FakeMailer(),
+    )
+
+    assert raw_token
+    rows = administrative_session.exec(select(Invite)).all()
+    assert len(rows) == 2
+
+
 def test_create_invite_other_org_member_still_creates_invite(
     administrative_session: Session,
 ) -> None:
