@@ -378,6 +378,39 @@ def test_get_host_by_id_happy_path(
     assert body["scan_history"][0]["scan_id"] == str(seeded["scan"].scan_id)
 
 
+def test_mac_less_host_is_listed_and_readable(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    now = datetime.now(timezone.utc)
+    mac_less = HostRecord(
+        identity_key="ip:192.168.1.30",
+        org_id=seeded["org"].id,
+        ip="192.168.1.30",
+        mac=None,
+        hostname="host-routed",
+        vendor="Unknown",
+        open_ports_count=0,
+        highest_severity=None,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    session.add(mac_less)
+    session.commit()
+
+    headers = bearer_headers(seeded["org"].id, "admin")
+    listed = client.get("/api/v1/hosts", headers=headers)
+    assert listed.status_code == 200
+    row = next(
+        item for item in listed.json()["data"] if item["host_id"] == str(mac_less.id)
+    )
+    assert row["mac"] is None
+
+    detail = client.get(f"/api/v1/hosts/{mac_less.id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["mac"] is None
+
+
 def test_get_host_by_id_unknown_returns_404(
     client: TestClient, session: Session, bearer_headers
 ) -> None:
@@ -405,10 +438,8 @@ def test_get_scan_by_id_happy_path(
     client: TestClient, session: Session, bearer_headers
 ) -> None:
     seeded = _seed(session)
-    response = client.get(
-        f"/api/v1/scans/{seeded['scan'].scan_id}",
-        headers=bearer_headers(seeded["org"].id, "viewer"),
-    )
+    headers = bearer_headers(seeded["org"].id, "viewer")
+    response = client.get(f"/api/v1/scans/{seeded['scan'].scan_id}", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["scan_id"] == str(seeded["scan"].scan_id)
@@ -417,8 +448,20 @@ def test_get_scan_by_id_happy_path(
     assert host_ids == {str(seeded["host"].id), str(seeded["other_host"].id)}
     for row in body["hosts"]:
         assert row["host_id"] is not None
-    finding_host_ids = {f["host_id"] for f in body["findings"]}
-    assert finding_host_ids == {str(seeded["host"].id), str(seeded["other_host"].id)}
+        resolved = client.get(f"/api/v1/hosts/{row['host_id']}", headers=headers)
+        assert resolved.status_code == 200
+        assert resolved.json()["host_id"] == row["host_id"]
+        assert resolved.json()["ip"] == row["ip"]
+
+    expected_finding_host_ids = {
+        str(seeded["finding"].finding_id): str(seeded["host"].id),
+        str(seeded["other_finding"].finding_id): str(seeded["other_host"].id),
+    }
+    assert {f["finding_id"] for f in body["findings"]} == set(
+        expected_finding_host_ids
+    )
+    for finding in body["findings"]:
+        assert finding["host_id"] == expected_finding_host_ids[finding["finding_id"]]
 
 
 def test_get_scan_by_id_unknown_returns_404(

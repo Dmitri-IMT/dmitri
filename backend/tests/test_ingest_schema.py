@@ -50,6 +50,32 @@ def test_scan_result_rejects_devices_field_without_hosts():
         ScanResult.model_validate(payload)
 
 
+def test_scan_result_rejects_ipv6_host_address():
+    payload = _base_payload()
+    payload["hosts"][0]["ip"] = "2001:db8::1"
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanResult.model_validate(payload)
+
+
+def test_scan_result_rejects_ipv6_finding_address():
+    payload = _base_payload(
+        findings=[
+            {
+                "ip": "2001:db8::1",
+                "severity": "high",
+                "title": "Vulnerable service",
+                "description": "A vulnerable service was found.",
+                "recommendation": "Patch it.",
+                "evidence": "Some evidence.",
+            }
+        ]
+    )
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanResult.model_validate(payload)
+
+
 def test_host_importable_from_api_schemas():
     host = Host(ip="10.0.0.1", hostname="router", vendor="Acme", mac=None)
 
