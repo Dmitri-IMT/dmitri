@@ -286,9 +286,9 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Screen | Route | Shell | Roles | Flow | Status |
 | --- | --- | --- | --- | --- | --- |
 | Login | `/login` | outside | public | B1 | ◐ (C16) |
-| Accept invite | `/invite/:token` | outside | public | B2 | ◐ (C14) |
+| Accept invite | `/invite?token=…` | outside | public | B2 | ◐ (C14) |
 | Forgot password | `/forgot-password` | outside | public | B1 | ◐ |
-| Reset password | `/reset-password?token=…` | outside | public | B1 | ◐ (C15) |
+| Reset password | `/reset-password?token=…` | outside | public | B1 | ✅ (C15 resolved) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
 | Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
 | Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C10) |
@@ -436,20 +436,22 @@ to decide what to render.
 
 ### ACCEPT INVITE
 
-**Route:** `/invite/:token` · **Shell:** outside · **Roles:** public · **Flow:** B2
+**Route:** `/invite?token=…` · **Shell:** outside · **Roles:** public · **Flow:** B2
 
 **Epicenter** — choosing a password. This is the first thing anyone ever does in Dmitri, and the
 account exists the moment it succeeds.
 
 **Data:**
-- `POST /api/v1/invites/{token}/accept` — body `{ email, password }` (`minLength: 12`).
+- `POST /api/v1/invites/accept` — body `{ token, email, password }` (`minLength: 12`). The invite
+  token moved from the URL path into the body in DMI-77 (it was being written to access logs), so
+  the route reads it from the request body and the emailed link is `/invite?token=…`.
 - **`201` returns a full `LoginResponse`.** ✅ **C7 RESOLVED — accepting an invite issues a
   session.** Store the access token, and the invitee lands on **HOME**, in its first-run blank state
   (B2). They are never sent back to LOGIN to type the password they just chose.
 - **`410`** — invite expired or already used (**not** `400`; single-use, 24–72h TTL per
   [`AUTH.md`](../roadmap/AUTH.md)). **`400`** — password rejected by policy.
 
-**The screen cannot greet you — 🔓 C14.** There is **no `GET /invites/{token}`**, so this page knows
+**The screen cannot greet you — 🔓 C14.** There is **no `GET /invites?token=…`**, so this page knows
 *nothing*: not the org, not the role, not even the email the invite was sent to. Two consequences,
 both bad:
 - It cannot say *"You've been invited to Acme as a viewer"* — the one sentence that would tell a
@@ -520,9 +522,10 @@ Dead link (410) — the form is gone:
 ```
 
 **Open questions:**
-1. **C14** — no `GET /invites/{token}`. Costs the greeting *and* forces the invitee to type their
+1. **C14** — no `GET /invites?token=…`. Costs the greeting *and* forces the invitee to type their
    email from memory. Resolving it lets the screen prefill the email, name the org, and state the
-   role — and lets a bad link fail honestly instead of vaguely.
+   role — and lets a bad link fail honestly instead of vaguely. ⚠️ Whatever shape it takes, the
+   token stays out of the **path** (DMI-77) — query string, or a `POST` with the token in the body.
 
 ---
 
@@ -610,14 +613,17 @@ Confirmed — the form is replaced:
   the user logs in with the password they just set. That is the correct edge — it proves the
   password works and re-arms the recall the 7-day refresh window exists to encourage
   ([`AUTH.md`](../roadmap/AUTH.md) → Sessions).
-- `400` → **two different failures wearing one status. 🔓 C15.**
+- `410 invalid_reset_token` → the link is dead (never issued, already used, or expired). Remove the
+  form; tell the user to request a new one.
+- `400 password_policy_violation` → stay on the form; inline error under the new-password field.
 
-**The `400` is ambiguous, and the two meanings need opposite responses — 🔓 C15.** A dead or
-already-used reset link and a too-weak password both return `400`, and `ErrorBody.code` is an
-unconstrained `string` in the contract, so there is nothing safe to switch on. But *"request a new
-link"* and *"pick a better password"* are opposite instructions, and guessing wrong sends the user
-in the exactly wrong direction. Until distinct `error.code` values are specified, this screen
-**cannot word its most likely failure correctly.** The copy below assumes they exist.
+**✅ C15 RESOLVED 2026-08-03 (DMI-77).** The two failures no longer share a status *or* a code. A
+dead link is `410` with `error.code: invalid_reset_token`; a rejected password is `400` with
+`password_policy_violation`. Both codes are pinned by an `enum` in the contract
+(`ResetTokenGone` / `ResetPasswordRejected`) and gated by `test_contract_fidelity.py`, so the screen
+can switch on `error.code` safely. The token is checked **before** the policy, so a dead link plus a
+weak password yields the `410` — the link is the thing to fix first. `410` matches accept-invite, so
+both token screens share one pattern.
 
 **Missing token:** `/reset-password` with no `?token=` never renders the form — there is nothing to
 submit. It shows the dead-link state directly.
@@ -1290,7 +1296,7 @@ is how you ask for it.
   `InviteCreatedResponse`: `{ invite_token, expires_at }`.**
 - **The backend emails the invite, *and* the screen shows the link. ✅ Decided 2026-07-13** —
   transactional email is in scope (provider TBD, [C17](#users--invites)); the backend sends
-  `https://<app>/invite/<invite_token>` to the invitee.
+  `https://<app>/invite?token=<invite_token>` to the invitee.
 - **🔓 C4** — listing users, listing pending invites, changing a role and revoking an invite have
   **no endpoints**.
 - **🔓 C18** — `POST /invites` documents **only a `201`**. Inviting an email that already has an
@@ -1376,7 +1382,7 @@ Created — the form is replaced by the confirmation:
 |                                                                              |
 |   Or send them this link yourself:                                           |
 |   +----------------------------------------------------------------+        |
-|   | https://app.dmitri.io/invite/8f3c9a1e-…            [ Copy link ]|        |
+|   | https://app.dmitri.io/invite?token=8f3c9a1e-…      [ Copy link ]|        |
 |   +----------------------------------------------------------------+        |
 |   This is the only time you'll see this link. If they never get the          |
 |   email, copy it now.                                           (muted)      |

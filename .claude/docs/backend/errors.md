@@ -4,7 +4,7 @@ title: Backend API error envelope
 description: ApiError(HTTPException) with per-site code overrides and the global handlers that wrap every HTTPException and unhandled Exception into the contract ErrorResponse shape.
 resource: backend/src/api/errors.py
 tags: [backend, errors, fastapi, contract, envelope]
-timestamp: 2026-07-27T21:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Backend API error envelope
@@ -13,7 +13,8 @@ timestamp: 2026-07-27T21:00:00Z
 
 `errors.py` is the single place the backend defines how API failures are shaped on the wire.
 `ApiError` subclasses `HTTPException` and carries an explicit `code` string for the few routes
-that need a machine-readable discriminator beyond the HTTP status (today: change-password only).
+that need a machine-readable discriminator beyond the HTTP status (today: the four auth/invite
+write surfaces — change-password, reset-password, create-invite, accept-invite).
 Everything else keeps raising bare `HTTPException` and gets a status-derived default code from
 `DEFAULT_CODES_BY_STATUS`. The global handlers in [`main.py`](/backend/api.md) turn both into
 `{"error": {"code", "message", "details": {}}}` — matching `contracts/openapi/openapi.yaml`.
@@ -39,8 +40,15 @@ Everything else keeps raising bare `HTTPException` and gets a status-derived def
 - **Downstream** — the SPA and contract consumers read `error.code`; C13 change-password uses
   `wrong_current_password` / `password_policy_violation` at **400** (never 401) — see
   [auth](/backend/auth.md).
-- **Explicit override call site** — `change_password_route` in `routers/auth.py` only; reset/accept
-  invite codes are deferred to DMI-77.
+- **Explicit override call sites** — since DMI-77 closed C15/C18, all four auth/invite surfaces
+  override: `change_password_route` and `reset_password_route` in `routers/auth.py`,
+  `create_invite_route` and `accept_invite_route` in `routers/invites.py`. Ten pinned codes across
+  seven `components/responses` entries, listed in [auth](/backend/auth.md). Every other raiser in
+  the app still falls back to `DEFAULT_CODES_BY_STATUS`.
+- **The overrides are contract-gated.** `test_contract_fidelity.py::test_error_code_fidelity`
+  AST-extracts each route's `code=` literals per status and asserts exact set equality with the
+  contract's pinned `enum`s, so a code the contract does not declare — or a declared code no route
+  emits — fails the suite.
 
 ## Notes / gotchas
 
@@ -58,7 +66,10 @@ Everything else keeps raising bare `HTTPException` and gets a status-derived def
   logged**: the log file is not a safer home for a plaintext password than the response body.
   Pinned by `test_validation_failure_does_not_echo_submitted_password`.
 - `details` is `{}` everywhere except `422`, which carries `{"field": ...}` for the first error
-  only. DMI-77 may add more.
+  only — DMI-77 pinned codes but added no `details` payloads.
+- **A dead token and a rejected password no longer share a status.** Reset-password answers `410`
+  for the token and `400` for the policy; accept-invite does the same. The token check runs first in
+  both services, so the `410` wins when both are wrong. That precedence is user-visible and tested.
 
 # Citations
 

@@ -31,7 +31,7 @@ Per-layer gates:
 pointing at a live `dmitri_test`, `conftest.py` *skips* every DB-backed test instead of
 failing — a bare `uv run pytest` prints a green ~368 passed / 251 skipped and proves
 almost nothing about services, routers, or migrations. With the database up it is
-619 passed / 0 skipped, which is what CI runs.
+665 passed / 0 skipped (2026-08-03, after DMI-77), which is what CI runs.
 
 ```bash
 ./database.sh --test   # start Supabase, ensure dmitri_test, run the backend suite

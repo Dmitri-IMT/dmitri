@@ -5,6 +5,44 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-03
 
+* **Update**: `read_hosts`'s paging defaults stopped being written twice — `backend/routers.md`,
+  `backend/services.md`. `services/read.py` exports `DEFAULT_PAGE = 1` / `DEFAULT_PER_PAGE = 20` and
+  `routers/hosts.py` imports them into its `Query(...)` declarations, so the route's advertised
+  default and the service's fallback can no longer drift apart silently — a mismatch would page
+  differently depending on whether the caller omitted the param or another caller invoked the
+  service directly. Behaviour is unchanged (`1`/`20` either way); `read_scans`/`read_findings` keep
+  their inline literals, since their services take no defaults. Also re-synced the five drifted
+  `services/read.py` line refs in `backend/services.md` (`get_host_detail` and below were four
+  lines stale before this change, seven after it).
+* **Update**: `dmitri_runtime` now **converges** instead of merely existing — `backend/migrations.md`.
+  The baseline's role statement gained an `ELSE ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS`.
+  Checking only `IF NOT EXISTS` meant a pre-existing role kept whatever attributes it had, and since
+  RLS is `ENABLE`d on every application table with **no policy anywhere**, a role without
+  `BYPASSRLS` is denied every read and write — so migrations reported success against a database the
+  app could not write to. Surfaced as an order-dependent failure in
+  `test_runtime_role_allows_engine_work_and_rejects_privilege_expansion` (the test before it creates
+  the role bare), which is why it passed in isolation. The `ALTER` names only `LOGIN` and
+  `BYPASSRLS`: naming `NOSUPERUSER` even to clear it requires the executor to be `SUPERUSER`, which
+  the migration runner is not under Supabase. Pinned by an `rolbypassrls` assertion in
+  `test_live_migration_tolerates_preexisting_runtime_role`. Backend suite: 665 passed, 0 skipped.
+* **Update**: index listings for `backend/migrations` re-synced to its frontmatter description
+  ("eleven revisions" → "thirteen") in `index.md` and `backend/index.md`.
+* **Update**: auth + invite error codes pinned, and the invite token left the URL (DMI-77, spec
+  023) — `backend/auth.md`, `backend/errors.md`, `backend/schemas.md` and `contracts.md`.
+  **Codes:** reset-password, accept-invite and create-invite join change-password in raising
+  `ApiError` with a pinned `error.code`; ten codes across seven `components/responses` entries,
+  replacing the `bad_request` default that made *"your link is dead"* and *"your password is too
+  weak"* indistinguishable to the SPA. **Statuses split:** a dead reset token is now `410` (was
+  `400`), matching accept-invite; re-inviting an address that already holds a live invite is `409`.
+  **Token relocated:** `POST /api/v1/invites/{token}/accept` → `POST /api/v1/invites/accept` with
+  the token in the body — as a path parameter it was written to access logs by uvicorn's default
+  logger and any edge proxy. `invite_link()` moved to the query form to match `reset_link()`.
+  **New guard:** `test_contract_fidelity.py` now AST-extracts each route's `code=` literals and
+  asserts exact set equality against the contract enums, so a typo can no longer ship green.
+  **New concurrency guard:** `create_invite` takes a `pg_advisory_xact_lock` before its checks —
+  `Invite.role` is per-row, so two racing invites with different roles let the invitee choose their
+  own privilege. No migration and no partial index (the predicate is not IMMUTABLE and nothing
+  sweeps expired invites).
 * **Update**: IPv4 narrowing threaded to the agent side — `hardware-agent/normalize.md`'s
   `HostPayload`/`FindingPayload` rows now read `IPv4Address` (was `IPvAnyAddress`) and note the
   nullable `mac`/`ip`. Both ends of the ingest contract agree again: the backend began rejecting

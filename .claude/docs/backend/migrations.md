@@ -4,7 +4,7 @@ title: Backend database migrations
 description: The Alembic env and thirteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check and command delivery — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Backend database migrations
@@ -32,7 +32,7 @@ new table.
 | `_migration_url()` | Requires a **separate** `DATABASE_URL_DIRECT` env var (the runtime pooler runs in transaction mode and cannot run DDL); normalized via `normalize_postgres_url`. | `backend/alembic/env.py:19` |
 | `run_migrations_online()` | Builds a `NullPool` engine from the direct URL and runs migrations. | `backend/alembic/env.py:42` |
 | `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. | `backend/alembic/versions/20260715_01_baseline.py:64` |
-| RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. The `CREATE ROLE` is wrapped in an `IF NOT EXISTS (SELECT 1 FROM pg_roles ...)` guard and the downgrade's `DROP ROLE` swallows `dependent_objects_still_exist` — see the role note below. | `backend/alembic/versions/20260715_01_baseline.py:293` |
+| RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. The role statement is an `IF NOT EXISTS (SELECT 1 FROM pg_roles …) … ELSE ALTER ROLE … LOGIN BYPASSRLS` block, so a pre-existing role **converges** instead of being left as found; the downgrade's `DROP ROLE` swallows `dependent_objects_still_exist` — see the role notes below. | `backend/alembic/versions/20260715_01_baseline.py:293` |
 | `upgrade()` (rev `20260716_02`) | Adds `orgs`/`users`/`invites` (role checks + case-insensitive email unique index), a nullable `org_id` FK on `scans`, and extends RLS/revoke/grant to the identity tables. | `backend/alembic/versions/20260716_02_identity_schema.py:35` |
 | `upgrade()` (rev `20260722_03`, `scan_mode_status`) | Drops `scans.target_mode`/`scans.scan_profile`, adds `scans.scan_mode` (not null) and `scans.status` (not null, server default `completed`). | `backend/alembic/versions/20260722_03_scan_mode_status.py:13` |
 | `upgrade()` (rev `20260722_04`, `scan_host_rename`) | Renames table `devices`→`scan_hosts` (and its id sequence), renames `ports.device_id`/`findings.device_id`→`scan_host_id`. | `backend/alembic/versions/20260722_04_scan_host_rename.py:11` |
@@ -73,6 +73,20 @@ new table.
 - **`BYPASSRLS` but not superuser.** `dmitri_runtime` bypasses the RLS policies (the app is the trust
   boundary) while `anon`/`authenticated` — Supabase's PostgREST roles — are fully revoked, so the
   tables are unreachable through Supabase's auto-generated API.
+- **`BYPASSRLS` is load-bearing, and the guard converges it.** RLS is `ENABLE`d on every application
+  table and there is **no `CREATE POLICY` anywhere in the repo** — so a role without `BYPASSRLS` is
+  denied every read and write by default, not merely scoped. The existence guard above therefore has
+  an `ELSE ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS`: checking only existence let a
+  pre-existing role keep whatever attributes it had, so migrations reported success against a
+  database the app could not write to. Fixed 2026-08-03; pinned by
+  `test_live_migration_tolerates_preexisting_runtime_role`, which creates the role bare and asserts
+  `rolbypassrls` after migrating to head. The `ALTER` names **only** `LOGIN` and `BYPASSRLS` —
+  naming `NOSUPERUSER`, even to clear it, requires the executing role to be `SUPERUSER`, which the
+  migration runner is not under Supabase. Consequence: the `NO*` hardening applies on creation only,
+  so a pre-existing role holding e.g. `CREATEROLE` is not de-escalated here.
+- **Editing the baseline only reaches databases that migrate from base.** A cluster already past
+  `20260715_01` does not re-run it; a misconfigured role there needs a one-off
+  `ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS` or a follow-up revision.
 - **No `DELETE` grant — except on `agent_nonces`.** Every other table grants `dmitri_runtime` only
   `SELECT/INSERT/UPDATE`, so persistence is append/update-only. `agent_nonces` inverts that: it is
   granted `SELECT/INSERT/DELETE` and **withheld** `UPDATE`, because a nonce is written once, never

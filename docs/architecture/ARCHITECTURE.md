@@ -232,7 +232,7 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
   - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)
   - `POST /api/v1/auth/login` → Login (email/senha)
   - `POST /api/v1/auth/refresh` / `POST /api/v1/auth/logout` → Ciclo de vida da sessão
-  - `POST /api/v1/invites` + `POST /api/v1/invites/{token}/accept` → Convite e criação de conta (não há auto-registro)
+  - `POST /api/v1/invites` + `POST /api/v1/invites/accept` → Convite e criação de conta (não há auto-registro; o token do convite vai no corpo da requisição, não na URL)
   - `POST /api/v1/auth/change-password`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password` → Troca e redefinição de senha
   - `GET /api/v1/users/me` → Perfil do usuário autenticado
   - `POST /api/v1/agents/{agent_id}/commands` → Disparar um scan (**Scan now**)

@@ -76,7 +76,7 @@ dependency); the contract's `format: email` is advisory.
 |------|-------------------|-----|
 | `CreateInviteRequest` | `email`, `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. | `backend/src/api/schemas/invites.py:11` |
 | `InviteCreatedResponse` | `invite_token`, `expires_at`. | `backend/src/api/schemas/invites.py:18` |
-| `AcceptInviteRequest` | `email`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. | `backend/src/api/schemas/invites.py:25` |
+| `AcceptInviteRequest` | `token`, `email`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. `token` moved here from the URL path in DMI-77 to keep a live credential out of access logs. | `backend/src/api/schemas/invites.py:25` |
 
 `extra="forbid"` on all three is load-bearing, not stylistic: it is what turns an `org_id` smuggled
 into the create-invite body into a **422** instead of a silently ignored field. The invited org
