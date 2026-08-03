@@ -171,8 +171,12 @@ Reset tokens must be:
   used / delete) inside the same transaction that performs the password change,
   so a token can never be redeemed twice.
 - **Short-lived** — enforce a limited lifetime / expiry; store an `expires_at`
-  and reject on/after it. A short TTL (minutes to ~an hour) is standard; our ~1h
-  fits.
+  and reject on/after it. OWASP mandates expiry but **names no duration**, and no
+  primary source gives one for this case. The earlier claim here — that "minutes
+  to ~an hour is standard" and our ~1h "fits" — was inference, not citation, and
+  is **retracted (2026-08-03)**: our 60-minute reset TTL is neither endorsed nor
+  condemned by any source. See
+  [`emailed-token-link-placement.md`](emailed-token-link-placement.md) §TTLs.
 - **Hashed at rest** — "Stored in a secure manner, as discussed in the Password
   Storage Cheat Sheet" (store `SHA-256(raw)`, not the raw token).
 - **No enumeration** — "Return a consistent message for both existent and
