@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Response
 from sqlmodel import Session
 
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_admin
+from api.errors import ApiError
 from api.schemas.auth import LoginResponse
 from api.schemas.invites import (
     AcceptInviteRequest,
@@ -16,6 +17,7 @@ from api.services.invites import (
     DuplicateUserError,
     InviteEmailMismatchError,
     InviteTokenError,
+    PendingInviteError,
     accept_invite,
     create_invite,
 )
@@ -44,29 +46,30 @@ def create_invite_route(
             mailer=get_mailer(background),
         )
     except AlreadyMemberError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(400, str(exc), code="email_already_member") from exc
+    except PendingInviteError as exc:
+        raise ApiError(409, str(exc), code="invite_already_pending") from exc
     return InviteCreatedResponse(invite_token=invite_token, expires_at=expires_at)
 
 
-@router.post("/api/v1/invites/{token}/accept", status_code=201)
+@router.post("/api/v1/invites/accept", status_code=201)
 def accept_invite_route(
-    token: str,
     body: AcceptInviteRequest,
     response: Response,
     session: Session = Depends(get_session),
 ) -> LoginResponse:
     try:
         access_token, refresh_token, expires_in = accept_invite(
-            session, token=token, email=body.email, password=body.password
+            session, token=body.token, email=body.email, password=body.password
         )
     except InviteTokenError as exc:
-        raise HTTPException(status_code=410, detail=str(exc)) from exc
-    except (
-        InviteEmailMismatchError,
-        DuplicateUserError,
-        PasswordPolicyError,
-    ) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(410, str(exc), code="invalid_invite_token") from exc
+    except InviteEmailMismatchError as exc:
+        raise ApiError(400, str(exc), code="invite_email_mismatch") from exc
+    except DuplicateUserError as exc:
+        raise ApiError(400, str(exc), code="email_already_registered") from exc
+    except PasswordPolicyError as exc:
+        raise ApiError(400, str(exc), code="password_policy_violation") from exc
     return login_response(response, access_token, refresh_token, expires_in)
 
 

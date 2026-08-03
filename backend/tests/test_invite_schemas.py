@@ -51,21 +51,35 @@ def test_invite_created_response_rejects_extra_fields():
 
 def test_accept_invite_request_validates_good_payload():
     request = AcceptInviteRequest.model_validate(
-        {"email": "a@b.com", "password": "a" * 12}
+        {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 12}
     )
 
     assert request.password == "a" * 12
 
 
+def test_accept_invite_request_requires_token():
+    with pytest.raises(pydantic.ValidationError):
+        AcceptInviteRequest.model_validate(
+            {"email": "a@b.com", "password": "a" * 12}
+        )
+
+
 def test_accept_invite_request_rejects_short_password():
     with pytest.raises(pydantic.ValidationError):
-        AcceptInviteRequest.model_validate({"email": "a@b.com", "password": "a" * 11})
+        AcceptInviteRequest.model_validate(
+            {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 11}
+        )
 
 
 def test_accept_invite_request_rejects_extra_fields():
     with pytest.raises(pydantic.ValidationError):
         AcceptInviteRequest.model_validate(
-            {"email": "a@b.com", "password": "a" * 12, "org_id": "some-org"}
+            {
+                "token": "test-invite-token",
+                "email": "a@b.com",
+                "password": "a" * 12,
+                "org_id": "some-org",
+            }
         )
 
 
@@ -78,10 +92,10 @@ def test_accept_invite_request_password_min_length_tracks_constant(monkeypatch):
     try:
         with pytest.raises(pydantic.ValidationError):
             reloaded.AcceptInviteRequest.model_validate(
-                {"email": "a@b.com", "password": "a" * 19}
+                {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 19}
             )
         reloaded.AcceptInviteRequest.model_validate(
-            {"email": "a@b.com", "password": "a" * 20}
+            {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 20}
         )
     finally:
         monkeypatch.undo()
@@ -89,8 +103,8 @@ def test_accept_invite_request_password_min_length_tracks_constant(monkeypatch):
 
     with pytest.raises(pydantic.ValidationError):
         restored.AcceptInviteRequest.model_validate(
-            {"email": "a@b.com", "password": "a" * 11}
+            {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 11}
         )
     restored.AcceptInviteRequest.model_validate(
-        {"email": "a@b.com", "password": "a" * 12}
+        {"token": "test-invite-token", "email": "a@b.com", "password": "a" * 12}
     )

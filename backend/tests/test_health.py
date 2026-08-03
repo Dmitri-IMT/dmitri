@@ -51,8 +51,8 @@ EXPECTED_ROUTE_SURFACE = {
 } | {
     ("/api/v1/invites", "POST"),
     ("/api/v1/invites", "OPTIONS"),
-    ("/api/v1/invites/{token}/accept", "POST"),
-    ("/api/v1/invites/{token}/accept", "OPTIONS"),
+    ("/api/v1/invites/accept", "POST"),
+    ("/api/v1/invites/accept", "OPTIONS"),
     ("/api/v1/users/me", "GET"),
     ("/api/v1/agents/{agent_id}/commands", "POST"),
     ("/api/v1/agents/{agent_id}/commands", "OPTIONS"),
