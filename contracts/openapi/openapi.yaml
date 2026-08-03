@@ -1514,9 +1514,9 @@ components:
           type: string
           minLength: 1
         version:
-          type:
-            - string
-            - 'null'
+          anyOf:
+            - type: string
+            - type: 'null'
     HostPayload:
       type: object
       additionalProperties: false
@@ -1564,10 +1564,10 @@ components:
           type: string
           format: ipv4
         mac:
-          type:
-            - string
-            - 'null'
-          pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+          anyOf:
+            - type: string
+              pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+            - type: 'null'
         hostname:
           type: string
           minLength: 1
@@ -1578,7 +1578,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Port'
-          default: []
     FindingPayload:
       type: object
       additionalProperties: false
@@ -1785,22 +1784,22 @@ components:
           items:
             $ref: '#/components/schemas/FindingRecord'
         metadata:
-          type:
-            - object
-            - 'null'
-          additionalProperties:
-            oneOf:
-              - type: string
-              - type: integer
-              - type: number
-              - type: boolean
+          anyOf:
+            - type: object
+              additionalProperties:
+                oneOf:
+                  - type: string
+                  - type: integer
+                  - type: number
+                  - type: boolean
+            - type: 'null'
         status:
           $ref: '#/components/schemas/ScanStatus'
         command_id:
-          type:
-            - string
-            - 'null'
-          format: uuid
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
         host_count:
           type: integer
           minimum: 0
@@ -1845,8 +1844,10 @@ components:
           type: string
           format: ipv4
         mac:
-          type: string
-          pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+          anyOf:
+            - type: string
+              pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+            - type: 'null'
         hostname:
           type: string
         vendor:
@@ -1910,8 +1911,10 @@ components:
           type: string
           format: ipv4
         mac:
-          type: string
-          pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+          anyOf:
+            - type: string
+              pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+            - type: 'null'
         hostname:
           type: string
         vendor:

@@ -430,7 +430,6 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
-            /** @default [] */
             ports: components["schemas"]["Port"][];
         };
         FindingPayload: {
@@ -502,7 +501,6 @@ export interface components {
                 [key: string]: string | number | boolean;
             } | null;
             status: components["schemas"]["ScanStatus"];
-            /** Format: uuid */
             command_id?: string | null;
             host_count: number;
             finding_count: number;
@@ -517,7 +515,7 @@ export interface components {
             host_id: string;
             /** Format: ipv4 */
             ip: string;
-            mac: string;
+            mac: string | null;
             hostname: string;
             vendor: string;
             /** Format: date-time */
@@ -541,7 +539,7 @@ export interface components {
             host_id: string;
             /** Format: ipv4 */
             ip: string;
-            mac: string;
+            mac: string | null;
             hostname: string;
             vendor: string;
             /** Format: date-time */
