@@ -184,6 +184,41 @@ def test_scan_payload_rejects_devices_keyword() -> None:
     assert not hasattr(payload, "devices")
 
 
+def test_agent_models_emit_no_field_the_contract_forbids() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    for schema_name, model in (
+        ("ScanIngestRequest", ScanPayload),
+        ("HostPayload", HostPayload),
+        ("PortPayload", PortPayload),
+        ("FindingPayload", FindingPayload),
+    ):
+        schema = spec["components"]["schemas"][schema_name]
+        assert schema["additionalProperties"] is False
+        unknown = set(model.model_fields) - set(schema["properties"])
+        assert not unknown, f"{schema_name} would reject {sorted(unknown)}"
+
+
+def test_agent_models_emit_every_field_the_contract_requires() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    for schema_name, model in (
+        ("ScanIngestRequest", ScanPayload),
+        ("HostPayload", HostPayload),
+        ("PortPayload", PortPayload),
+        ("FindingPayload", FindingPayload),
+    ):
+        schema = spec["components"]["schemas"][schema_name]
+        missing = set(schema["required"]) - set(model.model_fields)
+        assert not missing, f"{schema_name} requires {sorted(missing)}"
+
+
+def test_port_payload_omits_cpes_which_the_contract_leaves_optional() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    schema = spec["components"]["schemas"]["PortPayload"]
+    assert "cpes" in schema["properties"]
+    assert "cpes" not in schema["required"]
+    assert "cpes" not in PortPayload.model_fields
+
+
 def test_health_503_references_database_unavailable_error() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     health_responses = spec["paths"]["/api/v1/health"]["get"]["responses"]
