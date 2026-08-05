@@ -4,7 +4,7 @@ title: hardware-agent — package overview
 description: What the hardware-agent package is, its scan pipeline, and the three front doors that drive it.
 resource: hardware-agent/src/agent/
 tags: [hardware-agent, scan-pipeline, overview]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # hardware-agent — package overview
@@ -12,8 +12,9 @@ timestamp: 2026-07-22T00:00:00Z
 `hardware-agent` is the Python package (`hardware-agent/src/agent/`) that *performs* scans — the
 [agent](/glossary.md) in domain terms. It runs an Nmap + NSE pipeline over a subnet, normalizes the
 raw XML into the shared [`ScanPayload`](/hardware-agent/normalize.md) contract, and writes the
-result to disk. It is the only Dmitri component in active development; there is no upload step yet.
-`AGENT_VERSION` / `APP_VERSION` is `0.1.4`.
+result to disk. Since DMI-65 it also *has* a signed upload client —
+[transport](/hardware-agent/transport.md) — but nothing in the package calls it yet; the pipeline
+still ends at the local file. `AGENT_VERSION` / `APP_VERSION` is `0.1.4`.
 
 ## The scan pipeline
 
@@ -53,12 +54,14 @@ rule guards):
 | Discovery stages | [discovery](/hardware-agent/discovery.md) |
 | Contracts + findings | [normalize](/hardware-agent/normalize.md) |
 | Network + XML helpers | [utils](/hardware-agent/utils.md) |
+| Signed ingest client (unwired) | [transport](/hardware-agent/transport.md) |
 | Textual TUI | [tui](/hardware-agent/tui.md) |
 
 ## Tech stack
 
 Python 3.13, Textual (TUI), Pydantic v2 (contracts), Nmap + NSE (engine), `psutil`, stdlib threads,
-`uv`. Installed console script: `dmitri = agent.cli:main`.
+`uv`, plus `httpx` + `cryptography` (added by DMI-65 for the ingest client). Installed console
+script: `dmitri = agent.cli:main`.
 
 # Citations
 

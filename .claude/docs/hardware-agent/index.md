@@ -19,6 +19,10 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 * [normalize](./normalize.md) — Pydantic wire contracts (`ScanPayload`) and the NSE-to-findings extractor.
 * [utils](./utils.md) — Local-network detection/connectivity checks and the Nmap/NSE XML parsers.
 
+## Upload
+
+* [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Built, not yet called (DMI-66).
+
 ## TUI
 
 * [tui](./tui.md) — The Textual application: app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.

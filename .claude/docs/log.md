@@ -5,6 +5,22 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-05
 
+* **Creation**: `hardware-agent/transport.md` — the device-side ingest client (DMI-65, spec 025).
+  New `agent.transport` package: `load_ingest_config` / `IngestConfig` / `IngestConfigError`,
+  `ScanIngestClient`, `SubmissionOutcome`, `SubmissionResult`. It signs the same canonical string
+  the backend's [device auth](./backend/device-auth.md) verifies, and is the opposite end of the
+  wire from DMI-63's ingest route. Also updated `hardware-agent/overview.md`,
+  `hardware-agent/index.md` (new "Upload" section) and `backend/device-auth.md`.
+  Three facts worth not re-deriving: the client is **built but called by nothing** — no `src/agent/`
+  module imports it, and wiring is DMI-66, so "no upload step yet" is now "no upload *caller* yet";
+  the retry loop rebuilds the whole envelope per attempt because the backend burns a verified nonce
+  *before* persisting, so reused headers would make a legitimate retry look like a replay `401`; and
+  the client does **no file I/O**, taking an in-memory `ScanPayload` so the local artifact is
+  untouched by success, failure, or a backend-assigned `scan_id` (applied to a `model_copy` only).
+  `httpx` + `cryptography` are now direct hardware-agent dependencies.
+* **Update**: `backend/device-auth.md` had a caveat left over from before DMI-63 — it said the HTTP
+  `require_agent` adapter was "built but still unmounted". It has been mounted on
+  `POST /api/v1/scans` since DMI-63; corrected while adding the DMI-65 cross-link.
 * **Update**: **ingest is wired** (DMI-63, spec 024) — `backend/routers.md`, `backend/api.md`,
   `backend/overview.md`, `backend/index.md`, `contracts.md`. `POST /api/v1/scans` is mounted as
   `ingestScan` behind the HTTP `require_agent` adapter, returning the contract's `202`

@@ -237,11 +237,11 @@ Auth → [`AUTH.md`](AUTH.md). Pi runtime → [`PI.md`](PI.md). Trigger UX → [
 
 Minimum technical path:
 
-- [ ] **Pi hardware acquired and base-configured** — see [`PI.md`](PI.md) (blocker: no Pi in possession today; procurement is DMI-55, cycle 6)  
-- [x] Supabase + Railway `nspi` live — DMI-52 (2026-07-28); frontend static deploy still open (DMI-91)  
-- [x] Alembic + identity schema per [`AUTH.md`](AUTH.md) Phase 1 — DMI-60, DMI-61, DMI-77  
-- [ ] Pi daemon + Pi → backend ingest (Ed25519 signature per AUTH Phase 1) — DMI-66, DMI-65, DMI-63  
-- [ ] Command queue + "Scan now" E2E (web → backend → Pi → results → web) — enqueue/delivery landed (DMI-64); E2E is DMI-67  
+- [ ] **Pi hardware acquired and base-configured** — see [`PI.md`](PI.md) (blocker: no Pi in possession today; procurement is DMI-55, cycle 6)
+- [x] Supabase + Railway `nspi` live — DMI-52 (2026-07-28); frontend static deploy still open (DMI-91)
+- [x] Alembic + identity schema per [`AUTH.md`](AUTH.md) Phase 1 — DMI-60, DMI-61, DMI-77
+- [ ] Pi daemon + Pi → backend ingest (Ed25519 signature per AUTH Phase 1) — DMI-66, DMI-65, DMI-63
+- [ ] Command queue + "Scan now" E2E (web → backend → Pi → results → web) — enqueue/delivery landed (DMI-64); E2E is DMI-67
 
 ---
 

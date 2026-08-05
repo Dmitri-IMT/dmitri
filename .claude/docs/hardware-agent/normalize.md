@@ -47,9 +47,17 @@ object — the seam that binds the agent to the (planned) backend.
   domain term **host** used everywhere else in the agent. See [glossary](/glossary.md).
 - `scan_mode` is `Literal["quick","standard","extensive","nspi","max"]` — no `full`; the legacy mode
   is being removed in favor of `max`.
-- The full OpenAPI surface diverges from what is implemented on the backend today; the backend's
-  read path (`GET /hosts`, `/scans/{id}`, `/findings`) is wired, ingest is not — see
-  [contracts](/contracts.md).
+- The full OpenAPI surface still diverges from what is implemented on the backend today, but ingest
+  is no longer the gap: DMI-63 mounted `POST /api/v1/scans` alongside the read path
+  (`GET /hosts`, `/scans/{id}`, `/findings`) — see [contracts](/contracts.md).
+- **These models are gated against the shared contract.** `hardware-agent/tests/test_contract_models.py`
+  asserts that every field the four payload models emit is a property of the matching
+  `contracts/openapi/openapi.yaml` schema, and that every contract-`required` field is present. All
+  four schemas declare `additionalProperties: false`, so a field added here without updating the
+  contract is a **`422`** at ingest, not a silently ignored extra. Contract-*optional* fields the
+  agent omits are allowed — `PortPayload.cpes` is the one live case and has its own pinning test, so
+  the gap stays visible instead of drifting. This is the agent-side mirror of
+  `backend/tests/test_contract_fidelity.py`; before it, only the `scan_mode` enum was checked.
 
 # Citations
 

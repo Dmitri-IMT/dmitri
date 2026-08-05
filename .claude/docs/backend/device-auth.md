@@ -4,7 +4,7 @@ title: Backend device auth — Ed25519 signatures, nonces, the agent gate
 description: The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, the transport-agnostic authenticate_agent core, and its require_agent / require_agent_ws adapters.
 resource: backend/src/api/dependencies/agent_auth.py
 tags: [backend, auth, device, ed25519, signatures, nonces, replay, agents, websocket]
-timestamp: 2026-07-27T18:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend device auth — Ed25519 signatures, nonces, the agent gate
@@ -19,8 +19,10 @@ database leak therefore exposes nothing forgeable, which is why ADR-015 (secret-
 was retired rather than implemented.
 
 Three modules make it up — a pure signature layer, a nonce store, and the gate that sequences them.
-**DMI-62 mounts the WebSocket adapter** on `WebSocket /api/v1/agents/{agent_id}/commands`; the HTTP
-`require_agent` adapter remains built but still unmounted (ingest/DMI-63).
+**DMI-62 mounts the WebSocket adapter** on `WebSocket /api/v1/agents/{agent_id}/commands`, and
+**DMI-63 mounts the HTTP `require_agent` adapter** on `POST /api/v1/scans`. The device-side
+counterpart that produces these proofs is [transport](/hardware-agent/transport.md) (DMI-65) —
+built, but not yet driven by a Pi daemon (DMI-66).
 
 ## Key classes / functions
 
