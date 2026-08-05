@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # double as a model-vs-migration drift check.
 HEAD_APPLICATION_TABLES = frozenset(SQLModel.metadata.tables)
 SEQUENCES_RENAMED_AFTER_BASELINE = {"devices_id_seq": "scan_hosts_id_seq"}
+SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 
 # `agent_nonces` deliberately withholds UPDATE and grants DELETE instead (nonces are
 # insert-then-expire-and-delete, never mutated in place; see
@@ -239,9 +240,16 @@ def test_baseline_matches_model_metadata_and_security_fence(
     }
     rename_affected_tables = {"devices", "ports", "findings", "scans"}
     dropped_columns = {("scans", "target_mode"), ("scans", "scan_profile")}
-    model_table_names = {renamed_tables.get(name, name) for name in created}
+    dropped_tables = {"artifacts"}
+    model_table_names = {
+        renamed_tables.get(name, name)
+        for name in created
+        if name not in dropped_tables
+    }
     assert model_table_names <= set(persistence.SQLModel.metadata.tables)
     for name, table in created.items():
+        if name in dropped_tables:
+            continue
         model_name = renamed_tables.get(name, name)
         created_shape = _table_shape(table)
         model_shape = _table_shape(persistence.SQLModel.metadata.tables[model_name])
@@ -416,6 +424,7 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
     head_sequences = tuple(
         SEQUENCES_RENAMED_AFTER_BASELINE.get(sequence, sequence)
         for sequence in baseline.APPLICATION_SEQUENCES
+        if sequence not in SEQUENCES_DROPPED_AFTER_BASELINE
     )
 
     _migrate(postgres_engine, "base")

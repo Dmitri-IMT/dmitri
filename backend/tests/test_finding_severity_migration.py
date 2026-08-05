@@ -159,23 +159,45 @@ def test_valid_severities_commit(administrative_session: Session) -> None:
 def test_live_upgrade_preserves_seeded_findings(migrated_database: Engine) -> None:
     engine = migrated_database
     _migrate(engine, "20260724_11")
-    with Session(engine) as session:
-        org = _seed_org(session)
-        scan = _seed_scan(session, org.id)
+    org_id = uuid4()
+    scan_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO orgs (id, name, created_at) "
+                "VALUES (:id, :name, NOW())"
+            ),
+            {"id": org_id, "name": f"org-{uuid4()}"},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO scans "
+                "(scan_id, org_id, timestamp, subnet, scan_mode, status, "
+                "metadata_json, created_at) "
+                "VALUES (:scan_id, :org_id, NOW(), '192.168.1.0/24', 'standard', "
+                "'completed', '{}', NOW())"
+            ),
+            {"scan_id": scan_id, "org_id": org_id},
+        )
         for severity in ("low", "medium", "high", "critical"):
-            session.add(
-                FindingRecord(
-                    finding_id=uuid4(),
-                    scan_id=scan.scan_id,
-                    severity=severity,
-                    title=f"{severity} title",
-                    description="desc",
-                    recommendation="rec",
-                    evidence="ev",
-                    dedupe_key=f"seed-{severity}",
-                )
+            connection.execute(
+                sa.text(
+                    "INSERT INTO findings "
+                    "(finding_id, scan_id, severity, confidence, title, "
+                    "description, recommendation, evidence, references_json, "
+                    "source_labels_json, dedupe_key, created_at, updated_at) "
+                    "VALUES (:finding_id, :scan_id, :severity, 'tentative', "
+                    ":title, 'desc', 'rec', 'ev', '[]', '[]', :dedupe_key, "
+                    "NOW(), NOW())"
+                ),
+                {
+                    "finding_id": uuid4(),
+                    "scan_id": scan_id,
+                    "severity": severity,
+                    "title": f"{severity} title",
+                    "dedupe_key": f"seed-{severity}",
+                },
             )
-        session.commit()
 
     with engine.connect() as connection:
         before = _finding_row_snapshot(connection)
