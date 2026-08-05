@@ -212,7 +212,7 @@ De acordo com as decisões dos ADRs:
 Todas as interfaces seguem o padrão REST + JSON. A documentação completa da API é gerada automaticamente pelo FastAPI (OpenAPI/Swagger).
 
 ### 6.1 Pi Agent → Backend API
-- **Método**: `POST /api/v1/scans` *(definido no contrato OpenAPI; ainda **não implementado** no backend — ver ADR-013 e DMI-63)*
+- **Método**: `POST /api/v1/scans` *(implementado no backend em DMI-63, atrás de `require_agent`; o lado do dispositivo — o daemon do Pi que faz o upload — ainda está pendente em DMI-66)*
 - **Autenticação**: assinatura Ed25519 (chave privada no dispositivo; backend verifica com a chave pública, sem guardar segredo)
 - **Payload**: JSON contendo:
   - Metadados do scan (timestamp, device_id, rede escaneada)

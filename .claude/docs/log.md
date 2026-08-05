@@ -3,6 +3,51 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-05
+
+* **Update**: **ingest is wired** (DMI-63, spec 024) — `backend/routers.md`, `backend/api.md`,
+  `backend/overview.md`, `backend/index.md`, `contracts.md`. `POST /api/v1/scans` is mounted as
+  `ingestScan` behind the HTTP `require_agent` adapter, returning the contract's `202`
+  `ScanIngestAcceptedResponse`. This retires the long-standing "ingest is contract-defined only"
+  caveat that ran through five docs; the remaining gap is now purely the **device** end — no Pi
+  daemon posts results yet (DMI-66) — so ingest is exercised by signed test requests. Auth resolves
+  **before** body validation (a sub-`Depends` beats body parsing), so an unsigned request with an
+  invalid payload is a `401`, not a `422`; the exception is a body that is not valid JSON, which
+  fails at decode time and is a `422`.
+* **Update**: the ingest schemas took the contract's vocabulary — `backend/schemas.md`,
+  `contracts.md`. `ScanResult`→`ScanIngestRequest`, `Host`/`Port`/`Finding`→
+  `HostPayload`/`PortPayload`/`FindingPayload`, `ScanIngestResponse`→`ScanIngestAcceptedResponse`
+  (plus a required `status: "accepted"`). `extra="forbid"` now applies at **every** ingest depth, so
+  a nested unknown field like `hosts[0].os` is refused instead of silently dropped. The rename is
+  load-bearing, not cosmetic: `scan.py` deliberately keeps **no** class named `Port`, because the
+  short-name collision with `read.Port` made FastAPI mangle a published component to
+  `api__schemas__scan__Port`. The contract's correction was a *new* ingest-only `PortPayload`
+  component (`Port` plus `cpes`) with `HostPayload.ports` re-pointed at it — `Port` itself stayed
+  byte-identical, since the read responses still fingerprint through it.
+* **Deletion**: the artifact concept is gone end to end — `backend/models.md`, `backend/schemas.md`,
+  `backend/migrations.md`, `contracts.md`. `ArtifactRecord`/`artifacts`, `Artifact`, `ArtifactKind`,
+  `ScanResult.artifacts`, `PersistedArtifact` and `PersistedScanDetail.artifacts` all removed; the
+  agent never populated them. An `artifacts` key in an ingest body is now a `422`.
+* **Update**: `persist_scan` was reworked into an authenticated, atomic ingest — `backend/services.md`.
+  New `ingest_scan` owns the authorisation and lifecycle rules (fill a requested placeholder, create
+  an unrequested scan, refuse a foreign or written-off one) and `persist_scan` took the keyword
+  signature `(session, scan, *, org_id, agent_id, command, now)`. Idempotency **moved up** into
+  `ingest_scan`, which now checks ownership *first* — a foreign agent replaying a known `scan_id`
+  gets a `403`, where the old early-return made it a silent no-op. Every write is `flush()`ed to a
+  single commit point, so ingest is genuinely all-or-nothing.
+* **Creation**: revision `20260804_14` (`scan_ingest_rework`) — `backend/migrations.md`,
+  `backend/models.md`. Adds nullable `scans.agent_id` (FK → `agents.id`, no backfill) and drops
+  `artifacts` with its owned `artifacts_id_seq`; the downgrade recreates the table exactly as the
+  baseline declared it. Recorded the trap it exposed: a migration test that seeds through an **ORM
+  model** while pinned at an older revision breaks the moment a later migration adds a column —
+  `agent_id` broke `test_finding_severity_migration.py` this way. Seed with explicit `sa.text()`
+  INSERTs naming only the columns that exist at that revision.
+* **Update**: documented `test_contract_fidelity.py`'s comparator — `contracts.md`. `SCHEMA_NAMES`
+  gained the five ingest components (a name is only listable once a mounted route makes it reachable
+  from `app.openapi()`), and `_property_shape` now treats `type: [X, "null"]` ≡
+  `anyOf: [X, {type: null}]` and `const: v` ≡ `enum: [v]`. Noted the standing blind spot: it reads
+  neither `minLength` nor `maxLength`, so a changed `constr(min_length=…)` goes uncaught.
+
 ## 2026-08-03
 
 * **Update**: `read_hosts`'s paging defaults stopped being written twice — `backend/routers.md`,

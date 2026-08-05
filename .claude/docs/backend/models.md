@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend ORM models
@@ -24,20 +24,22 @@ order is irrelevant.
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `utc_now()` | Timezone-aware `default_factory` shared by every model. | `backend/src/api/models/persistence.py:12` |
-| `ScanRecord` → `scans` | PK `scan_id` (UUID); nullable `org_id` FK → `orgs`; `subnet`, `scan_mode`, `status` (default `completed`), JSON `metadata_json`. | `backend/src/api/models/persistence.py:16` |
-| `ArtifactRecord` → `artifacts` | `kind`, `path`, `stage`, optional `host_ip`; FK → `scans`. | `backend/src/api/models/persistence.py:29` |
-| `ScanHostRecord` → `scan_hosts` | A **per-scan host observation**; unique `(scan_id, ip)`; `mac`, `hostname`, `vendor`; `host_id` FK → `hosts` (nullable until identity resolution runs). | `backend/src/api/models/persistence.py:40` |
-| `HostRecord` → `hosts` | The **durable cross-scan host identity**; PK `id` (UUID); `org_id`, `identity_key` (unique with `org_id`, `NULLS NOT DISTINCT`); `ip`/`mac`/`hostname`/`vendor` snapshot from the latest scan; `open_ports_count`, `highest_severity`; `first_seen_at`/`last_seen_at`. | `backend/src/api/models/persistence.py:54` |
-| `PortRecord` → `ports` | Unique `(scan_host_id, port, protocol)`; `state`. | `backend/src/api/models/persistence.py:77` |
-| `ServiceRecord` → `services` | Unique `port_id` (one service per port); `name`, `version`. | `backend/src/api/models/persistence.py:89` |
-| `CPERecord` → `cpes` | Unique `(port_id, cpe)`. | `backend/src/api/models/persistence.py:99` |
-| `FindingRecord` → `findings` | Unique `(scan_id, dedupe_key)`; check `ck_findings_severity` on `severity`, spelled from `SEVERITY_ORDER` in [`core/severity.py`](/backend/api.md) so the constraint and the domain cannot drift (`low`/`medium`/`high`/`critical`); `finding_id` (UUID, `default_factory=uuid4`, unique+indexed — a stable public identifier separate from the integer PK); `cve_id`, `cvss_score`, `severity`, `confidence` (default `tentative`), title/description/recommendation/evidence, JSON `references_json` + `source_labels_json`, `dedupe_key`; FKs scan_host/port/scan. | `backend/src/api/models/persistence.py:121` |
-| `EnrichmentJobRecord` → `enrichment_jobs` | `job_type` (`nvd_cpe`/`nvd_cve`/`kev_cve`/`epss_cve`), `target_value`, `status` (default `pending`), `attempts`, `last_error`; FKs scan/port/finding. | `backend/src/api/models/persistence.py:140` |
-| `NvdCacheRecord` → `nvd_cache` | Unique `query_key`, `query_kind`/`query_value`, `response_json`, `expires_at`. | `backend/src/api/models/persistence.py:157` |
-| `KevRecord` / `EpssRecord` | Normalized per-CVE results (PK `cve_id`): KEV `date_added`/`known_ransomware`/`required_action`; EPSS `epss_score`/`percentile`/`scored_at`. | `backend/src/api/models/persistence.py:169` |
-| `KevCacheRecord` / `EpssCacheRecord` | Raw cached upstream payloads per CVE with `expires_at` TTL. | `backend/src/api/models/persistence.py:193` |
-| `RiskSnapshotRecord` → `risk_snapshots` | Unique `finding_id`; `confidence`, `exploitability`, `risk_score`, `rationale`. | `backend/src/api/models/persistence.py:211` |
+| `utc_now()` | Timezone-aware `default_factory` shared by every model. | `backend/src/api/models/persistence.py:18` |
+| `ScanRecord` → `scans` | PK `scan_id` (UUID); nullable `org_id` FK → `orgs`; nullable `agent_id` FK → `agents` (the submitting device, added by DMI-63, no backfill); `subnet`, `scan_mode`, `status` (default `completed`), JSON `metadata_json`. | `backend/src/api/models/persistence.py:29` |
+| `ScanHostRecord` → `scan_hosts` | A **per-scan host observation**; unique `(scan_id, ip)`; `mac`, `hostname`, `vendor`; `host_id` FK → `hosts` (nullable until identity resolution runs). | `backend/src/api/models/persistence.py:43` |
+| `HostRecord` → `hosts` | The **durable cross-scan host identity**; PK `id` (UUID); `org_id`, `identity_key` (unique with `org_id`, `NULLS NOT DISTINCT`); `ip`/`mac`/`hostname`/`vendor` snapshot from the latest scan; `open_ports_count`, `highest_severity`; `first_seen_at`/`last_seen_at`. | `backend/src/api/models/persistence.py:57` |
+| `PortRecord` → `ports` | Unique `(scan_host_id, port, protocol)`; `state`. | `backend/src/api/models/persistence.py:80` |
+| `ServiceRecord` → `services` | Unique `port_id` (one service per port); `name`, `version`. | `backend/src/api/models/persistence.py:92` |
+| `CPERecord` → `cpes` | Unique `(port_id, cpe)`. | `backend/src/api/models/persistence.py:102` |
+| `FindingRecord` → `findings` | Unique `(scan_id, dedupe_key)`; check `ck_findings_severity` on `severity`, spelled from `SEVERITY_ORDER` in [`core/severity.py`](/backend/api.md) so the constraint and the domain cannot drift (`low`/`medium`/`high`/`critical`); `finding_id` (UUID, `default_factory=uuid4`, unique+indexed — a stable public identifier separate from the integer PK); `cve_id`, `cvss_score`, `severity`, `confidence` (default `tentative`), title/description/recommendation/evidence, JSON `references_json` + `source_labels_json`, `dedupe_key`; FKs scan_host/port/scan. | `backend/src/api/models/persistence.py:111` |
+| `EnrichmentJobRecord` → `enrichment_jobs` | `job_type` (`nvd_cpe`/`nvd_cve`/`kev_cve`/`epss_cve`), `target_value`, `status` (default `pending`), `attempts`, `last_error`; FKs scan/port/finding. | `backend/src/api/models/persistence.py:146` |
+| `NvdCacheRecord` → `nvd_cache` | Unique `query_key`, `query_kind`/`query_value`, `response_json`, `expires_at`. | `backend/src/api/models/persistence.py:163` |
+| `KevRecord` / `EpssRecord` | Normalized per-CVE results (PK `cve_id`): KEV `date_added`/`known_ransomware`/`required_action`; EPSS `epss_score`/`percentile`/`scored_at`. | `backend/src/api/models/persistence.py:175`, `:187` |
+| `KevCacheRecord` / `EpssCacheRecord` | Raw cached upstream payloads per CVE with `expires_at` TTL. | `backend/src/api/models/persistence.py:199`, `:208` |
+| `RiskSnapshotRecord` → `risk_snapshots` | Unique `finding_id`; `confidence`, `exploitability`, `risk_score`, `rationale`. | `backend/src/api/models/persistence.py:217` |
+
+`ArtifactRecord` → `artifacts` was **deleted in DMI-63** (migration `20260804_14` drops the table).
+The agent never wrote artifacts, so the table was dead weight; the reverse migration recreates it.
 
 ## Key classes / functions — `identity.py`
 
@@ -64,11 +66,14 @@ order is irrelevant.
 
 ## How it connects
 
-- [`persist_scan` and the enrichment services](/backend/services.md) read and write these records;
-  [`upsert_hosts_for_scan`](/backend/services.md) resolves each `ScanHostRecord` to a `HostRecord`.
-- The wire-facing [schemas](/backend/schemas.md) are the input (`ScanResult`) and output
+- [`ingest_scan`/`persist_scan` and the enrichment services](/backend/services.md) read and write
+  these records; [`upsert_hosts_for_scan`](/backend/services.md) resolves each `ScanHostRecord` to a
+  `HostRecord`.
+- The wire-facing [schemas](/backend/schemas.md) are the input (`ScanIngestRequest`) and output
   (`Persisted*` / [`read.py`](/backend/schemas.md)) projections of these tables; they are separate
   Pydantic models, not the ORM rows.
+- `ScanRecord.agent_id` and `Command.agent_id` both point at `agents`, and `ingest_scan` compares
+  them: a submission is accepted only when the signing device owns the scan's command.
 - Every table here is created — with its RLS policies and grants — by
   [migrations](/backend/migrations.md).
 

@@ -5,6 +5,16 @@
 > `devices` (while the read side had already been renamed to `hosts`) is lifted. See
 > [`CONTEXT.md`](../../CONTEXT.md) for the domain glossary this ADR updates.
 
+> **Amendment 2026-08-05 (ingest now live):** `POST /api/v1/scans` is implemented (DMI-63, spec
+> [`specs/024-scan-ingest-endpoint`](../../specs/024-scan-ingest-endpoint/TRUTH.md)), mounted as
+> `ingestScan` behind `require_agent`. §Context item 1's "no live producer or consumer to break" is
+> now **historical** — it described the state at acceptance time and was the basis for choosing a
+> rename over a coordinated migration. The vocabulary decision itself is **unaffected and still in
+> force** (ingest speaks `hosts[]`); DMI-63 in fact completed the convergence by adopting the
+> contract's own component names on the Python side. Not a supersession — only the "safe to rename
+> now" premise has expired, which matters for anyone reasoning about *future* wire renames now that
+> a real endpoint exists.
+
 ## Context
 
 [`ADR-011`](ADR-011-pi-command-channel.md) renamed the host inventory read path from `/devices` to

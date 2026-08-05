@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -19,20 +19,21 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 
 > **Build status.** Only the **Pi agent + TUI** ([`hardware-agent`](/hardware-agent/overview.md)) is
 > in active development. The [`backend`](/backend/overview.md) is working code; its **read path**
-> (`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) is wired, but **ingest is not** —
-> nothing uploads a scan over HTTP yet, and Pi hardware is not yet acquired. The
+> (`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`), auth, the command channel and — since
+> DMI-63 — **ingest** (`POST /api/v1/scans`) are all wired. The
 > [`frontend`](/frontend/overview.md) now has its first real vertical slice (login → Home) reading
 > that wired read path.
-> The only live coupling between agent and backend today is the shared [`contracts`](/contracts.md)
-> schema. Treat the ingest side of backend/contract docs as **planned / not yet wired**.
-> `docs/architecture/ARCHITECTURE.md` describes target state.
+> What is still missing is the **device end of the link**: no Pi daemon uploads a scan or dials the
+> WS channel yet (DMI-66), and Pi hardware is not yet acquired, so both are exercised against signed
+> test requests and fake sockets. Treat the *Pi-side* upload as **planned / not yet wired** — but the
+> backend routes it posts to now exist. `docs/architecture/ARCHITECTURE.md` describes target state.
 
 ## Components
 
 | Component | Doc | Status | Purpose |
 |-----------|-----|--------|---------|
 | Hardware agent + TUI | [hardware-agent](/hardware-agent/overview.md) | **active** | Runs the Nmap scan pipeline, normalizes output, Textual TUI + headless CLI. |
-| Backend API + worker | [backend](/backend/overview.md) | read path wired, ingest not | FastAPI read endpoints + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
+| Backend API + worker | [backend](/backend/overview.md) | read path + auth + commands + ingest wired | FastAPI read/ingest endpoints + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
 | Shared contracts | [contracts](/contracts.md) | active seam | OpenAPI + example JSON binding agent, backend, and (future) frontend. |
 | Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, Railway deploy config. |
 | Frontend (React) | [frontend](/frontend/overview.md) | login → Home slice wired | Vite + React 19 SPA on the frozen contract: session layer, routing, and the Home verdict screen (ADR-008). |
@@ -52,11 +53,14 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 4. [`workspace`](/hardware-agent/scanner/workspace.md) writes the normalized JSON to disk. **The flow
    ends here today — no upload.** Headless returns an outcome with exit codes 0/10/20 (ADR-012).
 
-**Backend side (ingest not yet wired; read path is):**
+**Backend side (all wired; only the Pi's upload client is missing):**
 
-5. (Planned) Pi `POST /api/v1/scans` (HMAC) → [`persist_scan`](/backend/services.md) writes
+5. Pi `POST /api/v1/scans` (Ed25519-signed) → `require_agent` authenticates the device →
+   [`ingest_scan`](/backend/services.md) authorises the submission, then
+   [`persist_scan`](/backend/services.md) writes
    scans/scan_hosts/ports/services/cpes/findings, resolves each host's durable identity
-   (`upsert_hosts_for_scan`), and enqueues `enrichment_jobs`.
+   (`upsert_hosts_for_scan`), and enqueues `enrichment_jobs` — all in one transaction. *(The route is
+   live; the Pi-side uploader is DMI-66.)*
 6. A separate [worker](/backend/services.md) claims jobs (`FOR UPDATE SKIP LOCKED`), enriches CVEs
    against **NVD**, **CISA KEV**, and **FIRST EPSS**, upgrades finding confidence, and re-runs the
    explainable [risk scorer](/backend/services.md).
