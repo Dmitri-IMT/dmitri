@@ -69,8 +69,20 @@ Regras da v1:
 - algoritmo: **Ed25519** (assinatura assimetrica; o backend verifica com a chave publica do device)
 - tolerancia de relogio: 5 minutos
 - nonce deve ser unico por device dentro da janela de validacao
-- `401 Unauthorized`: assinatura ausente, invalida, expirada ou replay detectado
-- `403 Forbidden`: device revogado, desconhecido ou sem permissao para envio
+- `401 Unauthorized`: assinatura ausente, invalida, expirada, replay detectado, ou **device
+  desconhecido** (identidade nao registrada)
+- `403 Forbidden`: device **registrado** porem revogado, ou sem permissao sobre o recurso alvo
+  (por exemplo, um `scan_id` pertencente a outro device ou outra organizacao)
+
+> **Correcao (2026-08-05):** a redacao original listava "device desconhecido" sob `403`. A
+> implementacao em `backend/src/api/dependencies/agent_auth.py` levanta `AgentUnauthenticated`
+> para device desconhecido, que `require_agent` mapeia para `401`, e reserva `403` para device
+> revogado e para falhas de posse do scan (`ScanOwnershipError`). O texto acima passa a refletir
+> o codigo em execucao. Nao ha mudanca de comportamento: apenas a ADR estava desatualizada.
+>
+> A distincao e deliberada e nao deve ser "simplificada": device desconhecido responde `401` como
+> qualquer outra prova rejeitada, de modo que a resposta **nao revela quais `agent_id` existem**.
+> Somente um device **registrado** porem revogado recebe `403`.
 
 Provisionamento e rotacao:
 

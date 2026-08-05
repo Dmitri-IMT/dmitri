@@ -15,7 +15,7 @@
 - **Hardware: none in possession.** Target BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md): Raspberry Pi 4 (4 GB), headless, ALFA Wi-Fi adapter. **Must acquire and configure before September E2E** — see [Hardware acquisition](#hardware-acquisition--open).
 - **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
 - **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
-- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **not implemented** on either side.
+- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **implemented on both sides but not yet wired**: the backend route landed with DMI-63 and the device client (`agent.transport.ScanIngestClient`) with DMI-65. What is missing is the daemon that calls it (DMI-66).
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.
 
 ✅ **RECONCILED:** ADR-005 originally assumed a *one-way push* agent. Control requires the backend

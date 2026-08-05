@@ -177,6 +177,14 @@ A headless `fatal` is a Pi-reported `failed`, including a result-write failure a
 pipeline completed. The daemon may retain the returned payload in memory, but must not report
 `uploading` or `done` when no result JSON was persisted.
 
+**Late results are discarded.** Once a command is terminal, `POST /api/v1/scans` rejects a result
+for its scan with **`400`** (`ScanClosedError` in `services/persistence.py`) and the result is
+dropped. This is deliberate, not a race to be repaired: terminal status is what releases the
+one-active-scan-per-Pi lock above, so a replacement scan may already be running against the same
+agent, and reviving the old scan row would corrupt it. The agent keeps its local artifact, but
+nothing will accept it — recovery is a **new scan**, not a resubmission. Ingest clients must treat
+this `400` as final and must not retry or requeue it.
+
 **Timeouts / stale sweep:** connection-loss grace is **config/env**
 (`COMMAND_DISCONNECT_GRACE_SECONDS`). The enrichment worker sweeps globally on its poll; enqueue
 sweeps the target agent before the busy check. Stale `queued` → `expired`; stale

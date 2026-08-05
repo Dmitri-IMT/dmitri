@@ -164,7 +164,7 @@ def persist_scan(
 def upsert_finding(
     session: Session,
     *,
-    scan_id,
+    scan_id: UUID,
     finding: FindingPayload,
     scan_host_record: ScanHostRecord | None,
     port_record: PortRecord | None,
@@ -262,7 +262,9 @@ def initial_confidence_for_finding(finding: FindingPayload) -> str:
     return "tentative"
 
 
-def _persist_scan_host(session: Session, scan_id, host: HostPayload) -> ScanHostRecord:
+def _persist_scan_host(
+    session: Session, scan_id: UUID, host: HostPayload
+) -> ScanHostRecord:
     record = ScanHostRecord(
         scan_id=scan_id,
         ip=str(host.ip),
@@ -304,7 +306,7 @@ def _persist_port(
 
 def _enqueue_enrichment_jobs(
     session: Session,
-    scan_id,
+    scan_id: UUID,
     port_records: Iterable[PortRecord],
 ) -> None:
     seen: set[tuple[str, int | None, str]] = set()
