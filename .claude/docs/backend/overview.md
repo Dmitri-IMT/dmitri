@@ -4,19 +4,19 @@ title: Backend — API + enrichment worker
 description: The FastAPI backend — its read path and auth are wired — and the CVE-enrichment worker.
 resource: backend/src/api
 tags: [backend, fastapi, worker, persistence, enrichment, read, auth]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend — API + enrichment worker
 
-> **Read path + auth + invites wired; ingest still not.** `api/main.py` registers
+> **Read path + auth + invites + the command channel + ingest all wired.** `api/main.py` registers
 > `GET /api/v1/health`, the three [read routers](/backend/routers.md) (`GET /hosts`,
-> `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`) — spec 015, now gated by `require_user` and
-> org-scoped — the [auth routes](/backend/auth.md) (spec 016), and the invite routes (spec 017).
-> The ingest route (`POST /api/v1/scans`) still exists only in the [contracts](/contracts.md)
-> OpenAPI surface; `persist_scan` and the worker are still exercised **directly by tests**, not
-> through the API — the agent→backend upload link does not exist yet, and the
-> [device gate](/backend/device-auth.md) built for it is mounted on no route.
+> `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`) — spec 015, gated by `require_user` and
+> org-scoped — the [auth routes](/backend/auth.md) (spec 016), the invite routes (spec 017), the
+> command channel (spec 022) and, since DMI-63 (spec 024), the ingest route
+> `POST /api/v1/scans` behind the [device gate](/backend/device-auth.md)'s `require_agent`.
+> What is still missing is the **device side**: no Pi daemon posts results or dials the WS channel
+> yet (DMI-66), so ingest is exercised by signed test requests rather than real hardware.
 > `docs/architecture/ARCHITECTURE.md` describes the target state.
 
 ## Purpose
@@ -33,19 +33,20 @@ Postgres database: a FastAPI **API** service and a long-running enrichment **wor
 | Area | Doc | What lives there |
 |------|-----|------------------|
 | Entry points & config | [api](/backend/api.md) | `main.py` (health + read routers), `worker_main.py`, `core/config.py`, `db/session.py`. |
-| Routers | [routers](/backend/routers.md) | `routers/hosts.py`, `routers/scans.py`, `routers/findings.py` — the wired HTTP surface. |
+| Routers | [routers](/backend/routers.md) | `routers/hosts.py`, `routers/scans.py` (read **and** ingest), `routers/findings.py` — the wired HTTP surface. |
 | ORM / tables | [models](/backend/models.md) | `models/persistence.py` + `models/identity.py` — SQLModel tables on the metadata Alembic owns. |
 | Wire schemas | [schemas](/backend/schemas.md) | `schemas/scan.py` (ingest input), `schemas/read.py` (wired read responses), `schemas/persistence.py` (legacy read projections). |
-| Business logic | [services](/backend/services.md) | `persist_scan`, `upsert_hosts_for_scan`, the read-path queries, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
+| Business logic | [services](/backend/services.md) | `ingest_scan`/`persist_scan`, `upsert_hosts_for_scan`, the read-path queries, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
 | Auth subsystem | [auth](/backend/auth.md) | Login/refresh/logout + password change/reset, JWT + refresh families, argon2 password policy, `require_user`, and the request-id/CORS middleware. |
-| Database schema | [migrations](/backend/migrations.md) | Alembic env + seven revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
+| Database schema | [migrations](/backend/migrations.md) | Alembic env + fourteen revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
 
 ## Two processes, one database
 
 Deployed as two Railway services (per `docs/adr/ADR-007`), both importing the `api` package
 (`backend/src/api`):
 
-- **API** — `uvicorn api.main:app`. Serves `GET /api/v1/health` and the read path.
+- **API** — `uvicorn api.main:app`. Serves `GET /api/v1/health`, the read path, the auth/invite
+  routes, the command channel and scan ingest.
 - **Worker** — `python -m api.worker_main` (also the `backend-worker` console script). Polls
   `enrichment_jobs` forever and calls the upstream feeds.
 
@@ -55,8 +56,10 @@ target and to map queries.
 
 ## Data flow (the intended pipeline)
 
-1. An agent `POST`s a `ScanResult`, validated by [`schemas/scan.py`](/backend/schemas.md). *(Route
-   not wired — tests call `persist_scan` directly.)*
+1. An agent `POST`s a `ScanIngestRequest` to `POST /api/v1/scans`, authenticated by `require_agent`
+   and validated by [`schemas/scan.py`](/backend/schemas.md); [`ingest_scan`](/backend/services.md)
+   then decides whether this fills a requested placeholder, creates an unrequested scan, or is a
+   duplicate/foreign/late submission to refuse.
 2. [`persist_scan`](/backend/services.md) writes, synchronously, `scan → scan_hosts → ports →
    services → cpes → findings`, computes an **initial risk snapshot** per finding, calls
    `upsert_hosts_for_scan` to resolve each `scan_host` to a durable `host`, and enqueues

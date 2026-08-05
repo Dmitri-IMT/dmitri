@@ -96,6 +96,10 @@ def active_command_for(session: Session, agent_id: UUID) -> Command | None:
     ).first()
 
 
+def command_for_scan(session: Session, scan_id: UUID) -> Command | None:
+    return session.exec(select(Command).where(Command.scan_id == scan_id)).first()
+
+
 def apply_status(
     session: Session,
     *,

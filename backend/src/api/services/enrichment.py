@@ -11,7 +11,7 @@ from api.models.persistence import (
     ScanHostRecord,
     ServiceRecord,
 )
-from api.schemas.scan import Finding
+from api.schemas.scan import FindingPayload
 from api.services.epss import EpssClient, upsert_epss_record
 from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, parse_nvd_matches
@@ -128,7 +128,7 @@ def _process_cpe_job(
     ).first()
     payload = client.query_by_cpe(session, job.target_value)
     for match in parse_nvd_matches(payload):
-        finding = Finding(
+        finding = FindingPayload(
             ip=device.ip if device is not None else None,
             port=port_record.port,
             protocol=port_record.protocol,  # type: ignore[arg-type]

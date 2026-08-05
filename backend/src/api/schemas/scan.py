@@ -13,18 +13,12 @@ SubnetCIDR = constr(
 )
 
 
-ArtifactKind = Literal["nmap_xml", "nse_output"]
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 
 
-class Artifact(BaseModel):
-    kind: ArtifactKind
-    path: constr(min_length=1)
-    stage: constr(min_length=1)
-    host_ip: IPv4Address | None = None
+class PortPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class Port(BaseModel):
     port: Annotated[int, Field(ge=1, le=65535)]
     protocol: Literal["tcp", "udp"]
     state: Literal["open", "closed", "filtered"]
@@ -33,15 +27,19 @@ class Port(BaseModel):
     cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
-class Host(BaseModel):
+class HostPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ip: IPv4Address
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
+    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
-    ports: list[Port] = Field(default_factory=list)
+    ports: list[PortPayload]
 
 
-class Finding(BaseModel):
+class FindingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
@@ -58,20 +56,22 @@ class Finding(BaseModel):
     references: list[constr(min_length=1)] = Field(default_factory=list)
 
 
-class ScanResult(BaseModel):
+class ScanIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scan_id: UUID
     timestamp: datetime
     subnet: SubnetCIDR
     scan_mode: ScanMode
-    hosts: list[Host] = Field(default_factory=list)
-    findings: list[Finding] = Field(default_factory=list)
-    artifacts: list[Artifact] = Field(default_factory=list)
+    hosts: list[HostPayload]
+    findings: list[FindingPayload]
     metadata: dict[str, str | int | float | bool] | None = None
 
 
-class ScanIngestResponse(BaseModel):
+class ScanIngestAcceptedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     message: str
     scan_id: UUID
-    hosts_received: int
+    hosts_received: Annotated[int, Field(ge=0)]
+    status: Literal["accepted"]

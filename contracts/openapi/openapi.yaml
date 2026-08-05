@@ -1701,6 +1701,43 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+    PortPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - port
+        - protocol
+        - state
+        - service
+      properties:
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          type: string
+          enum:
+            - tcp
+            - udp
+        state:
+          type: string
+          enum:
+            - open
+            - closed
+            - filtered
+        service:
+          type: string
+          minLength: 1
+        version:
+          anyOf:
+            - type: string
+            - type: 'null'
+        cpes:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
     HostPayload:
       type: object
       additionalProperties: false
@@ -1728,7 +1765,7 @@ components:
         ports:
           type: array
           items:
-            $ref: '#/components/schemas/Port'
+            $ref: '#/components/schemas/PortPayload'
           default: []
     ScanHostView:
       type: object

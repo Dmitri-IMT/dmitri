@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The real work — persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command channel's lifecycle rulebook, enqueue/delivery/sweep service and durable presence projection.
+description: The real work — ingest_scan/persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command channel's lifecycle rulebook, enqueue/delivery/sweep service and durable presence projection.
 resource: backend/src/api/services/persistence.py
-tags: [backend, services, persistence, read, enrichment, worker, risk, command-channel, presence, tenancy]
-timestamp: 2026-08-03T00:00:00Z
+tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy]
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -12,8 +12,9 @@ timestamp: 2026-08-03T00:00:00Z
 ## Purpose
 
 `services/` is where the backend actually does its work. `persistence.py` writes an ingested
-`ScanResult` into the [tables](/backend/models.md), resolves host identity, and enqueues enrichment
-jobs. `hosts.py` resolves each scan's `ScanHostRecord`s to durable `HostRecord`s. `read.py` answers
+`ScanIngestRequest` into the [tables](/backend/models.md), resolves host identity, and enqueues
+enrichment jobs; since DMI-63 it also owns the **authorisation and lifecycle rules** for ingest via
+`ingest_scan`. `hosts.py` resolves each scan's `ScanHostRecord`s to durable `HostRecord`s. `read.py` answers
 the wired [read-path routers](/backend/routers.md) — list/detail queries over hosts, scans, and
 findings. `worker.py` is the long-running poll loop. `enrichment.py` claims and processes jobs,
 calling the three upstream clients — `nvd.py`, `kev.py`, `epss.py` — each of which caches in the DB.
@@ -21,9 +22,10 @@ calling the three upstream clients — `nvd.py`, `kev.py`, `epss.py` — each of
 the command channel — enqueue, the busy check, the atomic status transition, the staleness sweep and
 WebSocket delivery — and `agent_presence.py` projects socket connectedness into `agents.connected_at`
 so the worker process can reason about it without reading the API's memory.
-(`services/__init__.py` is a placeholder.) `persist_scan` and the enrichment worker are still
-exercised by tests, not the live agent; the read path, the [auth routes](/backend/auth.md) and the
-command routes are the route groups actually reached over HTTP.
+(`services/__init__.py` is a placeholder.) `ingest_scan` is now reached over HTTP via
+`POST /api/v1/scans` ([routers](/backend/routers.md)) alongside the read path, the
+[auth routes](/backend/auth.md) and the command routes; the enrichment worker is still driven by the
+poll loop rather than a live agent.
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
 [auth](/backend/auth.md).
 
@@ -31,11 +33,14 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `persist_scan()` | Idempotent on `scan_id` (returns the existing `ScanRecord` if present). Inserts the scan (with `scan_mode`, `status` defaulting `completed`) + artifacts, persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, upserts each agent finding, calls `upsert_hosts_for_scan` in the same transaction, then enqueues enrichment jobs. | `backend/src/api/services/persistence.py:23` |
-| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:90` |
-| `finding_dedupe_key()` | `ip|protocol|port|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:173` |
-| `_persist_scan_host()` | Inserts one `ScanHostRecord` (`ip`/`mac`/`hostname`/`vendor`) for the scan. | `backend/src/api/services/persistence.py:191` |
-| `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:229` |
+| `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
+| `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError`, else fill it. | `backend/src/api/services/persistence.py:35` |
+| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan (`scan_mode`, `status`), persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, upserts each agent finding, calls `upsert_hosts_for_scan`, then enqueues enrichment jobs — all in **one transaction with a single commit point**. | `backend/src/api/services/persistence.py:78` |
+| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
+| `finding_dedupe_key()` | `ip|protocol|port|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |
+| `_persist_scan_host()` | Inserts one `ScanHostRecord` (`ip`/`mac`/`hostname`/`vendor`) for the scan. | `backend/src/api/services/persistence.py:262` |
+| `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:302` |
+| `command_for_scan()` | Looks up the `Command` a `scan_id` belongs to, or `None`. Used by `ingest_scan` for the Case C ownership check. | `backend/src/api/services/commands.py:99` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
 | `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:23` |
 | `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` | `1` / `20` — the paging defaults `list_hosts()` falls back to, imported by `read_hosts` so the route and the service cannot drift apart. `list_scans`/`list_findings` still inline theirs. | `backend/src/api/services/read.py:35` |
@@ -85,10 +90,13 @@ ML/AI scoring is future work.
 
 ## How it connects
 
-- `persist_scan` consumes a [`ScanResult`](/backend/schemas.md) and writes the
-  [ORM models](/backend/models.md); it is called (by tests today) as step 2 of the
-  [overview data flow](/backend/overview.md), and calls `upsert_hosts_for_scan` in the same
-  transaction to resolve durable host identity.
+- `ingest_scan` is called by `ingest_scan_route` ([routers](/backend/routers.md)) with the
+  `AgentIdentity` that `require_agent` resolved; it delegates the writing to `persist_scan`, which
+  consumes a [`ScanIngestRequest`](/backend/schemas.md) and writes the
+  [ORM models](/backend/models.md) as step 2 of the [overview data flow](/backend/overview.md),
+  calling `upsert_hosts_for_scan` in the same transaction to resolve durable host identity.
+- `ingest_scan` reads `commands.py`'s `command_for_scan` and `command_lifecycle.is_terminal` — the
+  ingest gate reuses the command channel's own terminal-state definition rather than restating it.
 - `read.py`'s functions back the [hosts/scans/findings routers](/backend/routers.md) directly — this
   is the one service group actually invoked over HTTP.
 - The worker entry [`worker_main.py`](/backend/api.md) calls `run_worker_loop`; the loop's cadence
@@ -113,7 +121,19 @@ ML/AI scoring is future work.
   because they only ever receive already-scoped ids.
 - **Confidence ladder.** `tentative` → `probable` (agent CVE or CPE match) → `confirmed` (NVD-by-CVE).
   `upsert_finding` only ever raises confidence via `_max_confidence`, never lowers it.
-- **Idempotency.** `persist_scan` returns early if the `scan_id` already exists — re-ingest is safe.
+- **Idempotency moved up into `ingest_scan` (DMI-63).** `persist_scan` no longer short-circuits on an
+  existing `scan_id`; `ingest_scan`'s Case B owns that, and it now checks **ownership first** — a
+  foreign agent submitting a known `scan_id` gets a `ScanOwnershipError`, not a silent no-op. A
+  repeated *owned* submission still writes nothing new.
+- **Ingest is one transaction with one commit.** Every write inside `persist_scan` is `flush()`ed,
+  never committed, until a single commit point: `session.commit()` for an unrequested scan, or
+  `apply_status(...)` (which commits on success and rolls back on a zero-rowcount race) when filling
+  a placeholder. Adding a `commit()` anywhere in that call tree breaks the all-or-nothing guarantee
+  that `test_ingest_scan.py`'s two rollback tests exist to protect.
+- **`nvd_cpe` dedup is per `(port, cpe)`, not per distinct CPE.** The key is
+  `("nvd_cpe", port_record.id, cpe_record.cpe)`, so the same CPE on two different ports is two jobs.
+  That is deliberate — `EnrichmentJobRecord.port_id` is load-bearing for `enrichment.py`'s per-port
+  finding attachment. Spec prose that says "one job per distinct CPE" means *within a port*.
 - **Host identity is scan-order-sensitive.** `upsert_hosts_for_scan` only overwrites the `HostRecord`
   snapshot (ip/mac/hostname/vendor/open_ports_count/highest_severity) when the incoming scan's
   `timestamp` is `>=` the current `last_seen_at`; an out-of-order (backfilled) scan only extends

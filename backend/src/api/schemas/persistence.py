@@ -73,13 +73,6 @@ class RiskSnapshotView(BaseModel):
     rationale: str
 
 
-class PersistedArtifact(BaseModel):
-    kind: str
-    path: str
-    stage: str
-    host_ip: str | None
-
-
 class EnrichmentJobView(BaseModel):
     id: int
     scan_id: UUID
@@ -113,7 +106,6 @@ class PersistedScanDetail(BaseModel):
     metadata: dict[str, str | int | float | bool] | None
     devices: list[PersistedDevice]
     findings: list[PersistedFinding]
-    artifacts: list[PersistedArtifact]
     enrichment_jobs: list[EnrichmentJobView]
 
 

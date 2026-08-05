@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend routers — hosts, scans, findings, commands
-description: The FastAPI routers on the read path plus users/me, the command-channel write path (POST /agents/{id}/commands behind require_admin, GET /commands/{id}) and the agent WebSocket channel behind require_agent_ws.
+description: The FastAPI routers on the read path plus users/me, the signed scan-ingest route (POST /api/v1/scans behind require_agent), the command-channel write path (POST /agents/{id}/commands behind require_admin, GET /commands/{id}) and the agent WebSocket channel behind require_agent_ws.
 resource: backend/src/api/routers
-tags: [backend, fastapi, routers, read, auth, tenancy, websocket, command-channel]
-timestamp: 2026-08-03T00:00:00Z
+tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel]
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend routers — hosts, scans, findings
@@ -26,8 +26,9 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 |------|--------------|-----|
 | `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:22` |
 | `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:32` |
-| `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:23` |
-| `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:44` |
+| `ingest_scan_route()` | `POST /api/v1/scans` (`operation_id="ingestScan"`, `202`) behind `Depends(require_agent)` → `ingest_scan(...)` → `ScanIngestAcceptedResponse`. `ScanOwnershipError` → `403 Forbidden`; `ScanClosedError` → `400 "Scan is no longer accepting results"`. | `backend/src/api/routers/scans.py:32` |
+| `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
+| `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
 | `read_current_user()` | `GET /api/v1/users/me` → takes the caller's `User` from `require_user_row` (which owns the lookup and the missing-row 401) and returns `UserProfileResponse` with **role from the DB row**, not JWT claims. Read-only, no path param. | `backend/src/api/routers/users.py:13` |
 | `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:46` |
@@ -71,11 +72,25 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 - **The command routes split across two files on purpose.** The write path hangs off the agent
   (`routers/agents.py`, alongside the WS handler that delivers it); the read path is command-scoped
   and org-scoped, so it gets its own `routers/commands.py`.
+- **Ingest and read share `routers/scans.py`.** `POST /api/v1/scans` sits in the same module as the
+  two read routes but is the only one behind [device auth](/backend/device-auth.md)
+  (`require_agent`) rather than `require_user` — a Pi submits, a human reads.
+- **The ingest router is a thin adapter and owns no rules.** Ownership, terminal-state refusal and
+  idempotency all live in [`ingest_scan`](/backend/services.md); the handler only translates
+  `ScanOwnershipError` → 403 and `ScanClosedError` → 400. Do not reimplement those checks here.
+- **Auth runs before body validation on ingest.** Declaring `payload: ScanIngestRequest` as a plain
+  body param while `require_agent` is a sub-`Depends` means FastAPI solves the dependency first, so
+  an unsigned request carrying an invalid body answers **401, not 422**. The one exception is a body
+  that is not valid JSON at all — decoding precedes dependency solving, so that is a 422.
+- **Ingest status codes.** `401` unauthenticated (bad/missing/stale signature, replayed nonce);
+  `403` revoked device or a scan owned by another agent/org; `400` results arriving after the
+  command was written off; `422` payload shape. A separately re-signed repeat is accepted and writes
+  nothing new; a byte-identical replay is 401 on the nonce.
 - Auth and invite routes live in `routers/auth.py` and `routers/invites.py` but are documented
   separately — see [auth](/backend/auth.md). `GET /api/v1/users/me` closes contract ask C16 — role
-  is authoritative from the profile resource, not the JWT. Ingest (`POST /api/v1/scans`) is still
-  not wired — see the note in [api](/backend/api.md). The agent command channel is the first product
-  route mounting [device auth](/backend/device-auth.md) (`require_agent_ws`).
+  is authoritative from the profile resource, not the JWT. The agent command channel and ingest are
+  the product routes mounting [device auth](/backend/device-auth.md) (`require_agent_ws` /
+  `require_agent`).
 
 # Citations
 
@@ -85,3 +100,4 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 [4] [specs/019-users-me-and-error-envelope](../../../specs/019-users-me-and-error-envelope/TRUTH.md)
 [5] [specs/021-scan-list-and-finding-filters](../../../specs/021-scan-list-and-finding-filters/TRUTH.md)
 [6] [specs/022-command-enqueue-delivery](../../../specs/022-command-enqueue-delivery/plan.md)
+[7] [specs/024-scan-ingest-endpoint](../../../specs/024-scan-ingest-endpoint/TRUTH.md)

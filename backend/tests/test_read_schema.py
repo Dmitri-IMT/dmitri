@@ -4,7 +4,7 @@ from uuid import UUID
 
 import pydantic
 import pytest
-from api.schemas import Host
+from api.schemas import HostPayload
 from api.schemas.read import (
     FindingListResponse,
     FindingRead,
@@ -111,9 +111,9 @@ def test_host_summary_first_seen_at_present():
 
 
 def test_scan_host_view_is_distinct_from_ingest_host():
-    assert ScanHostView is not Host
-    assert not issubclass(ScanHostView, Host)
-    assert not issubclass(Host, ScanHostView)
+    assert ScanHostView is not HostPayload
+    assert not issubclass(ScanHostView, HostPayload)
+    assert not issubclass(HostPayload, ScanHostView)
 
 
 def test_scan_host_view_rejects_missing_hostname():

@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanResult), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
+description: The Pydantic ingest input (ScanIngestRequest), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -12,8 +12,9 @@ timestamp: 2026-08-03T00:00:00Z
 ## Purpose
 
 `schemas/` holds the Pydantic v2 models at the HTTP boundary — separate from the
-[ORM models](/backend/models.md). `scan.py` is the **ingestion input**: it validates the `ScanResult`
-an agent submits. `persistence.py` is the legacy read/output side: `Persisted*` projections used
+[ORM models](/backend/models.md). `scan.py` is the **ingestion input**: it validates the
+`ScanIngestRequest` an agent submits to the wired `POST /api/v1/scans`. `persistence.py` is the
+legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
 [hosts/scans/findings routers](/backend/routers.md) actually return (plus `ScanSortBy`/`SortOrder`
 literal aliases used only on the scan-list route). `schemas/__init__.py` re-exports
@@ -24,12 +25,18 @@ the ingest input plus the main persisted projections.
 | Name | What it validates | Ref |
 |------|-------------------|-----|
 | `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
-| `ScanResult` | Top-level payload (`extra="forbid"`): `scan_id`, `timestamp`, `subnet`, `scan_mode` (`quick`/`standard`/`extensive`/`nspi`/`max`), `hosts`, `findings`, `artifacts`, `metadata`. | `backend/src/api/schemas/scan.py:61` |
-| `Host` | `ip` (`IPv4Address`), MAC regex, `hostname`, `vendor`, `ports`. | `backend/src/api/schemas/scan.py:36` |
-| `Port` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `cpes`. | `backend/src/api/schemas/scan.py:27` |
-| `Finding` | Optional `ip` (`IPv4Address`)/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:44` |
-| `Artifact` | `kind` (`nmap_xml`/`nse_output`), `path`, `stage`, optional `host_ip` (`IPv4Address`). | `backend/src/api/schemas/scan.py:20` |
-| `ScanIngestResponse` | `message`, `scan_id`, `hosts_received` — the `202` response body. | `backend/src/api/schemas/scan.py:74` |
+| `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. | `backend/src/api/schemas/scan.py:16` |
+| `PortPayload` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `version`, `cpes`. | `backend/src/api/schemas/scan.py:19` |
+| `HostPayload` | `ip` (`IPv4Address`), MAC regex (required-but-nullable), `hostname`, `vendor`, `ports` (required). | `backend/src/api/schemas/scan.py:30` |
+| `FindingPayload` | Optional `ip` (`IPv4Address`)/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:40` |
+| `ScanIngestRequest` | Top-level payload: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `hosts`, `findings`, `metadata`. `hosts`/`findings` are required (no defaults). | `backend/src/api/schemas/scan.py:59` |
+| `ScanIngestAcceptedResponse` | `message`, `scan_id`, `hosts_received` (`ge=0`), `status` (`Literal["accepted"]`) — the `202` response body. | `backend/src/api/schemas/scan.py:71` |
+
+**All five carry `model_config = ConfigDict(extra="forbid")`** — DMI-63 pushed it to *every* ingest
+depth, not just the top level. Before that only `ScanResult` forbade extras, so `hosts[0].os = "linux"`
+was silently dropped instead of refused. The names are the contract's own (`HostPayload`,
+`PortPayload`, `FindingPayload`), which also removes the short-name collision with `read.Port` that
+made FastAPI mangle a component to `api__schemas__scan__Port`.
 
 ## Key classes / functions — `read.py` (wired read responses)
 
@@ -115,17 +122,20 @@ command has none. The published contract was amended to drop it from `required` 
 | `PersistedDevice` / `PersistedPort` / `PersistedService` | A stored host with nested ports and one service (incl. `cpes`). | `backend/src/api/schemas/persistence.py:22` |
 | `PersistedFinding` | A stored finding with `confidence`, `source_labels`, and embedded `KevRecordView` / `EpssRecordView` / `RiskSnapshotView`. | `backend/src/api/schemas/persistence.py:31` |
 | `KevRecordView` / `EpssRecordView` / `RiskSnapshotView` | Read views of the KEV/EPSS/risk rows. | `backend/src/api/schemas/persistence.py:55` |
-| `PersistedArtifact` | Stored artifact projection. | `backend/src/api/schemas/persistence.py:76` |
-| `EnrichmentJobView` | An `enrichment_jobs` row (status, attempts, timestamps). | `backend/src/api/schemas/persistence.py:83` |
-| `PersistedScanSummary` | Scan header (`scan_mode`) + `device_count` / `finding_count`. | `backend/src/api/schemas/persistence.py:98` |
-| `PersistedScanDetail` | Full scan: `scan_mode`/`status` + metadata + devices + findings + artifacts + enrichment jobs. | `backend/src/api/schemas/persistence.py:107` |
-| `PersistedScanRiskSummary` | Aggregates: totals, confirmed/KEV counts, average/max risk, `top_findings`. | `backend/src/api/schemas/persistence.py:120` |
+| `EnrichmentJobView` | An `enrichment_jobs` row (status, attempts, timestamps). | `backend/src/api/schemas/persistence.py:76` |
+| `PersistedScanSummary` | Scan header (`scan_mode`) + `device_count` / `finding_count`. | `backend/src/api/schemas/persistence.py:91` |
+| `PersistedScanDetail` | Full scan: `scan_mode`/`status` + metadata + devices + findings + enrichment jobs. | `backend/src/api/schemas/persistence.py:100` |
+| `PersistedScanRiskSummary` | Aggregates: totals, confirmed/KEV counts, average/max risk, `top_findings`. | `backend/src/api/schemas/persistence.py:112` |
+
+`PersistedArtifact` and `PersistedScanDetail.artifacts` were **removed in DMI-63** along with the
+rest of the artifact concept — see the note below.
 
 ## How it connects
 
-- `ScanResult` is the argument to [`persist_scan`](/backend/services.md), which maps it onto the
-  [ORM models](/backend/models.md); the enrichment services also build synthetic `Finding` objects
-  to feed `upsert_finding`.
+- `ScanIngestRequest` is the body of `POST /api/v1/scans` ([routers](/backend/routers.md)) and the
+  argument to [`ingest_scan`/`persist_scan`](/backend/services.md), which map it onto the
+  [ORM models](/backend/models.md); the enrichment services also build synthetic `FindingPayload`
+  objects to feed `upsert_finding`.
 - The `read.py` models are built by [`services/read.py`](/backend/services.md) and returned directly
   by the [routers](/backend/routers.md) — this is the one wired HTTP surface today.
 - The `Persisted*` projections still exist and are used mainly by tests; they predate the read path
@@ -144,13 +154,24 @@ command has none. The published contract was amended to drop it from `required` 
   likewise dropped `Field(default_factory=list)` — the service always passes them, and a default
   would make FastAPI publish them as optional, weakening the generated frontend types. Keep them
   defaultless so the contract's `required` list stays honest.
-- **`scan_mode`, resolved.** `ScanResult.scan_mode` and the OpenAPI `ScanIngestRequest.scan_mode` now
-  agree — see [contracts](/contracts.md) for the ADR-013 resolution.
-- **`hosts`, not devices.** The ingest schema uses `Host`/`hosts`/`hosts_received` (ADR-013 retired
-  `device` from the wire — see [glossary](/glossary.md)). `PersistedDevice`/`devices`/`device_count`
-  in the legacy `persistence.py` projections were **not** renamed by this change.
+- **`scan_mode`, resolved.** `ScanIngestRequest.scan_mode` and the OpenAPI
+  `ScanIngestRequest.scan_mode` now agree — see [contracts](/contracts.md) for the ADR-013 resolution.
+  DMI-63 also adopted the contract's component *names*, so the Python class and the published
+  schema are now called the same thing.
+- **`hosts`, not devices.** The ingest schema uses `HostPayload`/`hosts`/`hosts_received` (ADR-013
+  retired `device` from the wire — see [glossary](/glossary.md)).
+  `PersistedDevice`/`devices`/`device_count` in the legacy `persistence.py` projections were **not**
+  renamed by this change.
+- **Artifacts are gone (DMI-63).** `Artifact`, `ArtifactKind`, `ScanResult.artifacts`,
+  `PersistedArtifact` and `PersistedScanDetail.artifacts` were all deleted, along with the
+  `ArtifactRecord` table — the agent never populated them. An `artifacts` key in an ingest body is
+  now a **422** (unknown field), not a silently ignored one.
+- **No ingest-side `Port` any more.** `scan.py` deliberately defines *no* class named `Port`; the
+  read path keeps its own at `read.py:18`. Do not re-add one — the collision is what DMI-63 removed.
+  The contract likewise gained a separate `PortPayload` component (`Port` plus `cpes`) rather than
+  widening the shared `Port`, which the read responses still fingerprint against.
 - These are Pydantic models, wholly distinct from the same-named ORM classes in
-  [models](/backend/models.md) (`Host` schema vs `ScanHostRecord`/`HostRecord` tables).
+  [models](/backend/models.md) (`HostPayload` schema vs `ScanHostRecord`/`HostRecord` tables).
 
 # Citations
 
@@ -160,3 +181,4 @@ command has none. The published contract was amended to drop it from `required` 
 [4] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)
 [5] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
 [7] [specs/021-scan-list-and-finding-filters](../../../specs/021-scan-list-and-finding-filters/TRUTH.md)
+[8] [specs/024-scan-ingest-endpoint](../../../specs/024-scan-ingest-endpoint/TRUTH.md)

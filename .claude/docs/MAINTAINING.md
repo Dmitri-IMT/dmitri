@@ -3,7 +3,7 @@ type: Maintenance Playbook
 title: Maintaining the Dmitri code-map
 description: How agents write and keep the .claude/docs OKF code-map current as the code changes.
 tags: [okf, maintenance, meta]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Maintaining this code-map
@@ -71,18 +71,29 @@ Keep it accurate over exhaustive. Reference real symbols and line numbers; do no
   backend, and the React frontend. The backend serves the read path, auth, `users/me`, the invite
   routes and — since DMI-64 — the full command channel (`POST /agents/{id}/commands`,
   `GET /commands/{id}`, and the WS channel that delivers commands and applies the Pi's status
-  frames). Still **not wired**: ingest (`POST /api/v1/scans`) is contract-defined only, and no Pi
-  client dials the WS channel — the daemon is DMI-66, so delivery is exercised against fake sockets.
-  Flag those two as **planned / not yet wired**; do not describe the backend as a whole that way.
-- **`device` ↔ `host` rename.** The Pi ingest payload says `devices[]` (frozen by ADR-011);
-  everywhere else the term is `host`. `X-Device-Id` identifies the *agent*, not a host.
+  frames). Ingest (`POST /api/v1/scans`) is also wired, since DMI-63. Still **not wired**: the
+  device side — no Pi daemon posts scan results (DMI-66) and no Pi client dials the WS channel
+  either, so both are exercised against signed test requests and fake sockets rather than a real
+  Pi. The backend routes exist and are gated; what's missing is the Pi client that calls them.
+  Flag that as **planned / not yet wired**; do not describe the backend as a whole that way.
+- **`device` ↔ `host` rename, now complete on the wire.** ADR-013 lifted ADR-011's ingest-naming
+  freeze, so the ingest payload says `hosts[]` too — on both the agent side
+  (`normalize/contracts.py:56`) and the backend (`schemas/scan.py:66`). `host` is the term
+  everywhere. Two deliberate survivors: `X-Device-Id`, which identifies the *agent* and not a host,
+  and the legacy `PersistedDevice`/`devices`/`device_count` projections in
+  `schemas/persistence.py`, which were never renamed. Don't "finish" either.
 - **`ScanRunner` orchestration.** There is no `ScanOrchestrator` class; `ScanRunner._run()` is the
   pipeline. CLAUDE.md's "bypass" warning is about the dual front-door design (TUI + headless), not
   a live second code path.
 - **Not-wired / legacy code.** `discovery/service_detection.py` is exported but unused; the legacy
   `full` scan mode is being removed in favor of `max`. Describe as such; don't delete.
-- **Contract divergence.** OpenAPI `ScanIngestRequest` (`scan_mode`) is out of step with the
-  implemented `schemas/scan.py` + example JSON (`target_mode`/`scan_profile`). Note, don't reconcile.
+- **Contract and Python agree — the old divergence is resolved.** OpenAPI `ScanIngestRequest`,
+  `schemas/scan.py` and the example JSON all use `scan_mode`; `target_mode`/`scan_profile` are gone.
+  DMI-63 went further and adopted the contract's own component names on the Python side
+  (`ScanIngestRequest`, `HostPayload`, `PortPayload`, `FindingPayload`), so the two halves can no
+  longer drift on naming. This entry used to say the opposite — if you half-remember a warning about
+  a `scan_mode` divergence, read [contracts.md](./contracts.md)'s "Resolved divergence" section
+  rather than re-opening it.
 
 ## Ingest workflow (when code changes)
 

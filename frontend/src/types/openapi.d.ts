@@ -413,6 +413,17 @@ export interface components {
             service: string;
             version?: string | null;
         };
+        PortPayload: {
+            port: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            /** @enum {string} */
+            state: "open" | "closed" | "filtered";
+            service: string;
+            version?: string | null;
+            /** @default [] */
+            cpes: string[];
+        };
         HostPayload: {
             /** Format: ipv4 */
             ip: string;
@@ -420,7 +431,7 @@ export interface components {
             hostname: string;
             vendor: string;
             /** @default [] */
-            ports: components["schemas"]["Port"][];
+            ports: components["schemas"]["PortPayload"][];
         };
         ScanHostView: {
             /** Format: uuid */

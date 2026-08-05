@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Shared contracts
@@ -18,12 +18,14 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 | File | What it is |
 |------|-----------|
 | `contracts/openapi/openapi.yaml` | OpenAPI 3.1 REST/ingest contract — the full integration surface (much broader than what the backend shell implements today). |
-| `contracts/examples/scan_result.example.json` | A concrete `ScanResult` payload; the shared test fixture. |
+| `contracts/examples/scan_result.example.json` | A concrete `ScanIngestRequest` payload; the shared test fixture. |
 
 ## The ingest surface
 
-- `POST /api/v1/scans` — agent ingest, **HMAC-signed** (headers `X-Device-Id`, `X-Timestamp`,
-  `X-Nonce`, `X-Body-SHA256`, `X-Signature`; returns `202 Accepted`).
+- `POST /api/v1/scans` — agent ingest, **signed** (headers `X-Device-Id`, `X-Timestamp`,
+  `X-Nonce`, `X-Body-SHA256`, `X-Signature`; returns `202 Accepted`). **Wired** (DMI-63), operation
+  id `ingestScan`. `401` unauthenticated / nonce replay, `403` revoked device or a scan owned by
+  another agent-or-org, `400` results after the command was written off, `422` payload shape.
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
   stub is returned before ingest completes).
 - `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
@@ -37,20 +39,29 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
 `RefreshCookieAuth` (httpOnly `dmitri_refresh` cookie). CORS restricted to the SPA origins.
 
-> **The read path is wired** in the backend shell today ([backend/routers](/backend/routers.md)):
-> `GET /api/v1/health`, `/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`. Ingest
-> (`POST /api/v1/scans`) and auth above are still contract-defined but not yet wired; `persist_scan`
-> is exercised directly by tests, not over HTTP.
+> **Ingest is wired as of DMI-63** ([backend/routers](/backend/routers.md)), joining the read path,
+> auth, the invite routes and the command channel. `POST /api/v1/scans` is mounted as `ingestScan`
+> behind `require_agent` and returns the contract's `202`. The remaining gap is the **device** end:
+> no Pi daemon posts results yet (DMI-66), so ingest is driven by signed test requests.
 
 ## The payload shape
 
-The agent emits a [`ScanPayload`](/hardware-agent/normalize.md); the backend validates a `ScanResult`
-([backend/schemas](/backend/schemas.md)). Both carry a scan header (`scan_id`, `timestamp`, `subnet`,
-`scan_mode`), a list of **hosts** (ip/mac/hostname/vendor + ports), a list of **findings** (cve_id,
-cvss, severity, confidence, evidence), and metadata.
+The agent emits a [`ScanPayload`](/hardware-agent/normalize.md); the backend validates a
+`ScanIngestRequest` ([backend/schemas](/backend/schemas.md)) — since DMI-63 the Python class and the
+contract component share the same name, as do `HostPayload`/`PortPayload`/`FindingPayload`. Both
+carry a scan header (`scan_id`, `timestamp`, `subnet`, `scan_mode`), a list of **hosts**
+(ip/mac/hostname/vendor + ports), a list of **findings** (cve_id, cvss, severity, confidence,
+evidence), and metadata.
 
-The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestResponse` returns
-`hosts_received` (ADR-013 retired `Device`/`devices`/`devices_received` from the wire — ingest is
+**`PortPayload` is ingest-only (DMI-63).** The contract gained a *new* `PortPayload` component —
+`Port` plus `cpes` — and `HostPayload.ports` was re-pointed at it. `Port` itself was deliberately
+left byte-identical, because the read responses (`ScanHostView`, `HostDetailResponse`) still
+fingerprint through it and `read.Port` has no `cpes`. Widening the shared component instead would
+break both.
+
+The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestAcceptedResponse` returns
+`hosts_received` plus a `status` of `"accepted"` (ADR-013 retired
+`Device`/`devices`/`devices_received` from the wire — ingest is
 now `POST`ed as `hosts[]`, per contract asks C1–C5). Read responses add: `ScanHostView` — the
 `HostPayload` shape plus a **required** `host_id` (C9, resolved host identity per host observation
 in a scan); `HostSummary` — the `GET /hosts` list row, adding `first_seen_at`/`last_seen_at` (C6).
@@ -65,7 +76,14 @@ which the Pydantic models now match exactly with `IPv4Address`.
 
 `backend/tests/test_contract_fidelity.py` gates this file against the app's generated OpenAPI by
 fingerprinting `additionalProperties`, `required` and every property shape. Its `SCHEMA_NAMES`
-covers the read responses; `OPERATION_PATHS` covers query parameters on `/scans` and `/findings`
+covers the read responses and — since DMI-63 mounted the route — the five ingest components
+(`ScanIngestRequest`, `ScanIngestAcceptedResponse`, `HostPayload`, `PortPayload`, `FindingPayload`);
+a name can only be listed there once some mounted route makes it reachable from `app.openapi()`, or
+`_app_schema()` raises `KeyError`. `_property_shape` normalises two spellings that mean the same
+thing — `type: [X, "null"]` ≡ `anyOf: [X, {type: null}]`, and `const: v` ≡ `enum: [v]` (pydantic emits
+`const` for a single-value `Literal`; the contract writes a one-item `enum`). It does **not** read
+`minLength`/`maxLength`, so a changed `constr(min_length=…)` is not caught — a known blind spot.
+`OPERATION_PATHS` covers query parameters on `/scans` and `/findings`
 only — `/api/v1/hosts` is **not** guarded, because the contract declares `sort_by`/`sort_order`/`q`
 there and the service implements none of them (DMI-100 closes the sort half and adds the path).
 
@@ -80,7 +98,9 @@ one example per code.
 
 The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
 (previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by
-`backend/tests/test_ingest_scan.py` to drive `persist_scan` and the enrichment tests offline.
+`backend/tests/test_ingest_scan.py` to drive `ingest_scan`/`persist_scan` and the enrichment tests
+offline. It carries no `artifacts` key — DMI-63 deleted the artifact concept end to end, so an
+`artifacts` field in an ingest body is now a `422`.
 
 ## Resolved divergence (was: "note, do not fix" — now reconciled)
 

@@ -33,6 +33,11 @@ SCHEMA_NAMES = (
     "HostListResponse",
     "ScanDetailResponse",
     "FindingListResponse",
+    "ScanIngestRequest",
+    "ScanIngestAcceptedResponse",
+    "HostPayload",
+    "PortPayload",
+    "FindingPayload",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
@@ -59,12 +64,6 @@ def _normalize_minimum(value: Any) -> int | float:
 def _property_shape(spec: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any]:
     prop = _resolve_ref(spec, prop)
     shape: dict[str, Any] = {}
-    if "enum" in prop:
-        shape["enum"] = sorted(prop["enum"])
-    if "format" in prop:
-        shape["format"] = prop["format"]
-    if "minimum" in prop:
-        shape["minimum"] = _normalize_minimum(prop["minimum"])
     if "anyOf" in prop:
         parts = [_resolve_ref(spec, part) for part in prop["anyOf"]]
         shape["nullable"] = any(part.get("type") == "null" for part in parts)
@@ -76,8 +75,27 @@ def _property_shape(spec: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any
         if len(non_null) == 1:
             shape.update(_property_shape(spec, non_null[0]))
         return shape
-    if "type" in prop:
-        shape["type"] = prop["type"]
+
+    prop_type = prop.get("type")
+    nullable = isinstance(prop_type, list) and "null" in prop_type
+    if nullable:
+        remaining = [value for value in prop_type if value != "null"]
+        prop_type = remaining[0] if len(remaining) == 1 else remaining
+
+    if "enum" in prop:
+        values = prop["enum"]
+        nullable = nullable or None in values
+        shape["enum"] = sorted(value for value in values if value is not None)
+    elif "const" in prop:
+        shape["enum"] = [prop["const"]]
+    if "format" in prop:
+        shape["format"] = prop["format"]
+    if "minimum" in prop:
+        shape["minimum"] = _normalize_minimum(prop["minimum"])
+    if nullable:
+        shape["nullable"] = True
+    if prop_type is not None:
+        shape["type"] = prop_type
     if "items" in prop:
         items = _resolve_ref(spec, prop["items"])
         if "properties" in items:
@@ -143,6 +161,95 @@ def _app_operation_parameters(path: str) -> dict[str, dict[str, Any]]:
     return {param["name"]: _parameter_entry(spec, param) for param in raw}
 
 
+def test_property_shape_type_list_and_anyof_nullable_are_equal():
+    spec: dict[str, Any] = {}
+    type_list = {"type": ["string", "null"]}
+    any_of = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+    assert _property_shape(spec, type_list) == _property_shape(spec, any_of)
+
+
+def test_property_shape_const_and_single_enum_are_equal():
+    spec: dict[str, Any] = {}
+    const = {"const": "accepted"}
+    enum = {"enum": ["accepted"]}
+    assert _property_shape(spec, const) == _property_shape(spec, enum)
+
+
+def test_property_shape_nullable_mismatch_is_different():
+    spec: dict[str, Any] = {}
+    nullable = {"type": ["string", "null"]}
+    non_nullable = {"type": "string"}
+    assert _property_shape(spec, nullable) != _property_shape(spec, non_nullable)
+
+
+def test_property_shape_const_vs_wider_enum_is_different():
+    spec: dict[str, Any] = {}
+    const = {"const": "accepted"}
+    enum = {"enum": ["accepted", "pending"]}
+    assert _property_shape(spec, const) != _property_shape(spec, enum)
+
+
+def test_property_shape_changed_type_is_different():
+    spec: dict[str, Any] = {}
+    assert _property_shape(spec, {"type": "string"}) != _property_shape(
+        spec, {"type": "integer"}
+    )
+
+
+def test_property_shape_changed_minimum_is_different():
+    spec: dict[str, Any] = {}
+    assert _property_shape(
+        spec, {"type": "integer", "minimum": 0}
+    ) != _property_shape(spec, {"type": "integer", "minimum": 1})
+
+
+def test_schema_fingerprint_removed_required_is_different():
+    spec: dict[str, Any] = {}
+    base = {
+        "additionalProperties": False,
+        "required": ["a", "b"],
+        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+    }
+    missing_required = {
+        "additionalProperties": False,
+        "required": ["a"],
+        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+    }
+    assert _schema_fingerprint(spec, base) != _schema_fingerprint(
+        spec, missing_required
+    )
+
+
+def test_schema_fingerprint_added_property_is_different():
+    spec: dict[str, Any] = {}
+    base = {
+        "additionalProperties": False,
+        "required": [],
+        "properties": {"a": {"type": "string"}},
+    }
+    with_extra = {
+        "additionalProperties": False,
+        "required": [],
+        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+    }
+    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, with_extra)
+
+
+def test_schema_fingerprint_removed_property_is_different():
+    spec: dict[str, Any] = {}
+    base = {
+        "additionalProperties": False,
+        "required": [],
+        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+    }
+    without_b = {
+        "additionalProperties": False,
+        "required": [],
+        "properties": {"a": {"type": "string"}},
+    }
+    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, without_b)
+
+
 def test_response_status_codes_not_compared_open_item_1():
     contract = _load_contract()
     app_spec = app.openapi()
@@ -161,6 +268,13 @@ def test_schema_matches_contract(schema_name: str):
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
     )
+
+
+def test_ingest_scan_endpoint_exists():
+    contract = _load_contract()
+    contract_operation_id = contract["paths"]["/api/v1/scans"]["post"]["operationId"]
+    app_operation = app.openapi()["paths"]["/api/v1/scans"]["post"]
+    assert app_operation["operationId"] == contract_operation_id == "ingestScan"
 
 
 @pytest.mark.parametrize("path", OPERATION_PATHS)

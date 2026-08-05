@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and thirteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check and command delivery — plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and fourteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check, command delivery and the scan-ingest rework — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-05T00:00:00Z
 ---
 
 # Backend database migrations
@@ -31,7 +31,7 @@ new table.
 | `target_metadata` | `persistence.SQLModel.metadata` — `env.py` imports `command`, `identity`, `persistence` from `api.models`, which transitively imports `session` too (the package `__init__.py` imports all four), so all tables register on the shared metadata before autogenerate. | `backend/alembic/env.py:16` |
 | `_migration_url()` | Requires a **separate** `DATABASE_URL_DIRECT` env var (the runtime pooler runs in transaction mode and cannot run DDL); normalized via `normalize_postgres_url`. | `backend/alembic/env.py:19` |
 | `run_migrations_online()` | Builds a `NullPool` engine from the direct URL and runs migrations. | `backend/alembic/env.py:42` |
-| `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. | `backend/alembic/versions/20260715_01_baseline.py:64` |
+| `upgrade()` (rev `20260715_01`) | Creates the 14 application tables (`scans`, `artifacts`, `devices`, `ports`, `services`, `cpes`, `findings`, `enrichment_jobs`, `nvd_cache`, `kev_records`, `epss_records`, `kev_cache`, `epss_cache`, `risk_snapshots`) with their indexes/constraints. `artifacts` is later dropped by `20260804_14`, so at head this baseline's table list is one short of the live schema — `test_migrations.py` carries a `dropped_tables` allowance for exactly that. | `backend/alembic/versions/20260715_01_baseline.py:64` |
 | RLS + role hardening (baseline) | `ENABLE ROW LEVEL SECURITY` on every app table; `REVOKE ALL` from `anon`/`authenticated`; `CREATE ROLE dmitri_runtime` (`LOGIN`, `BYPASSRLS`, `NOSUPERUSER`) granted only `SELECT/INSERT/UPDATE` + sequence usage. The role statement is an `IF NOT EXISTS (SELECT 1 FROM pg_roles …) … ELSE ALTER ROLE … LOGIN BYPASSRLS` block, so a pre-existing role **converges** instead of being left as found; the downgrade's `DROP ROLE` swallows `dependent_objects_still_exist` — see the role notes below. | `backend/alembic/versions/20260715_01_baseline.py:293` |
 | `upgrade()` (rev `20260716_02`) | Adds `orgs`/`users`/`invites` (role checks + case-insensitive email unique index), a nullable `org_id` FK on `scans`, and extends RLS/revoke/grant to the identity tables. | `backend/alembic/versions/20260716_02_identity_schema.py:35` |
 | `upgrade()` (rev `20260722_03`, `scan_mode_status`) | Drops `scans.target_mode`/`scans.scan_profile`, adds `scans.scan_mode` (not null) and `scans.status` (not null, server default `completed`). | `backend/alembic/versions/20260722_03_scan_mode_status.py:13` |
@@ -46,6 +46,7 @@ new table.
 | `upgrade()` (rev `20260724_11`, `agents_public_key`) | Drops `agents.secret_ciphertext`/`secret_nonce`/`secret_key_version` and adds `public_key` (`LargeBinary`, NOT NULL, no server default — the table is empty). The `agents` security fence is untouched. `downgrade()` restores the three columns exactly as `20260723_07` declared them and documents that it is knowingly lossy if rows exist. | `backend/alembic/versions/20260724_11_agents_public_key.py` |
 | `upgrade()` (rev `20260727_12`, `finding_severity_domain`) | Adds check `ck_findings_severity` on `findings.severity` (`IN ('low','medium','high','critical')`); `upgrade()` guards for out-of-domain rows before applying. No RLS change — constraint only. | `backend/alembic/versions/20260727_12_finding_severity_domain.py` |
 | `upgrade()` (rev `20260731_13`, `command_delivery`) | Makes `commands.scan_id` **nullable** (guarded by a pre-flight query for rows that would violate the new check), adds `ck_commands_scan_id_or_expired` — `scan_id IS NOT NULL OR status IN ('queued', 'expired')` — adds the partial unique index `uq_commands_active_agent ON commands (agent_id) WHERE status IN ('queued','delivered','running','uploading')`, and adds nullable `agents.connected_at`. `downgrade()` refuses to run while any null `scan_id` remains. | `backend/alembic/versions/20260731_13_command_delivery.py` |
+| `upgrade()` (rev `20260804_14`, `scan_ingest_rework`) | Adds nullable `scans.agent_id` (FK → `agents.id`, **no backfill** — pre-existing rows stay `NULL`) and drops the `artifacts` table, which takes its owned identity sequence `artifacts_id_seq` with it. `downgrade()` recreates `artifacts` exactly as the baseline declared it, including `ix_artifacts_scan_id` and the FK → `scans`, then drops only `scans.agent_id`. Existing scan rows survive a full up→down→up round trip. | `backend/alembic/versions/20260804_14_scan_ingest_rework.py` |
 
 ## How it connects
 
@@ -70,6 +71,12 @@ new table.
 - **The DB tests only run when `DATABASE_URL_TEST` is set**, and it must name a database literally
   called `dmitri_test` (`backend/tests/conftest.py:44`, asserted again at connect time). Unset, ~249
   tests skip rather than fail.
+- **Never seed via an ORM model at a pinned old revision.** A test that calls `_migrate(engine, "<old
+  rev>")` and then inserts through `ScanRecord`/`FindingRecord` breaks the moment a *later* migration
+  adds a column, because the model always tracks head — `20260804_14`'s `scans.agent_id` broke
+  `test_finding_severity_migration.py` exactly this way (`UndefinedColumn`). Seed with explicit
+  `sa.text()` INSERTs naming only the columns that exist at that revision; `test_scan_ingest_migration.py`
+  and the sibling tests in `test_migrations.py` are the pattern to copy.
 - **`BYPASSRLS` but not superuser.** `dmitri_runtime` bypasses the RLS policies (the app is the trust
   boundary) while `anon`/`authenticated` — Supabase's PostgREST roles — are fully revoked, so the
   tables are unreachable through Supabase's auto-generated API.
