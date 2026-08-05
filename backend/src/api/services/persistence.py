@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Iterable
+from uuid import UUID
 
 from sqlmodel import Session, select
 
+from api.dependencies.agent_auth import AgentIdentity
+from api.models.command import Command
 from api.models.persistence import (
-    ArtifactRecord,
     CPERecord,
     EnrichmentJobRecord,
     FindingRecord,
@@ -15,40 +17,100 @@ from api.models.persistence import (
     ScanRecord,
     ServiceRecord,
 )
-from api.schemas.scan import Finding, Host, Port, ScanResult
+from api.schemas.scan import FindingPayload, HostPayload, PortPayload, ScanIngestRequest
+from api.services.command_lifecycle import is_terminal
+from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
 from api.services.risk import refresh_risk_snapshot
 
 
-def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
+class ScanOwnershipError(Exception):
+    pass
+
+
+class ScanClosedError(Exception):
+    pass
+
+
+def ingest_scan(
+    session: Session,
+    scan: ScanIngestRequest,
+    *,
+    identity: AgentIdentity,
+    now: datetime,
+) -> ScanRecord:
     existing = session.get(ScanRecord, scan.scan_id)
-    if existing is not None:
+
+    if existing is None:
+        return persist_scan(
+            session,
+            scan,
+            org_id=identity.org_id,
+            agent_id=identity.agent_id,
+            command=None,
+            now=now,
+            existing=None,
+        )
+
+    if existing.status == "completed":
+        if existing.agent_id != identity.agent_id or existing.org_id != identity.org_id:
+            raise ScanOwnershipError
         return existing
 
-    scan_record = ScanRecord(
-        scan_id=scan.scan_id,
-        timestamp=scan.timestamp,
-        subnet=scan.subnet,
-        scan_mode=scan.scan_mode,
-        metadata_json=scan.metadata,
+    command = command_for_scan(session, scan.scan_id)
+    if (
+        command is None
+        or command.agent_id != identity.agent_id
+        or command.org_id != identity.org_id
+    ):
+        raise ScanOwnershipError
+    if is_terminal(command.status):
+        raise ScanClosedError
+    return persist_scan(
+        session,
+        scan,
+        org_id=identity.org_id,
+        agent_id=identity.agent_id,
+        command=command,
+        now=now,
+        existing=existing,
     )
-    session.add(scan_record)
-    session.commit()
-    session.refresh(scan_record)
+
+
+def persist_scan(
+    session: Session,
+    scan: ScanIngestRequest,
+    *,
+    org_id: UUID,
+    agent_id: UUID,
+    command: Command | None,
+    now: datetime,
+    existing: ScanRecord | None,
+) -> ScanRecord:
+    if existing is None:
+        scan_record = ScanRecord(
+            scan_id=scan.scan_id,
+            org_id=org_id,
+            agent_id=agent_id,
+            timestamp=scan.timestamp,
+            subnet=scan.subnet,
+            scan_mode=scan.scan_mode,
+            metadata_json=scan.metadata,
+            status="completed",
+        )
+        session.add(scan_record)
+    else:
+        scan_record = existing
+        scan_record.timestamp = scan.timestamp
+        scan_record.subnet = scan.subnet
+        scan_record.scan_mode = scan.scan_mode
+        scan_record.metadata_json = scan.metadata
+        scan_record.agent_id = agent_id
+        session.add(scan_record)
+    session.flush()
 
     scan_host_index: dict[str, ScanHostRecord] = {}
     port_index: dict[tuple[str, int, str], PortRecord] = {}
-
-    for artifact in scan.artifacts:
-        session.add(
-            ArtifactRecord(
-                scan_id=scan.scan_id,
-                kind=artifact.kind,
-                path=artifact.path,
-                stage=artifact.stage,
-                host_ip=str(artifact.host_ip) if artifact.host_ip is not None else None,
-            )
-        )
 
     for host in scan.hosts:
         scan_host_record = _persist_scan_host(session, scan.scan_id, host)
@@ -56,8 +118,6 @@ def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
         for port in host.ports:
             port_record = _persist_port(session, scan_host_record.id, port)
             port_index[(str(host.ip), port.port, port.protocol)] = port_record
-
-    session.commit()
 
     for finding in scan.findings:
         scan_host_record = (
@@ -83,7 +143,21 @@ def persist_scan(session: Session, scan: ScanResult) -> ScanRecord:
     upsert_hosts_for_scan(session, scan_record, scan)
 
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
-    session.commit()
+
+    if command is None:
+        session.commit()
+    else:
+        applied = apply_status(
+            session,
+            agent_id=agent_id,
+            command_id=command.id,
+            status="done",
+            now=now,
+        )
+        if not applied:
+            raise RuntimeError(
+                "command moved past 'done' between the terminal check and commit"
+            )
     return scan_record
 
 
@@ -91,7 +165,7 @@ def upsert_finding(
     session: Session,
     *,
     scan_id,
-    finding: Finding,
+    finding: FindingPayload,
     scan_host_record: ScanHostRecord | None,
     port_record: PortRecord | None,
     confidence: str | None = None,
@@ -182,13 +256,13 @@ def finding_dedupe_key(
     return f"{ip or 'global'}|{protocol or 'na'}|{port or 0}|{suffix}"
 
 
-def initial_confidence_for_finding(finding: Finding) -> str:
+def initial_confidence_for_finding(finding: FindingPayload) -> str:
     if finding.cve_id:
         return "probable"
     return "tentative"
 
 
-def _persist_scan_host(session: Session, scan_id, host: Host) -> ScanHostRecord:
+def _persist_scan_host(session: Session, scan_id, host: HostPayload) -> ScanHostRecord:
     record = ScanHostRecord(
         scan_id=scan_id,
         ip=str(host.ip),
@@ -201,7 +275,9 @@ def _persist_scan_host(session: Session, scan_id, host: Host) -> ScanHostRecord:
     return record
 
 
-def _persist_port(session: Session, scan_host_id: int | None, port: Port) -> PortRecord:
+def _persist_port(
+    session: Session, scan_host_id: int | None, port: PortPayload
+) -> PortRecord:
     if scan_host_id is None:
         raise ValueError("scan_host_id is required to persist a port")
 

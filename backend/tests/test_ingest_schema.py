@@ -1,9 +1,25 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pydantic
 import pytest
-from api.schemas import Host, ScanResult
+from api.schemas import (
+    HostPayload,
+    PortPayload,
+    ScanIngestAcceptedResponse,
+    ScanIngestRequest,
+)
 from api.schemas.persistence import PersistedScanDetail, PersistedScanSummary
+from api.schemas.read import Port
+
+EXAMPLE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "contracts"
+    / "examples"
+    / "scan_result.example.json"
+)
 
 
 def _base_payload(**overrides: object) -> dict:
@@ -27,10 +43,11 @@ def _base_payload(**overrides: object) -> dict:
 
 
 def test_scan_result_validates_scan_mode_and_hosts_payload():
-    result = ScanResult.model_validate(_base_payload())
+    payload = _base_payload(findings=[])
+    result = ScanIngestRequest.model_validate(payload)
 
     assert result.scan_mode == "standard"
-    assert isinstance(result.hosts[0], Host)
+    assert isinstance(result.hosts[0], HostPayload)
     assert result.hosts[0].hostname == "lab-camera"
 
 
@@ -38,7 +55,7 @@ def test_scan_result_rejects_target_mode_and_scan_profile():
     payload = _base_payload(target_mode="subnet", scan_profile="lan")
 
     with pytest.raises(pydantic.ValidationError):
-        ScanResult.model_validate(payload)
+        ScanIngestRequest.model_validate(payload)
 
 
 def test_scan_result_rejects_devices_field_without_hosts():
@@ -47,15 +64,15 @@ def test_scan_result_rejects_devices_field_without_hosts():
     payload["devices"] = payload.pop("hosts", [])
 
     with pytest.raises(pydantic.ValidationError):
-        ScanResult.model_validate(payload)
+        ScanIngestRequest.model_validate(payload)
 
 
 def test_scan_result_rejects_ipv6_host_address():
-    payload = _base_payload()
+    payload = _base_payload(findings=[])
     payload["hosts"][0]["ip"] = "2001:db8::1"
 
     with pytest.raises(pydantic.ValidationError):
-        ScanResult.model_validate(payload)
+        ScanIngestRequest.model_validate(payload)
 
 
 def test_scan_result_rejects_ipv6_finding_address():
@@ -73,11 +90,13 @@ def test_scan_result_rejects_ipv6_finding_address():
     )
 
     with pytest.raises(pydantic.ValidationError):
-        ScanResult.model_validate(payload)
+        ScanIngestRequest.model_validate(payload)
 
 
 def test_host_importable_from_api_schemas():
-    host = Host(ip="10.0.0.1", hostname="router", vendor="Acme", mac=None)
+    host = HostPayload(
+        ip="10.0.0.1", hostname="router", vendor="Acme", mac=None, ports=[]
+    )
 
     assert host.hostname == "router"
 
@@ -105,9 +124,155 @@ def test_persisted_scan_detail_uses_scan_mode_and_status():
         metadata=None,
         devices=[],
         findings=[],
-        artifacts=[],
         enrichment_jobs=[],
     )
 
     assert detail.scan_mode == "standard"
     assert detail.status == "complete"
+
+
+def test_ingest_nested_models_forbid_unknown_fields_and_support_cpes():
+    port = PortPayload(
+        port=443,
+        protocol="tcp",
+        state="open",
+        service="https",
+        cpes=["cpe:2.3:a:x:y:1:*"],
+    )
+    assert port.cpes
+
+    bad_port_payload = _base_payload(findings=[])
+    bad_port_payload["hosts"][0]["ports"] = [
+        {
+            "port": 443,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "https",
+            "unknown": True,
+        }
+    ]
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(bad_port_payload)
+
+    bad_finding_payload = _base_payload(
+        findings=[
+            {
+                "severity": "high",
+                "title": "Bad",
+                "description": "Bad finding",
+                "recommendation": "Fix it",
+                "evidence": "Evidence",
+                "unknown": True,
+            }
+        ]
+    )
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(bad_finding_payload)
+
+
+def test_read_port_has_no_ingest_cpes_and_response_is_accepted():
+    assert "cpes" not in Port.model_fields
+
+    response = ScanIngestAcceptedResponse(
+        message="scan received successfully",
+        scan_id=_base_payload()["scan_id"],
+        hosts_received=1,
+        status="accepted",
+    )
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestAcceptedResponse.model_validate(
+            {**response.model_dump(), "extra": True}
+        )
+
+
+def test_ingest_host_entry_forbids_unknown_field():
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["unknown"] = True
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_ingest_requires_hosts_key():
+    payload = _base_payload()
+    del payload["hosts"]
+    payload["findings"] = []
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_ingest_requires_findings_key():
+    payload = _base_payload()
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_ingest_hosts_and_findings_may_be_empty_lists():
+    payload = _base_payload(findings=[])
+    payload["hosts"] = []
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts == []
+    assert result.findings == []
+
+
+def test_ingest_host_requires_mac_key_but_accepts_null():
+    payload = _base_payload(findings=[])
+    del payload["hosts"][0]["mac"]
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+    payload["hosts"][0]["mac"] = None
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].mac is None
+
+
+def test_ingest_host_requires_ports_key():
+    payload = _base_payload(findings=[])
+    del payload["hosts"][0]["ports"]
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_ingest_rejects_top_level_artifacts_field():
+    payload = _base_payload(findings=[], artifacts=[])
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_ingest_accepted_response_requires_status():
+    payload = {
+        "message": "scan received successfully",
+        "scan_id": _base_payload()["scan_id"],
+        "hosts_received": 1,
+    }
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestAcceptedResponse.model_validate(payload)
+
+
+def test_ingest_accepted_response_rejects_non_accepted_status():
+    payload = {
+        "message": "scan received successfully",
+        "scan_id": _base_payload()["scan_id"],
+        "hosts_received": 1,
+        "status": "pending",
+    }
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestAcceptedResponse.model_validate(payload)
+
+
+def test_example_payload_validates_against_tightened_model():
+    payload = json.loads(EXAMPLE_PATH.read_text())
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].ports[0].cpes == []

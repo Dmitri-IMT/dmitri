@@ -10,7 +10,7 @@ from api.models.persistence import (
     ScanHostRecord,
     ScanRecord,
 )
-from api.schemas.scan import ScanResult
+from api.schemas.scan import ScanIngestRequest
 
 
 def identity_key(mac: str | None, ip: str) -> str:
@@ -20,7 +20,7 @@ def identity_key(mac: str | None, ip: str) -> str:
 
 
 def upsert_hosts_for_scan(
-    session: Session, scan_record: ScanRecord, scan: ScanResult
+    session: Session, scan_record: ScanRecord, scan: ScanIngestRequest
 ) -> None:
     del scan
     scan_host_records = session.exec(

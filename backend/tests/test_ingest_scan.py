@@ -3,23 +3,38 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
+import pytest
+from api.dependencies.agent_auth import AgentIdentity
+from api.models.command import Agent, Command
+from api.models.identity import Org
 from api.models.persistence import (
+    CPERecord,
     EnrichmentJobRecord,
     EpssCacheRecord,
     EpssRecord,
     FindingRecord,
     KevCacheRecord,
     KevRecord,
+    PortRecord,
     RiskSnapshotRecord,
     ScanHostRecord,
+    ScanRecord,
+    ServiceRecord,
 )
-from api.schemas import ScanResult
+from api.schemas import HostPayload, PortPayload, ScanIngestRequest
+from api.services import persistence as persistence_module
 from api.services import worker
 from api.services.epss import EpssClient
 from api.services.kev import KevClient
 from api.services.nvd import NvdClient
-from api.services.persistence import persist_scan
+from api.services.persistence import (
+    ScanClosedError,
+    ScanOwnershipError,
+    ingest_scan,
+    persist_scan,
+)
 from sqlmodel import Session, select
 
 EXAMPLE_PATH = (
@@ -30,9 +45,66 @@ EXAMPLE_PATH = (
 )
 
 
-def _example_scan() -> tuple[dict[str, object], ScanResult]:
+def _example_scan() -> tuple[dict[str, object], ScanIngestRequest]:
     payload = json.loads(EXAMPLE_PATH.read_text(encoding="utf-8"))
-    return payload, ScanResult.model_validate(payload)
+    return payload, ScanIngestRequest.model_validate(payload)
+
+
+def _seed_org(session: Session) -> Org:
+    org = Org(name=f"org-{uuid4()}")
+    session.add(org)
+    session.commit()
+    session.refresh(org)
+    return org
+
+
+def _seed_agent(session: Session, org_id) -> Agent:
+    agent = Agent(
+        org_id=org_id, display_name=f"agent-{uuid4()}", public_key=b"\x01" * 32
+    )
+    session.add(agent)
+    session.commit()
+    session.refresh(agent)
+    return agent
+
+
+def _seed_placeholder(
+    session: Session, *, org_id, agent_id, scan_id, now: datetime
+) -> Command:
+    scan_record = ScanRecord(
+        scan_id=scan_id,
+        org_id=org_id,
+        timestamp=now,
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        status="pending",
+    )
+    session.add(scan_record)
+    session.commit()
+    command = Command(
+        org_id=org_id,
+        agent_id=agent_id,
+        scan_id=scan_id,
+        scan_mode="standard",
+        subnet="192.168.1.0/24",
+        status="delivered",
+        delivered_at=now,
+    )
+    session.add(command)
+    session.commit()
+    session.refresh(command)
+    return command
+
+
+def _scan(scan_id, *, hosts: list[HostPayload] | None = None) -> ScanIngestRequest:
+    return ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        hosts=hosts or [],
+        findings=[],
+    )
 
 
 def _fake_nvd_payload(cve_id: str) -> dict[str, object]:
@@ -83,11 +155,19 @@ def _fake_epss_payload(cve_id: str) -> dict[str, object]:
 
 
 def test_ingest_scan_accepts_enriched_findings_example(
-    runtime_session: Session,
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:
     payload, scan = _example_scan()
 
-    record = persist_scan(runtime_session, scan)
+    record = persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
     scan_hosts = runtime_session.exec(select(ScanHostRecord)).all()
 
     assert len(scan_hosts) == 2
@@ -97,7 +177,7 @@ def test_ingest_scan_accepts_enriched_findings_example(
 
 
 def test_worker_processes_pending_jobs_separately(
-    monkeypatch, runtime_session: Session
+    monkeypatch, runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:  # type: ignore[no-untyped-def]
     _, scan = _example_scan()
     monkeypatch.setattr(
@@ -121,7 +201,15 @@ def test_worker_processes_pending_jobs_separately(
         lambda self, session, cve_id: _fake_epss_payload(cve_id),
     )
 
-    persist_scan(runtime_session, scan)
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
     jobs_before = runtime_session.exec(select(EnrichmentJobRecord)).all()
     findings_before = runtime_session.exec(select(FindingRecord)).all()
     assert jobs_before
@@ -150,7 +238,7 @@ def test_worker_processes_pending_jobs_separately(
 
 
 def test_worker_marks_job_failed_when_processing_raises(
-    monkeypatch, runtime_session: Session
+    monkeypatch, runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:  # type: ignore[no-untyped-def]
     _, scan = _example_scan()
     monkeypatch.setattr(
@@ -174,7 +262,15 @@ def test_worker_marks_job_failed_when_processing_raises(
         lambda self, session, cve_id: _fake_epss_payload(cve_id),
     )
 
-    persist_scan(runtime_session, scan)
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
     monkeypatch.setattr(worker, "get_session", lambda: iter([runtime_session]))
     processed = worker.run_worker_once(batch_size=1)
     assert processed == 1
@@ -213,3 +309,422 @@ def test_kev_and_epss_cache_store_json_safe_dates(
     assert epss_cache is not None
     assert kev_cache.response_json["date_added"] == "2026-05-12"
     assert epss_cache.response_json["scored_at"] == "2026-05-12"
+
+
+def test_ingest_scan_cpe_produces_one_nvd_cpe_job_per_distinct_cpe(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    host_a = HostPayload(
+        ip="10.0.0.5",
+        mac=None,
+        hostname="host-a",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=443,
+                protocol="tcp",
+                state="open",
+                service="https",
+                cpes=["cpe:2.3:a:x:y:1:*", "cpe:2.3:a:x:y:1:*", "cpe:2.3:a:x:z:2:*"],
+            )
+        ],
+    )
+    host_b = HostPayload(
+        ip="10.0.0.6",
+        mac=None,
+        hostname="host-b",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=8443,
+                protocol="tcp",
+                state="open",
+                service="https",
+                cpes=["cpe:2.3:a:x:y:1:*"],
+            )
+        ],
+    )
+    scan_id = uuid4()
+    scan = _scan(scan_id, hosts=[host_a, host_b])
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    def _cpe_jobs() -> list[EnrichmentJobRecord]:
+        return runtime_session.exec(
+            select(EnrichmentJobRecord).where(
+                EnrichmentJobRecord.scan_id == scan_id,
+                EnrichmentJobRecord.job_type == "nvd_cpe",
+            )
+        ).all()
+
+    ingest_scan(
+        runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+    jobs = _cpe_jobs()
+    assert sorted(job.target_value for job in jobs) == [
+        "cpe:2.3:a:x:y:1:*",
+        "cpe:2.3:a:x:y:1:*",
+        "cpe:2.3:a:x:z:2:*",
+    ]
+    assert len(jobs) == 3
+    port_ids = {job.port_id for job in jobs}
+    assert len(port_ids) == 2
+
+    ingest_scan(
+        runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+    assert len(_cpe_jobs()) == 3
+
+
+def test_ingest_scan_preserves_first_seen_across_calls(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    mac = "AA:BB:CC:DD:EE:FF"
+    host = HostPayload(
+        ip="10.0.0.9", mac=mac, hostname="host", vendor="vendor", ports=[]
+    )
+    first_scan = _scan(uuid4(), hosts=[host])
+    second_scan = _scan(uuid4(), hosts=[host])
+
+    ingest_scan(
+        runtime_session, first_scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+    first_host = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == first_scan.scan_id)
+    ).one()
+    ingest_scan(
+        runtime_session, second_scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+
+    assert first_host.host_id is not None
+    second_host = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == second_scan.scan_id)
+    ).one()
+    assert second_host.host_id == first_host.host_id
+
+
+def _scan_with_findable_payload(scan_id) -> ScanIngestRequest:
+    host = HostPayload(
+        ip="10.0.0.99",
+        mac=None,
+        hostname="host",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=22,
+                protocol="tcp",
+                state="open",
+                service="ssh",
+                cpes=["cpe:2.3:a:x:y:1:*"],
+            )
+        ],
+    )
+    return _scan(scan_id, hosts=[host])
+
+
+def test_ingest_scan_rejects_placeholder_owned_by_another_agent(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    other_agent = _seed_agent(runtime_session, seeded_org.id)
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=other_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    scan = _scan_with_findable_payload(scan_id)
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    with pytest.raises(ScanOwnershipError):
+        ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(command)
+    assert command.status == "delivered"
+    placeholder = runtime_session.get(ScanRecord, scan_id)
+    assert placeholder.status == "pending"
+    assert (
+        runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+    assert runtime_session.exec(select(PortRecord)).first() is None
+    assert (
+        runtime_session.exec(
+            select(EnrichmentJobRecord).where(EnrichmentJobRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+
+
+def test_ingest_scan_rejects_placeholder_from_another_org(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    other_org = _seed_org(runtime_session)
+    other_agent = _seed_agent(runtime_session, other_org.id)
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=other_org.id,
+        agent_id=other_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    scan = _scan_with_findable_payload(scan_id)
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    with pytest.raises(ScanOwnershipError):
+        ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(command)
+    assert command.status == "delivered"
+    placeholder = runtime_session.get(ScanRecord, scan_id)
+    assert placeholder.status == "pending"
+    assert placeholder.org_id == other_org.id
+    assert (
+        runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+
+
+def test_ingest_scan_rejects_terminal_command(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    command.status = "failed"
+    command.error_code = "device_offline"
+    command.completed_at = now
+    runtime_session.add(command)
+    runtime_session.commit()
+
+    scan = _scan_with_findable_payload(scan_id)
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    with pytest.raises(ScanClosedError):
+        ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(command)
+    assert command.status == "failed"
+    assert command.error_code == "device_offline"
+    placeholder = runtime_session.get(ScanRecord, scan_id)
+    assert placeholder.status == "pending"
+    assert (
+        runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+    assert runtime_session.exec(select(PortRecord)).first() is None
+    assert (
+        runtime_session.exec(
+            select(EnrichmentJobRecord).where(EnrichmentJobRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+
+
+def test_ingest_scan_repeated_submission_is_idempotent(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    _, scan = _example_scan()
+
+    def _table_counts() -> dict[str, int]:
+        return {
+            "hosts": len(runtime_session.exec(select(ScanHostRecord)).all()),
+            "ports": len(runtime_session.exec(select(PortRecord)).all()),
+            "services": len(runtime_session.exec(select(ServiceRecord)).all()),
+            "cpes": len(runtime_session.exec(select(CPERecord)).all()),
+            "findings": len(runtime_session.exec(select(FindingRecord)).all()),
+            "jobs": len(runtime_session.exec(select(EnrichmentJobRecord)).all()),
+        }
+
+    first = ingest_scan(
+        runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+    counts_after_first = _table_counts()
+    assert counts_after_first["hosts"] == 2
+    assert counts_after_first["ports"] == 4
+    assert counts_after_first["services"] == 4
+    assert counts_after_first["findings"] == 2
+    assert counts_after_first["jobs"] > 0
+
+    second = ingest_scan(
+        runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+    counts_after_second = _table_counts()
+
+    assert second.scan_id == first.scan_id
+    assert counts_after_second == counts_after_first
+
+
+def test_ingest_scan_rejects_completed_scan_owned_by_another_agent(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    other_agent = _seed_agent(runtime_session, seeded_org.id)
+    other_identity = AgentIdentity(agent_id=other_agent.id, org_id=seeded_org.id)
+    scan = _scan_with_findable_payload(uuid4())
+    ingest_scan(
+        runtime_session, scan, identity=other_identity, now=datetime.now(timezone.utc)
+    )
+    hosts_before = runtime_session.exec(select(ScanHostRecord)).all()
+
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    with pytest.raises(ScanOwnershipError):
+        ingest_scan(
+            runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+        )
+
+    scan_record = runtime_session.get(ScanRecord, scan.scan_id)
+    assert scan_record.agent_id == other_agent.id
+    hosts_after = runtime_session.exec(select(ScanHostRecord)).all()
+    assert len(hosts_after) == len(hosts_before)
+
+
+def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
+    migrated_database, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    host = HostPayload(
+        ip="10.0.0.30",
+        mac=None,
+        hostname="host",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=22,
+                protocol="tcp",
+                state="open",
+                service="ssh",
+                cpes=["cpe:2.3:a:x:y:1:*"],
+            )
+        ],
+    )
+    scan = _scan(scan_id, hosts=[host])
+
+    with Session(migrated_database) as session:
+        command = _seed_placeholder(
+            session,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            scan_id=scan_id,
+            now=now,
+        )
+        command.status = "done"
+        command.completed_at = now
+        session.add(command)
+        session.commit()
+        session.refresh(command)
+        command_id = command.id
+
+        with pytest.raises(RuntimeError):
+            persist_scan(
+                session,
+                scan,
+                org_id=seeded_org.id,
+                agent_id=provisioned_agent.id,
+                command=command,
+                now=now,
+                existing=session.get(ScanRecord, scan_id),
+            )
+
+    with Session(migrated_database) as fresh_session:
+        placeholder = fresh_session.get(ScanRecord, scan_id)
+        assert placeholder.status == "pending"
+        fresh_command = fresh_session.get(Command, command_id)
+        assert fresh_command.status == "done"
+        assert (
+            fresh_session.exec(
+                select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+            ).first()
+            is None
+        )
+        assert fresh_session.exec(select(PortRecord)).first() is None
+        assert fresh_session.exec(select(ServiceRecord)).first() is None
+        assert fresh_session.exec(select(CPERecord)).first() is None
+        assert (
+            fresh_session.exec(
+                select(FindingRecord).where(FindingRecord.scan_id == scan_id)
+            ).first()
+            is None
+        )
+        assert (
+            fresh_session.exec(
+                select(EnrichmentJobRecord).where(
+                    EnrichmentJobRecord.scan_id == scan_id
+                )
+            ).first()
+            is None
+        )
+
+
+def test_ingest_scan_case_a_rolls_back_completely_on_mid_ingest_failure(
+    monkeypatch, migrated_database, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    def _boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(persistence_module, "_enqueue_enrichment_jobs", _boom)
+
+    scan_id = uuid4()
+    host = HostPayload(
+        ip="10.0.0.40",
+        mac=None,
+        hostname="host",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=22,
+                protocol="tcp",
+                state="open",
+                service="ssh",
+                cpes=["cpe:2.3:a:x:y:1:*"],
+            )
+        ],
+    )
+    scan = _scan(scan_id, hosts=[host])
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    with pytest.raises(RuntimeError):
+        with Session(migrated_database) as failing_session:
+            persistence_module.ingest_scan(
+                failing_session,
+                scan,
+                identity=identity,
+                now=datetime.now(timezone.utc),
+            )
+
+    with Session(migrated_database) as fresh_session:
+        assert fresh_session.get(ScanRecord, scan_id) is None
+        assert (
+            fresh_session.exec(
+                select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+            ).first()
+            is None
+        )
+        assert fresh_session.exec(select(PortRecord)).first() is None
+        assert fresh_session.exec(select(ServiceRecord)).first() is None
+        assert fresh_session.exec(select(CPERecord)).first() is None
+        assert (
+            fresh_session.exec(
+                select(EnrichmentJobRecord).where(
+                    EnrichmentJobRecord.scan_id == scan_id
+                )
+            ).first()
+            is None
+        )

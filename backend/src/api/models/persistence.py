@@ -31,23 +31,13 @@ class ScanRecord(SQLModel, table=True):
 
     scan_id: UUID = Field(primary_key=True)
     org_id: UUID | None = Field(default=None, foreign_key="orgs.id", index=True)
+    agent_id: UUID | None = Field(default=None, foreign_key="agents.id")
     timestamp: datetime = Field(sa_type=UTC_TIMESTAMP)
     subnet: str
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
-
-
-class ArtifactRecord(SQLModel, table=True):
-    __tablename__ = "artifacts"
-
-    id: int | None = Field(default=None, primary_key=True)
-    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
-    kind: str
-    path: str
-    stage: str
-    host_ip: str | None = None
 
 
 class ScanHostRecord(SQLModel, table=True):

@@ -578,11 +578,15 @@ def test_require_agent_ws_delegates_fully_to_authenticate_agent(
     assert unauth_exc.value.status_code == 401
 
 
-def test_no_product_route_mounts_require_agent():
+def test_ingest_scan_route_mounts_require_agent():
     seen: set = set()
     stack = list(main_app.routes)
     while stack:
         route = stack.pop()
+        included_router = getattr(route, "original_router", None)
+        if included_router is not None:
+            stack.extend(included_router.routes)
+            continue
         dependant = getattr(route, "dependant", None)
         if dependant is None:
             continue
@@ -593,4 +597,4 @@ def test_no_product_route_mounts_require_agent():
                 seen.add(current.call)
             pending.extend(current.dependencies)
 
-    assert require_agent not in seen
+    assert require_agent in seen
