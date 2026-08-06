@@ -3,7 +3,7 @@ type: Maintenance Playbook
 title: Maintaining the Dmitri code-map
 description: How agents write and keep the .claude/docs OKF code-map current as the code changes.
 tags: [okf, maintenance, meta]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Maintaining this code-map
@@ -71,11 +71,15 @@ Keep it accurate over exhaustive. Reference real symbols and line numbers; do no
   backend, and the React frontend. The backend serves the read path, auth, `users/me`, the invite
   routes and — since DMI-64 — the full command channel (`POST /agents/{id}/commands`,
   `GET /commands/{id}`, and the WS channel that delivers commands and applies the Pi's status
-  frames). Ingest (`POST /api/v1/scans`) is also wired, since DMI-63. Still **not wired**: the
-  device side — no Pi daemon posts scan results (DMI-66) and no Pi client dials the WS channel
-  either, so both are exercised against signed test requests and fake sockets rather than a real
-  Pi. The backend routes exist and are gated; what's missing is the Pi client that calls them.
-  Flag that as **planned / not yet wired**; do not describe the backend as a whole that way.
+  frames). Ingest (`POST /api/v1/scans`) is also wired, since DMI-63. **DMI-66 closed the device
+  side** (2026-08-06): bare `dmitri agent` runs a daemon that dials the WS channel with an Ed25519
+  proof, reports its available subnets, executes commands through the existing headless scan, and
+  uploads results through the ingest client. Both ends now exist. What is *still* missing is
+  everything physical and operational — a provisioned Pi, service-manager packaging, key
+  provisioning, and clock synchronization — so the whole path is exercised against signed test
+  requests and fake sockets rather than real hardware. Flag **that** as the gap; do not say "no Pi
+  client dials the WS channel" or "no Pi daemon posts results" any more, and do not describe the
+  backend as a whole as unwired.
 - **`device` ↔ `host` rename, now complete on the wire.** ADR-013 lifted ADR-011's ingest-naming
   freeze, so the ingest payload says `hosts[]` too — on both the agent side
   (`normalize/contracts.py:56`) and the backend (`schemas/scan.py:66`). `host` is the term

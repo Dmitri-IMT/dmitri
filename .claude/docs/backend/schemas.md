@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest input (ScanIngestRequest), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -93,7 +93,7 @@ always comes from the caller's JWT.
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `AvailableSubnet` | `interface` (min length 1), `cidr` (`SubnetCIDR`). | `backend/src/api/schemas/agent_frames.py` |
+| `AvailableSubnet` | `interface` (min length 1), `cidr` (`SubnetCIDR`), and — required since DMI-66 — `is_default_route`. A hello that omits it is rejected; the model stays in Pydantic's lax mode like its neighbours, so `1`/`"true"`/`"yes"` still coerce. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentHelloFrame` | `type: "hello"`, `agent_version`, `available_subnets`. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentStatusFrame` | `type: "status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`), optional `error_code`. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentCommandFrame` | `type: "command"`, `command_id`, `scan_id`, `scan_mode`, `subnet` — the outbound frame `deliver()` pushes down the socket. | `backend/src/api/schemas/agent_frames.py` |

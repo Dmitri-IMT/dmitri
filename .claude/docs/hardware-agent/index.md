@@ -19,9 +19,11 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 * [normalize](./normalize.md) — Pydantic wire contracts (`ScanPayload`) and the NSE-to-findings extractor.
 * [utils](./utils.md) — Local-network detection/connectivity checks and the Nmap/NSE XML parsers.
 
-## Upload
+## Remote control & upload
 
-* [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Built, not yet called (DMI-66).
+* [daemon](./daemon.md) — The long-lived device process that accepts backend commands, runs one headless scan at a time, uploads through ingest, and reports lifecycle status.
+* [command-channel](./command-channel.md) — The device end of the backend command channel: the shared Ed25519 signer, strict hello/command/status frames, hello-first ordering, and the pinned reconnect ladder.
+* [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Wired to the daemon since DMI-66.
 
 ## TUI
 

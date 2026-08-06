@@ -1,10 +1,10 @@
 ---
 type: Package Overview
 title: hardware-agent — package overview
-description: What the hardware-agent package is, its scan pipeline, and the three front doors that drive it.
+description: What the hardware-agent package is, its scan pipeline, and the front doors that drive it — TUI, headless CLI, and the remote command daemon.
 resource: hardware-agent/src/agent/
 tags: [hardware-agent, scan-pipeline, overview]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # hardware-agent — package overview
@@ -12,9 +12,11 @@ timestamp: 2026-08-05T00:00:00Z
 `hardware-agent` is the Python package (`hardware-agent/src/agent/`) that *performs* scans — the
 [agent](/glossary.md) in domain terms. It runs an Nmap + NSE pipeline over a subnet, normalizes the
 raw XML into the shared [`ScanPayload`](/hardware-agent/normalize.md) contract, and writes the
-result to disk. Since DMI-65 it also *has* a signed upload client —
-[transport](/hardware-agent/transport.md) — but nothing in the package calls it yet; the pipeline
-still ends at the local file. `AGENT_VERSION` / `APP_VERSION` is `0.1.4`.
+result to disk. Since DMI-65 it has a signed upload client
+([transport](/hardware-agent/transport.md)), and since DMI-66 something finally calls it: the
+[daemon](/hardware-agent/daemon.md) takes commands off the backend's WebSocket
+([command-channel](/hardware-agent/command-channel.md)), runs the headless scan, and uploads the
+result. `AGENT_VERSION` / `APP_VERSION` is `0.1.4`.
 
 ## The scan pipeline
 
@@ -35,14 +37,16 @@ contingency policy (ADR-010) so a partial result is preserved when a late stage 
 
 ## Front doors
 
-The same [`ScanRunner`](/hardware-agent/scanner/runner.md) is constructed from three places, each
+The same [`ScanRunner`](/hardware-agent/scanner/runner.md) is constructed from two places, each
 threading `workspace_root` through (this is the dual-front-door design the CLAUDE.md integration
-rule guards):
+rule guards). The remote entries reach it *through* `run_headless_scan` rather than constructing a
+runner of their own:
 
 | Front door | Entry | How it runs |
 |-----------|-------|-------------|
 | TUI | [`ScanProgressScreen`](/hardware-agent/tui.md) via `dmitri` / `dmitri start` | `ScanRunner.start()` on a worker thread; events bridged to Textual messages. |
 | Headless CLI | `dmitri agent <mode> <subnet>` → [`run_headless_scan`](/hardware-agent/cli.md) | `ScanRunner.run_blocking()`; prints a JSON outcome line and exits 0/10/20 (ADR-012). |
+| Remote daemon | bare `dmitri agent` → [`AgentDaemon`](/hardware-agent/daemon.md) | Backend command → `run_headless_scan` in an `asyncio.to_thread` worker → ingest upload; lifecycle reported on the WS channel. |
 | In-process | direct `run_headless_scan(...)` call | Same blocking path; returns a `HeadlessScanResult`. |
 
 ## Package layout
@@ -54,14 +58,16 @@ rule guards):
 | Discovery stages | [discovery](/hardware-agent/discovery.md) |
 | Contracts + findings | [normalize](/hardware-agent/normalize.md) |
 | Network + XML helpers | [utils](/hardware-agent/utils.md) |
-| Signed ingest client (unwired) | [transport](/hardware-agent/transport.md) |
+| Signed ingest client | [transport](/hardware-agent/transport.md) |
+| Signed WS command client + shared signer | [command-channel](/hardware-agent/command-channel.md) |
+| Remote command daemon | [daemon](/hardware-agent/daemon.md) |
 | Textual TUI | [tui](/hardware-agent/tui.md) |
 
 ## Tech stack
 
 Python 3.13, Textual (TUI), Pydantic v2 (contracts), Nmap + NSE (engine), `psutil`, stdlib threads,
-`uv`, plus `httpx` + `cryptography` (added by DMI-65 for the ingest client). Installed console
-script: `dmitri = agent.cli:main`.
+`uv`, plus `httpx` + `cryptography` (added by DMI-65 for the ingest client) and `websockets` (added
+by DMI-66 for the command channel). Installed console script: `dmitri = agent.cli:main`.
 
 # Citations
 

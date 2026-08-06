@@ -6,7 +6,8 @@ bundle mapping the Dmitri codebase — what each module does and how the pieces 
 knowledge base. See [MAINTAINING.md](./MAINTAINING.md) for how this bundle is kept current, and
 [log.md](./log.md) for its change history.
 
-> Only the hardware-agent + TUI is in active development; the backend is coded but not yet wired.
+> The hardware-agent + TUI is the most active layer, but the backend read path, auth, ingest and
+> command channel are all wired, and since DMI-66 so is the Pi-side daemon that drives them.
 > Start at [overview.md](./overview.md).
 
 ## Start here
@@ -20,12 +21,15 @@ knowledge base. See [MAINTAINING.md](./MAINTAINING.md) for how this bundle is ke
 The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Full listing in
 [hardware-agent/index.md](./hardware-agent/index.md).
 
-* [hardware-agent/overview](./hardware-agent/overview.md) — The package, its scan pipeline, and the three front doors that drive it.
+* [hardware-agent/overview](./hardware-agent/overview.md) — The package, its scan pipeline, and the front doors that drive it — TUI, headless CLI, and the remote command daemon.
 * [hardware-agent/cli](./hardware-agent/cli.md) — The dmitri CLI dispatcher, the headless entrypoint, scan tuning, and persisted user prefs.
 * [hardware-agent/discovery](./hardware-agent/discovery.md) — Thin per-stage Nmap-argument builders — host/port/service/NSE-vuln scanning.
 * [hardware-agent/normalize](./hardware-agent/normalize.md) — The Pydantic wire contracts and the NSE-to-findings extractor (the shared on-disk payload).
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
+* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that accepts backend commands, runs one headless scan at a time, uploads through ingest, and reports lifecycle status.
+* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The device end of the backend command channel: the shared Ed25519 signer, strict hello/command/status frames, hello-first ordering, and the pinned reconnect ladder.
+* [hardware-agent/transport](./hardware-agent/transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 
 ### Scan engine — `scanner/`
 
