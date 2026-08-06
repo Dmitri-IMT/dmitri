@@ -318,7 +318,7 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   HIBP screen, `mailer.py` seam), the `require_user` dependency (`dependencies/auth.py`), and the
   app middleware (`middleware.py` — `RequestIdMiddleware`, `NoContentCorsMiddleware` 204 preflight).
 * **Update**: threaded auth through the neighboring docs — `models.md` (new `session.py`:
-  `RefreshToken`/`refresh_tokens`, `PasswordResetToken`/`password_reset_tokens`; auth no longer
+  `RefreshToken`/`refresh_tokens`, `PasswordResetToken`/`password_reset_tokens`; auth no longer <!-- pragma: allowlist secret -->
   dormant), `migrations.md` (rev `20260722_07_auth_sessions`), `schemas.md` (`schemas/auth.py`
   request/response models), `api.md` (required `JWT_SIGNING_SECRET` + the seven auth `Settings`
   fields, middleware + auth-router wiring in `main.py`), `services.md`/`routers.md` cross-links,
