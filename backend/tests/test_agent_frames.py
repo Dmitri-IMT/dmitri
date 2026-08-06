@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 import pydantic
 import pytest
+import yaml
 from api.schemas.agent_frames import (
     AgentCommandFrame,
     AgentErrorFrame,
     AgentHelloFrame,
     AgentStatusFrame,
+    AvailableSubnet,
+)
+
+CONTRACT_PATH = (
+    Path(__file__).resolve().parents[2] / "contracts" / "openapi" / "openapi.yaml"
 )
 
 COMMAND_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -20,15 +27,59 @@ def test_hello_frame_validates_good_payload():
         {
             "type": "hello",
             "agent_version": "0.2.0",
-            "available_subnets": [{"interface": "eth0", "cidr": "10.0.0.0/24"}],
+            "available_subnets": [
+                {
+                    "interface": "eth0",
+                    "cidr": "10.0.0.0/24",
+                    "is_default_route": False,
+                },
+                {
+                    "interface": "wlan0",
+                    "cidr": "192.168.1.0/24",
+                    "is_default_route": True,
+                },
+            ],
         }
     )
 
     assert frame.type == "hello"
     assert frame.agent_version == "0.2.0"
-    assert len(frame.available_subnets) == 1
+    assert len(frame.available_subnets) == 2
     assert frame.available_subnets[0].interface == "eth0"
     assert frame.available_subnets[0].cidr == "10.0.0.0/24"
+    assert frame.available_subnets[0].is_default_route is False
+    assert frame.available_subnets[1].is_default_route is True
+
+
+def test_hello_frame_rejects_subnet_without_is_default_route():
+    with pytest.raises(pydantic.ValidationError):
+        AgentHelloFrame.model_validate(
+            {
+                "type": "hello",
+                "agent_version": "0.2.0",
+                "available_subnets": [
+                    {"interface": "eth0", "cidr": "10.0.0.0/24"},
+                ],
+            }
+        )
+
+
+@pytest.mark.parametrize("flag", [None, "maybe", {}, []])
+def test_hello_frame_rejects_non_boolean_is_default_route(flag):
+    with pytest.raises(pydantic.ValidationError):
+        AgentHelloFrame.model_validate(
+            {
+                "type": "hello",
+                "agent_version": "0.2.0",
+                "available_subnets": [
+                    {
+                        "interface": "eth0",
+                        "cidr": "10.0.0.0/24",
+                        "is_default_route": flag,
+                    },
+                ],
+            }
+        )
 
 
 def test_status_frame_validates_good_payload():
@@ -115,3 +166,22 @@ def test_error_frame_validates_good_payload():
 
     assert frame.type == "error"
     assert frame.message == "bad frame"
+
+
+@pytest.mark.parametrize(
+    ("schema_name", "model"),
+    [
+        ("AvailableSubnet", AvailableSubnet),
+        ("AgentHelloFrame", AgentHelloFrame),
+        ("AgentCommandFrame", AgentCommandFrame),
+        ("AgentStatusFrame", AgentStatusFrame),
+        ("AgentErrorFrame", AgentErrorFrame),
+    ],
+)
+def test_frame_models_match_the_contract(schema_name, model):
+    spec = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    schema = spec["components"]["schemas"][schema_name]
+
+    assert schema["additionalProperties"] is False
+    assert set(model.model_fields) == set(schema["properties"])
+    assert set(schema["required"]) <= set(model.model_fields)
