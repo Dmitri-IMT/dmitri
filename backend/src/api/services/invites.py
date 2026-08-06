@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from api.core.config import get_settings
-from api.models.identity import Invite, User
+from api.models.identity import Invite, Org, User
 from api.models.persistence import utc_now
 from api.services.auth import issue_session
 from api.services.mailer import Mailer
@@ -18,10 +18,6 @@ from api.services.tokens import hash_token
 
 
 class InviteTokenError(ValueError):
-    pass
-
-
-class InviteEmailMismatchError(ValueError):
     pass
 
 
@@ -96,7 +92,7 @@ def create_invite(
 
 
 def accept_invite(
-    session: Session, *, token: str, email: str, password: str
+    session: Session, *, token: str, password: str
 ) -> tuple[str, str, int]:
     invite = session.exec(
         select(Invite).where(Invite.token_hash == hash_token(token))
@@ -105,16 +101,13 @@ def accept_invite(
     if invite is None or invite.consumed_at is not None or invite.expires_at <= now:
         raise InviteTokenError("invalid or expired invite token")
 
-    if invite.email.lower() != email.lower():
-        raise InviteEmailMismatchError("email does not match the invite")
-
     existing = session.exec(
-        select(User).where(func.lower(User.email) == email.lower())
+        select(User).where(func.lower(User.email) == invite.email.lower())
     ).first()
     if existing is not None:
         raise DuplicateUserError("email is already registered")
 
-    validate_policy(password, email=email)
+    validate_policy(password, email=invite.email)
 
     user = User(
         org_id=invite.org_id,
@@ -137,3 +130,15 @@ def accept_invite(
     session.refresh(user)
 
     return issue_session(session, user=user)
+
+
+def read_invite(session: Session, *, token: str) -> tuple[str, str, str]:
+    invite = session.exec(
+        select(Invite).where(Invite.token_hash == hash_token(token))
+    ).first()
+    now = utc_now()
+    if invite is None or invite.consumed_at is not None or invite.expires_at <= now:
+        raise InviteTokenError("invalid or expired invite token")
+
+    org = session.get(Org, invite.org_id)
+    return invite.email, invite.role, org.name
