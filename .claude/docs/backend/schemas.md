@@ -83,11 +83,15 @@ dependency); the contract's `format: email` is advisory.
 |------|-------------------|-----|
 | `CreateInviteRequest` | `email`, `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. | `backend/src/api/schemas/invites.py:11` |
 | `InviteCreatedResponse` | `invite_token`, `expires_at`. | `backend/src/api/schemas/invites.py:18` |
-| `AcceptInviteRequest` | `token`, `email`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. `token` moved here from the URL path in DMI-77 to keep a live credential out of access logs. | `backend/src/api/schemas/invites.py:25` |
+| `AcceptInviteRequest` | `token`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. `token` moved here from the URL path in DMI-77 to keep a live credential out of access logs; `email` was **removed** in DMI-86 — once the lookup hands the page the address, submitting it back proves nothing, since anyone holding the token can read it. | `backend/src/api/schemas/invites.py:25` |
+| `InviteLookupRequest` | `token`; `extra="forbid"`. The lookup takes its token in the body for the same access-log reason acceptance does. | `backend/src/api/schemas/invites.py:32` |
+| `InviteLookupResponse` | `email`, `role` (`Literal["admin", "viewer"]`), `org_name` — **exactly three fields, and no more, ever**. No org/user/invite id, no token material, no timestamps. `extra="forbid"` plus a whole-body equality assertion in the route test enforce it. | `backend/src/api/schemas/invites.py:38` |
 
-`extra="forbid"` on all three is load-bearing, not stylistic: it is what turns an `org_id` smuggled
-into the create-invite body into a **422** instead of a silently ignored field. The invited org
-always comes from the caller's JWT.
+`extra="forbid"` on all five is load-bearing, not stylistic: it is what turns an `org_id` smuggled
+into the create-invite body into a **422** instead of a silently ignored field, and equally what
+makes an `email` sent to accept — or a `role` sent to the lookup — a loud rejection rather than a
+quietly dropped field. The invited org always comes from the caller's JWT; the accepted account's
+org, role and address always come from the invite row.
 
 ## Key classes / functions — `agent_frames.py` (command-channel wire frames)
 

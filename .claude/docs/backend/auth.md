@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend auth — sessions, tokens, passwords, routes
-description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow incl. the public invite lookup, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -30,6 +30,12 @@ failure now carries a **pinned `error.code`** instead of collapsing into `bad_re
 reset link answers **410** rather than 400, re-inviting a live address answers **409**, and the
 invite token moved **out of the URL path into the request body**.
 
+Spec 027 / DMI-86 (contract ask C14) added a **public, non-consuming invite lookup**
+(`POST /api/v1/invites/lookup`) so the accept page can name the org and role before asking for a
+password, and — as its direct consequence — **acceptance stopped asking for the address**.
+`POST /api/v1/invites/accept` now takes `{token, password}` only; the address, role and org are
+read from the invite record, which is what they were always sourced from.
+
 ## Key classes / functions
 
 | Name | What it does | Ref |
@@ -54,14 +60,17 @@ invite token moved **out of the URL path into the request body**.
 | `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:55` |
 | `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:132` |
 | `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:153` |
-| `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org (`AlreadyMemberError`), refuses an address that already holds an unconsumed unexpired invite (`PendingInviteError`), then stores only `sha256(raw)` in `token_hash`, `expires_at = now + INVITE_TTL_HOURS`, returns the raw token once. | `backend/src/api/services/invites.py:43` |
-| `INVITE_LOCK_NAMESPACE` | `8817` — the first argument of the two-arg advisory lock, so a future second lock user cannot collide. Nothing else in the repo takes advisory locks yet. | `backend/src/api/services/invites.py:40` |
-| `accept_invite()` | Consumes a valid, unexpired, unconsumed invite: rejects an email that already exists in **any** org (`DuplicateUserError`), validates policy, hashes the password, creates the `User`, and writes `consumed_at` **in the same commit**; returns the same triple `login` returns. | `backend/src/api/services/invites.py:98` |
+| `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org (`AlreadyMemberError`), refuses an address that already holds an unconsumed unexpired invite (`PendingInviteError`), then stores only `sha256(raw)` in `token_hash`, `expires_at = now + INVITE_TTL_HOURS`, returns the raw token once. | `backend/src/api/services/invites.py:39` |
+| `INVITE_LOCK_NAMESPACE` | `8817` — the first argument of the two-arg advisory lock, so a future second lock user cannot collide. Nothing else in the repo takes advisory locks yet. | `backend/src/api/services/invites.py:36` |
+| `accept_invite()` | Consumes a valid, unexpired, unconsumed invite. Signature is `(session, *, token, password)` — **no email** since DMI-86. Rejects an address that already exists in **any** org (`DuplicateUserError`), validates policy, hashes the password, creates the `User`, and writes `consumed_at` **in the same commit**; returns the same triple `login` returns. The address it checks, screens the password against, and creates the user with all come from `invite.email`. | `backend/src/api/services/invites.py:94` |
+| `read_invite()` | The lookup's service half (DMI-86): resolves `hash_token(token)` → `(email, role, org_name)`, with the org name via `session.get(Org, invite.org_id)`. **Reads only** — no `add`/`commit`/`flush`/`refresh`, no `consumed_at` write, no lock, no session issuance — so an invite may be read any number of times and still be acceptable. Unknown, expired and consumed all raise the *same* `InviteTokenError` with the *same* message. | `backend/src/api/services/invites.py:135` |
 | `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:25` |
 | `require_user_row()` | Depends on `require_user`, then loads the caller's `User` row; a signed token whose subject no longer exists → **401** (a dead session), not 404. Used by the two routes that need the row itself — `GET /users/me` and `change-password` — so neither queries the model inline. | `backend/src/api/dependencies/auth.py:42` |
 | `require_admin()` / `ROLE_ADMIN` / `ROLE_VIEWER` | Depends on `require_user` (never re-decodes the token) and raises 403 unless the role is exactly `admin` — an allowlist, so an unknown role is denied rather than waved through. | `backend/src/api/dependencies/auth.py:54` |
 | auth routes | 6 POST routes (`login`/`refresh`/`logout`/`change-password`/`forgot-password`/`reset-password`) + OPTIONS preflights; set/clear the `dmitri_refresh` cookie. | `backend/src/api/routers/auth.py:62` |
-| invite routes | `POST /api/v1/invites` (`Depends(require_admin)`, `org_id` from the caller identity) → 201 `{invite_token, expires_at}`; `POST /api/v1/invites/accept` (unauthenticated, 201) → a `LoginResponse` **plus** the refresh cookie, with the invite token in the **request body** alongside `email`/`password`; + OPTIONS preflights. | `backend/src/api/routers/invites.py:34`, `:56` |
+| invite routes | `POST /api/v1/invites` (`Depends(require_admin)`, `org_id` from the caller identity) → 201 `{invite_token, expires_at}`; `POST /api/v1/invites/accept` (unauthenticated, 201) → a `LoginResponse` **plus** the refresh cookie, with the invite token in the **request body** alongside `password` — and, since DMI-86, *nothing else*. | `backend/src/api/routers/invites.py:33`, `:57` |
+| `lookup_invite_route()` | `POST /api/v1/invites/lookup` (DMI-86) — **no auth dependency of any kind**, by design: possession of the token is the only authorisation, since the reader has no account yet. 200 → `{email, role, org_name}`; `InviteTokenError` → `ApiError(410, code="invalid_invite_token")`. Picked up by the shared OPTIONS preflight loop with no change. | `backend/src/api/routers/invites.py:76` |
+| invite preflight loop | Walks the router's `POST` routes and registers a bare 204 `OPTIONS` for each, so a new POST path gets its preflight automatically — which is why the lookup needed no CORS or preflight edit. | `backend/src/api/routers/invites.py:90` |
 | `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=Lax`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. | `backend/src/api/routers/auth.py:38` |
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
@@ -88,10 +97,12 @@ invite token moved **out of the URL path into the request body**.
 - `routers/invites.py` no longer raises `HTTPException` at all. `AlreadyMemberError` →
   `ApiError(400, code="email_already_member")`; `PendingInviteError` →
   `ApiError(409, code="invite_already_pending")`; on accept, `InviteTokenError` →
-  `ApiError(410, code="invalid_invite_token")` and `InviteEmailMismatchError` /
-  `DuplicateUserError` / `PasswordPolicyError` → 400 `invite_email_mismatch` /
-  `email_already_registered` / `password_policy_violation`. A non-admin caller still falls through
-  `require_admin` as **403**.
+  `ApiError(410, code="invalid_invite_token")` and `DuplicateUserError` / `PasswordPolicyError` →
+  400 `email_already_registered` / `password_policy_violation`. The lookup route maps the one
+  exception it catches, `InviteTokenError`, to the same 410 `invalid_invite_token`. A non-admin
+  caller still falls through `require_admin` as **403**.
+  `InviteEmailMismatchError` and its `invite_email_mismatch` code **no longer exist** — DMI-86
+  deleted them along with the address field that could mismatch.
 - **The router literals are gated against the contract.** `test_contract_fidelity.py` AST-walks each
   route function for its `ApiError(status, …, code="…")` literals and asserts exact set equality
   against the pinned `enum` in the matching `components/responses` entry, per status. A typo in
@@ -119,8 +130,29 @@ invite token moved **out of the URL path into the request body**.
   existence oracle. `accept_invite` checks **globally**, because `users` email uniqueness became
   global in migration `20260724_10`; a genuine collision fails at acceptance, not at invitation.
 - **An invite's `consumed_at` is written in the same commit as the `User` insert.** Every failure
-  path — unknown, expired, already-consumed, email mismatch, duplicate user, weak or breached
-  password — leaves `consumed_at` NULL and no `User` row.
+  path — unknown, expired, already-consumed, duplicate user, weak or breached password — leaves
+  `consumed_at` NULL and no `User` row. **Reading an invite is not a failure path and not a write
+  path**: `read_invite` never touches `consumed_at` either, so a lookup leaves the invite fully
+  acceptable.
+- **Dropping accept's email was a re-sourcing, not a deletion.** The address was read in three
+  places; only the mismatch check went away. The duplicate-user lookup and `validate_policy` both
+  still receive it, now from `invite.email`. Deleting rather than re-sourcing the policy argument
+  would silently stop the password screen from considering the invited address — a quiet
+  weakening no other test would catch, which is why
+  `test_accept_invite_password_policy_still_receives_the_invited_address` exists specifically to
+  fail if that argument is ever dropped.
+- **The lookup is advisory display data, never authority.** Nothing a caller sends can influence
+  what an accepted account receives: org, role and address are read from the invite row at
+  acceptance. Both invite request models are `extra="forbid"`, so a caller who appends `role` or
+  `email` gets a **422** rather than having it silently ignored — the loud-failure property is the
+  point.
+- **Expired, accepted and unknown are one answer, deliberately.** `read_invite` collapses all three
+  into a single predicate and a single raise, and the route publishes the *same*
+  `AcceptInviteTokenGone` response component acceptance already uses. Three error types would be
+  three chances for status, code or body to diverge and turn the lookup into an enumeration oracle;
+  a route test asserts the lookup's 410 body equals the accept route's byte for byte. Token entropy
+  (256 bits), not throttling, is what protects the route — there is no rate limiting in the service
+  on this or any route.
 - **The invite token travels in the request body, not the URL.** `POST /api/v1/invites/accept` reads
   `body.token`. It was a path parameter until DMI-77; uvicorn's default access logger (this repo
   configures none) and any edge proxy write the path to a log line, which put a live single-use
@@ -159,6 +191,7 @@ invite token moved **out of the URL path into the request body**.
 [1] [specs/016-sessions-auth-routes](../../../specs/016-sessions-auth-routes/TRUTH.md)
 [1a] [specs/017-auth-middleware-invite-flow](../../../specs/017-auth-middleware-invite-flow/TRUTH.md)
 [1b] [specs/023-auth-invite-contract-edges](../../../specs/023-auth-invite-contract-edges/PLAN.md)
+[1c] [specs/027-invite-lookup](../../../specs/027-invite-lookup/TRUTH.md)
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [3] [docs/adr/ADR-016-password-policy.md](../../../docs/adr/ADR-016-password-policy.md)
 [4] [docs/roadmap/AUTH.md](../../../docs/roadmap/AUTH.md)
