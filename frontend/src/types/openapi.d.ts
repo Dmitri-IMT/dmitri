@@ -375,6 +375,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invites/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read an invite without consuming it */
+        post: operations["lookupInvite"];
+        delete?: never;
+        /** CORS preflight for invite lookup */
+        options: operations["optionsInviteLookup"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -712,9 +730,16 @@ export interface components {
         };
         AcceptInviteRequest: {
             token: string;
-            /** Format: email */
-            email: string;
             password: string;
+        };
+        InviteLookupRequest: {
+            token: string;
+        };
+        InviteLookupResponse: {
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "viewer";
+            org_name: string;
         };
         FindingRecord: {
             /** Format: uuid */
@@ -922,10 +947,10 @@ export interface components {
             };
         };
         /**
-         * @description The invite token is live but the request cannot be accepted: the address does not match
-         *     the one invited, that address already has an account, or the chosen password fails the
-         *     policy. A dead token is `410`, not this. The `code` is pinned: the SPA switches on it to
-         *     choose which field to flag. `email_already_registered` is **global** — the address has an
+         * @description The invite token is live but the request cannot be accepted: the invited address already
+         *     has an account, or the chosen password fails the policy. A dead token is `410`, not this.
+         *     The `code` is pinned: the SPA switches on it to choose which field to flag.
+         *     `email_already_registered` is **global** — the address has an
          *     account somewhere, not necessarily in this org (contrast `email_already_member` on invite
          *     creation, which is org-scoped).
          */
@@ -937,7 +962,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"] & {
                     error: {
                         /** @enum {unknown} */
-                        code: "invite_email_mismatch" | "email_already_registered" | "password_policy_violation";
+                        code: "email_already_registered" | "password_policy_violation";
                     };
                 };
             };
@@ -1849,6 +1874,44 @@ export interface operations {
         };
     };
     optionsAcceptInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    lookupInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description The invitation is live. Returns only the invited address, the offered role and the organisation name — never the org id, the invite id, the token, or any timestamp. Reading does not consume the invitation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLookupResponse"];
+                };
+            };
+            /** @description Expired, already accepted, and unknown tokens are reported identically — same status, same code, same body — so the lookup is not an enumeration oracle. The component is shared with invite acceptance so the wording cannot drift. */
+            410: components["responses"]["AcceptInviteTokenGone"];
+        };
+    };
+    optionsInviteLookup: {
         parameters: {
             query?: never;
             header?: never;
