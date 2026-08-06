@@ -279,7 +279,6 @@ def test_accept_invite_creates_user_and_issues_session(
     access_token, refresh_token, expires_in = invites.accept_invite(
         administrative_session,
         token=raw,
-        email="invitee@corp.com",
         password=VALID_PASSWORD,
     )
 
@@ -301,7 +300,6 @@ def test_accept_invite_unknown_token_raises_invite_token_error(
         invites.accept_invite(
             administrative_session,
             token="does-not-exist",
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
     assert administrative_session.exec(select(User)).all() == []
@@ -319,7 +317,6 @@ def test_accept_invite_expired_raises_invite_token_error(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
     administrative_session.refresh(invite)
@@ -337,28 +334,8 @@ def test_accept_invite_already_consumed_raises_invite_token_error(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
-    assert administrative_session.exec(select(User)).all() == []
-
-
-def test_accept_invite_email_mismatch_raises_and_leaves_invite_unconsumed(
-    administrative_session: Session,
-) -> None:
-    org = _seed_org(administrative_session)
-    invite, raw = _seed_invite(administrative_session, org_id=org.id)
-
-    with pytest.raises(invites.InviteEmailMismatchError):
-        invites.accept_invite(
-            administrative_session,
-            token=raw,
-            email="someone-else@corp.com",
-            password=VALID_PASSWORD,
-        )
-
-    administrative_session.refresh(invite)
-    assert invite.consumed_at is None
     assert administrative_session.exec(select(User)).all() == []
 
 
@@ -372,10 +349,30 @@ def test_accept_invite_weak_password_raises_policy_error_and_leaves_invite_uncon
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password="short",
         )
 
+    administrative_session.refresh(invite)
+    assert invite.consumed_at is None
+    assert administrative_session.exec(select(User)).all() == []
+
+
+def test_accept_invite_password_policy_still_receives_the_invited_address(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, raw = _seed_invite(
+        administrative_session, org_id=org.id, email="ferdinand@corp.com"
+    )
+
+    with pytest.raises(PasswordPolicyError) as excinfo:
+        invites.accept_invite(
+            administrative_session,
+            token=raw,
+            password="ferdinand-Xk9$mQvL",
+        )
+
+    assert excinfo.value.violations == ["must not contain your email"]
     administrative_session.refresh(invite)
     assert invite.consumed_at is None
     assert administrative_session.exec(select(User)).all() == []
@@ -392,7 +389,6 @@ def test_accept_invite_duplicate_email_same_org_raises_duplicate_user_error(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
 
@@ -414,7 +410,6 @@ def test_accept_invite_duplicate_email_other_org_raises_duplicate_user_error(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
 
@@ -444,7 +439,6 @@ def test_accept_invite_losing_a_concurrent_signup_race_raises_duplicate_user_err
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
 
@@ -495,7 +489,6 @@ def test_accept_invite_breached_password_raises_policy_error(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=breached_password,
         )
 
@@ -528,7 +521,6 @@ def test_accept_invite_first_commit_is_atomic_for_user_and_invite(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            email="invitee@corp.com",
             password=VALID_PASSWORD,
         )
 
@@ -537,3 +529,79 @@ def test_accept_invite_first_commit_is_atomic_for_user_and_invite(
     assert len(users) == 1
     administrative_session.refresh(invite)
     assert invite.consumed_at is not None
+
+
+GONE_MESSAGE = "invalid or expired invite token"
+
+
+def test_read_invite_returns_email_role_and_org_name(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session, "Acme Corp")
+    _invite, raw = _seed_invite(administrative_session, org_id=org.id, role="admin")
+
+    assert invites.read_invite(administrative_session, token=raw) == (
+        "invitee@corp.com",
+        "admin",
+        "Acme Corp",
+    )
+
+
+def test_read_invite_unknown_token_raises_invite_token_error(
+    administrative_session: Session,
+) -> None:
+    with pytest.raises(invites.InviteTokenError) as excinfo:
+        invites.read_invite(administrative_session, token="does-not-exist")
+
+    assert str(excinfo.value) == GONE_MESSAGE
+
+
+def test_read_invite_expired_raises_same_error_as_unknown(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    _invite, raw = _seed_invite(
+        administrative_session, org_id=org.id, expires_delta=timedelta(hours=-1)
+    )
+
+    with pytest.raises(invites.InviteTokenError) as excinfo:
+        invites.read_invite(administrative_session, token=raw)
+
+    assert str(excinfo.value) == GONE_MESSAGE
+
+
+def test_read_invite_consumed_raises_same_error_as_unknown(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    _invite, raw = _seed_invite(administrative_session, org_id=org.id, consumed=True)
+
+    with pytest.raises(invites.InviteTokenError) as excinfo:
+        invites.read_invite(administrative_session, token=raw)
+
+    assert str(excinfo.value) == GONE_MESSAGE
+
+
+def test_read_invite_does_not_mutate_the_invite(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, raw = _seed_invite(administrative_session, org_id=org.id)
+    expires_at = invite.expires_at
+
+    invites.read_invite(administrative_session, token=raw)
+
+    administrative_session.refresh(invite)
+    assert invite.consumed_at is None
+    assert invite.expires_at == expires_at
+    assert administrative_session.exec(select(User)).all() == []
+
+
+def test_read_invite_is_repeatable(administrative_session: Session) -> None:
+    org = _seed_org(administrative_session)
+    _invite, raw = _seed_invite(administrative_session, org_id=org.id)
+
+    first = invites.read_invite(administrative_session, token=raw)
+    second = invites.read_invite(administrative_session, token=raw)
+
+    assert first == second

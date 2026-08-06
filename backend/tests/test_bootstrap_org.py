@@ -64,7 +64,6 @@ def test_bootstrap_prints_token_matching_stored_hash_and_accept_succeeds(
     access_token, refresh_token, expires_in = accept_invite(
         administrative_session,
         token=token,
-        email="a@acme.test",
         password=VALID_PASSWORD,
     )
     assert access_token

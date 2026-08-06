@@ -38,6 +38,8 @@ SCHEMA_NAMES = (
     "HostPayload",
     "PortPayload",
     "FindingPayload",
+    "InviteLookupRequest",
+    "InviteLookupResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
@@ -285,6 +287,20 @@ def test_query_parameters_match_contract(path: str):
     assert set(contract_params) == set(app_params)
     for name in contract_params:
         assert contract_params[name] == app_params[name]
+
+
+def test_invite_lookup_gone_reuses_the_accept_response_component():
+    contract = _load_contract()
+    lookup = contract["paths"]["/api/v1/invites/lookup"]["post"]["responses"]["410"]
+    accept = contract["paths"]["/api/v1/invites/accept"]["post"]["responses"]["410"]
+    shared = "#/components/responses/AcceptInviteTokenGone"
+    assert lookup["$ref"] == accept["$ref"] == shared
+    gone_components = [
+        name
+        for name in contract["components"]["responses"]
+        if "InviteTokenGone" in name
+    ]
+    assert gone_components == ["AcceptInviteTokenGone"]
 
 
 def _contract_error_codes(spec: dict[str, Any], response_name: str) -> set[str]:
