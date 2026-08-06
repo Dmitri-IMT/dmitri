@@ -369,7 +369,7 @@ def test_accept_invite_password_policy_still_receives_the_invited_address(
         invites.accept_invite(
             administrative_session,
             token=raw,
-            password="ferdinand-Xk9$mQvL",
+            password="ferdinand-Xk9$mQvL",  # pragma: allowlist secret
         )
 
     assert excinfo.value.violations == ["must not contain your email"]
