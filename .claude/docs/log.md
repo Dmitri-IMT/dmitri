@@ -3,6 +3,48 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-06
+
+* **Creation**: `hardware-agent/daemon.md` and `hardware-agent/command-channel.md` — the Pi agent
+  daemon (DMI-66, spec 026). Bare `dmitri agent` now starts `AgentDaemon`: it dials
+  `GET /api/v1/agents/{device_id}/commands` over a signed WebSocket, sends a `hello` with its
+  currently-enumerated subnets, executes one command at a time through the *existing*
+  `run_headless_scan`, and uploads through the *existing* `ScanIngestClient` under the backend's
+  `scan_id`. New modules: `transport/signing.py`, `transport/command_channel.py`, `daemon.py`.
+* **Update**: **the device end of the link is wired** — `overview.md`, `index.md`,
+  `contracts.md`, `MAINTAINING.md`, `hardware-agent/overview.md`, `hardware-agent/index.md`,
+  `hardware-agent/transport.md`, `hardware-agent/cli.md`, `hardware-agent/utils.md`,
+  `backend/schemas.md`. The long-standing "no Pi daemon posts results / no Pi client dials the WS
+  channel (DMI-66)" caveat is **retired everywhere**; the remaining gap is physical (no Pi
+  hardware, no service-manager packaging, no key provisioning), not code.
+
+  Six facts worth not re-deriving:
+
+  1. **The daemon is a third front door but not a third runner.** It calls `run_headless_scan`
+     unchanged, in an `asyncio.to_thread` worker. No parameter was added to it or to `ScanRunner`,
+     so the CLAUDE.md integration rule never fired.
+  2. **Ed25519 envelope construction moved** out of `transport/ingest.py` into the shared
+     `transport/signing.py`. The ingest `POST` and the WS `GET` upgrade now sign the same canonical
+     string shape. Side effect: `ScanIngestClient.__init__` no longer builds the key object, so a
+     hand-built bad `IngestConfig` raises on first `submit()` instead of at construction —
+     unreachable in production because `load_ingest_config` already gates on 64 hex chars.
+  3. **`AvailableSubnet.is_default_route` is now required** in OpenAPI, the backend Pydantic model
+     and the generated frontend type. The model stays in Pydantic's **lax** mode like its
+     neighbours, so `1` / `"true"` / `"yes"` coerce to bool and are accepted — only genuinely
+     non-coercible values are rejected. That was a deliberate consistency call, not an oversight.
+  4. **Hello is sent before the replay seam and before the first `recv()`**, on every reconnect,
+     with a freshly enumerated list. That ordering is what makes the daemon's pending-status replay
+     land after hello and before any newly delivered command.
+  5. **The `>= 4000` close-code floor is a placeholder.** DMI-97 owns the concrete
+     live-revocation close code; until then every 4xxx close parks. The only 4xxx the backend emits
+     today is `4000/replaced`, so nothing over-parks in practice — but replace the floor when
+     DMI-97 lands rather than leaving it.
+  6. **`_check_nmap()` runs before the daemon module is imported**, so a missing scanner exits `20`
+     without ever dialing. Exit `20` is now overloaded on that path (missing nmap *and* invalid
+     ingest config), distinguishable only by stderr text.
+
+  `websockets` is now a direct hardware-agent dependency.
+
 ## 2026-08-05
 
 * **Creation**: `hardware-agent/transport.md` — the device-side ingest client (DMI-65, spec 025).
@@ -276,7 +318,7 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   HIBP screen, `mailer.py` seam), the `require_user` dependency (`dependencies/auth.py`), and the
   app middleware (`middleware.py` — `RequestIdMiddleware`, `NoContentCorsMiddleware` 204 preflight).
 * **Update**: threaded auth through the neighboring docs — `models.md` (new `session.py`:
-  `RefreshToken`/`refresh_tokens`, `PasswordResetToken`/`password_reset_tokens`; auth no longer
+  `RefreshToken`/`refresh_tokens`, `PasswordResetToken`/`password_reset_tokens`; auth no longer <!-- pragma: allowlist secret -->
   dormant), `migrations.md` (rev `20260722_07_auth_sessions`), `schemas.md` (`schemas/auth.py`
   request/response models), `api.md` (required `JWT_SIGNING_SECRET` + the seven auth `Settings`
   fields, middleware + auth-router wiring in `main.py`), `services.md`/`routers.md` cross-links,

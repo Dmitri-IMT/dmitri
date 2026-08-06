@@ -14,7 +14,10 @@ T0 = datetime(2026, 7, 27, 12, 0, 0, tzinfo=UTC)
 T1 = datetime(2026, 7, 27, 12, 1, 0, tzinfo=UTC)
 T2 = datetime(2026, 7, 27, 12, 2, 0, tzinfo=UTC)
 T3 = datetime(2026, 7, 27, 12, 3, 0, tzinfo=UTC)
-SUBNETS = [AvailableSubnet(interface="eth0", cidr="10.0.0.0/24")]
+SUBNETS = [
+    AvailableSubnet(interface="eth0", cidr="10.0.0.0/24", is_default_route=False),
+    AvailableSubnet(interface="wlan0", cidr="192.168.1.0/24", is_default_route=True),
+]
 
 
 @pytest.fixture(autouse=True)
@@ -99,6 +102,10 @@ def test_get_hello_before_and_after_set_hello():
     )
 
     assert agent_connections.get_hello(AGENT_ID) == ("1.0.0", SUBNETS)
+    assert [s.is_default_route for s in agent_connections.get_hello(AGENT_ID)[1]] == [
+        False,
+        True,
+    ]
     assert agent_connections.last_seen_at(AGENT_ID) == T1
 
 

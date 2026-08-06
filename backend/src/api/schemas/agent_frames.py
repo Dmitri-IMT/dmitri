@@ -15,6 +15,7 @@ class AvailableSubnet(BaseModel):
 
     interface: constr(min_length=1)
     cidr: SubnetCIDR
+    is_default_route: bool
 
 
 class AgentHelloFrame(BaseModel):

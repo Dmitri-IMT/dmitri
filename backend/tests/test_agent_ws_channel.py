@@ -24,12 +24,20 @@ def _ws_path(agent_id: UUID) -> str:
     return f"/api/v1/agents/{agent_id}/commands"
 
 
-def _hello_payload() -> str:
+DEFAULT_SUBNETS = [
+    {"interface": "eth0", "cidr": "10.0.0.0/24", "is_default_route": False},
+    {"interface": "wlan0", "cidr": "192.168.1.0/24", "is_default_route": True},
+]
+
+
+def _hello_payload(*, available_subnets: list[dict] | None = None) -> str:
     return json.dumps(
         {
             "type": "hello",
             "agent_version": "0.2.0",
-            "available_subnets": [{"interface": "eth0", "cidr": "10.0.0.0/24"}],
+            "available_subnets": (
+                DEFAULT_SUBNETS if available_subnets is None else available_subnets
+            ),
         }
     )
 
@@ -154,8 +162,12 @@ def test_hello_frame_cached_in_registry_and_bumps_last_seen(
         hello = agent_connections.get_hello(provisioned_agent.id)
         assert hello is not None
         assert hello[0] == "0.2.0"
-        assert hello[1][0].interface == "eth0"
-        assert hello[1][0].cidr == "10.0.0.0/24"
+        assert [
+            (s.interface, s.cidr, s.is_default_route) for s in hello[1]
+        ] == [
+            ("eth0", "10.0.0.0/24", False),
+            ("wlan0", "192.168.1.0/24", True),
+        ]
 
     administrative_session.refresh(provisioned_agent)
     assert provisioned_agent.last_seen_at is not None
@@ -206,10 +218,51 @@ def test_reconnect_replaces_old_socket_without_stale_unregister(
     assert not agent_connections.is_online(agent_id)
 
 
+def test_reconnect_replaces_available_subnets_instead_of_merging(
+    client: TestClient,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    path = _ws_path(provisioned_agent.id)
+    agent_id = provisioned_agent.id
+    reconnect_subnets = [
+        {"interface": "eth1", "cidr": "172.16.0.0/24", "is_default_route": True},
+    ]
+
+    with client.websocket_connect(
+        path, headers=ws_upgrade_headers(private_key, agent_id)
+    ) as ws_a:
+        ws_a.send_text(_hello_payload())
+        _sync(ws_a)
+        assert len(agent_connections.get_hello(agent_id)[1]) == 2
+
+    with client.websocket_connect(
+        path, headers=ws_upgrade_headers(private_key, agent_id)
+    ) as ws_b:
+        ws_b.send_text(_hello_payload(available_subnets=reconnect_subnets))
+        _sync(ws_b)
+
+        hello = agent_connections.get_hello(agent_id)
+        assert hello is not None
+        assert [(s.interface, s.cidr, s.is_default_route) for s in hello[1]] == [
+            ("eth1", "172.16.0.0/24", True),
+        ]
+
+
 @pytest.mark.parametrize(
     "bad_frame",
     [
         "not json",
+        json.dumps(
+            {
+                "type": "hello",
+                "agent_version": "0.2.0",
+                "available_subnets": [
+                    {"interface": "eth0", "cidr": "10.0.0.0/24"},
+                ],
+            }
+        ),
         json.dumps({"type": "nope"}),
         json.dumps(
             {

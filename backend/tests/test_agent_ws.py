@@ -32,7 +32,18 @@ def _hello_payload() -> str:
         {
             "type": "hello",
             "agent_version": "0.2.0",
-            "available_subnets": [{"interface": "eth0", "cidr": "10.0.0.0/24"}],
+            "available_subnets": [
+                {
+                    "interface": "eth0",
+                    "cidr": "10.0.0.0/24",
+                    "is_default_route": False,
+                },
+                {
+                    "interface": "wlan0",
+                    "cidr": "192.168.1.0/24",
+                    "is_default_route": True,
+                },
+            ],
         }
     )
 
@@ -111,7 +122,10 @@ def test_hello_sets_registry_and_bumps_db_last_seen(
     hello = agent_connections.get_hello(provisioned_agent.id)
     assert hello is not None
     assert hello[0] == "0.2.0"
-    assert hello[1][0].interface == "eth0"
+    assert [(s.interface, s.is_default_route) for s in hello[1]] == [
+        ("eth0", False),
+        ("wlan0", True),
+    ]
     with Session(migrated_database) as session:
         agent = session.get(Agent, provisioned_agent.id)
         assert agent is not None
@@ -152,6 +166,28 @@ def test_status_touches_without_prior_hello(
         json.dumps({"status": "running"}),
         json.dumps({"type": "hello", "agent_version": "0.1.0"}),
         json.dumps({"type": "nope"}),
+        json.dumps(
+            {
+                "type": "hello",
+                "agent_version": "0.2.0",
+                "available_subnets": [
+                    {"interface": "eth0", "cidr": "10.0.0.0/24"},
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "type": "hello",
+                "agent_version": "0.2.0",
+                "available_subnets": [
+                    {
+                        "interface": "eth0",
+                        "cidr": "10.0.0.0/24",
+                        "is_default_route": None,
+                    },
+                ],
+            }
+        ),
         json.dumps(
             {
                 "type": "status",

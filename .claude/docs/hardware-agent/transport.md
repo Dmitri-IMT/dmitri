@@ -4,7 +4,7 @@ title: transport — the signed scan-ingest client
 description: The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 resource: hardware-agent/src/agent/transport/ingest.py
 tags: [hardware-agent, transport, ingest, ed25519, signatures, http, retry]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # transport — the signed scan-ingest client
@@ -17,8 +17,10 @@ timestamp: 2026-08-05T00:00:00Z
 [device gate](/backend/device-auth.md) can verify. It is the counterpart to that gate — same
 canonical string, same five headers, opposite side of the wire.
 
-It is **built but not yet called by anything**. No CLI flag, TUI screen, or scan stage invokes it;
-wiring it into a Pi daemon is DMI-66. Nothing in `src/agent/` imports it today.
+It is **wired as of DMI-66**: [`AgentDaemon`](/hardware-agent/daemon.md) calls
+`submit(payload, scan_id=command.scan_id)` in a worker thread once a remote command's scan has
+produced both a payload and a durable result path. No TUI screen or scan stage invokes it — the
+daemon is its only caller.
 
 The client does no file I/O at all. It accepts an in-memory payload, never a path, so its caller
 must persist the artifact first — success, failure and retry all leave the local result
@@ -34,7 +36,7 @@ copy only, so neither the caller's model nor the artifact is mutated.
 | `IngestConfigError` | Raised for a missing/malformed variable, before any request. Subclasses `ValueError`. Messages name the variable and expected shape, never the supplied value (`ingest.py:34`). |
 | `ScanIngestClient(config, *, client=None)` | Owns an `httpx.Client` unless one is injected; `close()` closes only an owned one. Context-manager capable. The injected-client seam is what the tests drive with `httpx.MockTransport` (`ingest.py:130`). |
 | `ScanIngestClient.submit(payload, *, scan_id=None)` | Serializes once, then runs the bounded retry loop and maps the response (`ingest.py:147`). |
-| `ScanIngestClient._build_headers(body)` | Builds one attempt's envelope: fresh timestamp + nonce, body SHA-256, canonical string, hex signature (`ingest.py:176`). |
+| `ScanIngestClient._build_headers(body)` | Adds `Content-Type` to the five headers returned by the shared [`build_device_signature_headers`](/hardware-agent/command-channel.md) — DMI-66 extracted the envelope construction out of this module so the ingest `POST` and the WS `GET` upgrade sign through one function (`ingest.py:182`). |
 | `SubmissionOutcome` | `Literal`: `accepted`, `unauthorized`, `forbidden`, `invalid`, `rejected`, `unavailable`, `protocol_error` (`ingest.py:23`). |
 | `SubmissionResult` | Frozen slotted result carrying `outcome`, `scan_id`, `attempts`, `status_code`, `message` (`ingest.py:45`). Expected HTTP and network failures *return* one — nothing raises, exits, or prints. |
 
@@ -83,13 +85,19 @@ inside its transaction.
   [workspace](/hardware-agent/scanner/workspace.md) writes to `results/`.
 * Talks to the backend's `POST /api/v1/scans` ([routers](/backend/routers.md),
   [api](/backend/api.md)), verified by [device auth](/backend/device-auth.md).
-* Upstream caller: none yet. DMI-66's daemon will call it after
+* Upstream caller: [`AgentDaemon`](/hardware-agent/daemon.md), after
   [`run_headless_scan`](/hardware-agent/cli.md) returns both a payload and a durable result path.
+* Shares its Ed25519 envelope construction with the
+  [command channel](/hardware-agent/command-channel.md).
 
 ## Notes / gotchas
 
 * `httpx` and `cryptography` became direct hardware-agent dependencies here
   (`hardware-agent/pyproject.toml`). `cryptography` is unavoidable — the stdlib has no Ed25519.
+* `ScanIngestClient.__init__` no longer constructs the Ed25519 key object (DMI-66), so a
+  hand-built `IngestConfig` with a malformed key now raises on the first `submit()` rather than at
+  construction. `load_ingest_config` already rejects anything that is not 64 hex characters, so no
+  production path can reach that late raise.
 * There is **no** client-side payload revalidation and must not be one. The agent's `ScanPayload`
   and the backend's `ScanIngestRequest` are compatible by construction; a `422` means the two model
   sets have genuinely drifted, which is a deploy-skew signal worth surfacing rather than masking.

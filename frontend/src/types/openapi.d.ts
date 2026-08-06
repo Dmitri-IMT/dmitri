@@ -610,6 +610,8 @@ export interface components {
             interface: string;
             /** @example 10.0.0.0/24 */
             cidr: string;
+            /** @example false */
+            is_default_route: boolean;
         };
         /**
          * @description **Pi → backend**, sent on every connect, before any `status` frame. The Pi is dual-homed

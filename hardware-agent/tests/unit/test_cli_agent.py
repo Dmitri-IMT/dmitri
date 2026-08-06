@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 from agent import headless
 from agent.cli import main
+from agent.transport.ingest import IngestConfigError
 
 
 class _StubPayload:
@@ -118,7 +119,6 @@ def test_cli_agent_write_failure_fatal_exits_20_and_prints_stderr(
 @pytest.mark.parametrize(
     "argv",
     [
-        ["dmitri", "agent"],
         ["dmitri", "agent", "quick"],
         ["dmitri", "agent", "quick", "192.168.1.0/24", "extra"],
     ],
@@ -132,7 +132,7 @@ def test_cli_agent_bad_arity_exits_2(
         assert exc_info.value.code == 2
 
     err = capsys.readouterr().err
-    assert "Usage: dmitri agent <mode> <subnet>" in err
+    assert "Usage: dmitri agent [<mode> <subnet>]" in err
 
 
 def test_cli_agent_invalid_scan_input_exits_2(
@@ -172,3 +172,61 @@ def test_cli_agent_nmap_missing_exits_20(capsys: pytest.CaptureFixture[str]) -> 
         assert exc_info.value.code == headless.EXIT_CODES["fatal"]
 
     assert called == []
+
+
+def test_cli_bare_agent_checks_nmap_then_runs_daemon() -> None:
+    order: list[str] = []
+
+    def _nmap() -> bool:
+        order.append("nmap")
+        return True
+
+    def _daemon() -> None:
+        order.append("daemon")
+
+    with (
+        patch.object(sys, "argv", ["dmitri", "agent"]),
+        patch("agent.cli._check_nmap", side_effect=_nmap),
+        patch("agent.daemon.run_daemon", side_effect=_daemon),
+    ):
+        main()
+
+    assert order == ["nmap", "daemon"]
+
+
+def test_cli_bare_agent_nmap_missing_exits_20_without_daemon(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _fail_if_called() -> None:
+        raise AssertionError("run_daemon must not be called")
+
+    with (
+        patch.object(sys, "argv", ["dmitri", "agent"]),
+        patch("agent.cli._check_nmap", return_value=False),
+        patch("agent.daemon.run_daemon", side_effect=_fail_if_called),
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 20
+
+    err = capsys.readouterr().err
+    assert "Error: nmap is not installed or not on PATH." in err
+    assert "Install nmap: https://nmap.org/download.html" in err
+
+
+def test_cli_bare_agent_ingest_config_error_exits_20(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def _raise() -> None:
+        raise IngestConfigError("DMITRI_INGEST_URL is not set")
+
+    with (
+        patch.object(sys, "argv", ["dmitri", "agent"]),
+        patch("agent.cli._check_nmap", return_value=True),
+        patch("agent.daemon.load_ingest_config", side_effect=_raise),
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code == 20
+
+    assert "DMITRI_INGEST_URL is not set" in capsys.readouterr().err

@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import hashlib
-import secrets
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from os import environ as process_environ
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agent.normalize.contracts import ScanPayload
+from agent.transport.signing import build_device_signature_headers
 
 _INGEST_PATH = "/api/v1/scans"
 _TIMEOUT = httpx.Timeout(connect=10.0, write=60.0, read=120.0, pool=10.0)
@@ -141,7 +138,6 @@ class ScanIngestClient:
         self._config = config
         self._owns_client = client is None
         self._client = client if client is not None else httpx.Client()
-        self._signing_key = Ed25519PrivateKey.from_private_bytes(config.private_key)
 
     def close(self) -> None:
         if self._owns_client:
@@ -183,20 +179,15 @@ class ScanIngestClient:
         return self._result("unavailable", effective, len(_RETRY_DELAYS), status_code)
 
     def _build_headers(self, body: bytes) -> dict[str, str]:
-        device_id = str(self._config.device_id)
-        timestamp = datetime.now(timezone.utc).isoformat()
-        nonce = secrets.token_hex(16)
-        body_sha256 = hashlib.sha256(body).hexdigest()
-        canonical = "\n".join(
-            ("POST", _INGEST_PATH, device_id, timestamp, nonce, body_sha256)
-        )
         return {
             "Content-Type": "application/json",
-            "X-Device-Id": device_id,
-            "X-Timestamp": timestamp,
-            "X-Nonce": nonce,
-            "X-Body-SHA256": body_sha256,
-            "X-Signature": self._signing_key.sign(canonical.encode("utf-8")).hex(),
+            **build_device_signature_headers(
+                "POST",
+                _INGEST_PATH,
+                body,
+                str(self._config.device_id),
+                self._config.private_key,
+            ),
         }
 
     def _map_response(

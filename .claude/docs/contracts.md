@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Shared contracts
@@ -33,7 +33,11 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 - `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
   on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
 - `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (Ed25519; frames
-  `hello`/`command`/`status`). Scan results never travel this socket.
+  `hello`/`command`/`status`). Scan results never travel this socket. **Both ends wired** — the
+  backend since DMI-64, the Pi client since DMI-66
+  ([command-channel](/hardware-agent/command-channel.md)). `AvailableSubnet` gained a **required**
+  `is_default_route` in DMI-66, so a hello that omits it is an invalid frame on every side:
+  contract, backend Pydantic model, and generated frontend type.
 - `auth` (`login`/`refresh`/`logout`/…) + `invites` — identity surface.
 
 Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
@@ -41,8 +45,10 @@ Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-liv
 
 > **Ingest is wired as of DMI-63** ([backend/routers](/backend/routers.md)), joining the read path,
 > auth, the invite routes and the command channel. `POST /api/v1/scans` is mounted as `ingestScan`
-> behind `require_agent` and returns the contract's `202`. The remaining gap is the **device** end:
-> no Pi daemon posts results yet (DMI-66), so ingest is driven by signed test requests.
+> behind `require_agent` and returns the contract's `202`. **DMI-66 closed the device end**: the
+> [daemon](/hardware-agent/daemon.md) dials the WS channel and posts results under the
+> backend-supplied `scan_id`. What remains unexercised is a *real Pi* — the automated tests drive
+> both ends with signed test requests and fake sockets.
 
 ## The payload shape
 

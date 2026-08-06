@@ -13,6 +13,23 @@ from agent.normalize.contracts import (
     PortPayload,
     ScanPayload,
 )
+from agent.transport.command_channel import (
+    AgentCommand,
+    AgentHello,
+    AgentStatus,
+    AvailableSubnet,
+)
+
+CONTRACT_MODELS = (
+    ("ScanIngestRequest", ScanPayload),
+    ("HostPayload", HostPayload),
+    ("PortPayload", PortPayload),
+    ("FindingPayload", FindingPayload),
+    ("AvailableSubnet", AvailableSubnet),
+    ("AgentHelloFrame", AgentHello),
+    ("AgentCommandFrame", AgentCommand),
+    ("AgentStatusFrame", AgentStatus),
+)
 
 OPENAPI_PATH = (
     Path(__file__).resolve().parents[2]
@@ -186,12 +203,7 @@ def test_scan_payload_rejects_devices_keyword() -> None:
 
 def test_agent_models_emit_no_field_the_contract_forbids() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
-    for schema_name, model in (
-        ("ScanIngestRequest", ScanPayload),
-        ("HostPayload", HostPayload),
-        ("PortPayload", PortPayload),
-        ("FindingPayload", FindingPayload),
-    ):
+    for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
         assert schema["additionalProperties"] is False
         unknown = set(model.model_fields) - set(schema["properties"])
@@ -200,12 +212,7 @@ def test_agent_models_emit_no_field_the_contract_forbids() -> None:
 
 def test_agent_models_emit_every_field_the_contract_requires() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
-    for schema_name, model in (
-        ("ScanIngestRequest", ScanPayload),
-        ("HostPayload", HostPayload),
-        ("PortPayload", PortPayload),
-        ("FindingPayload", FindingPayload),
-    ):
+    for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
         missing = set(schema["required"]) - set(model.model_fields)
         assert not missing, f"{schema_name} requires {sorted(missing)}"

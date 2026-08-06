@@ -47,6 +47,57 @@ def detect_local_network() -> LocalNetworkInfo:
     )
 
 
+@dataclass(slots=True)
+class AvailableSubnetInfo:
+    """One usable IPv4 subnet reachable from a local interface."""
+
+    interface: str
+    cidr: str
+    is_default_route: bool
+
+
+def detect_available_subnets() -> list[AvailableSubnetInfo]:
+    try:
+        default_interface: str | None = detect_local_network().interface
+    except (OSError, RuntimeError, ValueError):
+        default_interface = None
+
+    stats = psutil.net_if_stats()
+    subnets: list[AvailableSubnetInfo] = []
+    seen: set[tuple[str, str]] = set()
+    for interface_name, addresses in psutil.net_if_addrs().items():
+        interface_stats = stats.get(interface_name)
+        if interface_stats is None or not interface_stats.isup:
+            continue
+        for address in addresses:
+            if getattr(address.family, "name", "") != "AF_INET":
+                continue
+            if not address.address or not address.netmask:
+                continue
+            try:
+                host = ipaddress.IPv4Address(address.address)
+                network = ipaddress.IPv4Network(
+                    f"{address.address}/{address.netmask}",
+                    strict=False,
+                )
+            except ValueError:
+                continue
+            if host.is_loopback or host.is_link_local:
+                continue
+            key = (interface_name, str(network))
+            if key in seen:
+                continue
+            seen.add(key)
+            subnets.append(
+                AvailableSubnetInfo(
+                    interface=interface_name,
+                    cidr=str(network),
+                    is_default_route=interface_name == default_interface,
+                )
+            )
+    return subnets
+
+
 class NetworkUnreachableError(RuntimeError):
     """Raised when no usable network path exists to run a scan."""
 

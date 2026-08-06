@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -23,10 +23,13 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 > DMI-63 — **ingest** (`POST /api/v1/scans`) are all wired. The
 > [`frontend`](/frontend/overview.md) now has its first real vertical slice (login → Home) reading
 > that wired read path.
-> What is still missing is the **device end of the link**: no Pi daemon uploads a scan or dials the
-> WS channel yet (DMI-66), and Pi hardware is not yet acquired, so both are exercised against signed
-> test requests and fake sockets. Treat the *Pi-side* upload as **planned / not yet wired** — but the
-> backend routes it posts to now exist. `docs/architecture/ARCHITECTURE.md` describes target state.
+> **DMI-66 closed the device end of the link**: bare `dmitri agent` now runs a
+> [daemon](/hardware-agent/daemon.md) that dials the WS channel with an Ed25519 proof, reports its
+> available subnets, executes commands through the existing headless scan, and uploads results
+> through the ingest client. What is still missing is everything *physical*: Pi hardware is not yet
+> acquired, and service-manager packaging, key provisioning and clock synchronization are out of
+> DMI-66's scope — so the whole path is exercised against signed test requests and fake sockets
+> rather than real hardware. `docs/architecture/ARCHITECTURE.md` describes target state.
 
 ## Components
 
@@ -50,17 +53,21 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
    → **deep inspection** (`-sV` + NSE, `vulners` CVE correlation) → **normalize**.
    See [discovery](/hardware-agent/discovery.md) and [stages](/hardware-agent/scanner/stages.md).
 3. Raw Nmap XML → [`ScanPayload`](/hardware-agent/normalize.md) (Pydantic contract).
-4. [`workspace`](/hardware-agent/scanner/workspace.md) writes the normalized JSON to disk. **The flow
-   ends here today — no upload.** Headless returns an outcome with exit codes 0/10/20 (ADR-012).
+4. [`workspace`](/hardware-agent/scanner/workspace.md) writes the normalized JSON to disk. Headless
+   returns an outcome with exit codes 0/10/20 (ADR-012). On the **remote** path the
+   [daemon](/hardware-agent/daemon.md) continues from here: it uploads that payload under the
+   backend's `scan_id` and reports `uploading` → `done` on the
+   [command channel](/hardware-agent/command-channel.md). On the TUI and one-shot CLI paths the flow
+   still ends at the local file.
 
-**Backend side (all wired; only the Pi's upload client is missing):**
+**Backend side (all wired):**
 
 5. Pi `POST /api/v1/scans` (Ed25519-signed) → `require_agent` authenticates the device →
    [`ingest_scan`](/backend/services.md) authorises the submission, then
    [`persist_scan`](/backend/services.md) writes
    scans/scan_hosts/ports/services/cpes/findings, resolves each host's durable identity
-   (`upsert_hosts_for_scan`), and enqueues `enrichment_jobs` — all in one transaction. *(The route is
-   live; the Pi-side uploader is DMI-66.)*
+   (`upsert_hosts_for_scan`), and enqueues `enrichment_jobs` — all in one transaction. *(Both ends
+   are live: the route since DMI-63, the Pi-side uploader since DMI-66.)*
 6. A separate [worker](/backend/services.md) claims jobs (`FOR UPDATE SKIP LOCKED`), enriches CVEs
    against **NVD**, **CISA KEV**, and **FIRST EPSS**, upgrades finding confidence, and re-runs the
    explainable [risk scorer](/backend/services.md).
@@ -85,7 +92,8 @@ Legacy `full` mode is being removed in favor of `max`.
 
 ## Tech stack
 
-- **hardware-agent** — Python 3.13, Textual (TUI), Pydantic v2, Nmap + NSE, stdlib threads, `uv`.
+- **hardware-agent** — Python 3.13, Textual (TUI), Pydantic v2, Nmap + NSE, stdlib threads, `uv`,
+  plus `httpx` + `cryptography` (ingest) and `websockets` (command channel).
 - **backend** — Python 3.11+, FastAPI, SQLModel/SQLAlchemy 2, psycopg, Alembic, httpx, `uv`.
 - **infra** — Supabase (managed Postgres 17), Railway (API + worker services).
 
