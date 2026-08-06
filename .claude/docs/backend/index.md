@@ -30,7 +30,7 @@ exercised against fake sockets and ingest against signed test requests.
 
 ## Auth
 
-* [Backend auth — sessions, tokens, passwords, routes](./auth.md) — Login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+* [Backend auth — sessions, tokens, passwords, routes](./auth.md) — Login/refresh/logout + password change/reset, the invite flow incl. the public invite lookup, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
 * [Backend API error envelope](./errors.md) — ApiError with per-site code overrides and the global handlers that shape every HTTPException into the contract ErrorResponse.
 * [Backend device auth — Ed25519 signatures, nonces, the agent gate](./device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 

@@ -866,6 +866,43 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/invites/lookup:
+    post:
+      tags:
+        - auth
+      summary: Read an invite without consuming it
+      operationId: lookupInvite
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteLookupRequest'
+      responses:
+        '200':
+          description: The invitation is live. Returns only the invited address, the offered role
+            and the organisation name — never the org id, the invite id, the token, or any
+            timestamp. Reading does not consume the invitation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteLookupResponse'
+        '410':
+          $ref: '#/components/responses/AcceptInviteTokenGone'
+          description: Expired, already accepted, and unknown tokens are reported identically —
+            same status, same code, same body — so the lookup is not an enumeration oracle. The
+            component is shared with invite acceptance so the wording cannot drift.
+    options:
+      tags:
+        - auth
+      summary: CORS preflight for invite lookup
+      operationId: optionsInviteLookup
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
   /api/v1/users/me:
     get:
       tags:
@@ -1382,10 +1419,10 @@ components:
                   details: {}
     AcceptInviteRejected:
       description: |
-        The invite token is live but the request cannot be accepted: the address does not match
-        the one invited, that address already has an account, or the chosen password fails the
-        policy. A dead token is `410`, not this. The `code` is pinned: the SPA switches on it to
-        choose which field to flag. `email_already_registered` is **global** — the address has an
+        The invite token is live but the request cannot be accepted: the invited address already
+        has an account, or the chosen password fails the policy. A dead token is `410`, not this.
+        The `code` is pinned: the SPA switches on it to choose which field to flag.
+        `email_already_registered` is **global** — the address has an
         account somewhere, not necessarily in this org (contrast `email_already_member` on invite
         creation, which is org-scoped).
       content:
@@ -1404,16 +1441,9 @@ components:
                     properties:
                       code:
                         enum:
-                          - invite_email_mismatch
                           - email_already_registered
                           - password_policy_violation
           examples:
-            inviteEmailMismatch:
-              value:
-                error:
-                  code: invite_email_mismatch
-                  message: Email does not match the invite.
-                  details: {}
             emailAlreadyRegistered:
               value:
                 error:
@@ -2519,18 +2549,39 @@ components:
       additionalProperties: false
       required:
         - token
-        - email
         - password
       properties:
         token:
           type: string
           minLength: 16
-        email:
-          type: string
-          format: email
         password:
           type: string
           minLength: 12
+    InviteLookupRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+      properties:
+        token:
+          type: string
+    InviteLookupResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - role
+        - org_name
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+            - admin
+            - viewer
+        org_name:
+          type: string
     FindingRecord:
       type: object
       additionalProperties: false

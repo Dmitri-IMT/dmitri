@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health + read path + auth + users/me + the command channel's HTTP and WS surface + global error envelope), the worker process entry, settings, and the DB engine/session.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -62,13 +62,15 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 - **Read path + auth + users/me + invites + agent WS + ingest all wired.** `GET /api/v1/health`,
   the three [read routers](/backend/routers.md), the [auth routes](/backend/auth.md),
-  `GET /api/v1/users/me`, the invite routes, `WebSocket /api/v1/agents/{agent_id}/commands` and —
+  `GET /api/v1/users/me`, the invite routes — create, accept and, since DMI-86, the public
+  `POST /api/v1/invites/lookup` — `WebSocket /api/v1/agents/{agent_id}/commands` and —
   since DMI-63 — `POST /api/v1/scans` are registered in `main.py`. All `HTTPException` responses and
   WS upgrade denials use the [error envelope](/backend/errors.md). The
   [device gate](/backend/device-auth.md) is now mounted on both transports: `require_agent_ws` on the
-  WS command channel and the HTTP `require_agent` adapter on ingest. The remaining gap is on the
-  device side — no Pi client dials the WS channel or posts results yet (the daemon is DMI-66), so
-  both paths are exercised against fake sockets and signed test requests rather than real hardware.
+  WS command channel and the HTTP `require_agent` adapter on ingest. **Both ends of the link now
+  exist** — DMI-66 closed the device side — so the remaining gap is physical and operational (no
+  provisioned Pi, no service-manager packaging, no key provisioning); the paths are exercised
+  against fake sockets and signed test requests rather than real hardware.
 - **`websockets>=13` is a direct dependency** (not `uvicorn[standard]`) so uvicorn can serve WS
   upgrades in production with the sans-io protocol implementation.
 - **`JWT_SIGNING_SECRET` is required** — `Settings()` (instantiated at import) fails fast without it;

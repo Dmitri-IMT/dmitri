@@ -11,15 +11,17 @@ from api.schemas.invites import (
     AcceptInviteRequest,
     CreateInviteRequest,
     InviteCreatedResponse,
+    InviteLookupRequest,
+    InviteLookupResponse,
 )
 from api.services.invites import (
     AlreadyMemberError,
     DuplicateUserError,
-    InviteEmailMismatchError,
     InviteTokenError,
     PendingInviteError,
     accept_invite,
     create_invite,
+    read_invite,
 )
 from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
@@ -60,17 +62,29 @@ def accept_invite_route(
 ) -> LoginResponse:
     try:
         access_token, refresh_token, expires_in = accept_invite(
-            session, token=body.token, email=body.email, password=body.password
+            session, token=body.token, password=body.password
         )
     except InviteTokenError as exc:
         raise ApiError(410, str(exc), code="invalid_invite_token") from exc
-    except InviteEmailMismatchError as exc:
-        raise ApiError(400, str(exc), code="invite_email_mismatch") from exc
     except DuplicateUserError as exc:
         raise ApiError(400, str(exc), code="email_already_registered") from exc
     except PasswordPolicyError as exc:
         raise ApiError(400, str(exc), code="password_policy_violation") from exc
     return login_response(response, access_token, refresh_token, expires_in)
+
+
+@router.post(
+    "/api/v1/invites/lookup", response_model=InviteLookupResponse, status_code=200
+)
+def lookup_invite_route(
+    body: InviteLookupRequest,
+    session: Session = Depends(get_session),
+) -> InviteLookupResponse:
+    try:
+        email, role, org_name = read_invite(session, token=body.token)
+    except InviteTokenError as exc:
+        raise ApiError(410, str(exc), code="invalid_invite_token") from exc
+    return InviteLookupResponse(email=email, role=role, org_name=org_name)
 
 
 def invite_preflight() -> None:

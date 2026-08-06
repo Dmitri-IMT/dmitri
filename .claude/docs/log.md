@@ -5,6 +5,18 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-06
 
+* **Update**: the **public invite lookup and the address-free acceptance** (DMI-86, spec 027,
+  contract ask C14) — `backend/auth.md`, `backend/schemas.md`, `backend/errors.md`,
+  `backend/api.md`, `backend/index.md`. New `POST /api/v1/invites/lookup` with **no auth
+  dependency of any kind**, backed by a strictly read-only `read_invite()` returning exactly
+  `{email, role, org_name}`; expired/accepted/unknown collapse into one `InviteTokenError` and
+  reuse acceptance's own `AcceptInviteTokenGone` 410 component, so the two routes cannot drift
+  into an enumeration oracle. `POST /api/v1/invites/accept` **no longer takes an address**:
+  `accept_invite(session, *, token, password)` re-sources it from `invite.email` for both the
+  duplicate check and `validate_policy`. `InviteEmailMismatchError` and the
+  `invite_email_mismatch` code are **deleted** — retire that code if you half-remember it.
+* **Update**: `backend/api.md` also lost a stale "no Pi client dials the WS channel" caveat that
+  the DMI-66 sync missed; it contradicted the standing fact in `MAINTAINING.md`.
 * **Creation**: `hardware-agent/daemon.md` and `hardware-agent/command-channel.md` — the Pi agent
   daemon (DMI-66, spec 026). Bare `dmitri agent` now starts `AgentDaemon`: it dials
   `GET /api/v1/agents/{device_id}/commands` over a signed WebSocket, sends a `hello` with its

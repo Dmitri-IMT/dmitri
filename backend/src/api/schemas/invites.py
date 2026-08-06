@@ -26,5 +26,18 @@ class AcceptInviteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     token: str
-    email: str
     password: constr(min_length=MIN_LENGTH)
+
+
+class InviteLookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+
+
+class InviteLookupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str
+    role: Literal["admin", "viewer"]
+    org_name: str

@@ -286,7 +286,7 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Screen | Route | Shell | Roles | Flow | Status |
 | --- | --- | --- | --- | --- | --- |
 | Login | `/login` | outside | public | B1 | ◐ (C16) |
-| Accept invite | `/invite?token=…` | outside | public | B2 | ◐ (C14) |
+| Accept invite | `/invite?token=…` | outside | public | B2 | ◐ (C14 resolved; endpoint unconsumed — DMI-87) |
 | Forgot password | `/forgot-password` | outside | public | B1 | ◐ |
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ✅ (C15 resolved) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
@@ -442,26 +442,31 @@ to decide what to render.
 account exists the moment it succeeds.
 
 **Data:**
-- `POST /api/v1/invites/accept` — body `{ token, email, password }` (`minLength: 12`). The invite
+- `POST /api/v1/invites/accept` — body `{ token, password }` (`minLength: 12`). The invite
   token moved from the URL path into the body in DMI-77 (it was being written to access logs), so
-  the route reads it from the request body and the emailed link is `/invite?token=…`.
+  the route reads it from the request body and the emailed link is `/invite?token=…`. **The `email`
+  field was removed** (spec 027 / DR-0002, 2026-08-06): once the lookup below supplies the address,
+  retyping it proves nothing, and the account was always created from the invite record anyway.
+  Sending one now returns **422** rather than being ignored.
+- `POST /api/v1/invites/lookup` — body `{ token }`, public, returns `{ email, role, org_name }`.
+  Reading does **not** consume the invite, so the page may call it on mount and the link still
+  works. A dead token answers **410** here too, with the same body the accept route gives.
 - **`201` returns a full `LoginResponse`.** ✅ **C7 RESOLVED — accepting an invite issues a
   session.** Store the access token, and the invitee lands on **HOME**, in its first-run blank state
   (B2). They are never sent back to LOGIN to type the password they just chose.
 - **`410`** — invite expired or already used (**not** `400`; single-use, 24–72h TTL per
   [`AUTH.md`](../roadmap/AUTH.md)). **`400`** — password rejected by policy.
 
-**The screen cannot greet you — 🔓 C14.** There is **no `GET /invites?token=…`**, so this page knows
-*nothing*: not the org, not the role, not even the email the invite was sent to. Two consequences,
-both bad:
-- It cannot say *"You've been invited to Acme as a viewer"* — the one sentence that would tell a
-  stranger this link is legitimate.
-- **The invitee must type their own email from memory**, and it must match the invite exactly. A
-  typo returns the same failure as a dead link, so the screen must word that error to cover both —
-  which means wording it vaguely, on the very first screen of the product.
+**The screen can now greet you — ✅ C14 resolved.** The lookup landed 2026-08-06 (DMI-86), so both
+of the consequences this section used to list are gone: the page can say *"You've been invited to
+Acme as a viewer"* — the one sentence that tells a stranger the link is legitimate — and the
+invitee no longer types their own email from memory, so a typo can no longer fail identically to a
+dead link. **The endpoint is unconsumed**: building the screen against it is DMI-87, which is why
+this screen is still `◐`.
 
 **Three states:**
-- **Regular:** the form. Email + password + confirm.
+- **Regular:** the greeting (*"You've been invited to Acme as a viewer"*, from the lookup) plus the
+  form. Password + confirm — **no email field**.
 - **Blank:** not applicable (a form is its own content).
 - **Error — dead link (410):** the form is **removed**, not left there to be re-submitted. The link
   is spent; nothing the user types will fix it. The only honest next step is *ask your admin*, and
@@ -472,15 +477,15 @@ both bad:
 | Element | Copy |
 | --- | --- |
 | Title | "Create your account" |
-| Body | "You've been invited to Dmitri. Pick a password and you're in." |
-| Fields | "Email" / "Password" / "Confirm password" |
+| Body | "You've been invited to {org_name} as a {role}. Pick a password and you're in." — org and role from the lookup |
+| Fields | "Password" / "Confirm password" |
 | Policy hint | "At least 12 characters. Avoid names, dates, and passwords you've used elsewhere." |
 | Button | "Create account" · in flight: "Creating your account…" |
 | Error — 410 (heading) | "This invite has expired." |
 | Error — 410 (body) | "Invite links can only be used once, and they don't last long. Ask your admin to send you a new one." |
 | Error — 400 policy | "That password isn't strong enough. Try a longer one that isn't based on a name or a date." |
 | Error — mismatch (client) | "Those two passwords don't match." |
-| Error — wrong email / bad token | "We couldn't match that invite. Check the email address, or ask your admin for a new link." |
+| Error — already registered (400) | "That address already has an account. Sign in instead." |
 
 **Layout:**
 ```text
@@ -490,11 +495,9 @@ both bad:
 |                                                                              |
 |              +------------------------------------------+                    |
 |              |  CREATE YOUR ACCOUNT                     |                    |
-|              |  You've been invited to Dmitri. Pick a   |                    |
-|              |  password and you're in.        (muted)  |                    |
-|              |                                          |                    |
-|              |  Email                                   |                    |
-|              |  [__________________________________]    |                    |
+|              |  You've been invited to Acme as a        |                    |
+|              |  viewer. Pick a password and you're in.  |                    |
+|              |                                 (muted)  |                    |
 |              |                                          |                    |
 |              |  Password                                |                    |
 |              |  [__________________________________]    |                    |
@@ -522,10 +525,14 @@ Dead link (410) — the form is gone:
 ```
 
 **Open questions:**
-1. **C14** — no `GET /invites?token=…`. Costs the greeting *and* forces the invitee to type their
-   email from memory. Resolving it lets the screen prefill the email, name the org, and state the
-   role — and lets a bad link fail honestly instead of vaguely. ⚠️ Whatever shape it takes, the
-   token stays out of the **path** (DMI-77) — query string, or a `POST` with the token in the body.
+1. ~~**C14** — no invite-lookup endpoint.~~ **✅ RESOLVED 2026-08-06 (DMI-86, spec 027) —
+   `POST /api/v1/invites/lookup`**, token in the body (not a `GET` — a query string keeps the token
+   out of the path but not out of the access log), returning `{ email, role, org_name }`, with
+   `410 invalid_invite_token` for expired/used/unknown alike. The screen can now name the org, state
+   the role, and skip the email field entirely; a dead link is reached **on mount**, before the form
+   is ever submitted, so the 410 state no longer has to double as a typo message. **This screen
+   stays `◐` for a different reason now:** the endpoint exists and nothing consumes it — building
+   the page against it is DMI-87.
 
 ---
 

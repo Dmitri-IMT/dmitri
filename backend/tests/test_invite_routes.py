@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from api.db.session import get_session
+from api.dependencies.auth import require_admin, require_user, require_user_row
 from api.main import app
 from api.models.identity import Invite, Org, User
 from api.models.persistence import utc_now
@@ -15,6 +16,7 @@ from api.services.passwords import hash_password
 from api.services.tokens import decode_access_token, hash_token
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
+from test_auth_wiring import _flatten_routes
 
 VALID_PASSWORD = "Xk9$mQvL2pTz"
 
@@ -104,7 +106,7 @@ def test_admin_creates_invite_emails_a_working_invite_link(
 
     accepted = client.post(
         "/api/v1/invites/accept",
-        json={"token": token, "email": "new@corp.com", "password": VALID_PASSWORD},
+        json={"token": token, "password": VALID_PASSWORD},
     )
     assert accepted.status_code == 201
 
@@ -265,7 +267,7 @@ def test_accept_invite_returns_login_response_and_refresh_cookie(
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
 
     assert response.status_code == 201
@@ -282,11 +284,14 @@ def test_accepted_invite_token_works_against_protected_read_route(
 
     accept_response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
     access_token = accept_response.json()["access_token"]
 
     created_user = administrative_session.exec(select(User)).one()
+    assert created_user.email == invite.email
+    assert created_user.role == invite.role
+    assert created_user.org_id == invite.org_id
     claims = decode_access_token(access_token)
     assert claims["sub"] == str(created_user.id)
     assert claims["org_id"] == str(seeded_org.id)
@@ -306,13 +311,13 @@ def test_second_accept_returns_410_and_only_one_user(
 
     first = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
     assert first.status_code == 201
 
     second = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
 
     assert second.status_code == 410
@@ -329,7 +334,7 @@ def test_accept_expired_invite_returns_410(
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
 
     assert response.status_code == 410
@@ -339,11 +344,7 @@ def test_accept_expired_invite_returns_410(
 def test_accept_unknown_token_returns_410(client: TestClient) -> None:
     response = client.post(
         "/api/v1/invites/accept",
-        json={
-            "token": "does-not-exist",
-            "email": "nobody@corp.com",
-            "password": VALID_PASSWORD,
-        },
+        json={"token": "does-not-exist", "password": VALID_PASSWORD},
     )
 
     assert response.status_code == 410
@@ -359,29 +360,24 @@ def test_accept_dead_token_beats_weak_password(
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": "aaabbbcccddd"},
+        json={"token": raw, "password": "aaabbbcccddd"},
     )
 
     assert response.status_code == 410
     assert response.json()["error"]["code"] == "invalid_invite_token"
 
 
-def test_accept_mismatched_email_returns_400_invite_email_mismatch(
+def test_accept_with_email_in_body_returns_422(
     client: TestClient, administrative_session: Session, seeded_org: Org
 ) -> None:
-    raw, _invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+    raw, invite = _seed_invite(administrative_session, org_id=seeded_org.id)
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={
-            "token": raw,
-            "email": "someone.else@corp.com",
-            "password": VALID_PASSWORD,
-        },
+        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "invite_email_mismatch"
+    assert response.status_code == 422
     assert administrative_session.exec(select(User)).first() is None
 
 
@@ -405,7 +401,7 @@ def test_accept_already_registered_in_another_org_returns_400_email_already_regi
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
 
     assert response.status_code == 400
@@ -419,7 +415,7 @@ def test_accept_weak_password_returns_400_and_no_user_created(
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": "aaabbbcccddd"},
+        json={"token": raw, "password": "aaabbbcccddd"},
     )
 
     assert response.status_code == 400
@@ -470,7 +466,7 @@ def test_accept_breached_password_returns_400_and_no_user_created(
 
     response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": breached_password},
+        json={"token": raw, "password": breached_password},
     )
 
     assert response.status_code == 400
@@ -492,6 +488,152 @@ def test_old_path_carried_token_route_is_gone(
     assert response.status_code == 404
 
 
+def test_lookup_live_invite_returns_200_with_email_role_and_org_name(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+
+    response = client.post("/api/v1/invites/lookup", json={"token": raw})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "email": invite.email,
+        "role": invite.role,
+        "org_name": seeded_org.name,
+    }
+
+
+def test_lookup_without_credentials_succeeds(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, _invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+
+    client.cookies.clear()
+    response = client.post("/api/v1/invites/lookup", json={"token": raw})
+
+    assert response.status_code == 200
+    route = next(
+        r
+        for r in _flatten_routes(app.routes)
+        if getattr(r, "path", None) == "/api/v1/invites/lookup"
+        and "POST" in getattr(r, "methods", set())
+    )
+    calls = {dep.call for dep in route.dependant.dependencies}
+
+    assert require_user not in calls
+    assert require_admin not in calls
+    assert require_user_row not in calls
+
+
+def test_lookup_twice_returns_identical_bodies(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+
+    first = client.post("/api/v1/invites/lookup", json={"token": raw})
+    second = client.post("/api/v1/invites/lookup", json={"token": raw})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    administrative_session.refresh(invite)
+    assert invite.consumed_at is None
+
+
+def test_lookup_then_accept_still_returns_201(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+
+    for _ in range(3):
+        looked_up = client.post("/api/v1/invites/lookup", json={"token": raw})
+        assert looked_up.status_code == 200
+
+    response = client.post(
+        "/api/v1/invites/accept",
+        json={"token": raw, "password": VALID_PASSWORD},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["access_token"]
+    assert response.json()["token_type"] == "bearer"
+    assert response.cookies.get("dmitri_refresh")
+
+
+@pytest.mark.parametrize(
+    "consumed,expires_delta",
+    [(True, timedelta(hours=1)), (False, timedelta(hours=-1))],
+)
+def test_lookup_dead_invite_returns_410(
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    consumed: bool,
+    expires_delta: timedelta,
+) -> None:
+    raw, _invite = _seed_invite(
+        administrative_session,
+        org_id=seeded_org.id,
+        consumed=consumed,
+        expires_delta=expires_delta,
+    )
+
+    response = client.post("/api/v1/invites/lookup", json={"token": raw})
+
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "invalid_invite_token"
+
+
+def test_lookup_unknown_token_returns_410(client: TestClient) -> None:
+    response = client.post("/api/v1/invites/lookup", json={"token": "does-not-exist"})
+
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "invalid_invite_token"
+
+
+def test_lookup_expired_and_forged_tokens_are_byte_identical(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, _invite = _seed_invite(
+        administrative_session, org_id=seeded_org.id, expires_delta=timedelta(hours=-1)
+    )
+
+    expired = client.post("/api/v1/invites/lookup", json={"token": raw})
+    forged = client.post("/api/v1/invites/lookup", json={"token": "fabricated-token"})
+
+    assert expired.status_code == forged.status_code
+    assert expired.json() == forged.json()
+
+
+def test_lookup_gone_body_matches_accept_route_gone_body(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, invite = _seed_invite(
+        administrative_session, org_id=seeded_org.id, expires_delta=timedelta(hours=-1)
+    )
+
+    lookup = client.post("/api/v1/invites/lookup", json={"token": raw})
+    accept = client.post(
+        "/api/v1/invites/accept",
+        json={"token": raw, "password": VALID_PASSWORD},
+    )
+
+    assert lookup.status_code == accept.status_code == 410
+    assert lookup.json() == accept.json()
+
+
+def test_lookup_rejects_unknown_body_fields(
+    client: TestClient, administrative_session: Session, seeded_org: Org
+) -> None:
+    raw, _invite = _seed_invite(administrative_session, org_id=seeded_org.id)
+
+    response = client.post(
+        "/api/v1/invites/lookup", json={"token": raw, "role": "admin"}
+    )
+
+    assert response.status_code == 422
+
+
 def test_accept_invite_refresh_cookie_matches_login_route_cookie_policy(
     client: TestClient, administrative_session: Session, seeded_org: Org
 ) -> None:
@@ -504,7 +646,7 @@ def test_accept_invite_refresh_cookie_matches_login_route_cookie_policy(
 
     accept_response = client.post(
         "/api/v1/invites/accept",
-        json={"token": raw, "email": invite.email, "password": VALID_PASSWORD},
+        json={"token": raw, "password": VALID_PASSWORD},
     )
     assert accept_response.status_code == 201
     assert accept_response.json()["access_token"]
