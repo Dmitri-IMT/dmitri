@@ -18,7 +18,7 @@ def main() -> None:
         _run_agent(args[1:])
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
-        print("Usage: dmitri [start|agent <mode> <subnet>]", file=sys.stderr)
+        print("Usage: dmitri [start|agent [<mode> <subnet>]]", file=sys.stderr)
         raise SystemExit(2)
 
 
@@ -48,14 +48,20 @@ def _run_tui() -> None:
 
 
 def _run_agent(args: list[str]) -> None:
-    if len(args) != 2:
-        print("Usage: dmitri agent <mode> <subnet>", file=sys.stderr)
+    if len(args) not in (0, 2):
+        print("Usage: dmitri agent [<mode> <subnet>]", file=sys.stderr)
         raise SystemExit(2)
 
     if not _check_nmap():
         print("Error: nmap is not installed or not on PATH.", file=sys.stderr)
         print("Install nmap: https://nmap.org/download.html", file=sys.stderr)
         raise SystemExit(20)
+
+    if not args:
+        from agent.daemon import run_daemon
+
+        run_daemon()
+        return
 
     from agent import headless
 
