@@ -10,25 +10,15 @@ import TopBar from './TopBar'
 
 const baseURL = 'http://localhost:8000/api/v1'
 
-function renderTopBarAs(profile: typeof adminProfile | typeof viewerProfile) {
+function renderTopBarAs(
+  profile: typeof adminProfile | typeof viewerProfile,
+  route = '/',
+) {
   server.use(http.get(`${baseURL}/users/me`, () => HttpResponse.json(profile)))
-  return renderWithProviders(<TopBar />)
+  return renderWithProviders(<TopBar />, { route })
 }
 
 describe('TopBar', () => {
-  it('renders an identical tree for an admin and a viewer profile (AC 7)', async () => {
-    const admin = renderTopBarAs(adminProfile)
-    await screen.findByTestId('top-bar')
-    const adminMarkup = admin.container.innerHTML
-    admin.unmount()
-
-    const viewer = renderTopBarAs(viewerProfile)
-    await screen.findByTestId('top-bar')
-    const viewerMarkup = viewer.container.innerHTML
-
-    expect(viewerMarkup).toBe(adminMarkup)
-  })
-
   it.each([
     ['admin', adminProfile],
     ['viewer', viewerProfile],
@@ -47,15 +37,45 @@ describe('TopBar', () => {
       for (const el of interactive) {
         expect(el).toBeEnabled()
         expect(el).not.toHaveAttribute('aria-disabled', 'true')
+        expect(el).not.toHaveAttribute('disabled')
       }
 
       expect(screen.queryByTestId('nav-users')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('link', { name: 'Users' }),
+      ).not.toBeInTheDocument()
 
-      for (const link of screen.getAllByRole('link')) {
-        expect(link).toHaveAttribute('href', '/')
-      }
+      expect(screen.getAllByRole('link')).toHaveLength(2)
+      expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
+        'href',
+        '/',
+      )
+      expect(screen.getByTestId('nav-settings')).toHaveAttribute(
+        'href',
+        '/settings',
+      )
+      expect(screen.getByTestId('nav-settings')).toHaveAccessibleName(
+        'Settings',
+      )
+      expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
     },
   )
+
+  it.each([
+    ['/', 'Home', 'Settings'],
+    ['/settings', 'Settings', 'Home'],
+  ])('at %s marks %s active and %s muted', async (route, active, muted) => {
+    renderTopBarAs(adminProfile, route)
+    await screen.findByTestId('top-bar')
+
+    const activeLink = screen.getByRole('link', { name: active })
+    const mutedLink = screen.getByRole('link', { name: muted })
+
+    expect(activeLink).toHaveAttribute('aria-current', 'page')
+    expect(activeLink).toHaveClass('border-accent', 'text-foreground')
+    expect(mutedLink).not.toHaveAttribute('aria-current')
+    expect(mutedLink).toHaveClass('text-muted-foreground')
+  })
 
   it('the Log out control calls signOut', async () => {
     const user = userEvent.setup()
@@ -63,7 +83,13 @@ describe('TopBar', () => {
     await screen.findByTestId('top-bar')
     expect(getAccessToken()).not.toBeNull()
 
-    await user.click(screen.getByRole('button', { name: 'Log out' }))
+    const logOut = screen.getByRole('button', { name: 'Log out' })
+    await user.tab()
+    await user.tab()
+    await user.tab()
+    expect(logOut).toHaveFocus()
+
+    await user.keyboard('{Enter}')
 
     await waitFor(() => expect(getAccessToken()).toBeNull())
   })

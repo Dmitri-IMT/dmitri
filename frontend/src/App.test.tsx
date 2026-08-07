@@ -96,6 +96,56 @@ describe('App', () => {
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/')
   })
 
+  it('renders /forgot-password while anonymous, without redirecting to Login', async () => {
+    failBootRefresh()
+    renderApp('/forgot-password')
+
+    await screen.findByTestId('forgot-form')
+    expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/forgot-password',
+    )
+  })
+
+  it('renders /reset-password while anonymous, without redirecting to Login', async () => {
+    failBootRefresh()
+    renderApp('/reset-password?token=live-token')
+
+    await screen.findByTestId('reset-form')
+    expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      '/reset-password',
+    )
+  })
+
+  it('renders /invite while anonymous, without redirecting to Login', async () => {
+    failBootRefresh()
+    renderApp('/invite?token=live-token')
+
+    await screen.findByTestId('invite-form')
+    expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/invite')
+  })
+
+  it('redirects an anonymous visitor from /settings to /login without flashing Settings', async () => {
+    failBootRefresh()
+    renderApp('/settings')
+
+    expect(screen.queryByTestId('settings-form')).not.toBeInTheDocument()
+    await screen.findByTestId('login-form')
+    expect(screen.queryByTestId('settings-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/login')
+  })
+
+  it('renders /settings inside the app shell for an authenticated visitor', async () => {
+    renderApp('/settings')
+
+    await screen.findByTestId('settings-form')
+    expect(screen.getByTestId('top-bar')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/settings')
+  })
+
   it('signed out, an unknown path lands on /login (AC 19)', async () => {
     failBootRefresh()
     renderApp('/no-such-route')

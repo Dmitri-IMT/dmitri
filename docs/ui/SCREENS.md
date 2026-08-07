@@ -22,10 +22,11 @@ needs an exception, it changes the rule here or it doesn't ship.
 items (Home · Scans · Hosts · Agents · Users · Settings), `[Log out]` right. **Users** is omitted
 for viewers, not disabled.
 
-**While the nav holds exactly one item, that item is centred in the bar**; from the second item
-on the nav returns to left-adjacent as described above. A lone link sitting beside the wordmark
-reads as an orphaned control rather than as navigation. This is a transitional state — v1 ships
-`Home` alone — and the feature that adds the second nav item reverts it. *Decided 2026-07-31.*
+**The nav is left-adjacent.** It was centred for as long as it held exactly one item, because a lone
+link sitting beside the wordmark reads as an orphaned control rather than as navigation. That was
+always transitional: spec 028 added `Settings` as the second item and reverted the centring, as
+promised. *Decided 2026-07-31; reverted 2026-08-07.* Shipped today: `Home` and `Settings`, both
+visible to either role.
 
 **The nav names domains, not actions.** *Users* is the place user-related things live, and it keeps
 that name even in v1, when the only thing in it is the invite form. Nav is muscle memory — an item
@@ -459,13 +460,13 @@ account exists the moment it succeeds.
 
 **The screen can now greet you — ✅ C14 resolved.** The lookup landed 2026-08-06 (DMI-86), so both
 of the consequences this section used to list are gone: the page can say *"You've been invited to
-Acme as a viewer"* — the one sentence that tells a stranger the link is legitimate — and the
+Acme with the viewer role"* — the one sentence that tells a stranger the link is legitimate — and the
 invitee no longer types their own email from memory, so a typo can no longer fail identically to a
 dead link. **The endpoint is unconsumed**: building the screen against it is DMI-87, which is why
 this screen is still `◐`.
 
 **Three states:**
-- **Regular:** the greeting (*"You've been invited to Acme as a viewer"*, from the lookup) plus the
+- **Regular:** the greeting (*"You've been invited to Acme with the viewer role"*, from the lookup) plus the
   form. Password + confirm — **no email field**.
 - **Blank:** not applicable (a form is its own content).
 - **Error — dead link (410):** the form is **removed**, not left there to be re-submitted. The link
@@ -477,7 +478,7 @@ this screen is still `◐`.
 | Element | Copy |
 | --- | --- |
 | Title | "Create your account" |
-| Body | "You've been invited to {org_name} as a {role}. Pick a password and you're in." — org and role from the lookup |
+| Body | "You've been invited to {org_name} with the {role} role. Pick a password and you're in." — org and role from the lookup. The article was dropped 2026-08-06 (DMI-87): `role` is the enum `admin \| viewer`, so "as a {role}" renders "as a admin" for every admin invite, and this wording needs no per-role branch |
 | Fields | "Password" / "Confirm password" |
 | Policy hint | "At least 12 characters. Avoid names, dates, and passwords you've used elsewhere." |
 | Button | "Create account" · in flight: "Creating your account…" |
@@ -495,8 +496,9 @@ this screen is still `◐`.
 |                                                                              |
 |              +------------------------------------------+                    |
 |              |  CREATE YOUR ACCOUNT                     |                    |
-|              |  You've been invited to Acme as a        |                    |
-|              |  viewer. Pick a password and you're in.  |                    |
+|              |  You've been invited to Acme with the    |                    |
+|              |  viewer role. Pick a password and        |                    |
+|              |  you're in.                              |                    |
 |              |                                 (muted)  |                    |
 |              |                                          |                    |
 |              |  Password                                |                    |

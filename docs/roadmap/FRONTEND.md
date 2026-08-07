@@ -30,7 +30,8 @@ interaction in implementation before it has passed through that sequence.
 - **Inside shell:** Home, Scans, Hosts, Agents, Users & invites (admin only), and **Settings**.
 - **Settings** is in the MVP after all: a logged-in user has nowhere to change their own password
   (B1 covers only the invite/reset flows). Holds change-password
-  and profile. It does **not** hold the scan target network — that is a property of the Pi (below).
+  and profile — **as built (spec 028) it holds change-password only**, since profile is still blocked
+  on C3, and it is open to both roles. It does **not** hold the scan target network — that is a property of the Pi (below).
 - **Home** is the root route (`/`). It is deliberately not a metrics wall:
   it gives a plain-language verdict, only shows actionable critical/high findings, failed scans,
   or stale coverage, and is intentionally sparse when all is clear. Charts and metric cards are
@@ -108,8 +109,12 @@ interaction in implementation before it has passed through that sequence.
    spec 014.
 3. ✅ First vertical slice: login → Home, including blank, regular, and error states with live data —
    spec 020.
-4. **Next.** Admin auth and user-management surfaces: invite acceptance, forgot/reset, and Users &
-   invites — **blocked on C3/C4** (no `/users` listing endpoints).
+4. ◐ Admin auth and user-management surfaces. ✅ **Invite acceptance, forgot/reset password and the
+   voluntary change-password screen shipped 2026-08-07 (spec 028)** — `/invite` consumes spec 027's
+   `POST /invites/lookup`, and `/settings` ships change-password only (profile still blocked on C3).
+   The flows are built but not usable end to end until invite/reset **email delivery** exists (see
+   the provider + SPF/DKIM/DMARC decision in [`ui/status.md`](../ui/status.md)). **Users & invites
+   remains blocked on C3/C4** (no `/users` listing endpoints).
 5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.

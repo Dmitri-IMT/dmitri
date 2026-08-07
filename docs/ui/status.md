@@ -14,12 +14,12 @@ The product should explain what needs attention. It is not a metrics dashboard.
 
 | Area | Screens | Status |
 | --- | --- | --- |
-| Auth | Login, accept invite, forgot/reset password, voluntary change password | B1/B2 **corrected against the contract**. Login still needs C16. **C14 resolved 2026-08-06 (DMI-86)** — accept invite has its lookup endpoint and no longer asks for an address; consuming it is DMI-87. **C15 resolved 2026-08-03 (DMI-77)** — reset password is unblocked. **Forced password change was dropped** — forced rotation is abandoned (ADR-015), so C5 is void and there is no forced-change screen. |
+| Auth | Login, accept invite, forgot/reset password, voluntary change password | B1/B2 **corrected against the contract**. Login still needs C16. **C14 resolved 2026-08-06 (DMI-86)** — accept invite has its lookup endpoint and no longer asks for an address; consuming it is DMI-87. **C15 resolved 2026-08-03 (DMI-77)** — reset password is unblocked. **Forced password change was dropped** — forced rotation is abandoned (ADR-015), so C5 is void and there is no forced-change screen. **Built 2026-08-07 (spec 028)** — login's forgot link, forgot/reset password, and accept invite (consuming the C14 lookup) all ship; delivery of the emails carrying those links still waits on the provider decision below. |
 | Home | `/`; a verdict-led security review | Drafted. The only screen spec so far. |
 | Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C10 (**C9 resolved 2026-08-02** — `host_id` is required on `ScanHostView`). **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2. **C12 resolved** — terminal state splits on `delivered_at` (never delivered → `expired`; delivered then broke → `failed`). |
 | Admin | Users & invites | B2 drafted; **screen spec drafted 2026-07-13**. Ships as **invite-only** — `POST /invites` is the sole endpoint (C4). Stays at `/users` under the "Users" nav item; the user table lands inside it when C4 arrives. |
-| Settings | Change password; profile | B5 + **screen spec drafted 2026-07-13**. Password works; profile blocked (C3). |
+| Settings | Change password; profile | B5 + **screen spec drafted 2026-07-13**. **Change password built 2026-08-07 (spec 028)** at `/settings`, reachable from the new second nav item and open to both roles; profile still blocked (C3), so the screen ships with no profile section. |
 
 ## Chosen
 
@@ -49,12 +49,14 @@ The product should explain what needs attention. It is not a metrics dashboard.
 ## Still needed
 
 - Pick the hexes for the deep purple and the four severities — **deferred on purpose** to when the frontend is being built, so the purple can be auditioned against real screens. Hues and rules are locked (purple is the accent and never a severity; severity is red/orange/amber/blue; AA on paper). Last unfilled values in Foundations; nothing is blocked on them.
-- **Pick the email provider and the sending domain.** Transactional email is decided (C17 closed — the backend emails invites and reset links; invites also keep a copyable link in the UI as a spam fallback). The code is small; what's left is choosing Resend/Postmark/SES and standing up **SPF + DKIM + DMARC** on a domain you own. Forgot/Reset password stay unbuildable until that exists.
+- **Pick the email provider and the sending domain.** Transactional email is decided (C17 closed — the backend emails invites and reset links; invites also keep a copyable link in the UI as a spam fallback). The code is small; what's left is choosing Resend/Postmark/SES and standing up **SPF + DKIM + DMARC** on a domain you own. The Forgot/Reset password *screens* were built anyway (spec 028) — what stays unusable end to end is
+  the delivery of the link, not the surfaces that request and consume it.
 - **Fourteen contract asks + one doc contradiction** block the UI — see [`FLOWS.md` § Contract asks](FLOWS.md#contract-asks). The heavy ones: no `GET /agents` (C1), no way to set the Pi's target network (C2), and **no `/users` resource at all** (C3, C4, C16), which leaves Users & invites mostly unbuildable — and, via **C16**, leaves the frontend with no documented way to learn the user's **role**, which every "absent, not disabled" affordance in the product depends on. C8 resolved (`cve_id` exists); C7 resolved (accepting an invite **does** issue a session → lands on Home); C12 is a BACKEND.md self-contradiction, not a contract gap.
 - One design call left: the stale-coverage threshold (N days). The 409 busy-Pi copy is now proposed in the Agents spec.
 - Lock B3 and B4 (both clarified; B4 needs C1 + C2 landed). B1 waits on C16; **B2 no longer waits on a contract ask** — C14 and C15 are both resolved.
 - **All screens are specced.** Home, the four B3 read screens, Agents, Settings, Users & invites, and the auth screens (login, accept invite, forgot/reset password, voluntary change password). The forced-password-change screen was dropped — forced rotation is abandoned (ADR-015).
-- Build the first vertical slice: login → Home with live data.
+- Build the first vertical slice: login → Home with live data. **Done**, and spec 028 extended it
+  with the public auth surfaces and Settings (2026-08-07).
 
 ## Later, not MVP
 
