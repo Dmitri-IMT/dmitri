@@ -90,8 +90,8 @@ describe('every resource module reaches the auth interceptor on its own', () => 
 
     setAccessToken('token-jkl')
     await changePassword({
-      current_password: 'old-long-enough-password',
-      new_password: 'new-long-enough-password',
+      current_password: 'old-long-enough-password', // pragma: allowlist secret
+      new_password: 'new-long-enough-password', // pragma: allowlist secret
     })
 
     expect(seen).toEqual(['Bearer token-jkl'])
