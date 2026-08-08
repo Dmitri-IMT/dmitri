@@ -164,9 +164,7 @@ describe('ResetPassword', () => {
     await submit()
 
     await screen.findByTestId('login-form')
-    expect(bodies).toEqual([
-      { token: 'live-token', new_password: VALID },
-    ])
+    expect(bodies).toEqual([{ token: 'live-token', new_password: VALID }])
   })
 
   it('creates no session on 204 and replaces the route with Login showing the success status', async () => {
@@ -303,7 +301,9 @@ describe('ResetPassword', () => {
 
     const user = await submit()
     await waitFor(() =>
-      expect(screen.getByTestId('reset-password-error')).not.toBeEmptyDOMElement(),
+      expect(
+        screen.getByTestId('reset-password-error'),
+      ).not.toBeEmptyDOMElement(),
     )
 
     await user.type(screen.getByTestId('reset-password'), 'x')
