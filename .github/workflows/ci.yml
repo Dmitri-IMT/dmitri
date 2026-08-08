@@ -32,6 +32,57 @@ jobs:
               print(f"Loaded {path}")
           PY
 
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Mirrors the pre-push hook in .pre-commit-config.yaml, which only runs for
+      # contributors who have installed it locally.
+      - name: Install detect-secrets
+        run: pip install detect-secrets==1.5.0
+
+      # Deliberately not `detect-secrets-hook`: that rewrites the baseline's line
+      # numbers whenever content shifts and then exits 1, which CI cannot resolve
+      # by staging the result. Compare secret identities instead, so the job fails
+      # only on a secret that is genuinely absent from the committed baseline.
+      - name: Scan for secrets missing from the baseline
+        run: |
+          detect-secrets scan --baseline .secrets.baseline
+          python - <<'PY'
+          import json, subprocess, sys
+
+          def identities(baseline):
+              return {
+                  (path, entry["type"], entry["hashed_secret"])
+                  for path, entries in baseline["results"].items()
+                  for entry in entries
+              }
+
+          committed = json.loads(
+              subprocess.run(
+                  ["git", "show", "HEAD:.secrets.baseline"],
+                  capture_output=True, text=True, check=True,
+              ).stdout
+          )
+          with open(".secrets.baseline") as handle:
+              found = identities(json.load(handle))
+
+          new = found - identities(committed)
+          if new:
+              print("Secrets not present in .secrets.baseline:")
+              for path, kind, _ in sorted(new):
+                  print(f"  {path}: {kind}")
+              print("\nIf these are false positives, run:")
+              print("  detect-secrets scan --baseline .secrets.baseline")
+              sys.exit(1)
+          print(f"No new secrets ({len(found)} baselined detections).")
+          PY
+
   lint:
     runs-on: ubuntu-latest
     steps:
