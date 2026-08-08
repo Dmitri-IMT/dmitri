@@ -20,7 +20,11 @@ function TopBar() {
           <NavLink to="/" end className={navLinkClass}>
             Home
           </NavLink>
-          <NavLink to="/settings" data-testid="nav-settings" className={navLinkClass}>
+          <NavLink
+            to="/settings"
+            data-testid="nav-settings"
+            className={navLinkClass}
+          >
             Settings
           </NavLink>
         </nav>

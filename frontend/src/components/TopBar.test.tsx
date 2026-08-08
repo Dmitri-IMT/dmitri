@@ -57,7 +57,9 @@ describe('TopBar', () => {
       expect(screen.getByTestId('nav-settings')).toHaveAccessibleName(
         'Settings',
       )
-      expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Log out' }),
+      ).toBeInTheDocument()
     },
   )
 
