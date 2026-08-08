@@ -1,12 +1,15 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { changePassword } from '@/api/passwords'
-import type { components } from '@/types/openapi'
-
-type ErrorResponse = components['schemas']['ErrorResponse']
+import { readApiError } from '@/api/apiError'
+import {
+  PASSWORD_HINT,
+  PASSWORD_MISMATCH_ERROR,
+  PASSWORD_POLICY_ERROR,
+  SERVICE_ERROR,
+} from '@/lib/copy'
 
 function Settings() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -33,7 +36,7 @@ function Settings() {
       return
     }
     if (newPassword !== confirmPassword) {
-      setConfirmError("Those two passwords don't match.")
+      setConfirmError(PASSWORD_MISMATCH_ERROR)
       confirmRef.current?.focus()
       return
     }
@@ -48,23 +51,18 @@ function Settings() {
       setConfirmPassword('')
       setSuccess('Password changed.')
     } catch (err) {
-      const code = isAxiosError<ErrorResponse>(err)
-        ? err.response?.data?.error?.code
-        : undefined
-      const status = isAxiosError(err) ? err.response?.status : undefined
+      const { status, code } = readApiError(err)
       if (status === 400 && code === 'wrong_current_password') {
         setCurrentError("That's not your current password.")
         currentRef.current?.focus()
         return
       }
       if (status === 400 && code === 'password_policy_violation') {
-        setNewError(
-          "That password isn't strong enough. Try a longer one that isn't based on a name or a date.",
-        )
+        setNewError(PASSWORD_POLICY_ERROR)
         newRef.current?.focus()
         return
       }
-      setFormError("Couldn't reach Dmitri. Try again in a moment.")
+      setFormError(SERVICE_ERROR)
     } finally {
       setIsSubmitting(false)
     }
@@ -124,8 +122,7 @@ function Settings() {
             data-testid="settings-new-hint"
             className="text-sm text-muted-foreground"
           >
-            At least 12 characters. Avoid names, dates, and passwords
-            you&apos;ve used elsewhere.
+            {PASSWORD_HINT}
           </p>
           <p
             id="settings-new-error"

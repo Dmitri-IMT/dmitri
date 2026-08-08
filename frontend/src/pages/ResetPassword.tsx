@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import AuthShell from '@/components/AuthShell'
 import { resetPassword } from '@/api/auth'
-import type { components } from '@/types/openapi'
-
-type ErrorResponse = components['schemas']['ErrorResponse']
+import { readApiError } from '@/api/apiError'
+import {
+  PASSWORD_HINT,
+  PASSWORD_MISMATCH_ERROR,
+  PASSWORD_POLICY_ERROR,
+  SERVICE_ERROR,
+} from '@/lib/copy'
 
 function ResetPassword() {
   const [searchParams] = useSearchParams()
@@ -40,7 +43,7 @@ function ResetPassword() {
       return
     }
     if (newPassword !== confirmPassword) {
-      setConfirmError("Those two passwords don't match.")
+      setConfirmError(PASSWORD_MISMATCH_ERROR)
       confirmRef.current?.focus()
       return
     }
@@ -49,22 +52,17 @@ function ResetPassword() {
       await resetPassword({ token, new_password: newPassword })
       void navigate('/login', { replace: true, state: { passwordReset: true } })
     } catch (err) {
-      const code = isAxiosError<ErrorResponse>(err)
-        ? err.response?.data?.error?.code
-        : undefined
-      const status = isAxiosError(err) ? err.response?.status : undefined
+      const { status, code } = readApiError(err)
       if (status === 410 && code === 'invalid_reset_token') {
         setIsDead(true)
         return
       }
       if (status === 400 && code === 'password_policy_violation') {
-        setPasswordError(
-          "That password isn't strong enough. Try a longer one that isn't based on a name or a date.",
-        )
+        setPasswordError(PASSWORD_POLICY_ERROR)
         passwordRef.current?.focus()
         return
       }
-      setFormError("Couldn't reach Dmitri. Try again in a moment.")
+      setFormError(SERVICE_ERROR)
     } finally {
       setIsSubmitting(false)
     }
@@ -120,8 +118,7 @@ function ResetPassword() {
               data-testid="reset-password-hint"
               className="text-sm text-muted-foreground"
             >
-              At least 12 characters. Avoid names, dates, and passwords
-              you&apos;ve used elsewhere.
+              {PASSWORD_HINT}
             </p>
             <p
               id="reset-password-error"
@@ -161,7 +158,11 @@ function ResetPassword() {
           >
             {formError}
           </p>
-          <Button type="submit" disabled={isSubmitting} data-testid="reset-submit">
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            data-testid="reset-submit"
+          >
             {isSubmitting ? 'Setting your password…' : 'Set password'}
           </Button>
         </form>

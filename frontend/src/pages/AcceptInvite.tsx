@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import AuthShell from '@/components/AuthShell'
 import { lookupInvite } from '@/api/auth'
+import { readApiError } from '@/api/apiError'
 import { useSession } from '@/auth/useSession'
-import type { components } from '@/types/openapi'
+import {
+  PASSWORD_HINT,
+  PASSWORD_MISMATCH_ERROR,
+  PASSWORD_POLICY_ERROR,
+  SERVICE_ERROR,
+} from '@/lib/copy'
 
-type ErrorResponse = components['schemas']['ErrorResponse']
+type InviteView = 'dead' | 'signed-in' | 'lookup-error' | 'loading' | 'ready'
 
 function isDeadTokenError(error: unknown): boolean {
-  return (
-    isAxiosError<ErrorResponse>(error) &&
-    error.response?.status === 410 &&
-    error.response?.data?.error?.code === 'invalid_invite_token'
-  )
+  const { status, code } = readApiError(error)
+  return status === 410 && code === 'invalid_invite_token'
 }
 
 function AcceptInvite() {
@@ -44,18 +46,16 @@ function AcceptInvite() {
     retry: false,
   })
 
-  const view =
-    token === ''
-      ? 'dead'
-      : status === 'authenticated'
-        ? 'signed-in'
-        : acceptDead || isDeadTokenError(lookup.error)
-          ? 'dead'
-          : status !== 'booting' && lookup.isError
-            ? 'lookup-error'
-            : lookup.data === undefined
-              ? 'loading'
-              : 'ready'
+  function resolveView(): InviteView {
+    if (token === '') return 'dead'
+    if (status === 'authenticated') return 'signed-in'
+    if (acceptDead || isDeadTokenError(lookup.error)) return 'dead'
+    if (status !== 'booting' && lookup.isError) return 'lookup-error'
+    if (lookup.data === undefined) return 'loading'
+    return 'ready'
+  }
+
+  const view = resolveView()
 
   useEffect(() => {
     if (view === 'dead' || view === 'signed-in' || view === 'lookup-error') {
@@ -73,7 +73,7 @@ function AcceptInvite() {
       return
     }
     if (password !== confirmPassword) {
-      setConfirmError("Those two passwords don't match.")
+      setConfirmError(PASSWORD_MISMATCH_ERROR)
       confirmRef.current?.focus()
       return
     }
@@ -81,27 +81,23 @@ function AcceptInvite() {
     try {
       await acceptInvitation({ token, password })
     } catch (err) {
-      const code = isAxiosError<ErrorResponse>(err)
-        ? err.response?.data?.error?.code
-        : undefined
-      const status = isAxiosError(err) ? err.response?.status : undefined
+      // `httpStatus`, not `status` — the latter is the session status from useSession above.
+      const { status: httpStatus, code } = readApiError(err)
       if (isDeadTokenError(err)) {
         setAcceptDead(true)
         return
       }
-      if (status === 400 && code === 'password_policy_violation') {
-        setPasswordError(
-          "That password isn't strong enough. Try a longer one that isn't based on a name or a date.",
-        )
+      if (httpStatus === 400 && code === 'password_policy_violation') {
+        setPasswordError(PASSWORD_POLICY_ERROR)
         passwordRef.current?.focus()
         return
       }
-      if (status === 400 && code === 'email_already_registered') {
+      if (httpStatus === 400 && code === 'email_already_registered') {
         setAccountError(true)
         accountErrorRef.current?.focus()
         return
       }
-      setFormError("Couldn't reach Dmitri. Try again in a moment.")
+      setFormError(SERVICE_ERROR)
     } finally {
       setIsSubmitting(false)
     }
@@ -111,7 +107,11 @@ function AcceptInvite() {
     return (
       <AuthShell>
         <div data-testid="invite-dead" className="flex flex-col gap-4">
-          <p ref={headingRef} tabIndex={-1} className="font-title text-title-sm">
+          <p
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-title text-title-sm"
+          >
             This invite has expired.
           </p>
           <p className="text-sm text-muted-foreground">
@@ -127,7 +127,11 @@ function AcceptInvite() {
     return (
       <AuthShell>
         <div data-testid="invite-signed-in" className="flex flex-col gap-4">
-          <p ref={headingRef} tabIndex={-1} className="font-title text-title-sm">
+          <p
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-title text-title-sm"
+          >
             You&apos;re already signed in.
           </p>
           <p className="text-sm text-muted-foreground">
@@ -156,7 +160,7 @@ function AcceptInvite() {
             data-testid="invite-error"
             className="text-sm text-destructive"
           >
-            Couldn&apos;t reach Dmitri. Try again in a moment.
+            {SERVICE_ERROR}
           </p>
           <Button
             type="button"
@@ -179,9 +183,7 @@ function AcceptInvite() {
           className="flex flex-col gap-4"
         >
           <span className="font-title text-title-sm">Create your account</span>
-          <p className="text-sm text-muted-foreground">
-            Checking your invite…
-          </p>
+          <p className="text-sm text-muted-foreground">Checking your invite…</p>
         </div>
       </AuthShell>
     )
@@ -219,8 +221,7 @@ function AcceptInvite() {
               data-testid="invite-password-hint"
               className="text-sm text-muted-foreground"
             >
-              At least 12 characters. Avoid names, dates, and passwords
-              you&apos;ve used elsewhere.
+              {PASSWORD_HINT}
             </p>
             <p
               id="invite-password-error"
@@ -263,7 +264,11 @@ function AcceptInvite() {
             {accountError ? (
               <>
                 That address already has an account.{' '}
-                <Link to="/login" data-testid="invite-sign-in" className="underline">
+                <Link
+                  to="/login"
+                  data-testid="invite-sign-in"
+                  className="underline"
+                >
                   Sign in instead.
                 </Link>
               </>
@@ -276,7 +281,11 @@ function AcceptInvite() {
           >
             {formError}
           </p>
-          <Button type="submit" disabled={isSubmitting} data-testid="invite-submit">
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            data-testid="invite-submit"
+          >
             {isSubmitting ? 'Creating your account…' : 'Create account'}
           </Button>
         </form>

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import AuthShell from '@/components/AuthShell'
 import { forgotPassword } from '@/api/auth'
+import { SERVICE_ERROR } from '@/lib/copy'
 
 function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -31,7 +32,7 @@ function ForgotPassword() {
       await forgotPassword({ email })
       setConfirmedFor(email)
     } catch {
-      setError("Couldn't reach Dmitri. Try again in a moment.")
+      setError(SERVICE_ERROR)
       emailRef.current?.focus()
     } finally {
       setIsSubmitting(false)
