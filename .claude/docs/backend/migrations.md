@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and fourteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check, command delivery and the scan-ingest rework — plus Supabase RLS hardening and the dmitri_runtime role.
+description: The Alembic env and fifteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check, command delivery, the scan-ingest rework and the user-delete cascade — plus Supabase RLS hardening and the dmitri_runtime role.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Backend database migrations
@@ -47,6 +47,8 @@ new table.
 | `upgrade()` (rev `20260727_12`, `finding_severity_domain`) | Adds check `ck_findings_severity` on `findings.severity` (`IN ('low','medium','high','critical')`); `upgrade()` guards for out-of-domain rows before applying. No RLS change — constraint only. | `backend/alembic/versions/20260727_12_finding_severity_domain.py` |
 | `upgrade()` (rev `20260731_13`, `command_delivery`) | Makes `commands.scan_id` **nullable** (guarded by a pre-flight query for rows that would violate the new check), adds `ck_commands_scan_id_or_expired` — `scan_id IS NOT NULL OR status IN ('queued', 'expired')` — adds the partial unique index `uq_commands_active_agent ON commands (agent_id) WHERE status IN ('queued','delivered','running','uploading')`, and adds nullable `agents.connected_at`. `downgrade()` refuses to run while any null `scan_id` remains. | `backend/alembic/versions/20260731_13_command_delivery.py` |
 | `upgrade()` (rev `20260804_14`, `scan_ingest_rework`) | Adds nullable `scans.agent_id` (FK → `agents.id`, **no backfill** — pre-existing rows stay `NULL`) and drops the `artifacts` table, which takes its owned identity sequence `artifacts_id_seq` with it. `downgrade()` recreates `artifacts` exactly as the baseline declared it, including `ix_artifacts_scan_id` and the FK → `scans`, then drops only `scans.agent_id`. Existing scan rows survive a full up→down→up round trip. | `backend/alembic/versions/20260804_14_scan_ingest_rework.py` |
+
+| `upgrade()` (rev `20260808_15`, `user_delete_cascade`) | Drops and recreates exactly two FKs — `refresh_tokens_user_id_fkey` and `password_reset_tokens_user_id_fkey` — with `ondelete="CASCADE"`, and grants `DELETE ON public.users` to `dmitri_runtime`. Without it `DELETE FROM users` raised `ForeignKeyViolation` for any user with a live session, and the runtime role had no `DELETE` on `users` at all. `downgrade()` revokes the grant and recreates both FKs without `ondelete`. The child tables need **no** `DELETE` grant: the cascade runs through the referential-integrity trigger, which is not subject to the caller's privileges on the referencing table. | `backend/alembic/versions/20260808_15_user_delete_cascade.py` |
 
 ## How it connects
 
@@ -94,11 +96,14 @@ new table.
 - **Editing the baseline only reaches databases that migrate from base.** A cluster already past
   `20260715_01` does not re-run it; a misconfigured role there needs a one-off
   `ALTER ROLE dmitri_runtime WITH LOGIN BYPASSRLS` or a follow-up revision.
-- **No `DELETE` grant — except on `agent_nonces`.** Every other table grants `dmitri_runtime` only
+- **`DELETE` is granted on exactly two tables.** Every other table grants `dmitri_runtime` only
   `SELECT/INSERT/UPDATE`, so persistence is append/update-only. `agent_nonces` inverts that: it is
   granted `SELECT/INSERT/DELETE` and **withheld** `UPDATE`, because a nonce is written once, never
   mutated, and must be prunable once expired. `test_migrations.py`'s privilege loop is therefore
   table-aware (`RUNTIME_GRANTS_BY_TABLE`) rather than asserting one grant set for everything.
+  `users` is the second exception, added by `20260808_15`: it is granted `SELECT/INSERT/UPDATE/DELETE`
+  so [account removal](/backend/services.md) can hard-delete a member. A grant added without the
+  matching `RUNTIME_GRANTS_BY_TABLE` entry fails `test_live_migration_round_trip_and_security`.
 - `alembic.ini` sets `prepend_sys_path = src` so `import api...` resolves during migrations.
 
 # Citations

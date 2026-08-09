@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The real work — ingest_scan/persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command channel's lifecycle rulebook, enqueue/delivery/sweep service and durable presence projection.
+description: The real work — ingest_scan/persist_scan, host-identity upsert, account removal, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command channel's lifecycle rulebook, enqueue/delivery/sweep service and durable presence projection.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -26,6 +26,8 @@ so the worker process can reason about it without reading the API's memory.
 `POST /api/v1/scans` ([routers](/backend/routers.md)) alongside the read path, the
 [auth routes](/backend/auth.md) and the command routes; the enrichment worker is still driven by the
 poll loop rather than a live agent.
+`users.py` (DMI-102) owns account removal — the org-scoped admin count and the two hard deletes
+behind the [`DELETE /users/me` and `DELETE /users/{user_id}` routes](/backend/routers.md).
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
 [auth](/backend/auth.md).
 
@@ -41,6 +43,10 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `_persist_scan_host()` | Inserts one `ScanHostRecord` (`ip`/`mac`/`hostname`/`vendor`) for the scan. | `backend/src/api/services/persistence.py:262` |
 | `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:302` |
 | `command_for_scan()` | Looks up the `Command` a `scan_id` belongs to, or `None`. Used by `ingest_scan` for the Case C ownership check. | `backend/src/api/services/commands.py:99` |
+| `LastAdminError` | Domain refusal raised by `delete_self` when the caller is their org's only admin; the router maps it to `409 last_admin`. Subclasses `ValueError`, mirroring `PendingInviteError`. | `backend/src/api/services/users.py:11` |
+| `count_org_admins()` | `SELECT count(*) FROM users WHERE org_id = :org_id AND role = 'admin'`. Ordinary count under READ COMMITTED — **no** row lock, advisory lock, isolation change or retry. | `backend/src/api/services/users.py:15` |
+| `delete_self()` | Hard-deletes the caller's own `User` row via the ORM. Counts admins **only when the row's role is `admin`** (role read from the DB row, never the JWT) and raises `LastAdminError` at a count of 1. | `backend/src/api/services/users.py:23` |
+| `delete_member()` | Org-scoped lookup by `(id, org_id)`; returns `False` on a miss — unknown id and foreign-org id are indistinguishable by design — else hard-deletes and returns `True`. | `backend/src/api/services/users.py:30` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
 | `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:23` |
 | `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` | `1` / `20` — the paging defaults `list_hosts()` falls back to, imported by `read_hosts` so the route and the service cannot drift apart. `list_scans`/`list_findings` still inline theirs. | `backend/src/api/services/read.py:35` |
@@ -113,6 +119,18 @@ ML/AI scoring is future work.
 
 ## Notes / gotchas
 
+- **Removal is a hard delete and the database does the cascade.** `session.delete(user)` emits a
+  single `DELETE FROM users WHERE id = ...`; there are no `Relationship()` declarations anywhere in
+  `models/`, so SQLAlchemy neither pre-deletes nor nulls dependents — `refresh_tokens` and
+  `password_reset_tokens` go through the FK's `ON DELETE CASCADE`
+  ([migrations](/backend/migrations.md)). Nothing in `auth.py` is called; the cascade **is** the
+  session teardown. Org data (scans, hosts, findings, agents) is the org's and is untouched, and the
+  freed address can be invited again.
+- **The last-admin invariant is checked in exactly one place.** Only `delete_self` counts admins;
+  `delete_member` needs no count because the router refuses self-targeting, so an ordinary
+  cross-removal always leaves its admin caller behind. Two admins concurrently self-removing, or
+  concurrently targeting each other, can both pass — a known, documented v1 race owned by
+  **DMI-105**. Do not add partial locking here.
 - **The read path is org-scoped in SQL, and `org_id` is required.** All four `read.py` entry points
   take a keyword-only `org_id: UUID` with no default, so a caller cannot silently omit it. Scoping is
   a plain `WHERE org_id = :org_id` — there is no `OR org_id IS NULL` and no fallback branch, which
@@ -193,3 +211,4 @@ ML/AI scoring is future work.
 [7] [specs/021-scan-list-and-finding-filters](../../../specs/021-scan-list-and-finding-filters/TRUTH.md)
 [8] [specs/022-command-enqueue-delivery](../../../specs/022-command-enqueue-delivery/plan.md)
 [9] [docs/research/ws-session-lifetime.md](../../../docs/research/ws-session-lifetime.md)
+[10] [specs/029-account-removal-api](../../../specs/029-account-removal-api/TRUTH.md)

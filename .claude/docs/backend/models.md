@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Backend ORM models
@@ -53,8 +53,8 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `RefreshToken` → `refresh_tokens` | UUID PK; `user_id` FK → `users`; `family_id` (indexed); `token_hash` (unique+indexed); `family_expires_at`; nullable `rotated_at`/`revoked_at`; `created_at`. Backs the rotating refresh-token family — see [auth](/backend/auth.md). | `backend/src/api/models/session.py:11` |
-| `PasswordResetToken` → `password_reset_tokens` | UUID PK; `user_id` FK → `users`; `token_hash` (unique+indexed); `expires_at`; nullable `consumed_at`; `created_at`. Single-use reset token. | `backend/src/api/models/session.py:24` |
+| `RefreshToken` → `refresh_tokens` | UUID PK; `user_id` FK → `users` **`ON DELETE CASCADE`**; `family_id` (indexed); `token_hash` (unique+indexed); `family_expires_at`; nullable `rotated_at`/`revoked_at`; `created_at`. Backs the rotating refresh-token family — see [auth](/backend/auth.md). | `backend/src/api/models/session.py:11` |
+| `PasswordResetToken` → `password_reset_tokens` | UUID PK; `user_id` FK → `users` **`ON DELETE CASCADE`**; `token_hash` (unique+indexed); `expires_at`; nullable `consumed_at`; `created_at`. Single-use reset token. | `backend/src/api/models/session.py:24` |
 
 ## Key classes / functions — `command.py`
 

@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Shared contracts
@@ -38,6 +38,13 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   ([command-channel](/hardware-agent/command-channel.md)). `AvailableSubnet` gained a **required**
   `is_default_route` in DMI-66, so a hello that omits it is an invalid frame on every side:
   contract, backend Pydantic model, and generated frontend type.
+- `DELETE /api/v1/users/me` (`deleteCurrentUser`) and `DELETE /api/v1/users/{user_id}`
+  (`deleteUser`) — account removal, **wired** (DMI-102). Both `204` with an empty body and no
+  `Set-Cookie`. Two new pinned failure codes, both `409`: `LastAdminConflict` (`last_admin`, the
+  self route) and `SelfTargetConflict` (`self_target`, an admin naming their own id). A foreign-org
+  target is `404`, never `403`. Neither route has an `options` twin — the CORS middleware answers
+  the preflight, and the `Access-Control-Allow-Methods` example now reads
+  `GET, POST, DELETE, OPTIONS`.
 - `auth` (`login`/`refresh`/`logout`/…) + `invites` — identity surface.
 
 Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),

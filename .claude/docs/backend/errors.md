@@ -4,7 +4,7 @@ title: Backend API error envelope
 description: ApiError(HTTPException) with per-site code overrides and the global handlers that wrap every HTTPException and unhandled Exception into the contract ErrorResponse shape.
 resource: backend/src/api/errors.py
 tags: [backend, errors, fastapi, contract, envelope]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Backend API error envelope
@@ -13,8 +13,9 @@ timestamp: 2026-08-06T00:00:00Z
 
 `errors.py` is the single place the backend defines how API failures are shaped on the wire.
 `ApiError` subclasses `HTTPException` and carries an explicit `code` string for the few routes
-that need a machine-readable discriminator beyond the HTTP status (today: the four auth/invite
-write surfaces — change-password, reset-password, create-invite, accept-invite).
+that need a machine-readable discriminator beyond the HTTP status (today: the auth/invite write
+surfaces — change-password, reset-password, create-invite, accept-invite, invite lookup — plus the
+two account-removal routes).
 Everything else keeps raising bare `HTTPException` and gets a status-derived default code from
 `DEFAULT_CODES_BY_STATUS`. The global handlers in [`main.py`](/backend/api.md) turn both into
 `{"error": {"code", "message", "details": {}}}` — matching `contracts/openapi/openapi.yaml`.
@@ -44,8 +45,12 @@ Everything else keeps raising bare `HTTPException` and gets a status-derived def
   override: `change_password_route` and `reset_password_route` in `routers/auth.py`,
   `create_invite_route`, `accept_invite_route` and — since DMI-86 — `lookup_invite_route` in
   `routers/invites.py`. Pinned codes across seven `components/responses` entries, listed in
-  [auth](/backend/auth.md). Every other raiser in the app still falls back to
-  `DEFAULT_CODES_BY_STATUS`.
+  [auth](/backend/auth.md). DMI-102 added two more, both `409` from `routers/users.py`:
+  `last_admin` on `delete_current_user_route` and `self_target` on `delete_user_route`, pinned by
+  the `LastAdminConflict` / `SelfTargetConflict` contract components. Both are `409` because the
+  caller holds every permission the action requires and it is the current state that refuses
+  (RFC 9110 § 15.5.10). Every other raiser in the app still falls back to
+  `DEFAULT_CODES_BY_STATUS` — including the removal routes' own `404`.
   DMI-86 also **retired** `invite_email_mismatch`: acceptance no longer takes an address, so the
   failure it named cannot occur. The lookup's 410 deliberately reuses acceptance's
   `AcceptInviteTokenGone` component rather than minting a parallel one, which is what makes the
