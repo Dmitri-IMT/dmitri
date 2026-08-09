@@ -10,6 +10,13 @@ receive it. Before marking an integration task complete, grep for every
 constructor/call site of the changed class and verify each one passes the new
 parameter.
 
+## No temporary code
+
+Do not build temporary implementations, stopgap abstractions, or partial replacements that a
+known follow-up will immediately remove. Build each feature in its intended complete shape. If
+that is not possible within the requested scope or current constraints, state the limitation and
+ask the user to decide how to proceed rather than silently shipping temporary code.
+
 ## Formatting and lint gates
 
 **Never run a repo-wide formatter.** Not `ruff format`, not `black .`, not `./lint.sh`
