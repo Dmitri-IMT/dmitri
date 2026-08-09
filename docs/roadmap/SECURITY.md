@@ -34,6 +34,7 @@ the SPA's login/session), the agent and command-channel controls are not (see
 | Agent Ed25519 signature | **Decided** (September); **not built** |
 | Frontend JWT / login | **Decided**; **built** — in-memory token, single-flight refresh, route guard (specs 014 + 020) |
 | Authorization (roles) | **`admin` / `viewer`** — [`AUTH.md`](AUTH.md); **built server-side** (`require_user`/`require_admin`, org-scoped reads, DMI-61). SPA reads the role from `GET /users/me`, not a JWT claim — no role-gated screen exists yet to consume it |
+| Account removal | **Decided 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)); **not built**. Hard delete cascading the session tables, self-service for both roles, and a **last-admin invariant** — an org can never reach zero admins. Closes a live gap: today a departed employee keeps a working account and read access to every finding |
 | Device keys | **✅** B2B installer provisioning (register public key) — [`AUTH.md`](AUTH.md); rotation Phase 2 |
 | Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH. Device auth needs no stored secret — backend holds only public keys |
 | Pi command-channel auth | WSS Ed25519-signed upgrade per [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |
@@ -54,6 +55,14 @@ the SPA's login/session), the agent and command-channel controls are not (see
 
 Scans carry sensitive recon data. Track: HTTPS in transit, encryption at rest (DB provider),
 least-privilege once auth exists, audit for scan triggers and (later) LLM/assessment actions.
+
+**Member activity is personal data about employees, not recon data.** Showing an org admin when a
+colleague was last active needs a documented lawful basis (legitimate interests — consent is not
+freely given in an employment relationship) and transparency toward the people monitored. ICO
+guidance places logon-time monitoring at the low-intrusion end and no DPIA is required here, but
+the decision not to run one is recorded rather than assumed. Store precise, render coarse. See
+[`AUTH.md` § Member activity](AUTH.md) and
+[`user-last-seen-tracking.md`](../research/user-last-seen-tracking.md).
 
 ---
 

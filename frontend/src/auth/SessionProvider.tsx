@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
-import { login, logout, refresh } from '@/api/auth'
+import { acceptInvite, login, logout, refresh } from '@/api/auth'
 import { getCurrentUser } from '@/api/users'
 import { clearAccessToken, getAccessToken } from '@/api/tokenStore'
 import { onSessionExpired } from '@/api/authEvents'
@@ -9,6 +9,7 @@ import type { components } from '@/types/openapi'
 
 type UserProfileResponse = components['schemas']['UserProfileResponse']
 type LoginRequest = components['schemas']['LoginRequest']
+type AcceptInviteRequest = components['schemas']['AcceptInviteRequest']
 
 type SessionStatus = 'booting' | 'authenticated' | 'anonymous'
 
@@ -17,6 +18,7 @@ interface SessionContextValue {
   user: UserProfileResponse | null
   signIn: (credentials: LoginRequest) => Promise<void>
   signOut: () => Promise<void>
+  acceptInvitation: (request: AcceptInviteRequest) => Promise<void>
 }
 
 export const SessionContext = createContext<SessionContextValue | null>(null)
@@ -65,11 +67,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [queryClient, navigate],
   )
 
-  async function signIn(credentials: LoginRequest): Promise<void> {
-    await login(credentials)
+  async function enterSession(): Promise<void> {
     setEnabled(true)
     await queryClient.invalidateQueries({ queryKey: ['session'] })
     navigate('/', { replace: true })
+  }
+
+  async function signIn(credentials: LoginRequest): Promise<void> {
+    await login(credentials)
+    await enterSession()
+  }
+
+  async function acceptInvitation(request: AcceptInviteRequest): Promise<void> {
+    await acceptInvite(request)
+    await enterSession()
   }
 
   async function signOut(): Promise<void> {
@@ -96,6 +107,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     user: query.data ?? null,
     signIn,
     signOut,
+    acceptInvitation,
   }
 
   return (

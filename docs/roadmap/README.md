@@ -16,8 +16,8 @@
 |-----|-------|--------------|
 | [`PI.md`](PI.md) | Raspberry Pi agent | **Software built (dev machine/TUI).** No Pi hardware yet. No daemon, no backend HTTP client. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · **B8 ✅** · ADR-011 |
-| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); **in progress in code** — schema, sessions/routes and middleware landed; WS channel + ingest open |
-| [`FRONTEND.md`](FRONTEND.md) | React SPA | **Scaffold ✅ (014) · login → Home slice ✅ (020).** Next: admin/user-management surfaces, blocked on C3/C4. |
+| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); **in progress in code** — schema, sessions/routes and middleware landed; WS channel + ingest open. **Account removal + member activity pulled forward from Phase 2 on 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)) — decided, not built |
+| [`FRONTEND.md`](FRONTEND.md) | React SPA | **Scaffold ✅ (014) · login → Home slice ✅ (020) · public auth surfaces + Settings ✅ (028).** Next: Users & invites, blocked on C3/C4; invite/reset email delivery still unbuilt. |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
 | [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
@@ -43,7 +43,8 @@ risk — but **the Pi does not call the backend today**; that link is the shared
 only. The web app now does: `frontend/` reads the wired read path through the login → Home slice.
 **September (B10 = Control):** scan-from-web via command channel, Pi daemon, frontend trigger.
 **Still missing:** Pi hardware, Pi→backend transport, command channel, the rest of the **frontend**
-(admin surfaces, scans/hosts/agents screens, "Scan now"), LLM explainer. **NSPi pilot:** dual-homed
+(Users & invites, scans/hosts/agents screens, "Scan now"), LLM explainer. The public auth surfaces
+and Settings landed 2026-08-07 (spec 028), though invite/reset **emails** are still not sent. **NSPi pilot:** dual-homed
 laptop validated on the real lab network (July 2026); use Quick scan until NSPi mode port stage is
 fixed. This roadmap sequences the rest.
 

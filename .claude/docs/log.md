@@ -3,6 +3,29 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-07
+
+* **Update**: the **frontend public auth surfaces** (spec 028) — `frontend/screens.md`,
+  `frontend/app.md`, `frontend/api.md`, `frontend/auth.md`, `frontend/overview.md`,
+  `frontend/index.md`. Four new screens: `ForgotPassword` and `ResetPassword` (public password
+  recovery), `AcceptInvite` (public, consuming spec 027's lookup), and `Settings` (guarded,
+  voluntary change-password only — **no profile section**). Routes `/forgot-password`,
+  `/reset-password` and `/invite` sit outside `RequireSession`; `/settings` sits inside it.
+* **Update**: `SessionProvider` gained `acceptInvitation`, and the post-authentication sequence
+  (`setEnabled(true)` → invalidate `['session']` → `navigate('/', { replace: true })`) now exists
+  **once** as the private `enterSession()` helper shared with `signIn`. No second context, token
+  store or Axios instance. An accepted invite never routes through Login.
+* **Creation**: `frontend/src/api/passwords.ts` — `changePassword`, deliberately its own module
+  importing `apiClient` from `./client`; folding it into `auth.ts` would either recreate the
+  `client.ts` → `auth.ts` cycle or bypass the Bearer and refresh-retry interceptors.
+* **Update**: **the top bar's transitional centred nav is gone.** `Settings` is the second nav item,
+  so `TopBar` reverted `1fr auto 1fr` to `flex justify-between` with `flex-1` on the nav, exactly as
+  the 2026-07-31 note promised. Both roles see both items; there is still no `Users` link. Retire
+  any memory of "the nav holds one centred item".
+* **Update**: `frontend/overview.md` records two Windows-only environment conditions found during the
+  feature — `format:check` failing repo-wide on a CRLF checkout, and the Vitest forks pool being
+  unable to spawn workers. Neither is caused by feature code; both are open items.
+
 ## 2026-08-06
 
 * **Update**: the **public invite lookup and the address-free acceptance** (DMI-86, spec 027,

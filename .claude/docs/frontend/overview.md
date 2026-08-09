@@ -1,10 +1,10 @@
 ---
 type: Package Overview
 title: frontend package overview
-description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
+description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the screens from login and Home through password recovery, settings and invite acceptance.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-07T00:00:00Z
 ---
 
 # frontend package overview
@@ -16,6 +16,9 @@ through the frozen OpenAPI contract at `contracts/openapi/openapi.yaml`. Spec 01
 foundation (contract-generated types, the two-Axios-instance auth client, the in-memory token
 store) behind a throwaway stub UI. Spec 020 replaced the stubs with the first real vertical slice:
 a router, a session provider and route guard, two shells, and the **LOGIN** and **HOME** screens.
+Spec 028 completed the auth surface around it: **FORGOT PASSWORD**, **RESET PASSWORD**, **ACCEPT
+INVITE** (all public) and **SETTINGS** (guarded), plus the second nav item that ended the top bar's
+transitional one-item centring.
 
 The product frame is the verdict, not a dashboard: Home answers "does anything need me?" in one
 sentence, backed by a pure derivation over four reads.
@@ -24,10 +27,10 @@ sentence, backed by a pure derivation over four reads.
 
 | Area | What lives there | Doc |
 |------|------------------|-----|
-| `src/api/` | The typed API layer: the two bare Axios instances (`instances.ts`), the module that arms them with the Bearer + refresh interceptors (`client.ts`), the auth resource module (`auth.ts`), the in-memory token store (`tokenStore.ts`), the session-expiry event bus (`authEvents.ts`), and the read resource modules (`users`/`scans`/`findings`). | [api](./api.md) |
-| `src/auth/` | The session layer: `SessionProvider` (boot refresh as a query, sign-in/sign-out), `useSession`, and the `RequireSession` route guard. | [auth](./auth.md) |
+| `src/api/` | The typed API layer: the two bare Axios instances (`instances.ts`), the module that arms them with the Bearer + refresh interceptors (`client.ts`), the auth resource module (`auth.ts`), the in-memory token store (`tokenStore.ts`), the session-expiry event bus (`authEvents.ts`), the change-password module (`passwords.ts`), and the read resource modules (`users`/`scans`/`findings`). | [api](./api.md) |
+| `src/auth/` | The session layer: `SessionProvider` (boot refresh as a query, sign-in/sign-out/invite acceptance), `useSession`, and the `RequireSession` route guard. | [auth](./auth.md) |
 | `src/App.tsx`, `src/main.tsx` | The provider nest and the route table. | [app](./app.md) |
-| `src/pages/`, `src/components/` | The screens (Login, Home, NotFound), the two shells, the top bar, and the shared presentation components. | [screens](./screens.md) |
+| `src/pages/`, `src/components/` | The screens (Login, Home, ForgotPassword, ResetPassword, AcceptInvite, Settings, NotFound), the two shells, the top bar, and the shared presentation components. | [screens](./screens.md) |
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes the four Home reads into one discriminated union. | [review](./review.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types` (openapi-typescript). Committed; CI re-checks for drift. Sole source of request/response types. | — |
 | `src/components/ui/` | shadcn/ui `button`, `input`, `label` only (Tailwind CSS v4, light-only foundation). | — |
@@ -54,6 +57,14 @@ sentence, backed by a pure derivation over four reads.
   line is deliberately not built. No `VITE_AGENT_ID`, no hardcoded UUID. `src/api/agents.ts` and
   its MSW handler existed but were called by nothing; both were **deleted 2026-07-31** rather than
   left as speculative surface. They return with the feature that needs them.
+- **`format:check` currently fails repo-wide on a Windows working copy.** Roughly 50 files —
+  including ones no feature has touched — report as unformatted because the checkout is CRLF and
+  Prettier expects LF. It reproduces on a clean tree, so it is a line-ending condition, not a
+  feature's doing. Fixing it means a `.gitattributes` / `core.autocrlf` decision, **not** running a
+  repo-wide formatter (forbidden by `.claude/CLAUDE.md`). CI on Linux is unaffected. Open item.
+- **The Vitest forks pool cannot spawn workers on that same machine** ("Timeout waiting for worker
+  to respond", zero tests collected). Run `npx vitest run --pool=threads --maxWorkers=1
+  --no-file-parallelism` there; the default configuration is fine in CI.
 - **Dev server must run on port `5173`** (Vite default, unoverridden) to match the backend's CORS
   allow-list; the refresh cookie flow depends on it.
 - **`.npmrc` pins `legacy-peer-deps=true`** — `openapi-typescript` peers on TS `^5` while the app

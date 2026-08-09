@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: frontend app root & routing
-description: The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
+description: The React root's provider nest and App's route table — the four public auth routes, the guarded shell branch, and a catch-all that renders rather than redirects.
 resource: frontend/src/App.tsx
 tags: [frontend, react, entrypoint, router]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-08-07T00:00:00Z
 ---
 
 # frontend app root & routing
@@ -20,12 +20,15 @@ contains no `useEffect`, no refresh call and no session state at all.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `main.tsx` root | Mounts `<StrictMode>` → `BrowserRouter` → `QueryClientProvider` → `SessionProvider` → `App`. The router must sit outside the session provider, which navigates. | `frontend/src/main.tsx:11` |
-| `App` | The route table only: `/login` → `Login`; then a `RequireSession` branch wrapping an `AppShell` branch holding `/` → `Home` and `*` → `NotFound`. | `frontend/src/App.tsx:8` |
+| `App` | The route table only: four public routes — `/login` → `Login`, `/forgot-password` → `ForgotPassword`, `/reset-password` → `ResetPassword`, `/invite` → `AcceptInvite`; then a `RequireSession` branch wrapping an `AppShell` branch holding `/` → `Home`, `/settings` → `Settings` and `*` → `NotFound`. | `frontend/src/App.tsx:15` |
 
 ## How it connects
 
 - Guarded by [auth](./auth.md)'s `RequireSession`; framed by [screens](./screens.md)'s `AppShell`.
-- `Login` sits **outside** the guard and redirects to `/` itself when already authenticated.
+- `Login` sits **outside** the guard and redirects to `/` itself when already authenticated. The
+  three other public routes sit outside it too: password recovery and invite acceptance must work
+  with no session at all. `AcceptInvite` guards itself in the opposite direction — an
+  *authenticated* visitor gets a sign-out block rather than the form.
 
 ## Notes / gotchas
 
@@ -35,6 +38,8 @@ contains no `useEffect`, no refresh call and no session state at all.
   `Navigate` on the catch-all — rewriting the URL would hide the typo the operator needs to see.
 - **Router package is `react-router` v7**, not `react-router-dom` — v7 merged them, and importing
   the old package name is a silent-drift trap.
+- **`/settings` is the only screen added inside the guard**, so it is the second route in the
+  `AppShell` branch and must stay above the `*` catch-all.
 - `App.test.tsx` supplies its own `MemoryRouter` (App mounts routes, not a router), and reads the
   live path through a `useLocation()` probe to prove the catch-all preserved it.
 

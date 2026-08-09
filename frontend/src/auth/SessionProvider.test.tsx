@@ -205,6 +205,136 @@ describe('SessionProvider', () => {
     expect(refreshCount).toBe(1)
   })
 
+  it('establishes a session from invite acceptance: stores the token, refetches /users/me, and replaces /invite with / without rendering Login', async () => {
+    server.use(
+      http.post(
+        `${baseURL}/auth/refresh`,
+        () => new HttpResponse(null, { status: 401 }),
+      ),
+      http.post(`${baseURL}/invites/accept`, () =>
+        HttpResponse.json(
+          {
+            access_token: 'invite-access-token',
+            token_type: 'bearer',
+            expires_in: 3600,
+          },
+          { status: 201 },
+        ),
+      ),
+      http.get(`${baseURL}/users/me`, () => HttpResponse.json(viewerProfile)),
+    )
+
+    function InviteProbe() {
+      const { acceptInvitation } = useSession()
+      return (
+        <button
+          onClick={() =>
+            void acceptInvitation({
+              token: 'live-token',
+              password: 'x'.repeat(12),
+            })
+          }
+        >
+          Accept invite
+        </button>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/first', '/invite']} initialIndex={1}>
+        <QueryClientProvider client={newQueryClient()}>
+          <SessionProvider>
+            <Routes>
+              <Route path="/first" element={<div>first-route</div>} />
+              <Route path="/invite" element={<InviteProbe />} />
+              <Route path="/" element={<SessionProbe />} />
+              <Route
+                path="/login"
+                element={
+                  <>
+                    <div>login-route</div>
+                    <BackProbe />
+                  </>
+                }
+              />
+            </Routes>
+          </SessionProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Accept invite' }),
+    )
+
+    await screen.findByText('Signed in as viewer')
+    expect(getAccessToken()).toBe('invite-access-token')
+    expect(screen.queryByText('login-route')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
+    await screen.findByText('login-route')
+    await userEvent.click(screen.getByRole('button', { name: 'Go back' }))
+    await screen.findByText('first-route')
+  })
+
+  it('establishes a session from signIn through the same sequence: refetches /users/me and replaces /login with /', async () => {
+    server.use(
+      http.post(
+        `${baseURL}/auth/refresh`,
+        () => new HttpResponse(null, { status: 401 }),
+      ),
+      http.get(`${baseURL}/users/me`, () => HttpResponse.json(viewerProfile)),
+    )
+
+    function SignInProbe() {
+      const { signIn } = useSession()
+      return (
+        <button
+          onClick={() =>
+            void signIn({
+              email: 'viewer@dmitri.dev',
+              password: 'x'.repeat(12),
+            })
+          }
+        >
+          Sign in
+        </button>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/first', '/login']} initialIndex={1}>
+        <QueryClientProvider client={newQueryClient()}>
+          <SessionProvider>
+            <Routes>
+              <Route path="/first" element={<div>first-route</div>} />
+              <Route path="/login" element={<SignInProbe />} />
+              <Route
+                path="/"
+                element={
+                  <>
+                    <SessionProbe />
+                    <BackProbe />
+                  </>
+                }
+              />
+            </Routes>
+          </SessionProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Sign in' }),
+    )
+
+    await screen.findByText('Signed in as viewer')
+    expect(getAccessToken()).toBe('test-access-token')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go back' }))
+    await screen.findByText('first-route')
+  })
+
   it('throws when used outside a SessionProvider', () => {
     function Consumer() {
       useSession()

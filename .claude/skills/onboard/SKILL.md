@@ -5,7 +5,7 @@ description: >-
   Show recent activity, open issues by component, PR review queue, blockers, and quick component guide.
   Use when a new team member joins, asking "what should I know about this project?",
   joining a standup, or needing quick situational awareness. Manual invocation via /onboard.
-compatibility: Requires the linear-server MCP connection (issues live in Linear), plus GitHub CLI (gh) and git for PRs/commits
+compatibility: Claude uses linear-server MCP; Pi uses pi-linear with LINEAR_API_KEY; GitHub CLI (gh) and git provide PRs/commits.
 metadata:
   author: github-cli-skills
   source: skills/github-cli/onboard.md
@@ -36,8 +36,13 @@ User may optionally provide a time window (e.g., "last 14 days", "last week") or
 
 ## Prerequisites
 
-- Linear MCP tools (`mcp__linear-server__*`) for issues; load via ToolSearch if deferred:
-  `list_issues`, `list_milestones`, `get_project`
+Use the integration available in the current runtime:
+
+- **Claude**: Linear MCP tools (`mcp__linear-server__*`); load via ToolSearch if deferred:
+  `list_issues`, `list_milestones`, `get_project`, `get_issue`.
+- **Pi**: `pi-linear` tools `linear_list_teams`, `linear_list_issues`, and
+  `linear_get_issue`. Authentication comes from the exported `LINEAR_API_KEY` (locally
+  loaded from `~/.config/pi-linear/env`).
 - GitHub CLI (`gh`) authenticated + git repository, for PRs and commits (those stay on GitHub)
 - Documentation should be available: `docs/architecture/ARCHITECTURE.md`, `docs/roadmap/`, component READMEs
 
@@ -92,11 +97,16 @@ Parse to extract:
 
 ### 4. Fetch Open Issues (Linear)
 
-Issues live in Linear (team **Dmitri**, project **Dmitri**). Fetch open work with
-`mcp__linear-server__list_issues` (team `Dmitri`, states Backlog/Todo/In Progress/In Review).
-Exclude closed `Migrated` issues — they are imported GitHub history.
+Issues live in Linear (team **Dmitri**, project **Dmitri**).
 
-For each issue, determine component from labels:
+- **Claude (MCP):** fetch open work with `mcp__linear-server__list_issues` (team `Dmitri`,
+  states Backlog/Todo/In Progress/In Review). Exclude closed `Migrated` issues.
+- **Pi (API):** resolve the team UUID with `linear_list_teams`, then call
+  `linear_list_issues` with `includeCompleted: false` (repeat with `statusType` only when a
+  specific state grouping is needed). The current Pi result does not expose labels, parent
+  epics, created dates, milestones, or relations.
+
+In Claude, determine component from labels:
 
 | Label | Component |
 |-------|-----------|
@@ -108,16 +118,18 @@ For each issue, determine component from labels:
 | `type:adr` \| `type:documentation` | Documentation |
 | (no layer label) | Uncategorized |
 
-Group by epic (parent issue) when present — the epics ARE the delivery phases — then sort
-by Linear priority, then created date. Note the milestone (e.g. **MVP — Control**) and its
-target date via `list_milestones`.
+In Claude, group by epic (parent issue) when present — the epics ARE the delivery phases —
+then sort by Linear priority and created date. Note the milestone and target date via
+`list_milestones`. In Pi, group by workflow state and sort by priority; label/component,
+epic, created-date, and milestone views must be marked unavailable rather than inferred.
 
 ### 5. Identify Blockers and Dependencies
 
-Blockers are real Linear relations, not text patterns: `list_issues` results include
-relations; for suspicious cases use `get_issue` with `includeRelations: true`. Report each
-open issue that is blocked, what blocks it, and the blocker's state. Also scan PR
-descriptions (`gh pr list`) for "waiting" language.
+Blockers are real Linear relations, not text patterns. In Claude, `list_issues` results
+include relations; for suspicious cases use `get_issue` with `includeRelations: true`, then
+report each blocked issue and the blocker's state. Pi's extension does not expose relations:
+mark the blocker report as unavailable and tell the user to verify it in Linear. In both
+runtimes, also scan PR descriptions (`gh pr list`) for "waiting" language.
 
 ### 6. Analyze PR Review Queue
 
@@ -488,7 +500,10 @@ User reads this and knows:
 
 ## Limitations
 
-- Requires Linear issues and GitHub PRs to be properly labeled
+- Claude requires Linear MCP. Pi requires `pi-linear` and an exported `LINEAR_API_KEY`.
+- Pi cannot fetch labels, epics, milestones, created dates, or blocker relations, so its
+  report groups issues by state and explicitly marks those sections unavailable.
+- Requires Linear issues and GitHub PRs to be properly labeled for Claude's component view
 - Requires documentation files to exist and be readable
 - Assumes standard GitHub conventions
 - May not reflect real-time status (GitHub API has some caching)

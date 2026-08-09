@@ -22,10 +22,11 @@ needs an exception, it changes the rule here or it doesn't ship.
 items (Home · Scans · Hosts · Agents · Users · Settings), `[Log out]` right. **Users** is omitted
 for viewers, not disabled.
 
-**While the nav holds exactly one item, that item is centred in the bar**; from the second item
-on the nav returns to left-adjacent as described above. A lone link sitting beside the wordmark
-reads as an orphaned control rather than as navigation. This is a transitional state — v1 ships
-`Home` alone — and the feature that adds the second nav item reverts it. *Decided 2026-07-31.*
+**The nav is left-adjacent.** It was centred for as long as it held exactly one item, because a lone
+link sitting beside the wordmark reads as an orphaned control rather than as navigation. That was
+always transitional: spec 028 added `Settings` as the second item and reverted the centring, as
+promised. *Decided 2026-07-31; reverted 2026-08-07.* Shipped today: `Home` and `Settings`, both
+visible to either role.
 
 **The nav names domains, not actions.** *Users* is the place user-related things live, and it keeps
 that name even in v1, when the only thing in it is the invite form. Nav is muscle memory — an item
@@ -394,6 +395,13 @@ to decide what to render.
   is a *different* error and says so — telling someone their password is wrong when the server is
   down is the §7 sin.
 
+**One arrival note, above the form.** A user who has just deleted their own account in SETTINGS
+lands here ([`ADR-017`](../adr/ADR-017-account-removal.md)) — their session no longer exists, so
+there is nowhere else to send them. It is a *confirmation*, not an error, and is styled as one:
+they did something irreversible and deserve to be told it worked. It does not persist across a
+reload; a stale "your account was deleted" on a shared machine would be both confusing and a small
+disclosure.
+
 **Copy:**
 | Element | Copy |
 | --- | --- |
@@ -403,6 +411,7 @@ to decide what to render.
 | Link | "Forgot password?" |
 | Error — 401 | "That email and password don't match." |
 | Error — server/network | "Couldn't reach Dmitri. Try again in a moment." |
+| Arrival — account deleted | "Your account has been deleted." |
 
 **Layout:**
 ```text
@@ -459,13 +468,13 @@ account exists the moment it succeeds.
 
 **The screen can now greet you — ✅ C14 resolved.** The lookup landed 2026-08-06 (DMI-86), so both
 of the consequences this section used to list are gone: the page can say *"You've been invited to
-Acme as a viewer"* — the one sentence that tells a stranger the link is legitimate — and the
+Acme with the viewer role"* — the one sentence that tells a stranger the link is legitimate — and the
 invitee no longer types their own email from memory, so a typo can no longer fail identically to a
 dead link. **The endpoint is unconsumed**: building the screen against it is DMI-87, which is why
 this screen is still `◐`.
 
 **Three states:**
-- **Regular:** the greeting (*"You've been invited to Acme as a viewer"*, from the lookup) plus the
+- **Regular:** the greeting (*"You've been invited to Acme with the viewer role"*, from the lookup) plus the
   form. Password + confirm — **no email field**.
 - **Blank:** not applicable (a form is its own content).
 - **Error — dead link (410):** the form is **removed**, not left there to be re-submitted. The link
@@ -477,7 +486,7 @@ this screen is still `◐`.
 | Element | Copy |
 | --- | --- |
 | Title | "Create your account" |
-| Body | "You've been invited to {org_name} as a {role}. Pick a password and you're in." — org and role from the lookup |
+| Body | "You've been invited to {org_name} with the {role} role. Pick a password and you're in." — org and role from the lookup. The article was dropped 2026-08-06 (DMI-87): `role` is the enum `admin \| viewer`, so "as a {role}" renders "as a admin" for every admin invite, and this wording needs no per-role branch |
 | Fields | "Password" / "Confirm password" |
 | Policy hint | "At least 12 characters. Avoid names, dates, and passwords you've used elsewhere." |
 | Button | "Create account" · in flight: "Creating your account…" |
@@ -495,8 +504,9 @@ this screen is still `◐`.
 |                                                                              |
 |              +------------------------------------------+                    |
 |              |  CREATE YOUR ACCOUNT                     |                    |
-|              |  You've been invited to Acme as a        |                    |
-|              |  viewer. Pick a password and you're in.  |                    |
+|              |  You've been invited to Acme with the    |                    |
+|              |  viewer role. Pick a password and        |                    |
+|              |  you're in.                              |                    |
 |              |                                 (muted)  |                    |
 |              |                                          |                    |
 |              |  Password                                |                    |
@@ -1304,8 +1314,17 @@ is how you ask for it.
 - **The backend emails the invite, *and* the screen shows the link. ✅ Decided 2026-07-13** —
   transactional email is in scope (provider TBD, [C17](#users--invites)); the backend sends
   `https://<app>/invite?token=<invite_token>` to the invitee.
-- **🔓 C4** — listing users, listing pending invites, changing a role and revoking an invite have
-  **no endpoints**.
+- **🔓 C4** — listing users, listing pending invites, changing a role, revoking an invite and
+  **removing a member** have **no endpoints**. When it lands the screen consumes `GET /api/v1/users`
+  and `GET /api/v1/invites` as **two separate calls, merged here into one table** — they have
+  different lifecycles and different row actions, so they stay separate resources.
+- **Removal ✅ decided 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)) —
+  `DELETE /api/v1/users/{user_id}`, admin-only, **hard delete**. It **refuses to target the caller**
+  (`/users/me` is the self-service path, and it lives in SETTINGS, not here), which is why an
+  admin's own row carries no Remove action. Changing a role likewise refuses to target the caller:
+  **self-demotion is not possible**. Between them, an org can never reach zero admins.
+- **`last_seen_at`** is served on the user row — when the person was last active, including silent
+  refresh, rendered as relative time. Pending invites have none and render `—`.
 - **🔓 C18** — `POST /invites` documents **only a `201`**. Inviting an email that already has an
   account, or that already has a live invite, has **undefined behavior** — and re-inviting someone
   is the single most likely thing an admin does twice.
@@ -1353,9 +1372,23 @@ invite. So the warning stays, worded as a nudge rather than an alarm (§7).
 | Error — bad email | "That doesn't look like an email address." |
 | Error — duplicate (⚠️ C18, provisional) | "That person already has an account or a pending invite." |
 | Error — server | "Couldn't create the invite." · [Try again] |
-| Table columns (post-C4) | "Person · Role · Status · Added" |
-| Pending row (post-C4) | "Invited — expires in 2 days" · [Revoke] |
+| Table columns (post-C4) | "Person · Role · Status · Last seen" |
+| Active row (post-C4) | "Active" · "2 hours ago" · [Remove] |
+| Pending row (post-C4) | "Invited — expires in 2 days" · "—" · [Revoke] |
+| Own row (post-C4) | "Active · you" — **no Remove, no role control.** Leaving is done in Settings |
 | Blank table (post-C4) | "You're the only person here." |
+| Remove — confirm heading | "Remove name@example.com?" |
+| Remove — confirm body | "They lose access immediately and their account is deleted. This can't be undone. You can invite them again later." |
+| Remove — confirm prompt | "Type their email address to confirm." |
+| Remove — confirm button | "Remove" · in flight: "Removing…" |
+| Remove — error | "Couldn't remove that person." · [Try again] |
+
+**"Added" was dropped, deliberately.** The earlier column deck carried *Person · Role · Status ·
+Added*. `last_seen_at` replaces it rather than joining it: the one case where Added earns its place
+— telling a brand-new member apart from a long-dormant one, both reading "Never" — cannot arise,
+because accepting an invite issues a session immediately, so a user's first activity timestamp *is*
+their join date. For a pending row, "expires in 2 days" already carries the only time fact worth
+having. Four columns, not five.
 
 **Layout — v1 (the buildable screen):**
 ```text
@@ -1431,11 +1464,16 @@ Created — the form is replaced by the confirmation:
 
 **Route:** `/settings` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B5
 
-**Epicenter** — change your own password. It is the only thing here that works, and the only reason
-this screen exists: voluntary self-service password change is the **only** change-password screen
-in the product — there is no forced rotation and no 403-triggered flow
-([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
-NIST-misaligned).
+**Epicenter** — change your own password. It is the reason this screen exists: voluntary
+self-service password change is the **only** change-password screen in the product — there is no
+forced rotation and no 403-triggered flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced
+periodic rotation is rejected as NIST-misaligned).
+
+**Leaving the organization also lives here** ([`ADR-017`](../adr/ADR-017-account-removal.md), added
+2026-08-08), for **both roles**. A viewer never sees the USERS screen, so this is the only place
+they can remove their own account — and an account nobody can leave is the wrong default for a
+product holding this data. It sits at the bottom, visually separated, and is the last thing on the
+page: it is not what anyone came here to do.
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
 pointed at one network, identical for every admin in the org. It lives on AGENTS (B4).
@@ -1445,6 +1483,11 @@ pointed at one network, identical for every admin in the org. It lives on AGENTS
   `new_password` has `minLength: 12` in the contract. Errors: `400` (policy / bad request), `401`.
 - Profile (display name, email) — **🔓 C3. There is no `/users` resource in the contract at all**,
   and `LoginResponse` returns only a token. The section is specced but cannot be built.
+- `DELETE /api/v1/users/me` → **`204`**. No body. Any role. **Hard delete** — the account and its
+  sessions are gone, not disabled. One error worth designing for: **`409 last_admin`** when the
+  caller is their org's only admin, because an org with no admins can invite nobody and manage
+  nothing. The route does **not** clear the refresh cookie and does not need to: deleting the user
+  cascades their refresh tokens, so the cookie is already inert.
 
 **Password policy** ([`AUTH.md`](AUTH.md) → Passwords) — stated up front, not discovered by failing:
 minimum 12 characters; no common or breached passwords; no obvious patterns (repeated characters,
@@ -1457,6 +1500,12 @@ simple suffixes); no names or birth dates.
 - **Error:** field-level inline errors (wrong current password, policy rejection). No toast for form
   validation — the error belongs next to the field that caused it.
 - **Success:** inline confirmation, not a redirect. The user stays where they are.
+- **Confirming removal:** a modal over the page. It states what is lost, and the button stays
+  inert until the user has typed **their own email address** — deletion is irreversible and kills a
+  live session, so a single click is not proportionate to it. Same component as the USERS screen's
+  Remove; two call sites is the bar §Shared components sets.
+- **Removed:** not a state of this screen. The session is gone, so the SPA drops its in-memory token
+  and redirects to LOGIN, which carries the confirmation line (see LOGIN copy).
 
 **Copy:**
 | Element | Copy |
@@ -1473,6 +1522,15 @@ simple suffixes); no names or birth dates.
 | Section — profile | "Your details" |
 | Profile fields | "Display name" / "Email" |
 | Profile button | "Save" |
+| Section — leaving | "Leave this organization" |
+| Leaving — body | "Your account is deleted and you lose access to **Acme**'s scans, hosts and findings straight away. This can't be undone — an admin would have to invite you again." |
+| Leaving — trigger | "Delete my account" |
+| Confirm — heading | "Delete your account?" |
+| Confirm — prompt | "Type **you@example.com** to confirm." |
+| Confirm — button | "Delete my account" · in flight: "Deleting…" |
+| Confirm — cancel | "Cancel" |
+| Error — last admin (`409`) | "You're the only admin. Make someone else an admin first, then you can leave." |
+| Error — server | "Couldn't delete your account." · [Try again] |
 
 **Layout:**
 ```text
@@ -1499,7 +1557,31 @@ simple suffixes); no names or birth dates.
 |   Display name           [____________________________]                      |
 |   Email                  [____________________________]                      |
 |                          [ Save ]                                            |
+|                                                                              |
+|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
+|                                                                              |
+|   LEAVE THIS ORGANIZATION                                                    |
+|   Your account is deleted and you lose access to Acme's scans,               |
+|   hosts and findings straight away. This can't be undone — an                |
+|   admin would have to invite you again.                         (muted)      |
+|                                                                              |
+|   [ Delete my account ]                                                      |
 +------------------------------------------------------------------------------+
+```
+
+Confirming — a modal over the page; the button is inert until the address matches:
+```text
++--------------------------------------------------+
+|  DELETE YOUR ACCOUNT?                            |
+|                                                  |
+|  Your account is deleted and you lose access     |
+|  straight away. This can't be undone.            |
+|                                                  |
+|  Type you@example.com to confirm.                |
+|  [__________________________________]            |
+|                                                  |
+|            [ Cancel ]  [ Delete my account ]     |
++--------------------------------------------------+
 ```
 
 **Open questions:**

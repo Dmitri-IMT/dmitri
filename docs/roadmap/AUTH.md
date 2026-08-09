@@ -4,7 +4,9 @@
 > (DMI-58 — `orgs`/`users`/`invites` tables + `org_id` on tenant data), sessions and the auth routes
 > (DMI-60), and the auth middleware + invite flow (DMI-61 — `require_user`/`require_admin`, org-scoped
 > reads, the invite create/accept flow, and Ed25519 device-signature verification).
-> **Still open — and still Phase 1:** the WebSocket command channel (DMI-62) and scan ingest (DMI-63).
+> **Still open — and still Phase 1:** the WebSocket command channel (DMI-62), scan ingest (DMI-63),
+> and — added 2026-08-08 — **account removal and member activity** (see below;
+> [`ADR-017`](../adr/ADR-017-account-removal.md)), pulled forward from Phase 2.
 > Phase 1 is **not** complete until those land; the device gate built in DMI-61 is deliberately mounted
 > on no route until they do. Update ADR-005 to match once the whole layer lands.
 > **Neighbours:** [`BACKEND.md`](BACKEND.md), [`SECURITY.md`](SECURITY.md),
@@ -83,10 +85,66 @@ September (not a self-serve admin UI flow). The viewer UI omits the trigger rath
 
 **Role matrix ✅**
 
-| Role | Read (scans, hosts, agents) | Trigger scan | Invite users | Pi provisioning |
-|------|------------------------------|--------------|--------------|-----------------|
-| `viewer` | Yes | No | No | No |
-| `admin` | Yes | Yes | Yes | No (installer/vendor) |
+| Role | Read (scans, hosts, agents) | Trigger scan | Invite users | Remove a member | Pi provisioning |
+|------|------------------------------|--------------|--------------|-----------------|-----------------|
+| `viewer` | Yes | No | No | Own account only | No |
+| `admin` | Yes | Yes | Yes | Yes, and own account | No (installer/vendor) |
+
+Roles stay **`admin`** and **`viewer`**. "Viewer" is deliberately not renamed to "user": every
+member is a user, so the word cannot distinguish a role, and the screen that lists them is itself
+called *Users*.
+
+### Account removal ✅
+
+Decided 2026-08-08 — [`ADR-017`](../adr/ADR-017-account-removal.md), which supersedes the previous
+"no user deletion/deactivation" position. Summary; the ADR holds the reasoning:
+
+| Area | Decision |
+|------|----------|
+| **Kind** | **Hard delete**, cascading `refresh_tokens` and `password_reset_tokens`. No deactivated state. Frees the email for re-invite, which the global unique `lower(email)` index would otherwise block. |
+| **Routes** | `DELETE /users/me` (**any role**, always self) and `DELETE /users/{user_id}` (**admin only**, never self). Foreign org → **404**, per the org-scoping rule below. |
+| **Self-service** | Available to **both roles**, from Settings. A viewer never sees the Users screen, so this is their only way out of the org. |
+| **Last-admin invariant** | **An org always has at least one admin.** `/users/{user_id}` and the role-change route refuse to target the caller, so the caller always survives and neither can reach zero. `DELETE /users/me` is the only route that can, and it answers **`409 last_admin`**. |
+| **Self-demotion** | **Refused outright.** An admin may leave the org but may not downgrade themselves; a colleague can demote them. This is what makes the invariant hold for role changes. |
+| **Confirmation** | The operator types the **target's email address** before removal proceeds — on both surfaces (Settings and Users). |
+| **Session teardown** | The cascade kills the refresh token. The delete routes do **not** clear the refresh cookie: it is `/api/v1/auth`-scoped and the SPA's business client sends no credentials, so the residual cookie is already inert. |
+
+### Member activity ✅
+
+Decided 2026-08-08. Research: [`user-last-seen-tracking.md`](../research/user-last-seen-tracking.md).
+**Partially pulls forward the Phase 2 "Audit — who logged in" row below**, which no longer wholly
+owns this.
+
+Two nullable columns on `users`, because login and activity are genuinely different facts — the
+split every mainstream implementation makes (Django `last_login`; Devise `current_sign_in_at`;
+Supabase GoTrue `users.last_sign_in_at` alongside `sessions.refreshed_at`):
+
+| Column | Stamped in | Records |
+|--------|-----------|---------|
+| `last_login_at` | `issue_session()` only | Real authentication — login, invite acceptance, post-reset sign-in |
+| `last_seen_at` | `issue_session()` **and** `refresh_session()` | Activity, including silent refresh |
+
+Stamping happens on the **auth paths, not middleware** — no framework surveyed writes activity to
+the user row per request. `GET /users` serves **`last_seen_at` only**; `last_login_at` is recorded
+now because login history cannot be backfilled, and is read when the Phase 2 audit surface lands.
+
+**Two implementation constraints, both load-bearing:**
+
+- **Neither column is indexed.** PostgreSQL's heap-only-tuple optimisation requires the update not
+  touch indexed columns, so indexing the column written every ~15 minutes defeats it and adds index
+  bloat. Sort with `ORDER BY last_seen_at DESC NULLS LAST`; at org scale the planner seq-scans anyway.
+- **The UPDATE must name only the stamped columns.** A whole-object write sends `email` back and
+  hits `ix_users_email`, which defeats HOT for the same reason.
+
+Write amplification needs no mitigation at this scale (~20 updates/hour per org, against a
+crossover around 10k active users). Redis buffering, a separate activity table and `fillfactor`
+tuning are all explicitly **out** — see the research doc for the trigger that would justify each.
+
+**Privacy:** surfacing a member's activity to their org admin needs a documented lawful basis
+(legitimate interests — consent is not freely given in an employment relationship) and transparency
+toward the people being monitored. ICO guidance treats logon-time monitoring as comparatively
+low-intrusion and a DPIA is not mandatory here, but the decision not to run one is recorded. Store
+precise, render coarse — the UI shows relative time, matching the house style for hosts and agents.
 
 ### Passwords ✅
 
@@ -135,7 +193,7 @@ Per ADR-005 pattern (Bearer on business APIs; refresh on `/auth/*` only).
 | **Authorization** | Finer permissions matrix; document role semantics |
 | **Agent** | Key **rotation + revoke** story; optional self-service pairing if no on-site installer |
 | **Ops** | JWT signing key in managed secrets (not plain Railway env for prod). Device auth no longer needs a stored secret — backend holds only public keys (ADR-005 Ed25519). |
-| **Audit** | Who logged in, who triggered scans (minimum trail) |
+| **Audit** | Who triggered scans (minimum trail), and who removed whom. **"Who logged in" partly ships in September** — `last_login_at` / `last_seen_at` land with Account removal above; what remains here is the *trail* (an append-only record), which a mutable column on `users` cannot provide. Removal leaves no trace of itself by design ([`ADR-017`](../adr/ADR-017-account-removal.md)), so this needs its own table. `requested_by` on commands **must** be nullable / `ON DELETE SET NULL` to survive member removal. |
 
 **Open questions for Phase 2 planning:**
 
@@ -183,6 +241,8 @@ update ADR-005 once DMI-62/63 land and Phase 1 is complete.
 | JWT gate + role matrix (`require_user`, `require_admin`) | ✅ Built (DMI-61) |
 | Org scoping on business reads (`/hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) | ✅ Built (DMI-61) — enforced in SQL; a foreign row is 404, never 403 |
 | Invite flow (admin creates, invitee accepts → session) | ✅ Built (DMI-61) |
+| Account removal (`DELETE /users/me`, `DELETE /users/{user_id}`, last-admin invariant) | ⏳ Decided 2026-08-08 ([`ADR-017`](../adr/ADR-017-account-removal.md)); **not built** |
+| Member activity (`last_login_at`, `last_seen_at`) | ⏳ Decided 2026-08-08; **not built** — folded into the users/invites admin API (DMI-76) |
 | Ed25519 device-signature verify + nonce replay protection | ✅ Built (DMI-61) — **mounted on no route** until DMI-62/63 |
 | Agent→backend command channel (WebSocket) | ⏳ DMI-62 — Phase 1, in progress |
 | Scan ingest (`POST /api/v1/scans`) | ⏳ DMI-63 — Phase 1, in progress; still contract-only |

@@ -7,6 +7,11 @@ import type { components } from '../types/openapi'
 
 type LoginRequest = components['schemas']['LoginRequest']
 type LoginResponse = components['schemas']['LoginResponse']
+type ForgotPasswordRequest = components['schemas']['ForgotPasswordRequest']
+type ResetPasswordRequest = components['schemas']['ResetPasswordRequest']
+type AcceptInviteRequest = components['schemas']['AcceptInviteRequest']
+type InviteLookupRequest = components['schemas']['InviteLookupRequest']
+type InviteLookupResponse = components['schemas']['InviteLookupResponse']
 
 export async function login(credentials: LoginRequest): Promise<LoginResponse> {
   const response = await authClient.post<LoginResponse>(
@@ -26,4 +31,37 @@ export async function refresh(): Promise<LoginResponse> {
 export async function logout(): Promise<void> {
   await authClient.post('/auth/logout')
   clearAccessToken()
+}
+
+export async function forgotPassword(
+  request: ForgotPasswordRequest,
+): Promise<void> {
+  await authClient.post('/auth/forgot-password', request)
+}
+
+export async function resetPassword(
+  request: ResetPasswordRequest,
+): Promise<void> {
+  await authClient.post('/auth/reset-password', request)
+}
+
+export async function lookupInvite(
+  request: InviteLookupRequest,
+): Promise<InviteLookupResponse> {
+  const response = await authClient.post<InviteLookupResponse>(
+    '/invites/lookup',
+    request,
+  )
+  return response.data
+}
+
+export async function acceptInvite(
+  request: AcceptInviteRequest,
+): Promise<LoginResponse> {
+  const response = await authClient.post<LoginResponse>(
+    '/invites/accept',
+    request,
+  )
+  setAccessToken(response.data.access_token)
+  return response.data
 }

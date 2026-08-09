@@ -6,6 +6,7 @@ type ScanSummary = components['schemas']['ScanSummary']
 type ScanListResponse = components['schemas']['ScanListResponse']
 type FindingRecord = components['schemas']['FindingRecord']
 type FindingListResponse = components['schemas']['FindingListResponse']
+type InviteLookupResponse = components['schemas']['InviteLookupResponse']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
@@ -30,6 +31,12 @@ export const viewerProfile: UserProfileResponse = {
   user_id: '22222222-2222-4222-8222-222222222222',
   email: 'viewer@dmitri.dev',
   role: 'viewer',
+}
+
+export const liveInvite: InviteLookupResponse = {
+  email: 'ana@northwind.example',
+  role: 'viewer',
+  org_name: 'Northwind Security',
 }
 
 export const latestScan: ScanSummary = {
@@ -114,6 +121,22 @@ export const handlers = [
   http.post(
     `${baseURL}/auth/logout`,
     () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post(
+    `${baseURL}/auth/forgot-password`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post(
+    `${baseURL}/auth/reset-password`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post(
+    `${baseURL}/auth/change-password`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post(`${baseURL}/invites/lookup`, () => HttpResponse.json(liveInvite)),
+  http.post(`${baseURL}/invites/accept`, () =>
+    HttpResponse.json(validLoginResponse, { status: 201 }),
   ),
   http.get(`${baseURL}/hosts`, () => HttpResponse.json([])),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),

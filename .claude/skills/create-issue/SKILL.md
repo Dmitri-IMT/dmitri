@@ -1,12 +1,12 @@
 ---
 name: create-issue
 description: >-
-  Create a new Linear issue (team Dmitri) via the Linear MCP, written to the agentic
-  product-brief template and human-validated BEFORE creation — this skill is the pipeline
+  Create a new Linear issue (team Dmitri) via Claude's Linear MCP or Pi's Linear API tools,
+  written to the agentic product-brief template and human-validated BEFORE creation — this skill is the pipeline
   gate: no issue exists until the vision is decided and the user approves. Use when the user
   says "create an issue", "open a ticket", "file a bug", "make an issue for X", or wants to
   hand work off to an agent or teammate.
-compatibility: Requires the linear-server MCP connection; GitHub is no longer used for issues.
+compatibility: Claude uses linear-server MCP; Pi uses pi-linear with LINEAR_API_KEY; GitHub is no longer used for issues.
 metadata:
   author: dmitri
   source: docs/roadmap/linear-setup-plan.md (Phase 1/3)
@@ -41,8 +41,14 @@ problem statement — the title and brief are derived from it.
 
 ## Prerequisites
 
-- Linear MCP tools available (`mcp__linear-server__*`); load via ToolSearch if deferred:
-  `save_issue`, `get_issue`, `list_issues`, `list_issue_labels`, `list_users`
+Use the integration available in the current runtime; never ask Pi for MCP and never ask
+Claude to use Pi's API key:
+
+- **Claude**: Linear MCP tools (`mcp__linear-server__*`); load via ToolSearch if deferred:
+  `save_issue`, `get_issue`, `list_issues`, `list_issue_labels`, `list_users`.
+- **Pi**: `pi-linear` tools: `linear_list_teams`, `linear_list_users`,
+  `linear_create_issue`, and `linear_update_issue`. Authentication comes from the exported
+  `LINEAR_API_KEY` (locally loaded from `~/.config/pi-linear/env`).
 - Workspace: `dmitri-imt` · Team: **Dmitri (DMI)** · Project: **Dmitri**
 - Current milestone: **MVP — Control** (target 2026-08-15) — apply unless the work is
   clearly outside it
@@ -57,8 +63,9 @@ problem statement — the title and brief are derived from it.
 
 ## Available labels
 
-Apply only what fits — do not over-label. Refresh with `list_issue_labels` (team Dmitri)
-if unsure.
+Apply only what fits — do not over-label. In Claude, refresh with `list_issue_labels`
+(team Dmitri) if unsure. Pi cannot list label IDs: only pass `labelIds` when their UUIDs
+are already known; otherwise report labels as not applied rather than guessing.
 
 | Group | Labels |
 |-------|--------|
@@ -141,10 +148,18 @@ re-confirm. **An issue without a Validation stamp should not exist.**
 
 ### 5. Create the issue
 
-Use `mcp__linear-server__save_issue` (no `id` — creation): `team: "Dmitri"`,
-`project: "Dmitri"`, `title`, `description` (the brief), `assignee`, `labels`, `milestone`,
-`parentId` (epic), `priority`, `blockedBy` (issue identifiers). Content goes as real
-markdown with literal newlines.
+**Claude (MCP):** use `mcp__linear-server__save_issue` (no `id` — creation):
+`team: "Dmitri"`, `project: "Dmitri"`, `title`, `description` (the brief), `assignee`,
+`labels`, `milestone`, `parentId` (epic), `priority`, `blockedBy` (issue identifiers).
+Content goes as real markdown with literal newlines.
+
+**Pi (API):** resolve the Dmitri team UUID with `linear_list_teams`, then call
+`linear_create_issue` with `teamId`, `title`, `description`, `priority`, and only known
+`labelIds`. If needed, resolve the assignee with `linear_list_users` and apply it afterward
+with `linear_update_issue`. Pi's extension cannot currently set project, milestone, parent,
+or blocked-by relations. Before creation, explicitly tell the user which requested metadata
+will be omitted and obtain approval; after creation, list those fields as requiring manual
+Linear UI follow-up. Never claim omitted metadata was applied.
 
 ### 6. Report result
 
@@ -158,6 +173,9 @@ markdown with literal newlines.
 
 Next: an agent can run `get-issue DMI-<N>` to pull full context and start work.
 ```
+
+For Pi, replace every unsupported field above with `not applied — manual Linear follow-up`
+rather than echoing the requested value. Claude reports the values returned by MCP.
 
 ## Example
 
@@ -178,7 +196,10 @@ Output: ✅ Created DMI-51: Fix TUI scan progress bar freezing at 90% on large s
 
 ## Limitations
 
-- Requires the Linear MCP connection (`linear-server`).
+- Claude requires the Linear MCP connection (`linear-server`). Pi requires `pi-linear` and
+  an exported `LINEAR_API_KEY`.
+- Pi's API extension cannot list labels or set project, milestone, parent, or blocked-by
+  relations; surface omissions before creation and never silently degrade the brief.
 - Cannot delete issues or create Linear issue *templates* — template parity is maintained by
   this skill's body structure matching the team template "Agentic coding issue".
 - Label/priority/size classification is heuristic; the gate conversation is where it gets
@@ -186,8 +207,9 @@ Output: ✅ Created DMI-51: Fix TUI scan progress bar freezing at 90% on large s
 
 ## Troubleshooting
 
-- **Label rejected**: run `list_issue_labels` for team Dmitri and use an existing one; do
-  not invent labels without the user asking.
-- **Assignee not found**: run `list_users` and confirm the name with the user.
+- **Label rejected**: in Claude, run `list_issue_labels` for team Dmitri. In Pi, omit
+  unknown label IDs and report the omission; do not invent IDs.
+- **Assignee not found**: use `list_users` in Claude or `linear_list_users` in Pi and
+  confirm the name with the user.
 - **Escaped `\n` in the created body**: pass real newlines in `description`, never literal
   escape sequences.

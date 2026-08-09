@@ -5,7 +5,7 @@ description: >-
   expected/not-expected, test cases), validation status, blockers, related ADRs, and linked
   PRs. Use when starting work on an issue, asking "what's in this issue?", needing full
   context before implementation, or when a DMI-NN identifier is mentioned in conversation.
-compatibility: Requires the linear-server MCP connection; git repo for ADR lookups; gh CLI only for PR fallback.
+compatibility: Claude uses linear-server MCP; Pi uses pi-linear with LINEAR_API_KEY; git repo for ADR lookups; gh CLI only for PR fallback.
 metadata:
   author: dmitri
   source: docs/roadmap/linear-setup-plan.md (Phase 1)
@@ -33,8 +33,12 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Prerequisites
 
-- Linear MCP tools (`mcp__linear-server__*`); load via ToolSearch if deferred:
-  `get_issue`, `list_comments`, `list_issues`
+Use the integration available in the current runtime:
+
+- **Claude**: Linear MCP tools (`mcp__linear-server__*`); load via ToolSearch if deferred:
+  `get_issue`, `list_comments`, `list_issues`.
+- **Pi**: `pi-linear` tools `linear_get_issue` and `linear_search`. Authentication comes
+  from the exported `LINEAR_API_KEY` (locally loaded from `~/.config/pi-linear/env`).
 - Git repository checkout (for ADR lookups under `docs/adr/`)
 
 ## Outline
@@ -46,13 +50,17 @@ Bare numbers are DMI-<N>. If nothing is determinable, ask for the identifier.
 
 ### 2. Fetch
 
-`mcp__linear-server__get_issue` with `id: "DMI-<N>"` and `includeRelations: true`. Also
-fetch `list_comments` for the issue — decisions and scope changes often live there.
+**Claude (MCP):** call `mcp__linear-server__get_issue` with `id: "DMI-<N>"` and
+`includeRelations: true`. Also fetch `list_comments` for the issue — decisions and scope
+changes often live there. Extract title, description, state, assignee, labels, priority,
+project, milestone, parent, sub-issues, relations, attachments, `gitBranchName`, timestamps,
+and URL.
 
-Extract: title, description (the brief), state, assignee, labels, priority, project,
-milestone, parent (epic), sub-issues, relations (blocked-by / blocks / related),
-attachments (the GitHub integration attaches linked PRs here), `gitBranchName`, timestamps,
-URL.
+**Pi (API):** call `linear_get_issue` with `issueId: "DMI-<N>"`. It returns the brief plus
+basic status, assignee, team, priority, labels, project, and URL. The current extension does
+not expose comments, milestone, parent/sub-issues, relations, attachments, branch name, or
+timestamps. Mark those fields as **unavailable via pi-linear**; do not infer that they are
+empty. Use the `gh` PR fallback in step 5 because attachments are unavailable.
 
 ### 3. Parse the brief
 
@@ -84,9 +92,11 @@ points at.
 
 ### 5. Blockers and related work
 
-- **Relations**: report blocked-by (with each blocker's state — an open blocker means do
-  not start), blocks, related, parent epic, sub-issues.
-- **PRs**: check the issue's attachments first (GitHub integration). Fallback:
+- **Relations**: in Claude, report blocked-by (with each blocker's state — an open blocker
+  means do not start), blocks, related, parent epic, and sub-issues. In Pi, report relation
+  status as unavailable and warn that starting work still requires checking Linear for
+  blockers.
+- **PRs**: Claude checks attachments first, then falls back to `gh`. Pi goes directly to:
   `gh pr list --search "DMI-<N>" --state all --json number,title,state,url`.
 
 ### 6. Present to user
@@ -130,7 +140,10 @@ Highlight open blockers and a missing validation stamp above everything else.
 
 ## Limitations
 
-- Requires the Linear MCP connection.
+- Claude requires the Linear MCP connection. Pi requires `pi-linear` and an exported
+  `LINEAR_API_KEY`.
+- Pi cannot fetch comments, relations, milestones, parent/sub-issues, attachments, branch
+  names, or timestamps; unavailable does not mean absent.
 - ADR detection is pattern-based; unusual formatting may be missed.
 - PR linkage depends on the Linear↔GitHub integration; the `gh` fallback needs the CLI
   authenticated.
@@ -138,7 +151,8 @@ Highlight open blockers and a missing validation stamp above everything else.
 
 ## Troubleshooting
 
-- **Issue not found**: confirm the DMI-NN identifier; try `list_issues` with a title query.
+- **Issue not found**: confirm the DMI-NN identifier; try `list_issues` in Claude or
+  `linear_search` in Pi with a title query.
 - **No ADR files found**: ADRs live at `docs/adr/ADR-<NNN>-<slug>.md`.
 - **No PRs shown**: check the issue's attachments in Linear; the integration may not be
   connected yet (linear-setup-plan Phase 6).

@@ -20,6 +20,17 @@ function captureAuthorization(path: string, body: JsonBodyType) {
   return seen
 }
 
+function captureAuthorizationPost(path: string) {
+  const seen: (string | null)[] = []
+  server.use(
+    http.post(`${baseURL}${path}`, ({ request }) => {
+      seen.push(request.headers.get('Authorization'))
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+  return seen
+}
+
 const userProfile = {
   user_id: '11111111-1111-4111-8111-111111111111',
   email: 'admin@example.com',
@@ -69,6 +80,21 @@ describe('every resource module reaches the auth interceptor on its own', () => 
     })
 
     expect(seen).toEqual(['Bearer token-ghi'])
+  })
+
+  it('passwords.ts sends the bearer token', async () => {
+    vi.resetModules()
+    const seen = captureAuthorizationPost('/auth/change-password')
+    const { setAccessToken } = await import('./tokenStore')
+    const { changePassword } = await import('./passwords')
+
+    setAccessToken('token-jkl')
+    await changePassword({
+      current_password: 'old-long-enough-password', // pragma: allowlist secret
+      new_password: 'new-long-enough-password', // pragma: allowlist secret
+    })
+
+    expect(seen).toEqual(['Bearer token-jkl'])
   })
 
   it('sends no Authorization header while signed out', async () => {

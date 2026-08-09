@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-07T00:00:00Z
 ---
 
 # frontend API layer
@@ -27,7 +27,10 @@ deliberately rejected). On top of that sit the thin, contract-typed read modules
 | `performRefresh()` | Single-flight refresh: memoizes one in-flight `refresh()` in module-scoped `refreshPromise`; concurrent 401s await the same promise; `.finally` resets it. | `frontend/src/api/client.ts:13` |
 | response interceptor | On a 401 for a not-yet-retried request: refresh once (guarded by per-request `_retry`), rewrite the header, retry via `apiClient(config)`; on refresh failure clear the token store and **`emitSessionExpired()`**, no second refresh. | `frontend/src/api/client.ts:44` |
 | `onSessionExpired()` / `emitSessionExpired()` | Module-scoped handler `Set` — the seam that lets `client.ts` report an unrecoverable session without importing React or the router. | `frontend/src/api/authEvents.ts:5` |
-| `login()` / `refresh()` / `logout()` | The **only** callers of `authClient`, hitting `/auth/login`, `/auth/refresh`, `/auth/logout`. `login`/`refresh` write the returned `access_token` to the store; `logout` clears it. | `frontend/src/api/auth.ts:8` |
+| `login()` / `refresh()` / `logout()` | Callers of `authClient`, hitting `/auth/login`, `/auth/refresh`, `/auth/logout`. `login`/`refresh` write the returned `access_token` to the store; `logout` clears it. | `frontend/src/api/auth.ts:16` |
+| `forgotPassword()` / `resetPassword()` | Thin typed wrappers on `authClient` for `POST /auth/forgot-password` and `POST /auth/reset-password`, both `204`. Neither touches the token store — a completed reset deliberately leaves the visitor signed out. | `frontend/src/api/auth.ts:36` |
+| `lookupInvite()` / `acceptInvite()` | `POST /invites/lookup` (non-consuming; returns `org_name`, `role` and an `email` the UI never renders) and `POST /invites/accept` (`201 → LoginResponse`). `acceptInvite` writes `access_token` to the store exactly as `login` does, and posts on `authClient` so the httpOnly refresh cookie is received. | `frontend/src/api/auth.ts:48` |
+| `changePassword()` | `POST /auth/change-password` for the voluntary change on Settings. Lives in its **own** module and imports `apiClient` from `./client` — the one authenticated write in the app. | `frontend/src/api/passwords.ts:6` |
 | `getAccessToken()` / `setAccessToken()` / `clearAccessToken()` | The in-memory token store over a single module-scoped `let accessToken` — never `localStorage`/`sessionStorage`/cookies/React state. | `frontend/src/api/tokenStore.ts:3` |
 | `getCurrentUser()` | `GET /users/me`. The **sole** source of identity and role — nothing decodes a JWT anywhere in the app. | `frontend/src/api/users.ts:6` |
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:25` |
@@ -41,7 +44,9 @@ deliberately rejected). On top of that sit the thin, contract-typed read modules
   `auth.ts`, and arms the interceptors. The read modules (`users`, `scans`, `findings`) import
   `apiClient` **from `client.ts`**, never from `instances.ts`. `auth.ts` is the one exception — it
   imports `authClient` from `instances.ts`, because `client.ts` depends on it and the other
-  direction would be a genuine cycle.
+  direction would be a genuine cycle. `passwords.ts` follows the ordinary rule (`./client`) and is
+  deliberately **not** folded into `auth.ts`: doing so would either recreate that cycle or leave the
+  change-password call bypassing the Bearer and refresh-retry interceptors.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
 - The three read modules are consumed by [review](./review.md)'s `useHomeReview()`.
@@ -63,6 +68,12 @@ deliberately rejected). On top of that sit the thin, contract-typed read modules
   `./client` anywhere in a test file's graph arms the interceptors for every other module in that
   file. `authHeader.test.ts` therefore calls `vi.resetModules()` and dynamically imports exactly
   one read module per test; a naive version of the same test passes even with the bug present.
+  `passwords.ts` has its own case there, added with a `captureAuthorizationPost` sibling helper —
+  the original `captureAuthorization` registers `http.get` only, and the three GET cases were left
+  unconverted.
+- **`400` never reaches the response interceptor.** Both `wrong_current_password` and
+  `password_policy_violation` are `400`s, so the change-password failures render as field errors
+  with zero refresh calls and no logout. Only a genuine `401` drives the refresh-and-retry chain.
 - **No `window.location` anywhere in `src/api/`.** The hard `window.location.href = '/login'` that
   spec 014 used on refresh failure was replaced by the `authEvents` bus, so the redirect is a
   router navigation and the module stays free of React/router imports.

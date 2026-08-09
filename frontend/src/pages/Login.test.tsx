@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
@@ -22,18 +22,31 @@ function failBootRefresh() {
   )
 }
 
-function renderLoginApp() {
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <>
+      <span data-testid="location-url">{`${location.pathname}${location.search}`}</span>
+      <span data-testid="location-state">
+        {JSON.stringify(location.state ?? null)}
+      </span>
+    </>
+  )
+}
+
+function renderLoginApp(state?: { passwordReset: boolean }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
-    <MemoryRouter initialEntries={['/login']}>
+    <MemoryRouter initialEntries={[{ pathname: '/login', state }]}>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<div>home-route</div>} />
           </Routes>
+          <LocationProbe />
         </SessionProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -165,7 +178,7 @@ describe('Login', () => {
     expect(screen.getByTestId('login-error')).toBeInTheDocument()
   })
 
-  it('autofocuses email, renders the idle copy verbatim, and ships no forgot-password link', async () => {
+  it('autofocuses email, renders the idle copy verbatim, and links to /forgot-password', async () => {
     failBootRefresh()
     renderWithProviders(<Login />)
 
@@ -175,8 +188,50 @@ describe('Login', () => {
       screen.getByText('Sign in', { selector: 'span' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.queryByText(/forgot password/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Forgot password?' }),
+    ).toHaveAttribute('href', '/forgot-password')
+  })
+
+  it('renders no reset-success status on a normal visit', async () => {
+    failBootRefresh()
+    renderWithProviders(<Login />)
+
+    await screen.findByTestId('login-form')
+    expect(screen.queryByTestId('login-success')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('renders the approved reset-success status from router state and clears it from history', async () => {
+    failBootRefresh()
+    renderLoginApp({ passwordReset: true })
+
+    const successRegion = await screen.findByTestId('login-success')
+    expect(successRegion).toHaveTextContent(
+      'Password set. Sign in with your new password.',
+    )
+    expect(successRegion).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('status')).toBe(successRegion)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-state')).toHaveTextContent('null'),
+    )
+    expect(screen.getByTestId('location-url')).toHaveTextContent(/^\/login$/)
+    expect(successRegion).toBeInTheDocument()
+  })
+
+  it('gives the reset-success status focus, after which Tab reaches Email then Password', async () => {
+    failBootRefresh()
+    const user = userEvent.setup()
+    renderLoginApp({ passwordReset: true })
+
+    const successRegion = await screen.findByTestId('login-success')
+    await waitFor(() => expect(successRegion).toHaveFocus())
+
+    await user.tab()
+    expect(await screen.findByLabelText('Email')).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText('Password')).toHaveFocus()
   })
 
   it('submits on Enter from the email field', async () => {
