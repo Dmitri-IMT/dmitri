@@ -101,6 +101,15 @@ USERS & INVITES                                        ⚠️ mostly blocked —
           → shown ONCE: with no GET /invites, the admin cannot retrieve it again
       [change role] / [revoke invite] → row updates                   ❌ no endpoint
       (listing users and pending invites)                             ❌ no endpoint
+        ⇒ ONE table, merged in the SPA from two calls:
+          GET /users + GET /invites — separate resources, different row actions
+          columns: Person · Role · Status · Last seen  (pending rows show "—")
+      [Remove] on someone else's row  → confirm: type THEIR email
+                                        DELETE /users/{user_id}       ❌ no endpoint
+      (your own row)                  → no Remove, no role control.
+                                        Leaving is in SETTINGS (B5); self-demotion is
+                                        refused outright. Between them an org can never
+                                        reach zero admins. ADR-017, decided 2026-08-08.
       ⇒ v1 ships the invite form ALONE, at /users. The nav item stays "Users" — it names the
         domain, and more user-related surfaces land inside it as endpoints arrive.
 ```
@@ -229,6 +238,14 @@ SETTINGS
   Profile — display name, email                     ⚠️ blocked — contract ask C3
       no /users/me endpoint exists; LoginResponse returns only a token, no user object.
       Whether the user model even has a display_name is unknown.
+
+  Leave this organization                           DELETE /users/me   ❌ no endpoint (C4)
+      [Delete my account] → confirm modal: type your own email to enable the button
+      204 ..........................→ drop token → LOGIN, "Your account has been deleted."
+      409 last_admin ...............→ stay; "You're the only admin. Make someone else an
+                                      admin first, then you can leave."
+      (BOTH roles. A viewer never sees USERS, so this is their only way out of the org.
+       ADR-017, decided 2026-08-08.)
 ```
 
 ## Not breadboarded (out of scope for September)
@@ -247,7 +264,7 @@ Raised against [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openap
 | C1 | `GET /api/v1/agents` — list agents (an array of one in the MVP). Today only `GET /agents/{id}` exists, and `agent_id` is the provisioning `X-Device-Id`, so the frontend cannot discover it. | B4, AGENTS |
 | C2 | `AgentDetail.available_subnets` (reported by the Pi over its WS channel) + `target_subnet`, and a way to set it. Without these, `POST /commands` demands a `subnet` CIDR from a non-technical admin. **◐ Half-closed 2026-07-13: the WS half is locked** — the Pi sends a **`hello` frame on connect** carrying `available_subnets` (`interface` + `cidr`), now in the contract ([`ADR-011` §3](../adr/ADR-011-pi-command-channel.md)). **Still open: the HTTP half** — exposing them on `AgentDetail`, and the endpoint an admin uses to pick `target_subnet`. | B2, B4 |
 | C3 | A user resource: `GET /users/me` + a way to update it. There is **no `/users` path in the contract at all**, and `LoginResponse` returns only a token. | B5 profile |
-| C4 | Users & invites: list users, list pending invites, change role, revoke invite. Only `POST /invites` exists — the USERS & INVITES place is **mostly unbuildable** as breadboarded in B2. | B2, USERS & INVITES |
+| C4 | Users & invites: list users, list pending invites, change role, revoke invite, **remove a member** (`DELETE /users/{user_id}` and `DELETE /users/me`), **member activity** (`last_seen_at` on the row). Only `POST /invites` exists — the USERS & INVITES place is **mostly unbuildable** as breadboarded in B2, and B5's "leave this organization" has no endpoint either. Widened 2026-08-08 by [`ADR-017`](../adr/ADR-017-account-removal.md). | B2, B5, USERS & INVITES, SETTINGS |
 | ~~C5~~ | ~~Forced password change: login with an expired password returns 403 without a token, but `POST /auth/change-password` requires Bearer.~~ **✅ VOID 2026-07-13 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced rotation entirely (NIST SP 800-63B §5.1.1.2); the mechanism this ask was about no longer exists.** Login is `200`/`401` only; there is no forced password-change flow or screen. | — |
 | ~~C6~~ | ~~`HostSummary.first_seen_at`, to power the "new device on your network" item on HOME.~~ **✅ RESOLVED — `first_seen_at` is a required property on `HostSummary`.** The HOME item is unblocked but still unbuilt; shipping it is a product call, not a contract gap. | — |
 | ~~C7~~ | ~~Does accept-invite issue a session?~~ **✅ RESOLVED 2026-07-13** — **yes.** It returns `201` with a full `LoginResponse`, so the invitee lands on HOME, not LOGIN. B2 above said the opposite and was corrected. Expiry is **`410`**, not `400`. | — |

@@ -18,12 +18,15 @@ The product should explain what needs attention. It is not a metrics dashboard.
 | Home | `/`; a verdict-led security review | Drafted. The only screen spec so far. |
 | Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. Scan detail needs C10 (**C9 resolved 2026-08-02** — `host_id` is required on `ScanHostView`). **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2. **C12 resolved** — terminal state splits on `delivered_at` (never delivered → `expired`; delivered then broke → `failed`). |
-| Admin | Users & invites | B2 drafted; **screen spec drafted 2026-07-13**. Ships as **invite-only** — `POST /invites` is the sole endpoint (C4). Stays at `/users` under the "Users" nav item; the user table lands inside it when C4 arrives. |
-| Settings | Change password; profile | B5 + **screen spec drafted 2026-07-13**. **Change password built 2026-08-07 (spec 028)** at `/settings`, reachable from the new second nav item and open to both roles; profile still blocked (C3), so the screen ships with no profile section. |
+| Admin | Users & invites | B2 drafted; **screen spec drafted 2026-07-13**. Ships as **invite-only** — `POST /invites` is the sole endpoint (C4). Stays at `/users` under the "Users" nav item; the user table lands inside it when C4 arrives. **Widened 2026-08-08 ([`ADR-017`](../adr/ADR-017-account-removal.md))** — one table (*Person · Role · Status · Last seen*) with pending invites as rows, plus **Remove** on other people's rows. Your own row has neither Remove nor a role control. |
+| Settings | Change password; profile | B5 + **screen spec drafted 2026-07-13**. **Change password built 2026-08-07 (spec 028)** at `/settings`, reachable from the new second nav item and open to both roles; profile still blocked (C3), so the screen ships with no profile section. **Reopened 2026-08-08 ([`ADR-017`](../adr/ADR-017-account-removal.md))** — gains a "Leave this organization" section for **both** roles, since a viewer never sees the Users screen. Blocked on C4 (`DELETE /users/me`). |
 
 ## Chosen
 
-- Two roles: admin and viewer.
+- Two roles: admin and viewer. **Not renamed to "user"** — every member is a user, so the word cannot distinguish a role, and the screen listing them is itself called *Users*.
+- **Members can be removed, and it is a hard delete** ([`ADR-017`](../adr/ADR-017-account-removal.md)): admins remove other people from Users; everyone removes themselves from Settings. Both surfaces confirm by making the operator type the target's email address.
+- **An org can never reach zero admins.** Admins cannot delete or demote themselves from the Users screen, so the caller always survives; the only route that can remove the last admin is self-service removal in Settings, and it refuses with "You're the only admin."
+- **Members show a "Last seen" time, not "Added."** It counts silent refresh, so it answers "is this account being used?" rather than "when did they last type a password."
 - Both roles can read Home, scans, hosts, and agents.
 - Only admins can scan, invite users, or manage roles.
 - Viewer-only UI omits unavailable actions; it does not show disabled controls.

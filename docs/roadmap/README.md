@@ -16,7 +16,7 @@
 |-----|-------|--------------|
 | [`PI.md`](PI.md) | Raspberry Pi agent | **Software built (dev machine/TUI).** No Pi hardware yet. No daemon, no backend HTTP client. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · **B8 ✅** · ADR-011 |
-| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); **in progress in code** — schema, sessions/routes and middleware landed; WS channel + ingest open |
+| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); **in progress in code** — schema, sessions/routes and middleware landed; WS channel + ingest open. **Account removal + member activity pulled forward from Phase 2 on 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)) — decided, not built |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | **Scaffold ✅ (014) · login → Home slice ✅ (020) · public auth surfaces + Settings ✅ (028).** Next: Users & invites, blocked on C3/C4; invite/reset email delivery still unbuilt. |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |

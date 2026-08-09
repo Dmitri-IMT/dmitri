@@ -63,7 +63,9 @@ March-era `wireframes.md` (2026-07-10).
 - Auto-login after invite acceptance (FLOWS.md open decision #1 — needs contract support)
 - Password strength meter mirroring the AUTH.md policy rules as-you-type
 - Pending invite rows show TTL countdown (24–72 h) and a [Resend] affordance
-- Audit hint on user rows: last login, invited-by
+- ~~Audit hint on user rows: last login~~ — **promoted 2026-08-08**, ships as the *Last seen* column
+  (activity, counting silent refresh — see [`AUTH.md` § Member activity](../roadmap/AUTH.md) and
+  [`ADR-017`](../adr/ADR-017-account-removal.md)). **Invited-by is still parked** — nothing records it.
 
 ## Copy & tone
 
