@@ -20,6 +20,8 @@ ERROR_RESPONSE_ROUTES = {
     "AcceptInviteTokenGone": ("invites.py", "accept_invite_route", 410),
     "InviteCreateRejected": ("invites.py", "create_invite_route", 400),
     "InviteAlreadyPending": ("invites.py", "create_invite_route", 409),
+    "LastAdminConflict": ("users.py", "delete_current_user_route", 409),
+    "SelfTargetConflict": ("users.py", "delete_user_route", 409),
 }
 
 SCHEMA_NAMES = (
@@ -301,6 +303,42 @@ def test_invite_lookup_gone_reuses_the_accept_response_component():
         if "InviteTokenGone" in name
     ]
     assert gone_components == ["AcceptInviteTokenGone"]
+
+
+@pytest.mark.parametrize(
+    ("path", "operation_id", "conflict_ref", "expected_codes"),
+    [
+        (
+            "/api/v1/users/me",
+            "deleteCurrentUser",
+            "#/components/responses/LastAdminConflict",
+            {"204", "401", "409"},
+        ),
+        (
+            "/api/v1/users/{user_id}",
+            "deleteUser",
+            "#/components/responses/SelfTargetConflict",
+            {"204", "401", "403", "404", "409"},
+        ),
+    ],
+)
+def test_delete_user_operations_are_published(
+    path: str, operation_id: str, conflict_ref: str, expected_codes: set[str]
+):
+    contract = _load_contract()
+    operation = contract["paths"][path]["delete"]
+    assert operation["operationId"] == operation_id
+    assert operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(operation["responses"]) == expected_codes
+    assert "content" not in operation["responses"]["204"]
+    assert operation["responses"]["409"]["$ref"] == conflict_ref
+    assert "delete" in app.openapi()["paths"][path]
+
+
+def test_cors_allowed_methods_example_includes_delete():
+    contract = _load_contract()
+    header = contract["components"]["headers"]["Access-Control-Allow-Methods"]
+    assert header["schema"]["example"] == "GET, POST, DELETE, OPTIONS"
 
 
 def _contract_error_codes(spec: dict[str, Any], response_name: str) -> set[str]:
