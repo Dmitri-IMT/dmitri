@@ -17,7 +17,7 @@ function TopBar() {
       <div className="mx-auto flex max-w-[45rem] items-center justify-between gap-4 px-4 py-3">
         <span className="font-title text-title-xs tracking-wide">DMITRI</span>
         <nav className="flex min-w-0 flex-1 items-center gap-4">
-          <NavLink to="/" end className={navLinkClass}>
+          <NavLink to="/" end data-testid="nav-home" className={navLinkClass}>
             Home
           </NavLink>
           <NavLink
