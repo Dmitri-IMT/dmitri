@@ -9,12 +9,11 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from api.db.session import get_session
-from api.models.identity import User
+from api.models.identity import ROLE_ADMIN, User
 from api.services.tokens import decode_access_token
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-ROLE_ADMIN = "admin"
 
 class CallerIdentity(BaseModel):
     sub: UUID
