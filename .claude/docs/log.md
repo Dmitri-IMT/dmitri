@@ -3,6 +3,26 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-09
+
+* **Update**: **account removal** (spec 029 / DMI-102, ADR-017) — `backend/routers.md`,
+  `backend/services.md`, `backend/models.md`, `backend/migrations.md`, `backend/errors.md`,
+  `backend/auth.md`, `backend/index.md`, `contracts.md`. Two new routes:
+  `DELETE /api/v1/users/me` behind `require_user_row` (any role may leave) and
+  `DELETE /api/v1/users/{user_id}` behind `require_admin`. Both `204`, no body, no `Set-Cookie`.
+* **Creation**: `backend/src/api/services/users.py` — `LastAdminError`, `count_org_admins`,
+  `delete_self`, `delete_member`. Removal is a **hard delete**; the FK cascade added by migration
+  `20260808_15` on `refresh_tokens` / `password_reset_tokens` **is** the session teardown, so
+  nothing in `services/auth.py` is called and no revocation step exists.
+* **Update**: `20260808_15_user_delete_cascade` also grants `DELETE ON public.users` to
+  `dmitri_runtime` — `users` is now the second table (after `agent_nonces`) whose grant set differs
+  from the append/update-only default, and `RUNTIME_GRANTS_BY_TABLE` had to gain the entry.
+* **Update**: two new pinned error codes, both `409` raised literally in `routers/users.py` so the
+  contract-fidelity AST scan can see them — `last_admin` and `self_target`. Self-targeting the
+  admin route is `409`, deliberately **not** `404`; a foreign-org target stays `404`.
+* **Update**: `build_cors_middleware_kwargs` `allow_methods` gained `DELETE`, without which the
+  SPA's preflight would be rejected before either route was reached.
+
 ## 2026-08-07
 
 * **Update**: the **frontend public auth surfaces** (spec 028) — `frontend/screens.md`,

@@ -8,7 +8,10 @@ from sqlmodel import Field, SQLModel
 
 from api.models.persistence import UTC_TIMESTAMP, utc_now
 
-_ROLE_CHECK = "role IN ('admin', 'viewer')"
+ROLE_ADMIN = "admin"
+ROLE_VIEWER = "viewer"
+
+_ROLE_CHECK = f"role IN ('{ROLE_ADMIN}', '{ROLE_VIEWER}')"
 
 
 class Org(SQLModel, table=True):

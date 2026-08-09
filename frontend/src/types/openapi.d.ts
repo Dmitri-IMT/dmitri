@@ -404,7 +404,25 @@ export interface paths {
         get: operations["getCurrentUser"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Remove own account */
+        delete: operations["deleteCurrentUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove another account in the caller's organisation */
+        delete: operations["deleteUser"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1021,6 +1039,47 @@ export interface components {
                     error: {
                         /** @enum {unknown} */
                         code: "invite_already_pending";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The caller is the organisation's only admin, so removing their account would leave it
+         *     with none. The caller holds every permission this request needs — nothing is being
+         *     denied them — it is the organisation's current state that refuses, which is why this is
+         *     `409` and not `403` (RFC 9110 § 15.5.10: "the request could not be completed due to a
+         *     conflict with the current state of the target resource"). The caller resolves it by
+         *     promoting another admin and resubmitting. The `code` is pinned.
+         */
+        LastAdminConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "last_admin";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The admin targeted their own account for removal. The caller holds every permission this
+         *     request needs — nothing is being denied them — it is the current state of the target,
+         *     being the caller themselves, that refuses, which is why this is `409` and not `403`
+         *     (RFC 9110 § 15.5.10). Removing your own account is available from Settings. The `code`
+         *     is pinned.
+         */
+        SelfTargetConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "self_target";
                     };
                 };
             };
@@ -1946,6 +2005,59 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account removed. The body is empty and the caller's sessions and reset tokens are gone with the row — the SPA should drop its token and return to login. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["LastAdminConflict"];
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the account to remove. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account removed. The body is empty and the removed account's sessions and reset tokens are gone with the row. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SelfTargetConflict"];
         };
     };
 }

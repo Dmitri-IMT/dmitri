@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow incl. the public invite lookup, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -75,7 +75,7 @@ read from the invite record, which is what they were always sourced from.
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
 | `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. | `backend/src/api/middleware.py:38` |
-| `build_cors_middleware_kwargs()` | Builds CORS kwargs from `CORS_ALLOWED_ORIGINS` — no-wildcard origins, `allow_credentials=true`, methods GET/POST/OPTIONS, headers Authorization/Content-Type/X-Request-Id, expose X-Request-Id. | `backend/src/api/middleware.py:45` |
+| `build_cors_middleware_kwargs()` | Builds CORS kwargs from `CORS_ALLOWED_ORIGINS` — no-wildcard origins, `allow_credentials=true`, methods GET/POST/DELETE/OPTIONS (`DELETE` added by DMI-102 so the SPA's account-removal preflight is not rejected before the route is reached), headers Authorization/Content-Type/X-Request-Id, expose X-Request-Id. | `backend/src/api/middleware.py:45` |
 
 ## How it connects
 

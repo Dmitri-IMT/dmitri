@@ -3,6 +3,7 @@
 > **Status:** Accepted (2026-08-08). **Amends** [`AUTH.md`](../roadmap/AUTH.md) Phase 1 — the role
 > matrix gains a removal capability, and "Audit — who logged in" is no longer purely Phase 2.
 > **Reverses** the "No user deletion/deactivation" exclusion carried by DMI-76 and DMI-90.
+> Concurrent-removal limitation clarified 2026-08-08; hardening is tracked by DMI-105.
 
 ## Context
 
@@ -62,17 +63,21 @@ not an acceptable default for a product holding this data.
 
 ### 3. The last-admin invariant
 
-**An org always has at least one admin.** An org with zero admins can invite nobody, promote
-nobody and manage nothing; recovery requires running `bootstrap_org` by hand against the database.
+**The intended invariant is that an org always has at least one admin.** An org with zero admins
+can invite nobody, promote nobody and manage nothing; recovery requires running `bootstrap_org`
+by hand against the database.
 
-The invariant is enforced by two rules, not by counting at every write point:
+Ordinary, non-concurrent removal is protected by two rules:
 
-1. **`DELETE /users/{user_id}` and the role-change route both refuse to target the caller.** The
-   caller is necessarily an admin and necessarily survives their own request, so neither route can
-   reduce the admin count to zero. No query is needed.
-2. **`DELETE /users/me` refuses when the caller is the org's only admin** — the one route that can
-   remove the caller, and therefore the only place the count is load-bearing. It responds
+1. **`DELETE /users/{user_id}` and the role-change route both refuse to target the caller.** A
+   single request therefore leaves its admin caller behind without needing an admin count.
+2. **`DELETE /users/me` refuses when the caller is the org's only admin.** It responds
    **`409 last_admin`**.
+
+These checks alone do not protect concurrent transactions. Two admins can simultaneously remove
+themselves, or target each other, after both observe a valid pre-removal state. DMI-102 accepts
+that narrow race rather than adding a partial lock to one route; DMI-105 owns one complete
+per-organisation serialization mechanism across both removal routes.
 
 `409` follows the precedent already in the codebase for state conflicts (`invite_already_pending`,
 `device_busy`) and RFC 9110's Conflict semantics. The caller is not forbidden — they hold every

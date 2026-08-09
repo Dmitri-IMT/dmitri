@@ -929,6 +929,68 @@ paths:
                 $ref: '#/components/schemas/UserProfileResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags:
+        - users
+      summary: Remove own account
+      operationId: deleteCurrentUser
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '204':
+          description: Account removed. The body is empty and the caller's sessions and reset
+            tokens are gone with the row — the SPA should drop its token and return to login.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/LastAdminConflict'
+
+  /api/v1/users/{user_id}:
+    delete:
+      tags:
+        - users
+      summary: Remove another account in the caller's organisation
+      operationId: deleteUser
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: Backend identifier of the account to remove.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Account removed. The body is empty and the removed account's sessions and
+            reset tokens are gone with the row.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/SelfTargetConflict'
 
 components:
   securitySchemes:
@@ -1162,7 +1224,7 @@ components:
       description: Allowed methods for preflight requests.
       schema:
         type: string
-        example: GET, POST, OPTIONS
+        example: GET, POST, DELETE, OPTIONS
     Vary-Origin:
       description: Informs caches that responses vary by request origin.
       schema:
@@ -1546,6 +1608,69 @@ components:
                 error:
                   code: invite_already_pending
                   message: Email already has a pending invite.
+                  details: {}
+    LastAdminConflict:
+      description: |
+        The caller is the organisation's only admin, so removing their account would leave it
+        with none. The caller holds every permission this request needs — nothing is being
+        denied them — it is the organisation's current state that refuses, which is why this is
+        `409` and not `403` (RFC 9110 § 15.5.10: "the request could not be completed due to a
+        conflict with the current state of the target resource"). The caller resolves it by
+        promoting another admin and resubmitting. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - last_admin
+          examples:
+            lastAdmin:
+              value:
+                error:
+                  code: last_admin
+                  message: Add another admin before removing your account.
+                  details: {}
+    SelfTargetConflict:
+      description: |
+        The admin targeted their own account for removal. The caller holds every permission this
+        request needs — nothing is being denied them — it is the current state of the target,
+        being the caller themselves, that refuses, which is why this is `409` and not `403`
+        (RFC 9110 § 15.5.10). Removing your own account is available from Settings. The `code`
+        is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - self_target
+          examples:
+            selfTarget:
+              value:
+                error:
+                  code: self_target
+                  message: Remove your account from Settings instead.
                   details: {}
     DatabaseUnavailableError:
       description: |
