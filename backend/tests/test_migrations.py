@@ -33,9 +33,14 @@ SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 
 # `agent_nonces` deliberately withholds UPDATE and grants DELETE instead (nonces are
 # insert-then-expire-and-delete, never mutated in place; see
-# 20260724_09_agent_nonces.py). Every other table keeps the default grant set.
+# 20260724_09_agent_nonces.py). `users` adds DELETE on top of the default set for
+# account removal (see 20260808_15_user_delete_cascade.py). Every other table keeps
+# the default grant set.
 DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
-RUNTIME_GRANTS_BY_TABLE = {"agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"})}
+RUNTIME_GRANTS_BY_TABLE = {
+    "agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"}),
+    "users": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),
+}
 ALL_TABLE_PRIVILEGES = frozenset(
     {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
 )

@@ -12,7 +12,7 @@ class RefreshToken(SQLModel, table=True):
     __tablename__ = "refresh_tokens"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="users.id")
+    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
     family_id: UUID = Field(index=True)
     token_hash: str = Field(unique=True, index=True)
     family_expires_at: datetime = Field(sa_type=UTC_TIMESTAMP)
@@ -25,7 +25,7 @@ class PasswordResetToken(SQLModel, table=True):
     __tablename__ = "password_reset_tokens"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="users.id")
+    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
     token_hash: str = Field(unique=True, index=True)
     expires_at: datetime = Field(sa_type=UTC_TIMESTAMP)
     consumed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
