@@ -23,6 +23,7 @@ def test_real_preflight_returns_204_with_cors_headers() -> None:
     allow_methods = response.headers["access-control-allow-methods"]
     assert "GET" in allow_methods
     assert "POST" in allow_methods
+    assert "DELETE" in allow_methods
     assert "OPTIONS" in allow_methods
     allow_headers = response.headers["access-control-allow-headers"]
     assert "authorization" in allow_headers.lower()

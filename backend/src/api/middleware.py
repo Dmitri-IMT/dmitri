@@ -51,7 +51,7 @@ def build_cors_middleware_kwargs(settings: Settings) -> dict:
     return {
         "allow_origins": origins,
         "allow_credentials": True,
-        "allow_methods": ["GET", "POST", "OPTIONS"],
+        "allow_methods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allow_headers": ["Authorization", "Content-Type", REQUEST_ID_HEADER],
         "expose_headers": [REQUEST_ID_HEADER],
     }

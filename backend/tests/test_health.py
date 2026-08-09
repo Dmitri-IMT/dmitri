@@ -57,6 +57,8 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/invites/lookup", "POST"),
     ("/api/v1/invites/lookup", "OPTIONS"),
     ("/api/v1/users/me", "GET"),
+    ("/api/v1/users/me", "DELETE"),
+    ("/api/v1/users/{user_id}", "DELETE"),
     ("/api/v1/agents/{agent_id}/commands", "POST"),
     ("/api/v1/agents/{agent_id}/commands", "OPTIONS"),
     ("/api/v1/commands/{command_id}", "GET"),

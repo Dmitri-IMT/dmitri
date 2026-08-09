@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from api.dependencies.auth import require_user
+from api.dependencies.auth import require_admin, require_user, require_user_row
 from api.main import app
 from starlette.routing import WebSocketRoute
 from starlette.testclient import TestClient
@@ -141,6 +141,24 @@ def test_read_route_depends_on_require_user(path: str, method: str) -> None:
     calls = {dep.call for dep in route.dependant.dependencies}
 
     assert require_user in calls
+
+
+DELETE_ROUTES = (
+    ("/api/v1/users/me", require_user_row),
+    ("/api/v1/users/{user_id}", require_admin),
+)
+
+
+@pytest.mark.parametrize("path,dependency", DELETE_ROUTES)
+def test_user_delete_route_is_registered_with_its_dependency(path, dependency) -> None:
+    route = next(
+        r
+        for r in _flatten_routes(app.routes)
+        if getattr(r, "path", None) == path and "DELETE" in getattr(r, "methods", set())
+    )
+    calls = {dep.call for dep in route.dependant.dependencies}
+
+    assert dependency in calls
 
 
 def test_no_placeholder_org_id_remains() -> None:
