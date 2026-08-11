@@ -296,8 +296,8 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ |
 | Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
 | Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
-| Users & invites | `/users` | inside | admin | B2 | ◐ **ships as invite-only** (C4, C18) |
-| Settings | `/settings` | inside | admin, viewer | B5 | ◐ (password works; profile blocked — C3) |
+| Users & invites | `/users` | inside | admin | B2 | ◐ API ready (C4 closed); frontend screen not built |
+| Settings | `/settings` | inside | admin, viewer | B5 | ◐ password + Activity disclosure built; profile/removal UI pending |
 
 ---
 
@@ -1444,16 +1444,14 @@ Created — the form is replaced by the confirmation:
 ```
 
 **Open questions:**
-1. **C4** — no `/users` endpoints. Everything except the invite form is unbuildable; the v1 page is
-   the honest subset.
-2. ~~**C17** — no email delivery exists anywhere in the product.~~ **✅ Decided 2026-07-13 —
-   transactional email is in scope; provider TBD.** The code is small (`httpx` is already a backend
-   dependency; two call sites, both at points where a token is already minted); the real work is a
-   sending domain with **SPF/DKIM/DMARC**, without which these mails land in spam. **This is what
-   unblocks FORGOT/RESET PASSWORD**, which — unlike invites — have no human in the loop to hand-carry
-   a link. Remaining: pick the provider, own the sending domain.
-3. **C18** — re-inviting an existing user or a pending invitee is undefined. It is also the most
-   likely repeat action on this screen.
+1. ~~**C4** — no member/invite administration endpoints.~~ **✅ Resolved 2026-08-11** — the
+   published contract and backend now provide the separate resources; the SPA screen remains.
+2. ~~**C17** — no email delivery exists anywhere in the product.~~ **✅ Resolved in code** —
+   Resend sends invite and reset links; production delivery still needs a verified sending domain
+   with SPF/DKIM/DMARC.
+3. ~~**C18** — re-inviting existing users or pending invitees is undefined.~~ **✅ Resolved** —
+   an existing member returns `400 email_already_member`; a live pending invite returns
+   `409 invite_already_pending`.
 4. ~~Rename the nav item to "Invite" for v1?~~ **✅ Decided 2026-07-13 — no.** It stays **Users**,
    at `/users`, and grows more user-related surfaces inside it. Nav names domains, not the one
    action that happens to be buildable this month.
@@ -1475,19 +1473,26 @@ they can remove their own account — and an account nobody can leave is the wro
 product holding this data. It sits at the bottom, visually separated, and is the last thing on the
 page: it is not what anyone came here to do.
 
+**Activity disclosure is built for both roles** (spec 030). A visible `Activity` label sits beside
+`What's recorded?`; activating that button expands a persistent note. It names last use and last
+sign-in, says org admins can see the activity time, and states that no viewed/action detail is
+recorded. It is information, not a toggle, and must work by keyboard and assistive technology.
+
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
 pointed at one network, identical for every admin in the org. It lives on AGENTS (B4).
 
 **Data:**
 - `POST /api/v1/auth/change-password` → **`204`**. Body: `{ current_password, new_password }`;
   `new_password` has `minLength: 12` in the contract. Errors: `400` (policy / bad request), `401`.
-- Profile (display name, email) — **🔓 C3. There is no `/users` resource in the contract at all**,
-  and `LoginResponse` returns only a token. The section is specced but cannot be built.
+- Profile (display name, email) — **🔓 C3 update half.** `GET /users/me` exists, but there is no
+  self-profile update operation and the model still has no display name.
 - `DELETE /api/v1/users/me` → **`204`**. No body. Any role. **Hard delete** — the account and its
   sessions are gone, not disabled. One error worth designing for: **`409 last_admin`** when the
   caller is their org's only admin, because an org with no admins can invite nobody and manage
   nothing. The route does **not** clear the refresh cookie and does not need to: deleting the user
   cascades their refresh tokens, so the cookie is already inert.
+- Activity disclosure — static product copy over the activity facts recorded by the backend; no
+  request and no opt-out control.
 
 **Password policy** ([`AUTH.md`](AUTH.md) → Passwords) — stated up front, not discovered by failing:
 minimum 12 characters; no common or breached passwords; no obvious patterns (repeated characters,
@@ -1519,6 +1524,9 @@ simple suffixes); no names or birth dates.
 | Error — wrong current | "That's not your current password." |
 | Error — policy | "That password isn't strong enough. Try a longer one that isn't based on a name or a date." |
 | Error — mismatch (client-side) | "Those two passwords don't match." |
+| Section — activity | "Activity" |
+| Activity control | "What's recorded?" |
+| Activity disclosure | "Your organization's admins can see when you last used Dmitri and when you last signed in. We record only these times — not what you viewed or did." |
 | Section — profile | "Your details" |
 | Profile fields | "Display name" / "Email" |
 | Profile button | "Save" |
@@ -1552,6 +1560,13 @@ simple suffixes); no names or birth dates.
 |                          [ Change password ]                                 |
 |                                                                              |
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
+|   ACTIVITY                         [What's recorded?]                          |
+|   (expanded) Your organization's admins can see when you last used Dmitri    |
+|   and when you last signed in. We record only these times — not what you     |
+|   viewed or did.                                                (muted)      |
+|                                                                              |
+|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
+|                                                                              |
 |                                                                              |
 |   YOUR DETAILS                                        ⚠️ blocked — C3         |
 |   Display name           [____________________________]                      |

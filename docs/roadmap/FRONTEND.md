@@ -28,12 +28,12 @@ interaction in implementation before it has passed through that sequence.
 
 - **Public auth:** login, accept invite, forgot/reset password, and voluntary change password.
 - **Inside shell:** Home, Scans, Hosts, Agents, Users & invites (admin only), and **Settings**.
-- **Settings** is in the MVP after all: a logged-in user has nowhere to change their own password
-  (B1 covers only the invite/reset flows). Holds change-password
-  and profile — **as built (spec 028) it holds change-password only**, since profile is still blocked
-  on C3, and it is open to both roles. **It also gains self-service account removal**
-  ([`ADR-017`](../adr/ADR-017-account-removal.md)) — for *both* roles, since a viewer never sees the
-  Users screen and Settings is their only way out of the org. It does **not** hold the scan target network — that is a property of the Pi (below).
+- **Settings** is in the MVP and open to both roles. The built screen has voluntary
+  change-password plus the spec 030 Activity disclosure: an expandable, keyboard-reachable notice
+  says admins can see last-used and last-sign-in times and that no viewed/action detail is recorded.
+  Profile editing remains blocked on C3. Self-service account removal is still future frontend work
+  under [`ADR-017`](../adr/ADR-017-account-removal.md), although its backend route exists. The scan
+  target network remains an agent property, not a setting.
 - **Home** is the root route (`/`). It is deliberately not a metrics wall:
   it gives a plain-language verdict, only shows actionable critical/high findings, failed scans,
   or stale coverage, and is intentionally sparse when all is clear. Charts and metric cards are
@@ -69,29 +69,20 @@ interaction in implementation before it has passed through that sequence.
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
 - **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
-- **UI status:** flows are drafted, **LOGIN and Home are built** (spec 020), and all other screen
-  specs are pending. Shared visual foundations are **written** in
-  [`ui/SCREENS.md` §Foundations](../ui/SCREENS.md#foundations) — app shell (top bar, no sidebar),
-  light-only theme, typography (IM Fell English titles + IBM Plex Mono for everything else),
-  viewport (desktop-only but fluid, 1440/1280), locked neutral palette, shared components, building
-  rules, and consistency rules. **The deep purple and the severity hexes are now locked** — they
-  were deferred to the build so the accent could be auditioned against real screens, and spec 020
-  wrote them into [`ui/SCREENS.md` §Color](../ui/SCREENS.md#color) with measured contrast ratios.
+- **UI status:** Login, Home, public auth, and Settings change-password + Activity disclosure are
+  built. The remaining screen specs live in [`ui/SCREENS.md`](../ui/SCREENS.md); Users & Invites is
+  now API-ready but unimplemented in the SPA. Shared visual foundations are locked there: top-bar
+  shell, light-only theme, typography, fluid desktop viewport, palette, and component rules.
   [`ui/SCREENS.md`](../ui/SCREENS.md) is the source of truth for the UI: where it disagrees with an
   ADR or a roadmap doc, those get reconciled to it (ADR-008's `AppShell` was narrowed to a top bar
   on 2026-07-13). The active UI documents replaced the removed March-era `ui/wireframes.md`.
-- **Contract asks — 4 of the original 8 still open.** Raised 2026-07-13 against
-  `contracts/openapi/openapi.yaml`; each blocks a flow and none are frontend-solvable — see
-  [`ui/FLOWS.md` § Contract asks](../ui/FLOWS.md#contract-asks) and
-  [`BACKEND.md` B11](BACKEND.md#b11--frontend-contract-asks-) for the full 18-row list.
-  The heavy ones: **`/users` is still listing-less** (C3 ◐, C4) — spec 019 added `GET /users/me`, but
-  only `POST /invites` exists beyond it, so listing users or invites, changing a role and revoking
-  an invite still have no endpoints, leaving **Users & invites mostly unbuildable** as breadboarded.
-  Then `GET /agents` (C1) and the Pi's target network (C2 ◐ — `AgentDetail.available_subnets`
-  landed, but nothing persists the chosen `target_subnet`).
-  **Closed since:** `HostSummary.first_seen_at` (C6) and `FindingRecord.cve_id` (C8) are both in the
-  contract; invite-accept does auto-log-in (C7, returns a full `LoginResponse`). (C5
-  forced-password-change is void — forced rotation dropped, [`ADR-016`](../adr/ADR-016-password-policy.md).)
+- **Contract asks — 3 of the original 8 still open.** C4 is closed: the published backend contract
+  now has member list, pending-invite list, role change, revoke, and account-removal operations.
+  Users & Invites is therefore unblocked at the API layer but remains an unbuilt frontend screen.
+  The remaining original blockers are `GET /agents` (C1), target-network persistence (C2 partial),
+  and profile update (C3 partial). `HostSummary.first_seen_at`, finding CVE data, invite auto-login,
+  and forced-password-change disposition remain resolved as recorded in
+  [`BACKEND.md` B11](BACKEND.md#b11--frontend-contract-asks-).
 - **Role comes from `GET /users/me`, not a JWT claim** (B11-C16, closed). Spec 020's session layer is
   its only reader and nothing in the SPA decodes a token. ⚠️ **REVALIDATE:**
   [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and
@@ -111,19 +102,11 @@ interaction in implementation before it has passed through that sequence.
    spec 014.
 3. ✅ First vertical slice: login → Home, including blank, regular, and error states with live data —
    spec 020.
-4. ◐ Admin auth and user-management surfaces. ✅ **Invite acceptance, forgot/reset password and the
-   voluntary change-password screen shipped 2026-08-07 (spec 028)** — `/invite` consumes spec 027's
-   `POST /invites/lookup`, and `/settings` ships change-password only (profile still blocked on C3).
-   The flows are built but not usable end to end until invite/reset **email delivery** exists (see
-   the provider + SPF/DKIM/DMARC decision in [`ui/status.md`](../ui/status.md)). **Users & invites
-   remains blocked on C3/C4** (no `/users` listing endpoints).
-   **Widened 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)): Users ships **one**
-   table — *Person · Role · Status · Last seen* — with pending invites as rows inside it (merged in
-   the SPA from `GET /users` + `GET /invites`, which stay separate resources), plus a **Remove**
-   action on other people's rows. **This milestone now also reopens Settings**, which shipped in
-   spec 028 with change-password only: every role gets self-service account removal there. Both
-   removal surfaces share one confirm-by-typing-the-email component — two call sites, so it clears
-   the bar in [`ui/status.md`](../ui/status.md) for a shared component.
+4. ◐ Admin auth and user-management surfaces. Public auth and change-password shipped in spec 028;
+   spec 030 added the Settings Activity disclosure and closed C4 in the backend contract. The
+   Users & Invites screen itself is not built yet, but its member/invite list and mutation endpoints
+   now exist. Profile editing remains blocked on C3, and invite/reset delivery still needs a verified
+   sending domain. Account-removal UI remains planned under ADR-017.
 5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.

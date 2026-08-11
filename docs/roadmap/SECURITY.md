@@ -11,19 +11,16 @@
 
 ## Authority map — who owns which security decision
 
-Decided in roadmap, **not yet built in code**. Source of truth per area:
+Decisions and implementation status are separate; authority remains:
 
 - **Agent Ed25519 signature + CORS/transport baseline** — [`ADR-005`](../adr/ADR-005-security-model.md)
-  (v1 baseline; §1 agent directionality amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md);
-  §1 algorithm amended 2026-07-24 from HMAC to Ed25519, retiring [`ADR-015`](../adr/ADR-015-agent-secret-storage-at-rest.md)).
-- **Pi command channel** (bidirectional agent, WSS Ed25519-signed upgrade) —
-  [`ADR-011`](../adr/ADR-011-pi-command-channel.md), reusing ADR-005's signature rules.
-- **Identity** (login, sessions, invites, roles, password policy) — [`AUTH.md`](AUTH.md) **Phase 1 ✅**
-  (roadmap); the detailed authority over ADR-005's frontend-auth sketch.
+  as amended by [`ADR-011`](../adr/ADR-011-pi-command-channel.md).
+- **Pi command channel** — [`ADR-011`](../adr/ADR-011-pi-command-channel.md).
+- **Identity** — [`AUTH.md`](AUTH.md) Phase 1.
 
-"Decided" ≠ "built" — the identity layer is now partly in code (auth routes, middleware, roles, and
-the SPA's login/session), the agent and command-channel controls are not (see
-[Built vs. gap](#built-vs-gap)).
+The browser and agent gates, command/ingest transports, account removal, member administration, and
+activity recording are now implemented in software. Physical Pi provisioning and later hardening
+remain gaps; see [Built vs. gap](#built-vs-gap).
 
 ---
 
@@ -31,13 +28,14 @@ the SPA's login/session), the agent and command-channel controls are not (see
 
 | Control | State |
 |---------|--------|
-| Agent Ed25519 signature | **Decided** (September); **not built** |
-| Frontend JWT / login | **Decided**; **built** — in-memory token, single-flight refresh, route guard (specs 014 + 020) |
-| Authorization (roles) | **`admin` / `viewer`** — [`AUTH.md`](AUTH.md); **built server-side** (`require_user`/`require_admin`, org-scoped reads, DMI-61). SPA reads the role from `GET /users/me`, not a JWT claim — no role-gated screen exists yet to consume it |
-| Account removal | **Decided 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)); **not built**. Hard delete cascading the session tables, self-service for both roles, and a **last-admin invariant** — an org can never reach zero admins. Closes a live gap: today a departed employee keeps a working account and read access to every finding |
-| Device keys | **✅** B2B installer provisioning (register public key) — [`AUTH.md`](AUTH.md); rotation Phase 2 |
-| Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH. Device auth needs no stored secret — backend holds only public keys |
-| Pi command-channel auth | WSS Ed25519-signed upgrade per [`ADR-011`](../adr/ADR-011-pi-command-channel.md) |
+| Agent Ed25519 signature | **Built** on backend and Pi software; real hardware/key provisioning remains |
+| Frontend JWT / login | **Built** — in-memory token, single-flight refresh, route guard |
+| Authorization (roles) | **Built server-side**; admin member/invite operations are role-gated and org-scoped. The Users screen remains unbuilt |
+| Account removal | **Built** (DMI-102/spec 029): hard delete with session-table cascade and last-admin refusal |
+| Member activity | **Built** (DMI-76/spec 030): `last_login_at` + `last_seen_at`, admin list exposes only last-seen, Settings discloses both recorded facts |
+| Device keys | **Built in software** for installer provisioning; physical provisioning and rotation remain |
+| Secrets management (prod) | Ad hoc `.env`; Phase 2 in AUTH. Backend stores device public keys only |
+| Pi command-channel auth | **Built**: Ed25519-signed WSS upgrade on backend and Pi daemon |
 
 ---
 
