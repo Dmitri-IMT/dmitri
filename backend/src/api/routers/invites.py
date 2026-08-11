@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Response
 from sqlmodel import Session
 
@@ -13,6 +15,8 @@ from api.schemas.invites import (
     InviteCreatedResponse,
     InviteLookupRequest,
     InviteLookupResponse,
+    PendingInvite,
+    PendingInviteListResponse,
 )
 from api.services.invites import (
     AlreadyMemberError,
@@ -21,7 +25,9 @@ from api.services.invites import (
     PendingInviteError,
     accept_invite,
     create_invite,
+    list_pending_invites,
     read_invite,
+    revoke_invite,
 )
 from api.services.mailer import get_mailer
 from api.services.passwords import PasswordPolicyError
@@ -85,6 +91,39 @@ def lookup_invite_route(
     except InviteTokenError as exc:
         raise ApiError(410, str(exc), code="invalid_invite_token") from exc
     return InviteLookupResponse(email=email, role=role, org_name=org_name)
+
+
+@router.get("/api/v1/invites", response_model=PendingInviteListResponse)
+def list_invites_route(
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> PendingInviteListResponse:
+    invites = list_pending_invites(session, org_id=caller.org_id)
+    return PendingInviteListResponse(
+        data=[
+            PendingInvite(
+                invite_id=invite.id,
+                email=invite.email,
+                role=invite.role,
+                expires_at=invite.expires_at,
+            )
+            for invite in invites
+        ]
+    )
+
+
+@router.delete("/api/v1/invites/{invite_id}", status_code=204)
+def revoke_invite_route(
+    invite_id: UUID,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> None:
+    if not revoke_invite(
+        session,
+        invite_id=invite_id,
+        org_id=caller.org_id,
+    ):
+        raise ApiError(404, "Invite not found", code="not_found")
 
 
 def invite_preflight() -> None:

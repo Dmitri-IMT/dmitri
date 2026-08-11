@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, constr
 
@@ -41,3 +42,18 @@ class InviteLookupResponse(BaseModel):
     email: str
     role: Literal["admin", "viewer"]
     org_name: str
+
+
+class PendingInvite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invite_id: UUID
+    email: str
+    role: Literal["admin", "viewer"]
+    expires_at: datetime
+
+
+class PendingInviteListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[PendingInvite]

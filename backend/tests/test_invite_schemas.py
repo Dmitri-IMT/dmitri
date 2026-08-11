@@ -10,6 +10,8 @@ from api.schemas.invites import (
     InviteCreatedResponse,
     InviteLookupRequest,
     InviteLookupResponse,
+    PendingInvite,
+    PendingInviteListResponse,
 )
 
 
@@ -161,3 +163,88 @@ def test_accept_invite_request_password_min_length_tracks_constant(monkeypatch):
     restored.AcceptInviteRequest.model_validate(
         {"token": "test-invite-token", "password": "a" * 12}
     )
+
+
+def test_pending_invite_validates_exact_public_shape():
+    pending = PendingInvite.model_validate(
+        {
+            "invite_id": "11111111-1111-1111-1111-111111111111",
+            "email": "invitee@corp.com",
+            "role": "admin",
+            "expires_at": "2026-08-12T12:00:00Z",
+        }
+    )
+
+    assert pending.model_dump(mode="json") == {
+        "invite_id": "11111111-1111-1111-1111-111111111111",
+        "email": "invitee@corp.com",
+        "role": "admin",
+        "expires_at": "2026-08-12T12:00:00Z",
+    }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "invite_id": "11111111-1111-1111-1111-111111111111",
+            "email": "invitee@corp.com",
+            "role": "owner",
+            "expires_at": "2026-08-12T12:00:00Z",
+        },
+        {
+            "invite_id": "11111111-1111-1111-1111-111111111111",
+            "email": "invitee@corp.com",
+            "role": "viewer",
+            "expires_at": "2026-08-12T12:00:00Z",
+            "token_hash": "secret",
+        },
+        {
+            "invite_id": "11111111-1111-1111-1111-111111111111",
+            "email": "invitee@corp.com",
+            "role": "viewer",
+            "expires_at": "2026-08-12T12:00:00Z",
+            "invite_token": "secret",
+        },
+        {
+            "invite_id": "11111111-1111-1111-1111-111111111111",
+            "email": "invitee@corp.com",
+            "role": "viewer",
+            "expires_at": "2026-08-12T12:00:00Z",
+            "token": "secret",
+        },
+    ],
+)
+def test_pending_invite_rejects_bad_role_and_secret_or_extra_fields(payload):
+    with pytest.raises(pydantic.ValidationError):
+        PendingInvite.model_validate(payload)
+
+
+def test_pending_invite_list_response_validates_strict_envelope_and_rows():
+    payload = {
+        "data": [
+            {
+                "invite_id": "11111111-1111-1111-1111-111111111111",
+                "email": "invitee@corp.com",
+                "role": "viewer",
+                "expires_at": "2026-08-12T12:00:00Z",
+            }
+        ]
+    }
+
+    response = PendingInviteListResponse.model_validate(payload)
+
+    assert response.model_dump(mode="json") == payload
+    with pytest.raises(pydantic.ValidationError):
+        PendingInviteListResponse.model_validate({**payload, "total": 1})
+    with pytest.raises(pydantic.ValidationError):
+        PendingInviteListResponse.model_validate(
+            {
+                "data": [
+                    {
+                        **payload["data"][0],
+                        "token_hash": "must-not-be-published",
+                    }
+                ]
+            }
+        )
