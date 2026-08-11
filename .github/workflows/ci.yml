@@ -50,6 +50,13 @@ jobs:
       # numbers whenever content shifts and then exits 1, which CI cannot resolve
       # by staging the result. Compare secret identities instead, so the job fails
       # only on a secret that is genuinely absent from the committed baseline.
+      #
+      # Identity is the secret's (type, value), NOT its file path. The shared test
+      # password is baselined under nine paths already; keying on the path made
+      # every new backend test file that imports it a "new secret" and forced a
+      # baseline commit per PR, which trains reviewers to rubber-stamp baseline
+      # diffs. Keyed on the value, a fixture that is already known-safe stays safe
+      # wherever it appears, and only a secret value nobody has vetted fails.
       - name: Scan for secrets missing from the baseline
         run: |
           detect-secrets scan --baseline .secrets.baseline
@@ -58,10 +65,18 @@ jobs:
 
           def identities(baseline):
               return {
-                  (path, entry["type"], entry["hashed_secret"])
-                  for path, entries in baseline["results"].items()
+                  (entry["type"], entry["hashed_secret"])
+                  for entries in baseline["results"].values()
                   for entry in entries
               }
+
+          def locations(baseline, identity):
+              return sorted(
+                  f'{path}:{entry["line_number"]}'
+                  for path, entries in baseline["results"].items()
+                  for entry in entries
+                  if (entry["type"], entry["hashed_secret"]) == identity
+              )
 
           committed = json.loads(
               subprocess.run(
@@ -70,17 +85,21 @@ jobs:
               ).stdout
           )
           with open(".secrets.baseline") as handle:
-              found = identities(json.load(handle))
+              scanned = json.load(handle)
+          found = identities(scanned)
 
           new = found - identities(committed)
           if new:
-              print("Secrets not present in .secrets.baseline:")
-              for path, kind, _ in sorted(new):
-                  print(f"  {path}: {kind}")
+              print("Secret values not present in .secrets.baseline:")
+              for identity in sorted(new):
+                  kind = identity[0]
+                  for location in locations(scanned, identity):
+                      print(f"  {location}: {kind}")
               print("\nIf these are false positives, run:")
               print("  detect-secrets scan --baseline .secrets.baseline")
+              print("and commit the regenerated baseline.")
               sys.exit(1)
-          print(f"No new secrets ({len(found)} baselined detections).")
+          print(f"No new secret values ({len(found)} baselined).")
           PY
 
   lint:
