@@ -1,40 +1,33 @@
 # Backend
 
-The cloud half of Dmitri — a FastAPI API and a CVE-enrichment worker over a Supabase-managed
-Postgres. **Read path + auth + users/me + the command channel + ingest wired:** `GET /api/v1/health`, the
-read routes (`/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — behind `require_user`
-and scoped to the caller's org), `GET /api/v1/users/me` (role from the DB row) and — since DMI-102 — the two account-removal
-routes `DELETE /api/v1/users/me` and `DELETE /api/v1/users/{user_id}`, the auth routes
-(login/refresh/logout + password change/reset), the invite routes, the command channel —
-`POST /api/v1/agents/{agent_id}/commands` (behind `require_admin`),
-`GET /api/v1/commands/{command_id}`, and `WebSocket /api/v1/agents/{agent_id}/commands` (behind
-`require_agent_ws`), which delivers commands outbound and applies the Pi's reported status
-transitions — and, since DMI-63, `POST /api/v1/scans` (ingest, behind `require_agent`) are all served
-today. No Pi client dials the WS channel or posts results yet (the daemon is DMI-66), so delivery is
-exercised against fake sockets and ingest against signed test requests.
+The cloud half of Dmitri — a FastAPI API and CVE-enrichment worker over Supabase Postgres.
+Data reads, auth/session/password flows, self profile/removal, member and pending-invite
+administration, command enqueue/read/WebSocket, and signed scan ingest are all served today.
+The Pi daemon also exists; the remaining end-to-end gap is physical provisioning and operations,
+not a missing client or backend route.
 
 ## Overview & entry points
 
-* [Backend — API + enrichment worker](./overview.md) — The FastAPI backend (read path wired) and the CVE-enrichment worker.
-* [Backend entry points & config](./api.md) — The FastAPI app (health + wired routes + global error envelope), the worker process entry, settings, and the DB engine/session.
-* [Backend routers](./routers.md) — The read-path GET routers, GET /users/me, the two account-removal DELETE routes, the signed scan-ingest route POST /api/v1/scans, plus the agent WebSocket command channel — behind require_user / require_agent / require_agent_ws respectively.
+* [Backend — API + enrichment worker](./overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker.
+* [Backend entry points & config](./api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
+* [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, user/member admin, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 * [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 
 ## Data model
 
-* [Backend ORM models](./models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel.
-* [Backend wire schemas](./schemas.md) — The Pydantic ingest input (ScanIngestRequest), the legacy read/output projections (Persisted*), the read-path response schemas, UserProfileResponse, and the auth/invite request/response models.
+* [Backend ORM models](./models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+* [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — ingest_scan/persist_scan, host-identity upsert, account removal, the read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
 
 ## Auth
 
-* [Backend auth — sessions, tokens, passwords, routes](./auth.md) — Login/refresh/logout + password change/reset, the invite flow incl. the public invite lookup, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+* [Backend auth — sessions, tokens, passwords, routes](./auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 * [Backend API error envelope](./errors.md) — ApiError with per-site code overrides and the global handlers that shape every HTTPException into the contract ErrorResponse.
 * [Backend device auth — Ed25519 signatures, nonces, the agent gate](./device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and fifteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check, command delivery, the scan-ingest rework and the user-delete cascade — plus Supabase RLS hardening and the dmitri_runtime role.
+* [Backend database migrations](./migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.

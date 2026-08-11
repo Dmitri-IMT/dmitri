@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import secrets
 from datetime import timedelta
+from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlmodel import Session, select
 
 from api.core.config import get_settings
@@ -35,12 +36,25 @@ class InvalidResetTokenError(ValueError):
     pass
 
 
+def _stamp_activity(session: Session, *, user_id: UUID, login: bool) -> None:
+    now = utc_now()
+    values = {"last_seen_at": now}
+    if login:
+        values["last_login_at"] = now
+    session.execute(update(User).where(User.id == user_id).values(**values))
+    # Committed here rather than by the caller: activity is a standalone fact,
+    # and every call site would otherwise have to remember to flush it.
+    session.commit()
+
+
 def issue_session(session: Session, *, user: User) -> tuple[str, str, int]:
     settings = get_settings()
+    user_id = user.id
     access_token = create_access_token(
-        user_id=user.id, org_id=user.org_id, role=user.role
+        user_id=user_id, org_id=user.org_id, role=user.role
     )
-    refresh_token = issue_refresh_token(session, user_id=user.id)
+    _stamp_activity(session, user_id=user_id, login=True)
+    refresh_token = issue_refresh_token(session, user_id=user_id)
     return access_token, refresh_token, settings.access_token_ttl_minutes * 60
 
 
@@ -66,6 +80,7 @@ def refresh_session(
     access_token = create_access_token(
         user_id=user.id, org_id=user.org_id, role=user.role
     )
+    _stamp_activity(session, user_id=user_id, login=False)
     return access_token, new_refresh_token, settings.access_token_ttl_minutes * 60
 
 

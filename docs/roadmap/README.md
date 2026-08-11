@@ -14,10 +14,10 @@
 
 | Doc | Layer | Status today |
 |-----|-------|--------------|
-| [`PI.md`](PI.md) | Raspberry Pi agent | **Software built (dev machine/TUI).** No Pi hardware yet. No daemon, no backend HTTP client. |
-| [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · **B6 ✅** · **B7 ✅** · **B8 ✅** · ADR-011 |
-| [`AUTH.md`](AUTH.md) | Identity & authorization | **Phase 1 ✅** (roadmap); **in progress in code** — schema, sessions/routes and middleware landed; WS channel + ingest open. **Account removal + member activity pulled forward from Phase 2 on 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)) — decided, not built |
-| [`FRONTEND.md`](FRONTEND.md) | React SPA | **Scaffold ✅ (014) · login → Home slice ✅ (020) · public auth surfaces + Settings ✅ (028).** Next: Users & invites, blocked on C3/C4; invite/reset email delivery still unbuilt. |
+| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** No provisioned Pi hardware/service packaging yet. |
+| [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
+| [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
+| [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings password change, and Activity disclosure built. Next: Users & Invites UI (API now ready) |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
 | [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
@@ -36,17 +36,13 @@
 
 ## Where each layer stands (one paragraph)
 
-The scan pipeline (`hardware-agent/`) runs on developer machines via the TUI and writes normalized
-JSON locally. **No Raspberry Pi hardware is in possession yet** — acquisition is on the critical
-path for September. A separate FastAPI backend (`backend/`) can ingest payloads, enrich, and score
-risk — but **the Pi does not call the backend today**; that link is the shared `contracts/` schema
-only. The web app now does: `frontend/` reads the wired read path through the login → Home slice.
-**September (B10 = Control):** scan-from-web via command channel, Pi daemon, frontend trigger.
-**Still missing:** Pi hardware, Pi→backend transport, command channel, the rest of the **frontend**
-(Users & invites, scans/hosts/agents screens, "Scan now"), LLM explainer. The public auth surfaces
-and Settings landed 2026-08-07 (spec 028), though invite/reset **emails** are still not sent. **NSPi pilot:** dual-homed
-laptop validated on the real lab network (July 2026); use Quick scan until NSPi mode port stage is
-fixed. This roadmap sequences the rest.
+The scan pipeline, headless command daemon, and signed ingest client run in software; no physical Pi
+is provisioned yet. The FastAPI backend serves data reads, auth, identity administration, the
+command channel, and ingest. The web app has login → Home, public auth, and Settings with password
+change plus the Activity disclosure. Still missing are physical Pi operations and the remaining
+frontend screens/actions (including Users & Invites, despite its now-complete API), plus the LLM
+explainer. Invite/reset email code exists, but production delivery still needs a verified sending
+domain.
 
 ## Cross-layer milestone sequencing
 

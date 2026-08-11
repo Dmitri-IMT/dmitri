@@ -50,14 +50,18 @@ EXPECTED_ROUTE_SURFACE = {
     )
     for method in ("POST", "OPTIONS")
 } | {
+    ("/api/v1/invites", "GET"),
     ("/api/v1/invites", "POST"),
     ("/api/v1/invites", "OPTIONS"),
+    ("/api/v1/invites/{invite_id}", "DELETE"),
     ("/api/v1/invites/accept", "POST"),
     ("/api/v1/invites/accept", "OPTIONS"),
     ("/api/v1/invites/lookup", "POST"),
     ("/api/v1/invites/lookup", "OPTIONS"),
+    ("/api/v1/users", "GET"),
     ("/api/v1/users/me", "GET"),
     ("/api/v1/users/me", "DELETE"),
+    ("/api/v1/users/{user_id}", "PATCH"),
     ("/api/v1/users/{user_id}", "DELETE"),
     ("/api/v1/agents/{agent_id}/commands", "POST"),
     ("/api/v1/agents/{agent_id}/commands", "OPTIONS"),

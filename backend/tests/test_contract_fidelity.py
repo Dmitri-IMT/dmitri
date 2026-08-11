@@ -20,6 +20,7 @@ ERROR_RESPONSE_ROUTES = {
     "AcceptInviteTokenGone": ("invites.py", "accept_invite_route", 410),
     "InviteCreateRejected": ("invites.py", "create_invite_route", 400),
     "InviteAlreadyPending": ("invites.py", "create_invite_route", 409),
+    "RoleChangeConflict": ("users.py", "update_user_role_route", 409),
     "LastAdminConflict": ("users.py", "delete_current_user_route", 409),
     "SelfTargetConflict": ("users.py", "delete_user_route", 409),
 }
@@ -42,6 +43,11 @@ SCHEMA_NAMES = (
     "FindingPayload",
     "InviteLookupRequest",
     "InviteLookupResponse",
+    "OrgMember",
+    "OrgMemberListResponse",
+    "PendingInvite",
+    "PendingInviteListResponse",
+    "UpdateUserRoleRequest",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
@@ -335,10 +341,51 @@ def test_delete_user_operations_are_published(
     assert "delete" in app.openapi()["paths"][path]
 
 
-def test_cors_allowed_methods_example_includes_delete():
+@pytest.mark.parametrize(
+    ("path", "method", "operation_id", "expected_codes"),
+    [
+        (
+            "/api/v1/users",
+            "get",
+            "listOrgUsers",
+            {"200", "401", "403"},
+        ),
+        (
+            "/api/v1/users/{user_id}",
+            "patch",
+            "updateUserRole",
+            {"200", "401", "403", "404", "409"},
+        ),
+        (
+            "/api/v1/invites",
+            "get",
+            "listPendingInvites",
+            {"200", "401", "403"},
+        ),
+        (
+            "/api/v1/invites/{invite_id}",
+            "delete",
+            "revokeInvite",
+            {"204", "401", "403", "404"},
+        ),
+    ],
+)
+def test_admin_operations_are_published(
+    path: str, method: str, operation_id: str, expected_codes: set[str]
+) -> None:
+    contract = _load_contract()
+    operation = contract["paths"][path][method]
+
+    assert operation["operationId"] == operation_id
+    assert operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(operation["responses"]) == expected_codes
+    assert method in app.openapi()["paths"][path]
+
+
+def test_cors_allowed_methods_example_includes_patch_and_delete():
     contract = _load_contract()
     header = contract["components"]["headers"]["Access-Control-Allow-Methods"]
-    assert header["schema"]["example"] == "GET, POST, DELETE, OPTIONS"
+    assert header["schema"]["example"] == "GET, POST, PATCH, DELETE, OPTIONS"
 
 
 def _contract_error_codes(spec: dict[str, Any], response_name: str) -> set[str]:

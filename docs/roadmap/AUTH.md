@@ -1,14 +1,10 @@
 # Roadmap — Authentication & authorization
 
-> **Status:** **Phase 1 ✅ decided** (roadmap), **in progress in code**. Shipped: the identity schema
-> (DMI-58 — `orgs`/`users`/`invites` tables + `org_id` on tenant data), sessions and the auth routes
-> (DMI-60), and the auth middleware + invite flow (DMI-61 — `require_user`/`require_admin`, org-scoped
-> reads, the invite create/accept flow, and Ed25519 device-signature verification).
-> **Still open — and still Phase 1:** the WebSocket command channel (DMI-62), scan ingest (DMI-63),
-> and — added 2026-08-08 — **account removal and member activity** (see below;
-> [`ADR-017`](../adr/ADR-017-account-removal.md)), pulled forward from Phase 2.
-> Phase 1 is **not** complete until those land; the device gate built in DMI-61 is deliberately mounted
-> on no route until they do. Update ADR-005 to match once the whole layer lands.
+> **Status:** **Phase 1 ✅ decided** and its software controls are implemented: identity schema,
+> sessions/passwords, browser and device auth gates, invite onboarding, account removal, the
+> command/ingest transports, and — since spec 030 / DMI-76 — member/pending-invite administration
+> plus user activity stamping. Remaining gaps are operational (physical Pi provisioning, service
+> packaging, keys/clock) and the later product surfaces described below, not missing auth routes.
 > **Neighbours:** [`BACKEND.md`](BACKEND.md), [`SECURITY.md`](SECURITY.md),
 > [`FRONTEND.md`](FRONTEND.md), [`PI.md`](PI.md).
 
@@ -111,9 +107,9 @@ Decided 2026-08-08 — [`ADR-017`](../adr/ADR-017-account-removal.md), which sup
 
 ### Member activity ✅
 
-Decided 2026-08-08. Research: [`user-last-seen-tracking.md`](../research/user-last-seen-tracking.md).
-**Partially pulls forward the Phase 2 "Audit — who logged in" row below**, which no longer wholly
-owns this.
+Decided 2026-08-08 and implemented by spec 030 / DMI-76 on 2026-08-11. Research:
+[`user-last-seen-tracking.md`](../research/user-last-seen-tracking.md). This partially pulls forward
+the Phase 2 "Audit — who logged in" row below, which no longer wholly owns this.
 
 Two nullable columns on `users`, because login and activity are genuinely different facts — the
 split every mainstream implementation makes (Django `last_login`; Devise `current_sign_in_at`;
@@ -127,6 +123,10 @@ Supabase GoTrue `users.last_sign_in_at` alongside `sessions.refreshed_at`):
 Stamping happens on the **auth paths, not middleware** — no framework surveyed writes activity to
 the user row per request. `GET /users` serves **`last_seen_at` only**; `last_login_at` is recorded
 now because login history cannot be backfilled, and is read when the Phase 2 audit surface lands.
+
+Settings now carries the disclosure for both roles: admins can see when a member last used Dmitri
+and when they last signed in, while no viewed/action detail is recorded. It is an expandable notice,
+not an opt-out setting.
 
 **Two implementation constraints, both load-bearing:**
 
@@ -225,10 +225,9 @@ SSO and BYOC packaging are **one epic**, not background work.
 | **Pi agent** | Ed25519 per-device signature ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; backend stores only the public key) | ✅ Required |
 | **Web browser** | JWT Bearer + httpOnly refresh on `/auth/*` ([`ADR-005`](../adr/ADR-005-security-model.md)) | ✅ |
 
-**Next:** both mechanisms are now implemented (DMI-60, DMI-61). The Pi-agent gate
-(`dependencies/agent_auth.py`) verifies Ed25519 signatures with replay protection but is **mounted on
-no route** pending DMI-62/63; the browser gate is live on every business read route. Reconcile and
-update ADR-005 once DMI-62/63 land and Phase 1 is complete.
+Both mechanisms are implemented and mounted. `require_agent_ws` gates the command WebSocket and
+`require_agent` gates scan ingest; the browser gate protects business reads and admin mutations.
+The remaining end-to-end gap is physical/operational provisioning, not an absent auth path.
 
 ---
 
@@ -241,20 +240,21 @@ update ADR-005 once DMI-62/63 land and Phase 1 is complete.
 | JWT gate + role matrix (`require_user`, `require_admin`) | ✅ Built (DMI-61) |
 | Org scoping on business reads (`/hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`) | ✅ Built (DMI-61) — enforced in SQL; a foreign row is 404, never 403 |
 | Invite flow (admin creates, invitee accepts → session) | ✅ Built (DMI-61) |
-| Account removal (`DELETE /users/me`, `DELETE /users/{user_id}`, last-admin invariant) | ⏳ Decided 2026-08-08 ([`ADR-017`](../adr/ADR-017-account-removal.md)); **not built** |
-| Member activity (`last_login_at`, `last_seen_at`) | ⏳ Decided 2026-08-08; **not built** — folded into the users/invites admin API (DMI-76) |
-| Ed25519 device-signature verify + nonce replay protection | ✅ Built (DMI-61) — **mounted on no route** until DMI-62/63 |
-| Agent→backend command channel (WebSocket) | ⏳ DMI-62 — Phase 1, in progress |
-| Scan ingest (`POST /api/v1/scans`) | ⏳ DMI-63 — Phase 1, in progress; still contract-only |
+| Account removal (`DELETE /users/me`, `DELETE /users/{user_id}`, last-admin invariant) | ✅ Built (DMI-102 / spec 029) |
+| Member/pending-invite administration (`GET /users`, `PATCH /users/{id}`, `GET /invites`, `DELETE /invites/{id}`) | ✅ Built (DMI-76 / spec 030); admin-only and org-scoped |
+| Member activity (`last_login_at`, `last_seen_at`) | ✅ Built (DMI-76 / spec 030); only last-seen is published, and Settings discloses both recorded facts |
+| Ed25519 device-signature verify + nonce replay protection | ✅ Built and mounted on WebSocket + ingest |
+| Agent→backend command channel (WebSocket) | ✅ Built on backend and Pi software; real hardware/operations remain |
+| Scan ingest (`POST /api/v1/scans`) | ✅ Built on backend and Pi software; real hardware/operations remain |
 | Transactional email for invites / password reset | ✅ Code built (DMI-71) — Resend chosen, `ResendMailer` sends both links; `LogMailer` is gone, nothing logs a raw token. **Delivery still pending a verified sending domain** (SPF/DKIM/DMARC); with `RESEND_API_KEY` unset the backend falls back to `NullMailer` and both flows work off the returned link |
 
 ---
 
 ## Sequencing
 
-1. **Implement** Phase 1 — identity tables ✅, sessions ✅, roles middleware ✅, invite flow ✅,
-   Ed25519 device-signature verify ✅; **remaining: mount the device gate on the command channel
-   (DMI-62) and scan ingest (DMI-63)**  
+1. **Phase 1 software controls:** identity tables ✅, sessions ✅, roles middleware ✅, invite flow ✅,
+   account/member administration ✅, activity stamps/disclosure ✅, and signed command/ingest
+   transports ✅. Remaining work is physical and operational deployment.
 2. Plan Phase 2 before December (multi-org, device key rotation, audit, prod secrets)  
 3. Phase 3 when a deal names requirements  
 

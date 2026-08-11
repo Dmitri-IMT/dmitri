@@ -21,6 +21,7 @@ function Settings() {
   const [formError, setFormError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isActivityExpanded, setIsActivityExpanded] = useState(false)
   const currentRef = useRef<HTMLInputElement>(null)
   const newRef = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
@@ -177,6 +178,36 @@ function Settings() {
           {success}
         </p>
       </form>
+      <section data-testid="settings-activity" className="flex flex-col gap-1">
+        <div className="flex items-baseline gap-2">
+          <span
+            data-testid="settings-activity-label"
+            className="font-title text-title-sm"
+          >
+            Activity
+          </span>
+          <button
+            type="button"
+            aria-expanded={isActivityExpanded}
+            aria-controls="settings-activity-note"
+            data-testid="settings-activity-info"
+            className="text-body-md"
+            onClick={() => setIsActivityExpanded((expanded) => !expanded)}
+          >
+            What's recorded?
+          </button>
+        </div>
+        <p
+          id="settings-activity-note"
+          data-testid="settings-activity-note"
+          hidden={!isActivityExpanded}
+          className="max-w-prose text-body-md text-muted-foreground"
+        >
+          Your organization's admins can see when you last used Dmitri and when
+          you last signed in. We record only these times — not what you viewed
+          or did.
+        </p>
+      </section>
     </div>
   )
 }

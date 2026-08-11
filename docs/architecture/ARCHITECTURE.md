@@ -209,15 +209,15 @@ De acordo com as decisões dos ADRs:
 
 ## 6. Component Interfaces
 
-Todas as interfaces seguem o padrão REST + JSON. A documentação completa da API é gerada automaticamente pelo FastAPI (OpenAPI/Swagger).
+As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contracts/openapi/openapi.yaml`; o schema gerado, Swagger e ReDoc do FastAPI estão desabilitados no processo da API.
 
 ### 6.1 Pi Agent → Backend API
-- **Método**: `POST /api/v1/scans` *(implementado no backend em DMI-63, atrás de `require_agent`; o lado do dispositivo — o daemon do Pi que faz o upload — ainda está pendente em DMI-66)*
+- **Método**: `POST /api/v1/scans` *(backend e daemon do Pi implementados; falta provisionamento e validação em hardware real)*
 - **Autenticação**: assinatura Ed25519 (chave privada no dispositivo; backend verifica com a chave pública, sem guardar segredo)
 - **Payload**: JSON contendo:
-  - Metadados do scan (timestamp, device_id, rede escaneada)
-  - Resultados normalizados de Nmap + NSE + vulners NSE
-  - Descobertas de hosts, portas, serviços, versões, SO e CVEs
+  - Metadados do scan (timestamp, `scan_id`, rede escaneada e modo)
+  - Resultados normalizados de Nmap + NSE
+  - Hosts, portas, serviços, versões e CVEs encontrados
 - **Formato de autenticação**: Header customizado + assinatura do body (método + path + timestamp + body hash)
 - **Resposta esperada**: `202 Accepted` com ID do scan registrado
 - **Referência**: ADR-002, ADR-005, ADR-007
@@ -232,13 +232,15 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
   - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)
   - `POST /api/v1/auth/login` → Login (email/senha)
   - `POST /api/v1/auth/refresh` / `POST /api/v1/auth/logout` → Ciclo de vida da sessão
-  - `POST /api/v1/invites` + `POST /api/v1/invites/accept` → Convite e criação de conta (não há auto-registro; o token do convite vai no corpo da requisição, não na URL)
+  - `POST /api/v1/invites`, `POST /api/v1/invites/accept`, `POST /api/v1/invites/lookup` → Criar, aceitar e consultar convites
+  - `GET /api/v1/invites`, `DELETE /api/v1/invites/{invite_id}` → Listar e revogar convites pendentes (admin)
   - `POST /api/v1/auth/change-password`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password` → Troca e redefinição de senha
-  - `GET /api/v1/users/me` → Perfil do usuário autenticado
+  - `GET /api/v1/users/me`, `DELETE /api/v1/users/me` → Perfil e remoção da própria conta
+  - `GET /api/v1/users`, `PATCH /api/v1/users/{user_id}`, `DELETE /api/v1/users/{user_id}` → Administração de membros da organização (admin)
   - `POST /api/v1/agents/{agent_id}/commands` → Disparar um scan (**Scan now**)
   - `GET /api/v1/commands/{command_id}` → Ciclo de vida do comando enfileirado
 - **Formato**: JSON completo (request e response)
-- **Contrato**: Tipos TypeScript gerados automaticamente via `openapi-typescript` a partir do schema OpenAPI do FastAPI
+- **Contrato**: Tipos TypeScript gerados via `openapi-typescript` a partir do contrato publicado em `contracts/openapi/openapi.yaml`
 - **Referência**: ADR-003, ADR-005, ADR-008
 
 ### 6.3 Backend API → Background Worker (comunicação assíncrona)
@@ -254,14 +256,14 @@ Todas as interfaces seguem o padrão REST + JSON. A documentação completa da A
 
 ### 6.4 Backend API → React Frontend
 - **Respostas**: Sempre JSON estruturado
-- **Documentação interativa**: Swagger UI (`/docs`) e ReDoc (`/redoc`) disponíveis em ambiente de desenvolvimento e produção
+- **Documentação da API**: contrato OpenAPI versionado em `contracts/openapi/openapi.yaml`; Swagger UI, ReDoc e `/openapi.json` estão desabilitados no FastAPI
 - **CORS**: Configurado para aceitar apenas as origens permitidas (domínio de produção + localhost em dev)
 
 ### 6.5 Resumo das Restrições de Interface
 - Todas as comunicações externas ocorrem sobre **HTTPS**
 - O Pi Agent autentica com assinatura Ed25519 (ADR-005). *(O canal do agente passou a ser bidirecional — ver ADR-011 — mas a autenticação da requisição segue as mesmas regras de assinatura.)*
 - O React Frontend nunca acessa diretamente o Pi Agent
-- Nenhum componente expõe endpoints sem autenticação em produção
+- Endpoints públicos são limitados às operações explícitas de saúde e bootstrap de autenticação/convite marcadas com `security: []` no contrato
 - A comunicação interna entre Backend API e Background Worker é feita via **fila no PostgreSQL** (assíncrona e desacoplada)
 
 ---

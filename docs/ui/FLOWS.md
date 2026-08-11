@@ -1,9 +1,8 @@
 # UI Flows — Breadboards
 
-> **Status:** draft (2026-07-13) — **B3 and B4 clarified against the contract**; B5 (Settings) added;
-> **B1 and B2 corrected against the contract** when the auth screens were specced (C7 resolved — accepting
-> an invite *does* issue a session, so it lands on HOME, not LOGIN; invite expiry is `410`, not `400`).
-> Fourteen open contract asks are recorded below; B4 cannot lock until C1 and C2 land. The flow layer of the UI docs ladder:
+> **Status:** draft (2026-07-13), updated through spec 030 on 2026-08-11. Resolved contract asks
+> stay in the table as history; C4 is now closed, while B4 still waits on C1/C2. The flow layer of
+> the UI docs ladder:
 > [`REFERENCE.md`](REFERENCE.md) (principles) → **FLOWS.md** (breadboards) → [`SCREENS.md`](SCREENS.md)
 > (layouts, states, copy). Breadboards fix **places, affordances and connections**
 > and deliberately fix **no layout** ([`REFERENCE.md` §5](REFERENCE.md)) — argue and lock the
@@ -221,10 +220,9 @@ It is withheld because sending an operator to an empty scan is worse than making
 
 ## B5 — Settings
 
-Both roles. Settings exists because **a logged-in user currently has nowhere to change their own
-password**: voluntary self-service change-password is the only change-password flow the product
-has ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation was rejected as
-NIST-misaligned, so there is no forced flow for it to compete with).
+Both roles. Settings provides voluntary self-service password change. Spec 030 also adds the
+layered Activity disclosure for every member; profile editing and account-removal UI remain later
+sections on the same screen.
 
 The scan target network is **not** here — it is a property of the Pi, not of the user (see B4).
 
@@ -235,17 +233,19 @@ SETTINGS
       ok ..........................→ stay; confirmation copy
       400 policy / wrong current ..→ stay; inline error
 
-  Profile — display name, email                     ⚠️ blocked — contract ask C3
-      no /users/me endpoint exists; LoginResponse returns only a token, no user object.
-      Whether the user model even has a display_name is unknown.
+  Activity  [What's recorded?]
+      expands in place: admins can see last used + last signed in;
+      only those times are recorded, not what the member viewed or did
 
-  Leave this organization                           DELETE /users/me   ❌ no endpoint (C4)
+  Profile — display name, email                     ⚠️ update blocked — C3
+      GET /users/me exists; no self-profile update operation exists.
+
+  Leave this organization                           DELETE /users/me   ✅ backend exists
       [Delete my account] → confirm modal: type your own email to enable the button
       204 ..........................→ drop token → LOGIN, "Your account has been deleted."
       409 last_admin ...............→ stay; "You're the only admin. Make someone else an
                                       admin first, then you can leave."
-      (BOTH roles. A viewer never sees USERS, so this is their only way out of the org.
-       ADR-017, decided 2026-08-08.)
+      (Frontend action not built yet.)
 ```
 
 ## Not breadboarded (out of scope for September)
@@ -263,8 +263,8 @@ Raised against [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openap
 | --- | --- | --- |
 | C1 | `GET /api/v1/agents` — list agents (an array of one in the MVP). Today only `GET /agents/{id}` exists, and `agent_id` is the provisioning `X-Device-Id`, so the frontend cannot discover it. | B4, AGENTS |
 | C2 | `AgentDetail.available_subnets` (reported by the Pi over its WS channel) + `target_subnet`, and a way to set it. Without these, `POST /commands` demands a `subnet` CIDR from a non-technical admin. **◐ Half-closed 2026-07-13: the WS half is locked** — the Pi sends a **`hello` frame on connect** carrying `available_subnets` (`interface` + `cidr`), now in the contract ([`ADR-011` §3](../adr/ADR-011-pi-command-channel.md)). **Still open: the HTTP half** — exposing them on `AgentDetail`, and the endpoint an admin uses to pick `target_subnet`. | B2, B4 |
-| C3 | A user resource: `GET /users/me` + a way to update it. There is **no `/users` path in the contract at all**, and `LoginResponse` returns only a token. | B5 profile |
-| C4 | Users & invites: list users, list pending invites, change role, revoke invite, **remove a member** (`DELETE /users/{user_id}` and `DELETE /users/me`), **member activity** (`last_seen_at` on the row). Only `POST /invites` exists — the USERS & INVITES place is **mostly unbuildable** as breadboarded in B2, and B5's "leave this organization" has no endpoint either. Widened 2026-08-08 by [`ADR-017`](../adr/ADR-017-account-removal.md). | B2, B5, USERS & INVITES, SETTINGS |
+| C3 | `GET /users/me` exists, but there is no self-profile update operation and the user model has no display name. | B5 profile |
+| ~~C4~~ | ~~Users & invites: list users, list pending invites, change role, revoke invite, remove a member, member activity.~~ **✅ RESOLVED 2026-08-11:** the published contract and backend now provide the separate member/invite list and mutation routes plus account removal and `last_seen_at`. The Users screen remains frontend work. | B2, B5, USERS & INVITES, SETTINGS |
 | ~~C5~~ | ~~Forced password change: login with an expired password returns 403 without a token, but `POST /auth/change-password` requires Bearer.~~ **✅ VOID 2026-07-13 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced rotation entirely (NIST SP 800-63B §5.1.1.2); the mechanism this ask was about no longer exists.** Login is `200`/`401` only; there is no forced password-change flow or screen. | — |
 | ~~C6~~ | ~~`HostSummary.first_seen_at`, to power the "new device on your network" item on HOME.~~ **✅ RESOLVED — `first_seen_at` is a required property on `HostSummary`.** The HOME item is unblocked but still unbuilt; shipping it is a product call, not a contract gap. | — |
 | ~~C7~~ | ~~Does accept-invite issue a session?~~ **✅ RESOLVED 2026-07-13** — **yes.** It returns `201` with a full `LoginResponse`, so the invitee lands on HOME, not LOGIN. B2 above said the opposite and was corrected. Expiry is **`410`**, not `400`. | — |

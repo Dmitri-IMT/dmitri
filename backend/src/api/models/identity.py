@@ -37,6 +37,8 @@ class User(SQLModel, table=True):
     password_changed_at: datetime = Field(
         default_factory=utc_now, sa_type=UTC_TIMESTAMP
     )
+    last_login_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 

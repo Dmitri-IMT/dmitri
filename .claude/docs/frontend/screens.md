@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend screens, shells and shared components
-description: The login, home, password-recovery, settings and invite screens, the not-found page, the two shells and top bar, and the shared presentation components.
+description: The login, home, password-recovery, settings (including activity disclosure) and invite screens, plus shells, navigation and shared components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -26,7 +26,7 @@ operator never meets a control that looks live and isn't.
 | `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient post-reset status line. In-flight the button reads `Signing in…` and is `disabled` — the feature's **one** legitimate `disabled`. | `frontend/src/pages/Login.tsx:10` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:9` |
 | `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:13` |
-| `Settings` | The voluntary change-password form inside the guarded `AppShell` branch. **No profile section** — no display name, no email field. Success clears all three fields in place and stays on `/settings`. | `frontend/src/pages/Settings.tsx:11` |
+| `Settings` | Guarded change-password form plus a layered Activity disclosure available to both roles. The button toggles a persistent, keyboard/assistive-technology reachable note explaining that admins see last-used and last-sign-in times, and that no viewed/action detail is recorded. | `frontend/src/pages/Settings.tsx:14` |
 | `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
 | `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Items-pending order: deck → failed-scan card → stale-coverage card. | `frontend/src/pages/Home.tsx:10` |
 | `NotFound` | `That page doesn't exist.` plus a real `Go to Home` **link**, inside the shell. | `frontend/src/pages/NotFound.tsx:3` |
@@ -95,6 +95,9 @@ operator never meets a control that looks live and isn't.
   lookup and zero accept requests — leaving the invitation untouched — and offers `signOut`.
 - **Wrong current password never ends the session.** On Settings it is contractually a `400`, so it
   renders as a field error with no refresh, no logout and no navigation.
+- **Activity disclosure is information, not a preference.** The visible `Activity` label and
+  `What's recorded?` button toggle one `hidden` note through `aria-expanded`/`aria-controls`.
+  There is no opt-out control and no pointer-hover dependency.
 - The role-invariance sweep (`TopBar.test.tsx`, repeated across every Home state) asserts
   `queryAllByRole(...)` elements are `toBeEnabled()` with no `aria-disabled` — never a
   `container.querySelectorAll('[disabled]')` sweep, which misses `fieldset[disabled]` inheritance
@@ -107,3 +110,4 @@ operator never meets a control that looks live and isn't.
 [3] [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md)
 [4] [specs/028-frontend-public-auth-surfaces/DESIGN.md](../../../specs/028-frontend-public-auth-surfaces/DESIGN.md)
 [5] [specs/028-frontend-public-auth-surfaces/ARCHITECTURE.md](../../../specs/028-frontend-public-auth-surfaces/ARCHITECTURE.md)
+[6] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)

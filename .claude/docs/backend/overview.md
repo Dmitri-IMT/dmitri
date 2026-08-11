@@ -1,22 +1,21 @@
 ---
 type: Package Overview
 title: Backend — API + enrichment worker
-description: The FastAPI backend — its read path and auth are wired — and the CVE-enrichment worker.
+description: The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker.
 resource: backend/src/api
 tags: [backend, fastapi, worker, persistence, enrichment, read, auth]
-timestamp: 2026-08-05T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend — API + enrichment worker
 
-> **Read path + auth + invites + the command channel + ingest all wired.** `api/main.py` registers
-> `GET /api/v1/health`, the three [read routers](/backend/routers.md) (`GET /hosts`,
-> `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings`) — spec 015, gated by `require_user` and
-> org-scoped — the [auth routes](/backend/auth.md) (spec 016), the invite routes (spec 017), the
-> command channel (spec 022) and, since DMI-63 (spec 024), the ingest route
-> `POST /api/v1/scans` behind the [device gate](/backend/device-auth.md)'s `require_agent`.
-> What is still missing is the **device side**: no Pi daemon posts results or dials the WS channel
-> yet (DMI-66), so ingest is exercised by signed test requests rather than real hardware.
+> **Read path + auth + identity administration + command channel + ingest all wired.**
+> `api/main.py` registers the org-scoped data reads, auth/session routes, member and pending-invite
+> administration, account removal, command enqueue/read/WebSocket, and signed scan ingest.
+> **Both ends of the command/ingest link exist** since DMI-66: the Pi daemon dials the socket,
+> executes the headless scan, and uploads results. What remains is physical and operational — a
+> provisioned Pi, service-manager packaging, key provisioning, and clock synchronization — so the
+> path is exercised with signed requests and fake sockets rather than real hardware.
 > `docs/architecture/ARCHITECTURE.md` describes the target state.
 
 ## Purpose
@@ -32,21 +31,21 @@ Postgres database: a FastAPI **API** service and a long-running enrichment **wor
 
 | Area | Doc | What lives there |
 |------|-----|------------------|
-| Entry points & config | [api](/backend/api.md) | `main.py` (health + read routers), `worker_main.py`, `core/config.py`, `db/session.py`. |
-| Routers | [routers](/backend/routers.md) | `routers/hosts.py`, `routers/scans.py` (read **and** ingest), `routers/findings.py` — the wired HTTP surface. |
-| ORM / tables | [models](/backend/models.md) | `models/persistence.py` + `models/identity.py` — SQLModel tables on the metadata Alembic owns. |
-| Wire schemas | [schemas](/backend/schemas.md) | `schemas/scan.py` (ingest input), `schemas/read.py` (wired read responses), `schemas/persistence.py` (legacy read projections). |
-| Business logic | [services](/backend/services.md) | `ingest_scan`/`persist_scan`, `upsert_hosts_for_scan`, the read-path queries, the worker loop, NVD/KEV/EPSS clients, and the risk scorer. |
-| Auth subsystem | [auth](/backend/auth.md) | Login/refresh/logout + password change/reset, JWT + refresh families, argon2 password policy, `require_user`, and the request-id/CORS middleware. |
-| Database schema | [migrations](/backend/migrations.md) | Alembic env + fourteen revisions, including Supabase RLS hardening and the `dmitri_runtime` role. |
+| Entry points & config | [api](/backend/api.md) | `main.py`, `worker_main.py`, `core/config.py`, `db/session.py`. |
+| Routers | [routers](/backend/routers.md) | Data reads, auth/identity administration, scan ingest, and command HTTP/WS routes. |
+| ORM / tables | [models](/backend/models.md) | Scan/enrichment, identity/activity, session, and command-channel SQLModel tables. |
+| Wire schemas | [schemas](/backend/schemas.md) | Ingest/read/command shapes plus profile, member, auth, and invite models. |
+| Business logic | [services](/backend/services.md) | Ingest/persistence, member administration, reads, enrichment/risk, and command lifecycle. |
+| Auth subsystem | [auth](/backend/auth.md) | Sessions/passwords, activity stamps, invite lifecycle, role gates, and CORS. |
+| Database schema | [migrations](/backend/migrations.md) | Alembic env + sixteen revisions with RLS and runtime grants. |
 
 ## Two processes, one database
 
 Deployed as two Railway services (per `docs/adr/ADR-007`), both importing the `api` package
 (`backend/src/api`):
 
-- **API** — `uvicorn api.main:app`. Serves `GET /api/v1/health`, the read path, the auth/invite
-  routes, the command channel and scan ingest.
+- **API** — `uvicorn api.main:app`. Serves data reads, auth and identity administration, the
+  command channel, and scan ingest.
 - **Worker** — `python -m api.worker_main` (also the `backend-worker` console script). Polls
   `enrichment_jobs` forever and calls the upstream feeds.
 
@@ -83,9 +82,8 @@ target and to map queries.
   `schemas/scan.py` (and example JSON) now both use `scan_mode`. Resolved by spec 015 /
   [ADR-013](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md); see
   [contracts](/contracts.md).
-- **Auth is now wired.** The [auth routes](/backend/auth.md) (login/refresh/logout + password
-  change/reset) run in `main.py` over the `users` table + refresh/reset session tokens (spec 016).
-  `orgs`/`invites` remain dormant — no invite endpoints run yet.
+- **Identity is wired.** Auth/session/password routes, invite create/accept/lookup/list/revoke,
+  self profile/removal, and member list/role/remove routes all run over the identity tables.
 
 # Citations
 
@@ -96,3 +94,5 @@ target and to map queries.
 [5] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
 [6] [docs/adr/ADR-014-host-identity-resolution.md](../../../docs/adr/ADR-014-host-identity-resolution.md)
 [7] [specs/015-read-path](../../../specs/015-read-path/TRUTH.md)
+
+[8] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)

@@ -113,3 +113,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+**When talking to user, explaining, or asking questions** write in ASD-STE100, or simplified technical english and follow Zinsser's four principles of quality writing: 
+1. Simplicity
+2. Brevity
+3. Clarity
+4. Humanity

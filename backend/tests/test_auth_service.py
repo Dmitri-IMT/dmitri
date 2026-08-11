@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from api.models.identity import Org, User
 from api.models.session import PasswordResetToken, RefreshToken
 from api.services import auth
 from api.services.passwords import PasswordPolicyError, hash_password
+from sqlalchemy import event
 from sqlmodel import Session, select
 
 VALID_PASSWORD = "Xk9$mQvL2pTz"
@@ -46,6 +49,126 @@ def _seed_user(session: Session, *, password: str = VALID_PASSWORD) -> User:
     return user
 
 
+def _read_activity_fresh(
+    session: Session, *, user_id
+) -> tuple[datetime | None, datetime | None]:
+    with Session(session.get_bind()) as fresh_session:
+        user = fresh_session.get(User, user_id)
+        assert user is not None
+        return user.last_login_at, user.last_seen_at
+
+
+def test_password_login_stamps_both_activity_facts_and_commits(
+    administrative_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _seed_user(administrative_session)
+    stamp_at = datetime(2026, 8, 11, 12, tzinfo=UTC)
+    monkeypatch.setattr(auth, "utc_now", lambda: stamp_at)
+
+    auth.login(
+        administrative_session, email="alice@corp.com", password=VALID_PASSWORD
+    )
+
+    assert _read_activity_fresh(
+        administrative_session, user_id=user.id
+    ) == (stamp_at, stamp_at)
+
+
+def test_refresh_strictly_advances_only_last_seen_and_commits(
+    administrative_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _seed_user(administrative_session)
+    login_at = datetime(2026, 8, 11, 12, tzinfo=UTC)
+    refresh_at = login_at + timedelta(minutes=15)
+    activity_times = iter((login_at, refresh_at))
+    monkeypatch.setattr(auth, "utc_now", lambda: next(activity_times))
+    _, refresh_token, _ = auth.login(
+        administrative_session, email="alice@corp.com", password=VALID_PASSWORD
+    )
+
+    auth.refresh_session(administrative_session, refresh_token=refresh_token)
+
+    refreshed_login_at, refreshed_seen_at = _read_activity_fresh(
+        administrative_session, user_id=user.id
+    )
+    assert refreshed_login_at == login_at
+    assert refreshed_seen_at == refresh_at
+    assert refreshed_seen_at > refreshed_login_at
+
+
+def test_refresh_token_reuse_leaves_activity_unchanged(
+    administrative_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _seed_user(administrative_session)
+    login_at = datetime(2026, 8, 11, 12, tzinfo=UTC)
+    refresh_at = login_at + timedelta(minutes=15)
+    activity_times = iter((login_at, refresh_at))
+    monkeypatch.setattr(auth, "utc_now", lambda: next(activity_times))
+    _, used_refresh_token, _ = auth.login(
+        administrative_session, email="alice@corp.com", password=VALID_PASSWORD
+    )
+    auth.refresh_session(
+        administrative_session, refresh_token=used_refresh_token
+    )
+    activity_after_success = _read_activity_fresh(
+        administrative_session, user_id=user.id
+    )
+
+    with pytest.raises(auth.RefreshTokenError):
+        auth.refresh_session(
+            administrative_session, refresh_token=used_refresh_token
+        )
+
+    assert (
+        _read_activity_fresh(administrative_session, user_id=user.id)
+        == activity_after_success
+    )
+
+
+def test_activity_updates_name_only_the_intended_columns(
+    administrative_session: Session,
+) -> None:
+    _seed_user(administrative_session)
+    user_updates: list[str] = []
+    engine = administrative_session.get_bind()
+
+    def _capture_user_updates(
+        conn, cursor, statement, parameters, context, executemany
+    ) -> None:
+        normalized = statement.strip().lower()
+        if normalized.startswith("update users set "):
+            user_updates.append(normalized)
+
+    event.listen(engine, "before_cursor_execute", _capture_user_updates)
+    try:
+        _, refresh_token, _ = auth.login(
+            administrative_session,
+            email="alice@corp.com",
+            password=VALID_PASSWORD,
+        )
+        login_updates = user_updates.copy()
+        user_updates.clear()
+        auth.refresh_session(
+            administrative_session, refresh_token=refresh_token
+        )
+        refresh_updates = user_updates.copy()
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture_user_updates)
+
+    assert len(login_updates) == 1
+    assert len(refresh_updates) == 1
+
+    def _set_columns(statement: str) -> set[str]:
+        set_clause = statement.split(" set ", 1)[1].split(" where ", 1)[0]
+        return {
+            assignment.split("=", 1)[0].strip().rsplit(".", 1)[-1]
+            for assignment in set_clause.split(",")
+        }
+
+    assert _set_columns(login_updates[0]) == {"last_login_at", "last_seen_at"}
+    assert _set_columns(refresh_updates[0]) == {"last_seen_at"}
+
+
 def test_login_with_valid_credentials_issues_tokens(
     administrative_session: Session,
 ) -> None:
@@ -65,7 +188,7 @@ def test_login_with_valid_credentials_issues_tokens(
 def test_login_with_bad_password_raises_and_issues_no_tokens(
     administrative_session: Session,
 ) -> None:
-    _seed_user(administrative_session)
+    user = _seed_user(administrative_session)
 
     with pytest.raises(auth.InvalidCredentialsError):
         auth.login(
@@ -74,6 +197,9 @@ def test_login_with_bad_password_raises_and_issues_no_tokens(
 
     rows = administrative_session.exec(select(RefreshToken)).all()
     assert rows == []
+    assert _read_activity_fresh(
+        administrative_session, user_id=user.id
+    ) == (None, None)
 
 
 def test_login_with_unknown_email_raises(administrative_session: Session) -> None:
@@ -83,16 +209,26 @@ def test_login_with_unknown_email_raises(administrative_session: Session) -> Non
         )
 
 
-def test_logout_revokes_the_current_family(administrative_session: Session) -> None:
+def test_logout_revokes_the_current_family_without_changing_activity(
+    administrative_session: Session,
+) -> None:
     from api.services.tokens import issue_refresh_token
 
     user = _seed_user(administrative_session)
+    login_at = datetime(2026, 8, 10, 9, tzinfo=UTC)
+    seen_at = login_at + timedelta(hours=1)
+    user.last_login_at = login_at
+    user.last_seen_at = seen_at
+    administrative_session.add(user)
     raw = issue_refresh_token(administrative_session, user_id=user.id)
 
     auth.logout(administrative_session, refresh_token=raw)
 
     row = administrative_session.exec(select(RefreshToken)).one()
     assert row.revoked_at is not None
+    assert _read_activity_fresh(
+        administrative_session, user_id=user.id
+    ) == (login_at, seen_at)
 
 
 def test_change_password_wrong_current_raises_distinct_error(
@@ -187,10 +323,16 @@ def test_forgot_password_unknown_email_is_silent(
     assert rows == []
 
 
-def test_reset_password_consumes_token_once(
+def test_reset_password_consumes_token_once_without_changing_activity(
     administrative_session: Session,
 ) -> None:
     user = _seed_user(administrative_session)
+    login_at = datetime(2026, 8, 10, 9, tzinfo=UTC)
+    seen_at = login_at + timedelta(hours=1)
+    user.last_login_at = login_at
+    user.last_seen_at = seen_at
+    administrative_session.add(user)
+    administrative_session.commit()
     mailer = FakeMailer()
     auth.forgot_password(
         administrative_session, email="alice@corp.com", mailer=mailer
@@ -207,6 +349,9 @@ def test_reset_password_consumes_token_once(
         )
 
     administrative_session.refresh(user)
+    assert _read_activity_fresh(
+        administrative_session, user_id=user.id
+    ) == (login_at, seen_at)
 
 
 def test_reset_password_weak_password_raises_policy_error(

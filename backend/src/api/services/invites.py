@@ -142,3 +142,31 @@ def read_invite(session: Session, *, token: str) -> tuple[str, str, str]:
 
     org = session.get(Org, invite.org_id)
     return invite.email, invite.role, org.name
+
+
+def list_pending_invites(session: Session, *, org_id: UUID) -> list[Invite]:
+    return session.exec(
+        select(Invite)
+        .where(
+            Invite.org_id == org_id,
+            Invite.consumed_at.is_(None),
+            Invite.expires_at > utc_now(),
+        )
+        .order_by(Invite.expires_at.asc(), Invite.id.asc())
+    ).all()
+
+
+def revoke_invite(session: Session, *, invite_id: UUID, org_id: UUID) -> bool:
+    invite = session.exec(
+        select(Invite).where(
+            Invite.id == invite_id,
+            Invite.org_id == org_id,
+            Invite.consumed_at.is_(None),
+            Invite.expires_at > utc_now(),
+        )
+    ).first()
+    if invite is None:
+        return False
+    session.delete(invite)
+    session.commit()
+    return True

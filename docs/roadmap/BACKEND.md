@@ -26,7 +26,7 @@
 | B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
-| B11 | Frontend contract asks | 🔓 | **9 of 18 still open** (C2, C3 partial) — C5–C9, C11, C12, C16, C17 closed — [B11](#b11--frontend-contract-asks-) |
+| B11 | Frontend contract asks | 🔓 | **4 of 18 still open** (C2, C3 partial); C4 closed by DMI-76/spec 030 — [B11](#b11--frontend-contract-asks-) |
 | B12 | Transactional email | 🔓 | Built in DMI-71 on **Resend** (invites + password reset); **sending domain still TBD** — [B11-C17](#b11--frontend-contract-asks-) |
 
 ✅ = decided here · 🔓 = open (auth details → [`AUTH.md`](AUTH.md))
@@ -252,17 +252,11 @@ Minimum technical path:
 [`ui/FLOWS.md`](../ui/FLOWS.md#contract-asks); none are frontend-solvable. The UI is designed and
 waiting.
 
-**The big one: `/users` is still listing-less.** `GET /users/me` landed (DMI-72), but it is the only
-`/users` route: `POST /invites` and `POST /invites/accept` remain the *only* other
-identity-adjacent routes. This still leaves **USERS & INVITES mostly unbuildable** as breadboarded
-(B1 promised "multi-user, single org… invite-only signup, roles `admin`/`viewer`" — the UI to
-operate that does not have endpoints), and a logged-in user still cannot *change* their profile.
-
-**There is also no way out.** Nothing removes a member: a person who leaves the company keeps a
-working password, a rotating refresh token for up to seven days, and read access to every scan,
-host and finding in the org. That gap was scheduled for Phase 2 and is pulled into September by
-[`ADR-017`](../adr/ADR-017-account-removal.md) — it needs no Pi, no hardware and no new contract
-machinery, and it is the wrong default for a security product. C4 below carries it.
+**The identity administration contract is now complete.** Spec 030 / DMI-76 publishes and
+implements separate admin-only, org-scoped resources for members and pending invites:
+`GET /users`, `PATCH /users/{user_id}`, `GET /invites`, and
+`DELETE /invites/{invite_id}`. Spec 029 / DMI-102 already supplied both account-removal routes.
+The Users & Invites frontend screen is still unbuilt, but it is no longer blocked by C4.
 
 **The role half of this is now closed.** `GET /users/me` returns the user object, so the frontend
 has a documented way to learn the logged-in user's role and does not have to read a JWT claim the
@@ -275,7 +269,7 @@ item and the invite form, once those screens exist.
 | **C1** | `GET /api/v1/agents` — list agents | AGENTS, "Scan now", **HOME Pi-status line** | Array of one in the MVP. `agent_id` is the provisioning `X-Device-Id`, so the frontend has **no way to discover it**. Cheap, and correct under [B1](#b1--user-model-organizational-)'s "design toward many orgs". **Live cost:** `GET /agents/{agent_id}` is in the contract but **unimplemented** (DMI-78), and without C1 there is no id to call it with — so spec 020 shipped `frontend/src/api/agents.ts` deliberately **called by nothing** and left HOME's Pi-status footer line unbuilt rather than faking an id. |
 | **C2** ◐ | `AgentDetail.available_subnets` + `target_subnet`, and a way to set it | AGENTS, "Scan now", first-run | **WS half LOCKED 2026-07-13:** the Pi sends a **`hello` frame on connect** with `available_subnets` (`interface` + `cidr`) — in the contract and in [`ADR-011` §3](../adr/ADR-011-pi-command-channel.md). Decided *now*, while the envelope was being defined, rather than reopening it later. **HTTP half still open:** surfacing them on `AgentDetail` + the endpoint an admin uses to pick one, once. `agents` table gains `target_subnet`; `POST /commands` is unchanged. |
 | **C3** ◐ | ~~`GET /users/me`~~ (+ update) | SETTINGS → profile | **Read half ✅ shipped** (DMI-72 / spec 019): `GET /api/v1/users/me` is in the contract and implemented; spec 020's session layer reads identity **and role** from it, and nothing decodes a JWT. **Still open:** the update half (profile edit) for SETTINGS. |
-| **C4** | Users & invites: list users, list pending invites, change role, revoke invite, **remove a member**, **member activity** | USERS & INVITES | Only `POST /invites` exists. The whole admin surface in [`ui/FLOWS.md` B2](../ui/FLOWS.md#b2--admin-day-one-invite--first-scan) has no endpoints behind it. **Widened 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)): the ask now also covers `DELETE /users/me` + `DELETE /users/{user_id}` and a `last_seen_at` on the list row — both were Phase 2 and are pulled into September. Two consequences for the routes already in this row: the **role-change route must refuse to target the caller** (self-demotion is refused outright, and that refusal is what keeps a zero-admin org unreachable), and `GET /users` / `GET /invites` stay **two separate resources** — the single table in the screen spec is merged client-side, not by a union endpoint. |
+| ~~**C4**~~ | ~~Users & invites: list users, list pending invites, change role, revoke invite, remove a member, member activity~~ | — | **✅ RESOLVED 2026-08-11 (DMI-76/spec 030, plus DMI-102/spec 029 removal).** Published and implemented as separate admin resources: `GET /users` returns `OrgMember` rows with `last_seen_at`; `PATCH /users/{user_id}` changes role while refusing self-target and final-admin demotion; `GET /invites` lists live pending rows without tokens; `DELETE /invites/{invite_id}` revokes pending invites. `DELETE /users/me` and `DELETE /users/{user_id}` remove accounts. All are org-scoped; foreign ids are 404. |
 | ~~**C5**~~ | ~~Forced password change: 403 on expired-password login carries no token, but `POST /auth/change-password` requires Bearer~~ | — | **✅ MOOT 2026-07-23 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced password rotation.** With no password expiry, this deadlock cannot occur: login is `200`/`401` only. No change needed. |
 | ~~**C6**~~ | ~~`HostSummary.first_seen_at`~~ | — | **✅ RESOLVED** — `first_seen_at` is now a required property on `HostSummary` in the contract. The HOME "new device" item is unblocked (it is still not built; HOME ships critical/high findings, failed scans and stale coverage only). |
 | ~~**C7**~~ | ~~Does accept-invite issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |

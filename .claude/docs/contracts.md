@@ -1,10 +1,10 @@
 ---
 type: Data Contract
 title: Shared contracts (OpenAPI + example)
-description: The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
+description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member and invite administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Shared contracts
@@ -17,7 +17,7 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 
 | File | What it is |
 |------|-----------|
-| `contracts/openapi/openapi.yaml` | OpenAPI 3.1 REST/ingest contract — the full integration surface (much broader than what the backend shell implements today). |
+| `contracts/openapi/openapi.yaml` | The published OpenAPI 3.1 contract and system of record; FastAPI's generated schema endpoint is disabled. |
 | `contracts/examples/scan_result.example.json` | A concrete `ScanIngestRequest` payload; the shared test fixture. |
 
 ## The ingest surface
@@ -38,16 +38,18 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   ([command-channel](/hardware-agent/command-channel.md)). `AvailableSubnet` gained a **required**
   `is_default_route` in DMI-66, so a hello that omits it is an invalid frame on every side:
   contract, backend Pydantic model, and generated frontend type.
-- `DELETE /api/v1/users/me` (`deleteCurrentUser`) and `DELETE /api/v1/users/{user_id}`
-  (`deleteUser`) — account removal, **wired** (DMI-102). Both `204` with an empty body and no
-  `Set-Cookie`. Two new pinned failure codes, both `409`: `LastAdminConflict` (`last_admin`, the
-  self route) and `SelfTargetConflict` (`self_target`, an admin naming their own id). A foreign-org
-  target is `404`, never `403`. Neither route has an `options` twin — the CORS middleware answers
-  the preflight, and the `Access-Control-Allow-Methods` example now reads
-  `GET, POST, DELETE, OPTIONS`.
-- `auth` (`login`/`refresh`/`logout`/…) + `invites` — identity surface.
+- `GET /api/v1/users` (`listOrgUsers`) — admin-only member list, ordered by recent activity;
+  `OrgMember` exposes `last_seen_at` but no login history or status.
+- `PATCH /api/v1/users/{user_id}` (`updateUserRole`) — admin-only role change; `409 self_target`
+  or `last_admin`, 404 for unknown/foreign members.
+- `GET /api/v1/invites` (`listPendingInvites`) — admin-only live pending invitations, with no token
+  material. `DELETE /api/v1/invites/{invite_id}` (`revokeInvite`) hard-deletes a pending invite.
+- Account-removal routes remain `DELETE /api/v1/users/me` and
+  `DELETE /api/v1/users/{user_id}`. CORS publication now includes PATCH:
+  `GET, POST, PATCH, DELETE, OPTIONS`.
+- `auth` login/session/password routes plus invite create/accept/lookup complete the identity surface.
 
-Security schemes: `AgentHmacAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
+Security schemes: `AgentSignatureAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
 `RefreshCookieAuth` (httpOnly `dmitri_refresh` cookie). CORS restricted to the SPA origins.
 
 > **Ingest is wired as of DMI-63** ([backend/routers](/backend/routers.md)), joining the read path,
@@ -87,27 +89,15 @@ in a scan); `HostSummary` — the `GET /hosts` list row, adding `first_seen_at`/
 would push needless `?.` into the generated frontend types. All address fields are `format: ipv4`,
 which the Pydantic models now match exactly with `IPv4Address`.
 
-`backend/tests/test_contract_fidelity.py` gates this file against the app's generated OpenAPI by
-fingerprinting `additionalProperties`, `required` and every property shape. Its `SCHEMA_NAMES`
-covers the read responses and — since DMI-63 mounted the route — the five ingest components
-(`ScanIngestRequest`, `ScanIngestAcceptedResponse`, `HostPayload`, `PortPayload`, `FindingPayload`);
-a name can only be listed there once some mounted route makes it reachable from `app.openapi()`, or
-`_app_schema()` raises `KeyError`. `_property_shape` normalises two spellings that mean the same
-thing — `type: [X, "null"]` ≡ `anyOf: [X, {type: null}]`, and `const: v` ≡ `enum: [v]` (pydantic emits
-`const` for a single-value `Literal`; the contract writes a one-item `enum`). It does **not** read
-`minLength`/`maxLength`, so a changed `constr(min_length=…)` is not caught — a known blind spot.
-`OPERATION_PATHS` covers query parameters on `/scans` and `/findings`
-only — `/api/v1/hosts` is **not** guarded, because the contract declares `sort_by`/`sort_order`/`q`
-there and the service implements none of them (DMI-100 closes the sort half and adds the path).
+`backend/tests/test_contract_fidelity.py` fingerprints mounted Pydantic schemas against this file.
+Spec 030 added `OrgMember`, `OrgMemberListResponse`, `UpdateUserRoleRequest`, `PendingInvite`, and
+`PendingInviteListResponse` to that coverage, and separately pins operation ids and response-code
+sets for the four new admin operations. Query-parameter parity remains scoped to scans/findings.
 
-**Error responses are guarded too, since DMI-77.** `ERROR_RESPONSE_ROUTES` maps seven pinned
-`components/responses` entries — `PasswordChangeRejected`, `ResetPasswordRejected`, `ResetTokenGone`,
-`AcceptInviteRejected`, `AcceptInviteTokenGone`, `InviteCreateRejected`, `InviteAlreadyPending` — to
-`(router file, route function, status)`, AST-extracts that function's `ApiError(status, …, code="…")`
-literals, and asserts exact set equality with the response's pinned `error.code` `enum`. Before this,
-nothing cross-checked router literals against contract enums and a typo shipped green. Each pinned
-response follows one shape: `allOf` of `ErrorResponse` plus an `enum`-constrained `error.code`, with
-one example per code.
+**Error responses are guarded too.** `ERROR_RESPONSE_ROUTES` now maps ten pinned components. The
+new `RoleChangeConflict` must match the role router's exact `409` codes (`self_target`,
+`last_admin`), alongside the existing auth/invite and account-removal components. The gate
+AST-extracts route literals and compares them with each contract enum.
 
 The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
 (previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by
@@ -135,3 +125,4 @@ offline. It carries no `artifacts` key — DMI-63 deleted the artifact concept e
 [5] [docs/adr/ADR-013-ingest-host-vocabulary-unification.md](../../docs/adr/ADR-013-ingest-host-vocabulary-unification.md)
 [6] [docs/adr/ADR-014-host-identity-resolution.md](../../docs/adr/ADR-014-host-identity-resolution.md)
 [7] [specs/015-read-path](../../specs/015-read-path/TRUTH.md)
+[8] [specs/030-users-invites-admin-api](../../specs/030-users-invites-admin-api/TRUTH.md)

@@ -30,7 +30,7 @@ tags:
   - name: auth
     description: Login, refresh, logout, password, and invite acceptance.
   - name: users
-    description: Read-only self profile.
+    description: User profiles and organisation member administration.
   - name: findings
     description: Finding query endpoints for the frontend.
   - name: health
@@ -787,6 +787,25 @@ paths:
           $ref: '#/components/responses/CorsPreflightNoContent'
 
   /api/v1/invites:
+    get:
+      tags:
+        - auth
+      summary: List pending organisation invites
+      operationId: listPendingInvites
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Live, unconsumed invitations for the caller's organisation, ordered by
+            expiry time and then invitation identifier. Token material is never returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingInviteListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - auth
@@ -903,6 +922,65 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/invites/{invite_id}:
+    delete:
+      tags:
+        - auth
+      summary: Revoke a pending organisation invite
+      operationId: revokeInvite
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          description: Backend identifier of the pending invitation to revoke.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Invitation hard-deleted. The body is empty and its token is immediately
+            unusable.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Accepted, expired, foreign-organisation, and unknown invitations are
+            reported identically.
+
+  /api/v1/users:
+    get:
+      tags:
+        - users
+      summary: List organisation members
+      operationId: listOrgUsers
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Members of the caller's organisation, ordered by most recent activity with
+            members who have no last-seen value last. Login history and member status are omitted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgMemberListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /api/v1/users/me:
     get:
       tags:
@@ -955,6 +1033,43 @@ paths:
           $ref: '#/components/responses/LastAdminConflict'
 
   /api/v1/users/{user_id}:
+    patch:
+      tags:
+        - users
+      summary: Change an organisation member's role
+      operationId: updateUserRole
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: Backend identifier of the member whose role will change.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleRequest'
+      responses:
+        '200':
+          description: Role changed; returns the updated member.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Unknown and foreign-organisation members are reported identically.
+        '409':
+          $ref: '#/components/responses/RoleChangeConflict'
     delete:
       tags:
         - users
@@ -1224,7 +1339,7 @@ components:
       description: Allowed methods for preflight requests.
       schema:
         type: string
-        example: GET, POST, DELETE, OPTIONS
+        example: GET, POST, PATCH, DELETE, OPTIONS
     Vary-Origin:
       description: Informs caches that responses vary by request origin.
       schema:
@@ -1671,6 +1786,42 @@ components:
                 error:
                   code: self_target
                   message: Remove your account from Settings instead.
+                  details: {}
+    RoleChangeConflict:
+      description: |
+        The role change conflicts with the organisation's current state: an admin targeted their
+        own account, or demoting the target would leave the organisation without an admin. The
+        caller holds the required permission, so this is `409`, not `403`. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - last_admin
+                          - self_target
+          examples:
+            lastAdmin:
+              value:
+                error:
+                  code: last_admin
+                  message: Add another admin before changing this role.
+                  details: {}
+            selfTarget:
+              value:
+                error:
+                  code: self_target
+                  message: You cannot change your own role.
                   details: {}
     DatabaseUnavailableError:
       description: |
@@ -2609,6 +2760,81 @@ components:
           enum:
             - admin
             - viewer
+    OrgMember:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - email
+        - role
+        - last_seen_at
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+            - admin
+            - viewer
+        last_seen_at:
+          type: [string, 'null']
+          format: date-time
+    OrgMemberListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgMember'
+    UpdateUserRoleRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+      properties:
+        role:
+          type: string
+          enum:
+            - admin
+            - viewer
+    PendingInvite:
+      type: object
+      additionalProperties: false
+      required:
+        - invite_id
+        - email
+        - role
+        - expires_at
+      properties:
+        invite_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+          enum:
+            - admin
+            - viewer
+        expires_at:
+          type: string
+          format: date-time
+    PendingInviteListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingInvite'
     ChangePasswordRequest:
       type: object
       additionalProperties: false

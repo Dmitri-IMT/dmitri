@@ -3,6 +3,25 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-10
+
+* **Update**: **users and invites admin API** (spec 030 / DMI-76) — refreshed
+  `backend/auth.md`, `backend/routers.md`, `backend/schemas.md`, `backend/services.md`,
+  `backend/errors.md`, `backend/api.md`, `backend/overview.md`, and `backend/index.md`. Admins can
+  list org members and pending invites, change another member's role, and revoke a pending invite;
+  foreign-org identifiers stay indistinguishable from missing rows.
+* **Update**: user activity and migration coverage — `backend/models.md` and
+  `backend/migrations.md` now map nullable, unindexed `last_login_at` / `last_seen_at`, the
+  login-vs-refresh stamp split, revision `20260810_16`, and the runtime DELETE grant on `invites`.
+  `backend/services.md` also maps the per-org transaction advisory lock that serializes
+  admin-reducing role changes.
+* **Update**: `contracts.md` records the four published admin operations, five new response/request
+  schemas, `RoleChangeConflict`, and PATCH in the CORS method set. The hand-authored OpenAPI file
+  remains authoritative; FastAPI's generated schema/docs stay disabled.
+* **Update**: `frontend/screens.md` records Settings' keyboard-reachable Activity disclosure for
+  both roles. Root and component indexes plus `overview.md` were refreshed to match the concept
+  frontmatter and current wired state.
+
 ## 2026-08-09
 
 * **Update**: **account removal** (spec 029 / DMI-102, ADR-017) — `backend/routers.md`,

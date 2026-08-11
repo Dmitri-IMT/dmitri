@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from api.models.identity import Invite, Org, User
@@ -254,8 +255,9 @@ def _seed_invite(
     role: str = "viewer",
     expires_delta: timedelta = timedelta(hours=48),
     consumed: bool = False,
+    raw_token: str = "test-raw-invite-token-1234567890",
 ) -> tuple[Invite, str]:
-    raw = "test-raw-invite-token-1234567890"
+    raw = raw_token
     invite = Invite(
         org_id=org_id,
         email=email,
@@ -270,11 +272,13 @@ def _seed_invite(
     return invite, raw
 
 
-def test_accept_invite_creates_user_and_issues_session(
-    administrative_session: Session,
+def test_accept_invite_creates_user_issues_session_and_stamps_activity(
+    administrative_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     org = _seed_org(administrative_session)
     invite, raw = _seed_invite(administrative_session, org_id=org.id, role="admin")
+    stamp_at = datetime(2026, 8, 11, 12, tzinfo=UTC)
+    monkeypatch.setattr(auth_module, "utc_now", lambda: stamp_at)
 
     access_token, refresh_token, expires_in = invites.accept_invite(
         administrative_session,
@@ -285,10 +289,13 @@ def test_accept_invite_creates_user_and_issues_session(
     assert access_token
     assert refresh_token
     assert expires_in > 0
-    user = administrative_session.exec(select(User)).one()
-    assert user.org_id == org.id
-    assert user.role == "admin"
-    assert user.email == "invitee@corp.com"
+    with Session(administrative_session.get_bind()) as fresh_session:
+        user = fresh_session.exec(select(User)).one()
+        assert user.org_id == org.id
+        assert user.role == "admin"
+        assert user.email == "invitee@corp.com"
+        assert user.last_login_at == stamp_at
+        assert user.last_seen_at == stamp_at
     administrative_session.refresh(invite)
     assert invite.consumed_at is not None
 
@@ -605,3 +612,108 @@ def test_read_invite_is_repeatable(administrative_session: Session) -> None:
     second = invites.read_invite(administrative_session, token=raw)
 
     assert first == second
+
+
+def test_list_pending_invites_applies_pending_predicate_and_org_scope(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session, "Visible Org")
+    foreign_org = _seed_org(administrative_session, "Foreign Org")
+    live, _ = _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        email="live@corp.com",
+        raw_token="live-predicate-token",
+    )
+    _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        email="consumed@corp.com",
+        consumed=True,
+        raw_token="consumed-predicate-token",
+    )
+    _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        email="expired@corp.com",
+        expires_delta=timedelta(seconds=-1),
+        raw_token="expired-predicate-token",
+    )
+    _seed_invite(
+        administrative_session,
+        org_id=foreign_org.id,
+        email="foreign@corp.com",
+        raw_token="foreign-predicate-token",
+    )
+
+    rows = invites.list_pending_invites(administrative_session, org_id=org.id)
+
+    assert [row.id for row in rows] == [live.id]
+
+
+def test_revoke_invite_returns_true_and_hard_deletes_pending_row(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, _ = _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        raw_token="delete-success-token",
+    )
+
+    result = invites.revoke_invite(
+        administrative_session, invite_id=invite.id, org_id=org.id
+    )
+
+    assert result is True
+    administrative_session.expire_all()
+    assert administrative_session.get(Invite, invite.id) is None
+
+
+@pytest.mark.parametrize("state", ["consumed", "expired"])
+def test_revoke_invite_returns_false_for_non_pending_row_and_preserves_it(
+    state: str,
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, _ = _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        consumed=state == "consumed",
+        expires_delta=(
+            timedelta(seconds=-1) if state == "expired" else timedelta(hours=1)
+        ),
+        raw_token=f"{state}-miss-token",
+    )
+
+    result = invites.revoke_invite(
+        administrative_session, invite_id=invite.id, org_id=org.id
+    )
+
+    assert result is False
+    administrative_session.expire_all()
+    assert administrative_session.get(Invite, invite.id) is not None
+
+
+def test_revoke_invite_returns_false_for_foreign_or_unknown_id_without_deleting(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session, "Caller Org")
+    foreign_org = _seed_org(administrative_session, "Foreign Org")
+    foreign, _ = _seed_invite(
+        administrative_session,
+        org_id=foreign_org.id,
+        raw_token="foreign-miss-token",
+    )
+
+    foreign_result = invites.revoke_invite(
+        administrative_session, invite_id=foreign.id, org_id=org.id
+    )
+    unknown_result = invites.revoke_invite(
+        administrative_session, invite_id=uuid4(), org_id=org.id
+    )
+
+    assert foreign_result is False
+    assert unknown_result is False
+    administrative_session.expire_all()
+    assert administrative_session.get(Invite, foreign.id) is not None
