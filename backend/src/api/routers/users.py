@@ -26,6 +26,15 @@ from api.services.users import (
 router = APIRouter()
 
 
+def _member(user: User) -> OrgMember:
+    return OrgMember(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+        last_seen_at=user.last_seen_at,
+    )
+
+
 @router.get("/api/v1/users/me", response_model=UserProfileResponse)
 def read_current_user(
     user: User = Depends(require_user_row),
@@ -54,17 +63,7 @@ def list_org_users_route(
     session: Session = Depends(get_session),
 ) -> OrgMemberListResponse:
     members = list_org_members(session, org_id=caller.org_id)
-    return OrgMemberListResponse(
-        data=[
-            OrgMember(
-                user_id=member.id,
-                email=member.email,
-                role=member.role,
-                last_seen_at=member.last_seen_at,
-            )
-            for member in members
-        ]
-    )
+    return OrgMemberListResponse(data=[_member(member) for member in members])
 
 
 @router.patch("/api/v1/users/{user_id}", response_model=OrgMember)
@@ -95,12 +94,7 @@ def update_user_role_route(
         ) from exc
     if member is None:
         raise ApiError(404, "User not found", code="not_found")
-    return OrgMember(
-        user_id=member.id,
-        email=member.email,
-        role=member.role,
-        last_seen_at=member.last_seen_at,
-    )
+    return _member(member)
 
 
 @router.delete("/api/v1/users/{user_id}", status_code=204)
