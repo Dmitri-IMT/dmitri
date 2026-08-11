@@ -346,7 +346,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List pending organisation invites */
+        get: operations["listPendingInvites"];
         put?: never;
         /** Create org invite (admin) */
         post: operations["createInvite"];
@@ -393,6 +394,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invites/{invite_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a pending organisation invite */
+        delete: operations["revokeInvite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List organisation members */
+        get: operations["listOrgUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -425,7 +460,8 @@ export interface paths {
         delete: operations["deleteUser"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Change an organisation member's role */
+        patch: operations["updateUserRole"];
         trace?: never;
     };
 }
@@ -722,6 +758,34 @@ export interface components {
             email: string;
             /** @enum {string} */
             role: "admin" | "viewer";
+        };
+        OrgMember: {
+            /** Format: uuid */
+            user_id: string;
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "viewer";
+            /** Format: date-time */
+            last_seen_at: string | null;
+        };
+        OrgMemberListResponse: {
+            data: components["schemas"]["OrgMember"][];
+        };
+        UpdateUserRoleRequest: {
+            /** @enum {string} */
+            role: "admin" | "viewer";
+        };
+        PendingInvite: {
+            /** Format: uuid */
+            invite_id: string;
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "viewer";
+            /** Format: date-time */
+            expires_at: string;
+        };
+        PendingInviteListResponse: {
+            data: components["schemas"]["PendingInvite"][];
         };
         ChangePasswordRequest: {
             current_password: string;
@@ -1080,6 +1144,24 @@ export interface components {
                     error: {
                         /** @enum {unknown} */
                         code: "self_target";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The role change conflicts with the organisation's current state: an admin targeted their
+         *     own account, or demoting the target would leave the organisation without an admin. The
+         *     caller holds the required permission, so this is `409`, not `403`. The `code` is pinned.
+         */
+        RoleChangeConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "last_admin" | "self_target";
                     };
                 };
             };
@@ -1864,6 +1946,28 @@ export interface operations {
             204: components["responses"]["CorsPreflightNoContent"];
         };
     };
+    listPendingInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live, unconsumed invitations for the caller's organisation, ordered by expiry time and then invitation identifier. Token material is never returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingInviteListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     createInvite: {
         parameters: {
             query?: never;
@@ -1982,6 +2086,57 @@ export interface operations {
             204: components["responses"]["CorsPreflightNoContent"];
         };
     };
+    revokeInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the pending invitation to revoke. */
+                invite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Invitation hard-deleted. The body is empty and its token is immediately unusable. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Accepted, expired, foreign-organisation, and unknown invitations are reported identically. */
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listOrgUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Members of the caller's organisation, ordered by most recent activity with members who have no last-seen value last. Login history and member status are omitted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMemberListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getCurrentUser: {
         parameters: {
             query?: never;
@@ -2058,6 +2213,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SelfTargetConflict"];
+        };
+    };
+    updateUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the member whose role will change. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Role changed; returns the updated member. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMember"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Unknown and foreign-organisation members are reported identically. */
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["RoleChangeConflict"];
         };
     };
 }

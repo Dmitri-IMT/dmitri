@@ -161,6 +161,28 @@ def test_user_delete_route_is_registered_with_its_dependency(path, dependency) -
     assert dependency in calls
 
 
+ADMIN_ROUTES = (
+    ("/api/v1/users", "GET"),
+    ("/api/v1/users/{user_id}", "PATCH"),
+    ("/api/v1/invites", "GET"),
+    ("/api/v1/invites/{invite_id}", "DELETE"),
+)
+
+
+@pytest.mark.parametrize("path,method", ADMIN_ROUTES)
+def test_admin_route_is_registered_with_unconditional_admin_dependency(
+    path: str, method: str
+) -> None:
+    route = next(
+        r
+        for r in _flatten_routes(app.routes)
+        if getattr(r, "path", None) == path and method in getattr(r, "methods", set())
+    )
+    calls = {dep.call for dep in route.dependant.dependencies}
+
+    assert require_admin in calls
+
+
 def test_no_placeholder_org_id_remains() -> None:
     root = Path(__file__).resolve().parents[1]
     this_file = Path(__file__).resolve()
