@@ -15,6 +15,8 @@ type UserProfileResponse = components['schemas']['UserProfileResponse']
 const baseURL = 'http://localhost:8000/api/v1'
 const CURRENT = 'old-long-enough-password'
 const NEXT = 'new-long-enough-password'
+const ACTIVITY_NOTE =
+  "Your organization's admins can see when you last used Dmitri and when you last signed in. We record only these times — not what you viewed or did."
 
 function signedInAs(profile: UserProfileResponse) {
   server.use(http.get(`${baseURL}/users/me`, () => HttpResponse.json(profile)))
@@ -96,6 +98,126 @@ describe('Settings', () => {
     expect(screen.getByTestId('settings-submit')).toHaveTextContent(
       'Change password',
     )
+  })
+
+  it.each([
+    ['admin', adminProfile],
+    ['viewer', viewerProfile],
+  ])(
+    'shows the same collapsed activity disclosure to a %s',
+    async (_role, profile) => {
+      signedInAs(profile)
+      renderSettings()
+
+      const activity = await screen.findByTestId('settings-activity')
+      const disclosure = within(activity)
+      const label = disclosure.getByTestId('settings-activity-label')
+      const button = disclosure.getByRole('button', {
+        name: "What's recorded?",
+      })
+      const note = disclosure.getByTestId('settings-activity-note')
+
+      expect(label).toBeVisible()
+      expect(label.textContent).toBe('Activity')
+      expect(button).toBeVisible()
+      expect(button).not.toHaveAttribute('aria-label')
+      expect(button.textContent).toBe("What's recorded?")
+      expect(button).toHaveAttribute('type', 'button')
+      expect(button).toHaveAttribute('aria-expanded', 'false')
+      expect(button).toHaveAttribute('aria-controls', note.id)
+      expect(note.id).not.toBe('')
+      expect(note).toBeInTheDocument()
+      expect(note).not.toBeVisible()
+      expect(note).toHaveAttribute('hidden')
+      expect(note.textContent).toBe(ACTIVITY_NOTE)
+      expect(disclosure.queryByRole('switch', { hidden: true })).toBeNull()
+      expect(disclosure.queryByRole('checkbox', { hidden: true })).toBeNull()
+      expect(activity.querySelector('time, [datetime]')).toBeNull()
+      expect(activity.textContent).toBe(
+        `ActivityWhat's recorded?${ACTIVITY_NOTE}`,
+      )
+    },
+  )
+
+  it('reveals and hides the exact activity note by click without moving focus', async () => {
+    signedInAs(viewerProfile)
+    renderSettings()
+    const user = userEvent.setup()
+
+    const button = await screen.findByRole('button', {
+      name: "What's recorded?",
+    })
+    const note = screen.getByTestId('settings-activity-note')
+
+    await user.click(button)
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note.textContent).toBe(ACTIVITY_NOTE)
+    expect(note).toBeVisible()
+
+    await user.click(button)
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note).toBeInTheDocument()
+    expect(note).not.toBeVisible()
+  })
+
+  it('reaches the disclosure by Tab and reveals and hides it with Enter and Space', async () => {
+    signedInAs(adminProfile)
+    renderSettings()
+    const user = userEvent.setup()
+
+    await screen.findByTestId('settings-form')
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-current')).toHaveFocus(),
+    )
+    await user.tab()
+    await user.tab()
+    await user.tab()
+    await user.tab()
+
+    const button = screen.getByRole('button', {
+      name: "What's recorded?",
+    })
+    const note = screen.getByTestId('settings-activity-note')
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-controls', note.id)
+
+    await user.keyboard('{Enter}')
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note.textContent).toBe(ACTIVITY_NOTE)
+    expect(note).toBeVisible()
+
+    await user.keyboard('{Enter}')
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note).toBeInTheDocument()
+    expect(note).not.toBeVisible()
+
+    await user.keyboard(' ')
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note.textContent).toBe(ACTIVITY_NOTE)
+    expect(note).toBeVisible()
+
+    await user.keyboard(' ')
+
+    expect(button).toHaveFocus()
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveAttribute('aria-controls', note.id)
+    expect(note).toBeInTheDocument()
+    expect(note).not.toBeVisible()
   })
 
   it('renders the policy hint exactly once', async () => {
