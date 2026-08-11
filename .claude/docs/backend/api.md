@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: Backend entry points & config
-description: The FastAPI app (health + read path + auth + users/me + the command channel's HTTP and WS surface + global error envelope), the worker process entry, settings, and the DB engine/session.
+description: The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -20,19 +20,19 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `app` | The `FastAPI` instance, title `"Dmitri Backend"`, version read from installed `backend-api` metadata. `docs_url`/`redoc_url`/`openapi_url` are **all `None`** — interactive docs and the generated schema are disabled because the published contract is the system of record. Mounts the three [read-path routers](/backend/routers.md), the [auth router](/backend/auth.md), the [users router](/backend/routers.md), the [agents WebSocket router](/backend/routers.md), registers the global [error envelope](/backend/errors.md) handlers, and adds the request-id + CORS middleware. | `backend/src/api/main.py:28` |
+| `app` | The `FastAPI` instance with generated OpenAPI/Swagger/ReDoc disabled; the published hand-authored contract is authoritative. Mounts read, auth, users, invites, command, and ingest routers plus global errors and middleware. | `backend/src/api/main.py:46` |
 | `app.add_middleware(NoContentCorsMiddleware / RequestIdMiddleware)` | Registers the 204-preflight CORS middleware (built from `CORS_ALLOWED_ORIGINS`) and the `X-Request-Id` middleware — see [auth](/backend/auth.md). | `backend/src/api/main.py:32` |
 | `options_health()` | `OPTIONS /api/v1/health` → 204, so a real browser preflight is answered by the CORS middleware. | `backend/src/api/main.py:54` |
 | `http_exception_handler()` | `@app.exception_handler(StarletteHTTPException)` — wraps every `HTTPException`/`ApiError` into `{"error": {code, message, details:{}}}`; forwards `exc.headers` so the router's `405` keeps its `Allow`. | `backend/src/api/main.py:46` |
 | `validation_exception_handler()` | `@app.exception_handler(RequestValidationError)` — `422` / `validation_error` with `details.field`; fixed message, never echoes the rejected `input`. | `backend/src/api/main.py:71` |
 | `unhandled_exception_handler()` | `@app.exception_handler(Exception)` — fixed `500` / `internal_server_error`; no exception text in the body. | `backend/src/api/main.py:87` |
-| `app.include_router(auth.router)` | Wires the 6 auth POST routes + preflights — see [auth](/backend/auth.md). | `backend/src/api/main.py` |
-| `app.include_router(users.router)` | Wires `GET /api/v1/users/me` — see [routers](/backend/routers.md). | `backend/src/api/main.py:114` |
-| `get_settings()` (import-time call) | Called at module import so a missing/invalid `DATABASE_URL` **fails fast** at startup. | `backend/src/api/main.py:17` |
-| `read_health()` | `GET /api/v1/health`. Runs a real `SELECT 1` through a `get_session` dependency; returns `{"status": "ok", "version": ...}`, or a `503` `database_unreachable` error envelope on `SQLAlchemyError`. | `backend/src/api/main.py:28` |
-| `app.include_router(hosts.router / scans.router / findings.router)` | Wires `GET /api/v1/hosts`, `/hosts/{host_id}`, `/scans/{scan_id}`, `/findings` — see [routers](/backend/routers.md). | `backend/src/api/main.py:46` |
-| `app.include_router(agents.router)` | Wires `POST /api/v1/agents/{agent_id}/commands` and `WebSocket /api/v1/agents/{agent_id}/commands` — see [routers](/backend/routers.md) and [device auth](/backend/device-auth.md). | `backend/src/api/main.py:147` |
-| `app.include_router(commands.router)` | Wires `GET /api/v1/commands/{command_id}` — see [routers](/backend/routers.md). | `backend/src/api/main.py:148` |
+| `app.include_router(auth.router)` | Wires the six auth POST routes and their preflights. | `backend/src/api/main.py:152` |
+| `app.include_router(users.router)` | Wires self profile/removal plus admin member list, role change, and member removal. | `backend/src/api/main.py:153` |
+| `app.include_router(invites.router)` | Wires admin invite create/list/revoke plus public accept/lookup. | `backend/src/api/main.py:157` |
+| `get_settings()` (import-time call) | Called at module import so missing/invalid required configuration fails fast at startup. | `backend/src/api/main.py:34` |
+| `read_health()` | `GET /api/v1/health`; runs `SELECT 1` and returns status/version or the fixed 503 envelope. | `backend/src/api/main.py:131` |
+| `app.include_router(hosts.router / scans.router / findings.router)` | Wires host/scan/finding reads plus signed scan ingest. | `backend/src/api/main.py:154` |
+| `app.include_router(agents.router / commands.router)` | Wires command enqueue/read plus the agent WebSocket channel. | `backend/src/api/main.py:150` |
 | lifespan startup → `reconcile_all(session)` | Clears every `agents.connected_at` at boot, so a hard-crashed API (where the WS `finally` never ran) does not leave agents looking permanently connected to the worker's sweeper. See [services](/backend/services.md). | `backend/src/api/main.py:39` |
 | `ws_validation_denial()` | `WebSocketRequestValidationError` handler — pre-accept HTTP **403** with the [error envelope](/backend/errors.md) for malformed `{agent_id}` (non-UUID path segment) via `send_denial_response`. | `backend/src/api/main.py:103` |
 | `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |
@@ -60,17 +60,13 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 ## Notes / gotchas
 
-- **Read path + auth + users/me + invites + agent WS + ingest all wired.** `GET /api/v1/health`,
-  the three [read routers](/backend/routers.md), the [auth routes](/backend/auth.md),
-  `GET /api/v1/users/me`, the invite routes — create, accept and, since DMI-86, the public
-  `POST /api/v1/invites/lookup` — `WebSocket /api/v1/agents/{agent_id}/commands` and —
-  since DMI-63 — `POST /api/v1/scans` are registered in `main.py`. All `HTTPException` responses and
-  WS upgrade denials use the [error envelope](/backend/errors.md). The
-  [device gate](/backend/device-auth.md) is now mounted on both transports: `require_agent_ws` on the
-  WS command channel and the HTTP `require_agent` adapter on ingest. **Both ends of the link now
-  exist** — DMI-66 closed the device side — so the remaining gap is physical and operational (no
-  provisioned Pi, no service-manager packaging, no key provisioning); the paths are exercised
-  against fake sockets and signed test requests rather than real hardware.
+- **Read, auth, identity administration, command channel, and ingest are wired.** In addition to
+  `/users/me` and invite create/accept/lookup, the users router now serves admin member list and
+  role change, while the invites router serves pending-list and revoke. All are registered through
+  the existing router includes in `main.py`.
+- **Both device transports are mounted and both ends exist.** WS denials use the error envelope;
+  `require_agent_ws` gates the socket and `require_agent` gates ingest. The remaining gap is
+  physical/operational provisioning, so tests use fake sockets and signed requests.
 - **`websockets>=13` is a direct dependency** (not `uvicorn[standard]`) so uvicorn can serve WS
   upgrades in production with the sans-io protocol implementation.
 - **`JWT_SIGNING_SECRET` is required** — `Settings()` (instantiated at import) fails fast without it;

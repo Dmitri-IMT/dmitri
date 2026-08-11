@@ -14,7 +14,7 @@ knowledge base. See [MAINTAINING.md](./MAINTAINING.md) for how this bundle is ke
 
 * [overview](./overview.md) — What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 * [glossary](./glossary.md) — The core domain terms — agent, host, scan_host, command, scan, org — and their code meanings.
-* [contracts](./contracts.md) — The OpenAPI + example-JSON seam binding agent, backend, and frontend — now unified on host/scan_mode vocabulary.
+* [contracts](./contracts.md) — The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member and invite administration surface.
 
 ## Hardware agent (active)
 
@@ -43,33 +43,31 @@ Full listing in [hardware-agent/scanner/index.md](./hardware-agent/scanner/index
 * [scanner/progress](./hardware-agent/scanner/progress.md) — The ScanEvent stream, the ScanReporter protocol, and the progress mapper.
 * [scanner/workspace](./hardware-agent/scanner/workspace.md) — The on-disk results/ + logs/ layout — serialization, per-run logging, pruning.
 
-## Backend (read path, auth, command channel and ingest wired)
+## Backend (reads, identity admin, command channel and ingest wired)
 
-FastAPI API (read path + auth + invites + command channel + ingest wired) + the CVE-enrichment
-worker. Full listing in [backend/index.md](./backend/index.md).
+FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./backend/index.md).
 
-* [backend/overview](./backend/overview.md) — The FastAPI backend — read path, auth, invites, the command channel and scan ingest are wired — and the CVE-enrichment worker.
-* [backend/api](./backend/api.md) — The FastAPI app (health + the wired read path + auth + ingest), the worker process entry, settings, and the DB engine/session.
-* [backend/routers](./backend/routers.md) — The FastAPI routers — the read path (GET /hosts, /hosts/{id}, /scans/{id}, /findings) behind require_user and org-scoped, the signed POST /api/v1/scans ingest route behind require_agent, and the command channel.
-* [backend/auth](./backend/auth.md) — Login/refresh/logout + password change/reset, the invite flow, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+* [backend/overview](./backend/overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker.
+* [backend/api](./backend/api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
+* [backend/routers](./backend/routers.md) — The FastAPI read, user/member admin, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
+* [backend/auth](./backend/auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 * [backend/device-auth](./backend/device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 * [backend/management](./backend/management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
-* [backend/models](./backend/models.md) — The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
-* [backend/schemas](./backend/schemas.md) — The Pydantic ingest input (ScanIngestRequest), the legacy read/output projections (Persisted*), the read-path response schemas, and the auth and invite request/response models.
-* [backend/services](./backend/services.md) — ingest_scan/persist_scan, host-identity upsert, the org-scoped read-path queries, the worker loop, the NVD/KEV/EPSS clients, the explainable risk scorer, and the command lifecycle rulebook.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and fourteen revisions that own the schema — baseline through the command channel, auth session tokens, agent nonces, global user-email uniqueness, agent public keys, the findings severity check, command delivery and the scan-ingest rework — plus Supabase RLS hardening and the dmitri_runtime role.
+* [backend/models](./backend/models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+* [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
+* [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
 
-## Frontend (first vertical slice)
+## Frontend (auth, Home and Settings slice)
 
-The React 19 + TypeScript SPA. The scaffold plus the first real screens — routing, a session
-layer, and login → Home. Full listing in [frontend/index.md](./frontend/index.md).
+The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/index.md).
 
 * [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
 * [frontend/api](./frontend/api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
-* [frontend/screens](./frontend/screens.md) — The LOGIN and HOME screens, the not-found page, the two shells and top bar, and the shared presentation components.
+* [frontend/screens](./frontend/screens.md) — The login, home, password-recovery, settings (including activity disclosure) and invite screens, plus shells, navigation and shared components.
 
 ## Infrastructure
 

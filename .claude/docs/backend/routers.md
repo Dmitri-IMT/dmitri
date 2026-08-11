@@ -1,13 +1,13 @@
 ---
 type: Module
-title: Backend routers — hosts, scans, findings, commands
-description: The FastAPI routers on the read path plus users/me and the two account-removal DELETE routes, the signed scan-ingest route (POST /api/v1/scans behind require_agent), the command-channel write path (POST /agents/{id}/commands behind require_admin, GET /commands/{id}) and the agent WebSocket channel behind require_agent_ws.
+title: Backend routers — reads, identity admin, ingest and commands
+description: The FastAPI read, user/member admin, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
-tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, account-removal]
-timestamp: 2026-08-09T00:00:00Z
+tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin]
+timestamp: 2026-08-11T00:00:00Z
 ---
 
-# Backend routers — hosts, scans, findings
+# Backend routers — reads, identity admin, ingest and commands
 
 ## Purpose
 
@@ -30,9 +30,11 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
-| `read_current_user()` | `GET /api/v1/users/me` → takes the caller's `User` from `require_user_row` (which owns the lookup and the missing-row 401) and returns `UserProfileResponse` with **role from the DB row**, not JWT claims. Read-only, no path param. | `backend/src/api/routers/users.py:13` |
-| `delete_current_user_route()` | `DELETE /api/v1/users/me` (`204`, empty body) behind `require_user_row` — **any role may leave**. Calls `delete_self`; `LastAdminError` → `ApiError(409, "Add another admin before removing your account.", code="last_admin")`. Takes no body and sets no cookie. | `backend/src/api/routers/users.py:25` |
-| `delete_user_route()` | `DELETE /api/v1/users/{user_id}` (`204`, empty body) behind `require_admin`. Compares `user_id == caller.sub` **before** any lookup → `ApiError(409, "Remove your account from Settings instead.", code="self_target")`; then `delete_member(..., org_id=caller.org_id)`, whose `False` becomes `404 not_found`. | `backend/src/api/routers/users.py:40` |
+| `read_current_user()` | `GET /api/v1/users/me` → caller profile, with role loaded from the DB row by `require_user_row`. | `backend/src/api/routers/users.py:29` |
+| `delete_current_user_route()` | `DELETE /api/v1/users/me` (`204`) for either role; maps `LastAdminError` to `409 last_admin`. | `backend/src/api/routers/users.py:36` |
+| `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |
+| `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:70` |
+| `delete_user_route()` | Admin-only `DELETE /api/v1/users/{user_id}` (`204`). Self-targeting → `409 self_target`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:106` |
 | `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:46` |
 | `read_command()` | `GET /api/v1/commands/{command_id}` → `get_command_detail(...)` → `CommandDetail`, or `404` for an unknown id or another org's command. **Pure read** — the sweep is deliberately not called here. | `backend/src/api/routers/commands.py:17` |
 | `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` now drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:84` |
@@ -78,8 +80,9 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 - **A foreign row is 404, never 403.** The read service returns `None` for a row outside the
   caller's org and the router turns that into a 404; answering 403 would confirm the row exists in
   some other tenant.
-- **`viewer` and `admin` both read.** These four routes require only `require_user`, per the AUTH.md
-  role matrix — `require_admin` gates invitation, not reading.
+- **Business reads and identity-admin reads use different gates.** Scan/host/finding reads and
+  `/users/me` accept viewers; `GET /users`, role changes, invite listing/revocation, and invite
+  creation require `require_admin`.
 - **`read_findings`'s `host_id` is not a tenant escape.** The org predicate is applied in
   `list_findings` independently of the `host_id` branch, so asking for a foreign host's id returns
   empty rather than another org's findings.
@@ -123,3 +126,4 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 [7] [specs/024-scan-ingest-endpoint](../../../specs/024-scan-ingest-endpoint/TRUTH.md)
 [8] [specs/029-account-removal-api](../../../specs/029-account-removal-api/TRUTH.md)
 [9] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
+[10] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)

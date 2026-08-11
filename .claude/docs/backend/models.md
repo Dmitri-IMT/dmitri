@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend ORM models
-description: The SQLModel tables — scan persistence, host identity, enrichment/cache, risk snapshots, user identity, auth session tokens, and the command channel with its agent public keys and replay nonces.
+description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend ORM models
@@ -45,9 +45,9 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `Org` → `orgs` | UUID PK, `name`. | `backend/src/api/models/identity.py:14` |
-| `User` → `users` | Case-insensitive unique index `ix_users_email` on `lower(email)` — **global, not per-org**, since migration `20260724_10`; `role` check `admin`/`viewer`; `password_hash`, `password_changed_at`. | `backend/src/api/models/identity.py:22` |
-| `Invite` → `invites` | Unique `token_hash`; `role` check; `expires_at`, `consumed_at`. | `backend/src/api/models/identity.py:38` |
+| `Org` → `orgs` | UUID PK, `name`. | `backend/src/api/models/identity.py:17` |
+| `User` → `users` | Global case-insensitive unique index `ix_users_email` on `lower(email)`; `role` check `admin`/`viewer`; password fields; nullable, unindexed `last_login_at` and `last_seen_at`; `created_at`. | `backend/src/api/models/identity.py:25` |
+| `Invite` → `invites` | Unique `token_hash`; `role` check; `expires_at`, `consumed_at`. | `backend/src/api/models/identity.py:45` |
 
 ## Key classes / functions — `session.py`
 
@@ -76,6 +76,8 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
   them: a submission is accepted only when the signing device owns the scan's command.
 - Every table here is created — with its RLS policies and grants — by
   [migrations](/backend/migrations.md).
+- [`services/auth.py`](/backend/auth.md) stamps the two user activity columns, while
+  [`services/users.py`](/backend/services.md) lists members and changes roles.
 
 ## Notes / gotchas
 
@@ -93,11 +95,12 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
   `(org_id, lower(email))` index with `lower(email)` alone, so one address maps to at most one user
   across the whole system. This is why `create_invite` and `accept_invite` use *different* duplicate
   scopes — see the invites note in [auth](/backend/auth.md).
-- **The command channel is wired end to end as of DMI-64** — enqueue, WS delivery, Pi-reported status
-  transitions and the staleness sweep all run (ingest, DMI-63, is the remaining gap). A `Command`'s
-  `status` is the source of truth; the linked `Scan`'s status is a pure projection (see
-  [`command_lifecycle`](/backend/services.md)), and every writer mirrors it in the same transaction so
-  `GET /commands/{id}` and `GET /scans` cannot disagree.
+- **User activity is two nullable facts.** `last_login_at` means password login or invite
+  acceptance; `last_seen_at` also advances on refresh. Neither column is indexed, and only
+  `last_seen_at` is published on the member list.
+- **The command channel and ingest are wired end to end.** A `Command`'s `status` is the source of
+  truth; the linked `Scan` status is a projection, and every writer mirrors both in one transaction
+  so `GET /commands/{id}` and `GET /scans` cannot disagree.
 - **A null `scan_id` is a consequence, never a marker.** It means the command has not been delivered
   (`queued`) or never will be (`expired`) — the DB CHECK makes that equivalence provable. Do not infer
   failure from it; read `status`.

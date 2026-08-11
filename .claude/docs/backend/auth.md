@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend auth — sessions, tokens, passwords, routes
-description: The wired auth subsystem — login/refresh/logout + password change/reset, the invite flow incl. the public invite lookup, JWT access tokens with a role gate, rotating refresh-token families, the argon2 password policy, and the request-id/CORS middleware.
+description: The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -16,8 +16,8 @@ The auth subsystem (spec 016 / DMI-60) is the second route group wired over HTTP
 [`users` identity table](/backend/models.md), issues short-lived **JWT access tokens** plus a
 rotating **refresh-token family** stored in [`refresh_tokens`](/backend/models.md), and handles the
 password lifecycle (change, forgot, reset) with an argon2 hash + policy screen. It spans a
-router, four services, one FastAPI dependency, and the app-wide middleware. The agent→backend
-ingest link is still unwired, but auth itself now runs in `main.py`.
+router, four services, one FastAPI dependency, and the app-wide middleware. The auth, invite,
+member-admin, ingest, and command-channel routes all run in `main.py`.
 
 Spec 017 / DMI-61 completed the gate: `require_admin` adds role enforcement on top of
 `require_user`, the **invite flow** (`POST /api/v1/invites`, `POST /api/v1/invites/accept`)
@@ -36,17 +36,22 @@ password, and — as its direct consequence — **acceptance stopped asking for 
 `POST /api/v1/invites/accept` now takes `{token, password}` only; the address, role and org are
 read from the invite record, which is what they were always sourced from.
 
+Spec 030 / DMI-76 completed the identity administration API: admins can list members and pending
+invites, change another member's role, and revoke a pending invite. Login and invite acceptance
+stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only `last_seen_at`.
+
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `login()` | Verifies email + argon2 password, returns `(access_token, refresh_token, expires_in)`; issues a refresh family. Bad creds → `InvalidCredentialsError`, no tokens. | `backend/src/api/services/auth.py:42` |
-| `issue_session()` | The single place a **fresh** session is minted from a `User` — access token + new refresh family + `expires_in`. Used by `login` and by `accept_invite`. | `backend/src/api/services/auth.py:38` |
-| `refresh_session()` | Rotates the presented refresh token and mints a fresh access token (composes `rotate_refresh_token` + `create_access_token`). Deliberately does **not** call `issue_session` — see the rotation note below. | `backend/src/api/services/auth.py:56` |
-| `logout()` | Revokes the current refresh family; silently idempotent on an unknown/stale cookie. | `backend/src/api/services/auth.py:76` |
-| `change_password()` | `WrongCurrentPasswordError` on bad current pw, `PasswordPolicyError` on weak new pw (both → 400, never 401); on success updates `password_hash`/`password_changed_at` without touching sessions. | `backend/src/api/services/auth.py:80` |
-| `forgot_password()` | Sends a reset link **only** for a real account (via the `Mailer`) but never raises — no account enumeration. | `backend/src/api/services/auth.py:92` |
-| `reset_password()` | Consumes the single-use token once (`InvalidResetTokenError` on missing/consumed/expired), validates policy, updates the password, and `revoke_all_refresh_tokens` to log out everywhere. The token is checked **before** the policy, which is what makes a dead link answer 410 even when the new password is also weak. | `backend/src/api/services/auth.py:115` |
+| `_stamp_activity()` | Bulk-updates only the activity columns: every fresh session sets `last_seen_at`, and password login or invite acceptance also sets `last_login_at`. It deliberately does not write the full `User` row. | `backend/src/api/services/auth.py:39` |
+| `issue_session()` | The single place a **fresh** session is minted from a `User` — stamps both activity times, creates the access token + new refresh family, and returns `expires_in`. Used by `login` and `accept_invite`. | `backend/src/api/services/auth.py:47` |
+| `login()` | Verifies email + argon2 password, then delegates to `issue_session`; bad credentials raise `InvalidCredentialsError` and mint nothing. | `backend/src/api/services/auth.py:57` |
+| `refresh_session()` | Rotates within the presented refresh family, advances `last_seen_at` without changing `last_login_at`, commits both writes, and mints a fresh access token. | `backend/src/api/services/auth.py:66` |
+| `logout()` | Revokes the current refresh family; silently idempotent on an unknown/stale cookie. | `backend/src/api/services/auth.py:84` |
+| `change_password()` | `WrongCurrentPasswordError` on bad current pw, `PasswordPolicyError` on weak new pw (both → 400, never 401); on success updates `password_hash`/`password_changed_at` without touching sessions. | `backend/src/api/services/auth.py:88` |
+| `forgot_password()` | Sends a reset link **only** for a real account (via the `Mailer`) but never raises — no account enumeration. | `backend/src/api/services/auth.py:104` |
+| `reset_password()` | Consumes the single-use token once (`InvalidResetTokenError` on missing/consumed/expired), validates policy, updates the password, and `revoke_all_refresh_tokens` to log out everywhere. The token is checked **before** the policy. | `backend/src/api/services/auth.py:123` |
 | `create_access_token()` / `decode_access_token()` | PyJWT HS256; claims `sub`/`org_id`/`role`/`iat`/`exp`, exp from `ACCESS_TOKEN_TTL_MINUTES` (15), signed with `JWT_SIGNING_SECRET`. | `backend/src/api/services/tokens.py:20` |
 | `issue_refresh_token()` | Raw = `secrets.token_urlsafe(32)`, stored as `sha256` hex; new `family_id`, `family_expires_at` = now + `REFRESH_TOKEN_TTL_DAYS` (7d). | `backend/src/api/services/tokens.py:42` |
 | `rotate_refresh_token()` | Sets `rotated_at` on the old row and mints a new row in the same family with the **copied** `family_expires_at`; reuse of a rotated/revoked hash calls `_revoke_family` and raises `RefreshTokenError`; refresh past `family_expires_at` rejected. | `backend/src/api/services/tokens.py:73` |
@@ -60,22 +65,24 @@ read from the invite record, which is what they were always sourced from.
 | `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:55` |
 | `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:132` |
 | `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:153` |
-| `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org (`AlreadyMemberError`), refuses an address that already holds an unconsumed unexpired invite (`PendingInviteError`), then stores only `sha256(raw)` in `token_hash`, `expires_at = now + INVITE_TTL_HOURS`, returns the raw token once. | `backend/src/api/services/invites.py:39` |
-| `INVITE_LOCK_NAMESPACE` | `8817` — the first argument of the two-arg advisory lock, so a future second lock user cannot collide. Nothing else in the repo takes advisory locks yet. | `backend/src/api/services/invites.py:36` |
-| `accept_invite()` | Consumes a valid, unexpired, unconsumed invite. Signature is `(session, *, token, password)` — **no email** since DMI-86. Rejects an address that already exists in **any** org (`DuplicateUserError`), validates policy, hashes the password, creates the `User`, and writes `consumed_at` **in the same commit**; returns the same triple `login` returns. The address it checks, screens the password against, and creates the user with all come from `invite.email`. | `backend/src/api/services/invites.py:94` |
-| `read_invite()` | The lookup's service half (DMI-86): resolves `hash_token(token)` → `(email, role, org_name)`, with the org name via `session.get(Org, invite.org_id)`. **Reads only** — no `add`/`commit`/`flush`/`refresh`, no `consumed_at` write, no lock, no session issuance — so an invite may be read any number of times and still be acceptable. Unknown, expired and consumed all raise the *same* `InviteTokenError` with the *same* message. | `backend/src/api/services/invites.py:135` |
+| `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org, refuses an address with an unconsumed unexpired invite, then stores only `sha256(raw)` and returns the raw token once. | `backend/src/api/services/invites.py:40` |
+| `INVITE_LOCK_NAMESPACE` | `8817` — separates the per-org/email invite lock from the org-admin lock namespace in [`org_lock.py`](/backend/services.md). | `backend/src/api/services/invites.py:37` |
+| `accept_invite()` | Consumes a live invite and creates the user in one commit, then delegates to `issue_session`, which stamps both user activity times. The address, role, and org all come from the invite row. | `backend/src/api/services/invites.py:95` |
+| `read_invite()` | Public lookup half: resolves a live token to `(email, role, org_name)` without consuming it or issuing a session. Unknown, expired, and consumed all raise the same `InviteTokenError`. | `backend/src/api/services/invites.py:136` |
+| `list_pending_invites()` | Returns only the caller org's unconsumed, unexpired invites, ordered by `expires_at` then `id`; token material is never projected. | `backend/src/api/services/invites.py:154` |
+| `revoke_invite()` | Org-scoped, pending-only hard delete. Unknown, expired, consumed, and foreign-org identifiers all return `False`, which the router maps to 404. | `backend/src/api/services/invites.py:165` |
 | `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:25` |
-| `require_user_row()` | Depends on `require_user`, then loads the caller's `User` row; a signed token whose subject no longer exists → **401** (a dead session), not 404. Used by the two routes that need the row itself — `GET /users/me` and `change-password` — so neither queries the model inline. | `backend/src/api/dependencies/auth.py:42` |
+| `require_user_row()` | Depends on `require_user`, then loads the caller's `User` row; a signed token whose subject no longer exists → **401**. Used by `GET /users/me`, `DELETE /users/me`, and change-password — the routes that need the row itself. | `backend/src/api/dependencies/auth.py:42` |
 | `require_admin()` / `ROLE_ADMIN` / `ROLE_VIEWER` | Depends on `require_user` (never re-decodes the token) and raises 403 unless the role is exactly `admin` — an allowlist, so an unknown role is denied rather than waved through. | `backend/src/api/dependencies/auth.py:54` |
 | auth routes | 6 POST routes (`login`/`refresh`/`logout`/`change-password`/`forgot-password`/`reset-password`) + OPTIONS preflights; set/clear the `dmitri_refresh` cookie. | `backend/src/api/routers/auth.py:62` |
-| invite routes | `POST /api/v1/invites` (`Depends(require_admin)`, `org_id` from the caller identity) → 201 `{invite_token, expires_at}`; `POST /api/v1/invites/accept` (unauthenticated, 201) → a `LoginResponse` **plus** the refresh cookie, with the invite token in the **request body** alongside `password` — and, since DMI-86, *nothing else*. | `backend/src/api/routers/invites.py:33`, `:57` |
-| `lookup_invite_route()` | `POST /api/v1/invites/lookup` (DMI-86) — **no auth dependency of any kind**, by design: possession of the token is the only authorisation, since the reader has no account yet. 200 → `{email, role, org_name}`; `InviteTokenError` → `ApiError(410, code="invalid_invite_token")`. Picked up by the shared OPTIONS preflight loop with no change. | `backend/src/api/routers/invites.py:76` |
-| invite preflight loop | Walks the router's `POST` routes and registers a bare 204 `OPTIONS` for each, so a new POST path gets its preflight automatically — which is why the lookup needed no CORS or preflight edit. | `backend/src/api/routers/invites.py:90` |
+| invite routes | Admin create/list/revoke (`POST`/`GET /api/v1/invites`, `DELETE /api/v1/invites/{invite_id}`), public accept/lookup (`POST /accept`, `POST /lookup`). Listing returns no token; revocation is pending-only and answers 204. | `backend/src/api/routers/invites.py:39` |
+| `lookup_invite_route()` | Public, non-consuming `POST /api/v1/invites/lookup`; possession of the body token is the only authorisation. Returns `{email, role, org_name}` or 410 `invalid_invite_token`. | `backend/src/api/routers/invites.py:82` |
+| invite preflight loop | Registers bare 204 `OPTIONS` routes for each invite `POST`; `GET` and `DELETE` preflights are handled by the CORS middleware. | `backend/src/api/routers/invites.py:129` |
 | `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=Lax`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. | `backend/src/api/routers/auth.py:38` |
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
 | `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. | `backend/src/api/middleware.py:38` |
-| `build_cors_middleware_kwargs()` | Builds CORS kwargs from `CORS_ALLOWED_ORIGINS` — no-wildcard origins, `allow_credentials=true`, methods GET/POST/DELETE/OPTIONS (`DELETE` added by DMI-102 so the SPA's account-removal preflight is not rejected before the route is reached), headers Authorization/Content-Type/X-Request-Id, expose X-Request-Id. | `backend/src/api/middleware.py:45` |
+| `build_cors_middleware_kwargs()` | Builds credentialed CORS kwargs from `CORS_ALLOWED_ORIGINS`; allowed methods are GET/POST/PATCH/DELETE/OPTIONS, covering role change and removal/revocation. | `backend/src/api/middleware.py:45` |
 
 ## How it connects
 
@@ -85,9 +92,9 @@ read from the invite record, which is what they were always sourced from.
   `CORS_ALLOWED_ORIGINS`, `RESET_TOKEN_TTL_MINUTES`, `HIBP_*`, and the mail block
   `RESEND_API_KEY`/`RESEND_API_BASE_URL`/`MAIL_FROM`/`MAIL_REPLY_TO`/`MAIL_TIMEOUT_SECONDS`/
   `APP_BASE_URL`) is a `Settings` field — see [config](/backend/api.md).
-- **Data** — refresh/reset rows live in [`models/session.py`](/backend/models.md)
-  (`refresh_tokens`, `password_reset_tokens`), created by
-  [migration `20260722_07`](/backend/migrations.md); users and invites come from `identity.py`.
+- **Data** — refresh/reset rows live in [`models/session.py`](/backend/models.md); identity and
+  activity columns live in `identity.py`. [Migration `20260810_16`](/backend/migrations.md) adds the
+  two user timestamps and grants runtime DELETE on `invites`.
 - `routers/auth.py` maps the service exception types to HTTP status: `InvalidCredentialsError` →
   401; `WrongCurrentPasswordError` → `ApiError(400, code="wrong_current_password")`;
   `PasswordPolicyError` on change-password **and** on reset-password →
@@ -124,6 +131,9 @@ read from the invite record, which is what they were always sourced from.
   the **same** family. Routing refresh through `issue_session` orphans a token row in an unlinked
   family and leaves the presented token's `rotated_at`/`revoked_at` NULL, so reuse detection never
   fires. The ~3 duplicated lines of access-token construction are the deliberate price.
+- **Activity stamps have different meanings.** `issue_session` is reached by password login and
+  invite acceptance, so both timestamps advance. `refresh_session` advances only `last_seen_at`.
+  The member list exposes `last_seen_at`; `last_login_at` is stored for the later audit surface.
 - **Invites use two different duplicate scopes, and they are not symmetrical.** `create_invite`
   checks **own-org only**, so inviting an address that already has an account in *another* org
   succeeds and returns a response indistinguishable from a fresh address — no cross-tenant
@@ -192,6 +202,7 @@ read from the invite record, which is what they were always sourced from.
 [1a] [specs/017-auth-middleware-invite-flow](../../../specs/017-auth-middleware-invite-flow/TRUTH.md)
 [1b] [specs/023-auth-invite-contract-edges](../../../specs/023-auth-invite-contract-edges/PLAN.md)
 [1c] [specs/027-invite-lookup](../../../specs/027-invite-lookup/TRUTH.md)
+[1d] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
 [2] [docs/adr/ADR-005-security-model.md](../../../docs/adr/ADR-005-security-model.md)
 [3] [docs/adr/ADR-016-password-policy.md](../../../docs/adr/ADR-016-password-policy.md)
 [4] [docs/roadmap/AUTH.md](../../../docs/roadmap/AUTH.md)

@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -17,12 +17,10 @@ later phases) ships them to a cloud backend that enriches and risk-scores findin
 Current deployment target: the university's **NSPi** industrial-robotics lab (PLCs from
 Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 
-> **Build status.** Only the **Pi agent + TUI** ([`hardware-agent`](/hardware-agent/overview.md)) is
-> in active development. The [`backend`](/backend/overview.md) is working code; its **read path**
-> (`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`), auth, the command channel and — since
-> DMI-63 — **ingest** (`POST /api/v1/scans`) are all wired. The
-> [`frontend`](/frontend/overview.md) now has its first real vertical slice (login → Home) reading
-> that wired read path.
+> **Build status.** The backend's data reads, auth, identity administration, command channel, and
+> ingest are wired. The React frontend has login → Home, public auth screens, Settings password
+> change, and the Settings activity disclosure; the Users & Invites screen itself is still future
+> frontend work.
 > **DMI-66 closed the device end of the link**: bare `dmitri agent` now runs a
 > [daemon](/hardware-agent/daemon.md) that dials the WS channel with an Ed25519 proof, reports its
 > available subnets, executes commands through the existing headless scan, and uploads results
@@ -36,10 +34,10 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 | Component | Doc | Status | Purpose |
 |-----------|-----|--------|---------|
 | Hardware agent + TUI | [hardware-agent](/hardware-agent/overview.md) | **active** | Runs the Nmap scan pipeline, normalizes output, Textual TUI + headless CLI. |
-| Backend API + worker | [backend](/backend/overview.md) | read path + auth + commands + ingest wired | FastAPI read/ingest endpoints + Postgres persistence + a worker that enriches CVEs (NVD/KEV/EPSS) and risk-scores them. |
-| Shared contracts | [contracts](/contracts.md) | active seam | OpenAPI + example JSON binding agent, backend, and (future) frontend. |
+| Backend API + worker | [backend](/backend/overview.md) | reads + auth/admin + commands + ingest wired | FastAPI API, Postgres persistence, and CVE enrichment/risk worker. |
+| Shared contracts | [contracts](/contracts.md) | published active seam | Hand-authored OpenAPI + example JSON binding agent, backend, and frontend. |
 | Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, Railway deploy config. |
-| Frontend (React) | [frontend](/frontend/overview.md) | login → Home slice wired | Vite + React 19 SPA on the frozen contract: session layer, routing, and the Home verdict screen (ADR-008). |
+| Frontend (React) | [frontend](/frontend/overview.md) | auth/Home/Settings slice wired | React 19 SPA with contract-typed API access, sessions, Home, public auth, and Settings. |
 
 ## End-to-end flow
 

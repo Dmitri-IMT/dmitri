@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest input (ScanIngestRequest), the legacy read/output projections (Persisted*), the read-path response schemas, the user profile schema, the command-channel wire frames and HTTP shapes, and the auth and invite request/response models.
+description: The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -55,13 +55,16 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:139` |
 | `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:147` |
 
-## Key classes / functions — `users.py` (self profile)
+## Key classes / functions — `users.py` (profile and member administration)
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `UserProfileResponse` | `user_id` (`UUID`), `email` (`str`), `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. No `password_expires_at` — ADR-016 removed forced rotation. | `backend/src/api/schemas/users.py` |
+| `UserProfileResponse` | `user_id`, `email`, `role`; the caller-facing profile omits activity. | `backend/src/api/schemas/users.py:10` |
+| `OrgMember` | Admin member-list row: `user_id`, `email`, `role`, nullable `last_seen_at`; deliberately no `last_login_at` or status. | `backend/src/api/schemas/users.py:18` |
+| `OrgMemberListResponse` | `{data: OrgMember[]}` with extras forbidden. | `backend/src/api/schemas/users.py:27` |
+| `UpdateUserRoleRequest` | Exactly one `role`, constrained to `admin` or `viewer`. | `backend/src/api/schemas/users.py:33` |
 
-Consumed by [`routers/users.py`](/backend/routers.md) for `GET /api/v1/users/me`.
+Consumed by [`routers/users.py`](/backend/routers.md) for self profile and admin member operations.
 
 ## Key classes / functions — `auth.py` (auth request/response)
 
@@ -81,17 +84,16 @@ dependency); the contract's `format: email` is advisory.
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `CreateInviteRequest` | `email`, `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. | `backend/src/api/schemas/invites.py:11` |
-| `InviteCreatedResponse` | `invite_token`, `expires_at`. | `backend/src/api/schemas/invites.py:18` |
-| `AcceptInviteRequest` | `token`, `password` with the minimum taken from `MIN_LENGTH` in `services/passwords.py` — imported, never a literal `12`, so the schema and the policy cannot drift. `token` moved here from the URL path in DMI-77 to keep a live credential out of access logs; `email` was **removed** in DMI-86 — once the lookup hands the page the address, submitting it back proves nothing, since anyone holding the token can read it. | `backend/src/api/schemas/invites.py:25` |
-| `InviteLookupRequest` | `token`; `extra="forbid"`. The lookup takes its token in the body for the same access-log reason acceptance does. | `backend/src/api/schemas/invites.py:32` |
-| `InviteLookupResponse` | `email`, `role` (`Literal["admin", "viewer"]`), `org_name` — **exactly three fields, and no more, ever**. No org/user/invite id, no token material, no timestamps. `extra="forbid"` plus a whole-body equality assertion in the route test enforce it. | `backend/src/api/schemas/invites.py:38` |
+| `CreateInviteRequest` | `email`, `role` (`Literal["admin", "viewer"]`); `extra="forbid"`. | `backend/src/api/schemas/invites.py:12` |
+| `InviteCreatedResponse` | `invite_token`, `expires_at`. | `backend/src/api/schemas/invites.py:19` |
+| `AcceptInviteRequest` | Body `token` plus policy-constrained `password`; no email. | `backend/src/api/schemas/invites.py:26` |
+| `InviteLookupRequest` | Body `token`; `extra="forbid"`. | `backend/src/api/schemas/invites.py:33` |
+| `InviteLookupResponse` | Exactly `email`, `role`, `org_name`; no ids, token, or timestamps. | `backend/src/api/schemas/invites.py:39` |
+| `PendingInvite` | Admin list row: `invite_id`, `email`, `role`, `expires_at`; no token material. | `backend/src/api/schemas/invites.py:47` |
+| `PendingInviteListResponse` | `{data: PendingInvite[]}` with extras forbidden. | `backend/src/api/schemas/invites.py:56` |
 
-`extra="forbid"` on all five is load-bearing, not stylistic: it is what turns an `org_id` smuggled
-into the create-invite body into a **422** instead of a silently ignored field, and equally what
-makes an `email` sent to accept — or a `role` sent to the lookup — a loud rejection rather than a
-quietly dropped field. The invited org always comes from the caller's JWT; the accepted account's
-org, role and address always come from the invite row.
+`extra="forbid"` applies to all seven invite models. Org and role authority always come from the
+authenticated caller or stored invite; list responses never publish token material.
 
 ## Key classes / functions — `agent_frames.py` (command-channel wire frames)
 
@@ -186,3 +188,4 @@ rest of the artifact concept — see the note below.
 [5] [specs/018-agent-ws-command-channel](../../../specs/018-agent-ws-command-channel/TRUTH.md)
 [7] [specs/021-scan-list-and-finding-filters](../../../specs/021-scan-list-and-finding-filters/TRUTH.md)
 [8] [specs/024-scan-ingest-endpoint](../../../specs/024-scan-ingest-endpoint/TRUTH.md)
+[9] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)

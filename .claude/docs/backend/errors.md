@@ -4,7 +4,7 @@ title: Backend API error envelope
 description: ApiError(HTTPException) with per-site code overrides and the global handlers that wrap every HTTPException and unhandled Exception into the contract ErrorResponse shape.
 resource: backend/src/api/errors.py
 tags: [backend, errors, fastapi, contract, envelope]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 ---
 
 # Backend API error envelope
@@ -12,10 +12,9 @@ timestamp: 2026-08-09T00:00:00Z
 ## Purpose
 
 `errors.py` is the single place the backend defines how API failures are shaped on the wire.
-`ApiError` subclasses `HTTPException` and carries an explicit `code` string for the few routes
-that need a machine-readable discriminator beyond the HTTP status (today: the auth/invite write
-surfaces — change-password, reset-password, create-invite, accept-invite, invite lookup — plus the
-two account-removal routes).
+`ApiError` subclasses `HTTPException` and carries an explicit `code` string for routes that need a
+machine-readable discriminator beyond the status: auth/invite writes, account removal, and member
+role changes.
 Everything else keeps raising bare `HTTPException` and gets a status-derived default code from
 `DEFAULT_CODES_BY_STATUS`. The global handlers in [`main.py`](/backend/api.md) turn both into
 `{"error": {"code", "message", "details": {}}}` — matching `contracts/openapi/openapi.yaml`.
@@ -41,24 +40,18 @@ Everything else keeps raising bare `HTTPException` and gets a status-derived def
 - **Downstream** — the SPA and contract consumers read `error.code`; C13 change-password uses
   `wrong_current_password` / `password_policy_violation` at **400** (never 401) — see
   [auth](/backend/auth.md).
-- **Explicit override call sites** — since DMI-77 closed C15/C18, the auth/invite surfaces
-  override: `change_password_route` and `reset_password_route` in `routers/auth.py`,
-  `create_invite_route`, `accept_invite_route` and — since DMI-86 — `lookup_invite_route` in
-  `routers/invites.py`. Pinned codes across seven `components/responses` entries, listed in
-  [auth](/backend/auth.md). DMI-102 added two more, both `409` from `routers/users.py`:
-  `last_admin` on `delete_current_user_route` and `self_target` on `delete_user_route`, pinned by
-  the `LastAdminConflict` / `SelfTargetConflict` contract components. Both are `409` because the
-  caller holds every permission the action requires and it is the current state that refuses
-  (RFC 9110 § 15.5.10). Every other raiser in the app still falls back to
-  `DEFAULT_CODES_BY_STATUS` — including the removal routes' own `404`.
-  DMI-86 also **retired** `invite_email_mismatch`: acceptance no longer takes an address, so the
-  failure it named cannot occur. The lookup's 410 deliberately reuses acceptance's
-  `AcceptInviteTokenGone` component rather than minting a parallel one, which is what makes the
-  two routes' dead-token answers identical by construction.
+- **Explicit override call sites** — auth and invite creation/acceptance/lookup use seven pinned
+  response components. Account removal adds `last_admin` and `self_target`. Spec 030 adds
+  `RoleChangeConflict`: `update_user_role_route` emits `409 self_target` when an admin names
+  themselves and `409 last_admin` when demotion would remove the final admin. The contract gate now
+  covers ten response components in total. Invite listing and revocation use ordinary
+  status-derived `forbidden` / `not_found` responses.
+- `invite_email_mismatch` remains retired: acceptance no longer takes an address. Invite lookup
+  deliberately reuses acceptance's `AcceptInviteTokenGone` component so dead-token answers stay
+  identical.
 - **The overrides are contract-gated.** `test_contract_fidelity.py::test_error_code_fidelity`
-  AST-extracts each route's `code=` literals per status and asserts exact set equality with the
-  contract's pinned `enum`s, so a code the contract does not declare — or a declared code no route
-  emits — fails the suite.
+  AST-extracts each mapped route's `code=` literals per status and asserts exact set equality with
+  the contract enum.
 
 ## Notes / gotchas
 
@@ -85,3 +78,4 @@ Everything else keeps raising bare `HTTPException` and gets a status-derived def
 
 [1] [specs/019-users-me-and-error-envelope](../../../specs/019-users-me-and-error-envelope/TRUTH.md)
 [2] [contracts/openapi/openapi.yaml](../../../contracts/openapi/openapi.yaml)
+[3] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
