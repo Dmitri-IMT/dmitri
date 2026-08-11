@@ -51,12 +51,9 @@ jobs:
       # by staging the result. Compare secret identities instead, so the job fails
       # only on a secret that is genuinely absent from the committed baseline.
       #
-      # Identity is the secret's (type, value), NOT its file path. The shared test
-      # password is baselined under nine paths already; keying on the path made
-      # every new backend test file that imports it a "new secret" and forced a
-      # baseline commit per PR, which trains reviewers to rubber-stamp baseline
-      # diffs. Keyed on the value, a fixture that is already known-safe stays safe
-      # wherever it appears, and only a secret value nobody has vetted fails.
+      # Identity is the secret's (type, value), NOT its file path: the shared test
+      # password is baselined under nine paths already, so path-keying failed every
+      # new test file that used it and forced a baseline commit per PR.
       - name: Scan for secrets missing from the baseline
         run: |
           detect-secrets scan --baseline .secrets.baseline
@@ -69,14 +66,6 @@ jobs:
                   for entries in baseline["results"].values()
                   for entry in entries
               }
-
-          def locations(baseline, identity):
-              return sorted(
-                  f'{path}:{entry["line_number"]}'
-                  for path, entries in baseline["results"].items()
-                  for entry in entries
-                  if (entry["type"], entry["hashed_secret"]) == identity
-              )
 
           committed = json.loads(
               subprocess.run(
@@ -91,10 +80,10 @@ jobs:
           new = found - identities(committed)
           if new:
               print("Secret values not present in .secrets.baseline:")
-              for identity in sorted(new):
-                  kind = identity[0]
-                  for location in locations(scanned, identity):
-                      print(f"  {location}: {kind}")
+              for path, entries in sorted(scanned["results"].items()):
+                  for entry in entries:
+                      if (entry["type"], entry["hashed_secret"]) in new:
+                          print(f'  {path}:{entry["line_number"]}: {entry["type"]}')
               print("\nIf these are false positives, run:")
               print("  detect-secrets scan --baseline .secrets.baseline")
               print("and commit the regenerated baseline.")
