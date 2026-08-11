@@ -33,17 +33,39 @@ SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 
 # `agent_nonces` deliberately withholds UPDATE and grants DELETE instead (nonces are
 # insert-then-expire-and-delete, never mutated in place; see
-# 20260724_09_agent_nonces.py). `users` adds DELETE on top of the default set for
-# account removal (see 20260808_15_user_delete_cascade.py). Every other table keeps
+# 20260724_09_agent_nonces.py). `users` adds DELETE for account removal (see
+# 20260808_15_user_delete_cascade.py), and `invites` adds DELETE for revocation
+# (see 20260810_16_user_activity_and_invite_revoke.py). Every other table keeps
 # the default grant set.
 DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
 RUNTIME_GRANTS_BY_TABLE = {
     "agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"}),
+    "invites": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),
     "users": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),
 }
 ALL_TABLE_PRIVILEGES = frozenset(
     {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
 )
+
+
+def test_user_activity_model_is_nullable_timezone_aware_and_unindexed() -> None:
+    users = SQLModel.metadata.tables["users"]
+    activity_columns = [
+        users.columns["last_login_at"],
+        users.columns["last_seen_at"],
+    ]
+
+    for column in activity_columns:
+        assert isinstance(column.type, sa.DateTime)
+        assert column.type.timezone is True
+        assert column.nullable is True
+        assert column.default is None
+        assert column.index in (None, False)
+
+    indexed_columns = {
+        column.name for index in users.indexes for column in index.columns
+    }
+    assert {"last_login_at", "last_seen_at"}.isdisjoint(indexed_columns)
 
 
 def _load_alembic_env(monkeypatch: pytest.MonkeyPatch):
@@ -440,6 +462,12 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
     _migrate(postgres_engine, "head")
     with postgres_engine.connect() as connection:
         tables_after_up = set(sa.inspect(connection).get_table_names(schema="public"))
+        migrated_user_columns = {
+            column["name"]
+            for column in sa.inspect(connection).get_columns(
+                "users", schema="public"
+            )
+        }
         rls_rows = connection.execute(
             sa.text(
                 "SELECT relname, relrowsecurity, relforcerowsecurity "
@@ -485,6 +513,9 @@ def test_live_migration_round_trip_and_security(postgres_engine: Engine) -> None
         ).one()
 
         assert set(HEAD_APPLICATION_TABLES) <= tables_after_up
+        assert migrated_user_columns == set(
+            SQLModel.metadata.tables["users"].columns.keys()
+        )
         assert {row[0] for row in rls_rows} == set(HEAD_APPLICATION_TABLES)
         assert all(row[1] is True and row[2] is False for row in rls_rows)
         assert policies == 0
