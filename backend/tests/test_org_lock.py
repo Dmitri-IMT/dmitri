@@ -35,7 +35,7 @@ def _seed_user(
     user = User(
         org_id=org_id,
         email=email,
-        password_hash="unused-in-service-tests",
+        password_hash="x",  # unused: these tests never authenticate
         role=role,
     )
     session.add(user)
