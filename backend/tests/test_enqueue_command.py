@@ -11,6 +11,7 @@ from api.main import app
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
+from api.schemas.agent_frames import AvailableSubnet
 from api.services import agent_connections, commands
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -298,3 +299,130 @@ def test_enqueue_sweep_clears_stale_command_wedge(
     administrative_session.refresh(stale)
     assert stale.status == "failed"
     assert response.json()["status"] == "delivered"
+
+
+UNREPORTED = "10.9.9.0/24"
+REPORTED = [
+    AvailableSubnet(interface="eth0", cidr="192.168.1.0/24", is_default_route=True),
+]
+
+
+def _register_with_hello(agent_id) -> None:
+    ws = AsyncMock()
+
+    async def _run() -> None:
+        await agent_connections.register(agent_id, ws, now=T0)
+        await agent_connections.set_hello(
+            agent_id,
+            ws,
+            agent_version="0.2.0",
+            available_subnets=REPORTED,
+            now=T0,
+        )
+
+    asyncio.run(_run())
+
+
+def test_reported_subnet_is_delivered(
+    client: TestClient,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    _register_with_hello(provisioned_agent.id)
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json=REQUEST_BODY,
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "delivered"
+
+
+def test_unreported_subnet_returns_422_without_command_row(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    _register_with_hello(provisioned_agent.id)
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={"scan_mode": "standard", "subnet": UNREPORTED},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "subnet_not_reported"
+    assert administrative_session.exec(select(Command)).all() == []
+
+
+def test_stale_stored_choice_is_refused_and_left_alone(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    provisioned_agent.target_subnet = UNREPORTED
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+    _register_with_hello(provisioned_agent.id)
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={"scan_mode": "standard", "subnet": UNREPORTED},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 422
+    administrative_session.expire_all()
+    stored = administrative_session.get(Agent, provisioned_agent.id)
+    assert stored.target_subnet == UNREPORTED
+
+
+def test_busy_agent_wins_over_unreported_subnet(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+    _register_with_hello(provisioned_agent.id)
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={"scan_mode": "standard", "subnet": UNREPORTED},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "device_busy"
+
+
+def test_missing_subnet_key_is_rejected_by_the_request_schema(
+    client: TestClient,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={"scan_mode": "standard"},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] != "subnet_not_reported"
