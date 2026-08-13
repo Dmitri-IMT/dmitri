@@ -1,10 +1,10 @@
 ---
 type: Data Contract
 title: Shared contracts (OpenAPI + example)
-description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member and invite administration surface.
+description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Shared contracts
@@ -29,7 +29,17 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
   stub is returned before ingest completes).
 - `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
-  `CommandSummary`, `409 device_busy`, `503 device_offline`. **Wired** (DMI-64).
+  `CommandSummary`, `409 device_busy`, `422 subnet_not_reported` (DMI-78, `ScanSubnetNotReported`),
+  `503 device_offline`. **Wired** (DMI-64).
+- `GET /api/v1/agents` (`listAgents`) and `GET /api/v1/agents/{agent_id}` — the fleet read surface;
+  any authenticated caller, org-scoped. `AgentSummary` carries `online`/`last_seen_at`/
+  `target_subnet`/`active_command_id`; `AgentDetail` adds the Pi's currently reported
+  `available_subnets`. **Wired** (DMI-78) — the detail path was published earlier but unimplemented
+  until then.
+- `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) — admin-only choice of the network a
+  Pi will scan; returns the full `AgentDetail`. `409 device_offline` (`AgentOfflineConflict`) when
+  the Pi is reporting nothing, `422 subnet_not_reported` (`TargetSubnetNotReported`) for a network it
+  did not report, `404` for an unknown or foreign agent. **Wired** (DMI-78).
 - `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
   on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
 - `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (Ed25519; frames
@@ -94,10 +104,26 @@ Spec 030 added `OrgMember`, `OrgMemberListResponse`, `UpdateUserRoleRequest`, `P
 `PendingInviteListResponse` to that coverage, and separately pins operation ids and response-code
 sets for the four new admin operations. Query-parameter parity remains scoped to scans/findings.
 
-**Error responses are guarded too.** `ERROR_RESPONSE_ROUTES` now maps ten pinned components. The
-new `RoleChangeConflict` must match the role router's exact `409` codes (`self_target`,
+Spec 031 added `AgentSummary`, `AgentDetail`, `AgentListResponse` and
+`UpdateAgentTargetSubnetRequest`, and pins `listAgents` and `updateAgentTargetSubnet` the same way.
+`AgentDetail` gained `available_subnets` in `required` (after `last_seen_at`) plus an optional
+`target_subnet`; `active_command_id` stays **out** of `required` — that is deliberate, not an
+oversight to fix.
+
+**Error responses are guarded too.** `ERROR_RESPONSE_ROUTES` now maps thirteen pinned components.
+The `RoleChangeConflict` must match the role router's exact `409` codes (`self_target`,
 `last_admin`), alongside the existing auth/invite and account-removal components. The gate
-AST-extracts route literals and compares them with each contract enum.
+AST-extracts route literals and compares them with each contract enum — since spec 031 it matches
+`ast.AsyncFunctionDef` as well as `ast.FunctionDef`, because `create_agent_command` is `async def`
+and the scan would otherwise fail to find it.
+
+**Three near-identical error components exist on purpose.** `AgentOfflineConflict` (409
+`device_offline`), `TargetSubnetNotReported` (422 `subnet_not_reported`) and `ScanSubnetNotReported`
+(422 `subnet_not_reported`) are not collapsible: `ERROR_RESPONSE_ROUTES` maps **one component to
+exactly one handler**, so sharing one would leave an `ApiError` literal unverified. Nor does
+`AgentOfflineConflict` merge into `DeviceOfflineError` — same machine code by decision, different
+status and meaning. A separate test pins each path's `$ref`, because the operation-publication test
+compares only status-code sets and would not notice a swap.
 
 The example fixture (`scan_result.example.json`) now uses `scan_mode`, matching the OpenAPI schema
 (previously it used `target_mode`/`scan_profile` — see "Resolved divergence" below); it is loaded by

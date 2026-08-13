@@ -7,10 +7,15 @@ from sqlmodel import Session
 
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent_ws
-from api.dependencies.auth import CallerIdentity, require_admin
+from api.dependencies.auth import CallerIdentity, require_admin, require_user
 from api.errors import ApiError
 from api.models.command import Command
 from api.models.persistence import utc_now
+from api.schemas.agents import (
+    AgentDetail,
+    AgentListResponse,
+    UpdateAgentTargetSubnetRequest,
+)
 from api.schemas.commands import CommandSummary, CreateCommandRequest
 from api.services import agent_connections, commands
 from api.services.agent_presence import (
@@ -19,6 +24,12 @@ from api.services.agent_presence import (
     default_session_factory,
 )
 from api.services.agent_ws import run_agent_channel
+from api.services.agents import (
+    AgentOfflineError,
+    get_agent_detail,
+    list_agents,
+    set_target_subnet,
+)
 
 router = APIRouter()
 
@@ -30,6 +41,63 @@ def _command_summary(command: Command) -> CommandSummary:
         agent_id=command.agent_id,
         status=command.status,
     )
+
+
+@router.get("/api/v1/agents", response_model=AgentListResponse)
+def list_agents_route(
+    caller: CallerIdentity = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> AgentListResponse:
+    return AgentListResponse(data=list_agents(session, org_id=caller.org_id))
+
+
+@router.options("/api/v1/agents", status_code=204)
+def options_agents() -> None:
+    return None
+
+
+@router.get("/api/v1/agents/{agent_id}", response_model=AgentDetail)
+def read_agent_route(
+    agent_id: UUID,
+    caller: CallerIdentity = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> AgentDetail:
+    detail = get_agent_detail(session, agent_id=agent_id, org_id=caller.org_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return detail
+
+
+@router.patch("/api/v1/agents/{agent_id}", response_model=AgentDetail)
+def update_agent_target_subnet_route(
+    agent_id: UUID,
+    body: UpdateAgentTargetSubnetRequest,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> AgentDetail:
+    try:
+        detail = set_target_subnet(
+            session,
+            agent_id=agent_id,
+            org_id=caller.org_id,
+            target_subnet=body.target_subnet,
+        )
+    except AgentOfflineError as exc:
+        raise ApiError(409, "Pi seems to be offline.", code="device_offline") from exc
+    except commands.SubnetNotReportedError as exc:
+        raise ApiError(
+            422,
+            "That network is not one the Pi reported.",
+            code="subnet_not_reported",
+        ) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return detail
+
+
+@router.options("/api/v1/agents/{agent_id}", status_code=204)
+def options_agent() -> None:
+    return None
 
 
 @router.post(
@@ -57,6 +125,10 @@ async def create_agent_command(
     except commands.DeviceBusyError as exc:
         raise ApiError(
             409, "That Pi is already scanning.", code="device_busy"
+        ) from exc
+    except commands.SubnetNotReportedError as exc:
+        raise ApiError(
+            422, "That network is not one the Pi reported.", code="subnet_not_reported"
         ) from exc
     except commands.DeviceOfflineError as exc:
         raise ApiError(503, "Pi seems to be offline.", code="device_offline") from exc

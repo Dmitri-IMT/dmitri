@@ -3,6 +3,30 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-12
+
+* **Update**: **agent read surface and the Pi's target network** (spec 031 / DMI-78) — refreshed
+  `backend/routers.md`, `backend/services.md`, `backend/schemas.md`, `backend/models.md`,
+  `backend/migrations.md`, `backend/api.md`, `backend/index.md` and `contracts.md`. `GET
+  /api/v1/agents` and `GET /api/v1/agents/{agent_id}` now serve the fleet to any authenticated
+  caller, org-scoped; admins choose a Pi's network with `PATCH /api/v1/agents/{agent_id}`.
+* **Update**: `backend/models.md` and `backend/migrations.md` map revision `20260811_17` and the
+  nullable, unindexed `agents.target_subnet`. `online` and `available_subnets` remain **uncolumned**
+  — both are read from the in-process connection registry on every request, so `last_seen_at:
+  null` means exactly "never connected".
+* **Update**: `backend/services.md` maps the new `services/agents.py` (one `_fields` builder behind
+  both the list and detail shapes) and the `_claim_agent` check that refuses a scan naming a network
+  the Pi is not currently reporting — exact string equality, and silence from the Pi is not
+  treated as a contradiction.
+* **Update**: `contracts.md` records the three published agent operations, four new schemas, and why
+  `AgentOfflineConflict` / `TargetSubnetNotReported` / `ScanSubnetNotReported` must stay three
+  separate components.
+* **Update** (`docs/`, on the operator's instruction): frontend contract asks **C1 and C2 closed**
+  across `roadmap/BACKEND.md`, `roadmap/FRONTEND.md`, `roadmap/PI.md`, `ui/SCREENS.md` and
+  `ui/FLOWS.md` — an ask closes when the contract publishes and the backend implements it, not when
+  a screen consumes it (that is DMI-89). `adr/ADR-011` no longer says the backend "caches"
+  `available_subnets`, and carries a note that DMI-78 delivered the HTTP half it deferred.
+
 ## 2026-08-10
 
 * **Update**: **users and invites admin API** (spec 030 / DMI-76) — refreshed

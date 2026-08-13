@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
+description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -120,6 +120,18 @@ All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame 
 **`scan_id` is optional on both `CommandSummary` and `CommandDetail`** — a `queued` or `expired`
 command has none. The published contract was amended to drop it from `required` on both schemas;
 `tests/test_contract_fidelity.py` gates that the two agree.
+
+## Key classes / functions — `agents.py` (agent read surface, DMI-78)
+
+| Name | What it validates | Ref |
+|------|-------------------|-----|
+| `AgentSummary` | One `GET /agents` row: `agent_id`, `display_name`, `online`, `last_seen_at`, `target_subnet` (`SubnetCIDR \| None`), `active_command_id`. No `available_subnets` — the list never carries the reported networks. | `backend/src/api/schemas/agents.py:12` |
+| `AgentDetail` | `GET`/`PATCH /agents/{agent_id}` — `AgentSummary`'s fields plus `available_subnets: list[AvailableSubnet]`, reusing the frame model rather than declaring a second subnet type. | `backend/src/api/schemas/agents.py:23` |
+| `AgentListResponse` | `{data: AgentSummary[]}`. | `backend/src/api/schemas/agents.py:35` |
+| `UpdateAgentTargetSubnetRequest` | The PATCH body — one required `target_subnet` (`SubnetCIDR`). `extra="forbid"`, so an unknown key is a `422 validation_error`. | `backend/src/api/schemas/agents.py:41` |
+
+All four use `extra="forbid"` and reuse `SubnetCIDR` from `schemas/scan.py`. `target_subnet` and
+`active_command_id` default to `None` and stay **out** of the contract's `required` lists.
 
 ## Key classes / functions — `persistence.py` (legacy read projections)
 

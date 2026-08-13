@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Backend ORM models
@@ -60,7 +60,7 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; `public_key` (`LargeBinary`) — the device's 32 raw Ed25519 public-key bytes, stored **in the clear**; soft-tombstone `revoked_at`; informational `last_seen_at`; nullable `connected_at` — the durable projection of the in-memory socket registry, written by the API and read in SQL by the worker's sweeper. No secret or hash column: since DMI-61 the backend holds nothing that could impersonate a device, and "online" is `connected_at IS NOT NULL` rather than a separate flag. | `backend/src/api/models/command.py:12` |
+| `Agent` → `agents` | The Pi appliance; UUID PK (equals the Pi's `X-Device-Id`); `org_id` FK → `orgs` (indexed); `display_name`; `public_key` (`LargeBinary`) — the device's 32 raw Ed25519 public-key bytes, stored **in the clear**; soft-tombstone `revoked_at`; informational `last_seen_at`; nullable `connected_at` — the durable projection of the in-memory socket registry, written by the API and read in SQL by the worker's sweeper; nullable, unindexed `target_subnet` (DMI-78) — the network an admin **chose** for this Pi, `null` until one is picked. No secret or hash column: since DMI-61 the backend holds nothing that could impersonate a device, and "online" is `connected_at IS NOT NULL` rather than a separate flag. | `backend/src/api/models/command.py:12` |
 | `AgentNonce` → `agent_nonces` | One row per accepted device request: `agent_id` FK → `agents`, `nonce`, `expires_at`. `UniqueConstraint("agent_id", "nonce")` **is** the replay detector; `expires_at` is indexed for pruning. No `agent_id`-only index. | `backend/src/api/models/command.py` |
 | `Command` → `commands` | The audit record of one "Scan now"; UUID PK; `org_id` + `agent_id` FKs (indexed); `scan_id` FK → `scans` **nullable + unique** (1:1 Command→Scan, written only once delivery succeeds) under `CHECK (scan_id IS NOT NULL OR status IN ('queued', 'expired'))`; `scan_mode`/`subnet` request-of-record; unconstrained `status` (guarded by [`command_lifecycle`](/backend/services.md), no ENUM/CHECK); nullable `error_code`; exactly four timestamps `created_at`/`delivered_at`/`started_at`/`completed_at` (no `uploading_at`). A partial unique index on `agent_id` over the four non-terminal statuses enforces one active command per Pi. | `backend/src/api/models/command.py:26` |
 
@@ -104,6 +104,11 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 - **A null `scan_id` is a consequence, never a marker.** It means the command has not been delivered
   (`queued`) or never will be (`expired`) — the DB CHECK makes that equivalence provable. Do not infer
   failure from it; read `status`.
+- **`agents` stores the chosen network, never the reported ones.** `target_subnet` is a human
+  decision and persists; the Pi's `available_subnets` and its `online` state are read from the
+  in-memory registry on every request and have no column — see
+  [services](/backend/services.md). `connected_at` is the one connection-state column, and the
+  sweeper depends on it.
 - **`agents` no longer stores a device secret.** DMI-59's `secret_ciphertext`/`secret_nonce`/
   `secret_key_version` columns were dropped in `20260724_11` in favour of a plaintext `public_key`,
   per ADR-005 as amended — which is why ADR-015 (secret encryption at rest) was retired rather than
