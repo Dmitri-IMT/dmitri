@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
+description: The Alembic env and seventeen revisions through the agents target-subnet column, with Supabase RLS and dmitri_runtime hardening.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Backend database migrations
@@ -13,7 +13,7 @@ timestamp: 2026-08-11T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Sixteen chained revisions build the
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Seventeen chained revisions build the
 scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
 and the `findings.finding_id` UUID — then the auth session tables (spec 016, DMI-60) and the
@@ -50,6 +50,7 @@ new table.
 
 | `upgrade()` (rev `20260808_15`, `user_delete_cascade`) | Drops and recreates exactly two FKs — `refresh_tokens_user_id_fkey` and `password_reset_tokens_user_id_fkey` — with `ondelete="CASCADE"`, and grants `DELETE ON public.users` to `dmitri_runtime`. Without it `DELETE FROM users` raised `ForeignKeyViolation` for any user with a live session, and the runtime role had no `DELETE` on `users` at all. `downgrade()` revokes the grant and recreates both FKs without `ondelete`. The child tables need **no** `DELETE` grant: the cascade runs through the referential-integrity trigger, which is not subject to the caller's privileges on the referencing table. | `backend/alembic/versions/20260808_15_user_delete_cascade.py` |
 | `upgrade()` (rev `20260810_16`, `user_activity_and_invite_revoke`) | Adds nullable `TIMESTAMPTZ` `users.last_login_at` and `users.last_seen_at`, and grants `DELETE ON public.invites` to `dmitri_runtime` so pending invitations can be revoked. Downgrade revokes that grant before dropping both columns. | `backend/alembic/versions/20260810_16_user_activity_and_invite_revoke.py:12` |
+| `upgrade()` (rev `20260811_17`, `agents_target_subnet`) | Adds one nullable, unindexed `agents.target_subnet` (`sa.String`) — the network an admin chose for a Pi. No grant statement: `agents` already grants `SELECT, INSERT, UPDATE` to `dmitri_runtime` from `20260723_07`, so `RUNTIME_GRANTS_BY_TABLE` is unchanged. `downgrade()` is a single `drop_column`. | `backend/alembic/versions/20260811_17_agents_target_subnet.py` |
 
 ## How it connects
 

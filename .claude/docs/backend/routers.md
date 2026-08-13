@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend routers — reads, identity admin, ingest and commands
-description: The FastAPI read, user/member admin, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
+description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
-tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin]
-timestamp: 2026-08-11T00:00:00Z
+tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -35,9 +35,12 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |
 | `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:70` |
 | `delete_user_route()` | Admin-only `DELETE /api/v1/users/{user_id}` (`204`). Self-targeting → `409 self_target`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:106` |
-| `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:46` |
+| `list_agents_route()` | `GET /api/v1/agents` (`listAgents`) behind `require_user` → `{data: AgentSummary[]}`, org-scoped in SQL. Viewers may read; an org with no agents gets an empty list, never a 404. | `backend/src/api/routers/agents.py:47` |
+| `read_agent_route()` | `GET /api/v1/agents/{agent_id}` behind `require_user` → `AgentDetail`, which adds the Pi's currently reported `available_subnets`. Unknown **and** foreign ids both → `404` with the same body. | `backend/src/api/routers/agents.py:60` |
+| `update_agent_target_subnet_route()` | Admin-only `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) → the full `AgentDetail`, so the SPA needs no refetch. Resolution order is fixed: missing/foreign row → `404`, no `hello` report → `409 device_offline`, value the Pi did not report → `422 subnet_not_reported`, then commit. | `backend/src/api/routers/agents.py:72` |
+| `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → the reported-subnet check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `SubnetNotReportedError` → `422 subnet_not_reported`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:108` |
 | `read_command()` | `GET /api/v1/commands/{command_id}` → `get_command_detail(...)` → `CommandDetail`, or `404` for an unknown id or another org's command. **Pure read** — the sweep is deliberately not called here. | `backend/src/api/routers/commands.py:17` |
-| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` now drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:84` |
+| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` now drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:140` |
 
 ## How it connects
 
@@ -92,6 +95,23 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 - **Both 409 paths return the same body.** The read-side busy check and the unique-index
   `IntegrityError` (a double-clicked "Scan now") are indistinguishable to the caller by design —
   `_device_busy_error()` is the single constructor.
+- **`routers/agents.py` now answers 403 and 404 for the same unknown id, depending on the verb.**
+  `POST /commands` keeps its 403 (the contract publishes no 404 for it); the DMI-78 read and PATCH
+  routes follow the read path's 404-for-foreign-row convention. That is a contract constraint, not
+  an inconsistency to tidy.
+- **The PATCH's 409 and 422 are literal `ApiError(...)` calls in the handler body**, for the same
+  AST-scan reason as the users routes above — as is the new `422 subnet_not_reported` arm on
+  `create_agent_command`. Each maps to its **own** contract response component
+  (`AgentOfflineConflict`, `TargetSubnetNotReported`, `ScanSubnetNotReported`), because
+  `ERROR_RESPONSE_ROUTES` maps one component to exactly one handler; collapsing two of them onto a
+  shared component would leave one literal unverified.
+- **`device_offline` on the PATCH is a 409, not the WS path's 503.** Same machine code, different
+  meaning: 503 says delivery failed, 409 says you cannot choose a network for a Pi that is not
+  reporting one. The connected-but-pre-`hello` case answers the same 409 — one
+  `get_hello() is None` check covers both.
+- **The two OPTIONS preflights use the `@router.options(...)` decorator** with no path parameter
+  declared, matching `routers/commands.py`; the older `add_api_route` preflight on
+  `/agents/{agent_id}/commands` is left as it was.
 - **The command routes split across two files on purpose.** The write path hangs off the agent
   (`routers/agents.py`, alongside the WS handler that delivers it); the read path is command-scoped
   and org-scoped, so it gets its own `routers/commands.py`.
@@ -127,3 +147,4 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 [8] [specs/029-account-removal-api](../../../specs/029-account-removal-api/TRUTH.md)
 [9] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
 [10] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
+[11] [specs/031-agents-read-surface-target-subnet](../../../specs/031-agents-read-surface-target-subnet/TRUTH.md)

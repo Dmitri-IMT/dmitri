@@ -50,14 +50,15 @@ interaction in implementation before it has passed through that sequence.
   Home with live data — then completes the admin and read surfaces. LLM remains deferred.
 - **Auth UX:** per [`AUTH.md`](AUTH.md) Phase 1 ✅ — login, invite, password flows, **7-day re-login**, silent refresh, server logout.
 - **Pi provisioning:** **not** in business admin UI for September — installer/vendor on-site ([`AUTH.md`](AUTH.md)). Admin UI shows agents (online, trigger scan) only after install.
-- **Single agent.** The MVP has exactly one Pi. The frontend still cannot *discover* it — `agent_id`
-  is the provisioning `X-Device-Id` and there is no `GET /agents` (**contract ask C1**).
+- **Single agent.** The MVP has exactly one Pi. The frontend discovers it through `GET /agents`
+  (**contract ask C1, shipped DMI-78**) rather than the provisioning `X-Device-Id`, which it cannot
+  derive.
 - **The scan target network is chosen by a human, once, on Agents.** The Pi is deliberately
   dual-homed ([NSPi field test](../tests/nspi-september/plan.md)) — ethernet to the target subnet
   with no default gateway, wifi for internet — so it sees two networks and cannot guess which is the
   target. `POST /commands` requires a `subnet` CIDR that a non-technical admin does not know. The Pi
   reports `available_subnets`; the admin picks one; it persists on the agent as `target_subnet`
-  (**contract ask C2**). It is an agent property, not a user preference, so it is not in Settings.
+  (**contract ask C2, shipped DMI-78** — `PATCH /api/v1/agents/{agent_id}`). It is an agent property, not a user preference, so it is not in Settings.
 - **Scan mode is not a choice:** the product picks `quick` and does not surface the other four.
 - **Trigger scan UX:** admin-only `POST …/agents/{agent_id}/commands`; display a status pill as
   `queued → delivered → running → uploading → done`, then offer **View scan**. On **`503`** +
@@ -87,9 +88,10 @@ interaction in implementation before it has passed through that sequence.
   its only reader and nothing in the SPA decodes a token. ⚠️ **REVALIDATE:**
   [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and
   now contradicts the shipped code — it needs an amendment.
-- **`GET /agents/{agent_id}` is in the contract but unimplemented backend-side** (DMI-78). Spec 020
-  wrote `src/api/agents.ts` against it and left it **called by nothing**; Home's Pi-status footer
-  line is deliberately not built rather than faked from a `VITE_AGENT_ID` or a scan.
+- **`GET /agents/{agent_id}` is now implemented backend-side** (DMI-78), alongside `GET /agents` and
+  the `PATCH` that sets `target_subnet`. Spec 020 wrote `src/api/agents.ts` against the detail route
+  and left it **called by nothing**; wiring it, and Home's deliberately unbuilt Pi-status footer
+  line, is DMI-89.
 - **Open design decisions (1):** the 409 busy-Pi copy. *(The stale-coverage threshold is decided —
   spec 020 locked it at **3 days**, owned by `STALE_COVERAGE_DAYS` in `frontend/src/lib/review.ts`.)*
 
@@ -97,7 +99,7 @@ interaction in implementation before it has passed through that sequence.
 
 1. ◐ Lock shared UI foundations (done — typography and the accent + severity hexes now locked) and
    the auth/Home/Agents flows; resolve the contract blockers needed by those screens. **Auth and
-   Home cleared; Agents still blocked on C1** (no `GET /agents`, so no `agent_id` to read).
+   Home cleared; Agents cleared too** — DMI-78 closed C1 and C2, so the screen is buildable (DMI-89).
 2. ✅ Scaffold `frontend/` (Vite + TS + Router + Query + shadcn) + Axios client + OpenAPI type-gen —
    spec 014.
 3. ✅ First vertical slice: login → Home, including blank, regular, and error states with live data —

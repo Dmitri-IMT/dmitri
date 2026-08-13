@@ -111,11 +111,18 @@ Every frame is JSON with a required `type` field.
 Sent by the Pi **on every connect**, before any `status` frame. The Pi is deliberately **dual-homed**
 (ethernet on the target subnet, wifi for internet) so it sees more than one network and **cannot guess
 which to scan** — a human picks once, and `POST /commands` therefore never asks a non-technical admin
-for a CIDR. The backend caches `available_subnets` against the agent (they are *reported*, not stored
-as truth — the Pi is the authority on its own interfaces).
+for a CIDR. The backend holds `available_subnets` **only in the API process's connection registry**
+for the life of the socket (they are *reported*, not stored as truth — the Pi is the authority on its
+own interfaces). There is no column and no cache table; every read derives them afresh.
 
 **Out of this ADR:** how an admin *chooses* `target_subnet`, and how `AgentDetail` exposes it. That is
 the HTTP half of C2 and belongs to the frontend-contract-asks epic.
+
+> **Implemented 2026-08-12 (DMI-78 / spec 031),** consistent with this ADR: `AgentDetail` carries
+> `available_subnets` and `target_subnet`, and admin-only `PATCH /api/v1/agents/{agent_id}` records
+> the choice. Only the choice persists (`agents.target_subnet`); the reported networks and `online`
+> still do not. The chosen value is re-checked against the live report at trigger time, so a scan
+> naming a network the Pi is no longer reporting is refused rather than run.
 
 Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`.
 
