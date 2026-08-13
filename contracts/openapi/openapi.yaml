@@ -426,6 +426,36 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/agents:
+    get:
+      tags:
+        - agents
+      summary: List scanner agents
+      description: The org's scanner agents, with online state from the WS registry.
+      operationId: listAgents
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Scanner agents for the caller's org.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - agents
+      summary: CORS preflight for the agents collection
+      operationId: optionsAgents
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
   /api/v1/agents/{agent_id}/commands:
     get:
       tags:
@@ -507,6 +537,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/DeviceBusyError'
+        '422':
+          $ref: '#/components/responses/ScanSubnetNotReported'
         '503':
           $ref: '#/components/responses/DeviceOfflineError'
         '500':
@@ -528,7 +560,9 @@ paths:
       tags:
         - agents
       summary: Get scanner agent
-      description: Agent detail including online state (from WS registry) and active command.
+      description: |
+        Agent detail including online state (from WS registry) and active command. The detail also
+        carries the networks the connected Pi reported and the network an admin chose.
       operationId: getAgentById
       security:
         - FrontendBearerAuth: []
@@ -547,6 +581,41 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - agents
+      summary: Set the agent's target network
+      description: Chooses, from the networks the connected Pi reported, the one its scans use.
+      operationId: updateAgentTargetSubnet
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAgentTargetSubnetRequest'
+      responses:
+        '200':
+          description: Agent detail after the choice was stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/AgentOfflineConflict'
+        '422':
+          $ref: '#/components/responses/TargetSubnetNotReported'
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -1496,6 +1565,95 @@ components:
                 error:
                   code: device_offline
                   message: Pi seems to be offline.
+                  details: {}
+    AgentOfflineConflict:
+      description: |
+        The Pi is not holding a connection, so it has reported no networks and there is nothing to
+        choose from; the stored choice is unchanged. Same machine code as the trigger's `503`
+        because the condition is the same; the status differs because nothing was dispatched.
+        The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - device_offline
+          examples:
+            agentOffline:
+              value:
+                error:
+                  code: device_offline
+                  message: Pi seems to be offline.
+                  details: {}
+    TargetSubnetNotReported:
+      description: |
+        The value is a well-formed CIDR but is not one the connected Pi reported; the stored choice
+        is unchanged. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - subnet_not_reported
+          examples:
+            targetSubnetNotReported:
+              value:
+                error:
+                  code: subnet_not_reported
+                  message: That network is not one the Pi reported.
+                  details: {}
+    ScanSubnetNotReported:
+      description: |
+        The network named for this scan is not one the Pi is currently reporting — the stored
+        choice may predate a change of cabling or address range. No command was created and the
+        stored choice is unchanged. Same machine code as `TargetSubnetNotReported` because it is
+        the same rule; a separate component because the description and the operation differ.
+        The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - subnet_not_reported
+          examples:
+            scanSubnetNotReported:
+              value:
+                error:
+                  code: subnet_not_reported
+                  message: That network is not one the Pi reported.
                   details: {}
     PasswordChangeRejected:
       description: |
@@ -2576,6 +2734,7 @@ components:
         - display_name
         - online
         - last_seen_at
+        - available_subnets
       properties:
         agent_id:
           type: string
@@ -2589,11 +2748,74 @@ components:
             - string
             - 'null'
           format: date-time
+        available_subnets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableSubnet'
+        target_subnet:
+          type:
+            - string
+            - 'null'
+          pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
         active_command_id:
           type:
             - string
             - 'null'
           format: uuid
+
+    AgentSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+        - display_name
+        - online
+        - last_seen_at
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        display_name:
+          type: string
+        online:
+          type: boolean
+        last_seen_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        target_subnet:
+          type:
+            - string
+            - 'null'
+          pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
+        active_command_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+
+    AgentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSummary'
+
+    UpdateAgentTargetSubnetRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - target_subnet
+      properties:
+        target_subnet:
+          type: string
+          pattern: '^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$'
+          example: 10.0.0.0/24
 
     AvailableSubnet:
       type: object

@@ -24,6 +24,7 @@ def test_agent_columns_match_expected_set():
         "last_seen_at",
         "connected_at",
         "created_at",
+        "target_subnet",
     }
 
 

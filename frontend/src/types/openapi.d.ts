@@ -133,6 +133,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List scanner agents
+         * @description The org's scanner agents, with online state from the WS registry.
+         */
+        get: operations["listAgents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        /** CORS preflight for the agents collection */
+        options: operations["optionsAgents"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/commands": {
         parameters: {
             query?: never;
@@ -195,7 +216,8 @@ export interface paths {
         };
         /**
          * Get scanner agent
-         * @description Agent detail including online state (from WS registry) and active command.
+         * @description Agent detail including online state (from WS registry) and active command. The detail also
+         *     carries the networks the connected Pi reported and the network an admin chose.
          */
         get: operations["getAgentById"];
         put?: never;
@@ -204,7 +226,11 @@ export interface paths {
         /** CORS preflight for agent detail */
         options: operations["optionsAgentById"];
         head?: never;
-        patch?: never;
+        /**
+         * Set the agent's target network
+         * @description Chooses, from the networks the connected Pi reported, the one its scans use.
+         */
+        patch: operations["updateAgentTargetSubnet"];
         trace?: never;
     };
     "/api/v1/commands/{command_id}": {
@@ -674,8 +700,28 @@ export interface components {
             online: boolean;
             /** Format: date-time */
             last_seen_at: string | null;
+            available_subnets: components["schemas"]["AvailableSubnet"][];
+            target_subnet?: string | null;
             /** Format: uuid */
             active_command_id?: string | null;
+        };
+        AgentSummary: {
+            /** Format: uuid */
+            agent_id: string;
+            display_name: string;
+            online: boolean;
+            /** Format: date-time */
+            last_seen_at: string | null;
+            target_subnet?: string | null;
+            /** Format: uuid */
+            active_command_id?: string | null;
+        };
+        AgentListResponse: {
+            data: components["schemas"]["AgentSummary"][];
+        };
+        UpdateAgentTargetSubnetRequest: {
+            /** @example 10.0.0.0/24 */
+            target_subnet: string;
         };
         AvailableSubnet: {
             /** @example eth0 */
@@ -967,6 +1013,62 @@ export interface components {
                     error: {
                         /** @constant */
                         code: "device_offline";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The Pi is not holding a connection, so it has reported no networks and there is nothing to
+         *     choose from; the stored choice is unchanged. Same machine code as the trigger's `503`
+         *     because the condition is the same; the status differs because nothing was dispatched.
+         *     The `code` is pinned.
+         */
+        AgentOfflineConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "device_offline";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The value is a well-formed CIDR but is not one the connected Pi reported; the stored choice
+         *     is unchanged. The `code` is pinned.
+         */
+        TargetSubnetNotReported: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "subnet_not_reported";
+                    };
+                };
+            };
+        };
+        /**
+         * @description The network named for this scan is not one the Pi is currently reporting — the stored
+         *     choice may predate a change of cabling or address range. No command was created and the
+         *     stored choice is unchanged. Same machine code as `TargetSubnetNotReported` because it is
+         *     the same rule; a separate component because the description and the operation differ.
+         *     The `code` is pinned.
+         */
+        ScanSubnetNotReported: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "subnet_not_reported";
                     };
                 };
             };
@@ -1571,6 +1673,40 @@ export interface operations {
             204: components["responses"]["CorsPreflightNoContent"];
         };
     };
+    listAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scanner agents for the caller's org. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentListResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    optionsAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
     connectAgentCommandsWebSocket: {
         parameters: {
             query?: never;
@@ -1633,6 +1769,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["DeviceBusyError"];
+            422: components["responses"]["ScanSubnetNotReported"];
             500: components["responses"]["InternalServerError"];
             503: components["responses"]["DeviceOfflineError"];
         };
@@ -1692,6 +1829,39 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    updateAgentTargetSubnet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAgentTargetSubnetRequest"];
+            };
+        };
+        responses: {
+            /** @description Agent detail after the choice was stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["AgentOfflineConflict"];
+            422: components["responses"]["TargetSubnetNotReported"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     getCommandById: {

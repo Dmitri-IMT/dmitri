@@ -23,6 +23,9 @@ ERROR_RESPONSE_ROUTES = {
     "RoleChangeConflict": ("users.py", "update_user_role_route", 409),
     "LastAdminConflict": ("users.py", "delete_current_user_route", 409),
     "SelfTargetConflict": ("users.py", "delete_user_route", 409),
+    "AgentOfflineConflict": ("agents.py", "update_agent_target_subnet_route", 409),
+    "TargetSubnetNotReported": ("agents.py", "update_agent_target_subnet_route", 422),
+    "ScanSubnetNotReported": ("agents.py", "create_agent_command", 422),
 }
 
 SCHEMA_NAMES = (
@@ -48,6 +51,10 @@ SCHEMA_NAMES = (
     "PendingInvite",
     "PendingInviteListResponse",
     "UpdateUserRoleRequest",
+    "AgentSummary",
+    "AgentDetail",
+    "AgentListResponse",
+    "UpdateAgentTargetSubnetRequest",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
 
@@ -368,6 +375,12 @@ def test_delete_user_operations_are_published(
             "revokeInvite",
             {"204", "401", "403", "404"},
         ),
+        (
+            "/api/v1/agents/{agent_id}",
+            "patch",
+            "updateAgentTargetSubnet",
+            {"200", "401", "403", "404", "409", "422", "500"},
+        ),
     ],
 )
 def test_admin_operations_are_published(
@@ -380,6 +393,37 @@ def test_admin_operations_are_published(
     assert operation["security"] == [{"FrontendBearerAuth": []}]
     assert set(operation["responses"]) == expected_codes
     assert method in app.openapi()["paths"][path]
+
+
+def test_list_agents_is_published_as_member_readable() -> None:
+    contract = _load_contract()
+    operation = contract["paths"]["/api/v1/agents"]["get"]
+
+    assert operation["operationId"] == "listAgents"
+    assert operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(operation["responses"]) == {"200", "401", "500"}
+    assert "get" in app.openapi()["paths"]["/api/v1/agents"]
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "status", "response_name"),
+    [
+        ("/api/v1/agents/{agent_id}", "patch", "409", "AgentOfflineConflict"),
+        ("/api/v1/agents/{agent_id}", "patch", "422", "TargetSubnetNotReported"),
+        (
+            "/api/v1/agents/{agent_id}/commands",
+            "post",
+            "422",
+            "ScanSubnetNotReported",
+        ),
+    ],
+)
+def test_agent_error_responses_reference_their_own_component(
+    path: str, method: str, status: str, response_name: str
+) -> None:
+    contract = _load_contract()
+    response = contract["paths"][path][method]["responses"][status]
+    assert response["$ref"] == f"#/components/responses/{response_name}"
 
 
 def test_cors_allowed_methods_example_includes_patch_and_delete():
@@ -411,7 +455,8 @@ def _route_error_codes_by_status(
     function = next(
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == function_name
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and node.name == function_name
     )
     for node in ast.walk(function):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):

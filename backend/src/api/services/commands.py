@@ -36,6 +36,10 @@ class AgentNotFoundError(Exception):
     pass
 
 
+class SubnetNotReportedError(Exception):
+    pass
+
+
 _STATUS_RANK = case(
     *[(Command.status == status, rank) for status, rank in RANK.items()],
     else_=max(RANK.values()),
@@ -310,6 +314,12 @@ def _claim_agent(
     sweep_stale_commands(session, now=now, agent_id=agent_id)
     if active_command_for(session, agent_id) is not None:
         raise DeviceBusyError
+
+    hello = agent_connections.get_hello(agent_id)
+    if hello is not None:
+        _, reported = hello
+        if subnet not in {entry.cidr for entry in reported}:
+            raise SubnetNotReportedError
 
     try:
         return enqueue(
