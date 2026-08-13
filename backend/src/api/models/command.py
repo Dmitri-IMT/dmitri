@@ -20,6 +20,7 @@ class Agent(SQLModel, table=True):
     last_seen_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     connected_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    target_subnet: str | None = None
 
 
 class AgentNonce(SQLModel, table=True):
