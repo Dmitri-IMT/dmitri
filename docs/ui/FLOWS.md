@@ -34,8 +34,8 @@ Matches the screen inventory in ADR-008. The LLM explainer panel is deferred and
 | SETTINGS | inside | admin, viewer |
 
 **Single agent.** The MVP has exactly one Pi. AGENTS is still a list place (one row), and the
-frontend discovers it via `GET /api/v1/agents` — **contract ask C1**; the agent id is the
-provisioning `X-Device-Id` and cannot be derived client-side.
+frontend discovers it via `GET /api/v1/agents` (**contract ask C1, shipped DMI-78**); the agent id is
+the provisioning `X-Device-Id` and cannot be derived client-side.
 
 ## B1 — Auth: login and its edges
 
@@ -261,8 +261,8 @@ Raised against [`contracts/openapi/openapi.yaml`](../../contracts/openapi/openap
 
 | # | Ask | Blocks |
 | --- | --- | --- |
-| C1 | `GET /api/v1/agents` — list agents (an array of one in the MVP). Today only `GET /agents/{id}` exists, and `agent_id` is the provisioning `X-Device-Id`, so the frontend cannot discover it. | B4, AGENTS |
-| C2 | `AgentDetail.available_subnets` (reported by the Pi over its WS channel) + `target_subnet`, and a way to set it. Without these, `POST /commands` demands a `subnet` CIDR from a non-technical admin. **◐ Half-closed 2026-07-13: the WS half is locked** — the Pi sends a **`hello` frame on connect** carrying `available_subnets` (`interface` + `cidr`), now in the contract ([`ADR-011` §3](../adr/ADR-011-pi-command-channel.md)). **Still open: the HTTP half** — exposing them on `AgentDetail`, and the endpoint an admin uses to pick `target_subnet`. | B2, B4 |
+| ~~C1~~ | ~~`GET /api/v1/agents` — list agents (an array of one in the MVP).~~ **✅ RESOLVED 2026-08-12 (DMI-78):** published and implemented as `listAgents`, org-scoped and readable by viewers, so the frontend discovers `agent_id` instead of needing the provisioning `X-Device-Id`. | B4, AGENTS |
+| ~~C2~~ | ~~`AgentDetail.available_subnets` + `target_subnet`, and a way to set it.~~ **✅ RESOLVED 2026-08-12 (DMI-78).** The WS half was locked 2026-07-13 — the Pi's `hello` frame carries `available_subnets` ([`ADR-011` §3](../adr/ADR-011-pi-command-channel.md)). The HTTP half now exists too: `AgentDetail` carries both fields, and admin-only `PATCH /api/v1/agents/{agent_id}` picks one, refusing anything the Pi is not reporting. A non-technical admin never types a CIDR. | B2, B4 |
 | C3 | `GET /users/me` exists, but there is no self-profile update operation and the user model has no display name. | B5 profile |
 | ~~C4~~ | ~~Users & invites: list users, list pending invites, change role, revoke invite, remove a member, member activity.~~ **✅ RESOLVED 2026-08-11:** the published contract and backend now provide the separate member/invite list and mutation routes plus account removal and `last_seen_at`. The Users screen remains frontend work. | B2, B5, USERS & INVITES, SETTINGS |
 | ~~C5~~ | ~~Forced password change: login with an expired password returns 403 without a token, but `POST /auth/change-password` requires Bearer.~~ **✅ VOID 2026-07-13 — [`ADR-016`](../adr/ADR-016-password-policy.md) drops forced rotation entirely (NIST SP 800-63B §5.1.1.2); the mechanism this ask was about no longer exists.** Login is `200`/`401` only; there is no forced password-change flow or screen. | — |

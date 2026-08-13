@@ -32,7 +32,7 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | `get_settings()` (import-time call) | Called at module import so missing/invalid required configuration fails fast at startup. | `backend/src/api/main.py:34` |
 | `read_health()` | `GET /api/v1/health`; runs `SELECT 1` and returns status/version or the fixed 503 envelope. | `backend/src/api/main.py:131` |
 | `app.include_router(hosts.router / scans.router / findings.router)` | Wires host/scan/finding reads plus signed scan ingest. | `backend/src/api/main.py:154` |
-| `app.include_router(agents.router / commands.router)` | Wires command enqueue/read plus the agent WebSocket channel. | `backend/src/api/main.py:150` |
+| `app.include_router(agents.router / commands.router)` | Wires the agent list/detail/target-subnet routes and command enqueue/read plus the agent WebSocket channel. | `backend/src/api/main.py:150` |
 | lifespan startup → `reconcile_all(session)` | Clears every `agents.connected_at` at boot, so a hard-crashed API (where the WS `finally` never ran) does not leave agents looking permanently connected to the worker's sweeper. See [services](/backend/services.md). | `backend/src/api/main.py:39` |
 | `ws_validation_denial()` | `WebSocketRequestValidationError` handler — pre-accept HTTP **403** with the [error envelope](/backend/errors.md) for malformed `{agent_id}` (non-UUID path segment) via `send_denial_response`. | `backend/src/api/main.py:103` |
 | `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |

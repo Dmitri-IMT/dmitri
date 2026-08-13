@@ -1154,11 +1154,15 @@ footnote; the attack surface is the page.
 ([`REFERENCE.md`](REFERENCE.md) §2). Everything else on this page is caption.
 
 **Data:**
-- `GET /api/v1/agents` → the row. **🔓 C1 — does not exist.** One agent in the MVP; `agent_id` is
-  the provisioning `X-Device-Id` and the frontend cannot derive it.
+- `GET /api/v1/agents` → the row. **✅ C1 shipped (DMI-78).** One agent in the MVP; the list is how
+  the frontend discovers `agent_id`.
 - `GET /api/v1/agents/{agent_id}` → `AgentDetail`: `display_name`, `online`, `last_seen_at`,
-  `active_command_id`. **Read on mount** — this is what lets a running scan's pill survive
-  navigation and reload (B4). **🔓 C2 —** must also carry `available_subnets` + `target_subnet`.
+  `active_command_id`, `available_subnets`, `target_subnet`. **Read on mount** — this is what lets a
+  running scan's pill survive navigation and reload (B4). **✅ C2 shipped (DMI-78).**
+- `PATCH /api/v1/agents/{agent_id}` → `AgentDetail`, admin only. Body `{ target_subnet }`, one of
+  the CIDRs `available_subnets` reported. The response is the full detail, so the screen needs no
+  refetch. `409 device_offline` if the Pi is reporting nothing; `422 subnet_not_reported` if the
+  chosen network is not one it reported.
 - `POST /api/v1/agents/{agent_id}/commands` → `CommandSummary`. Body is
   `{ scan_mode: "quick", subnet: <agent.target_subnet> }` — **both are supplied by the system, never
   typed by the operator** (B4).
@@ -1283,8 +1287,9 @@ Scanning:
    *never picked up*. Pill copy updated accordingly.
 3. Pill vs stepper for the five lifecycle states — pill chosen; stepper parked
    ([`IDEAS.md`](IDEAS.md) → Agents).
-4. Blocked on **C1** (no `GET /agents`) and **C2** (no `available_subnets` / `target_subnet`). The
-   screen is fully designed and cannot be built until both land.
+4. ~~Blocked on **C1** and **C2**.~~ **Unblocked 2026-08-12 (DMI-78).** `GET /agents`,
+   `GET /agents/{id}` with `available_subnets` + `target_subnet`, and the `PATCH` that sets it all
+   exist. The screen is fully designed and now buildable — the SPA work is DMI-89.
 
 ---
 

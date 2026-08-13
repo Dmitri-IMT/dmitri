@@ -134,7 +134,7 @@ Production Pi runs a **headless daemon** (`dmitri agent`), not the TUI:
 0. HTTP transport client + Ed25519 signing (Pi submit + backend verify) — closes the unwired contract gap.
 1. ADR-011 ✅ ([`ADR-011`](../adr/ADR-011-pi-command-channel.md)). → *unblocks everything below*
 2. `dmitri agent` daemon + systemd; **WebSocket client** + connection registry on API; Postgres command table for lifecycle/audit.
-2b. **Interface reporting** — daemon enumerates its subnets and reports them on connect; backend stores the operator's `target_subnet`. Blocks the first web-triggered scan ([B11-C2](BACKEND.md#b11--frontend-contract-asks-)).
+2b. **Interface reporting** ✅ — daemon enumerates its subnets and reports them on connect; the backend stores the operator's `target_subnet` and refuses a scan naming a network the Pi is not reporting (DMI-78, [B11-C2](BACKEND.md#b11--frontend-contract-asks-)). The remaining gap to the first web-triggered scan is the Agents screen itself.
 3. "Trigger scan from web" end-to-end (frontend → backend → WS → Pi → results → frontend).
 4. **Installer provisioning playbook** documented (vendor); scheduled reboot policy — rotation deferred Phase 2.
 5. (fallback) HTTP poll delivery if WS ops block cutover — same command schema.

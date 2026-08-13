@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
+description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, and command lifecycle/delivery.
 resource: backend/src/api/services/persistence.py
-tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy]
-timestamp: 2026-08-11T00:00:00Z
+tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -26,6 +26,9 @@ so the worker process can reason about it without reading the API's memory.
 `POST /api/v1/scans` ([routers](/backend/routers.md)) alongside the read path, the
 [auth routes](/backend/auth.md) and the command routes; the enrichment worker is still driven by the
 poll loop rather than a live agent.
+`agents.py` (DMI-78) is the read surface over the fleet: it joins the persisted `agents` row with the
+in-memory connection registry to answer the agent list and detail routes, and owns the admin write
+that stores an agent's chosen `target_subnet`.
 `users.py` owns account removal plus member listing and role changes. `org_lock.py` supplies the
 transaction-scoped per-org advisory lock that serializes admin-reducing role changes.
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
@@ -50,6 +53,12 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `delete_self()` | Hard-deletes the caller unless they are their org's only admin. | `backend/src/api/services/users.py:53` |
 | `delete_member()` | Org-scoped hard delete; unknown and foreign identifiers both return `False`. | `backend/src/api/services/users.py:60` |
 | `ORG_ADMIN_LOCK_NAMESPACE` / `lock_org_admins()` | Namespace `8818`; executes two-key `pg_advisory_xact_lock(namespace, hashtext(org_id))`, released automatically on commit or rollback. | `backend/src/api/services/org_lock.py:8` |
+| `_fields()` | The single builder behind both agent shapes: `agent_id`/`display_name` from the row, `online` from `agent_connections.is_online`, `last_seen_at` from `agent_connections.last_seen_at(id) or row.last_seen_at`, `target_subnet` from the row, `active_command_id` from `active_command_for`. `list_agents` and `_detail` both spread it, so list and detail cannot drift. | `backend/src/api/services/agents.py:17` |
+| `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:29` |
+| `get_agent_detail()` / `_detail()` | `AgentSummary`'s fields plus `available_subnets`, read only from `agent_connections.get_hello(...)`; `None` (offline, or connected before `hello`) renders `[]`. Unknown or foreign id → `None`, which the router turns into 404. | `backend/src/api/services/agents.py:52`, `:44` |
+| `set_target_subnet()` | Admin write. Foreign/unknown row → `None`; no `hello` → `AgentOfflineError`; a value outside `{entry.cidr for entry in reported}` → `SubnetNotReportedError`; else assign, commit, and return the same `_detail(...)` the GET returns. | `backend/src/api/services/agents.py:61` |
+| `AgentOfflineError` | "Cannot choose a network for a Pi that is reporting none" — router maps it to `409 device_offline`. Lives here, unlike `SubnetNotReportedError`. | `backend/src/api/services/agents.py:13` |
+| `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:39` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
 | `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:23` |
 | `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` | `1` / `20` — the paging defaults `list_hosts()` falls back to, imported by `read_hosts` so the route and the service cannot drift apart. `list_scans`/`list_findings` still inline theirs. | `backend/src/api/services/read.py:35` |
@@ -75,6 +84,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `scan_status_for()` | Pure projection of a command status → Scan status (`queued`/`delivered`→`pending`, `running`→`accepted`, `uploading`→`processing`, `done`→`completed`, `failed`/`expired`→`failed`). Kept separate from `next_status` so the read path can reuse it without a transition. | `backend/src/api/services/command_lifecycle.py:63` |
 | `InvalidCommandTransition` | Custom domain exception (not `ValueError`); message names `current` and `target`. | `backend/src/api/services/command_lifecycle.py:34` |
 | `enqueue()` | Inserts one `queued` `Command` (`org_id`/`agent_id`/`scan_mode`/`subnet`/`created_at`) and commits. Writes **no** `scan_id` — the stub scan is created only once delivery succeeds. | `backend/src/api/services/commands.py:35` |
+| `_claim_agent()` | The enqueue path's sync DB phase: authorize the agent, sweep, busy-check, then — since DMI-78 — refuse a `subnet` the connected Pi is not reporting, before inserting the row. | `backend/src/api/services/commands.py:296` |
 | `active_command_for()` | The busy check: first `Command` for the agent in any of the four non-terminal statuses (`queued`/`delivered`/`running`/`uploading`), not just running/uploading — otherwise a stuck `queued` would let a second job onto the Pi. | `backend/src/api/services/commands.py:81` |
 | `apply_status()` | One atomic conditional `UPDATE ... WHERE id AND agent_id AND rank(status) < rank(:next) AND scan_id IS NOT NULL RETURNING scan_id` — never read-validate-write. The `scan_id` predicate keeps a Pi frame that overtakes delivery from advancing an undelivered command (which the CHECK would reject outright). Backfills `started_at`/`delivered_at`/`completed_at` via `COALESCE`, persists `error_code` on `failed`, then mirrors `scan_status_for(status)` onto the linked scan. Returns `False` on zero rowcount (duplicate, late, or lost-race frame). | `backend/src/api/services/commands.py:89` |
 | `sweep_stale_commands()` | Flips stale non-terminal commands: `queued → expired` (never reached the Pi), everything else → `failed`, mirroring each linked scan. Pure-SQL predicate over the presence projection — `connected_at IS NULL AND last_seen_at < now - grace` — so a **connected** Pi is never failed however long its scan runs. Optional `agent_id` narrows it to one agent. | `backend/src/api/services/commands.py:137` |
@@ -140,6 +150,26 @@ ML/AI scoring is future work.
   means a row with a `NULL org_id` (legacy pre-tenancy data) is visible to **nobody**. That is
   deliberate: no backfill and no `NOT NULL` tightening were done. Private helpers stay unscoped
   because they only ever receive already-scoped ids.
+- **Presence and reported networks are never stored.** `online` and `available_subnets` have no
+  column; `agents.target_subnet` (the human's *choice*) does. Both derived fields come from the
+  in-process `agent_connections` registry through `_fields`/`_detail`, so a restart forgets them and
+  a `last_seen_at` of `null` means exactly "never connected" — after a disconnect it falls back to
+  the persisted row value rather than going null again.
+- **The subnet check fails closed on exact string equality.** Both `_claim_agent` and
+  `set_target_subnet` compare against `{entry.cidr for entry in reported}` verbatim; deliberately no
+  `ipaddress.ip_network` parsing, which would accept equivalent spellings and add a failure mode
+  inside the enqueue path.
+- **Silence is not contradiction.** When `get_hello()` returns `None`, `_claim_agent` falls straight
+  through to `enqueue` — it must **not** raise. Today's `503 device_offline` comes from `deliver()`
+  *after* the row exists, which is what leaves the command `expired`; refusing earlier would answer
+  503 with no row and break that lifecycle contract. The PATCH is the opposite case and does refuse,
+  with a 409.
+- **A stale choice is refused, never repaired.** If the Pi stops reporting the stored
+  `target_subnet`, the scan is refused with a 422 and the `agents` row is left exactly as it is —
+  nothing clears or corrects it behind the operator's back.
+- **`SubnetNotReportedError` lives in `commands.py` for import direction.** `agents.py` imports
+  `active_command_for` from `commands.py`; declaring the exception in `agents.py` and importing it
+  back would be a cycle.
 - **Confidence ladder.** `tentative` → `probable` (agent CVE or CPE match) → `confirmed` (NVD-by-CVE).
   `upsert_finding` only ever raises confidence via `_max_confidence`, never lowers it.
 - **Idempotency moved up into `ingest_scan` (DMI-63).** `persist_scan` no longer short-circuits on an
@@ -216,3 +246,4 @@ ML/AI scoring is future work.
 [9] [docs/research/ws-session-lifetime.md](../../../docs/research/ws-session-lifetime.md)
 [10] [specs/029-account-removal-api](../../../specs/029-account-removal-api/TRUTH.md)
 [11] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
+[12] [specs/031-agents-read-surface-target-subnet](../../../specs/031-agents-read-surface-target-subnet/TRUTH.md)
