@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-08-13T00:00:00Z
 ---
 
 # Shared contracts
@@ -27,7 +27,8 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   id `ingestScan`. `401` unauthenticated / nonce replay, `403` revoked device or a scan owned by
   another agent-or-org, `400` results after the command was written off, `422` payload shape.
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
-  stub is returned before ingest completes).
+  stub is returned before ingest completes). `GET /scans/{id}` (`ScanDetailResponse`) carries
+  optional `error_code` (`ScanErrorCode | null`) since DMI-75; the list row (`ScanSummary`) does not.
 - `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
   `CommandSummary`, `409 device_busy`, `422 subnet_not_reported` (DMI-78, `ScanSubnetNotReported`),
   `503 device_offline`. **Wired** (DMI-64).
@@ -42,6 +43,8 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   did not report, `404` for an unknown or foreign agent. **Wired** (DMI-78).
 - `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
   on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
+  `error_code` is optional `ScanErrorCode | null` (DMI-75 / spec 032): eight published values;
+  an off-contract stored string reads as `"unknown"`.
 - `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (Ed25519; frames
   `hello`/`command`/`status`). Scan results never travel this socket. **Both ends wired** — the
   backend since DMI-64, the Pi client since DMI-66
@@ -103,6 +106,11 @@ which the Pydantic models now match exactly with `IPv4Address`.
 Spec 030 added `OrgMember`, `OrgMemberListResponse`, `UpdateUserRoleRequest`, `PendingInvite`, and
 `PendingInviteListResponse` to that coverage, and separately pins operation ids and response-code
 sets for the four new admin operations. Query-parameter parity remains scoped to scans/findings.
+
+Spec 032 added `ScanErrorCode` (eight-value string enum) and pointed both
+`ScanDetailResponse.error_code` and `CommandDetail.error_code` at it as optional nullable `$ref`s.
+`AgentStatusFrame.error_code` stays untyped `string | null` so a newer Pi is not silenced.
+`ScanSummary` has no `error_code` — list rows are unchanged.
 
 Spec 031 added `AgentSummary`, `AgentDetail`, `AgentListResponse` and
 `UpdateAgentTargetSubnetRequest`, and pins `listAgents` and `updateAgentTargetSubnet` the same way.

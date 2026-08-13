@@ -55,6 +55,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/management](./backend/management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 * [backend/models](./backend/models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
+* [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
 * [backend/migrations](./backend/migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
 
@@ -67,6 +68,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [frontend/screens](./frontend/screens.md) — The login, home, password-recovery, settings (including activity disclosure) and invite screens, plus shells, navigation and shared components.
 
 ## Infrastructure
