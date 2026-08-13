@@ -292,7 +292,7 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ✅ (C15 resolved) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
 | Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
-| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C10) |
+| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C10 resolved — screen unbuilt, DMI-88) |
 | Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ |
 | Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
 | Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
@@ -908,12 +908,13 @@ the header last.
 **Data:**
 - `GET /api/v1/scans/{scan_id}` → `ScanDetailResponse` — **one request, everything embedded**:
   `findings: FindingRead[]`, `hosts: ScanHostView[]`, `timestamp`, `subnet`, `scan_mode`,
-  `status`, `host_count`, `finding_count`, `command_id` (nullable).
+  `status`, `host_count`, `finding_count`, `command_id` (nullable), `error_code` (`ScanErrorCode | null`).
 - **No `GET /findings` call here, and no `GET /findings/{id}`.** `FindingRecord` arrives complete —
   `severity`, `title`, `description`, `recommendation`, `evidence`, `references`, `cve_id`,
   `cvss_score`, `device_ip`, `port`, `protocol`, `service`. Opening a finding is **local state**.
-- **Failure reason:** `ScanDetailResponse` has **no error field**. When `status: failed`, fetch
-  `GET /api/v1/commands/{command_id}` for `error_code` — **C10**.
+- **Failure reason:** on `status: failed`, `error_code` is on this same body (never null). Map it
+  through `scanFailureReason()` in `frontend/src/lib/scanFailureReasons.ts` — **C10 resolved
+  (DMI-75)**; rendering it is DMI-88. Do not fetch `GET /commands/{id}` for the sentence.
 
 **Three states:**
 - **Regular:** header (when · mode · subnet · counts), then findings sorted critical→low, then the
@@ -985,8 +986,10 @@ row, open its panel. Absent or unmatched → render normally. No extra fetch (B3
    cannot link to HOST DETAIL.~~ **✅ RESOLVED 2026-08-02 (DMI-85) — the array is `hosts:
    ScanHostView[]` and `host_id` is required on it.** A host row can link to `/hosts/:hostId`;
    the affordance is available whenever this screen is built.
-2. **C10** — `error_code` is a *code*, not a sentence. It needs a copy mapping
-   (code → plain-language reason) before the failed state has real words.
+2. ~~**C10** — `error_code` is a *code*, not a sentence. It needs a copy mapping
+   (code → plain-language reason) before the failed state has real words.~~ **✅ RESOLVED
+   2026-08-13 (DMI-75)** — `frontend/src/lib/scanFailureReasons.ts` is the mapping. This screen
+   still needs to import it (DMI-88).
 
 ---
 
@@ -1189,7 +1192,8 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 - **Done.** Pill becomes `[View scan]` → SCAN DETAIL. Caches for scans/agents/findings invalidate.
 - **Failed.** The Pi took the command and it broke — a scan error, a failed upload, or the Pi going
   dark **mid-scan**. Error pill carrying `error_code` + `[Retry]`.
-- **Expired.** The Pi **never took the command** — delivery gave up after 2 retries. Distinct from
+- **Expired.** The Pi **never took the command** — there was no open socket, or the one send
+  attempt threw. Distinct from
   `failed` — the operator's next step is *check the box*, not *try again* — so it points at the Pi and
   offers `[Retry]` second.
 - **Offline.** `online: false`. `[Scan now]` **stays visible and enabled** — see Open questions.
@@ -1276,10 +1280,11 @@ Scanning:
 
 **Open questions:**
 1. **Offline: keep `[Scan now]` or hide it?** Spec says **keep it visible and enabled.** `online` is
-   derived from the WebSocket registry and can be momentarily stale, and the backend already
-   **retries delivery twice** before giving up ([`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)).
-   Hiding the button on a flag that might be wrong denies a scan that would have worked; the `503`
-   toast is the designed, honest failure. **This is not rule 3** — that rule is about what a *role*
+   derived from the WebSocket registry and can be momentarily stale. The backend makes **one**
+   delivery attempt and does not retry ([`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)),
+   which makes keeping the button live *more* important, not less: **the operator clicking again
+   is the only retry the system has.** Hiding the button on a flag that might be wrong denies a
+   scan that would have worked; the `503` toast is the designed, honest failure. **This is not rule 3** — that rule is about what a *role*
    may do, not what is momentarily unavailable.
 2. ~~**C12 — does a dead Pi produce `failed` or `expired`?**~~ **✅ RESOLVED 2026-07-13 — the split is
    `delivered_at`.** Never delivered → `expired`; delivered then broke → `failed`. The screen knows

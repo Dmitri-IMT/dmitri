@@ -8,6 +8,18 @@
 > algorithm and the stored credential change. Decision record:
 > [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
 
+> **Amendment 2026-08-13 (delivery retries withdrawn):** wherever this ADR says delivery fails
+> "after retries," read **on a single attempt**. Delivery is one send against the live socket; no
+> socket, or a send that throws, sets `expired` and returns `503 device_offline` immediately. The
+> retries were specified but never built, and they cannot work as specified: `deliver()` holds one
+> socket object, and `send_text` throws only when that connection is already closed, so further
+> calls on it are guaranteed to fail. A retry that could succeed would have to wait for the Pi to
+> **reconnect** — seconds — inside the operator's request, which is the queue-for-later this ADR
+> puts out of scope below. Retries also do nothing for the failure that actually occurs: a
+> half-open socket where the send *succeeds* into a black hole, which the presence projection and
+> the stale sweep catch (`failed` / `agent_disconnected`). **Retrying is the operator triggering
+> the scan again.**
+
 ## Context
 
 September MVP scope is **Control** ([`BACKEND.md` B10](../roadmap/BACKEND.md)): operators trigger scans from the web UI; the Pi executes and pushes results via the existing ingest path.
@@ -150,8 +162,9 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 
 - Pi **online** (open WS): send the command frame; on **successful delivery** set
   `delivered`, persist `scan_id`, and create the **stub** `scans` row.
-- Pi **offline** / send fails after retries: set `expired` (still no `scan_id`), return
-  **`503`** + `code: device_offline`.
+- Pi **offline** / the single send attempt throws: set `expired` (still no `scan_id`, and
+  `error_code=device_offline`), return **`503`** + `code: device_offline`. No retry — see the
+  2026-08-13 amendment.
 
 **Why the stub waits for delivery.** `expired →` scan status `"failed"`, and `GET /scans`
 lists by org without hiding host-less stubs. Creating a scan on every offline click would
@@ -252,7 +265,7 @@ DDL detail: **Alembic migrations** (source of truth for columns). This ADR does 
 
 ## Out of scope (v1)
 
-- Queue-for-later when Pi offline (reject after retries).
+- Queue-for-later when Pi offline (reject on the first failed attempt).
 - Device secret rotation UX (Phase 2).
 - HTTP poll command delivery (fallback only).
 - Multi-replica WS without sticky sessions.

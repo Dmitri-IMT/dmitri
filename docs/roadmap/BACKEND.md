@@ -26,7 +26,7 @@
 | B8 | Reuse `backend/` code | ✅ | Keep the enrichment/scoring engine; discard the app shell — [Reuse](#reuse-from-backend-code-) |
 | B9 | Hosted vs enterprise | ✅ | Hosted v1; enterprise deal-driven — [B9](#b9--hosted-vs-enterprise-) |
 | B10 | September MVP scope | ✅ | **Scenario B — Control** — [B10](#b10--september-mvp-) |
-| B11 | Frontend contract asks | 🔓 | **2 of 18 still open** (C3 partial, C10); C1 and C2 closed by DMI-78/spec 031 — [B11](#b11--frontend-contract-asks-) |
+| B11 | Frontend contract asks | 🔓 | **1 of 18 still open** (C3 partial); C10 closed by DMI-75/spec 032 — [B11](#b11--frontend-contract-asks-) |
 | B12 | Transactional email | 🔓 | Built in DMI-71 on **Resend** (invites + password reset); **sending domain still TBD** — [B11-C17](#b11--frontend-contract-asks-) |
 
 ✅ = decided here · 🔓 = open (auth details → [`AUTH.md`](AUTH.md))
@@ -112,7 +112,7 @@ See prior week-by-week plan in git history or expand in [`docs/cloud/`](../cloud
 | `uploading` | Scan finished locally; `POST /scans` in flight |
 | `done` | Ingest succeeded |
 | `failed` | Command **reached the Pi** and then broke: error reported by Pi, ingest failure, WS drop mid-scan, or stale `running` past the timeout |
-| `expired` | Command **never reached the Pi**: delivery gave up after the 2 retries (set at the same moment the trigger returns `503 device_offline`) |
+| `expired` | Command **never reached the Pi**: no open socket, or the one send attempt threw (set at the same moment the trigger returns `503 device_offline`) — or the stale sweep found it still `queued` |
 
 **The dividing line is `delivered_at` (C12, decided 2026-07-13).** Not the timeout duration — *whether the
 Pi ever took the job*. Never delivered → `expired`; delivered then broke → `failed`. This is why
@@ -143,7 +143,17 @@ the ingest payload.
 ### Delivery when operator clicks "Scan now" (3c)
 
 - **Pi online** (open WS): deliver immediately → `delivered` → `running`.
-- **Pi offline:** backend **retries delivery up to 2 times**; then reject — **`503`** + `code: device_offline` — frontend toast: *"Pi seems to be offline."* No queue-for-later in v1.
+- **Pi offline:** **one delivery attempt, no retries** — reject immediately — **`503`** + `code: device_offline` — frontend toast: *"Pi seems to be offline."* No queue-for-later in v1. **Retrying is the operator clicking "Scan now" again.**
+
+> **Amended 2026-08-13 — the "2 delivery retries" are withdrawn.** They were never built, and they
+> cannot work as written: `deliver()` holds **one** socket object, and `send_text` throws only when
+> that connection is already closed, so a second and third call are guaranteed to fail too. For a
+> retry to find a live socket the Pi must *reconnect* — seconds, not microseconds — which means
+> sleeping inside the operator's request. That is queue-for-later, which [`ADR-011`](../adr/ADR-011-pi-command-channel.md)
+> rejects for v1. Retries also miss the failure that actually bites: a half-open socket where the
+> send *succeeds* into a black hole. Nothing is retried there — the presence projection and the
+> stale sweep catch it and mark the command `failed` / `agent_disconnected`. One try, fail fast,
+> click again.
 
 ### Concurrency (3d)
 
@@ -154,7 +164,7 @@ the ingest payload.
 - **No resume** — scans are not resumable.
 - **`running` without progress / dead Pi:** mark **`failed`** after timeout — the Pi *took* the command, so this is a broken scan, not an undelivered one. **How long** is tunable at implementation (ADR-011 / config) — not a product decision here.
 - **WS drop mid-scan:** same timeout → `failed`; operator triggers again.
-- **Undelivered after the 2 retries:** **`expired`**, set synchronously with the `503 device_offline` — never reached the Pi. This is the *only* path to `expired`; there is no second timeout for it.
+- **Undelivered on the single attempt:** **`expired`**, set synchronously with the `503 device_offline` — never reached the Pi. There is no timeout for it: the verdict is immediate. The stale sweep reaches the same verdict for a command left `queued` (the enqueue succeeded but delivery never ran), so `expired` has two writers, both meaning *the Pi never took the job* and both recording `device_offline`.
 
 ### Idempotency (3f)
 
@@ -182,7 +192,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 
 | Condition | HTTP | `code` | UI |
 |-----------|------|--------|-----|
-| Pi not reachable after 2 delivery retries | **503** | `device_offline` | Toast: *Pi seems to be offline.* |
+| Pi not reachable on the one delivery attempt | **503** | `device_offline` | Toast: *Pi seems to be offline.* |
 | Scan already `running` / `uploading` | **409** | `device_busy` | Toast: scan in progress (copy TBD) |
 
 **WebSocket messages (4e):** backend → Pi `command` payload; Pi → backend `status` updates. Large result payload stays on **`POST /scans`**, not WS.
@@ -276,7 +286,7 @@ item and the invite form, once those screens exist.
 | ~~**C7**~~ | ~~Does accept-invite issue a session?~~ | — | **✅ RESOLVED 2026-07-13 — yes.** It returns `201` with a full `LoginResponse`, so ACCEPT INVITE auto-logs-in to HOME. (Expiry is **`410`**, not `400`.) `ui/FLOWS.md` B2 assumed the opposite and was corrected. No change needed. |
 | ~~**C8**~~ | ~~`FindingRecord.cve_id`~~ | — | **✅ RESOLVED 2026-07-13** — `cve_id`, `cvss_score` and `references` all exist. No change needed. |
 | ~~**C9**~~ | ~~`host_id` on `DevicePayload`~~ | — | **✅ RESOLVED 2026-08-02 (DMI-85)** — the array on `ScanDetailResponse` is `hosts: ScanHostView[]`, and `host_id` is a required property on it, so a host row on a scan links to that host's page. `FindingRead.host_id` carries the same identifier for findings. |
-| **C10** | A failed scan carries **no reason** | SCAN DETAIL, HOME | `ScanDetailResponse` has no error field. The UI must go `scan.command_id` → `GET /commands/{id}.error_code` — and `error_code` is a machine code, so it needs a **plain-language mapping** owned by the backend or the copy deck. A failed scan with a null `command_id` has no reason at all. B6 promised *"scan failed → readable failure reason"*; today that is unreachable. |
+| ~~**C10**~~ | ~~A failed scan carries **no reason**~~ | — | **✅ RESOLVED 2026-08-13 (DMI-75/spec 032).** `ScanDetailResponse` carries optional `error_code` (`ScanErrorCode \| null`) from a read-time join to the command row — one request, no second round trip. A failed scan with no command, a NULL stored code, or an off-contract string reads `"unknown"`. A non-failed scan is always `null`. The eight published codes are in the contract; the operator sentence is client copy at `frontend/src/lib/scanFailureReasons.ts`. The Scan Detail screen that renders it is DMI-88. |
 | ~~**C11**~~ | ~~Does `GET /findings?device_id=…` accept a `host_id`?~~ | — | **✅ RESOLVED 2026-07-13 — the filter becomes `?host_id=`.** The question only existed because the [B7](#b7--openapi-contract-) rename stopped at the paths; finishing it into the read-model field names dissolves it. Same identifier, one name. HOST DETAIL can show findings. |
 | ~~**C12**~~ | ~~Dead Pi → `failed` or `expired`?~~ | — | **✅ RESOLVED 2026-07-13 — split on `delivered_at`.** Never delivered → **`expired`** (set with the `503`, no sweeper). Delivered then broke — Pi error, ingest failure, WS drop, stale `running` — → **`failed`**. Both statements in B6 were half-right; the [lifecycle table](#lifecycle-3a--full) and [Failure & timeout](#failure--timeout-3e) now say the same thing. **Not a contract gap** — `CommandStatus` already carries all seven states. |
 | ~~**C13**~~ | ~~Bad `current_password` → **400, not 401**~~ | — | **✅ RESOLVED — `400`, and the `401` now means only what it says.** Spec 019 (DMI-72) pinned `wrong_current_password` / `password_policy_violation` at `400` via `PasswordChangeRejected`. DMI-77 closed the remainder: the route's `401` was retitled to pin it to a missing/malformed/expired `Authorization` header. Deleting the `401` would have made the contract lie — the route is bearer-authed, so `401` is genuinely reachable; RFC 9110 §11.6.2 just confirms a body field is not a credential. |
