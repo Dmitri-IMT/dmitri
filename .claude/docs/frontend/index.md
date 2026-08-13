@@ -22,4 +22,5 @@ lives at `frontend/src/`.
 ## Domain & screens
 
 * [review](./review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [screens](./screens.md) — The login, home, password-recovery, settings (including activity disclosure) and invite screens, plus shells, navigation and shared components.

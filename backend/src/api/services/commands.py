@@ -9,6 +9,7 @@ from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
 
 from api.core.config import get_settings
+from api.core.error_codes import normalise_error_code
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
@@ -84,7 +85,7 @@ def get_command_detail(
         scan_mode=command.scan_mode,
         subnet=command.subnet,
         status=command.status,
-        error_code=command.error_code,
+        error_code=normalise_error_code(command.error_code),
         created_at=command.created_at,
         delivered_at=command.delivered_at,
         started_at=command.started_at,
@@ -196,6 +197,10 @@ def sweep_stale_commands(
                     (Command.status == "queued", None),
                     else_=now,
                 ),
+                error_code=case(
+                    (Command.status == "queued", "device_offline"),
+                    else_="agent_disconnected",
+                ),
             )
             .returning(Command.scan_id, Command.status)
         )
@@ -216,7 +221,9 @@ def _expire_queued_command(session: Session, command_id: UUID) -> None:
     session.execute(
         update(Command)
         .where(Command.id == command_id, Command.status == "queued")
-        .values(status="expired")
+        # Same transition the sweep's `queued` branch takes, so it carries the
+        # same reason: the Pi was not reachable to take the job.
+        .values(status="expired", error_code="device_offline")
     )
     session.commit()
 

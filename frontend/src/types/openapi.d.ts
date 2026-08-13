@@ -501,6 +501,8 @@ export interface components {
         /** @enum {string} */
         CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
         /** @enum {string} */
+        ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
+        /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
         Port: {
             port: number;
@@ -611,6 +613,7 @@ export interface components {
             } | null;
             status: components["schemas"]["ScanStatus"];
             command_id?: string | null;
+            error_code?: components["schemas"]["ScanErrorCode"] | null;
             host_count: number;
             finding_count: number;
         };
@@ -686,7 +689,7 @@ export interface components {
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
             status: components["schemas"]["CommandStatus"];
-            error_code?: string | null;
+            error_code?: components["schemas"]["ScanErrorCode"] | null;
             /** Format: date-time */
             created_at: string;
             delivered_at?: string | null;
@@ -1001,7 +1004,8 @@ export interface components {
             };
         };
         /**
-         * @description The command never reached the Pi — delivery gave up after 2 retries. The command is
+         * @description The command never reached the Pi — there was no open socket, or the single send attempt
+         *     threw. Delivery is not retried; triggering the scan again is the retry. The command is
          *     recorded as `expired` (never `failed`: the Pi never took the job). The `code` is pinned.
          */
         DeviceOfflineError: {

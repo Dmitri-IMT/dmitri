@@ -18,6 +18,7 @@ not a missing client or backend route.
 
 * [Backend ORM models](./models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 * [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
+* [Scan failure-code vocabulary](./error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 
 ## Services
 

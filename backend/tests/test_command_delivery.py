@@ -94,6 +94,7 @@ def test_deliver_send_failure_expires_without_scan(
     assert ws.send_text.await_count == 1
     administrative_session.refresh(command)
     assert command.status == "expired"
+    assert command.error_code == "device_offline"
     assert command.scan_id is None
     assert command.delivered_at is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
@@ -121,6 +122,9 @@ def test_deliver_no_socket_raises_offline_without_awaiting_send(
     decoy_ws.send_text.assert_not_awaited()
     administrative_session.refresh(command)
     assert command.status == "expired"
+    # The same transition the sweep's `queued` branch takes records the same
+    # reason, so a command expired at dispatch is not the one silent record.
+    assert command.error_code == "device_offline"
     assert command.scan_id is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
 

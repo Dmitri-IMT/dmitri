@@ -501,7 +501,7 @@ def test_failed_frame_persists_error_code(
     ) as ws:
         ws.send_text(
             _status_payload(
-                command_id=command.id, status="failed", error_code="scan_timeout"
+                command_id=command.id, status="failed", error_code="scan_failed"
             )
         )
         _sync(ws)
@@ -510,5 +510,47 @@ def test_failed_frame_persists_error_code(
     administrative_session.refresh(command)
     administrative_session.refresh(scan)
     assert command.status == "failed"
-    assert command.error_code == "scan_timeout"
+    assert command.error_code == "scan_failed"
     assert scan.status == "failed"
+
+
+def test_unpublished_error_code_is_stored_verbatim_and_reads_unknown(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+    bearer_headers,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(
+            _status_payload(
+                command_id=command.id, status="failed", error_code="warp_core_breach"
+            )
+        )
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(command)
+    assert command.status == "failed"
+    assert command.error_code == "warp_core_breach"
+
+    response = client.get(
+        f"/api/v1/commands/{command.id}",
+        headers=bearer_headers(seeded_org.id, "viewer"),
+    )
+    assert response.status_code == 200
+    assert response.json()["error_code"] == "unknown"

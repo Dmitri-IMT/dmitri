@@ -5,12 +5,43 @@ from itertools import product
 from uuid import uuid4
 
 import pytest
+from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
 from api.services import read
 from read_factories import make_finding, make_host, make_org, make_scan, make_scan_host
 from sqlalchemy import event
 from sqlmodel import Session
+
+
+def _seed_command(
+    session: Session,
+    org_id,
+    scan_id,
+    *,
+    status: str,
+    error_code: str | None = None,
+) -> Command:
+    agent = Agent(
+        org_id=org_id,
+        display_name=f"agent-{uuid4()}",
+        public_key=b"\x01" * 32,
+    )
+    session.add(agent)
+    session.flush()
+    command = Command(
+        org_id=org_id,
+        agent_id=agent.id,
+        scan_id=scan_id,
+        scan_mode="quick",
+        subnet="192.168.1.0/24",
+        status=status,
+        error_code=error_code,
+    )
+    session.add(command)
+    session.commit()
+    session.refresh(command)
+    return command
 
 
 def _seed_scan_history_org(
@@ -394,3 +425,119 @@ def test_list_scans_query_count_constant_in_per_page(
 
     assert after_large == after_small - after_large
     assert after_large <= 4
+
+
+def test_get_scan_detail_failed_published_code_from_one_request(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Failed Published Org")
+    scan = make_scan(administrative_session, org.id, status="failed")
+    command = _seed_command(
+        administrative_session,
+        org.id,
+        scan.scan_id,
+        status="failed",
+        error_code="scan_failed",
+    )
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.error_code == "scan_failed"
+    assert detail.command_id == command.id
+
+
+def test_get_scan_detail_failed_null_code_is_unknown(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Failed Null Code Org")
+    scan = make_scan(administrative_session, org.id, status="failed")
+    _seed_command(
+        administrative_session, org.id, scan.scan_id, status="failed"
+    )
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.error_code == "unknown"
+
+
+def test_get_scan_detail_failed_off_contract_code_is_unknown(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Failed Off Contract Org")
+    scan = make_scan(administrative_session, org.id, status="failed")
+    _seed_command(
+        administrative_session,
+        org.id,
+        scan.scan_id,
+        status="failed",
+        error_code="scan_timeout",
+    )
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.error_code == "unknown"
+
+
+def test_get_scan_detail_failed_without_command_is_unknown(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Failed No Command Org")
+    scan = make_scan(administrative_session, org.id, status="failed")
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.error_code == "unknown"
+    assert detail.command_id is None
+
+
+def test_get_scan_detail_completed_hides_stored_error_code(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Completed Stored Code Org")
+    scan = make_scan(administrative_session, org.id, status="completed")
+    command = _seed_command(
+        administrative_session,
+        org.id,
+        scan.scan_id,
+        status="done",
+        error_code="scan_failed",
+    )
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.error_code is None
+    assert detail.command_id == command.id
+
+
+def test_list_scans_row_omits_error_code(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "List Omits Error Code Org")
+    scan = make_scan(administrative_session, org.id, status="failed")
+    _seed_command(
+        administrative_session,
+        org.id,
+        scan.scan_id,
+        status="failed",
+        error_code="scan_failed",
+    )
+
+    result = read.list_scans(administrative_session, org_id=org.id)
+
+    assert len(result.data) == 1
+    assert "error_code" not in result.data[0].model_dump()

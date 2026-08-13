@@ -1541,7 +1541,8 @@ components:
                   details: {}
     DeviceOfflineError:
       description: |
-        The command never reached the Pi — delivery gave up after 2 retries. The command is
+        The command never reached the Pi — there was no open socket, or the single send attempt
+        threw. Delivery is not retried; triggering the scan again is the retry. The command is
         recorded as `expired` (never `failed`: the Pi never took the job). The `code` is pinned.
       content:
         application/json:
@@ -2127,6 +2128,17 @@ components:
         - done
         - failed
         - expired
+    ScanErrorCode:
+      type: string
+      enum:
+        - device_offline
+        - device_busy
+        - agent_disconnected
+        - scan_failed
+        - invalid_command
+        - result_unavailable
+        - ingest_failed
+        - unknown
     Severity:
       type: string
       enum:
@@ -2485,6 +2497,10 @@ components:
             - type: string
               format: uuid
             - type: 'null'
+        error_code:
+          anyOf:
+            - $ref: '#/components/schemas/ScanErrorCode'
+            - type: 'null'
         host_count:
           type: integer
           minimum: 0
@@ -2706,7 +2722,7 @@ components:
           $ref: '#/components/schemas/CommandStatus'
         error_code:
           anyOf:
-            - type: string
+            - $ref: '#/components/schemas/ScanErrorCode'
             - type: 'null'
         created_at:
           type: string

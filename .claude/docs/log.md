@@ -3,6 +3,29 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-13
+
+* **Creation**: `backend/error-codes.md` — maps `api/core/error_codes.py` (DMI-75 / spec 032):
+  the closed eight-code `ScanErrorCode` set and the two pure helpers `normalise_error_code` /
+  `scan_error_code`.
+* **Creation**: `frontend/scan-failure-reasons.md` — maps `frontend/src/lib/scanFailureReasons.ts`,
+  the operator copy deck keyed off the generated union; no caller until DMI-88.
+* **Update**: `backend/schemas.md`, `backend/services.md`, `backend/api.md`, `contracts.md`,
+  and the backend/frontend/`index.md` listings. Scan detail now carries a real `command_id` and a
+  derived `error_code` from a read-time command join; the stale sweep writes `device_offline` /
+  `agent_disconnected`; `_expire_queued_command` writes `device_offline` too, so both
+  `queued → expired` writers record the same reason; inbound `AgentStatusFrame.error_code` stays
+  `str | None`.
+* **Update**: **delivery retries withdrawn** — `ADR-011` amended (2026-08-13), plus
+  `roadmap/BACKEND.md`, `ui/FLOWS.md`, `ui/SCREENS.md`, the `DeviceOfflineError` description in
+  `contracts/openapi/openapi.yaml` (types regenerated) and the `deliver()` row in
+  `backend/services.md`. The docs claimed "2 delivery retries"; `_DELIVERY_RETRIES` never existed
+  in source, and `deliver()` has always made **one** attempt. V1 is one try — the operator
+  clicking "Scan now" again is the retry.
+* **Update** (`docs/`): frontend contract ask **C10 closed** across `roadmap/BACKEND.md`,
+  `ui/FLOWS.md` and `ui/status.md` — the contract publishes `ScanErrorCode` and the backend
+  implements it on scan detail; the Scan Detail screen that renders the copy is DMI-88.
+
 ## 2026-08-12
 
 * **Update**: **agent read surface and the Pi's target network** (spec 031 / DMI-78) — refreshed
