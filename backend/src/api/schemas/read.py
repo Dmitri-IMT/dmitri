@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
+from api.core.error_codes import ScanErrorCode
 from api.core.severity import Severity
 
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
@@ -111,6 +112,7 @@ class ScanDetailResponse(BaseModel):
     metadata: dict[str, str | int | float | bool] | None = None
     status: ScanStatus
     command_id: UUID | None = None
+    error_code: ScanErrorCode | None = None
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
 

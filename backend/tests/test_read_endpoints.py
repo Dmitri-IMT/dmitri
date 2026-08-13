@@ -8,6 +8,7 @@ import pytest
 from api.core.config import get_settings
 from api.db.session import get_session
 from api.main import app
+from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import (
     FindingRecord,
@@ -241,6 +242,36 @@ def _seed(session: Session) -> dict:
     }
 
 
+def _seed_command(
+    session: Session,
+    org_id,
+    scan: ScanRecord,
+    *,
+    status: str,
+    error_code: str | None = None,
+) -> Command:
+    agent = Agent(
+        org_id=org_id,
+        display_name="scan-agent",
+        public_key=b"\x01" * 32,
+    )
+    session.add(agent)
+    session.flush()
+    command = Command(
+        org_id=org_id,
+        agent_id=agent.id,
+        scan_id=scan.scan_id,
+        scan_mode=scan.scan_mode,
+        subnet=scan.subnet,
+        status=status,
+        error_code=error_code,
+    )
+    session.add(command)
+    session.commit()
+    session.refresh(command)
+    return command
+
+
 READ_PATHS = (
     "/api/v1/hosts",
     "/api/v1/hosts/{host_id}",
@@ -462,6 +493,41 @@ def test_get_scan_by_id_happy_path(
     )
     for finding in body["findings"]:
         assert finding["host_id"] == expected_finding_host_ids[finding["finding_id"]]
+    assert body["error_code"] is None
+
+
+def test_get_scan_by_id_failed_body_has_error_code_and_command_id(
+    client: TestClient, session: Session, bearer_headers
+) -> None:
+    seeded = _seed(session)
+    scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded["org"].id,
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.4.0/24",
+        scan_mode="quick",
+        status="failed",
+        metadata_json={},
+    )
+    session.add(scan)
+    session.flush()
+    command = _seed_command(
+        session,
+        seeded["org"].id,
+        scan,
+        status="failed",
+        error_code="scan_failed",
+    )
+
+    response = client.get(
+        f"/api/v1/scans/{scan.scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error_code"] == "scan_failed"
+    assert body["command_id"] == str(command.id)
 
 
 def test_get_scan_by_id_unknown_returns_404(

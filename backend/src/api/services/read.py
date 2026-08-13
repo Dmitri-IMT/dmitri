@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import case
 from sqlmodel import Session, func, select
 
+from api.core.error_codes import scan_error_code
 from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.persistence import (
     FindingRecord,
@@ -30,6 +31,7 @@ from api.schemas.read import (
     ScanSummary,
     SortOrder,
 )
+from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 
 DEFAULT_PAGE = 1
@@ -158,6 +160,7 @@ def get_scan_detail(
     ).all()
     findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
 
+    command = commands.command_for_scan(session, scan_id)
     return ScanDetailResponse(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -167,7 +170,10 @@ def get_scan_detail(
         findings=findings,
         metadata=scan.metadata_json,
         status=scan.status,
-        command_id=None,
+        command_id=command.id if command else None,
+        error_code=scan_error_code(
+            scan.status, command.error_code if command else None
+        ),
         host_count=len(hosts),
         finding_count=len(findings),
     )

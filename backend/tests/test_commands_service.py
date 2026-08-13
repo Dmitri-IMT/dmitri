@@ -3,14 +3,30 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+from api.db.session import get_session
+from api.main import app
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
-from api.services import commands
+from api.services import commands, read
+from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 STALE = T0 - timedelta(minutes=20)
+
+
+@pytest.fixture
+def client(administrative_session: Session) -> TestClient:
+    def _override_get_session():
+        yield administrative_session
+
+    app.dependency_overrides[get_session] = _override_get_session
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def _seed_org(session: Session) -> Org:
@@ -303,7 +319,10 @@ def test_apply_status_no_ops_on_undelivered_command(
 
 
 def test_sweep_stale_commands_expires_stale_queued(
-    administrative_session: Session, seeded_org: Org
+    administrative_session: Session,
+    seeded_org: Org,
+    client: TestClient,
+    bearer_headers,
 ):
     agent = _seed_agent(administrative_session, seeded_org.id, last_seen_at=STALE)
     command = _seed_command(
@@ -320,11 +339,24 @@ def test_sweep_stale_commands_expires_stale_queued(
     assert swept == 1
     administrative_session.refresh(command)
     assert command.status == "expired"
+    assert command.error_code == "device_offline"
     assert command.completed_at is None
+    assert command.scan_id is None
+
+    response = client.get(
+        f"/api/v1/commands/{command.id}",
+        headers=bearer_headers(seeded_org.id, "viewer"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "expired"
+    assert body["error_code"] == "device_offline"
+    assert body["scan_id"] is None
 
 
+@pytest.mark.parametrize("status", ["delivered", "running", "uploading"])
 def test_sweep_stale_commands_fails_stale_non_terminal(
-    administrative_session: Session, seeded_org: Org
+    administrative_session: Session, seeded_org: Org, status: str
 ):
     agent = _seed_agent(administrative_session, seeded_org.id, last_seen_at=STALE)
     scan = _seed_scan(administrative_session, seeded_org.id)
@@ -332,7 +364,7 @@ def test_sweep_stale_commands_fails_stale_non_terminal(
         administrative_session,
         org_id=seeded_org.id,
         agent_id=agent.id,
-        status="running",
+        status=status,
         scan_id=scan.scan_id,
     )
 
@@ -344,8 +376,17 @@ def test_sweep_stale_commands_fails_stale_non_terminal(
     administrative_session.refresh(command)
     administrative_session.refresh(scan)
     assert command.status == "failed"
+    assert command.error_code == "agent_disconnected"
     assert command.completed_at == T0
     assert scan.status == "failed"
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=seeded_org.id
+    )
+    assert detail is not None
+    assert detail.status == "failed"
+    assert detail.error_code == "agent_disconnected"
+    assert detail.command_id == command.id
 
 
 def test_sweep_stale_commands_leaves_connected_agent_command(
