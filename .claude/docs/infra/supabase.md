@@ -4,7 +4,7 @@ title: Supabase (managed Postgres)
 description: How Dmitri uses Supabase purely as arms-length managed Postgres 17 — not its Auth, Data API, or client SDK.
 resource: supabase/config.toml
 tags: [infra, supabase, postgres, database]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Supabase (managed Postgres)
@@ -61,10 +61,10 @@ down.
   truth for the schema, the RLS lockdown, and the `dmitri_runtime` role.
 - **Runtime consumers:** the [backend](/backend/overview.md) API + worker connect over
   psycopg3 using the pooled `DATABASE_URL`; the health route round-trips `SELECT 1` through it.
-- **Deploy topology:** the hosted Supabase project pairs with the two Railway services — see
-  [deployment](./deployment.md).
-- **System context / build status:** [overview](/overview.md). Only the hardware agent runs
-  today; the backend (and therefore its live use of hosted Supabase) is coded, not yet wired.
+- **Deploy topology:** the hosted Supabase project serves the two backend Railway services; the
+  separate frontend static service does not connect to Supabase — see [deployment](./deployment.md).
+- **System context / build status:** [overview](/overview.md). The backend read, auth, admin,
+  command-channel and ingest paths are wired; the frontend consumes the backend over HTTP.
 
 ## Notes / gotchas
 

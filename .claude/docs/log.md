@@ -3,6 +3,14 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-18
+
+* **Update**: `frontend/api.md` and `frontend/overview.md` now map the required `VITE_API_URL`
+  guard, CI build input, and Railway's Docker/Caddy static deployment.
+* **Update**: `infra/deployment.md`, `infra/supabase.md`, `overview.md`, and the root/frontend/
+  infra indexes now describe the three-service Railway topology and the frontend's HTTP-only
+  relationship to the backend and Supabase.
+
 ## 2026-08-13
 
 * **Creation**: `backend/error-codes.md` — maps `api/core/error_codes.py` (DMI-75 / spec 032):

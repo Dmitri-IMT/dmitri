@@ -8,11 +8,11 @@ lives at `frontend/src/`.
 
 ## Overview
 
-* [Package overview](./overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
+* [Package overview](./overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings and invite acceptance, and the Railway static deployment.
 
 ## API layer
 
-* [api](./api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
+* [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
 
 ## Session & routing
 

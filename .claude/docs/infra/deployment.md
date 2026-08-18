@@ -1,10 +1,10 @@
 ---
 type: Infrastructure
 title: Deployment (install scripts + Railway)
-description: Dev-environment installers and the two-service Railway + Supabase deploy topology, with env-var wiring.
+description: Dev-environment installers and the three-service Railway + Supabase deploy topology, with frontend build and backend env-var wiring.
 resource: install.sh
 tags: [infra, deployment, railway, install, env]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Deployment (install scripts + Railway)
@@ -16,25 +16,29 @@ deploy topology**. `install.sh` (bash) and `install.ps1` (PowerShell) at the rep
 automated installers — they install `uv` and `nmap`, sync Python deps for `hardware-agent` and
 `backend`, install a `dmitri` TUI launcher on PATH, seed `backend/.env`, and, when Docker + the
 Supabase CLI are present, start the local Supabase stack and run Alembic migrations. The hosted
-side is two Railway services built from `backend/` — an `api` web service and a `worker`
-background process — with the database on Supabase (see [supabase](./supabase.md)).
-**Current state:** only the hardware agent runs today; backend deployment is coded but not yet
-wired (see [overview](/overview.md) and [backend overview](/backend/overview.md)) — the Railway
-config and install scripts exist and work, but nothing in production calls the backend.
+side is three Railway services in the `nspi` environment: an `api` web service and `worker`
+background process built from `backend/`, plus a `frontend` static site built from `frontend/`;
+the database remains on Supabase (see [supabase](./supabase.md)).
+**Current state:** the backend services and the Railway frontend deployment are wired for the
+hosted pilot. Physical Pi provisioning, service-manager packaging, key provisioning and clock
+synchronization remain outside this deploy layer.
 
 ## Key files / settings
 
 ### Railway services
 
-| Service | Config file | Start command | Health check |
-|---------|-------------|---------------|--------------|
+| Service | Config file | Start command / server | Health check |
+|---------|-------------|------------------------|--------------|
 | `api` (FastAPI web) | `backend/railway.api.toml` | `uvicorn api.main:app --host 0.0.0.0 --port $PORT` | `/api/v1/health` (`healthcheckTimeout = 300`) |
 | `worker` (background) | `backend/railway.worker.toml` | `python -m api.worker_main` | none (no inbound traffic) |
+| `frontend` (static SPA) | `frontend/Dockerfile` + `frontend/Caddyfile` | Caddy on Railway's `$PORT` | none (static hosting) |
 
-Both use `builder = "RAILPACK"`, `watchPatterns = ["backend/**"]`, and
+The `api` and `worker` use `builder = "RAILPACK"`, `watchPatterns = ["backend/**"]`, and
 `restartPolicyType = "ALWAYS"`; both deploy from Root Directory `/backend` and differ only by
-config file / start command. Config Path is absolute from the repo root
-(`/backend/railway.api.toml`) — it does **not** follow Root Directory.
+config file / start command. The `frontend` service uses Root Directory `/frontend`, passes
+`VITE_API_URL` as a Docker build argument, and serves the Vite `dist/` output with Caddy.
+Backend Config Paths are absolute from the repo root (`/backend/railway.api.toml`) — they do not
+follow Root Directory.
 
 ### Install scripts (`install.sh` / `install.ps1`)
 
@@ -57,24 +61,25 @@ Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--ho
 
 | Variable | Purpose | Source |
 |----------|---------|--------|
-| `DATABASE_URL` | Runtime pooled connection (6543, `dmitri_runtime`) — the **only** DB URL Railway holds | `backend/.env.example`, sealed on both Railway services |
+| `DATABASE_URL` | Runtime pooled connection (6543, `dmitri_runtime`) — the only DB URL Railway holds on either backend service | `backend/.env.example` |
 | `DATABASE_URL_DIRECT` | Admin/migration connection (5432, `postgres`) — required by Alembic, **forbidden** on any Railway service | `backend/alembic/env.py`; exported transiently in operator shell |
-| `NVD_API_KEY` | Optional NVD enrichment key | `backend/.env.example`; sealed on both services if used |
+| `NVD_API_KEY` | Optional NVD enrichment key | `backend/.env.example`; sealed on backend services if used |
 | Enrichment tuning (`ENRICHMENT_*`, `KEV_*`, `EPSS_*`, `NVD_*`) | Worker poll/cache/base-URL settings | `backend/.env.example` |
-| `GITHUB_PAT` | Optional Cursor MCP token — repo-root `.env` only, unrelated to deploy | `.env.example` (repo root) |
+| `VITE_API_URL` | Public API origin without `/api/v1`; embedded during the frontend Vite build | `frontend/.env.example`; Railway frontend build variable |
+| `GITHUB_PAT` | Optional Cursor MCP token — repo-root `.env` only, unrelated to deploy | `.env.example` |
 
 ## How it connects
 
 - **Database:** [supabase](./supabase.md) — the hosted Supabase Postgres 17 instance both
-  Railway services connect to via the sealed pooled `DATABASE_URL`.
+  backend Railway services connect to via the sealed pooled `DATABASE_URL`.
 - **Schema provisioning:** [migrations](/backend/migrations.md) — Alembic (`upgrade head`) must
-  run against a fresh DB before either service boots cleanly; the health route returns `503`
-  until the schema exists.
-- **What runs on Railway:** the [backend](/backend/overview.md) `api` and `worker` — the `api`
-  serves the contracted [health route](/backend/api.md), the `worker` runs the enrichment poll
-  loop.
+  run against a fresh DB before either backend service boots cleanly; the health route returns
+  `503` until the schema exists.
+- **What runs on Railway:** the [backend](/backend/overview.md) `api` and `worker` plus the
+  frontend static site. The API serves the contracted [health route](/backend/api.md), the worker
+  runs the enrichment poll loop, and Caddy serves the Vite bundle with SPA fallback.
 - **Build status / topology:** [overview](/overview.md). Deploy targets are Railway
-  (backend + worker) and Supabase (DB); no frontend service exists yet.
+  (backend API + worker + frontend static site) and Supabase (DB).
 
 ## Notes / gotchas
 
@@ -87,10 +92,14 @@ Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--ho
   `DATABASE_URL_DIRECT`, never 6543.
 - **Config Path does not follow Root Directory** — always use the absolute-from-repo-root path,
   or Railway silently uses defaults.
-- **One build, two services:** `watchPatterns = ["backend/**"]` means a worker-only change also
-  rebuilds `api` and vice versa.
-- **`$PORT` binding:** `api` must bind `0.0.0.0:$PORT` (already the shipped command) or the
-  health check fails and traffic never routes; `worker` binds no port by design.
+- **One backend build, two services:** `watchPatterns = ["backend/**"]` means a worker-only change
+  rebuilds `api` and vice versa. The frontend has its own Docker build context and does not use
+  the backend Railpack configs.
+- **`$PORT` binding:** `api` must bind `0.0.0.0:$PORT` and Caddy must listen on Railway's `$PORT`;
+  the API health check fails if the API binds a hardcoded or loopback-only port.
+- **Frontend build and routing:** `VITE_API_URL` is required and has no localhost fallback.
+  `Caddyfile` rewrites `/health` to a successful static response and falls back to `index.html`
+  for React Router deep links.
 - **Free-tier pauses:** Railway's trial credit and Supabase's 7-day idle pause both silently
   stop a long-running deployment — move to paid plans / add a keep-alive before `nspi` needs to
   run 24/7.

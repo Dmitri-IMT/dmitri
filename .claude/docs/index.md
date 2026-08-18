@@ -63,8 +63,8 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 
 The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/index.md).
 
-* [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the first real screens (login → Home).
-* [frontend/api](./frontend/api.md) — The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read resource modules.
+* [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings and invite acceptance, and the Railway static deployment.
+* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
@@ -76,7 +76,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 Full listing in [infra/index.md](./infra/index.md).
 
 * [infra/supabase](./infra/supabase.md) — Supabase used purely as arms-length managed Postgres 17.
-* [infra/deployment](./infra/deployment.md) — Dev-environment installers and the two-service Railway + Supabase topology.
+* [infra/deployment](./infra/deployment.md) — Dev-environment installers and the three-service Railway + Supabase topology, with frontend build and backend env-var wiring.
 
 ## Meta
 

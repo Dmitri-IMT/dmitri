@@ -1,10 +1,10 @@
 ---
 type: Package Overview
 title: frontend package overview
-description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, and the screens from login and Home through password recovery, settings and invite acceptance.
+description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings and invite acceptance, and the Railway static deployment.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # frontend package overview
@@ -23,6 +23,9 @@ transitional one-item centring.
 The product frame is the verdict, not a dashboard: Home answers "does anything need me?" in one
 sentence, backed by a pure derivation over four reads.
 
+The browser bundle requires a public `VITE_API_URL` at build time. The API client and Vite config
+both fail fast when it is absent, so hosted builds cannot silently target localhost.
+
 ## Layout
 
 | Area | What lives there | Doc |
@@ -33,6 +36,8 @@ sentence, backed by a pure derivation over four reads.
 | `src/pages/`, `src/components/` | The screens (Login, Home, ForgotPassword, ResetPassword, AcceptInvite, Settings, NotFound), the two shells, the top bar, and the shared presentation components. | [screens](./screens.md) |
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes the four Home reads into one discriminated union. | [review](./review.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types` (openapi-typescript). Committed; CI re-checks for drift. Sole source of request/response types. | — |
+| `vite.config.ts` | Loads Vite environment variables and rejects a missing `VITE_API_URL` before the production build starts. | — |
+| `Dockerfile`, `Caddyfile` | Build the SPA with Node 22, serve `dist/` with Caddy on Railway's `$PORT`, and rewrite deep links to `index.html`. | — |
 | `src/components/ui/` | shadcn/ui `button`, `input`, `label` only (Tailwind CSS v4, light-only foundation). | — |
 | `src/test/`, `*.test.ts(x)` | Vitest + MSW harness (`mswHandlers.ts` fixtures, `renderWithProviders.tsx`); MSW intercepts at the network layer so the real client/interceptor run untouched. | [api](./api.md) |
 
@@ -42,11 +47,18 @@ sentence, backed by a pure derivation over four reads.
   request/response models are permitted (ADR-008 §Geração de Tipos).
 - The `frontend` CI job in `.github/workflows/ci.yml` gates the layer: `npm ci` → `gen:types` →
   `git diff --exit-code -- src/types` (drift) → `lint` → `format:check` → `typecheck` → `test` →
-  `build`.
+  `build` with `VITE_API_URL=http://localhost:8000`.
 - Visual foundations (colour, spacing, type scale, the absent-not-disabled rule) are governed by
   [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md), whose §Color table this feature filled in.
 
 ## Notes / gotchas
+
+- **Hosted static deployment.** Railway builds `frontend/Dockerfile` and serves the resulting
+  `dist/` through `frontend/Caddyfile`; Caddy listens on Railway's `$PORT`, serves `/health`, and
+  rewrites unknown paths to `index.html` for React Router deep links.
+- **No localhost fallback.** `VITE_API_URL` is required in both the Vite config and API client.
+  Railway must provide the public API service URL as a Docker build argument; the deployed bundle
+  carries that URL at build time.
 
 - **Light-only, deliberately.** `index.css` defines no dark theme. `@custom-variant dark` is
   redefined to an unreachable selector (`&:is(.dmitri-dark-unused *)`) rather than deleted —
