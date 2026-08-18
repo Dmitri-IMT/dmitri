@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend screens, shells and shared components
-description: The login, home, password-recovery, settings (including activity disclosure) and invite screens, plus shells, navigation and shared components.
+description: The login, home, password-recovery, settings (activity disclosure and leaving the organization) and invite screens, plus shells, navigation and shared components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -23,10 +23,14 @@ operator never meets a control that looks live and isn't.
 | `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` in the fluid 720px-max prose column. **No sidebar.** | `frontend/src/components/AppShell.tsx:4` |
 | `TopBar` | Wordmark, a two-item nav (`Home` → `/`, `Settings` → `/settings`, the latter tagged `nav-settings`), `[Log out]` calling `signOut`. Active item is a 2px `--accent` underline, not a filled pill. **Reads only `signOut` — no role branch at all**, so both roles see both items. `flex justify-between` with `flex-1` on the nav. | `frontend/src/components/TopBar.tsx:12` |
 | `navLinkClass` | The one active/muted `NavLink` className callback, shared by both nav items rather than copied. Typed `({ isActive }: { isActive: boolean })` because a module-level function gets no contextual type from `NavLink`. | `frontend/src/components/TopBar.tsx:6` |
-| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient post-reset status line. In-flight the button reads `Signing in…` and is `disabled` — the feature's **one** legitimate `disabled`. | `frontend/src/pages/Login.tsx:10` |
+| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled` — the feature's **one** legitimate `disabled`. | `frontend/src/pages/Login.tsx:10` |
+| `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:18` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:9` |
 | `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:13` |
 | `Settings` | Guarded change-password form plus a layered Activity disclosure available to both roles. The button toggles a persistent, keyboard/assistive-technology reachable note explaining that admins see last-used and last-sign-in times, and that no viewed/action detail is recorded. | `frontend/src/pages/Settings.tsx:14` |
+| `Settings` — leaving section | The **last** section on the page, rendered `{user && …}` for both roles alike: the explanation, a destructive `settings-leave-trigger`, and a `ConfirmByTyping` gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. The org is named generically — a member's profile carries no organization name and no lookup was added for one. | `frontend/src/pages/Settings.tsx:14` |
+| `ConfirmByTyping` | The shared type-to-confirm modal, built directly on `Dialog` from `radix-ui` (no vendored `ui/dialog.tsx`). `expectedValue` is both the gate and the prompt that serves as the input's `<label htmlFor>`. The confirming button's greyed state is owned by the component — derived from the typed value and its own in-flight flag, never a caller-supplied variant — so both call sites behave identically. Everything else in the dialog stays live; Cancel is *absent* while submitting. The typed value is cleared explicitly when `open` goes true — the component outlives the dialog Radix unmounts, so the gate would otherwise hold only on the first open. Second caller (Users screen, DMI-90) not built yet. | `frontend/src/components/ConfirmByTyping.tsx:29` |
+| `matchesExpected` | Module-local, `trim()` + `toLowerCase()` on both sides: the account identity in this system is `lower(email)` (ADR-017 §1), so case and stray whitespace do not defeat a correct address. | `frontend/src/components/ConfirmByTyping.tsx:25` |
 | `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
 | `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Items-pending order: deck → failed-scan card → stale-coverage card. | `frontend/src/pages/Home.tsx:10` |
 | `NotFound` | `That page doesn't exist.` plus a real `Go to Home` **link**, inside the shell. | `frontend/src/pages/NotFound.tsx:3` |
@@ -40,9 +44,10 @@ operator never meets a control that looks live and isn't.
 
 ## How it connects
 
-- `Home` consumes [review](./review.md)'s `useHomeReview()`; `Login`, `TopBar` and `AcceptInvite`
-  consume [auth](./auth.md)'s `useSession()`. `ForgotPassword`, `ResetPassword` and `Settings` call
-  [api](./api.md) directly and touch the session layer not at all.
+- `Home` consumes [review](./review.md)'s `useHomeReview()`; `Login`, `TopBar`, `AcceptInvite` and
+  `Settings` consume [auth](./auth.md)'s `useSession()` — `Settings` for `user` and `deleteAccount`.
+  `ForgotPassword` and `ResetPassword` call [api](./api.md) directly and touch the session layer not
+  at all; `Settings` does both (its change-password form calls `changePassword()` directly).
 - Both shells are mounted from [app](./app.md)'s route table.
 - Visual tokens come from `src/index.css`, governed by
   [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md).
@@ -102,6 +107,30 @@ operator never meets a control that looks live and isn't.
   `queryAllByRole(...)` elements are `toBeEnabled()` with no `aria-disabled` — never a
   `container.querySelectorAll('[disabled]')` sweep, which misses `fieldset[disabled]` inheritance
   and `aria-disabled` and violates Testing Library's `no-container`/`no-node-access` rules.
+- **Absent, not disabled — and the one sanctioned exception.** `ConfirmByTyping`'s confirm button
+  is genuinely `disabled` until the typed address matches, and again while the request is in
+  flight. That is not a "you may not do this" statement — it reports the person's own progress and
+  the product's own work — so it is excluded from the absent-not-disabled sweep by `data-testid`,
+  while every other element in the dialog stays live. Cancel, by contrast, is *absent* while
+  submitting rather than disabled.
+- **Closing the dialog does not reset the typed value on its own.** Radix unmounts
+  `Dialog.Content`, but `ConfirmByTyping` sits beside the trigger in its caller and stays mounted,
+  so `typed` survives a dismissal. The component clears it on the false → true edge of `open`,
+  using the `wasOpen` render-phase mirror rather than an effect — `react-hooks` errors on
+  `setState` inside an effect, and the field has to be empty on the reopened dialog's first
+  render. Drop the reset and a cancelled attempt reopens with the address prefilled and the
+  destructive action already live, so the typing gate holds only the first time. Pinned by the
+  "reopens clean after a dismissal" test.
+- **Radix hijacks the modal's focus restore.** `DialogContentModal` unconditionally
+  `preventDefault()`s `onCloseAutoFocus` and focuses `context.triggerRef` itself. `ConfirmByTyping`
+  is fully controlled and renders no `Dialog.Trigger`, so that ref is always `null` and focus would
+  land on `document.body` on every dismissal. The component therefore restores focus itself, guarded
+  on `isConnected` so a trigger unmounted by the success navigation is skipped. **jsdom cannot
+  reproduce Radix's deferred restore**, so no Vitest test guards this: deleting the handler leaves
+  the suite green. Only a real-browser run would catch its removal — do not remove it on the
+  strength of a green suite.
+- **The leaving copy names no organization.** A member's profile is `{ user_id, email, role }` and
+  carries no organization name; the copy is generic by design and no lookup was added for it.
 
 # Citations
 
@@ -111,3 +140,5 @@ operator never meets a control that looks live and isn't.
 [4] [specs/028-frontend-public-auth-surfaces/DESIGN.md](../../../specs/028-frontend-public-auth-surfaces/DESIGN.md)
 [5] [specs/028-frontend-public-auth-surfaces/ARCHITECTURE.md](../../../specs/028-frontend-public-auth-surfaces/ARCHITECTURE.md)
 [6] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
+[7] [specs/033-settings-leave-organization](../../../specs/033-settings-leave-organization/TRUTH.md)
+[8] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)

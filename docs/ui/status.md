@@ -19,7 +19,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 | Read | Scan list/detail, host inventory/detail | B3 clarified; **all four screen specs drafted 2026-07-13**. **C10 resolved 2026-08-13 (DMI-75)** — `ScanDetailResponse.error_code` is on the scan; the copy deck ships; consuming it on Scan Detail is DMI-88. **C9 resolved 2026-08-02** — `host_id` is required on `ScanHostView`. **C11 resolved** — the findings filter is `?host_id=`; the read model is `hosts` end to end, only ingest keeps `devices`. |
 | Agents | Agent status; network choice; admin-only **Scan now** | B4 clarified; **screen spec drafted 2026-07-13**. Blocked on C1, C2. **C12 resolved** — terminal state splits on `delivered_at` (never delivered → `expired`; delivered then broke → `failed`). |
 | Admin | Users & invites | B2 and screen spec drafted. C4 backend contract is now complete (spec 030): member/pending-invite lists, role change, revoke, removal and last-seen exist. The frontend screen is not built yet. |
-| Settings | Change password; profile | Change password and the layered Activity disclosure are built. Profile update and self-removal UI remain pending; the self-delete backend route already exists. |
+| Settings | Change password; profile | Change password, the layered Activity disclosure and the leaving section (self-removal, confirmed by typing your own address) are built. Profile update remains pending. |
 
 ## Chosen
 
@@ -55,8 +55,8 @@ The product should explain what needs attention. It is not a metrics dashboard.
   delivery still needs SPF, DKIM, and DMARC. The built Forgot/Reset screens otherwise work.
 - Remaining contract blockers include agent discovery/target-network persistence and self-profile update. C4 is closed: member and invite administration routes are published and implemented, so Users & Invites is now frontend work rather than a missing-API problem.
 - One design call remains: the 409 busy-Pi copy. Stale coverage is already fixed at three days.
-- **All screens are specced.** Home, public auth, and Settings password + Activity disclosure are
-  built; the remaining product screens/actions follow the roadmap.
+- **All screens are specced.** Home, public auth, and Settings (password, Activity disclosure and
+  leaving the organization) are built; the remaining product screens/actions follow the roadmap.
 
 ## Later, not MVP
 

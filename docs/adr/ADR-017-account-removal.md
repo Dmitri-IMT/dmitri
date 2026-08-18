@@ -4,6 +4,8 @@
 > matrix gains a removal capability, and "Audit — who logged in" is no longer purely Phase 2.
 > **Reverses** the "No user deletion/deactivation" exclusion carried by DMI-76 and DMI-90.
 > Concurrent-removal limitation clarified 2026-08-08; hardening is tracked by DMI-105.
+> Confirm-button affordance reversed 2026-08-17: §5 now specifies a real, disabled confirm button
+> until the typed value matches, reversing the always-live control this ADR originally specified.
 
 ## Context
 
@@ -99,6 +101,26 @@ session; a single click is not proportionate to it.
 
 This is a shared component, not a per-screen control: two call sites is exactly the bar
 [`ui/status.md`](../ui/status.md) sets for a component earning its place.
+
+**Amended 2026-08-17 — the confirm button is a real, disabled HTML button until the typed value
+matches.** This ADR originally specified an always-live, always-focusable confirm button that did
+nothing on a non-matching press ("absent, not disabled"). The operator has reversed that: the
+button now carries the real `disabled` attribute — out of the tab order, visibly greyed — from the
+moment the dialog opens, and enables the instant the typed value matches, exactly like GitHub's
+"type the repository name to confirm" pattern.
+
+The reasoning: a button that turns live as the typing becomes correct is continuous feedback. The
+person watches their own progress and never has to press anything to find out where they stand.
+Letting them press a button only to be told "no" is worse than not letting them press it at all,
+and the convention — grey until correct, then live — is one people already know from elsewhere.
+
+**Accepted consequence.** While the typed value does not match, the button is out of the tab
+order. A sighted person sees the grey and reads "not yet". A screen-reader user who mistypes the
+address gets no equivalent signal: they tab from the field, find no confirm button, and cannot
+tell a typo from a broken dialog. The operator was shown this cost before deciding and accepted
+it. This is a narrow carve-out for one control — an action the person *is* permitted to take but
+has not yet supplied the required input for — not a reopening of the "absent, not disabled"
+principle, which still governs every action a role cannot perform.
 
 ### 6. What the removed user experiences
 

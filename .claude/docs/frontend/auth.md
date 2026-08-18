@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend session layer
-description: The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, the useSession accessor, and the RequireSession route guard.
+description: The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, account deletion, the useSession accessor, and the RequireSession route guard.
 resource: frontend/src/auth/SessionProvider.tsx
 tags: [frontend, auth, session, react, router]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # frontend session layer
@@ -26,6 +26,7 @@ the only place the session-expiry event is turned into a navigation.
 | `signIn(credentials)` | `login()` → `enterSession()`. | `frontend/src/auth/SessionProvider.tsx:76` |
 | `acceptInvitation(request)` | `acceptInvite()` → `enterSession()`. An accepted invite therefore lands on Home directly and **never routes through Login**. | `frontend/src/auth/SessionProvider.tsx:81` |
 | `signOut()` | `logout()`, then `clearSession()` + `navigate('/login', { replace: true })` — **whether or not the logout call succeeded**. | `frontend/src/auth/SessionProvider.tsx:86` |
+| `deleteAccount()` | `deleteCurrentUser()`, then `clearSession()` + `navigate('/login', { replace: true, state: { accountDeleted: true } })`. Deliberately **not** a reuse of `signOut()` and deliberately **does not catch**: the caller needs the rejection intact, because `Settings` discriminates the last-admin refusal (`409` + `last_admin`) on it. A refusal therefore leaves the session wholly untouched. | `frontend/src/auth/SessionProvider.tsx:98` |
 | `status` | Derived three-way `'booting' \| 'authenticated' \| 'anonymous'`; checks `!enabled` first so a signed-out user reads `anonymous` immediately rather than falling back to `booting`. | `frontend/src/auth/SessionProvider.tsx:97` |
 | `useSession()` | Throws outside the provider. **The only** way any component reads identity or role. | `frontend/src/auth/useSession.ts:4` |
 | `RequireSession` | Route guard: `booting` → renders neither protected content **nor** a redirect; `anonymous` → `<Navigate to="/login" replace />`; `authenticated` → `<Outlet />`. | `frontend/src/auth/RequireSession.tsx:4` |
@@ -33,11 +34,11 @@ the only place the session-expiry event is turned into a navigation.
 ## How it connects
 
 - Consumes [api](./api.md): `refresh()`, `login()`, `logout()`, `acceptInvite()`, `getCurrentUser()`,
-  the token store, and `onSessionExpired`.
+  `deleteCurrentUser()`, the token store, and `onSessionExpired`.
 - Mounted by [app](./app.md)'s provider nest in `main.tsx`; `RequireSession` wraps the protected
   branch of `App`'s route table.
 - Read by [screens](./screens.md): `Login` (status + `signIn`), `TopBar` (`signOut` only),
-  `AcceptInvite` (status + `acceptInvitation` + `signOut`).
+  `AcceptInvite` (status + `acceptInvitation` + `signOut`), `Settings` (`user` + `deleteAccount`).
 
 ## Notes / gotchas
 
