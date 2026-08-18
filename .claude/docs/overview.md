@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -36,8 +36,8 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 | Hardware agent + TUI | [hardware-agent](/hardware-agent/overview.md) | **active** | Runs the Nmap scan pipeline, normalizes output, Textual TUI + headless CLI. |
 | Backend API + worker | [backend](/backend/overview.md) | reads + auth/admin + commands + ingest wired | FastAPI API, Postgres persistence, and CVE enrichment/risk worker. |
 | Shared contracts | [contracts](/contracts.md) | published active seam | Hand-authored OpenAPI + example JSON binding agent, backend, and frontend. |
-| Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, Railway deploy config. |
-| Frontend (React) | [frontend](/frontend/overview.md) | auth/Home/Settings slice wired | React 19 SPA with contract-typed API access, sessions, Home, public auth, and Settings. |
+| Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, and Railway API, worker, and frontend static deployment config. |
+| Frontend (React) | [frontend](/frontend/overview.md) | auth/Home/Settings slice wired; static deployment configured | React 19 SPA with contract-typed API access, sessions, Home, public auth, Settings, and a Railway static bundle. |
 
 ## End-to-end flow
 
@@ -93,7 +93,7 @@ Legacy `full` mode is being removed in favor of `max`.
 - **hardware-agent** — Python 3.13, Textual (TUI), Pydantic v2, Nmap + NSE, stdlib threads, `uv`,
   plus `httpx` + `cryptography` (ingest) and `websockets` (command channel).
 - **backend** — Python 3.11+, FastAPI, SQLModel/SQLAlchemy 2, psycopg, Alembic, httpx, `uv`.
-- **infra** — Supabase (managed Postgres 17), Railway (API + worker services).
+- **infra** — Supabase (managed Postgres 17), Railway (API + worker + frontend static service).
 
 # Citations
 

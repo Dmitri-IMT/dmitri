@@ -1,28 +1,29 @@
 ---
 type: Module
 title: frontend API layer
-description: The two Axios instances, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
+description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # frontend API layer
 
 ## Purpose
 
-`src/api/` scopes the refresh cookie to auth requests structurally (two Axios instances), attaches
-the Bearer token, and recovers an expired session with exactly one refresh — sharing that single
-refresh across concurrent 401s. Credential scoping is achieved **solely** by the two-instance split;
-no interceptor toggles `withCredentials` by inspecting the URL (approach B from the research doc is
-deliberately rejected). On top of that sit the thin, contract-typed read modules the screens call.
+`src/api/` requires `VITE_API_URL` and derives the `/api/v1` base URL from it; it scopes the
+refresh cookie to auth requests structurally (two Axios instances), attaches the Bearer token, and
+recovers an expired session with exactly one refresh — sharing that single refresh across concurrent
+401s. Credential scoping is achieved **solely** by the two-instance split; no interceptor toggles
+`withCredentials` by inspecting the URL (approach B from the research doc is deliberately rejected).
+On top of that sit the thin, contract-typed read modules the screens call.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `apiClient` | Business Axios instance, `baseURL = ${VITE_API_URL}/api/v1`, `withCredentials` left at the Axios default (`false`). Created bare; the interceptors are attached to it by `client.ts`. | `frontend/src/api/instances.ts:5` |
-| `authClient` | Auth Axios instance, same baseURL, `withCredentials: true`. Carries **no** interceptors — so a refresh call's own 401 cannot recurse. | `frontend/src/api/instances.ts:7` |
+| `apiClient` | Business Axios instance, `baseURL = ${VITE_API_URL}/api/v1`, with `withCredentials` left at the Axios default (`false`). Created bare; the interceptors are attached to it by `client.ts`. | `frontend/src/api/instances.ts:11` |
+| `authClient` | Auth Axios instance, same baseURL, `withCredentials: true`. Carries **no** interceptors — so a refresh call's own 401 cannot recurse. | `frontend/src/api/instances.ts:13` |
 | `client.ts` (side effects) | Attaches both interceptors to the shared `apiClient` **at import time**, then re-exports `apiClient`/`authClient`. Importing this module is what arms authentication — see the gotcha below. | `frontend/src/api/client.ts:24` |
 | `performRefresh()` | Single-flight refresh: memoizes one in-flight `refresh()` in module-scoped `refreshPromise`; concurrent 401s await the same promise; `.finally` resets it. | `frontend/src/api/client.ts:13` |
 | response interceptor | On a 401 for a not-yet-retried request: refresh once (guarded by per-request `_retry`), rewrite the header, retry via `apiClient(config)`; on refresh failure clear the token store and **`emitSessionExpired()`**, no second refresh. | `frontend/src/api/client.ts:44` |
@@ -39,14 +40,15 @@ deliberately rejected). On top of that sit the thin, contract-typed read modules
 
 ## How it connects
 
-- **Import direction is asymmetric and load-bearing.** `instances.ts` is the leaf: it creates both
-  Axios objects and imports nothing. `client.ts` imports the bare instances plus `refresh` from
-  `auth.ts`, and arms the interceptors. The read modules (`users`, `scans`, `findings`) import
-  `apiClient` **from `client.ts`**, never from `instances.ts`. `auth.ts` is the one exception — it
-  imports `authClient` from `instances.ts`, because `client.ts` depends on it and the other
-  direction would be a genuine cycle. `passwords.ts` follows the ordinary rule (`./client`) and is
-  deliberately **not** folded into `auth.ts`: doing so would either recreate that cycle or leave the
-  change-password call bypassing the Bearer and refresh-retry interceptors.
+- **Import direction is asymmetric and load-bearing.** `instances.ts` is the leaf: it requires a
+  non-empty `VITE_API_URL`, creates both Axios objects, and imports nothing else. `client.ts`
+  imports the bare instances plus `refresh` from `auth.ts`, and arms the interceptors. The read
+  modules (`users`, `scans`, `findings`) import `apiClient` **from `client.ts`**, never from
+  `instances.ts`. `auth.ts` is the one exception — it imports `authClient` from `instances.ts`,
+  because `client.ts` depends on it and the other direction would be a genuine cycle.
+  `passwords.ts` follows the ordinary rule (`./client`) and is deliberately **not** folded into
+  `auth.ts`: doing so would either recreate that cycle or leave the change-password call bypassing
+  the Bearer and refresh-retry interceptors.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
 - The three read modules are consumed by [review](./review.md)'s `useHomeReview()`.
@@ -79,6 +81,9 @@ deliberately rejected). On top of that sit the thin, contract-typed read modules
   router navigation and the module stays free of React/router imports.
 - **All three read modules are typed exclusively from `components['schemas'][...]`.** A hand-written
   request/response interface is an ADR-008 violation even when it is correct today.
+- **`VITE_API_URL` is required.** Both `vite.config.ts` and `instances.ts` fail fast when it is
+  missing instead of silently defaulting to localhost. CI and the Railway frontend build provide
+  explicit values; the deployed bundle therefore targets the intended public API.
 - **Path tails are relative to the `/api/v1` baseURL** set in `instances.ts` — never repeat the prefix.
 - The MSW `/scans` handler branches on `status` and `/findings` branches on `severity`, so the two
   scan reads return genuinely different fixture records (`src/test/mswHandlers.ts`).

@@ -206,5 +206,7 @@ jobs:
         run: npm run test
 
       - name: Build
+        env:
+          VITE_API_URL: http://localhost:8000
         working-directory: frontend
         run: npm run build
