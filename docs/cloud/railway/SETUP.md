@@ -1,20 +1,21 @@
-# Railway — setup (API + worker)
+# Railway — setup (API, worker + frontend)
 
-> **Scope:** DMI-52 stood up the Railway project for `nspi` with **two services (`api`,
-> `worker`)**; [DMI-56](../../../specs/013-backend-app-shell-rebuild/) wired both to their real
-> shell entry points and this doc's variable/rollback guidance to the shipped runtime
-> contract. **No frontend service, no AWS** here (both are later work — see
-> [`BACKEND.md` B4/B5](../../roadmap/BACKEND.md#b4--b5--hosted-stack-)).
+> **Scope:** DMI-52 stood up the Railway project for `nspi` with the backend services
+> (`api` and `worker`); [DMI-56](../../../specs/013-backend-app-shell-rebuild/) wired both to
+> their real shell entry points. DMI-91 adds the hosted frontend static service and its
+> browser-to-API configuration. **No AWS** here — see
+> [`BACKEND.md` B4/B5](../../roadmap/BACKEND.md#b4--b5--hosted-stack-).
 >
-> **Locked decisions honored:** two services `api` + `worker`; single `nspi` environment;
-> region matches Supabase; Postgres lives on **Supabase**, not Railway (Railway connects via
-> env vars, restricted `dmitri_runtime` login, transaction pooler **6543** at runtime).
+> **Locked decisions honored:** three services `api` + `worker` + `frontend`; single `nspi`
+> environment; region matches Supabase; Postgres lives on **Supabase**, not Railway (Railway
+> connects via env vars, restricted `dmitri_runtime` login, transaction pooler **6543** at
+> runtime).
 >
-> **Current state of the repo:** both services build and deploy from `backend/` (Root
-> Directory `/backend` on both, `api` and `worker`) and start through their real entry points
-> — no placeholder start commands remain. See
+> **Current state of the repo:** `api` and `worker` build and deploy from `backend/` (Root
+> Directory `/backend`) and start through their real entry points. The `frontend` service
+> builds the Vite SPA from `/frontend` and publishes `dist/` as a Railway static site. See
 > [`specs/013-backend-app-shell-rebuild/ARCHITECTURE.md`](../../../specs/013-backend-app-shell-rebuild/ARCHITECTURE.md)
-> for the full shell contract.
+> for the backend shell contract.
 
 ## What this doc delivers
 
@@ -23,19 +24,22 @@
 | Railway project + `nspi` environment | Created |
 | `api` service (web/HTTP), Root Directory `/backend`, config `backend/railway.api.toml` | Deployed, real entry point |
 | `worker` service (background job runner), Root Directory `/backend`, config `backend/railway.worker.toml` | Deployed, real entry point |
+| `frontend` service (Railway static site), Root Directory `/frontend`, output `dist/` | Required by DMI-91 |
 | Region selected (matches Supabase) | Set |
-| Restricted pooled `DATABASE_URL` (`dmitri_runtime`, 6543 transaction pooler) wired into both services | Documented below — apply with the CLI commands in [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
-| `DATABASE_URL_DIRECT` on either service | **Forbidden** — see [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
+| Restricted pooled `DATABASE_URL` (`dmitri_runtime`, 6543 transaction pooler) wired into both backend services | Documented below — apply with the CLI commands in [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
+| `DATABASE_URL_DIRECT` on either backend service | **Forbidden** — see [Provisioning the runtime variables](#provisioning-the-runtime-variables) |
 
-## The two services
+## The services
 
 | Service | Role | Public domain? | Health check? | Replicas |
 |---------|------|----------------|---------------|----------|
 | `api` | FastAPI web service. Serves the contracted health route `GET /api/v1/health` (`uvicorn api.main:app --host 0.0.0.0 --port $PORT`). No business routes in this shell. | **Yes** — needed for the public URL | **Yes** — `/api/v1/health` | **1** (ADR-011: single API replica for NSPi) |
 | `worker` | Background job runner (`python -m api.worker_main` → `api.services.worker`; enrichment poll loop, `FOR UPDATE SKIP LOCKED` against Supabase). No inbound traffic. | **No** | **No** — nothing to probe over HTTP | 1 |
+| `frontend` | Railway static site serving the Vite build from `dist/`; every route must fall back to `index.html`. | **Yes** — generated Railway domain | **No** — static hosting | N/A |
 
-Both services deploy from the **same repo**, Root Directory `/backend`; they differ only by
-config file (`railway.api.toml` / `railway.worker.toml`) and therefore start command.
+The `api` and `worker` services deploy from the **same repo**, Root Directory `/backend`; they
+differ only by config file (`railway.api.toml` / `railway.worker.toml`) and therefore start
+command. The `frontend` service uses Root Directory `/frontend` and the Vite build output.
 
 ## Prerequisites
 
@@ -55,11 +59,42 @@ service in **Settings → Region**; both `api` and `worker` already use it.
 
 ## Build system
 
-Both services build with **Railpack** (Railway's default builder) reading
+The `api` and `worker` services build with **Railpack** (Railway's default builder) reading
 `backend/pyproject.toml` + `backend/uv.lock` — no Dockerfile, no build command. Root Directory
 `/backend` on both services makes this the build context; Config Path is set absolute from the
 repo root (`/backend/railway.api.toml`, `/backend/railway.worker.toml` — the config path does
 **not** follow Root Directory).
+
+## Frontend static service (DMI-91)
+
+Configure the `frontend` service in the `nspi` environment with:
+
+| Setting | Value |
+|---------|-------|
+| Source | Same repository as `api` and `worker` |
+| Root Directory | `/frontend` |
+| Builder | Dockerfile |
+| Dockerfile path | `/frontend/Dockerfile` |
+| Build stage | `npm ci --legacy-peer-deps && npm run build` |
+| Build output | `dist` |
+| Runtime server | Caddy, listening on Railway's `$PORT` |
+| SPA fallback | `try_files {path} /index.html` |
+| `VITE_API_URL` | Public `api` service URL, without `/api/v1` |
+
+`frontend/Dockerfile` builds the Vite bundle and copies `dist/` into Caddy. `frontend/Caddyfile`
+serves static assets and falls back to `index.html` for React Router deep links.
+The Dockerfile declares `VITE_API_URL` as a build argument and exports it during the Vite build;
+Railway service variables are available to the Docker build when declared this way.
+
+Set the API service's `CORS_ALLOWED_ORIGINS` to the local development origin plus the
+generated public `frontend` origin. Do not use `*`:
+
+```text
+CORS_ALLOWED_ORIGINS=http://localhost:5173,https://<frontend-service-domain>
+```
+
+`VITE_API_URL` is required at build time. The Vite config and frontend API client fail when it
+is missing instead of defaulting to localhost.
 
 ## Config-as-code (`railway.*.toml`)
 
