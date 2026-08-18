@@ -15,20 +15,24 @@ function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const [passwordReset] = useState(
-    () =>
-      (location.state as { passwordReset?: boolean } | null)?.passwordReset ===
-      true,
-  )
+  const [arrival] = useState(() => {
+    const state = location.state as {
+      passwordReset?: boolean
+      accountDeleted?: boolean
+    } | null
+    if (state?.accountDeleted === true) return 'accountDeleted' as const
+    if (state?.passwordReset === true) return 'passwordReset' as const
+    return null
+  })
 
   const successRef = useRef<HTMLParagraphElement>(null)
 
   useEffect(() => {
-    if (passwordReset) {
+    if (arrival !== null) {
       successRef.current?.focus()
       void navigate(location.pathname, { replace: true })
     }
-  }, [passwordReset, status, location.pathname, navigate])
+  }, [arrival, status, location.pathname, navigate])
 
   if (status === 'authenticated') {
     return <Navigate to="/" replace />
@@ -61,7 +65,7 @@ function Login() {
   return (
     <AuthShell>
       <div className="flex flex-col gap-4">
-        {passwordReset && (
+        {arrival !== null && (
           <p
             role="status"
             data-testid="login-success"
@@ -69,7 +73,9 @@ function Login() {
             tabIndex={-1}
             className="text-sm text-accent"
           >
-            Password set. Sign in with your new password.
+            {arrival === 'accountDeleted'
+              ? 'Your account has been deleted.'
+              : 'Password set. Sign in with your new password.'}
           </p>
         )}
         <form

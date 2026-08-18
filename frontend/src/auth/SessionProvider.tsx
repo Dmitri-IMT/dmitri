@@ -1,27 +1,20 @@
-import { createContext, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { acceptInvite, login, logout, refresh } from '@/api/auth'
-import { getCurrentUser } from '@/api/users'
+import { deleteCurrentUser, getCurrentUser } from '@/api/users'
 import { clearAccessToken, getAccessToken } from '@/api/tokenStore'
 import { onSessionExpired } from '@/api/authEvents'
+import {
+  SessionContext,
+  type SessionContextValue,
+  type SessionStatus,
+} from '@/auth/SessionContext'
 import type { components } from '@/types/openapi'
 
 type UserProfileResponse = components['schemas']['UserProfileResponse']
 type LoginRequest = components['schemas']['LoginRequest']
 type AcceptInviteRequest = components['schemas']['AcceptInviteRequest']
-
-type SessionStatus = 'booting' | 'authenticated' | 'anonymous'
-
-interface SessionContextValue {
-  status: SessionStatus
-  user: UserProfileResponse | null
-  signIn: (credentials: LoginRequest) => Promise<void>
-  signOut: () => Promise<void>
-  acceptInvitation: (request: AcceptInviteRequest) => Promise<void>
-}
-
-export const SessionContext = createContext<SessionContextValue | null>(null)
 
 async function bootSession(): Promise<UserProfileResponse> {
   if (!getAccessToken()) {
@@ -94,6 +87,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function deleteAccount(): Promise<void> {
+    await deleteCurrentUser()
+    clearSession()
+    navigate('/login', { replace: true, state: { accountDeleted: true } })
+  }
+
   const status: SessionStatus = !enabled
     ? 'anonymous'
     : query.isPending
@@ -108,6 +107,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signIn,
     signOut,
     acceptInvitation,
+    deleteAccount,
   }
 
   return (

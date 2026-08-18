@@ -10,6 +10,20 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 * **Update**: `infra/deployment.md`, `infra/supabase.md`, `overview.md`, and the root/frontend/
   infra indexes now describe the three-service Railway topology and the frontend's HTTP-only
   relationship to the backend and Supabase.
+* **Update**: `frontend/api.md`, `frontend/auth.md`, `frontend/screens.md` and the
+  `frontend/index.md` listing for DMI-103 / spec 033 — leaving the organization from Settings.
+  `deleteCurrentUser()` (`DELETE /users/me`) joins the users module; the session layer gains
+  `deleteAccount()`, which deliberately neither reuses `signOut()` nor catches, so `Settings` can
+  discriminate the `409` + `last_admin` refusal on the intact rejection. Settings grows a trailing
+  leaving section for both roles, built on the new shared `ConfirmByTyping` modal (Radix `Dialog`,
+  case-folded `matchesExpected`, component-owned greyed state). `Login`'s router-state read widens
+  to `arrival: 'passwordReset' | 'accountDeleted' | null` over the **single** existing
+  `role="status"` region. Three gotchas recorded in `screens.md`: the sanctioned `disabled` on the
+  confirming action; the explicit `typed` reset on open, without which a cancelled attempt reopens
+  already armed because the component outlives the `Dialog.Content` Radix unmounts (found by
+  `/nuke`, 2026-08-18, and pinned by a regression test); and Radix's unconditional
+  `onCloseAutoFocus` hijack — which jsdom cannot reproduce, so the component's own focus restore is
+  unguarded by the suite.
 
 ## 2026-08-13
 

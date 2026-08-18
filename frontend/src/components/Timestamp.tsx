@@ -18,7 +18,7 @@ function isSameCalendarDay(a: Date, b: Date): boolean {
   )
 }
 
-export function formatTimestamp(value: string, now: Date = new Date()): string {
+function formatTimestamp(value: string, now: Date = new Date()): string {
   const date = new Date(value)
   const diffMs = now.getTime() - date.getTime()
 

@@ -34,7 +34,10 @@ function LocationProbe() {
   )
 }
 
-function renderLoginApp(state?: { passwordReset: boolean }) {
+function renderLoginApp(state?: {
+  passwordReset?: boolean
+  accountDeleted?: boolean
+}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -224,6 +227,37 @@ describe('Login', () => {
     failBootRefresh()
     const user = userEvent.setup()
     renderLoginApp({ passwordReset: true })
+
+    const successRegion = await screen.findByTestId('login-success')
+    await waitFor(() => expect(successRegion).toHaveFocus())
+
+    await user.tab()
+    expect(await screen.findByLabelText('Email')).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText('Password')).toHaveFocus()
+  })
+
+  it('renders the deletion confirmation from router state and clears it from history', async () => {
+    failBootRefresh()
+    renderLoginApp({ accountDeleted: true })
+
+    const successRegion = await screen.findByTestId('login-success')
+    expect(successRegion).toHaveTextContent('Your account has been deleted.')
+    expect(successRegion).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('status')).toBe(successRegion)
+    expect(screen.getByTestId('login-error')).toBeEmptyDOMElement()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-state')).toHaveTextContent('null'),
+    )
+    expect(screen.getByTestId('location-url')).toHaveTextContent(/^\/login$/)
+    expect(successRegion).toBeInTheDocument()
+  })
+
+  it('gives the deletion confirmation focus, after which Tab reaches Email then Password', async () => {
+    failBootRefresh()
+    const user = userEvent.setup()
+    renderLoginApp({ accountDeleted: true })
 
     const successRegion = await screen.findByTestId('login-success')
     await waitFor(() => expect(successRegion).toHaveFocus())

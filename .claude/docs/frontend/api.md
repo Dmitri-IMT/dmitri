@@ -1,7 +1,7 @@
 ---
 type: Module
 title: frontend API layer
-description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
+description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read and account resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh]
 timestamp: 2026-08-18T00:00:00Z
@@ -34,6 +34,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `changePassword()` | `POST /auth/change-password` for the voluntary change on Settings. Lives in its **own** module and imports `apiClient` from `./client` — the one authenticated write in the app. | `frontend/src/api/passwords.ts:6` |
 | `getAccessToken()` / `setAccessToken()` / `clearAccessToken()` | The in-memory token store over a single module-scoped `let accessToken` — never `localStorage`/`sessionStorage`/cookies/React state. | `frontend/src/api/tokenStore.ts:3` |
 | `getCurrentUser()` | `GET /users/me`. The **sole** source of identity and role — nothing decodes a JWT anywhere in the app. | `frontend/src/api/users.ts:6` |
+| `deleteCurrentUser()` | `DELETE /users/me`, `204`. The self-service exit from the organization, called only by the session layer's `deleteAccount()`. No body either way, so no type alias. Deleting the account destroys its sessions server-side; the residual refresh cookie is deliberately left alone because it then authenticates nothing. | `frontend/src/api/users.ts:11` |
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:25` |
 | `listFindings({ scan_id, severity })` | One severity per call (never a list or comma-joined string), `per_page: 100`, returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:15` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:8` |

@@ -265,7 +265,10 @@ Cross-screen rules. A screen spec may cite these instead of restating them.
    toast naming the thing that failed. Never a spinner that never resolves, never a skeleton
    standing in for a verdict (§7 get defensive).
 3. **Absent, not disabled.** Actions a role cannot perform are omitted from the DOM, not greyed
-   out. The viewer never learns what they're missing (§9).
+   out. The viewer never learns what they're missing (§9). *Carve-out:* an action the person **is**
+   permitted to take but hasn't yet supplied the required input for is a different case — the
+   SETTINGS confirm-by-typing button is greyed out until the typed address matches
+   ([`ADR-017`](../adr/ADR-017-account-removal.md) §5).
 4. **Whole rows are links.** In every table the entire row navigates; no trailing "View" button
    column.
 5. **If it isn't a title, it's IBM Plex Mono.** There is no third face and no per-screen
@@ -1483,6 +1486,10 @@ they can remove their own account — and an account nobody can leave is the wro
 product holding this data. It sits at the bottom, visually separated, and is the last thing on the
 page: it is not what anyone came here to do.
 
+The copy does **not** name the organization. A signed-in member cannot read it — `UserProfileResponse` carries `user_id`, `email` and `role` only, and `org_name` exists solely on the
+pre-session invite lookup. The wording is org-neutral rather than adding a request to discover a name
+the heading has already supplied (spec 033).
+
 **Activity disclosure is built for both roles** (spec 030). A visible `Activity` label sits beside
 `What's recorded?`; activating that button expands a persistent note. It names last use and last
 sign-in, says org admins can see the activity time, and states that no viewed/action detail is
@@ -1515,10 +1522,11 @@ simple suffixes); no names or birth dates.
 - **Error:** field-level inline errors (wrong current password, policy rejection). No toast for form
   validation — the error belongs next to the field that caused it.
 - **Success:** inline confirmation, not a redirect. The user stays where they are.
-- **Confirming removal:** a modal over the page. It states what is lost, and the button stays
-  inert until the user has typed **their own email address** — deletion is irreversible and kills a
-  live session, so a single click is not proportionate to it. Same component as the USERS screen's
-  Remove; two call sites is the bar §Shared components sets.
+- **Confirming removal:** a modal over the page. It states what is lost, and the confirm button is
+  greyed out and disabled until the user has typed **their own email address**, enabling the
+  instant it matches — deletion is irreversible and kills a live session, so a single click is not
+  proportionate to it ([`ADR-017`](../adr/ADR-017-account-removal.md) §5, amended 2026-08-17). Same
+  component as the USERS screen's Remove; two call sites is the bar §Shared components sets.
 - **Removed:** not a state of this screen. The session is gone, so the SPA drops its in-memory token
   and redirects to LOGIN, which carries the confirmation line (see LOGIN copy).
 
@@ -1541,7 +1549,7 @@ simple suffixes); no names or birth dates.
 | Profile fields | "Display name" / "Email" |
 | Profile button | "Save" |
 | Section — leaving | "Leave this organization" |
-| Leaving — body | "Your account is deleted and you lose access to **Acme**'s scans, hosts and findings straight away. This can't be undone — an admin would have to invite you again." |
+| Leaving — body | "Your account is deleted and you lose access to this organization's scans, hosts and findings straight away. This can't be undone — an admin would have to invite you again." |
 | Leaving — trigger | "Delete my account" |
 | Confirm — heading | "Delete your account?" |
 | Confirm — prompt | "Type **you@example.com** to confirm." |
@@ -1586,15 +1594,17 @@ simple suffixes); no names or birth dates.
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
 |                                                                              |
 |   LEAVE THIS ORGANIZATION                                                    |
-|   Your account is deleted and you lose access to Acme's scans,               |
-|   hosts and findings straight away. This can't be undone — an                |
+|   Your account is deleted and you lose access to this organization's         |
+|   scans, hosts and findings straight away. This can't be undone — an         |
 |   admin would have to invite you again.                         (muted)      |
 |                                                                              |
 |   [ Delete my account ]                                                      |
 +------------------------------------------------------------------------------+
 ```
 
-Confirming — a modal over the page; the button is inert until the address matches:
+Confirming — a modal over the page; the confirm button is greyed out and disabled until the
+address matches, shown here with parentheses in place of brackets (the convention `DESIGN.md` §2.2
+uses for a greyed, non-clickable button; a live button keeps square brackets):
 ```text
 +--------------------------------------------------+
 |  DELETE YOUR ACCOUNT?                            |
@@ -1605,7 +1615,7 @@ Confirming — a modal over the page; the button is inert until the address matc
 |  Type you@example.com to confirm.                |
 |  [__________________________________]            |
 |                                                  |
-|            [ Cancel ]  [ Delete my account ]     |
+|            [ Cancel ]  ( Delete my account )     |
 +--------------------------------------------------+
 ```
 
