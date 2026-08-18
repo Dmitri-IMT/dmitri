@@ -2,8 +2,10 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import ConfirmByTyping from '@/components/ConfirmByTyping'
 import { changePassword } from '@/api/passwords'
 import { readApiError } from '@/api/apiError'
+import { useSession } from '@/auth/useSession'
 import {
   PASSWORD_HINT,
   PASSWORD_MISMATCH_ERROR,
@@ -11,7 +13,14 @@ import {
   SERVICE_ERROR,
 } from '@/lib/copy'
 
+const LAST_ADMIN_ERROR =
+  "You're the only admin. Make someone else an admin first, then you can leave."
+const LEAVE_ERROR = "Couldn't delete your account."
+
 function Settings() {
+  const { user, deleteAccount } = useSession()
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false)
+  const [leaveError, setLeaveError] = useState<string | null>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -66,6 +75,20 @@ function Settings() {
       setFormError(SERVICE_ERROR)
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleLeave() {
+    setLeaveError(null)
+    try {
+      await deleteAccount()
+    } catch (err) {
+      const { status, code } = readApiError(err)
+      setLeaveError(
+        status === 409 && code === 'last_admin'
+          ? LAST_ADMIN_ERROR
+          : LEAVE_ERROR,
+      )
     }
   }
 
@@ -208,6 +231,51 @@ function Settings() {
           or did.
         </p>
       </section>
+      {user && (
+        <>
+          <hr aria-hidden className="border-t border-dashed border-rule" />
+          <section data-testid="settings-leave" className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="font-title text-title-sm">
+                Leave this organization
+              </span>
+              <p
+                data-testid="settings-leave-body"
+                className="max-w-prose text-body-md text-muted-foreground"
+              >
+                Your account is deleted and you lose access to this
+                organization's scans, hosts and findings straight away. This
+                can't be undone — an admin would have to invite you again.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              className="self-start"
+              onClick={() => setIsLeaveOpen(true)}
+              data-testid="settings-leave-trigger"
+            >
+              Delete my account
+            </Button>
+          </section>
+          <ConfirmByTyping
+            open={isLeaveOpen}
+            onOpenChange={(open) => {
+              setIsLeaveOpen(open)
+              if (!open) {
+                setLeaveError(null)
+              }
+            }}
+            heading="Delete your account?"
+            body="Your account is deleted and you lose access straight away. This can't be undone."
+            expectedValue={user.email}
+            confirmLabel="Delete my account"
+            confirmPendingLabel="Deleting…"
+            onConfirm={handleLeave}
+            error={leaveError}
+          />
+        </>
+      )}
     </div>
   )
 }

@@ -140,6 +140,10 @@ export const handlers = [
   ),
   http.get(`${baseURL}/hosts`, () => HttpResponse.json([])),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
+  http.delete(
+    `${baseURL}/users/me`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
   http.get(`${baseURL}/scans`, ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')
     if (status === 'completed') {

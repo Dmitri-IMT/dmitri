@@ -7,3 +7,7 @@ export async function getCurrentUser(): Promise<UserProfileResponse> {
   const response = await apiClient.get<UserProfileResponse>('/users/me')
   return response.data
 }
+
+export async function deleteCurrentUser(): Promise<void> {
+  await apiClient.delete('/users/me')
+}

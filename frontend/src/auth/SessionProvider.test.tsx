@@ -1,14 +1,21 @@
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import { viewerProfile } from '@/test/mswHandlers'
 import { getAccessToken, setAccessToken } from '@/api/tokenStore'
+import { readApiError } from '@/api/apiError'
 import { emitSessionExpired } from '@/api/authEvents'
 import { SessionProvider } from './SessionProvider'
 import { useSession } from './useSession'
@@ -17,14 +24,33 @@ import { RequireSession } from './RequireSession'
 const baseURL = 'http://localhost:8000/api/v1'
 
 function SessionProbe() {
-  const { status, user, signOut } = useSession()
+  const { status, user, signOut, deleteAccount } = useSession()
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   if (status === 'booting') return null
   if (status === 'anonymous') return <div>Login form</div>
   return (
     <div>
       <div>Signed in as {user?.role}</div>
       <button onClick={() => void signOut()}>Log out</button>
+      <button
+        onClick={() => {
+          deleteAccount().catch((error: unknown) => {
+            const { status, code } = readApiError(error)
+            setDeleteError(`delete-rejected ${status} ${code}`)
+          })
+        }}
+      >
+        Delete account
+      </button>
+      {deleteError ? <div>{deleteError}</div> : null}
     </div>
+  )
+}
+
+function LoginStateProbe() {
+  const state = useLocation().state as { accountDeleted?: boolean } | null
+  return (
+    <div>{state?.accountDeleted ? 'account-deleted-state' : 'no-state'}</div>
   )
 }
 
@@ -46,6 +72,7 @@ function renderNavigableApp(queryClient: QueryClient) {
               element={
                 <>
                   <div>login-route</div>
+                  <LoginStateProbe />
                   <BackProbe />
                 </>
               }
@@ -130,6 +157,56 @@ describe('SessionProvider', () => {
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
 
     server.events.removeAllListeners()
+  })
+
+  it('deletes the account: fires DELETE /users/me, clears the token, empties the cache, navigates to /login with the accountDeleted state', async () => {
+    const queryClient = newQueryClient()
+    const seen: string[] = []
+    server.events.on('request:match', ({ request }) => {
+      seen.push(`${request.method} ${request.url}`)
+    })
+
+    renderNavigableApp(queryClient)
+    await screen.findByText('Signed in as admin')
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Delete account' }),
+    )
+
+    await screen.findByText('login-route')
+    await screen.findByText('account-deleted-state')
+    expect(seen.some((entry) => entry === `DELETE ${baseURL}/users/me`)).toBe(
+      true,
+    )
+    expect(getAccessToken()).toBeNull()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+
+    server.events.removeAllListeners()
+  })
+
+  it('propagates a failing account deletion to the caller and leaves the session intact', async () => {
+    server.use(
+      http.delete(`${baseURL}/users/me`, () =>
+        HttpResponse.json(
+          { error: { code: 'last_admin', message: 'nope' } },
+          { status: 409 },
+        ),
+      ),
+    )
+    const queryClient = newQueryClient()
+
+    renderNavigableApp(queryClient)
+    await screen.findByText('Signed in as admin')
+    setAccessToken('test-access-token')
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Delete account' }),
+    )
+
+    await screen.findByText('delete-rejected 409 last_admin')
+    expect(screen.getByText('Signed in as admin')).toBeInTheDocument()
+    expect(screen.queryByText('login-route')).not.toBeInTheDocument()
+    expect(getAccessToken()).toBe('test-access-token')
   })
 
   it('clears the token, empties the cache and navigates to /login when a session-expired event reaches the mounted provider', async () => {
