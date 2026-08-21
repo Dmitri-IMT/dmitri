@@ -7,6 +7,10 @@ type ScanListResponse = components['schemas']['ScanListResponse']
 type FindingRecord = components['schemas']['FindingRecord']
 type FindingListResponse = components['schemas']['FindingListResponse']
 type InviteLookupResponse = components['schemas']['InviteLookupResponse']
+type OrgMember = components['schemas']['OrgMember']
+type PendingInvite = components['schemas']['PendingInvite']
+type UpdateUserRoleRequest = components['schemas']['UpdateUserRoleRequest']
+type InviteCreatedResponse = components['schemas']['InviteCreatedResponse']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
@@ -37,6 +41,39 @@ export const liveInvite: InviteLookupResponse = {
   email: 'ana@northwind.example',
   role: 'viewer',
   org_name: 'Northwind Security',
+}
+
+export const selfMember: OrgMember = {
+  user_id: adminProfile.user_id,
+  email: adminProfile.email,
+  role: 'admin',
+  last_seen_at: minutesAgo(3),
+}
+
+export const otherMember: OrgMember = {
+  user_id: viewerProfile.user_id,
+  email: viewerProfile.email,
+  role: 'viewer',
+  last_seen_at: null,
+}
+
+export const recentMember: OrgMember = {
+  user_id: '99999999-9999-4999-8999-999999999999',
+  email: 'sam@northwind.example',
+  role: 'viewer',
+  last_seen_at: minutesAgo(12),
+}
+
+export const pendingInvite: PendingInvite = {
+  invite_id: '77777777-7777-4777-8777-777777777777',
+  email: 'ana@northwind.example',
+  role: 'viewer',
+  expires_at: new Date(NOW_MS + 3 * 24 * 60 * 60 * 1000).toISOString(),
+}
+
+export const createdInvite: InviteCreatedResponse = {
+  invite_token: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+  expires_at: new Date(NOW_MS + 48 * 60 * 60 * 1000).toISOString(),
 }
 
 export const latestScan: ScanSummary = {
@@ -138,10 +175,38 @@ export const handlers = [
   http.post(`${baseURL}/invites/accept`, () =>
     HttpResponse.json(validLoginResponse, { status: 201 }),
   ),
+  http.get(`${baseURL}/users`, () =>
+    HttpResponse.json({ data: [selfMember, otherMember] }),
+  ),
+  http.post(`${baseURL}/invites`, () =>
+    HttpResponse.json(createdInvite, { status: 201 }),
+  ),
+  http.get(`${baseURL}/invites`, () =>
+    HttpResponse.json({ data: [pendingInvite] }),
+  ),
+  http.delete(
+    `${baseURL}/invites/:inviteId`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
   http.get(`${baseURL}/hosts`, () => HttpResponse.json([])),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
+  http.patch(`${baseURL}/users/:userId`, async ({ params, request }) => {
+    const body = (await request.json()) as UpdateUserRoleRequest
+    return HttpResponse.json({
+      ...recentMember,
+      user_id: String(params.userId),
+      role: body.role,
+    })
+  }),
+  // MSW resolves the first matching handler, and `:userId` also matches "me", so the
+  // literal `/users/me` route has to stay above it or account deletion silently
+  // resolves against the remove-a-member handler instead.
   http.delete(
     `${baseURL}/users/me`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.delete(
+    `${baseURL}/users/:userId`,
     () => new HttpResponse(null, { status: 204 }),
   ),
   http.get(`${baseURL}/scans`, ({ request }) => {
