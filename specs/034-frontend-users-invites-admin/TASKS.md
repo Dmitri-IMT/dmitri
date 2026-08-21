@@ -302,15 +302,15 @@ per ARCHITECTURE.md §Constraints.
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Directory merge helpers | IN_PROGRESS |
-| 2 | Role gates — `AdminOnly`, `RequireAdmin`, and the nav item | PENDING |
-| 3 | `Toast` and `useToast` | PENDING |
-| 4 | API functions and `useOrgDirectory` | PENDING |
-| 5 | The Users page, the table, and the route | PENDING |
-| 6 | Role change | PENDING |
-| 7 | Remove a member | PENDING |
-| 8 | Revoke an invite | PENDING |
-| 9 | Invite a user | PENDING |
+| 1 | Directory merge helpers | COMPLETED |
+| 2 | Role gates — `AdminOnly`, `RequireAdmin`, and the nav item | COMPLETED |
+| 3 | `Toast` and `useToast` | COMPLETED |
+| 4 | API functions and `useOrgDirectory` | COMPLETED |
+| 5 | The Users page, the table, and the route | COMPLETED |
+| 6 | Role change | COMPLETED |
+| 7 | Remove a member | COMPLETED |
+| 8 | Revoke an invite | COMPLETED |
+| 9 | Invite a user | COMPLETED |
 
 ## Acceptance-criteria coverage
 

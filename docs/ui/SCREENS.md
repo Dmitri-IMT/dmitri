@@ -1410,7 +1410,7 @@ invite. So the warning stays, worded as a nudge rather than an alarm (§7).
 | Active row (post-C4) | "Active" · "2 hours ago" · [Remove] |
 | Active row, no last-seen value | "Not recorded yet" — **not** "Never", and not the pending row's `—` |
 | Pending row (post-C4) | "Invited — expires in 2 days" · "—" · [Revoke] |
-| Own row (post-C4) | "Active · you" — **no Remove, no role control.** Leaving is done in Settings |
+| Own row (post-C4) | No "you" marker — **no Remove, no role control.** The absent controls are what identify the row; a label repeating it was noise in the Person column. Leaving is done in Settings |
 | Blank table (post-C4) | "You're the only person here." |
 | Table — load error (post-C4) | "Couldn't load your organisation." · [Try again] |
 | Role control (post-C4) | a dropdown on **other members'** rows — "Viewer" / "Admin". Your own row and **pending invite rows** render the role as plain text, no control |
