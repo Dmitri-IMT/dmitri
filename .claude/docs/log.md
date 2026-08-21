@@ -3,6 +3,79 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-21
+
+* **Update**: `frontend/screens.md` + `docs/ui/SCREENS.md` — the own-row " you" marker is gone from
+  the Person cell. The design spec had called for "Active · you"; the shipped code had put it after
+  the address instead, and it is now dropped in both. Self is identified by the controls the row
+  does **not** render — no Remove, no role dropdown — plus the `user-row-self` testid, so the label
+  was restating what the row already showed.
+* **Update**: `frontend/screens.md` — the Users table declares its column widths in a `<colgroup>`
+  as percentage shares, `sm`-responsive: 30·15·20·25·10 below `sm`, 35·15·20·20·10 above, always
+  summing to 100. `table-fixed` had been splitting all five evenly, so Actions held a button plus a
+  column of dead space while Person truncated. Shares rather than pixels because the table's own
+  width range is only ~320–720px — a pixel set that fits the wide end overflows the narrow one.
+  `RoleCell`'s trigger also needed an explicit `text-caption-md`: the `ui/select` primitive ships
+  `text-body-md`, so stripping the border alone still left the editable roles two sizes larger than
+  the plain-text ones in the same column.
+* **Update**: `frontend/directory.md` — `mergeDirectory` no longer preserves server order for
+  members. `byRoleThenLastSeen` pins admins above viewers, then sorts each group most-recently-seen
+  first with never-signed-in last and email breaking a full tie, so the order is total and cannot
+  swap between renders. Invites keep server order and still trail every member. The sort runs on a
+  copy — the input array belongs to the query cache.
+* **Update**: `frontend/screens.md` — the Users table is locked to `h-8` rows at `text-caption-md`,
+  the smallest token in the scale. `h-8` on a `<tr>` is a minimum rather than a cap, so the rule
+  holds only because every cell truncates and the row actions dropped to `size="xs"`; the role
+  `Select` was what broke it. Person and Status carry `title` for the clipped case. `RoleCell`'s
+  trigger lost its box (`border-0 px-0 py-0 h-auto`, chevron kept) because a bordered trigger
+  indented its value relative to the plain-text rows and split the Role column into two left edges.
+  `InviteDialog` moved to `size="sm"` with plain `Viewer`/`Admin` options and the explanation
+  relocated to a `text-caption-md` note above the control, wired as `aria-describedby`.
+  `DialogShell` grew the `size` prop that made that width change possible.
+* **Creation**: `frontend/screens.md` gained `DialogShell` — the chrome all four modals share
+  (`Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string, the `locked` dismissal guard,
+  and the focus save/restore). `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog` and
+  `InviteDialog` had each grown their own copy; the focus restore in particular is invisible to
+  jsdom, so four copies were four places it could rot unobserved. Bodies and footers stayed with the
+  callers — their confirm buttons differ in type, variant and disabled condition. The note claiming
+  `RevokeDialog`/`RoleChangeDialog` were "deliberately left unextracted" is retired: the chrome was
+  extracted, a `ConfirmDialog` over the two bodies still was not.
+* **Update**: `frontend/directory.md` — `Role` and `ROLE_NOUN` are now exported from
+  `lib/directory.ts`. `ROLE_NOUN` was duplicated verbatim in `Users.tsx` and `RoleChangeDialog.tsx`,
+  so the heading and its success toast could name a role differently. Also recorded that the shared
+  `['org']` key prefix is load-bearing: every Users mutation now refreshes both lists with one
+  `invalidateQueries({ queryKey: ['org'] })` instead of a two-key `Promise.all`.
+* **Update**: `frontend/api.md` — MSW handler order is load-bearing where a literal segment collides
+  with a parameter: `:userId` also matches `me`, so `DELETE /users/me` has to stay above
+  `DELETE /users/:userId` or account deletion silently resolves against the remove-a-member handler.
+* **Creation**: `frontend/directory.md` — the org directory model. `DirectoryRow` is the display
+  union merging `OrgMember[]` and `PendingInvite[]` (members first, nothing re-sorted, `kind`
+  discriminating which fields exist), and `useOrgDirectory()` folds the two list reads into one
+  `loading | error | blank | ready` union. **Error is resolved before loading**, so a fast failure
+  on one list does not sit behind a slow success on the other.
+* **Update**: `frontend/api.md` — six org-administration calls. `listOrgMembers`, `updateUserRole`
+  and `deleteUser` join `users.ts`; the new `invites.ts` holds `listPendingInvites`, `createInvite`
+  and `revokeInvite`. All import `apiClient` from `./client`, per the standing rule that importing
+  `./instances` silently loses authentication. The authenticated invite-admin trio is deliberately
+  separate from `auth.ts`'s unauthenticated `lookupInvite`/`acceptInvite`.
+* **Update**: `frontend/auth.md` — `RequireAdmin` joins `RequireSession`. It **renders**
+  `<NotFound />` in place for a non-admin rather than navigating, so the URL is unchanged and a
+  gated route is indistinguishable from a missing one. Both role gates fail closed
+  (`user?.role !== 'admin'`) and neither takes a `fallback` or `disabled` prop — the absent props
+  are the enforcement mechanism for "absent, not disabled", not a style choice.
+* **Update**: `frontend/app.md` — the route table gained a nested `RequireAdmin` segment inside the
+  `AppShell` branch holding `/users`, so a refused viewer still sees the top bar.
+* **Update**: `frontend/screens.md` — the Users surface: the page, `DirectoryTable` (five columns,
+  four headings, members before invites, no row navigation), the four dialogs, `AdminOnly`,
+  `PageHeader`, `ui/select.tsx`, and the shared `ToastProvider`/`useToast` mounted once in
+  `AppShell`. Two stale claims corrected: `TopBar` **does** now carry a `Users` link (role-gated by
+  wrapping, not by branching inside the component), and `ConfirmByTyping`'s "second caller not built
+  yet" note is retired — the Users screen is that caller, passing the *target's* address where
+  Settings passes the caller's own. Recorded gotchas: the table sizes to the 720px shell rather than
+  DESIGN's 1120px column; the role `Select` is controlled by server state with no `useState` mirror;
+  Radix `Select`/`Toast` need the jsdom pointer-capture stubs in `src/test/setup.ts`; and invite
+  success raises no toast, alone among the screen's four actions.
+
 ## 2026-08-18
 
 * **Update**: `backend/auth.md` — cross-site session fixes. The `dmitri_refresh` cookie moved from

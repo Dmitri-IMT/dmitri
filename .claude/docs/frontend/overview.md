@@ -1,7 +1,7 @@
 ---
 type: Package Overview
 title: frontend package overview
-description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings and invite acceptance, and the Railway static deployment.
+description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings, the admin users-and-invites surface and invite acceptance, and the Railway static deployment.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
 timestamp: 2026-08-18T00:00:00Z

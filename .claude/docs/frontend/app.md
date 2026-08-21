@@ -1,7 +1,7 @@
 ---
 type: Entry Point
 title: frontend app root & routing
-description: The React root's provider nest and App's route table — the four public auth routes, the guarded shell branch, and a catch-all that renders rather than redirects.
+description: The React root's provider nest and App's route table — the four public auth routes, the guarded shell branch with its nested admin-only segment, and a catch-all that renders rather than redirects.
 resource: frontend/src/App.tsx
 tags: [frontend, react, entrypoint, router]
 timestamp: 2026-08-07T00:00:00Z
@@ -20,7 +20,7 @@ contains no `useEffect`, no refresh call and no session state at all.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `main.tsx` root | Mounts `<StrictMode>` → `BrowserRouter` → `QueryClientProvider` → `SessionProvider` → `App`. The router must sit outside the session provider, which navigates. | `frontend/src/main.tsx:11` |
-| `App` | The route table only: four public routes — `/login` → `Login`, `/forgot-password` → `ForgotPassword`, `/reset-password` → `ResetPassword`, `/invite` → `AcceptInvite`; then a `RequireSession` branch wrapping an `AppShell` branch holding `/` → `Home`, `/settings` → `Settings` and `*` → `NotFound`. | `frontend/src/App.tsx:15` |
+| `App` | The route table only: four public routes — `/login` → `Login`, `/forgot-password` → `ForgotPassword`, `/reset-password` → `ResetPassword`, `/invite` → `AcceptInvite`; then a `RequireSession` branch wrapping an `AppShell` branch holding `/` → `Home`, `/settings` → `Settings`, a nested `RequireAdmin` segment holding `/users` → `Users`, and `*` → `NotFound`. | `frontend/src/App.tsx:15` |
 
 ## How it connects
 
@@ -38,8 +38,10 @@ contains no `useEffect`, no refresh call and no session state at all.
   `Navigate` on the catch-all — rewriting the URL would hide the typo the operator needs to see.
 - **Router package is `react-router` v7**, not `react-router-dom` — v7 merged them, and importing
   the old package name is a silent-drift trap.
-- **`/settings` is the only screen added inside the guard**, so it is the second route in the
-  `AppShell` branch and must stay above the `*` catch-all.
+- **Two screens sit inside the session guard**: `/settings` directly, and `/users` behind a second,
+  nested [`RequireAdmin`](./auth.md) element route. Both must stay above the `*` catch-all.
+- **The admin segment nests inside `AppShell`, not beside it**, so a gated route keeps the top bar
+  and a refused viewer sees `NotFound` inside the normal frame rather than a bare page.
 - `App.test.tsx` supplies its own `MemoryRouter` (App mounts routes, not a router), and reads the
   live path through a `useLocation()` probe to prove the catch-all preserved it.
 

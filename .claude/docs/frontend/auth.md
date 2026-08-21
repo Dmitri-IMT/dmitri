@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend session layer
-description: The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, account deletion, the useSession accessor, and the RequireSession route guard.
+description: The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, account deletion, the useSession accessor, and the RequireSession and RequireAdmin route guards.
 resource: frontend/src/auth/SessionProvider.tsx
-tags: [frontend, auth, session, react, router]
-timestamp: 2026-08-18T00:00:00Z
+tags: [frontend, auth, session, react, router, roles]
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # frontend session layer
@@ -30,6 +30,7 @@ the only place the session-expiry event is turned into a navigation.
 | `status` | Derived three-way `'booting' \| 'authenticated' \| 'anonymous'`; checks `!enabled` first so a signed-out user reads `anonymous` immediately rather than falling back to `booting`. | `frontend/src/auth/SessionProvider.tsx:97` |
 | `useSession()` | Throws outside the provider. **The only** way any component reads identity or role. | `frontend/src/auth/useSession.ts:4` |
 | `RequireSession` | Route guard: `booting` → renders neither protected content **nor** a redirect; `anonymous` → `<Navigate to="/login" replace />`; `authenticated` → `<Outlet />`. | `frontend/src/auth/RequireSession.tsx:4` |
+| `RequireAdmin` | The role guard, mirroring `RequireSession`'s shape: `booting` → `null`; non-admin → `<NotFound />` **rendered in place**, never navigated to, so the URL is unchanged and a viewer cannot tell a gated route from a missing one; admin → `<Outlet />`. Takes no props — no `fallback`, no `disabled`. | `frontend/src/auth/RequireAdmin.tsx:5` |
 
 ## How it connects
 
@@ -37,10 +38,20 @@ the only place the session-expiry event is turned into a navigation.
   `deleteCurrentUser()`, the token store, and `onSessionExpired`.
 - Mounted by [app](./app.md)'s provider nest in `main.tsx`; `RequireSession` wraps the protected
   branch of `App`'s route table.
-- Read by [screens](./screens.md): `Login` (status + `signIn`), `TopBar` (`signOut` only),
-  `AcceptInvite` (status + `acceptInvitation` + `signOut`), `Settings` (`user` + `deleteAccount`).
+- Read by [screens](./screens.md): `Login` (status + `signIn`), `TopBar` (`signOut`, plus `user.role`
+  by way of `AdminOnly`), `AcceptInvite` (status + `acceptInvitation` + `signOut`), `Settings`
+  (`user` + `deleteAccount`), and [directory](./directory.md)'s `useOrgDirectory()` (`user.user_id`,
+  to mark the caller's own row).
 
 ## Notes / gotchas
+
+- **Both role gates fail closed.** `AdminOnly` and `RequireAdmin` both test
+  `user?.role !== 'admin'`, never `user?.role === 'viewer'` — a null or unrecognised user is denied,
+  not admitted. The pair is the whole of role enforcement in the UI: one hides an affordance
+  ([screens](./screens.md)'s `AdminOnly`), the other closes a route.
+- **Role gating is absence, not disablement.** Neither guard accepts a `fallback` or `disabled`
+  prop, and that missing prop *is* the enforcement mechanism — there is no way to ask either one for
+  a greyed-out control. The UI gate is a courtesy over the backend's own checks, never a substitute.
 
 - **The boot refresh must not live in a `useEffect`.** StrictMode double-invokes Effects (React 19
   softened that for `useMemo`/`useCallback`, **not** for Effects), so an Effect fires two
