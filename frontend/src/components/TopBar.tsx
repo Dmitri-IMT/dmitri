@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/auth/useSession'
+import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -20,6 +21,15 @@ function TopBar() {
           <NavLink to="/" end data-testid="nav-home" className={navLinkClass}>
             Home
           </NavLink>
+          <AdminOnly>
+            <NavLink
+              to="/users"
+              data-testid="nav-users"
+              className={navLinkClass}
+            >
+              Users
+            </NavLink>
+          </AdminOnly>
           <NavLink
             to="/settings"
             data-testid="nav-settings"
