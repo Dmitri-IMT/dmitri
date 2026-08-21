@@ -17,7 +17,7 @@
 | [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** No provisioned Pi hardware/service packaging yet. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
-| [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings password change, and Activity disclosure built. Next: Users & Invites UI (API now ready) |
+| [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings password change, Activity disclosure, and Users & Invites built. Next: Scans, Hosts, Agents |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
 | [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
@@ -40,8 +40,8 @@ The scan pipeline, headless command daemon, and signed ingest client run in soft
 is provisioned yet. The FastAPI backend serves data reads, auth, identity administration, the
 command channel, and ingest. The web app has login → Home, public auth, and Settings with password
 change plus the Activity disclosure. Still missing are physical Pi operations and the remaining
-frontend screens/actions (including Users & Invites, despite its now-complete API), plus the LLM
-explainer. Invite/reset email code exists, but production delivery still needs a verified sending
+frontend screens/actions — Scans, Hosts and Agents; Users & Invites shipped in spec 034 — plus the
+LLM explainer. Invite/reset email code exists, but production delivery still needs a verified sending
 domain.
 
 ## Cross-layer milestone sequencing

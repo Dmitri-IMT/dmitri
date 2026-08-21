@@ -70,16 +70,16 @@ interaction in implementation before it has passed through that sequence.
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
 - **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
-- **UI status:** Login, Home, public auth, and Settings change-password + Activity disclosure are
-  built. The remaining screen specs live in [`ui/SCREENS.md`](../ui/SCREENS.md); Users & Invites is
-  now API-ready but unimplemented in the SPA. Shared visual foundations are locked there: top-bar
+- **UI status:** Login, Home, public auth, Settings change-password + Activity disclosure, and
+  Users & Invites are built. The remaining screen specs — Scans, Hosts, Agents — live in
+  [`ui/SCREENS.md`](../ui/SCREENS.md). Shared visual foundations are locked there: top-bar
   shell, light-only theme, typography, fluid desktop viewport, palette, and component rules.
   [`ui/SCREENS.md`](../ui/SCREENS.md) is the source of truth for the UI: where it disagrees with an
   ADR or a roadmap doc, those get reconciled to it (ADR-008's `AppShell` was narrowed to a top bar
   on 2026-07-13). The active UI documents replaced the removed March-era `ui/wireframes.md`.
 - **Contract asks — 3 of the original 8 still open.** C4 is closed: the published backend contract
-  now has member list, pending-invite list, role change, revoke, and account-removal operations.
-  Users & Invites is therefore unblocked at the API layer but remains an unbuilt frontend screen.
+  now has member list, pending-invite list, role change, revoke, and account-removal operations,
+  and spec 034 consumed them — Users & Invites ships.
   The remaining original blockers are `GET /agents` (C1), target-network persistence (C2 partial),
   and profile update (C3 partial). `HostSummary.first_seen_at`, finding CVE data, invite auto-login,
   and forced-password-change disposition remain resolved as recorded in
@@ -105,10 +105,13 @@ interaction in implementation before it has passed through that sequence.
 3. ✅ First vertical slice: login → Home, including blank, regular, and error states with live data —
    spec 020.
 4. ◐ Admin auth and user-management surfaces. Public auth and change-password shipped in spec 028;
-   spec 030 added the Settings Activity disclosure and closed C4 in the backend contract. The
-   Users & Invites screen itself is not built yet, but its member/invite list and mutation endpoints
-   now exist. Profile editing remains blocked on C3, and invite/reset delivery still needs a verified
-   sending domain. Account-removal UI remains planned under ADR-017.
+   spec 030 added the Settings Activity disclosure and closed C4 in the backend contract; spec 034
+   (2026-08-21) shipped the Users & Invites screen — the merged member/invite table, role change,
+   member removal gated on typing the target's address, invite revocation, and an invite dialog
+   carrying the copyable one-time link. It is the product's **first role-gated route**: `AdminOnly`
+   hides the nav item, `RequireAdmin` renders not-found in place of the route. Self-removal shipped
+   in spec 033 under ADR-017. Profile editing remains blocked on C3, and invite/reset delivery still
+   needs a verified sending domain.
 5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.

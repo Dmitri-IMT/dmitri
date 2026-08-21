@@ -267,7 +267,7 @@ waiting.
 implements separate admin-only, org-scoped resources for members and pending invites:
 `GET /users`, `PATCH /users/{user_id}`, `GET /invites`, and
 `DELETE /invites/{invite_id}`. Spec 029 / DMI-102 already supplied both account-removal routes.
-The Users & Invites frontend screen is still unbuilt, but it is no longer blocked by C4.
+The Users & Invites frontend screen consumed these in spec 034 / DMI-90 (2026-08-21); C4 is closed end to end.
 
 **The role half of this is now closed.** `GET /users/me` returns the user object, so the frontend
 has a documented way to learn the logged-in user's role and does not have to read a JWT claim the

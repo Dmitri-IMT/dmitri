@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-11T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -78,11 +78,11 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 | invite routes | Admin create/list/revoke (`POST`/`GET /api/v1/invites`, `DELETE /api/v1/invites/{invite_id}`), public accept/lookup (`POST /accept`, `POST /lookup`). Listing returns no token; revocation is pending-only and answers 204. | `backend/src/api/routers/invites.py:39` |
 | `lookup_invite_route()` | Public, non-consuming `POST /api/v1/invites/lookup`; possession of the body token is the only authorisation. Returns `{email, role, org_name}` or 410 `invalid_invite_token`. | `backend/src/api/routers/invites.py:82` |
 | invite preflight loop | Registers bare 204 `OPTIONS` routes for each invite `POST`; `GET` and `DELETE` preflights are handled by the CORS middleware. | `backend/src/api/routers/invites.py:129` |
-| `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=Lax`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. | `backend/src/api/routers/auth.py:38` |
+| `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=None`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. `None` since 2026-08-18 (`f2836ba`): `up.railway.app` is a public suffix, so `nspi.` and `api-nspi.` are separate registrable domains and a `Lax` cookie was never attached to the cross-site refresh call. See the Notes below — it contradicts [ADR-005](../../../docs/adr/ADR-005-security-model.md) §cookie flags. | `backend/src/api/session_response.py:17` |
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
-| `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. | `backend/src/api/middleware.py:38` |
-| `build_cors_middleware_kwargs()` | Builds credentialed CORS kwargs from `CORS_ALLOWED_ORIGINS`; allowed methods are GET/POST/PATCH/DELETE/OPTIONS, covering role change and removal/revocation. | `backend/src/api/middleware.py:45` |
+| `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. It **rebuilds** the response rather than reassigning `status_code`, dropping `content-length` and `content-type`: the parent returns `PlainTextResponse("OK", 200)`, so a bare status reassignment left a 204 declaring a 2-byte body — malformed per RFC 9110 §15.3.5, and WebKit answers it by dropping the real request. | `backend/src/api/middleware.py:38` |
+| `build_cors_middleware_kwargs()` | Builds credentialed CORS kwargs from `CORS_ALLOWED_ORIGINS`; allowed methods are GET/POST/PATCH/DELETE/OPTIONS, covering role change and removal/revocation. | `backend/src/api/middleware.py:53` |
 
 ## How it connects
 
@@ -118,6 +118,25 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
   they come from [`backend-bootstrap-org`](/backend/management.md).
 
 ## Notes / gotchas
+
+- **The refresh cookie is `SameSite=None`, and that contradicts ADR-005.** Railway serves the SPA
+  at `nspi.up.railway.app` and the API at `api-nspi.up.railway.app`. `up.railway.app` is on the
+  Public Suffix List, so those are **separate registrable domains** — every `/auth/*` call is a
+  cross-site subresource request and a `Lax` cookie is never attached, which is why refresh
+  returned 401 forever in production. `f2836ba` (2026-08-18) switched both set and clear to
+  `SameSite=None`, which requires `Secure` (supplied by `REFRESH_COOKIE_SECURE`; localhost is
+  exempt from the HTTPS rule, so local dev is unaffected).
+  [ADR-005](../../../docs/adr/ADR-005-security-model.md) §"Flags previstas" still specifies
+  `SameSite=Lax` *ou mais restritivo*, and `None` is strictly **less** restrictive — the ADR and
+  the code disagree, and the same ADR requires CSRF to be "tratado explicitamente" once a
+  cookie-authenticated mutation exists, which `POST /auth/refresh` now is. Unresolved; a custom
+  domain (`app.` + `api.` under one registrable domain) would make the pair same-site again and
+  allow `Lax` back. See [research](../../../docs/research/http-cookies-samesite.md).
+- **A preflight must not carry a body.** `NoContentCorsMiddleware` rebuilds the parent's
+  `PlainTextResponse("OK", 200)` as a bare 204 instead of reassigning `status_code`. The old
+  version shipped `204` with `Content-Length: 2`; Chrome and curl tolerate it, WebKit rejects the
+  preflight and never sends the real request, which surfaced as "Can't reach the server" on iOS.
+  Two regression tests pin the empty body and the absent `content-length` / `content-type`.
 
 - **Refresh-token reuse revokes the whole family.** Presenting a rotated or revoked hash is treated
   as theft and kills every row sharing that `family_id`; `family_expires_at` is fixed at login and

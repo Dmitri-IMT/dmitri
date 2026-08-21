@@ -23,7 +23,7 @@ describe('TopBar', () => {
     ['admin', adminProfile],
     ['viewer', viewerProfile],
   ])(
-    'renders every control enabled, with no nav-users, for the %s profile',
+    'renders every control enabled for the %s profile',
     async (_label, profile) => {
       renderTopBarAs(profile)
       await screen.findByTestId('top-bar')
@@ -40,12 +40,6 @@ describe('TopBar', () => {
         expect(el).not.toHaveAttribute('disabled')
       }
 
-      expect(screen.queryByTestId('nav-users')).not.toBeInTheDocument()
-      expect(
-        screen.queryByRole('link', { name: 'Users' }),
-      ).not.toBeInTheDocument()
-
-      expect(screen.getAllByRole('link')).toHaveLength(2)
       expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
         'href',
         '/',
@@ -62,6 +56,28 @@ describe('TopBar', () => {
       ).toBeInTheDocument()
     },
   )
+
+  it('shows the Users nav item, pointing at /users, for an admin', async () => {
+    renderTopBarAs(adminProfile)
+    await screen.findByTestId('top-bar')
+
+    const users = await screen.findByTestId('nav-users')
+    expect(users).toHaveAttribute('href', '/users')
+    expect(users).toHaveAccessibleName('Users')
+    expect(screen.getAllByRole('link')).toHaveLength(3)
+  })
+
+  it('renders no Users nav item at all for a viewer', async () => {
+    renderTopBarAs(viewerProfile)
+    await screen.findByTestId('top-bar')
+    await screen.findByTestId('nav-settings')
+
+    expect(screen.queryByTestId('nav-users')).toBeNull()
+    expect(
+      screen.queryByRole('link', { name: 'Users' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link')).toHaveLength(2)
+  })
 
   it.each([
     ['/', 'Home', 'Settings'],
@@ -86,6 +102,7 @@ describe('TopBar', () => {
     expect(getAccessToken()).not.toBeNull()
 
     const logOut = screen.getByRole('button', { name: 'Log out' })
+    await user.tab()
     await user.tab()
     await user.tab()
     await user.tab()

@@ -30,7 +30,7 @@ remain gaps; see [Built vs. gap](#built-vs-gap).
 |---------|--------|
 | Agent Ed25519 signature | **Built** on backend and Pi software; real hardware/key provisioning remains |
 | Frontend JWT / login | **Built** — in-memory token, single-flight refresh, route guard |
-| Authorization (roles) | **Built server-side**; admin member/invite operations are role-gated and org-scoped. The Users screen remains unbuilt |
+| Authorization (roles) | **Built server-side**; admin member/invite operations are role-gated and org-scoped. The Users screen ships (spec 034) and adds the client-side gate — `AdminOnly` hides the nav item, `RequireAdmin` renders not-found in place of the route. Both fail closed, and both are a courtesy over the server checks, never a substitute |
 | Account removal | **Built** (DMI-102/spec 029): hard delete with session-table cascade and last-admin refusal |
 | Member activity | **Built** (DMI-76/spec 030): `last_login_at` + `last_seen_at`, admin list exposes only last-seen, Settings discloses both recorded facts |
 | Device keys | **Built in software** for installer provisioning; physical provisioning and rotation remain |

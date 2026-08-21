@@ -7,7 +7,13 @@ import { clearAccessToken } from '@/api/tokenStore'
 
 export const server = setupServer(...handlers)
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' })
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+  Element.prototype.scrollIntoView = () => {}
+})
 afterEach(() => {
   cleanup()
   server.resetHandlers()

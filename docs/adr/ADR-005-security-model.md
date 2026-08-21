@@ -1,6 +1,6 @@
 # ADR-005: Modelo de Seguranca v1
 
-> **Status:** Aceito, com duas emendas.
+> **Status:** Aceito, com tres emendas.
 > **(a)** §1 (direcionalidade do canal do agente) **emendado por
 > [ADR-011](ADR-011-pi-command-channel.md)** — o canal do agente passa a ser **bidirecional**
 > (resultados sobem via `POST /scans`; comandos descem via WSS).
@@ -11,6 +11,10 @@
 > (armazenamento cifrado do segredo). O envelope de assinatura (string canonica, headers, skew,
 > nonce) permanece **identico** — muda apenas o algoritmo e o lado de verificacao. Fundamentacao:
 > [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
+> **(c)** §2 (flags do cookie de refresh) **emendado em 2026-08-18**: `SameSite` passa de **`Lax`**
+> para **`None`**, porque a SPA e a API ficam em dominios registraveis distintos sob o public
+> suffix `up.railway.app` e o cookie `Lax` nunca era enviado. Detalhes, divida de CSRF e a
+> alternativa de dominio proprio estao na propria §2.
 > As decisoes de JWT Bearer, CORS e transporte desta ADR permanecem em vigor.
 
 ## Contexto
@@ -116,9 +120,27 @@ Decisao de v1:
 
 Flags previstas para cookie de refresh quando o fluxo de auth for implementado:
 
-- producao: `HttpOnly`, `Secure`, `SameSite=Lax` ou mais restritivo
+- producao: `HttpOnly`, `Secure`, **`SameSite=None`** — emendado em 2026-08-18 (`f2836ba`); ver abaixo
 - desenvolvimento local HTTP: excecao documentada para `Secure=false`
 - se houver mutacoes autenticadas por cookie no futuro, CSRF devera ser tratado explicitamente
+
+> **Emenda 2026-08-18 — `SameSite=Lax` -> `SameSite=None`.** Esta clausula exigia `Lax` *ou mais
+> restritivo*; a implantacao real tornou isso impossivel. A SPA e a API sao servidas em
+> `nspi.up.railway.app` e `api-nspi.up.railway.app`, e `up.railway.app` esta na **Public Suffix
+> List** — logo sao **dominios registraveis distintos**, toda chamada `/auth/*` e uma requisicao
+> *cross-site*, e o cookie `Lax` nunca era anexado: o refresh respondia 401 permanentemente em
+> producao. `None` exige `Secure`, fornecido por `REFRESH_COOKIE_SECURE`; `localhost` e isento da
+> regra de HTTPS, entao o dev local nao muda. Fundamentacao:
+> [`docs/research/http-cookies-samesite.md`](../research/http-cookies-samesite.md).
+>
+> **Divida aberta — CSRF.** `None` e estritamente **menos** restritivo, e a terceira clausula acima
+> passa a valer agora: `POST /auth/refresh` e `POST /auth/logout` sao mutacoes autenticadas por
+> cookie. Uma pagina hostil pode forcar um refresh cross-site; o browser grava o cookie rotacionado
+> e o refresh legitimo seguinte apresenta um token ja aposentado, que a deteccao de reuso trata
+> como roubo e revoga a familia inteira — logout forcado. Mitigacao pendente em issue separada.
+>
+> **Alternativa que reabilita `Lax`:** servir SPA e API sob um mesmo dominio registravel
+> (`app.<dominio>` + `api.<dominio>`), o que os torna same-site de novo e fecha a exposicao.
 
 ### 3. CORS e transporte na v1
 

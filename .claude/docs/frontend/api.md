@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend API layer
-description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read and account resource modules.
+description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
-tags: [frontend, api, axios, auth, refresh]
-timestamp: 2026-08-18T00:00:00Z
+tags: [frontend, api, axios, auth, refresh, invites]
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # frontend API layer
@@ -35,6 +35,10 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getAccessToken()` / `setAccessToken()` / `clearAccessToken()` | The in-memory token store over a single module-scoped `let accessToken` — never `localStorage`/`sessionStorage`/cookies/React state. | `frontend/src/api/tokenStore.ts:3` |
 | `getCurrentUser()` | `GET /users/me`. The **sole** source of identity and role — nothing decodes a JWT anywhere in the app. | `frontend/src/api/users.ts:6` |
 | `deleteCurrentUser()` | `DELETE /users/me`, `204`. The self-service exit from the organization, called only by the session layer's `deleteAccount()`. No body either way, so no type alias. Deleting the account destroys its sessions server-side; the residual refresh cookie is deliberately left alone because it then authenticates nothing. | `frontend/src/api/users.ts:11` |
+| `listOrgMembers()` | `GET /users` → `OrgMemberListResponse`. The admin-only org roster behind the Users screen; server-ordered, never re-sorted client-side. | `frontend/src/api/users.ts:21` |
+| `updateUserRole(userId, role)` | `PATCH /users/{id}` with an `UpdateUserRoleRequest` body. The backend keeps the `self_target` and `last_admin` guards; neither is reachable from the Users screen, so the UI carries no copy for them. | `frontend/src/api/users.ts:28` |
+| `deleteUser(userId)` | `DELETE /users/{id}`, `204` — removing *another* member, as distinct from `deleteCurrentUser()`'s self-exit. | `frontend/src/api/users.ts:37` |
+| `listPendingInvites()` / `createInvite()` / `revokeInvite()` | `GET /invites`, `POST /invites` → `InviteCreatedResponse`, `DELETE /invites/{id}`. Thin typed wrappers on `apiClient` in their own module — the authenticated invite-admin half, kept apart from `auth.ts`'s unauthenticated `lookupInvite`/`acceptInvite` pair. | `frontend/src/api/invites.ts:9` |
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:25` |
 | `listFindings({ scan_id, severity })` | One severity per call (never a list or comma-joined string), `per_page: 100`, returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:15` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:8` |
@@ -52,7 +56,9 @@ On top of that sit the thin, contract-typed read modules the screens call.
   the Bearer and refresh-retry interceptors.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
-- The three read modules are consumed by [review](./review.md)'s `useHomeReview()`.
+- The three read modules are consumed by [review](./review.md)'s `useHomeReview()`; the six org
+  calls in `users.ts`/`invites.ts` are consumed by [directory](./directory.md)'s `useOrgDirectory()`
+  and by the Users screen's four dialogs.
 - Consumes the generated types from `src/types/openapi.d.ts` (see [overview](./overview.md)).
 - Behavioral proof lives in `src/api/client.test.ts` (one-refresh-on-401, refresh-failure→event,
   concurrent single-flight, cookie scoping) — MSW intercepts at the network layer so these real
@@ -88,6 +94,11 @@ On top of that sit the thin, contract-typed read modules the screens call.
 - **Path tails are relative to the `/api/v1` baseURL** set in `instances.ts` — never repeat the prefix.
 - The MSW `/scans` handler branches on `status` and `/findings` branches on `severity`, so the two
   scan reads return genuinely different fixture records (`src/test/mswHandlers.ts`).
+- **MSW handler order is load-bearing where a literal segment collides with a parameter.** `:userId`
+  also matches `me`, and MSW resolves the first matching handler, so `DELETE /users/me` must stay
+  above `DELETE /users/:userId`. Reversed, account deletion resolves against the remove-a-member
+  handler and the failure reads as a wrong status, not a routing mistake. Pinned by a comment at the
+  pair rather than a test.
 
 # Citations
 

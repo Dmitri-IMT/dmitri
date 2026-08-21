@@ -1,12 +1,6 @@
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Dialog } from 'radix-ui'
+import DialogShell from '@/components/DialogShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -41,7 +35,6 @@ function ConfirmByTyping({
   const [wasOpen, setWasOpen] = useState(open)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const errorRef = useRef<HTMLParagraphElement>(null)
-  const openerRef = useRef<Element | null>(null)
   const inputId = useId()
   const promptId = useId()
 
@@ -57,12 +50,6 @@ function ConfirmByTyping({
       setTyped('')
     }
   }
-
-  useLayoutEffect(() => {
-    if (open) {
-      openerRef.current = document.activeElement
-    }
-  }, [open])
 
   useEffect(() => {
     if (error) {
@@ -84,92 +71,73 @@ function ConfirmByTyping({
   }
 
   return (
-    <Dialog.Root
+    <DialogShell
       open={open}
-      onOpenChange={(next) => {
-        if (!isSubmitting) {
-          onOpenChange(next)
-        }
-      }}
+      onOpenChange={onOpenChange}
+      testId="confirm-by-typing-dialog"
+      locked={isSubmitting}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-foreground/20" />
-        <Dialog.Content
-          data-testid="confirm-by-typing-dialog"
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            const opener = openerRef.current
-            if (opener instanceof HTMLElement && opener.isConnected) {
-              opener.focus()
-            }
-          }}
-          className="fixed top-1/2 left-1/2 flex w-full max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-4 border border-input bg-card p-6"
-        >
-          <Dialog.Title className="font-title text-title-sm">
-            {heading}
-          </Dialog.Title>
-          <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
-            {body}
-          </Dialog.Description>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-              <label
-                id={promptId}
-                htmlFor={inputId}
-                data-testid="confirm-by-typing-prompt"
-                className="text-body-md"
-              >
-                Type {expectedValue} to confirm.
-              </label>
-              <Input
-                id={inputId}
-                type="text"
-                autoComplete="off"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                value={typed}
-                onChange={(event) => setTyped(event.target.value)}
-                data-testid="confirm-by-typing-input"
-              />
-              <p
-                ref={errorRef}
-                role="alert"
-                tabIndex={-1}
-                data-testid="confirm-by-typing-error"
-                className="text-body-sm text-destructive"
-              >
-                {error}
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              {!isSubmitting && (
-                <Dialog.Close asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    data-testid="confirm-by-typing-cancel"
-                  >
-                    Cancel
-                  </Button>
-                </Dialog.Close>
-              )}
+      <Dialog.Title className="font-title text-title-sm">
+        {heading}
+      </Dialog.Title>
+      <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
+        {body}
+      </Dialog.Description>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <label
+            id={promptId}
+            htmlFor={inputId}
+            data-testid="confirm-by-typing-prompt"
+            className="text-body-md"
+          >
+            Type {expectedValue} to confirm.
+          </label>
+          <Input
+            id={inputId}
+            type="text"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            data-testid="confirm-by-typing-input"
+          />
+          <p
+            ref={errorRef}
+            role="alert"
+            tabIndex={-1}
+            data-testid="confirm-by-typing-error"
+            className="text-body-sm text-destructive"
+          >
+            {error}
+          </p>
+        </div>
+        <div className="flex justify-end gap-2">
+          {!isSubmitting && (
+            <Dialog.Close asChild>
               <Button
-                type="submit"
-                variant="destructive"
-                aria-describedby={promptId}
-                disabled={
-                  !matchesExpected(typed, expectedValue) || isSubmitting
-                }
-                data-testid="confirm-by-typing-submit"
+                type="button"
+                variant="outline"
+                data-testid="confirm-by-typing-cancel"
               >
-                {isSubmitting ? confirmPendingLabel : confirmLabel}
+                Cancel
               </Button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </Dialog.Close>
+          )}
+          <Button
+            type="submit"
+            variant="destructive"
+            aria-describedby={promptId}
+            disabled={!matchesExpected(typed, expectedValue) || isSubmitting}
+            data-testid="confirm-by-typing-submit"
+          >
+            {isSubmitting ? confirmPendingLabel : confirmLabel}
+          </Button>
+        </div>
+      </form>
+    </DialogShell>
   )
 }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from http.cookies import SimpleCookie
 
 import pytest
 from api.db.session import get_session
@@ -73,6 +74,32 @@ def test_login_issues_access_token_and_refresh_cookie(
     assert body["access_token"]
     assert body["token_type"] == "bearer"
     assert response.cookies.get(COOKIE_NAME)
+
+
+def test_refresh_cookie_is_sent_cross_site(
+    client: TestClient, administrative_session: Session
+) -> None:
+    _seed_user(administrative_session)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice@corp.com", "password": VALID_PASSWORD},
+    )
+
+    header = next(
+        h
+        for h in response.headers.get_list("set-cookie")
+        if h.startswith(f"{COOKIE_NAME}=")
+    )
+    cookie: SimpleCookie = SimpleCookie()
+    cookie.load(header)
+    morsel = cookie[COOKIE_NAME]
+
+    # The SPA and API are cross-site in production; `lax` would strip the
+    # cookie from the refresh call, and `none` is only honoured with `Secure`.
+    assert morsel["samesite"].lower() == "none"
+    assert bool(morsel["secure"])
+    assert bool(morsel["httponly"])
 
 
 def test_login_bad_credentials_returns_401_no_tokens(
