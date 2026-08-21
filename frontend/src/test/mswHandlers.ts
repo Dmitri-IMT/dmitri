@@ -72,7 +72,7 @@ export const pendingInvite: PendingInvite = {
 }
 
 export const createdInvite: InviteCreatedResponse = {
-  invite_token: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+  invite_token: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', // pragma: allowlist secret
   expires_at: new Date(NOW_MS + 48 * 60 * 60 * 1000).toISOString(),
 }
 
