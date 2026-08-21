@@ -248,7 +248,7 @@ screen that needs it.
 | `Timestamp` | everywhere a time is rendered — owns the relative/absolute rule below |
 | `EmptyState` | every table-led screen + blank Home |
 | `LoadingSkeleton` | every table-led screen |
-| `Toast` | Scan now errors (503 `device_offline`, 409 `device_busy`), admin mutations |
+| `Toast` | Users & invites — role change, remove, revoke **succeeding** (first call site); Scan now errors (503 `device_offline`, 409 `device_busy`) when Agents unblocks |
 | `Ornament` | Home, auth screens — the engraving detail |
 
 **Cut from the candidate list:** `Sidebar` (top bar chosen above) · `MetricCard` (the MVP has no
@@ -265,10 +265,12 @@ Cross-screen rules. A screen spec may cite these instead of restating them.
    toast naming the thing that failed. Never a spinner that never resolves, never a skeleton
    standing in for a verdict (§7 get defensive).
 3. **Absent, not disabled.** Actions a role cannot perform are omitted from the DOM, not greyed
-   out. The viewer never learns what they're missing (§9). *Carve-out:* an action the person **is**
-   permitted to take but hasn't yet supplied the required input for is a different case — the
-   SETTINGS confirm-by-typing button is greyed out until the typed address matches
-   ([`ADR-017`](../adr/ADR-017-account-removal.md) §5).
+   out. The viewer never learns what they're missing (§9). **This rule is about permission, not
+   progress.** *Carve-out:* an action the person **is** permitted to take but hasn't yet supplied
+   the required input for is a different case — the confirm-by-typing button on SETTINGS and on
+   USERS & INVITES is greyed out, unclickable and out of the tab order until the typed address
+   matches ([`ADR-017`](../adr/ADR-017-account-removal.md) §5). A test of this rule asserts that a
+   viewer's admin affordances are **absent**; it does not sweep the tree for `[disabled]`.
 4. **Whole rows are links.** In every table the entire row navigates; no trailing "View" button
    column.
 5. **If it isn't a title, it's IBM Plex Mono.** There is no third face and no per-screen
@@ -1321,6 +1323,15 @@ lands, the user table appears **above** the invite action and nothing in the she
 **Epicenter** — the invite form, and the link it produces. The link *is* the deliverable; the form
 is how you ask for it.
 
+**A viewer reaching `/users` directly gets the not-found page. ✅ Decided 2026-08-18.** Two
+primitives, because hiding a nav item and refusing a route are different jobs and DMI-90 requires
+both to be absent: `AdminOnly` wraps children and renders `null` for viewers (it hides the nav
+item), and `RequireAdmin` is an outlet guard mirroring `RequireSession` that renders the existing
+`NotFound` page. Not-found rather than a redirect or an access-denied message, for the same reason
+the backend answers `404` and never `403` for another org's resources — an unauthorised person
+should not be able to map what exists. Neither primitive takes a `fallback` or `disabled` prop, so
+there is no API through which a greyed-out admin control could be produced (rule 3).
+
 **Data:**
 - `POST /api/v1/invites` — body `{ email, role: "admin" | "viewer" }` → **`201`
   `InviteCreatedResponse`: `{ invite_token, expires_at }`.**
@@ -1336,6 +1347,14 @@ is how you ask for it.
   (`/users/me` is the self-service path, and it lives in SETTINGS, not here), which is why an
   admin's own row carries no Remove action. Changing a role likewise refuses to target the caller:
   **self-demotion is not possible**. Between them, an org can never reach zero admins.
+- **There is no `status` field on the wire.** `OrgMember` carries `user_id`, `email`, `role` and
+  `last_seen_at` only. The Status column is **derived from which endpoint the row came from** —
+  members read "Active", invites read "Invited — expires in 2d". Nobody should go looking for a
+  field that does not exist.
+- **Mutations refetch; they do not patch the cache by hand.** Role change, remove and revoke each
+  invalidate the two list queries on success, which is what "updates without a full reload" means
+  here. No optimistic update: all three are admin writes on a small table where a wrong guess
+  briefly shows a false membership fact.
 - **`last_seen_at`** is served on the user row — when the person was last active, including silent
   refresh, rendered as relative time. Pending invites have none and render `—`.
 - **🔓 C18** — `POST /invites` documents **only a `201`**. Inviting an email that already has an
@@ -1382,19 +1401,80 @@ invite. So the warning stays, worded as a nudge rather than an alarm (§7).
 | Created — nudge | "This is the only time you'll see this link. If they never get the email, copy it now." |
 | Created — copy button | "Copy link" · after click: "Copied" |
 | Created — again | "Invite someone else" |
+| Created — dismiss (post-C4) | "Done" — closes the dialog and refetches the table |
 | Error — bad email | "That doesn't look like an email address." |
-| Error — duplicate (⚠️ C18, provisional) | "That person already has an account or a pending invite." |
+| Error — already a member (`400 email_already_member`) | "That person is already in your organization." |
+| Error — already invited (`409 invite_already_pending`) | "That address already has an invite waiting. Revoke it first if you need to send a new one." |
 | Error — server | "Couldn't create the invite." · [Try again] |
 | Table columns (post-C4) | "Person · Role · Status · Last seen" |
 | Active row (post-C4) | "Active" · "2 hours ago" · [Remove] |
+| Active row, no last-seen value | "Not recorded yet" — **not** "Never", and not the pending row's `—` |
 | Pending row (post-C4) | "Invited — expires in 2 days" · "—" · [Revoke] |
 | Own row (post-C4) | "Active · you" — **no Remove, no role control.** Leaving is done in Settings |
 | Blank table (post-C4) | "You're the only person here." |
+| Table — load error (post-C4) | "Couldn't load your organisation." · [Try again] |
+| Role control (post-C4) | a dropdown on **other members'** rows — "Viewer" / "Admin". Your own row and **pending invite rows** render the role as plain text, no control |
+| Role change — confirm heading | "Make **name@example.com** an admin?" · demoting: "Make **name@example.com** a viewer?" |
+| Role change — confirm body (to admin) | "They'll be able to run scans and invite people." |
+| Role change — confirm body (to viewer) | "They'll only be able to see scans, hosts and findings." |
+| Role change — confirm button | "Change role" · in flight: "Changing…" |
+| Role change — error | "Couldn't change that role." · [Try again] |
 | Remove — confirm heading | "Remove name@example.com?" |
 | Remove — confirm body | "They lose access immediately and their account is deleted. This can't be undone. You can invite them again later." |
 | Remove — confirm prompt | "Type their email address to confirm." |
 | Remove — confirm button | "Remove" · in flight: "Removing…" |
 | Remove — error | "Couldn't remove that person." · [Try again] |
+| Revoke — confirm heading | "Revoke the invite to **new@example.com**?" |
+| Revoke — confirm body | "Their link stops working immediately. You can invite them again later." |
+| Revoke — confirm button | "Revoke" · in flight: "Revoking…" |
+| Revoke — error | "Couldn't revoke that invite." · [Try again] |
+| Role change — success toast | "**sam@acme.com** is now an admin." · demoting: "**sam@acme.com** is now a viewer." |
+| Remove — success toast | "**sam@acme.com** was removed." |
+| Revoke — success toast | "The invite to **new@acme.com** was revoked." |
+
+**Revoke confirms with a single click, like a role change — not by typing. ✅ Decided 2026-08-18.**
+DMI-90 asks for a confirmation on both role change and revoke, and revoking sits on the reversible
+side of the line drawn below: the invitee has no account yet, nothing is deleted but an unused
+token, and the admin can issue a new invite immediately. Typing stays reserved for removal.
+
+**The three row actions confirm with a toast; the invite does not. ✅ Decided 2026-08-18.** Role
+change, remove and revoke each take effect in a table the admin is already looking at, and the row
+alone is a weak signal — a role cell changing from Viewer to Admin, or a row quietly vanishing, is
+easy to miss and indistinguishable from a mis-click. Each therefore raises a toast naming the
+person and what happened. **A successful invite raises none**: its modal already *is* the
+confirmation, carries the link, and must be dismissed deliberately, so a toast on top would repeat
+it. **`Toast` itself is built here, not split out (✅ decided 2026-08-18):** this screen is its
+first call site and brings three real uses with it, so the component lands with consumers rather
+than ahead of them (`.claude/CLAUDE.md` §2). Scan now's errors join as a fourth when Agents
+unblocks.
+
+**Two calls, one table — ordering and failure. ✅ Decided 2026-08-18.** Members render first, in the
+order `GET /users` already returns them (`last_seen_at` descending, nulls last), then pending
+invites below, soonest-to-expire first. The two groups are not interleaved: a pending row has no
+`last_seen_at` to sort by, so mixing them would order rows on a value half of them lack. **If
+either call fails, the whole table shows its error state** — "Couldn't load your organisation."
+with `[Try again]`, and no rows at all. A member list silently missing its pending invites is not
+an incomplete answer but a wrong one: this table means *everyone with access*, and an admin
+auditing it would read the short version as complete. Rule 1 treats it as one unit; the same goes
+for its loading skeleton and its blank state.
+
+**The table's two `409`s are unreachable from this screen, and get no copy. ✅ Decided 2026-08-18.**
+`PATCH /users/{user_id}` documents `self_target` and `last_admin`. Neither can be produced here.
+`self_target` needs the admin to target their own row, and their own row draws no role control;
+`last_admin` needs the target to be the org's *only* admin while not being the caller, which cannot
+happen, because the caller is an admin in that same org and so the count is at least two — the
+backend checks self-targeting first
+([`users.py`](../../backend/src/api/routers/users.py) `update_user_role_route`). They stay as
+backend guards against direct API calls. Each row action therefore carries **one** failure line and
+a `[Try again]`, and no branch is written for a state this UI cannot reach (`.claude/CLAUDE.md` §2).
+
+**Two row actions, two weights of confirmation. ✅ Decided 2026-08-18.** Removal makes the admin
+type the target's address ([`ADR-017`](../adr/ADR-017-account-removal.md) §5); a role change asks a
+plain "Make **sam@acme.com** an admin?" with a single confirm button. The difference is
+proportionality, and it is the same reasoning ADR-017 used to justify typing in the first place:
+removal is irreversible and ends a live session, while a role set wrong is corrected in two clicks
+from the same dropdown. Making both feel identical would either make removal feel routine or make
+role changes feel dangerous. **Typing is reserved for the actions that cannot be undone.**
 
 **"Added" was dropped, deliberately.** The earlier column deck carried *Person · Role · Status ·
 Added*. `last_seen_at` replaces it rather than joining it: the one case where Added earns its place
@@ -1402,6 +1482,17 @@ Added*. `last_seen_at` replaces it rather than joining it: the one case where Ad
 because accepting an invite issues a session immediately, so a user's first activity timestamp *is*
 their join date. For a pending row, "expires in 2 days" already carries the only time fact worth
 having. Four columns, not five.
+
+**One null case does arise, and it is not the one above. ✅ Decided 2026-08-18.** The migration that
+added the column
+([`20260810_16`](../../backend/alembic/versions/20260810_16_user_activity_and_invite_revoke.py))
+adds it nullable **with no backfill**, so every account that existed before 2026-08-10 reads `NULL`
+until that person next signs in or their session refreshes. Those rows say **"Not recorded yet"** —
+not "Never", which would assert a falsehood about someone who may have logged in this morning, and
+not the pending row's `—`, which is the cell doing the work of telling a member from an invite. The
+state is self-healing and disappears within days of normal use; `GET /users` already sorts these
+rows last (`nulls_last`), so they sit at the bottom rather than at the top of a "most recently
+active" reading.
 
 **Layout — v1 (the buildable screen):**
 ```text
@@ -1443,15 +1534,29 @@ Created — the form is replaced by the confirmation:
 |   Invite someone else                                                        |
 ```
 
+**Post-C4, the invite form moves into a modal. ✅ Decided 2026-08-18.** In v1 the form *was* the
+page, so it rendered inline. Once the member table is the page's content, the form becomes an
+action, and `[Invite a user]` opens a dialog: the email + role form, replaced in place by the
+"Invite sent" confirmation carrying the link and `[Copy link]`. The reason is the once-only nudge
+already in this spec — the link is shown exactly once, and a modal is the only layout that cannot
+scroll out of view or be missed behind a long table. Dismissing it refetches the table so the new
+pending row is present. `Dialog` already exists in the app via `ConfirmByTyping`, so this is a new
+call site, not new machinery. The created state keeps **both** `[Done]` (closes and refetches) and
+"Invite someone else" (resets the dialog to an empty form) — inviting two people in a row is a real
+sequence, and losing it would cost a full reopen each time.
+
 **Layout — post-C4 (the table lands above the invite action; the shell does not move):**
 ```text
 |   USERS                                                                      |
 |   ------------------------------------------------------------------        |
-|   PERSON                  ROLE     STATUS                    ADDED           |
+|   PERSON                  ROLE     STATUS                  LAST SEEN         |
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   anna@acme.com (you)     Admin    Active                    Jul 2           |
-|   sam@acme.com            Viewer   Active                    Jul 8           |
-|   new@acme.com            Viewer   Invited — expires in 2d   Jul 12  [Revoke]|
+|   anna@acme.com (you)     Admin     Active                 2 hours ago       |
+|   sam@acme.com          [Viewer v]  Active                 3 days ago [Remove]|
+|   new@acme.com            Viewer    Invited — expires 2d   —          [Revoke]|
+|                                                                              |
+|   Dropdown only on other members' rows. Your own row and pending             |
+|   invite rows render the role as plain text.                                 |
 |                                                                              |
 |                                            [ ▓  Invite a user  ]             |
 ```
