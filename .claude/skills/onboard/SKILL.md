@@ -153,7 +153,7 @@ Read or summarize components from documentation:
 ```
 
 Extract component descriptions:
-- **Hardware Agent (Raspberry Pi 4 + Python + Nmap)**: Executes network scans, normalizes results, sends to backend
+- **Hardware Agent (Raspberry Pi + Python + Nmap)**: Executes network scans, normalizes results, sends to backend. ADR-001 targets a Pi 4; the board in hand is a Pi 3 (1 GB)
 - **Backend API (FastAPI + PostgreSQL)**: Validates, persists, and serves scan data
 - **Frontend (React + Vite)**: Web UI for viewing results and managing scans
 - **Database (PostgreSQL)**: Stores scans, devices, ports, services, findings
@@ -202,7 +202,7 @@ More detailed information is available in the links at the bottom.
 ## 🎯 What This Project Does
 
 This is an embedded network vulnerability scanning device for a university lab.
-- **Hardware**: Raspberry Pi 4 runs Nmap scans on lab networks
+- **Hardware**: a Raspberry Pi runs Nmap scans on lab networks (ADR-001 targets a Pi 4; a Pi 3 is what is actually in hand)
 - **Backend**: FastAPI server stores and processes scan results
 - **Frontend**: React web UI shows network devices, vulnerabilities, and scan history
 - **Goal**: Help network administrators find and fix security issues on lab equipment

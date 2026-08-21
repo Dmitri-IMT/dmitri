@@ -12,7 +12,7 @@
 
 ## Current state
 
-- **Hardware: none in possession.** Target BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md): Raspberry Pi 4 (4 GB), headless, ALFA Wi-Fi adapter. **Must acquire and configure before September E2E** — see [Hardware acquisition](#hardware-acquisition--open).
+- **Hardware: a Raspberry Pi 3 is in possession as of 2026-08-21** (exact model — B or B+ — to confirm). This is **not** the board [`ADR-001`](../adr/ADR-001-hardware-selection.md) selected: that ADR specifies a Pi 4 Model B 4 GB and explicitly **rejected** the Pi 3 B+ for **1 GB RAM** and **USB 2.0 I/O**. The ADR is annotated, not reversed — the Pi 4 remains the documented target. Still to do: flash, provision and **prove the pipeline actually fits in 1 GB** before the September E2E — see [Hardware acquisition](#hardware-acquisition--open).
 - **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
 - **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
 - **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **implemented on both sides but not yet wired**: the backend route landed with DMI-63 and the device client (`agent.transport.ScanIngestClient`) with DMI-65. What is missing is the daemon that calls it (DMI-66).
@@ -89,7 +89,11 @@ So the Pi **reports**, a human **chooses once**, and the backend **stores** the 
 
 ## Hardware acquisition & installer provisioning
 
-**Blocker:** no Raspberry Pi owned yet. September Scenario B needs a real appliance on the network.
+**Unblocked, with a caveat:** a Raspberry Pi 3 is now in hand, so September Scenario B has a real
+appliance. But it is the board ADR-001 rejected, so "we have hardware" is not the same as "the
+hardware is adequate" — the 1 GB RAM and USB 2.0 constraints are unproven against this pipeline
+and are now the top Pi-side risk. **DMI-109** measures then decides, producing **ADR-018**; it blocks DMI-57 so the installer playbook is written once against a settled baseline. Two BOM items from ADR-001 do **not** fit a Pi 3: the USB-C PSU
+(the Pi 3 uses micro-USB) and the Pi 4 case/cooler (different footprint).
 
 **B2B model ([`AUTH.md`](AUTH.md)):** a **technical installer** deploys the Pi on-site (vendor,
 integrator, or customer IT). The **org admin** never provisions keys — they only use the web app
@@ -98,7 +102,10 @@ after the agent is online. Consumer pairing flows (QR, local setup pages for bus
 
 | Step | Who | Status |
 |------|-----|--------|
-| Procure BOM per ADR-001 (Pi 4 4GB, PSU, microSD, case/cooling, ALFA Wi-Fi) | Vendor | 🔓 |
+| ~~Procure BOM per ADR-001 (Pi 4 4GB, …)~~ — **board acquired 2026-08-21, but a Pi 3, not the Pi 4** | Vendor | ⚠️ |
+| Confirm the exact Pi 3 model (B vs B+) — decides Ethernet ceiling (100 Mbit vs ~300 Mbit over USB 2.0) | Installer | 🔓 |
+| Source a **micro-USB** PSU and a Pi 3 case/cooler — the ADR-001 USB-C PSU and Pi 4 case do not fit | Vendor | 🔓 |
+| **Benchmark the full pipeline on the Pi 3**: peak RSS under 1 GB, subnet sweep wall-time, `ScanRunner` parallelism. Feeds the go/no-go on a new hardware ADR | Installer | 🔓 |
 | Flash Raspberry Pi OS Lite; headless SSH; static IP or DHCP reservation | Installer | 🔓 |
 | Install `nmap`, `uv`, agent package; verify scan on hardware | Installer | 🔓 |
 | Generate the Ed25519 keypair **on the Pi**; register its **public key** with the backend (creates the `agents` row). No secret leaves the device. | Installer + vendor playbook | 🔓 |

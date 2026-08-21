@@ -1,6 +1,6 @@
 # Hardware Agent
 
-Python-based service intended to run on a Raspberry Pi 4 with Raspberry Pi OS Lite. It orchestrates Nmap scans, normalizes output, and writes JSON payloads for the TUI workflow.
+Python-based service intended to run on a Raspberry Pi with Raspberry Pi OS Lite. `ADR-001` targets a Pi 4 Model B 4 GB; the board actually in hand since 2026-08-21 is a **Pi 3 (1 GB)**, whose fit is unproven — see `docs/roadmap/PI.md`. It orchestrates Nmap scans, normalizes output, and writes JSON payloads for the TUI workflow.
 
 ## Responsibilities
 - Manage scan scheduling per subnet configuration.

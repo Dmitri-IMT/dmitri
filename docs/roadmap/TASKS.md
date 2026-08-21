@@ -70,7 +70,7 @@
 
 ## Parked — Pi-gated (cannot do without hardware)
 
-- Procure Pi 4 BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md).
+- ~~Procure Pi 4 BOM per [`ADR-001`](../adr/ADR-001-hardware-selection.md).~~ A **Pi 3** was acquired 2026-08-21 instead — the board ADR-001 rejected. Remaining: micro-USB PSU, Pi 3 case, and a 1 GB fit benchmark. See [`PI.md`](PI.md).
 - Flash Raspberry Pi OS Lite; headless SSH; static IP / DHCP reservation.
 - Install `nmap`, `uv`, agent; **verify scan on real hardware**.
 - Installer secret handoff; write `/etc/dmitri/agent.env`; enable `dmitri-agent.service`; verify WSS + ingest.
