@@ -14,7 +14,7 @@
 
 | Doc | Layer | Status today |
 |-----|-------|--------------|
-| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** No provisioned Pi hardware/service packaging yet. |
+| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** A **Pi 3** is in hand since 2026-08-21 — not the Pi 4 ADR-001 selected — but nothing is provisioned and the 1 GB fit is unproven. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings password change, Activity disclosure, and Users & Invites built. Next: Scans, Hosts, Agents |
@@ -48,7 +48,7 @@ domain.
 
 These layers are coupled; build in roughly this order so each layer has something real to talk to:
 
-1. **Pi hardware** (PI): acquire + base configure per ADR-001 — **blocker today**
+1. **Pi hardware** (PI): board acquired 2026-08-21, but a **Pi 3**, which ADR-001 rejected for 1 GB RAM and USB 2.0. Base configure + **prove the pipeline fits in 1 GB** — still the top Pi-side risk
 2. **Hosted stack** (BACKEND B4/B5): Supabase + Railway for NSPi — [`epics/EPICS.md`](../epics/EPICS.md)
 3. **Auth Phase 1** — implement [`AUTH.md`](AUTH.md) (roadmap ✅)
 4. **ADR-011 + OpenAPI** — ✅ [`ADR-011`](../adr/ADR-011-pi-command-channel.md); implement `contracts/openapi/` in backend/Pi

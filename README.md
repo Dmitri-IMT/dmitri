@@ -50,7 +50,7 @@ Equipamentos e sistemas típicos no ambiente (referência para contexto da rede)
 
 Visão completa do sistema; **itens 2–4 não estão em desenvolvimento ativo** enquanto o foco for apenas o **Dmitri** (TUI + agente).
 
-1. **Hardware Agent (Raspberry Pi 4 + Python + Nmap + Dmitri)**: Varreduras rápidas ou completas, normalização segundo os schemas compartilhados e uso pelo operador via TUI; **envio ao backend** via REST/HTTPS fica para uma **fase posterior**.
+1. **Hardware Agent (Raspberry Pi + Python + Nmap + Dmitri)**: Varreduras rápidas ou completas, normalização segundo os schemas compartilhados e uso pelo operador via TUI; **envio ao backend** via REST/HTTPS fica para uma **fase posterior**.
 2. **Backend API (FastAPI + PostgreSQL)**: Receberá e validará os resultados, armazenará em PostgreSQL e fornecerá endpoints para consulta pelos clientes *(planeado)*.
 3. **Banco de Dados (PostgreSQL)**: Fonte única para histórico de scans, dispositivos, portas, findings e telemetria de agentes *(planeado)*.
 4. **Frontend web (React + Vite + TypeScript)**: Interface em navegador para acompanhar status, resultados e recomendações; consome a API via OpenAPI *(planeado)*.

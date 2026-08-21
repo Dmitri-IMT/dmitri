@@ -1,5 +1,31 @@
 # R-01 — Seleção de Hardware
 
+> **Status:** Aceito, com **divergência de aquisição registrada em 2026-08-21**.
+> O hardware efetivamente adquirido foi um **Raspberry Pi 3** (modelo exato a confirmar —
+> B ou B+), e **não** o Raspberry Pi 4 Model B 4 GB que esta ADR seleciona.
+> **A decisão não é revertida:** o Pi 4 permanece a plataforma-alvo documentada e o BOM da
+> §Decisão segue válido para aquisições futuras. O que mudou é a realidade de curto prazo.
+>
+> **O ponto crítico:** o Raspberry Pi 3 Model B+ é uma das alternativas que esta própria ADR
+> **rejeitou** (ver §Alternativas rejeitadas), por dois motivos que agora deixam de ser
+> hipotéticos e passam a ser riscos ativos do projeto:
+> **(a) 1 GB de RAM** — contra os 4 GB assumidos aqui e pelos critérios de hardware da
+> [`ADR-002`](ADR-002-scanning-tools-selection.md);
+> **(b) I/O limitado a USB 2.0** — o adaptador Wi-Fi ALFA AWUS036ACM (MT7612U) do BOM é um
+> periférico USB externo, exatamente o gargalo previsto. No Pi 3 a Ethernet também compartilha
+> o barramento USB 2.0.
+>
+> **A revalidar antes do E2E de setembro**, no dispositivo real e não no papel: o pipeline
+> completo (descoberta → enumeração → detecção de serviço → NSE → normalização) cabe em 1 GB;
+> o tempo de varredura de uma sub-rede permanece aceitável com Ethernet limitada; e o
+> `ScanRunner` não precisa de paralelismo reduzido. Essa medição e a decisão que dela decorre
+> são rastreadas por **DMI-109**, cujo entregável é a **ADR-018**. Se a medição reprovar o Pi 3,
+> a saída é a ADR-018 **superseding** esta — não uma edição desta.
+>
+> Consequências operacionais imediatas: a fonte do BOM (**USB-C 5 V/3 A**) **não serve** no
+> Pi 3, que usa **micro-USB**; e o case com cooler especificado é para Pi 4, de furação
+> diferente.
+
 ## Contexto
 
 O dispositivo executará um Linux headless, rodará ferramentas locais de descoberta e enumeração de serviços, normalizará os resultados e enviará os payloads para a API do backend.
