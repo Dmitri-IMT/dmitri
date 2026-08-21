@@ -1335,7 +1335,7 @@ export interface components {
         "X-Request-Id": string;
         /**
          * @description Issues (or rotates) the httpOnly refresh cookie. Production attributes:
-         *     `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth; Max-Age=604800` (7 days).
+         *     `HttpOnly; Secure; SameSite=None; Path=/api/v1/auth; Max-Age=604800` (7 days).
          */
         "Set-Cookie-Refresh": string;
         /** @description Clears the refresh cookie on logout (server-side revocation is authoritative; this only tidies the browser). */

@@ -5,6 +5,19 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-18
 
+* **Update**: `backend/auth.md` — cross-site session fixes. The `dmitri_refresh` cookie moved from
+  `SameSite=Lax` to `SameSite=None` (`f2836ba`), because `up.railway.app` is a public suffix and
+  the SPA (`nspi.`) and API (`api-nspi.`) are therefore separate registrable domains, so a `Lax`
+  cookie was never attached to `/auth/*` and refresh always answered 401 in production. The
+  `set_refresh_cookie` / `clear_refresh_cookie` row also had the wrong `resource` path — the pair
+  lives in `session_response.py:17`, not `routers/auth.py:38`. `NoContentCorsMiddleware` now
+  rebuilds the preflight as a bodyless 204 instead of reassigning `status_code` on Starlette's
+  `PlainTextResponse("OK", 200)`, which had been shipping `204` with `Content-Length: 2` — legal
+  to Chrome and curl, rejected by WebKit, which answered the preflight and then never sent the
+  real request. `build_cors_middleware_kwargs` moved to `middleware.py:53`. Two Notes entries
+  record both, including the **unresolved conflict with ADR-005**, whose cookie clause still
+  specifies `Lax` *ou mais restritivo*.
+
 * **Update**: `frontend/api.md` and `frontend/overview.md` now map the required `VITE_API_URL`
   guard, CI build input, and Railway's Docker/Caddy static deployment.
 * **Update**: `infra/deployment.md`, `infra/supabase.md`, `overview.md`, and the root/frontend/
