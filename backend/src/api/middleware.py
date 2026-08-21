@@ -37,9 +37,17 @@ class RequestIdMiddleware:
 
 class NoContentCorsMiddleware(CORSMiddleware):
     def preflight_response(self, request_headers) -> Response:
+        # Starlette answers a preflight with PlainTextResponse("OK", 200). Reassigning
+        # `status_code` alone leaves the body and its `Content-Length: 2` in place, and
+        # a 204 that declares content is malformed (RFC 9110 15.3.5) — WebKit rejects
+        # the preflight and never sends the real request. Rebuild without body headers.
         response = super().preflight_response(request_headers)
-        response.status_code = 204
-        return response
+        headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in {"content-length", "content-type"}
+        }
+        return Response(status_code=204, headers=headers)
 
 
 def build_cors_middleware_kwargs(settings: Settings) -> dict:

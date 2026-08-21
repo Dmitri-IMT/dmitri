@@ -64,3 +64,19 @@ def test_missing_request_id_is_generated() -> None:
     generated = response.headers[REQUEST_ID_HEADER]
     assert generated
     assert len(generated) == 36
+
+
+def test_preflight_carries_no_body_or_content_headers() -> None:
+    client = TestClient(_build_app())
+    response = client.options(
+        "/ping",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert "content-length" not in response.headers
+    assert "content-type" not in response.headers
