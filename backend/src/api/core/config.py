@@ -51,10 +51,11 @@ class Settings(BaseSettings):
     )
     refresh_token_ttl_days: int = Field(default=7, alias="REFRESH_TOKEN_TTL_DAYS")
     refresh_cookie_secure: bool = Field(default=True, alias="REFRESH_COOKIE_SECURE")
-    cors_allowed_origins: str = Field(
-        default="http://localhost:5173,https://app.vscanner.example.com",
-        alias="CORS_ALLOWED_ORIGINS",
-    )
+    # Fails closed: an unset CORS_ALLOWED_ORIGINS yields an empty allowlist, so the API
+    # permits no browser origin at all. The previous default trusted a developer
+    # workstation and a placeholder domain nobody owns, which — with
+    # allow_credentials=True — made a missing variable a silent exposure.
+    cors_allowed_origins: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
     reset_token_ttl_minutes: int = Field(default=60, alias="RESET_TOKEN_TTL_MINUTES")
     hibp_enabled: bool = Field(default=True, alias="HIBP_ENABLED")
     hibp_timeout_seconds: float = Field(default=2, alias="HIBP_TIMEOUT_SECONDS")

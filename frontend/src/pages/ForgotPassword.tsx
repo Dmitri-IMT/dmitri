@@ -43,7 +43,7 @@ function ForgotPassword() {
     <Link
       to="/login"
       data-testid="forgot-back"
-      className="self-center text-sm text-accent underline"
+      className="self-center text-body-md text-accent underline"
     >
       Back to sign in
     </Link>
@@ -63,7 +63,7 @@ function ForgotPassword() {
           >
             Check your email.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             If {confirmedFor} has a Dmitri account, a reset link is on its way.
             The link works once and expires shortly.
           </p>
@@ -82,7 +82,7 @@ function ForgotPassword() {
           className="flex flex-col gap-4"
         >
           <span className="font-title text-title-sm">Reset your password</span>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             Enter your email and we&apos;ll send you a link to set a new
             password.
           </p>
@@ -102,7 +102,7 @@ function ForgotPassword() {
           <p
             role="alert"
             data-testid="forgot-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {error}
           </p>

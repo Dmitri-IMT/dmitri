@@ -32,6 +32,19 @@ def test_real_preflight_returns_204_with_cors_headers() -> None:
     assert REQUEST_ID_HEADER.lower() in allow_headers.lower()
 
 
+def test_foreign_origin_preflight_has_no_allow_origin_header() -> None:
+    client = TestClient(app)
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "http://localhost:9999",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_inbound_request_id_is_echoed_back() -> None:
     client = TestClient(app)
     response = client.options(

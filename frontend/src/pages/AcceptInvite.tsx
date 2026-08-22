@@ -114,7 +114,7 @@ function AcceptInvite() {
           >
             This invite has expired.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             Invite links can only be used once, and they don&apos;t last long.
             Ask your admin to send you a new one.
           </p>
@@ -134,7 +134,7 @@ function AcceptInvite() {
           >
             You&apos;re already signed in.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             Sign out first to accept this invite.
           </p>
           <Button
@@ -158,7 +158,7 @@ function AcceptInvite() {
             tabIndex={-1}
             role="alert"
             data-testid="invite-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {SERVICE_ERROR}
           </p>
@@ -183,7 +183,9 @@ function AcceptInvite() {
           className="flex flex-col gap-4"
         >
           <span className="font-title text-title-sm">Create your account</span>
-          <p className="text-sm text-muted-foreground">Checking your invite…</p>
+          <p className="text-body-md text-muted-foreground">
+            Checking your invite…
+          </p>
         </div>
       </AuthShell>
     )
@@ -198,7 +200,7 @@ function AcceptInvite() {
           className="flex flex-col gap-4"
         >
           <span className="font-title text-title-sm">Create your account</span>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             You&apos;ve been invited to {lookup.data.org_name} with the{' '}
             {lookup.data.role} role. Pick a password and you&apos;re in.
           </p>
@@ -219,7 +221,7 @@ function AcceptInvite() {
             <p
               id="invite-password-hint"
               data-testid="invite-password-hint"
-              className="text-sm text-muted-foreground"
+              className="text-body-md text-muted-foreground"
             >
               {PASSWORD_HINT}
             </p>
@@ -227,7 +229,7 @@ function AcceptInvite() {
               id="invite-password-error"
               role="alert"
               data-testid="invite-password-error"
-              className="text-sm text-destructive"
+              className="text-body-md text-destructive"
             >
               {passwordError}
             </p>
@@ -249,7 +251,7 @@ function AcceptInvite() {
               id="invite-confirm-error"
               role="alert"
               data-testid="invite-confirm-error"
-              className="text-sm text-destructive"
+              className="text-body-md text-destructive"
             >
               {confirmError}
             </p>
@@ -259,7 +261,7 @@ function AcceptInvite() {
             tabIndex={-1}
             role="alert"
             data-testid="invite-account-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {accountError ? (
               <>
@@ -277,7 +279,7 @@ function AcceptInvite() {
           <p
             role="alert"
             data-testid="invite-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {formError}
           </p>

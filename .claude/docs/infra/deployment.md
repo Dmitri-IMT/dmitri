@@ -4,7 +4,7 @@ title: Deployment (install scripts + Railway)
 description: Dev-environment installers and the three-service Railway + Supabase deploy topology, with frontend build and backend env-var wiring.
 resource: install.sh
 tags: [infra, deployment, railway, install, env]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-22T00:00:00Z
 ---
 
 # Deployment (install scripts + Railway)
@@ -48,11 +48,12 @@ follow Root Directory.
 | Install `nmap` (brew / apt / dnf; winget / choco on Windows) | `install.sh:126-165` |
 | `uv sync --extra dev` for `hardware-agent` (and `backend` unless `--agent-only`) | `install.sh:167-175` |
 | Install a `dmitri` launcher into `~/.local/bin` on PATH | `install.sh:110-124` |
-| Seed `backend/.env` from `backend/.env.example` (never overwrites) | `install.sh:177-194` |
+| Seed `backend/.env` from `backend/.env.example` (never overwrites) | `install.sh:191-208` |
 | Start local Supabase, recreate scratch `dmitri_test` DB (needs Docker + Supabase CLI) | `install.sh:257-283` |
 | Run Alembic (`DATABASE_URL_DIRECT` set in shell only) after tests | `install.sh:235-255` |
 | Optional pre-commit pre-push hooks (`--hooks`) | `install.sh:285-292` |
 | Post-install pytest smoke checks (skip with `--skip-verify`) | `install.sh:312-336` |
+| Print the local Vite origin required for the backend CORS allowlist and emailed auth links | `install.sh:465-489` |
 
 Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--hooks`
 (`-AgentOnly` / `-SkipVerify` / `-Hooks` in PowerShell).
@@ -65,6 +66,8 @@ Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--ho
 | `DATABASE_URL_DIRECT` | Admin/migration connection (5432, `postgres`) — required by Alembic, **forbidden** on any Railway service | `backend/alembic/env.py`; exported transiently in operator shell |
 | `NVD_API_KEY` | Optional NVD enrichment key | `backend/.env.example`; sealed on backend services if used |
 | Enrichment tuning (`ENRICHMENT_*`, `KEV_*`, `EPSS_*`, `NVD_*`) | Worker poll/cache/base-URL settings | `backend/.env.example` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated trusted browser origins; empty by default so CORS fails closed. Local Web setup needs `http://localhost:5173`; hosted services supply their frontend origin. | `backend/.env.example`; sealed on the API service |
+| `APP_BASE_URL` | Browser origin used to build invite/reset links; set to the local Vite origin for development and the frontend service origin when hosted. | `backend/.env.example`; sealed on the API service |
 | `VITE_API_URL` | Public API origin without `/api/v1`; embedded during the frontend Vite build | `frontend/.env.example`; Railway frontend build variable |
 | `GITHUB_PAT` | Optional Cursor MCP token — repo-root `.env` only, unrelated to deploy | `.env.example` |
 
@@ -100,6 +103,10 @@ Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--ho
 - **Frontend build and routing:** `VITE_API_URL` is required and has no localhost fallback.
   `Caddyfile` rewrites `/health` to a successful static response and falls back to `index.html`
   for React Router deep links.
+- **Browser origins are deployment-specific.** The installer copies the fail-closed backend
+  example unchanged, then both shell mirrors print the exact
+  `CORS_ALLOWED_ORIGINS=http://localhost:5173` and `APP_BASE_URL=http://localhost:5173` edits
+  required before local Web access and emailed auth links work against the local SPA.
 - **Free-tier pauses:** Railway's trial credit and Supabase's 7-day idle pause both silently
   stop a long-running deployment — move to paid plans / add a keep-alive before `nspi` needs to
   run 24/7.

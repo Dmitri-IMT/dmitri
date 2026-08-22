@@ -75,13 +75,13 @@ function ResetPassword() {
           <p ref={deadRef} tabIndex={-1} className="font-title text-title-sm">
             This link has expired.
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-md text-muted-foreground">
             Reset links work once and don&apos;t last long.
           </p>
           <Link
             to="/forgot-password"
             data-testid="reset-request"
-            className="self-center text-sm text-accent underline"
+            className="self-center text-body-md text-accent underline"
           >
             Request a new link
           </Link>
@@ -116,7 +116,7 @@ function ResetPassword() {
             <p
               id="reset-password-hint"
               data-testid="reset-password-hint"
-              className="text-sm text-muted-foreground"
+              className="text-body-md text-muted-foreground"
             >
               {PASSWORD_HINT}
             </p>
@@ -124,7 +124,7 @@ function ResetPassword() {
               id="reset-password-error"
               role="alert"
               data-testid="reset-password-error"
-              className="text-sm text-destructive"
+              className="text-body-md text-destructive"
             >
               {passwordError}
             </p>
@@ -146,7 +146,7 @@ function ResetPassword() {
               id="reset-confirm-error"
               role="alert"
               data-testid="reset-confirm-error"
-              className="text-sm text-destructive"
+              className="text-body-md text-destructive"
             >
               {confirmError}
             </p>
@@ -154,7 +154,7 @@ function ResetPassword() {
           <p
             role="alert"
             data-testid="reset-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {formError}
           </p>

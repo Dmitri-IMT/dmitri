@@ -19,14 +19,35 @@ needs an exception, it changes the rule here or it doesn't ship.
 ### App shell
 
 **Top bar, no sidebar.** One horizontal bar above every inside-shell screen: wordmark left, nav
-items (Home · Scans · Hosts · Agents · Users · Settings), `[Log out]` right. **Users** is omitted
-for viewers, not disabled.
+items (Home · Scans · Hosts · Agents · Users · Settings) centred, `[Log out]` right. **Users** is
+omitted for viewers, not disabled.
 
-**The nav is left-adjacent.** It was centred for as long as it held exactly one item, because a lone
-link sitting beside the wordmark reads as an orphaned control rather than as navigation. That was
-always transitional: spec 028 added `Settings` as the second item and reverted the centring, as
-promised. *Decided 2026-07-31; reverted 2026-08-07.* Shipped today: `Home` and `Settings`, both
-visible to either role.
+**The nav is centred, and stays centred.** The wordmark holds the frame's left edge, `[Log out]`
+holds its right, and the navigation sits on the frame's centre line — growing symmetrically from
+it as destinations are added, never drifting toward either side. *Centred 2026-07-31; reverted
+to left-adjacent 2026-08-07; centred again and made permanent 2026-08-21 (DMI-107).*
+
+The 2026-08-07 reversal treated centring as a workaround for a **lone** link — an orphaned
+control needing somewhere to sit — and so undid it the moment a second item arrived. That framing
+is what changed. The nav is centred **because it is the product's spine**, not because of how
+many items it currently holds, so the count is no longer an argument either way: it is centred at
+three items and it will be centred at eight. Treating the count as the reason is what made this
+decision reversible twice, and naming the real reason is what stops it happening a third time.
+
+**Centred on the bar, not in the leftover space.** The bar is a three-column grid — `1fr auto
+1fr` — so the nav's centre is the *frame's* centre regardless of the wordmark's or the button's
+width. A viewer, who has no `Users` item, sees their items centred on the same axis an admin
+does. Centring it inside a flex row instead would let it drift every time something beside it
+changed width, which is the failure this spelling exists to prevent.
+
+**Consequence, recorded:** there is no specified wordmark→nav gap any more. It is whatever the
+frame leaves over, and it changes with the viewport. Any rule or test asserting a fixed gap there
+is asserting something the layout no longer promises.
+
+**The bar and the page share one frame.** The bar's contents and the content beneath it are both
+`--container-frame`, so the wordmark and the page title start on the same vertical. The bar's
+bottom hairline is full-bleed across the window, so the bar still reads as a band belonging to
+the window rather than as a floating object. *Decided 2026-08-21 (DMI-107).*
 
 **The nav names domains, not actions.** *Users* is the place user-related things live, and it keeps
 that name even in v1, when the only thing in it is the invite form. Nav is muscle memory — an item
@@ -91,6 +112,24 @@ Plex Mono. This rule is what keeps the split honest.
 > dense screen (Host inventory, Scan detail) later proves hostile to read, the size floor and the
 > Plex Sans escape hatch are the two levers — not a per-screen exception.
 
+**Type sizes come from the named scale.** These tokens are the complete type-size set:
+
+| Token | Value | Utility | Used for |
+| --- | --- | --- | --- |
+| `--text-title-lg` | `2rem` (32px) | `text-title-lg` | page titles |
+| `--text-title-md` | `1.5rem` (24px) | `text-title-md` | prominent titles and the auth wordmark |
+| `--text-title-sm` | `1.25rem` (20px) | `text-title-sm` | section and card titles |
+| `--text-title-xs` | `1rem` (16px) | `text-title-xs` | the smallest title and inside-shell wordmark |
+| `--text-body-md` | `0.875rem` (14px) | `text-body-md` | default body copy, labels, values and controls |
+| `--text-body-sm` | `0.8125rem` (13px) | `text-body-sm` | compact helper and error copy |
+| `--text-caption-md` | `0.75rem` (12px) | `text-caption-md` | captions and dense metadata |
+| `--text-nav` | `0.6875rem` (11px) | `text-nav` | top-bar navigation only |
+
+The framework's raw size utilities (`text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl` and
+`text-2xl` through `text-9xl`) are **not part of the scale**. Using one is a violation even when
+it renders the same pixels as a named token: the token is the product decision and the raw utility
+silently opts out of it.
+
 ### Color
 
 #### Neutrals — locked
@@ -148,6 +187,31 @@ it is doing a different job, exactly as red does at critical.
 
 **These were the only unfilled values in Foundations**, now resolved.
 
+### Interaction states
+
+**Every interactive element declares all five of its states.** Rest, hover, focus-visible, active
+and disabled are each a designed property, specified beside colour and type. Cursor treatment is
+explicit too. An element the user can act on and which looks identical under the pointer is a
+**defect**, not a style preference — the user has no way to learn it is a control except by
+clicking things at random to find out. *Decided 2026-08-18 (DMI-107).*
+
+| State | Owes |
+| --- | --- |
+| **Rest** | It looks like a control: a colour, a border, a caret or an underline that a paragraph beside it does not have. Accent purple, a hairline `--edge` boundary, or a caret — one of the three, at least. |
+| **Hover** | `cursor: pointer`, always, including text-shaped controls, plus one visible change: an underline, a background wash or a colour shift. Tailwind v4's preflight sets `cursor: default` on `<button>`, so the pointer is added, never inherited. |
+| **Focus-visible** | A ring at `--ring`, never `outline: none` and never a ring so faint it needs looking for. Keyboard users get the same affordance the pointer gets, so a control that underlines on hover also underlines on focus. |
+| **Active** | A pressed acknowledgement — the 1px downward nudge the button primitive already carries. |
+| **Disabled** | Reduced opacity, `pointer-events: none`, and out of the tab order. This is only for the progress carve-out of Consistency rule 3. A permission the user does not hold is absent, and has no disabled state to design. |
+
+**Only shared components may be interactive.** Application screens compose shared primitives and
+components; they do not hand-roll native controls or one-off click targets. Vendored shadcn
+primitives live in `frontend/src/components/ui/`; Dmitri-owned shared interactive components live
+in `frontend/src/components/`. Keeping interactivity shared makes the state table enforceable in
+one place instead of at every call site.
+
+**Motion is a transform, and it is small.** Carets rotate and buttons nudge. No fades on layout,
+no easing curves worth naming, nothing that outlasts a key press.
+
 ### Spacing and rhythm
 
 Building rule 1 says spacing comes from the token set. This is that set. **Whitespace is the
@@ -166,9 +230,9 @@ utilities already resolve to it and no custom token layer is needed.
 | `2` | 8px | label-to-value, items inside one group |
 | `3` | 12px | tight stack — table cell padding |
 | `4` | 16px | default gap between related elements |
-| `6` | 24px | card internal padding |
+| `6` | 24px | card internal padding; and between sections of a short-section screen |
 | `8` | 32px | between cards in a list |
-| `12` | 48px | between sections of a screen |
+| `12` | 48px | between sections of a table-led or long-section screen |
 | `16` | 64px | around the epicenter — the verdict's breathing room |
 | `24` | 96px | top offset for a vertically-centred, near-empty screen |
 
@@ -187,12 +251,32 @@ being a step.
    collapse unpredictably, leave orphaned space when an item is conditionally absent, and make
    "what is the space here" a question with two answers.
 3. **Space groups things; it does not decorate.** Related elements sit closer than unrelated ones
-   — proximity is how the eye parses the page, and it does more work than any rule or border.
-   Where a rule and whitespace would both separate two regions, prefer the whitespace: the
-   near-monochrome surface earns its calm by having fewer lines on it, not more.
+   — proximity is how the eye parses the page. Where a rule and whitespace would both separate
+   two regions, the choice is **per screen and stated once**, not left to the component.
+   Prose-led screens with long sections prefer whitespace — the near-monochrome surface earns its
+   calm by having fewer lines on it. **A screen of short, unlike sections prefers the rule**:
+   when sections are two or three rows each, the space between them is too small to do the
+   separating on its own, and a hairline does the work that 48px of paper used to. `/settings` is
+   the first of these. *Decided 2026-08-21 (DMI-107).*
+
+   When a screen takes the rule, it takes it at **every** boundary, including sections added
+   later. A rule that appears at one boundary and not the others stops reading as structure and
+   starts reading as emphasis on whatever it happens to sit above.
 4. **Vertical rhythm is consistent; horizontal is generous.** A screen uses at most three vertical
    step sizes (intra-group, inter-group, inter-section). Horizontal padding inside the content
    column never drops below step `6`, so text never runs to the edge of its card.
+
+   **The inter-section step is chosen per screen, from `6`, `8` or `12` — and only those.** A
+   screen whose sections are two or three short rows (Settings: a label/value pair, a button, a
+   disclosure) uses `6`; a screen whose sections are tables or long prose uses `12`; `8` is the
+   middle case. What stays binding is the *shape*: three vertical steps, each visibly larger than
+   the last, and the inter-section step never smaller than the inter-group step. *Decided
+   2026-08-21 (DMI-107).*
+
+   The trade is explicit. At `6` the inter-section step is 1.5× the inter-group step rather than
+   3×, so **space alone stops carrying the grouping** and the section heading has to help. That
+   works on Settings because its headings are IM Fell at 20px against Plex Mono body — a face
+   change, not just a size change. A screen without that contrast picks `8` or `12` instead.
 
 **One screen, one spacing owner.** A screen's page-level layout sets its section rhythm in one
 place. A nested component never reaches out to adjust the space around itself.
@@ -209,13 +293,47 @@ paid for out of the quality of the desktop screens (§3).
 **"Not designed for" is not "breaks".** Every layout is fluid, so the app degrades gracefully at
 any width instead of shattering:
 
-- **Content column:** prose-led screens (Home, all auth screens) center on a **720px max-width**
-  column; table-led screens (Scans, Hosts, Agents, Users) on **1120px max-width**. These are
-  *maximums*, not fixed widths — below them the column shrinks with the viewport.
+- **Content column:** the widths are the named containers and only the named containers — see
+  §Proportion and containers. **Every inside-shell screen holds `--container-frame`**, prose-led
+  and table-led alike, and so does the top bar above it: one frame, one left edge. A standalone
+  short form — the auth card above all — holds `--container-form`. Both are *maximums*, not
+  fixed widths: below them the column shrinks with the viewport.
+- **Reading measure is separate from column width.** A paragraph is held to about 65 characters
+  wherever it sits. Widening a column never lengthens a line.
 - **No fixed pixel widths on layout containers.** Widths are `max-w-*` + fluid, or grid/flex
   fractions. A container never has a width it can't give back.
 - **The page body never scrolls horizontally.** Wide content — tables above all — scrolls inside
   its own `overflow-x: auto` container, so the chrome and the verdict stay put.
+
+### Proportion and containers
+
+**Containers have names, and the names are the only layout widths.** A layout width is one of the
+two named containers below or it is a bug. `max-w-[45rem]` is the same bug as `p-[13px]`: a
+number that was right once, copied where nobody re-asked whether it was still right. That copy is
+how the login card became a 720px letterbox band around 336px of form. *Decided 2026-08-18
+(DMI-107).*
+
+| Token | Value | Is the width of |
+| --- | --- | --- |
+| `--container-frame` | `70rem` (1120px) | The frame — the top bar's contents and the page content beneath it. One width for the whole shell. |
+| `--container-form` | `24rem` (384px) | The form column — a short form standing on its own, above all the auth card. |
+
+Both are maxima and fluid below themselves (§Viewport). Nothing else is a layout width. A separate
+720px prose column was specified and then removed: once the bar and content share one frame there
+is nothing left for it to measure.
+
+**A card sizes to its content, never to its column.** A short form in a wide column is a narrow
+card centred in that column, not a wide card with a lake of padding around its inputs. The column
+and the card are different measurements; only one is about the viewport.
+
+**The frame and the content share one width.** The top bar's contents and the page beneath it both
+span `--container-frame`, so the wordmark and the page title start on the same vertical. The shell
+reads as one column of paper rather than chrome floating over a narrower sheet. *Decided
+2026-08-21 (DMI-107).*
+
+**Column width and reading measure are different problems.** Widening the column does not widen
+the prose in it: a paragraph is still held to about 65 characters by `max-w-prose`. The column
+decides where the page structure sits; the reading measure decides how long a line may get.
 
 ### Building rules
 
@@ -232,6 +350,9 @@ How the above is enforced in code. These are binding on implementation, not sugg
    a 64-character hostname must not widen the page (see Consistency rule 6, IDs truncate).
 5. **Text sizes are tokens too.** The 16px floor on IM Fell (§Typography) is enforced by the scale,
    not by remembering it.
+6. **The mechanical rules are lint rules, not reminders.** `local/no-arbitrary-utility`,
+   `local/no-raw-type-size`, `local/spacing-scale` and `local/no-bare-interactive` enforce
+   arbitrary values, the closed type scale, the spacing scale and shared interactive controls.
 
 ### Shared components
 
@@ -249,7 +370,7 @@ screen that needs it.
 | `EmptyState` | every table-led screen + blank Home |
 | `LoadingSkeleton` | every table-led screen |
 | `Toast` | Users & invites — role change, remove, revoke **succeeding** (first call site); Scan now errors (503 `device_offline`, 409 `device_busy`) when Agents unblocks |
-| `Ornament` | Home, auth screens — the engraving detail |
+| `Ornament` | Home, auth screens — the engraving detail: a filled lozenge on a full-width hairline, broken either side. **Inline SVG, never a Unicode glyph** — a glyph cannot be given a stroke weight, a size or a rule to sit on, and it renders differently wherever the face is missing. Sizes to its container with no props. |
 
 **Cut from the candidate list:** `Sidebar` (top bar chosen above) · `MetricCard` (the MVP has no
 metric cards, by decision) · `Breadcrumbs` (nothing is deeper than list → detail; parked in
@@ -302,7 +423,7 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
 | Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
 | Users & invites | `/users` | inside | admin | B2 | ◐ API ready (C4 closed); frontend screen not built |
-| Settings | `/settings` | inside | admin, viewer | B5 | ◐ password + Activity disclosure built; profile/removal UI pending |
+| Settings | `/settings` | inside | admin, viewer | B5 | ◐ details (read-only), password modal, activity disclosure and removal built; profile **editing** pending on C3 |
 
 ---
 
@@ -352,8 +473,13 @@ to bottom; do not start the ASCII layout until everything above it is written.
 The five outside-shell screens share one frame, specced once here rather than four times below.
 No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log out]`.
 
-- **Frame:** wordmark, `Ornament`, then a single centered card in the **720px prose column**
-  (§Viewport). The card is the page; there is no other content.
+- **Frame:** wordmark, `Ornament`, then a single centered card in the **`--container-form` column
+  (384px)** (§Proportion and containers). The card is the page; there is no other content — and
+  because there is no other content, the card sizes to the form rather than to the viewport. It
+  is a portrait card, taller than it is wide, and it stays 384px on the longer screens (Accept
+  invite, Reset password), which simply grow downward. It was briefly 720px, which read as a
+  letterbox band around 336px of inputs; that is the defect §Proportion and containers exists to
+  prevent. *Corrected 2026-08-18 (DMI-107).*
 - **Never reveal whether an account exists.** Login's `401` and Forgot's `204` are both deliberately
   uninformative. This is why Forgot always shows the same confirmation, and why login's error names
   neither field ([`AUTH.md`](../roadmap/AUTH.md) → Forgot password).
@@ -410,7 +536,7 @@ disclosure.
 **Copy:**
 | Element | Copy |
 | --- | --- |
-| Title | "Sign in to Dmitri" |
+| Title | "Sign in" |
 | Fields | "Email" / "Password" |
 | Button | "Log in" · in flight: "Logging in…" |
 | Link | "Forgot password?" |
@@ -426,7 +552,7 @@ disclosure.
 |                              D M I T R I                                     |
 |                                                                              |
 |              +------------------------------------------+                    |
-|              |  SIGN IN TO DMITRI                       |                    |
+|              |  SIGN IN                                   |                    |
 |              |                                          |                    |
 |              |  Email                                   |                    |
 |              |  [__________________________________]    |                    |
@@ -1580,10 +1706,23 @@ sequence, and losing it would cost a full reopen each time.
 
 **Route:** `/settings` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B5
 
-**Epicenter** — change your own password. It is the reason this screen exists: voluntary
-self-service password change is the **only** change-password screen in the product — there is no
-forced rotation and no 403-triggered flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced
-periodic rotation is rejected as NIST-misaligned).
+**Epicenter** — **who you are signed in as, and what you can do about it.** The screen opens on
+your email and your role, read without interaction, and then offers the two things you can do to
+that account: change its password, or leave the organization. *Who am I* comes before *change my
+password*, always — a screen that opens with the cursor in a current-password field and never
+names the account has asked for a secret before saying whose it is. *Amended 2026-08-18
+(DMI-107); it previously read "change your own password".*
+
+Changing the password is still the most common reason anyone comes here, and it is still the
+**only** change-password screen in the product — there is no forced rotation and no 403-triggered
+flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
+NIST-misaligned). It is now reached through a `[Change password]` trigger that opens a modal, so
+the page's regular state is four short sections with air between them rather than three password
+fields and a wall of labels.
+
+**The details block is read-only** — email and role, no display name and no `[Save]`. Open
+question **C3** stays open: there is no self-profile update operation, and an input the user can
+type into but not submit is worse than text.
 
 **Leaving the organization also lives here** ([`ADR-017`](../adr/ADR-017-account-removal.md), added
 2026-08-08), for **both roles**. A viewer never sees the USERS screen, so this is the only place
@@ -1595,17 +1734,28 @@ The copy does **not** name the organization. A signed-in member cannot read it �
 pre-session invite lookup. The wording is org-neutral rather than adding a request to discover a name
 the heading has already supplied (spec 033).
 
-**Activity disclosure is built for both roles** (spec 030). A visible `Activity` label sits beside
-`What's recorded?`; activating that button expands a persistent note. It names last use and last
-sign-in, says org admins can see the activity time, and states that no viewed/action detail is
-recorded. It is information, not a toggle, and must work by keyboard and assistive technology.
+**Activity disclosure is built for both roles** (spec 030). The `Activity` heading sits on **its
+own line**, and a disclosure row — a caret and the accent-coloured label `What's recorded?` —
+sits beneath it; activating that row expands a persistent note and rotates the caret. It was
+originally specced *beside* the heading, which made a section title and a control read as one
+label and left the control with no affordance at all; that arrangement is withdrawn. The row is
+the shared button primitive in its `link` variant and carries all five interactive states
+(§Interaction states) — it is the worked example that section is written for. *Corrected
+2026-08-18 (DMI-107).* It names last use and last sign-in, says org admins can see the activity
+time, and states that no viewed/action detail is recorded. It is information, not a toggle, and
+must work by keyboard and assistive technology.
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
 pointed at one network, identical for every admin in the org. It lives on AGENTS (B4).
 
 **Data:**
 - `POST /api/v1/auth/change-password` → **`204`**. Body: `{ current_password, new_password }`;
-  `new_password` has `minLength: 12` in the contract. Errors: `400` (policy / bad request), `401`.
+  `new_password` has `minLength: 12` in the contract. Errors: **`400`** for both a wrong current
+  password (`wrong_current_password`) and a policy rejection (`password_policy_violation`); `401`
+  on this route means the session itself failed, not the field. This split is deliberate — the
+  SPA's refresh interceptor ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) acts on
+  every `401`, so returning one for a mistyped field would refresh-and-retry, then sign the user
+  out over a typo. *Settled by contract ask C13.*
 - Profile (display name, email) — **🔓 C3 update half.** `GET /users/me` exists, but there is no
   self-profile update operation and the model still has no display name.
 - `DELETE /api/v1/users/me` → **`204`**. No body. Any role. **Hard delete** — the account and its
@@ -1726,10 +1876,5 @@ uses for a greyed, non-clickable button; a live button keeps square brackets):
 
 **Open questions:**
 1. **C3** — no user resource. The profile section cannot be built.
-2. **Wrong current password: `400` or `401`?** The contract lists both and doesn't say which one a
-   bad `current_password` produces. A `401` would trip the Axios refresh interceptor
-   ([`ADR-008`](../adr/ADR-008-frontend-stack.md) §Auth Client) and could bounce the user to login
-   for a mistyped field — so this must be a **`400`**, or the interceptor needs an exception for
-   this route. **Confirm before building.**
-3. Password strength meter — parked ([`IDEAS.md`](IDEAS.md) → Auth & admin). The policy hint is
+2. Password strength meter — parked ([`IDEAS.md`](IDEAS.md) → Auth & admin). The policy hint is
    stated up front instead.

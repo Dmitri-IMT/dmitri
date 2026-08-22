@@ -190,7 +190,7 @@ uv sync --extra dev
 cp .env.example .env          # ./install.sh does this for you
 ```
 
-Then edit `backend/.env`. Two values in the example are **not** usable as shipped:
+Then edit `backend/.env`. Four values in the example are **not** usable as shipped:
 
 ```bash
 # Ships EMPTY, and an empty value boots without complaint — generate a real one:
@@ -199,11 +199,17 @@ JWT_SIGNING_SECRET=<64 hex chars>
 
 # Must be false for local http:// development. See Gotchas.
 REFRESH_COOKIE_SECURE=false
+
+# Ships EMPTY so browser access fails closed. Trust only the local Vite origin:
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# Email links must return to the local SPA rather than the hosted deployment:
+APP_BASE_URL=http://localhost:5173
 ```
 
-`DATABASE_URL` already points at the local `postgres` database, and
-`CORS_ALLOWED_ORIGINS` already allows `http://localhost:5173`, so the frontend works
-without further edits.
+`DATABASE_URL` already points at the local `postgres` database. CORS has no trusted origin by
+default, so keep the explicit localhost allowlist above or the browser will block frontend API
+calls even though the backend boots.
 
 > `Settings` reads `.env` automatically, and **`.env` beats variables exported in your
 > shell** — including during tests. If something behaves unexpectedly, suspect a stale
@@ -303,8 +309,8 @@ npm run dev
 `./install.sh` already did the `npm install` and the `.env` copy — the manual steps above
 are for a machine where Node arrived after the installer ran.
 
-Vite serves on `http://localhost:5173`. That origin is already in the backend's
-`CORS_ALLOWED_ORIGINS` default.
+Vite serves on `http://localhost:5173`. That exact origin must be present in the backend's
+deployment-supplied `CORS_ALLOWED_ORIGINS` allowlist.
 
 The dev server proxies nothing — it calls the backend directly at `VITE_API_URL`, so the
 API from part 3 must be running or every request fails.

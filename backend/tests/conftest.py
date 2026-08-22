@@ -26,6 +26,7 @@ DATABASE_URL_TEST = os.environ.get("DATABASE_URL_TEST")
 RUNTIME_URL = DATABASE_URL_TEST or "postgresql+psycopg://u:p@127.0.0.1:1/x"
 os.environ["DATABASE_URL"] = RUNTIME_URL
 os.environ.setdefault("JWT_SIGNING_SECRET", "test-jwt-signing-secret")
+os.environ.setdefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173")
 if DATABASE_URL_TEST is not None:
     os.environ["DATABASE_URL_DIRECT"] = DATABASE_URL_TEST
 

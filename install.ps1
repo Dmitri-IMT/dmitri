@@ -483,6 +483,8 @@ Next steps:
     if ($FrontendOk) {
         @'
   Web:     cd frontend; npm run dev   (http://localhost:5173)
+  CORS:    set CORS_ALLOWED_ORIGINS=http://localhost:5173 in backend\.env before using Web
+  Links:   set APP_BASE_URL=http://localhost:5173 in backend\.env for local auth links
 '@ | Write-Host
     } elseif (-not $AgentOnly) {
         @'

@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend screens, shells and shared components
-description: The login, home, password-recovery, settings, users-and-invites and invite screens, plus shells, navigation, the role gate, the toast and shared components.
+description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-08-22T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -19,17 +19,20 @@ operator never meets a control that looks live and isn't.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `AuthShell` | Outside-shell frame: wordmark + `Ornament` + one centred card in the 720px column. No top bar. | `frontend/src/components/AuthShell.tsx:4` |
-| `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` in the fluid 720px-max prose column. **No sidebar.** | `frontend/src/components/AppShell.tsx:4` |
-| `TopBar` | Wordmark, the nav (`Home` → `/`, `Users` → `/users` tagged `nav-users`, `Settings` → `/settings` tagged `nav-settings`), `[Log out]` calling `signOut`. Active item is a 2px `--accent` underline, not a filled pill. The `Users` item is wrapped in `AdminOnly`, so a viewer's DOM contains **two** links and an admin's three — the component itself still holds no role branch. `flex justify-between` with `flex-1` on the nav. | `frontend/src/components/TopBar.tsx:12` |
+| `AuthShell` | Outside-shell frame: wordmark + full-width `Ornament` + one centred card in the named 24rem `max-w-form` column. No top bar. | `frontend/src/components/AuthShell.tsx:4` |
+| `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` in the fluid named 70rem `max-w-frame` column. **No sidebar.** | `frontend/src/components/AppShell.tsx:5` |
+| `TopBar` | Wordmark left, the nav centred on the 70rem frame, and `[Log out]` right through a `1fr auto 1fr` grid. Home, the admin-only Users link and Settings use the dedicated `text-nav` token; active items keep the 2px `--accent` underline. Wrapping Users in `AdminOnly` keeps the component role-free. | `frontend/src/components/TopBar.tsx:13` |
 | `AdminOnly` | Renders `children` for an admin and `null` for anyone else. Props are `{ children }` — no `fallback`, no `disabled`; the missing props are what make "absent, not disabled" unbypassable. Pairs with [auth](./auth.md)'s `RequireAdmin`, which closes the route the hidden link would have led to. | `frontend/src/components/AdminOnly.tsx:4` |
-| `navLinkClass` | The one active/muted `NavLink` className callback, shared by both nav items rather than copied. Typed `({ isActive }: { isActive: boolean })` because a module-level function gets no contextual type from `NavLink`. | `frontend/src/components/TopBar.tsx:6` |
-| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled` — the feature's **one** legitimate `disabled`. | `frontend/src/pages/Login.tsx:10` |
-| `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:18` |
-| `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:9` |
-| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:13` |
-| `Settings` | Guarded change-password form plus a layered Activity disclosure available to both roles. The button toggles a persistent, keyboard/assistive-technology reachable note explaining that admins see last-used and last-sign-in times, and that no viewed/action detail is recorded. | `frontend/src/pages/Settings.tsx:14` |
-| `Settings` — leaving section | The **last** section on the page, rendered `{user && …}` for both roles alike: the explanation, a destructive `settings-leave-trigger`, and a `ConfirmByTyping` gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. The org is named generically — a member's profile carries no organization name and no lookup was added for one. | `frontend/src/pages/Settings.tsx:14` |
+| `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination; the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:7` |
+| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
+| `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:19` |
+| `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:10` |
+| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
+| `Settings` | Details-first guarded surface with four short sections separated by dashed rules: read-only account identity, a password-dialog trigger and inline success, the shared activity disclosure, then self-service account deletion. | `frontend/src/pages/Settings.tsx:14` |
+| `Settings` — leaving section | The **last** section on the page, rendered `{user && …}` for both roles alike: the explanation, a destructive `settings-leave-trigger`, and a `ConfirmByTyping` gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:90` |
+| `AccountDetails` | Reads the session user and renders their email and normalized `Admin`/`Viewer` role in a read-only `<dl>`; an absent user renders nothing. | `frontend/src/pages/settings/AccountDetails.tsx:3` |
+| `PasswordDialog` | Owns the change-password form and its client/server error routing inside the shared small `DialogShell`. Success clears the three secrets, closes the modal and leaves an inline confirmation on Settings; submitting locks dismissal and removes Cancel. | `frontend/src/pages/settings/PasswordDialog.tsx:22` |
+| `Disclosure` | Shared controlled Radix `Collapsible` for expandable information: link-styled button, rotating caret, generated content id and force-mounted content hidden while closed. Settings Activity is its first caller. | `frontend/src/components/Disclosure.tsx:13` |
 | `ConfirmByTyping` | The shared type-to-confirm modal, rendered inside `DialogShell` (which owns the portal, overlay, panel and focus restore) so this file holds only the gate. `expectedValue` is both the gate and the prompt that serves as the input's `<label htmlFor>`. The confirming button's greyed state is owned by the component — derived from the typed value and its own in-flight flag, never a caller-supplied variant — so both call sites behave identically. Everything else in the dialog stays live; Cancel is *absent* while submitting. The typed value is cleared explicitly when `open` goes true — the component outlives the dialog Radix unmounts, so the gate would otherwise hold only on the first open. The Users screen is now the second caller and passes the **target's** address as `expectedValue` — the only difference from Settings, which passes the caller's own. | `frontend/src/components/ConfirmByTyping.tsx:23` |
 | `matchesExpected` | Module-local, `trim()` + `toLowerCase()` on both sides: the account identity in this system is `lower(email)` (ADR-017 §1), so case and stray whitespace do not defeat a correct address. | `frontend/src/components/ConfirmByTyping.tsx:19` |
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
@@ -54,19 +57,20 @@ operator never meets a control that looks live and isn't.
 | `HomeBlank` / `HomeError` / `HomeFooter` | First-run copy (no CTA, does not import `useSession`); the error copy + `[Retry]`; the last-scan line via `Timestamp`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
 | `Timestamp` / `formatTimestamp` | Relative inside 7 days, absolute beyond, exact value in `title`. | `frontend/src/components/Timestamp.tsx:21` |
 | `SeverityBadge` | Severity-coloured text on a 10% tint of the same hue with a 1px full-colour border — never white-on-solid. Severity type aliases the generated schema. | `frontend/src/components/SeverityBadge.tsx:20` |
-| `Ornament` | The `· · ❦ · ·` engraving. | `frontend/src/components/Ornament.tsx:1` |
+| `Ornament` | Full-width inline SVG rule with a filled vector lozenge centred between two hairline segments; fills its container with no props. | `frontend/src/components/Ornament.tsx:1` |
 
 ## How it connects
 
 - `Home` consumes [review](./review.md)'s `useHomeReview()`; `Users` consumes
   [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
-  `Login`, `TopBar`, `AcceptInvite` and `Settings` consume [auth](./auth.md)'s `useSession()` —
-  `Settings` for `user` and `deleteAccount`, `TopBar` by way of `AdminOnly`.
+  `Login`, `TopBar`, `AcceptInvite`, `Settings` and `AccountDetails` consume
+  [auth](./auth.md)'s `useSession()` — `Settings` for `user` and `deleteAccount`, `AccountDetails`
+  for the read-only identity, and `TopBar` by way of `AdminOnly`.
   `ForgotPassword` and `ResetPassword` call [api](./api.md) directly and touch the session layer not
-  at all; `Settings` does both (its change-password form calls `changePassword()` directly).
+  at all; `PasswordDialog` owns Settings' direct `changePassword()` call.
 - Both shells are mounted from [app](./app.md)'s route table.
-- Visual tokens come from `src/index.css`, governed by
-  [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md).
+- Visual tokens come from `src/index.css`, and authored source is checked by
+  [linting](./linting.md); both follow [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md).
 
 ## Notes / gotchas
 
@@ -74,12 +78,10 @@ operator never meets a control that looks live and isn't.
   Any placeholder in the verdict's position is read as a verdict.
 - **Blank and all-clear are distinct states** and are never collapsed; the footer is omitted
   entirely in the blank state.
-- **The transitional centred nav is gone.** `TopBar` centred its lone `Home` item under a
-  `1fr auto 1fr` grid until `Settings` arrived; spec 028 performed the promised revert to
-  `flex justify-between` with `flex-1` on the nav, and removed the grid-only `justify-self-end` on
-  Log out along with it. There is still no count-driven branch in the component. The `Users` link
-  arrived with spec 034 and is the nav's first role-gated item — wrapped in `AdminOnly` rather than
-  branching inside `TopBar`, so the component stayed role-free.
+- **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
+  named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and Log out widths cannot
+  move the nav off the frame's centre line. Removing the admin-only Users link also does not move
+  the remaining viewer links. Destination count is not a layout branch.
 - **Buttons carry an explicit `cursor-pointer`.** Tailwind v4's preflight sets `cursor: default` on
   `<button>` (changed from v3), so without it every button in the app shows an arrow. The class is
   a local addition to the vendored shadcn `buttonVariants` base and would be lost if the shadcn CLI
@@ -117,9 +119,9 @@ operator never meets a control that looks live and isn't.
   lookup and zero accept requests — leaving the invitation untouched — and offers `signOut`.
 - **Wrong current password never ends the session.** On Settings it is contractually a `400`, so it
   renders as a field error with no refresh, no logout and no navigation.
-- **Activity disclosure is information, not a preference.** The visible `Activity` label and
-  `What's recorded?` button toggle one `hidden` note through `aria-expanded`/`aria-controls`.
-  There is no opt-out control and no pointer-hover dependency.
+- **Activity disclosure is information, not a preference.** Settings gives `Activity` its own
+  heading, then uses the shared `Disclosure` trigger and persistent force-mounted content. The
+  note explains the two recorded timestamps; there is no opt-out or pointer-hover dependency.
 - The role-invariance sweep (`TopBar.test.tsx`, repeated across every Home state) asserts
   `queryAllByRole(...)` elements are `toBeEnabled()` with no `aria-disabled` — never a
   `container.querySelectorAll('[disabled]')` sweep, which misses `fieldset[disabled]` inheritance

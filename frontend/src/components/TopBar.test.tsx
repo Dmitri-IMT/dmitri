@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
@@ -56,6 +56,63 @@ describe('TopBar', () => {
       ).toBeInTheDocument()
     },
   )
+
+  it('uses the frame typography and three direct grid columns', async () => {
+    renderTopBarAs(adminProfile)
+    const topBar = await screen.findByTestId('top-bar')
+    const wordmark = screen.getByText('DMITRI')
+    const nav = screen.getByRole('navigation')
+    const logOut = screen.getByRole('button', { name: 'Log out' })
+    const frame = nav.parentElement
+
+    expect(frame).not.toBeNull()
+    expect(frame).toBe(topBar.firstElementChild)
+    expect(frame).toHaveClass('grid', 'max-w-frame', 'grid-cols-bar')
+    expect(frame?.children).toHaveLength(3)
+    expect(frame?.children.item(0)).toBe(wordmark)
+    expect(frame?.children.item(1)).toBe(nav)
+    expect(frame?.children.item(2)).toBe(logOut)
+    expect(wordmark).toHaveClass(
+      'justify-self-start',
+      'font-title',
+      'text-title-xs',
+    )
+    expect(nav).toHaveClass('justify-self-center', 'gap-4')
+    for (const link of within(nav).getAllByRole('link')) {
+      const label = link.firstElementChild
+      expect(label).toBeInstanceOf(HTMLSpanElement)
+      expect(label).toHaveClass('text-nav')
+    }
+    expect(logOut).toHaveClass('justify-self-end')
+    expect(logOut).toHaveAttribute('data-variant', 'ghost')
+  })
+
+  it('keeps the navigation centred when it grows to four destinations', async () => {
+    renderTopBarAs(adminProfile)
+    await screen.findByTestId('nav-users')
+    const nav = screen.getByRole('navigation')
+    const fourthDestination = screen
+      .getByTestId('nav-settings')
+      .cloneNode(true) as HTMLAnchorElement
+    fourthDestination.setAttribute('href', '/fourth')
+    fourthDestination.dataset.testid = 'nav-fourth'
+
+    nav.append(fourthDestination)
+    expect(within(nav).getByTestId('nav-fourth')).toHaveAttribute(
+      'href',
+      '/fourth',
+    )
+
+    const links = within(nav).getAllByRole('link')
+    expect(links).toHaveLength(4)
+    for (const link of links) {
+      const label = link.firstElementChild
+      expect(label).toBeInstanceOf(HTMLSpanElement)
+      expect(label).toHaveClass('text-nav')
+    }
+    expect(nav).toHaveClass('justify-self-center')
+    expect(nav.parentElement).toHaveClass('grid', 'grid-cols-bar')
+  })
 
   it('shows the Users nav item, pointing at /users, for an admin', async () => {
     renderTopBarAs(adminProfile)

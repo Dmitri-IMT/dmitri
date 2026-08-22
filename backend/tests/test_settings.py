@@ -139,9 +139,7 @@ def test_auth_settings_default_when_env_unset(
     assert settings.access_token_ttl_minutes == 15
     assert settings.refresh_token_ttl_days == 7
     assert settings.refresh_cookie_secure is True
-    assert settings.cors_allowed_origins == (
-        "http://localhost:5173,https://app.vscanner.example.com"
-    )
+    assert settings.cors_allowed_origins == ""
     assert settings.reset_token_ttl_minutes == 60
     assert settings.hibp_enabled is True
     assert settings.hibp_timeout_seconds == 2

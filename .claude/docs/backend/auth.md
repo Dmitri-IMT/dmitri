@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-22T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -82,7 +82,7 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
 | `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. It **rebuilds** the response rather than reassigning `status_code`, dropping `content-length` and `content-type`: the parent returns `PlainTextResponse("OK", 200)`, so a bare status reassignment left a 204 declaring a 2-byte body — malformed per RFC 9110 §15.3.5, and WebKit answers it by dropping the real request. | `backend/src/api/middleware.py:38` |
-| `build_cors_middleware_kwargs()` | Builds credentialed CORS kwargs from `CORS_ALLOWED_ORIGINS`; allowed methods are GET/POST/PATCH/DELETE/OPTIONS, covering role change and removal/revocation. | `backend/src/api/middleware.py:53` |
+| `build_cors_middleware_kwargs()` | Trims the comma-separated `CORS_ALLOWED_ORIGINS` into a credentialed explicit-origin allowlist; the empty setting becomes `[]`, so an unset deployment permits no browser origin. Allowed methods are GET/POST/PATCH/DELETE/OPTIONS. | `backend/src/api/middleware.py:53` |
 
 ## How it connects
 
@@ -132,6 +132,9 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
   cookie-authenticated mutation exists, which `POST /auth/refresh` now is. Unresolved; a custom
   domain (`app.` + `api.` under one registrable domain) would make the pair same-site again and
   allow `Lax` back. See [research](../../../docs/research/http-cookies-samesite.md).
+- **An omitted CORS allowlist fails closed.** `Settings.cors_allowed_origins` defaults to `""`;
+  the middleware builder drops empty entries and passes `allow_origins=[]`. Tests set the local
+  Vite origin explicitly, as every local or hosted environment must.
 - **A preflight must not carry a body.** `NoContentCorsMiddleware` rebuilds the parent's
   `PlainTextResponse("OK", 200)` as a bare 204 instead of reassigning `status_code`. The old
   version shipped `204` with `Content-Length: 2`; Chrome and curl tolerate it, WebKit rejects the
