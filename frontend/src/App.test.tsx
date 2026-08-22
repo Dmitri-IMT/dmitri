@@ -131,16 +131,16 @@ describe('App', () => {
     failBootRefresh()
     renderApp('/settings')
 
-    expect(screen.queryByTestId('settings-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('settings-details')).not.toBeInTheDocument()
     await screen.findByTestId('login-form')
-    expect(screen.queryByTestId('settings-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('settings-details')).not.toBeInTheDocument()
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/login')
   })
 
   it('renders /settings inside the app shell for an authenticated visitor', async () => {
     renderApp('/settings')
 
-    await screen.findByTestId('settings-form')
+    await screen.findByTestId('settings-details')
     expect(screen.getByTestId('top-bar')).toBeInTheDocument()
     expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/settings')
