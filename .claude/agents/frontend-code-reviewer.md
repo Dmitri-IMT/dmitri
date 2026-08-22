@@ -38,6 +38,25 @@ a style preference.
 
 Each is a violation of the `frontend-conventions` skill and each is a `[REJECT]`:
 
+### Foundations checklist
+
+- **All four authored-source rules are enabled:** `local/no-arbitrary-utility`,
+  `local/no-raw-type-size`, `local/spacing-scale`, and `local/no-bare-interactive`.
+  Their exemption globs are exactly `src/components/ui/**`, `src/**/*.test.{ts,tsx}`, and
+  `src/test/**`. A reviewer **never widens an exemption to make the gate pass**; reject the
+  change and require the rule or the application code to be fixed.
+- **`src/components/ui/` contains vendored shadcn source only.** Reject any new file there that
+  is not vendored shadcn source. Dmitri-owned shared primitives and interactive components go
+  under `src/components/`, where the local rules inspect them.
+- **Every interactive element specifies cursor, hover, focus-visible, active, and disabled
+  states.** Reject an omitted state, an invisible pointer affordance, or a removed focus ring.
+  A state that cannot occur must be called out as not applicable rather than silently forgotten.
+- **Every layout width is named.** Reject layout widths other than `max-w-frame` and
+  `max-w-form`, including arbitrary-value widths. `max-w-prose` is permitted only as a reading
+  measure for text; it is not a layout container.
+- **A card sizes to its content, never to its column.** Reject a short form stretched across a
+  wider page or viewport column.
+
 - **Hand-written API types.** Every request/response shape comes from
   `src/types/openapi.d.ts` via `components['schemas'][...]` (ADR-008 §Geração de Tipos). An
   interface that restates a contract shape is a finding even when it is correct today.

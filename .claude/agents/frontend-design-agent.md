@@ -91,6 +91,15 @@ as prose.
 
 Write `DESIGN.md` under `specs/NNN-feature-slug/`.
 
+- **A rendered preview is mandatory.** Link from `DESIGN.md` to a preview published as an
+  Artifact and built from the real tokens in `frontend/src/index.css` and the real typefaces:
+  IM Fell English and IBM Plex Mono loaded from Google Fonts. ASCII mockups stay as structural
+  notes, but they do not constitute an approvable design because they cannot express proportion,
+  type size, or affordance.
+- **The human performs the visual check, and it closes every frontend feature** (`TRUTH.md`
+  business rule 13). No agent signs off on how something looks; the agent supplies the rendered
+  preview and records the human's decision.
+
 - **No implementation code** — this is a spec.
 - **Screen flow** first: which route leads to which, and on what event.
 - **A visual mockup for every new/changed screen and every materially different state**
