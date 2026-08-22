@@ -30,6 +30,12 @@ def _build_app() -> Starlette:
     return app
 
 
+def test_empty_cors_setting_builds_empty_allowlist() -> None:
+    settings = Settings(CORS_ALLOWED_ORIGINS="")
+
+    assert build_cors_middleware_kwargs(settings)["allow_origins"] == []
+
+
 def test_real_preflight_returns_204_with_cors_headers() -> None:
     client = TestClient(_build_app())
     response = client.options(
