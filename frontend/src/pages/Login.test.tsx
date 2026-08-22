@@ -155,9 +155,7 @@ describe('Login', () => {
     await user.click(screen.getByTestId('login-submit'))
 
     expect(
-      await screen.findByText(
-        "Can't reach the server. Check your connection and try again.",
-      ),
+      await screen.findByText("Couldn't reach Dmitri. Try again in a moment."),
     ).toBeInTheDocument()
   })
 

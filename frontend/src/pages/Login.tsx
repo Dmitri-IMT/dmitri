@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import AuthShell from '@/components/AuthShell'
 import { useSession } from '@/auth/useSession'
+import { SERVICE_ERROR } from '@/lib/copy'
 
 function Login() {
   const { status, signIn } = useSession()
@@ -55,7 +56,7 @@ function Login() {
       setError(
         isAxiosError(err) && err.response?.status === 401
           ? "That email and password don't match."
-          : "Can't reach the server. Check your connection and try again.",
+          : SERVICE_ERROR,
       )
     } finally {
       setIsSubmitting(false)
@@ -71,7 +72,7 @@ function Login() {
             data-testid="login-success"
             ref={successRef}
             tabIndex={-1}
-            className="text-sm text-accent"
+            className="text-body-md text-accent"
           >
             {arrival === 'accountDeleted'
               ? 'Your account has been deleted.'
@@ -110,7 +111,7 @@ function Login() {
           <p
             role="alert"
             data-testid="login-error"
-            className="text-sm text-destructive"
+            className="text-body-md text-destructive"
           >
             {error}
           </p>
@@ -124,7 +125,7 @@ function Login() {
         </form>
         <Link
           to="/forgot-password"
-          className="self-center text-sm text-accent underline"
+          className="self-center text-body-md text-accent underline"
         >
           Forgot password?
         </Link>
