@@ -3,6 +3,23 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-22
+
+* **Creation**: `frontend/linting.md` — the repository-local ESLint plugin and its four
+  authored-source foundation rules: no arbitrary Tailwind values, no raw framework type sizes,
+  the closed spacing scale, and no bare native controls outside shared primitives. The map records
+  the static class-string visitor, exact source exemptions, token authority and agent-convention
+  connection.
+* **Update**: `frontend/overview.md`, `frontend/screens.md`, `frontend/index.md` and root `index.md` — Spec 035's
+  named 70rem frame and 24rem form containers, permanent three-column centred navigation,
+  vector ornament, details-first Settings page, shared `Disclosure`, extracted `AccountDetails`
+  and modal `PasswordDialog`, plus the new linting map and corrected source line references.
+* **Update**: `backend/api.md` and `backend/auth.md` — `CORS_ALLOWED_ORIGINS` now defaults to the
+  empty string and the middleware turns it into an empty allowlist, so browser access fails closed
+  until each environment supplies its trusted origins. `infra/deployment.md`,
+  `docs/DEV-SETUP.md` and both root installer mirrors now tell local operators to use the Vite
+  origin for both the CORS allowlist and `APP_BASE_URL`.
+
 ## 2026-08-21
 
 * **Update**: `frontend/screens.md` + `docs/ui/SCREENS.md` — the own-row " you" marker is gone from

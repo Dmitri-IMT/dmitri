@@ -1,10 +1,10 @@
 ---
 type: Package Overview
 title: frontend package overview
-description: The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings, the admin users-and-invites surface and invite acceptance, and the Railway static deployment.
+description: The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-22T00:00:00Z
 ---
 
 # frontend package overview
@@ -19,6 +19,8 @@ a router, a session provider and route guard, two shells, and the **LOGIN** and 
 Spec 028 completed the auth surface around it: **FORGOT PASSWORD**, **RESET PASSWORD**, **ACCEPT
 INVITE** (all public) and **SETTINGS** (guarded), plus the second nav item that ended the top bar's
 transitional one-item centring.
+Spec 035 added executable UI-foundation guardrails and aligned the existing shells, navigation,
+Settings surface and auth screens with the named width, type and spacing tokens.
 
 The product frame is the verdict, not a dashboard: Home answers "does anything need me?" in one
 sentence, backed by a pure derivation over four reads.
@@ -33,6 +35,7 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 | `src/api/` | The typed API layer: the two bare Axios instances (`instances.ts`), the module that arms them with the Bearer + refresh interceptors (`client.ts`), the auth resource module (`auth.ts`), the in-memory token store (`tokenStore.ts`), the session-expiry event bus (`authEvents.ts`), the change-password module (`passwords.ts`), and the read resource modules (`users`/`scans`/`findings`). | [api](./api.md) |
 | `src/auth/` | The session layer: `SessionProvider` (boot refresh as a query, sign-in/sign-out/invite acceptance), `useSession`, and the `RequireSession` route guard. | [auth](./auth.md) |
 | `src/App.tsx`, `src/main.tsx` | The provider nest and the route table. | [app](./app.md) |
+| `eslint.config.js`, `eslint-rules/` | The local authored-source rules for named Tailwind widths, type and spacing plus shared interactive primitives. | [linting](./linting.md) |
 | `src/pages/`, `src/components/` | The screens (Login, Home, ForgotPassword, ResetPassword, AcceptInvite, Settings, NotFound), the two shells, the top bar, and the shared presentation components. | [screens](./screens.md) |
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes the four Home reads into one discriminated union. | [review](./review.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types` (openapi-typescript). Committed; CI re-checks for drift. Sole source of request/response types. | — |
@@ -46,8 +49,9 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 - Consumes the backend contract [contracts](/contracts.md) via generated types — no hand-written
   request/response models are permitted (ADR-008 §Geração de Tipos).
 - The `frontend` CI job in `.github/workflows/ci.yml` gates the layer: `npm ci` → `gen:types` →
-  `git diff --exit-code -- src/types` (drift) → `lint` → `format:check` → `typecheck` → `test` →
-  `build` with `VITE_API_URL=http://localhost:8000`.
+  `git diff --exit-code -- src/types` (drift) → `lint` (including the four local UI-foundation
+  rules) → `format:check` → `typecheck` → `test` → `build` with
+  `VITE_API_URL=http://localhost:8000`.
 - Visual foundations (colour, spacing, type scale, the absent-not-disabled rule) are governed by
   [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md), whose §Color table this feature filled in.
 
@@ -77,8 +81,9 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 - **The Vitest forks pool cannot spawn workers on that same machine** ("Timeout waiting for worker
   to respond", zero tests collected). Run `npx vitest run --pool=threads --maxWorkers=1
   --no-file-parallelism` there; the default configuration is fine in CI.
-- **Dev server must run on port `5173`** (Vite default, unoverridden) to match the backend's CORS
-  allow-list; the refresh cookie flow depends on it.
+- **Dev server must run on port `5173`** (Vite default, unoverridden). Local development must set
+  the backend's fail-closed `CORS_ALLOWED_ORIGINS` explicitly to `http://localhost:5173`; the
+  refresh-cookie flow depends on that exact browser origin being allowed.
 - **`.npmrc` pins `legacy-peer-deps=true`** — `openapi-typescript` peers on TS `^5` while the app
   pins TS `~6.0.2`; the setting keeps a plain `npm ci` green in CI.
 - **`src/types/` is prettier-ignored** (`frontend/.prettierignore`) so `format:check` passes on the

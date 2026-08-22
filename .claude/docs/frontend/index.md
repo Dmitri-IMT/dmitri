@@ -6,15 +6,21 @@ slice: routing, a session layer, and the login → Home screens. Spec 028 added 
 surfaces around that slice — password recovery, invite acceptance and a Settings screen. Spec 033
 added the self-service exit from the organization, confirmed by typing your own address. Spec 034
 added the admin users-and-invites surface — the product's first role-gated route and its first
-table. Source lives at `frontend/src/`.
+table. Spec 035 added executable UI-foundation lint rules and aligned the shells, navigation and
+Settings structure with the named design tokens. App source lives at `frontend/src/`; the local
+lint plugin lives at `frontend/eslint-rules/`.
 
 ## Overview
 
-* [Package overview](./overview.md) — The React 19 + TypeScript SPA — contract-typed API access, the auth-client plumbing, the session layer, the screens from login and Home through password recovery, settings, the admin users-and-invites surface and invite acceptance, and the Railway static deployment.
+* [Package overview](./overview.md) — The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 
 ## API layer
 
 * [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the read, account and org-administration resource modules.
+
+## Engineering guardrails
+
+* [frontend authored-source guardrails](./linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
 
 ## Session & routing
 
@@ -26,4 +32,4 @@ table. Source lives at `frontend/src/`.
 * [review](./review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
 * [directory](./directory.md) — DirectoryRow — the merged member/invite display union — and useOrgDirectory(), which folds two list reads into one state union where error outranks loading.
 * [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
-* [screens](./screens.md) — The login, home, password-recovery, settings, users-and-invites and invite screens, plus shells, navigation, the role gate, the toast and shared components.
+* [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.

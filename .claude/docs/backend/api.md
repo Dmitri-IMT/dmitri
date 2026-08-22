@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-08-13T00:00:00Z
+timestamp: 2026-08-22T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -36,9 +36,9 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | lifespan startup → `reconcile_all(session)` | Clears every `agents.connected_at` at boot, so a hard-crashed API (where the WS `finally` never ran) does not leave agents looking permanently connected to the worker's sweeper. See [services](/backend/services.md). | `backend/src/api/main.py:39` |
 | `ws_validation_denial()` | `WebSocketRequestValidationError` handler — pre-accept HTTP **403** with the [error envelope](/backend/errors.md) for malformed `{agent_id}` (non-UUID path segment) via `send_denial_response`. | `backend/src/api/main.py:103` |
 | `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |
-| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins`, `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the **device/invite knobs** added by DMI-61: `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48), the **command-channel knob** added by DMI-64: `command_disconnect_grace_seconds` (900), and the **mail knobs** added by DMI-71: `resend_api_key` (`SecretStr \| None`, unset = no email), `resend_api_base_url`, `mail_from`, `mail_reply_to`, `mail_timeout_seconds` (10.0) and `app_base_url` (the origin the invite/reset links point at). | `backend/src/api/core/config.py:22` |
+| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins` (**empty by default**, so browsers fail closed until a deployment supplies an allowlist), `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the device/invite knobs `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48), the command-channel knob `command_disconnect_grace_seconds` (900), and the mail/link knobs `resend_api_key`, `resend_api_base_url`, `mail_from`, `mail_reply_to`, `mail_timeout_seconds` (10.0) and `app_base_url`. | `backend/src/api/core/config.py:22` |
 | `normalize_postgres_url()` | Rewrites any accepted Postgres scheme to `postgresql+psycopg://`; **rejects** unknown schemes (no SQLite). Used by both config validation and the engine. | `backend/src/api/core/config.py:16` |
-| `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:62` |
+| `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:98` |
 | `Severity` / `SEVERITY_ORDER` | The severity domain and its `low→1 … critical→4` ranking, derived from the literal's declaration order. Dependency-free on purpose: it sits in `core/` so [models](/backend/models.md) can spell the `findings.severity` check constraint without importing the schema layer above them. Read by `services/hosts.py` (host ranking), `services/read.py` (scan-list rank), `routers/findings.py` (the `severity` query param) and `schemas/read.py`. Moved here from `schemas/read.py` on 2026-07-31. | `backend/src/api/core/severity.py:5` |
 | `ScanErrorCode` / `normalise_error_code` / `scan_error_code` | The closed eight-code failure vocabulary and the two pure read helpers. Same leaf reason as `Severity`: `schemas/read.py` and `schemas/commands.py` must not import each other. Full map in [error-codes](/backend/error-codes.md). | `backend/src/api/core/error_codes.py:5` |
 | `get_engine()` | `lru_cache`d engine from the normalized `DATABASE_URL`, with `pool_pre_ping=True` and `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — required for the pgbouncer/Supabase pooler. | `backend/src/api/db/session.py:11` |
@@ -77,6 +77,10 @@ starts, how it is configured from the environment, and how it reaches Postgres.
   the same shape: unset is a supported production state, not a boot failure — the backend falls back
   to `NullMailer` and invites/resets keep working off their returned link (see
   [auth](/backend/auth.md)).
+- **CORS fails closed when unset.** `cors_allowed_origins` defaults to the empty string, which
+  `build_cors_middleware_kwargs()` turns into `allow_origins=[]`. Local development and every
+  deployment must supply the exact browser origins it trusts; the old localhost and placeholder
+  production defaults were removed.
 - Disabling `openapi_url` means FastAPI serves **no** generated schema; the hand-authored
   `contracts/openapi/openapi.yaml` is authoritative.
 - The worker uses `time.sleep`, not FastAPI — it never imports `app`.
