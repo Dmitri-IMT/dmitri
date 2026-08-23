@@ -1374,17 +1374,17 @@ components:
     Set-Cookie-Refresh:
       description: |
         Issues (or rotates) the httpOnly refresh cookie. Production attributes:
-        `HttpOnly; Secure; SameSite=None; Path=/api/v1/auth; Max-Age=604800` (7 days).
+        `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth; Max-Age=604800` (7 days).
       schema:
         type: string
-        example: dmitri_refresh=<token>; HttpOnly; Secure; SameSite=None; Path=/api/v1/auth;
+        example: dmitri_refresh=<token>; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth;
           Max-Age=604800
     Set-Cookie-Cleared:
       description: Clears the refresh cookie on logout (server-side revocation is authoritative;
         this only tidies the browser).
       schema:
         type: string
-        example: dmitri_refresh=; HttpOnly; Secure; SameSite=None; Path=/api/v1/auth; Max-Age=0
+        example: dmitri_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth; Max-Age=0
     Access-Control-Allow-Origin:
       description: Allowed browser origin.
       schema:
