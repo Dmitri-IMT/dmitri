@@ -11,10 +11,12 @@
 > (armazenamento cifrado do segredo). O envelope de assinatura (string canonica, headers, skew,
 > nonce) permanece **identico** — muda apenas o algoritmo e o lado de verificacao. Fundamentacao:
 > [`docs/research/device-auth-hmac-vs-asymmetric.md`](../research/device-auth-hmac-vs-asymmetric.md).
-> **(c)** §2 (flags do cookie de refresh) **emendado em 2026-08-18**: `SameSite` passa de **`Lax`**
-> para **`None`**, porque a SPA e a API ficam em dominios registraveis distintos sob o public
-> suffix `up.railway.app` e o cookie `Lax` nunca era enviado. Detalhes, divida de CSRF e a
-> alternativa de dominio proprio estao na propria §2.
+> **(c)** §2 (flags do cookie de refresh) **emendado em 2026-08-18** e **revertido em
+> 2026-08-23**: `SameSite` passou de **`Lax`** para **`None`**, porque a SPA e a API ficavam em
+> dominios registraveis distintos sob o public suffix `up.railway.app` e o cookie `Lax` nunca era
+> enviado. Com os dois servicos movidos para `dmitri.peirce.dev` e `api.peirce.dev` (DMI-108) o
+> par voltou a ser *same-site*, `SameSite=Lax` voltou a valer e o **desvio esta encerrado** — a
+> clausula original desta ADR vigora de novo. Historico na propria §2.
 > As decisoes de JWT Bearer, CORS e transporte desta ADR permanecem em vigor.
 
 ## Contexto
@@ -120,27 +122,30 @@ Decisao de v1:
 
 Flags previstas para cookie de refresh quando o fluxo de auth for implementado:
 
-- producao: `HttpOnly`, `Secure`, **`SameSite=None`** — emendado em 2026-08-18 (`f2836ba`); ver abaixo
+- producao: `HttpOnly`, `Secure`, **`SameSite=Lax`** — foi `None` entre 2026-08-18 (`f2836ba`) e 2026-08-23 (DMI-108); ver abaixo
 - desenvolvimento local HTTP: excecao documentada para `Secure=false`
 - se houver mutacoes autenticadas por cookie no futuro, CSRF devera ser tratado explicitamente
 
 > **Emenda 2026-08-18 — `SameSite=Lax` -> `SameSite=None`.** Esta clausula exigia `Lax` *ou mais
-> restritivo*; a implantacao real tornou isso impossivel. A SPA e a API sao servidas em
+> restritivo*; a implantacao daquele momento tornou isso impossivel. A SPA e a API eram servidas em
 > `nspi.up.railway.app` e `api-nspi.up.railway.app`, e `up.railway.app` esta na **Public Suffix
-> List** — logo sao **dominios registraveis distintos**, toda chamada `/auth/*` e uma requisicao
+> List** — logo eram **dominios registraveis distintos**, toda chamada `/auth/*` era uma requisicao
 > *cross-site*, e o cookie `Lax` nunca era anexado: o refresh respondia 401 permanentemente em
 > producao. `None` exige `Secure`, fornecido por `REFRESH_COOKIE_SECURE`; `localhost` e isento da
-> regra de HTTPS, entao o dev local nao muda. Fundamentacao:
+> regra de HTTPS, entao o dev local nao mudou. Fundamentacao:
 > [`docs/research/http-cookies-samesite.md`](../research/http-cookies-samesite.md).
 >
-> **Divida aberta — CSRF.** `None` e estritamente **menos** restritivo, e a terceira clausula acima
-> passa a valer agora: `POST /auth/refresh` e `POST /auth/logout` sao mutacoes autenticadas por
-> cookie. Uma pagina hostil pode forcar um refresh cross-site; o browser grava o cookie rotacionado
-> e o refresh legitimo seguinte apresenta um token ja aposentado, que a deteccao de reuso trata
-> como roubo e revoga a familia inteira — logout forcado. Mitigacao pendente em issue separada.
+> **Encerramento 2026-08-23 (DMI-108) — de volta a `SameSite=Lax`.** A SPA passou a ser servida em
+> `dmitri.peirce.dev` e a API em `api.peirce.dev`. Os dois estao sob o mesmo dominio registravel
+> `peirce.dev`, portanto sao *same-site*: o cookie `Lax` e anexado a chamada de refresh e a
+> clausula original volta a ser cumprida. **O desvio esta encerrado** — a emenda acima e historico,
+> nao politica vigente. Com isso a divida de CSRF aberta pela emenda tambem se fecha: `Lax` retem a
+> protecao *cross-site* de `POST /auth/refresh` e `POST /auth/logout`. Consequencia aceita:
+> `nspi.up.railway.app` fica *cross-site* em relacao a API e nao mantem mais sessao.
 >
-> **Alternativa que reabilita `Lax`:** servir SPA e API sob um mesmo dominio registravel
-> (`app.<dominio>` + `api.<dominio>`), o que os torna same-site de novo e fecha a exposicao.
+> A alternativa registrada em 2026-08-18 para reabilitar `Lax` — servir SPA e API sob um mesmo
+> dominio registravel (`app.<dominio>` + `api.<dominio>`) — foi exatamente a que se tomou em
+> 2026-08-23, com `dmitri.peirce.dev` + `api.peirce.dev`. Nao ha mitigacao pendente nesta secao.
 
 ### 3. CORS e transporte na v1
 

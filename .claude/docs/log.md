@@ -3,6 +3,25 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-23
+
+* **Update**: `backend/auth.md` — DMI-108. `ResendMailer` now posts a **`multipart/alternative`**
+  message: `_send` carries an `html` field beside the unchanged `text`, so the doc's "plain-text
+  message" claim is gone. Added rows for the new `INVITE_BODY_HTML` / `RESET_BODY_HTML` constants
+  (bare semantic markup — paragraphs and one anchor whose visible text is the full URL; no
+  `<table>`, `<img>`, `<link>`, colour or tracking pixel, because marketing-shaped HTML is itself a
+  spam signal). Every `services/mailer.py` line reference shifted when the constants landed and was
+  re-pinned. Noted that `invite_link()` / `reset_link()` are called once per send, so the two parts
+  cannot carry different URLs.
+* **Update**: `contracts/openapi/openapi.yaml` + the generated `frontend/src/types/openapi.d.ts` —
+  the `Set-Cookie-Refresh` description and both cookie examples still documented `SameSite=None`.
+  DMI-108 moved the refresh cookie back to `Lax`, so the contract was stale in three places. The
+  `.d.ts` was edited to match rather than regenerated: `frontend/node_modules` is not installed in
+  this worktree and `npx openapi-typescript` failed, but the change is one literal token inside a
+  doc comment, so `npm run gen:types` should produce an identical file.
+* **Note**: `backend/auth.md`'s cookie half (`set_refresh_cookie` / `clear_refresh_cookie`,
+  `SameSite=Lax`, the closed ADR-005 deviation) was written by DMI-108 itself and reviewed — this
+  run verified it rather than rewriting it.
 ## 2026-08-22
 
 * **Creation**: `frontend/linting.md` — the repository-local ESLint plugin and its four

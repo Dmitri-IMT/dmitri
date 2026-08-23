@@ -41,8 +41,8 @@ is provisioned yet. The FastAPI backend serves data reads, auth, identity admini
 command channel, and ingest. The web app has login → Home, public auth, and Settings with password
 change plus the Activity disclosure. Still missing are physical Pi operations and the remaining
 frontend screens/actions — Scans, Hosts and Agents; Users & Invites shipped in spec 034 — plus the
-LLM explainer. Invite/reset email code exists, but production delivery still needs a verified sending
-domain.
+LLM explainer. Invite/reset email now sends and delivers from the verified `mail.peirce.dev`; what
+remains there is sender reputation, not code.
 
 ## Cross-layer milestone sequencing
 

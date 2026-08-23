@@ -76,16 +76,7 @@ def test_login_issues_access_token_and_refresh_cookie(
     assert response.cookies.get(COOKIE_NAME)
 
 
-def test_refresh_cookie_is_sent_cross_site(
-    client: TestClient, administrative_session: Session
-) -> None:
-    _seed_user(administrative_session)
-
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"email": "alice@corp.com", "password": VALID_PASSWORD},
-    )
-
+def _refresh_morsel(response):
     header = next(
         h
         for h in response.headers.get_list("set-cookie")
@@ -93,13 +84,53 @@ def test_refresh_cookie_is_sent_cross_site(
     )
     cookie: SimpleCookie = SimpleCookie()
     cookie.load(header)
-    morsel = cookie[COOKIE_NAME]
+    return cookie[COOKIE_NAME]
 
-    # The SPA and API are cross-site in production; `lax` would strip the
-    # cookie from the refresh call, and `none` is only honoured with `Secure`.
-    assert morsel["samesite"].lower() == "none"
-    assert bool(morsel["secure"])
+
+def test_login_refresh_cookie_carries_the_full_flag_set(
+    client: TestClient, administrative_session: Session
+) -> None:
+    from api.core.config import get_settings
+
+    _seed_user(administrative_session)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice@corp.com", "password": VALID_PASSWORD},
+    )
+
+    morsel = _refresh_morsel(response)
+    settings = get_settings()
+    assert morsel["samesite"].lower() == "lax"
+    assert bool(morsel["secure"]) is settings.refresh_cookie_secure
     assert bool(morsel["httponly"])
+    assert morsel["path"] == "/api/v1/auth"
+    assert int(morsel["max-age"]) == settings.refresh_token_ttl_days * 24 * 60 * 60
+
+
+def test_logout_clears_the_refresh_cookie_with_the_same_flag_set(
+    client: TestClient, administrative_session: Session
+) -> None:
+    from api.core.config import get_settings
+
+    _seed_user(administrative_session)
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "alice@corp.com", "password": VALID_PASSWORD},
+    )
+
+    logout_response = client.post(
+        "/api/v1/auth/logout",
+        cookies={COOKIE_NAME: login_response.cookies.get(COOKIE_NAME)},
+    )
+
+    morsel = _refresh_morsel(logout_response)
+    settings = get_settings()
+    assert morsel.value == ""
+    assert morsel["samesite"].lower() == "lax"
+    assert bool(morsel["secure"]) is settings.refresh_cookie_secure
+    assert bool(morsel["httponly"])
+    assert morsel["path"] == "/api/v1/auth"
 
 
 def test_login_bad_credentials_returns_401_no_tokens(

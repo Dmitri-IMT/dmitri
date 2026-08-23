@@ -36,6 +36,22 @@ If you did not request a password reset, you can ignore this email. Your
 password will not change until you use the link above.
 """
 
+INVITE_BODY_HTML = """<p>You have been invited to join an organisation on Dmitri.</p>
+<p>Open the link below to create your account:</p>
+<p><a href="{link}">{link}</a></p>
+<p>This link can only be used once and expires in {ttl_hours} hours.</p>
+<p>If you were not expecting this invitation, you can ignore this email.</p>
+"""
+
+RESET_BODY_HTML = """<p>We received a request to reset the password for this Dmitri
+account.</p>
+<p>Open the link below to choose a new password:</p>
+<p><a href="{link}">{link}</a></p>
+<p>This link can only be used once and expires in {ttl_minutes} minutes.</p>
+<p>If you did not request a password reset, you can ignore this email. Your
+password will not change until you use the link above.</p>
+"""
+
 
 class Mailer(Protocol):
     def send_reset_link(self, email: str, token: str) -> None: ...
@@ -77,31 +93,34 @@ class ResendMailer:
         self.reset_ttl_minutes = settings.reset_token_ttl_minutes
 
     def send_invite_link(self, email: str, token: str) -> None:
+        link = invite_link(token)
         self._send(
             email,
             INVITE_SUBJECT,
-            INVITE_BODY.format(
-                link=invite_link(token), ttl_hours=self.invite_ttl_hours
-            ),
+            INVITE_BODY.format(link=link, ttl_hours=self.invite_ttl_hours),
+            INVITE_BODY_HTML.format(link=link, ttl_hours=self.invite_ttl_hours),
             "invite",
         )
 
     def send_reset_link(self, email: str, token: str) -> None:
+        link = reset_link(token)
         self._send(
             email,
             RESET_SUBJECT,
-            RESET_BODY.format(
-                link=reset_link(token), ttl_minutes=self.reset_ttl_minutes
-            ),
+            RESET_BODY.format(link=link, ttl_minutes=self.reset_ttl_minutes),
+            RESET_BODY_HTML.format(link=link, ttl_minutes=self.reset_ttl_minutes),
             "password reset",
         )
 
-    def _send(self, email: str, subject: str, body: str, kind: str) -> None:
+    def _send(
+        self, email: str, subject: str, body: str, html: str, kind: str
+    ) -> None:
         payload: dict[str, object] = {
             "from": self.sender,
             "to": [email],
             "subject": subject,
             "text": body,
+            "html": html,
         }
         if self.reply_to:
             payload["reply_to"] = self.reply_to

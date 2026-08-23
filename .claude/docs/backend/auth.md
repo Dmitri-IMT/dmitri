@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-22T00:00:00Z
+timestamp: 2026-08-23T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -59,12 +59,14 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 | `hash_password()` / `verify_password()` | argon2-cffi hash + verify. | `backend/src/api/services/passwords.py:36` |
 | `validate_policy()` | Enforces the AUTH.md rules — min length 12, common/breached, repeated-char / keyboard-suffix / repeated-number, email/name/org substrings — raising a violation-listing `PasswordPolicyError`; includes the HIBP k-anonymity screen. | `backend/src/api/services/passwords.py:76` |
 | `_check_hibp()` | SHA-1 range-API screen (first 5 chars sent, 35-char suffix matched locally), gated by `HIBP_ENABLED`; skipped (not failed) on timeout/HTTP error. | `backend/src/api/services/passwords.py:57` |
-| `Mailer` | Protocol `send_reset_link(email, token)` + `send_invite_link(email, token)`. Both take a **raw token, never a URL**; the mailer builds the URL itself from `APP_BASE_URL`. | `backend/src/api/services/mailer.py:40` |
-| `invite_link()` / `reset_link()` | The two link shapes the emails point at — `{APP_BASE_URL}/invite?token={token}` and `{APP_BASE_URL}/reset-password?token={token}`. The single place a token becomes a URL; both use the query form since DMI-77. | `backend/src/api/services/mailer.py:45`, `:50` |
-| `ResendMailer` | Posts a **plain-text** message to the Resend API (`RESEND_API_BASE_URL`, `Bearer RESEND_API_KEY`, `MAIL_FROM`, optional `MAIL_REPLY_TO`, `MAIL_TIMEOUT_SECONDS`). Snapshots every setting it needs in `__init__`. Swallows transport errors and ≥400 responses into a `logger.error` that never contains the token. | `backend/src/api/services/mailer.py:68` |
-| `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:55` |
-| `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:132` |
-| `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:153` |
+| `Mailer` | Protocol `send_reset_link(email, token)` + `send_invite_link(email, token)`. Both take a **raw token, never a URL**; the mailer builds the URL itself from `APP_BASE_URL`. | `backend/src/api/services/mailer.py:56` |
+| `invite_link()` / `reset_link()` | The two link shapes the emails point at — `{APP_BASE_URL}/invite?token={token}` and `{APP_BASE_URL}/reset-password?token={token}`. The single place a token becomes a URL; both use the query form since DMI-77. Called **once** per send, so the text and HTML parts can never carry different URLs. | `backend/src/api/services/mailer.py:61`, `:66` |
+| `ResendMailer` | Posts a **`multipart/alternative`** message to the Resend API — `_send` carries both a `text` and an `html` field (`RESEND_API_BASE_URL`, `Bearer RESEND_API_KEY`, `MAIL_FROM`, optional `MAIL_REPLY_TO`, `MAIL_TIMEOUT_SECONDS`). Snapshots every setting it needs in `__init__`. Swallows transport errors and ≥400 responses into a `logger.error` that never contains the token. | `backend/src/api/services/mailer.py:84`, `_send` `:115` |
+| `INVITE_BODY` / `RESET_BODY` | The plain-text bodies, unchanged since before DMI-108. They are now the `text/plain` **fallback part**, not the whole message. | `backend/src/api/services/mailer.py:16`, `:27` |
+| `INVITE_BODY_HTML` / `RESET_BODY_HTML` | The `text/html` parts added by DMI-108. Deliberately bare semantic markup — paragraphs plus one anchor whose visible text **is** the full URL. No `<table>`, `<img>`, `<link>`, inline colour, web font or tracking pixel: marketing-shaped HTML is itself a spam signal, and a visible URL is what a security-minded recipient checks before clicking. The copy mirrors the text constants word for word. | `backend/src/api/services/mailer.py:39`, `:46` |
+| `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:71` |
+| `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:151` |
+| `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:172` |
 | `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org, refuses an address with an unconsumed unexpired invite, then stores only `sha256(raw)` and returns the raw token once. | `backend/src/api/services/invites.py:40` |
 | `INVITE_LOCK_NAMESPACE` | `8817` — separates the per-org/email invite lock from the org-admin lock namespace in [`org_lock.py`](/backend/services.md). | `backend/src/api/services/invites.py:37` |
 | `accept_invite()` | Consumes a live invite and creates the user in one commit, then delegates to `issue_session`, which stamps both user activity times. The address, role, and org all come from the invite row. | `backend/src/api/services/invites.py:95` |
@@ -78,7 +80,7 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 | invite routes | Admin create/list/revoke (`POST`/`GET /api/v1/invites`, `DELETE /api/v1/invites/{invite_id}`), public accept/lookup (`POST /accept`, `POST /lookup`). Listing returns no token; revocation is pending-only and answers 204. | `backend/src/api/routers/invites.py:39` |
 | `lookup_invite_route()` | Public, non-consuming `POST /api/v1/invites/lookup`; possession of the body token is the only authorisation. Returns `{email, role, org_name}` or 410 `invalid_invite_token`. | `backend/src/api/routers/invites.py:82` |
 | invite preflight loop | Registers bare 204 `OPTIONS` routes for each invite `POST`; `GET` and `DELETE` preflights are handled by the CORS middleware. | `backend/src/api/routers/invites.py:129` |
-| `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=None`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. `None` since 2026-08-18 (`f2836ba`): `up.railway.app` is a public suffix, so `nspi.` and `api-nspi.` are separate registrable domains and a `Lax` cookie was never attached to the cross-site refresh call. See the Notes below — it contradicts [ADR-005](../../../docs/adr/ADR-005-security-model.md) §cookie flags. | `backend/src/api/session_response.py:17` |
+| `set_refresh_cookie()` / `clear_refresh_cookie()` | `dmitri_refresh` cookie: `HttpOnly`, `Path=/api/v1/auth`, `SameSite=Lax`, `Max-Age`=7d, `Secure` per `REFRESH_COOKIE_SECURE`. The only place a cookie is set. It was `None` between 2026-08-18 (`f2836ba`) and 2026-08-23 (DMI-108), while the SPA and the API sat under the public suffix `up.railway.app` and were therefore cross-site. Both now serve from `peirce.dev`, so `Lax` is back and the deviation from [ADR-005](../../../docs/adr/ADR-005-security-model.md) §cookie flags is **closed**. | `backend/src/api/session_response.py:17` |
 | `login_response()` | Builds the `LoginResponse` **and** sets the refresh cookie; used by `login_route`, `refresh_route`, and `accept_invite_route` so no route hand-rolls either. | `backend/src/api/routers/auth.py:52` |
 | `RequestIdMiddleware` | Reads inbound `X-Request-Id` or generates a uuid4, sets it on **every** response. | `backend/src/api/middleware.py:15` |
 | `NoContentCorsMiddleware` | Subclasses Starlette `CORSMiddleware`, overriding `preflight_response` to return **204** (contract requires it) instead of the default 200. It **rebuilds** the response rather than reassigning `status_code`, dropping `content-length` and `content-type`: the parent returns `PlainTextResponse("OK", 200)`, so a bare status reassignment left a 204 declaring a 2-byte body — malformed per RFC 9110 §15.3.5, and WebKit answers it by dropping the real request. | `backend/src/api/middleware.py:38` |
@@ -119,19 +121,18 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 
 ## Notes / gotchas
 
-- **The refresh cookie is `SameSite=None`, and that contradicts ADR-005.** Railway serves the SPA
-  at `nspi.up.railway.app` and the API at `api-nspi.up.railway.app`. `up.railway.app` is on the
-  Public Suffix List, so those are **separate registrable domains** — every `/auth/*` call is a
-  cross-site subresource request and a `Lax` cookie is never attached, which is why refresh
-  returned 401 forever in production. `f2836ba` (2026-08-18) switched both set and clear to
-  `SameSite=None`, which requires `Secure` (supplied by `REFRESH_COOKIE_SECURE`; localhost is
-  exempt from the HTTPS rule, so local dev is unaffected).
-  [ADR-005](../../../docs/adr/ADR-005-security-model.md) §"Flags previstas" still specifies
-  `SameSite=Lax` *ou mais restritivo*, and `None` is strictly **less** restrictive — the ADR and
-  the code disagree, and the same ADR requires CSRF to be "tratado explicitamente" once a
-  cookie-authenticated mutation exists, which `POST /auth/refresh` now is. Unresolved; a custom
-  domain (`app.` + `api.` under one registrable domain) would make the pair same-site again and
-  allow `Lax` back. See [research](../../../docs/research/http-cookies-samesite.md).
+- **The refresh cookie is `SameSite=Lax` again — the ADR-005 deviation is closed.** Railway used
+  to serve the SPA at `nspi.up.railway.app` and the API at `api-nspi.up.railway.app`.
+  `up.railway.app` is on the Public Suffix List, so those were **separate registrable domains** —
+  every `/auth/*` call was a cross-site subresource request, a `Lax` cookie was never attached,
+  and refresh returned 401 forever in production. `f2836ba` (2026-08-18) deliberately switched
+  both set and clear to `SameSite=None` to unblock that. DMI-108 (2026-08-23) moved both services
+  onto custom domains — `dmitri.peirce.dev` and `api.peirce.dev` — so they share one registrable
+  domain, are same-site, and `Lax` was restored. The code and
+  [ADR-005](../../../docs/adr/ADR-005-security-model.md) §"Flags previstas" (`SameSite=Lax` *ou
+  mais restritivo*) agree once more. Consequence, accepted: `nspi.up.railway.app` is cross-site to
+  the API now, so no session survives there. See
+  [research](../../../docs/research/http-cookies-samesite.md).
 - **An omitted CORS allowlist fails closed.** `Settings.cors_allowed_origins` defaults to `""`;
   the middleware builder drops empty entries and passes `allow_origins=[]`. Tests set the local
   Vite origin explicitly, as every local or hosted environment must.

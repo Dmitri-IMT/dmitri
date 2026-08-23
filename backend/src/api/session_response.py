@@ -9,11 +9,11 @@ COOKIE_NAME = "dmitri_refresh"
 COOKIE_PATH = "/api/v1/auth"
 
 
-# The SPA and the API are served from different registrable domains in
-# production (`nspi.up.railway.app` vs `api-nspi.up.railway.app`), so a refresh
-# call is a cross-site subresource request and a `Lax` cookie would never be
-# attached. `None` requires `Secure`, which `refresh_cookie_secure` supplies;
-# localhost is exempt from the HTTPS requirement, so local dev is unaffected.
+# The SPA and the API are served from the same registrable domain in production
+# (`dmitri.peirce.dev` and `api.peirce.dev`), so a refresh call is same-site and
+# a `Lax` cookie is attached to it. `Lax` was briefly `None` (2026-08-18,
+# `f2836ba`), while both services still sat under the public suffix
+# `up.railway.app` and were therefore cross-site.
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     settings = get_settings()
     response.set_cookie(
@@ -21,7 +21,7 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
         refresh_token,
         max_age=settings.refresh_token_ttl_days * 24 * 60 * 60,
         httponly=True,
-        samesite="none",
+        samesite="lax",
         secure=settings.refresh_cookie_secure,
         path=COOKIE_PATH,
     )
@@ -32,7 +32,7 @@ def clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         COOKIE_NAME,
         httponly=True,
-        samesite="none",
+        samesite="lax",
         secure=settings.refresh_cookie_secure,
         path=COOKIE_PATH,
     )
