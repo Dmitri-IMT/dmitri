@@ -1,10 +1,10 @@
 ---
 type: Module
 title: scanner/nmap — NmapRunner & LoggedNmapRunner
-description: NmapRunner / LoggedNmapRunner — run Nmap as a subprocess, parse XML, classify failures, and stream per-invocation logs.
+description: NmapRunner / LoggedNmapRunner — execute Nmap, log argv and failed stderr, parse XML, and retain per-run artifacts.
 resource: hardware-agent/src/agent/scanner/nmap.py
 tags: [hardware-agent, scanner, nmap, subprocess, logging]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # scanner/nmap — Nmap process execution
@@ -21,17 +21,17 @@ under `logs/`.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `NmapRunner` | Thin Nmap CLI wrapper; resolves the binary, holds a lock + set of active procs. | `nmap.py:89` |
-| `NmapRunner.run_xml()` | Runs `nmap <args> -oX -`, maps timeout→`BudgetExceeded`, missing binary→`FatalScanError`, bad XML→`UnitScanError`; returns the parsed root. | `nmap.py:105` |
-| `NmapRunner.run_streamed()` | Runs Nmap streaming stdout/stderr to files in a run dir (Nmap writes XML itself via `-oX`). | `nmap.py:136` |
-| `NmapRunner.terminate_active()` | Sets the cancelled flag and `kill()`s all tracked procs. | `nmap.py:98` |
-| `_classify_nonzero()` | Maps stderr markers to `TransientScanError`, else `UnitScanError`. | `nmap.py:38` |
-| `_resolve_nmap_path()` | Finds the Nmap binary (arg → PATH → common locations), else `FatalScanError`. | `nmap.py:58` |
-| `_strip_namespaces()` | Strips XML namespaces so plain tag names parse. | `nmap.py:201` |
-| `LoggedNmapRunner` | Workspace-aware subclass: per-invocation run folder, streamed output, `meta.json`, and log pruning; overrides `run_xml`. | `nmap.py:207` |
-| `LoggedNmapRunner.set_stage()` | Records the current stage for run-folder naming. | `nmap.py:231` |
-| `build_runner()` | Returns a caller-supplied runner if given, else a `LoggedNmapRunner` when `workspace_root` is set, else a plain `NmapRunner`. | `nmap.py:318` |
-| `AGENT_VERSION` | `"0.1.4"` — stamped into metadata and `meta.json`. | `nmap.py:30` |
+| `NmapRunner` | Thin Nmap CLI wrapper; resolves the binary, holds a lock + set of active procs. | `nmap.py:90` |
+| `NmapRunner.run_xml()` | Runs `nmap <args> -oX -`, maps timeout→`BudgetExceeded`, missing binary→`FatalScanError`, bad XML→`UnitScanError`; returns the parsed root. | `nmap.py:106` |
+| `NmapRunner.run_streamed()` | Logs the shell-quoted argv, then streams stdout/stderr to files in a run dir (Nmap writes XML itself via `-oX`). | `nmap.py:137` |
+| `NmapRunner.terminate_active()` | Sets the cancelled flag and `kill()`s all tracked procs. | `nmap.py:99` |
+| `_classify_nonzero()` | Maps stderr markers to `TransientScanError`, else `UnitScanError`. | `nmap.py:39` |
+| `_resolve_nmap_path()` | Finds the Nmap binary (arg → PATH → common locations), else `FatalScanError`. | `nmap.py:59` |
+| `_strip_namespaces()` | Strips XML namespaces so plain tag names parse. | `nmap.py:203` |
+| `LoggedNmapRunner` | Workspace-aware subclass: per-invocation run folder, streamed output, `meta.json`, failed-stderr logging, and log pruning; overrides `run_xml`. | `nmap.py:209` |
+| `LoggedNmapRunner.set_stage()` | Records the current stage for run-folder naming. | `nmap.py:233` |
+| `build_runner()` | Returns a caller-supplied runner if given, else a `LoggedNmapRunner` when `workspace_root` is set, else a plain `NmapRunner`. | `nmap.py:325` |
+| `AGENT_VERSION` | `"0.1.4"` — stamped into metadata and `meta.json`. | `nmap.py:31` |
 
 ## How it connects
 
@@ -50,6 +50,10 @@ under `logs/`.
   it so in-flight Nmap processes are killed rather than waited out.
 - `run_streamed` imports its workspace helpers lazily inside `run_xml` to avoid an import cycle with
   [workspace](/hardware-agent/scanner/workspace.md).
+- Logged execution emits the complete argv via `shlex.join` before spawn (`nmap.py:154-155`). A
+  non-zero logged run then emits its exit code and captured stderr before classification
+  (`nmap.py:296-305`), so container capability failures are visible in daemon logs as well as in
+  the per-run `stderr.log`.
 
 # Citations
 

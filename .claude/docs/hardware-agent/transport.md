@@ -1,10 +1,10 @@
 ---
 type: Module
 title: transport — the signed scan-ingest client
-description: The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
+description: "The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome."
 resource: hardware-agent/src/agent/transport/ingest.py
 tags: [hardware-agent, transport, ingest, ed25519, signatures, http, retry]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # transport — the signed scan-ingest client

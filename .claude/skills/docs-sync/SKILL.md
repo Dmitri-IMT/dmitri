@@ -2,7 +2,7 @@
 name: docs-sync
 description: >-
   Update the .claude/docs OKF code-map, the human docs/ knowledge base, and the root setup scripts
-  (install.sh/.ps1, database.sh/.ps1, lint.sh/.ps1) after code changes land. Owns .claude/docs fully;
+  (install.sh/.ps1, database.sh/.ps1, lint.sh/.ps1, and simulator.sh without a .ps1 twin) after code changes land. Owns .claude/docs fully;
   for docs/ it delegates to architecture-adr-sync / roadmap-sync / openapi-contract-sync and only
   patches unambiguous factual drift. Run once at the end of the feature-orchestrator pipeline, or
   manually via /docs-sync when code has moved and the docs or scripts may be stale.
@@ -16,7 +16,7 @@ Keep the two documentation layers current with the code, scoped to what changed.
 |-------|-----------|--------|
 | `.claude/docs/` (OKF code-map) | **fully owned** | Always update to match changed source. |
 | `docs/` (human KB) | curated, partly target-state | Delegate + patch only unambiguous factual drift; report the rest. |
-| Root scripts (`install`, `database`, `lint` — each a `.sh`/`.ps1` pair) | executable docs | Patch only when the diff invalidates something they encode; report anything bigger. |
+| Root scripts (`install`, `database`, `lint` mirror pairs; standalone `simulator.sh`) | executable docs | Patch only when the diff invalidates something they encode; report anything bigger. |
 
 The `.claude/docs/` conventions (frontmatter, body shape, linking, standing facts) live in
 [`.claude/docs/MAINTAINING.md`](../../docs/MAINTAINING.md) — read it first; this skill *executes*
@@ -61,7 +61,9 @@ changed, say so and exit early.
    - **Changed lint/test gate** (see `.claude/CLAUDE.md` "Formatting and lint gates") → `lint.sh`,
      and any test command the installer prints or runs.
 
-   Every root script is a `.sh`/`.ps1` mirror pair: **never patch one without the other.** Keep edits as
+   `install`, `database`, and `lint` are `.sh`/`.ps1` mirror pairs: **never patch one without the
+   other.** `simulator.sh` is the deliberate exception: it is a Linux-container harness with no
+   tested Windows path, so do not create or require a `simulator.ps1` twin. Keep edits as
    surgical here as in `docs/` — do not restructure a script, add flags nobody asked for, or bring a
    layer into an installer's scope when the setup docs say it is deliberately out of scope
    (`docs/DEV-SETUP.md` records those decisions). Widening scope is a human call: report it.

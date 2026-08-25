@@ -1,10 +1,10 @@
 ---
 type: Infrastructure
 title: Deployment (install scripts + Railway)
-description: Dev-environment installers and the three-service Railway + Supabase deploy topology, with frontend build and backend env-var wiring.
+description: Dev-environment installers, the local Pi simulator, and the three-service Railway + Supabase topology.
 resource: install.sh
 tags: [infra, deployment, railway, install, env]
-timestamp: 2026-08-22T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Deployment (install scripts + Railway)
@@ -22,6 +22,13 @@ the database remains on Supabase (see [supabase](./supabase.md)).
 **Current state:** the backend services and the Railway frontend deployment are wired for the
 hosted pilot. Physical Pi provisioning, service-manager packaging, key provisioning and clock
 synchronization remain outside this deploy layer.
+
+For live local scan data, `simulator.sh` runs the real agent, an isolated `dmitri_sim`
+Postgres, the backend, worker, and Samba target on a fixed Docker bridge. Its state is
+ephemeral, it owns host ports 8000 and 55432, and its deployed `--nspi` mode is connect-only
+with manually provisioned throwaway-org credentials. See the simulator runbook at
+[`docker/pi-simulator/README.md`](../../../docker/pi-simulator/README.md) and the dedicated
+[simulator code-map](./pi-simulator.md).
 
 ## Key files / settings
 
@@ -57,6 +64,15 @@ follow Root Directory.
 
 Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--hooks`
 (`-AgentOnly` / `-SkipVerify` / `-Hooks` in PowerShell).
+
+### Local Pi simulator (`simulator.sh`)
+
+`simulator.sh` wraps `docker/pi-simulator/compose.yaml`: a cold start rebuilds and seeds the
+ephemeral stack, repeat starts are no-ops, `scan` enqueues work, `logs` follows services, and
+`stop` removes volumes. It intentionally has no PowerShell twin because only its
+Linux-container path is tested. The alternate `--nspi` compose file starts no local API or
+database, refuses scans, and requires manual credentials belonging to a throwaway org. File-level
+ownership and line references are kept in [Local Pi simulator](./pi-simulator.md).
 
 ### Environment variables
 
@@ -112,11 +128,13 @@ Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--ho
   run 24/7.
 - Installers degrade gracefully: without Docker or the Supabase CLI they print manual
   instructions and skip infra (`INFRA_OK=0`), still leaving a working agent + TUI.
+- **Simulator port collision:** stop a hand-run backend before starting the local Pi
+  simulator because both bind host port 8000.
 
 # Citations
 
-- [ADR-007 — deployment architecture](../../docs/adr/ADR-007-deployment-architecture.md)
-- [ADR-009 — database stack](../../docs/adr/ADR-009-database-stack.md)
-- [docs/cloud/README.md](../../docs/cloud/README.md)
-- [docs/cloud/railway/SETUP.md](../../docs/cloud/railway/SETUP.md)
-- [docs/cloud/supabase/SETUP.md](../../docs/cloud/supabase/SETUP.md)
+- [ADR-007 — deployment architecture](../../../docs/adr/ADR-007-deployment-architecture.md)
+- [ADR-009 — database stack](../../../docs/adr/ADR-009-database-stack.md)
+- [docs/cloud/README.md](../../../docs/cloud/README.md)
+- [docs/cloud/railway/SETUP.md](../../../docs/cloud/railway/SETUP.md)
+- [docs/cloud/supabase/SETUP.md](../../../docs/cloud/supabase/SETUP.md)

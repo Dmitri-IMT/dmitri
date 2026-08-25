@@ -1,10 +1,10 @@
 ---
 type: Module
 title: command-channel — the signed WebSocket client and shared signer
-description: The device end of the backend command channel: the shared Ed25519 signer, strict hello/command/status frames, hello-first ordering, and the pinned reconnect ladder.
+description: "The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder."
 resource: hardware-agent/src/agent/transport/command_channel.py
 tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # command-channel — the signed WebSocket client
@@ -39,7 +39,7 @@ ingest. That split is the contract, not an implementation detail.
 | `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:170` |
 | `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:83` |
 | `_permanent_reason(exc)` | The park/retry decision — see below. | `command_channel.py:92` |
-| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:236` |
+| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:237` |
 
 ### The upgrade envelope
 
@@ -52,7 +52,8 @@ lets a Pi whose clock was wrong at boot recover on a later retry without operato
 
 ### Hello-first ordering
 
-`_serve_once` (`command_channel.py:184`) does connect → send hello → mark ready → `on_connected()`
+`_serve_once` (`command_channel.py:184`) does connect → send hello → mark ready → log the
+connection → `on_connected()`
 → first `recv()`, in that order, on **every** connection including reconnects. The subnet list is
 re-enumerated per hello via [`detect_available_subnets`](/hardware-agent/utils.md), never cached, so
 the backend registry always replaces its list with current device state. `on_connected` is the
@@ -99,6 +100,9 @@ retryable 4xxx close is not silently parked.
   interleave frames on the wire — the lock is load-bearing, not defensive.
 * Diagnostics carry only an exception class name and an integer status or close code. No key, no
   signature, no signed URL, no response body, no raw exception text ever reaches a log.
+* Each successful hello emits `command channel connected` (`command_channel.py:189-193`), while a
+  retryable loss emits the existing sanitized `command channel lost` warning. Together they make
+  reconnects visible without exposing the signed upgrade headers.
 * The module reads `ConnectionClosed.code` / `.reason`, which `websockets` 17 deprecates in favour
   of `.rcvd.code` / `.rcvd.reason`. The deprecated accessors are the *correct* ones here — they fold
   the `rcvd is None` case into `1006`, which the reconnect classifier depends on. Any future

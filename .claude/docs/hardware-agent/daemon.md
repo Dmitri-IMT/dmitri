@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: daemon — the unattended command executor
-description: The long-lived device process that accepts backend commands, runs one headless scan at a time, uploads through ingest, and reports lifecycle status.
+description: The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # daemon — the unattended command executor
@@ -31,7 +31,7 @@ new runner parameter, and applies the backend's `scan_id` only at the existing i
 | `.replay_pending()` | The `on_connected` seam — resends pending status after hello, before any new command is acted on. | `daemon.py:86` |
 | `._execute(command)` | Owns the scan task; converts any exception to `failed` and clears `_active` in `finally`. | `daemon.py:91` |
 | `._run_command(command)` | The state machine below. | `daemon.py:100` |
-| `run_daemon()` | Loads `load_ingest_config()` once, constructs both clients, runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:146` |
+| `run_daemon()` | Configures INFO logging to stdout, loads `load_ingest_config()` once, constructs both clients, and runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:159` |
 
 ## The state machine
 
@@ -54,6 +54,11 @@ valid idle command → running
 The five error codes (`device_busy`, `invalid_command`, `scan_failed`, `result_unavailable`,
 `ingest_failed`) are the whole vocabulary; transport-specific ingest categories are deliberately not
 exposed on the wire.
+
+Accepted uploads log command id, scan id, and HTTP status. Failed uploads log those identifiers plus
+the typed ingest outcome, status, and attempt count (`daemon.py:121-140`). The upstream response
+message is deliberately excluded because it may echo credentials; private keys and bearer tokens
+must never enter the daemon log.
 
 The gate order in `_run_command` is payload → result path → fatal, not fatal first. That is
 load-bearing: `run_headless_scan` only ever returns a `None` result path together with a `fatal`

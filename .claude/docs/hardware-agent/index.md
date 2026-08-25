@@ -16,13 +16,13 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 ## Discovery & normalization
 
 * [discovery](./discovery.md) — Thin per-stage Nmap-argument builders: host discovery, port discovery, service detection, and NSE vulnerability scanning.
-* [normalize](./normalize.md) — Pydantic wire contracts (`ScanPayload`) and the NSE-to-findings extractor.
+* [normalize](./normalize.md) — The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 * [utils](./utils.md) — Local-network detection/connectivity checks and the Nmap/NSE XML parsers.
 
 ## Remote control & upload
 
-* [daemon](./daemon.md) — The long-lived device process that accepts backend commands, runs one headless scan at a time, uploads through ingest, and reports lifecycle status.
-* [command-channel](./command-channel.md) — The device end of the backend command channel: the shared Ed25519 signer, strict hello/command/status frames, hello-first ordering, and the pinned reconnect ladder.
+* [daemon](./daemon.md) — The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
+* [command-channel](./command-channel.md) — The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder.
 * [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Wired to the daemon since DMI-66.
 
 ## TUI
