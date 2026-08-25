@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-08-13T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -16,8 +16,8 @@ timestamp: 2026-08-13T00:00:00Z
 `ScanIngestRequest` an agent submits to the wired `POST /api/v1/scans`. `persistence.py` is the
 legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
-[hosts/scans/findings routers](/backend/routers.md) actually return (plus `ScanSortBy`/`SortOrder`
-literal aliases used only on the scan-list route). `schemas/__init__.py` re-exports
+[hosts/scans/findings routers](/backend/routers.md) actually return (plus the `ScanSortBy`,
+`HostSortBy` and `SortOrder` literal aliases that type the scan-list and host-list sort params). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)

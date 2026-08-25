@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, and command lifecycle/delivery.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-08-13T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -61,12 +61,13 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:39` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
 | `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:23` |
-| `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` | `1` / `20` — the paging defaults `list_hosts()` falls back to, imported by `read_hosts` so the route and the service cannot drift apart. `list_scans`/`list_findings` still inline theirs. | `backend/src/api/services/read.py:35` |
-| `list_hosts()` | Paginated `HostRecord` list ordered by `last_seen_at desc` with a `HostRecord.id` tie-breaker for stable paging → `HostListResponse`. Requires keyword-only `org_id`; **both** the `count()` and the page query are scoped. | `backend/src/api/services/read.py:47` |
-| `get_host_detail()` | One host's latest `ScanHostRecord` (for current ports) + full scan history (ordered by `ScanRecord.timestamp desc`) → `HostDetailResponse`. Requires `org_id`; the two inline `ScanRecord` queries are scoped too, so a foreign org's scan cannot surface through a host's detail. | `backend/src/api/services/read.py:73` |
-| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings (host_id resolved via outer join) → `ScanDetailResponse`. Joins `commands.command_for_scan` so `command_id` is the real id (not hardcoded `None`) and `error_code` is derived via `scan_error_code(scan.status, stored)`. Requires `org_id`. | `backend/src/api/services/read.py:130` |
-| `list_scans()` | Paginated `ScanRecord` list with per-scan `host_count`/`finding_count`/`highest_severity` aggregates (four-query strategy, no N+1) → `ScanListResponse`. Optional `status` filter; `sort_by`/`sort_order` with `scan_id` tie-breaker. Requires keyword-only `org_id`. | `backend/src/api/services/read.py:176` |
-| `list_findings()` | Paginated `FindingRecord` list, optionally filtered by `host_id`, `severity`, `scan_id` → `FindingListResponse`. Ordered by `FindingRecord.id` for stable paging. Requires `org_id`; joins `ScanRecord` on `scan_id` **before** the `host_id` branch so the count and page queries share the org predicate. | `backend/src/api/services/read.py:245` |
+| `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` | `1` / `20` — the paging defaults `list_hosts()` falls back to, imported by `read_hosts` so the route and the service cannot drift apart. `list_scans`/`list_findings` still inline theirs. | `backend/src/api/services/read.py:39` |
+| `_HOST_SORT_COLUMNS` | The four sortable host columns keyed by `HostSortBy` — `last_seen_at`, `hostname`, `vendor` as plain columns, `ip` as `cast(HostRecord.ip, INET)`. The `_SCAN_SORT_COLUMNS` pattern, one table down. | `backend/src/api/services/read.py:47` |
+| `list_hosts()` | Paginated `HostRecord` list → `HostListResponse`. `sort_by`/`sort_order` (default `last_seen_at desc`, DMI-100) resolve through `_HOST_SORT_COLUMNS`, always with a `HostRecord.id` tie-breaker for stable paging. Requires keyword-only `org_id`; **both** the `count()` and the page query are scoped. | `backend/src/api/services/read.py:57` |
+| `get_host_detail()` | One host's latest `ScanHostRecord` (for current ports) + full scan history (ordered by `ScanRecord.timestamp desc`) → `HostDetailResponse`. Requires `org_id`; the two inline `ScanRecord` queries are scoped too, so a foreign org's scan cannot surface through a host's detail. | `backend/src/api/services/read.py:87` |
+| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings (host_id resolved via outer join) → `ScanDetailResponse`. Joins `commands.command_for_scan` so `command_id` is the real id (not hardcoded `None`) and `error_code` is derived via `scan_error_code(scan.status, stored)`. Requires `org_id`. | `backend/src/api/services/read.py:142` |
+| `list_scans()` | Paginated `ScanRecord` list with per-scan `host_count`/`finding_count`/`highest_severity` aggregates (four-query strategy, no N+1) → `ScanListResponse`. Optional `status` filter; `sort_by`/`sort_order` with `scan_id` tie-breaker. Requires keyword-only `org_id`. | `backend/src/api/services/read.py:194` |
+| `list_findings()` | Paginated `FindingRecord` list, optionally filtered by `host_id`, `severity`, `scan_id` → `FindingListResponse`. Ordered by `FindingRecord.id` for stable paging. Requires `org_id`; joins `ScanRecord` on `scan_id` **before** the `host_id` branch so the count and page queries share the org predicate. | `backend/src/api/services/read.py:263` |
 | `run_worker_loop()` | Reads poll interval + batch size from `Settings`, loops forever calling `run_worker_once()`, sleeps `poll_interval` when idle or after a logged exception. | `backend/src/api/services/worker.py:13` |
 | `run_worker_once()` | Opens a session via `get_session()`, calls `sweep_stale_commands` **globally** (every agent) before delegating to `process_pending_enrichment_jobs`, and returns the enrichment count so idle-sleep behaviour is unchanged. | `backend/src/api/services/worker.py:34` |
 | `claim_pending_enrichment_jobs()` | Selects `pending` jobs by `created_at,id`; on Postgres uses `SELECT ... FOR UPDATE SKIP LOCKED`; flips them to `running`, bumps `attempts`, commits. | `backend/src/api/services/enrichment.py:22` |
@@ -190,6 +191,11 @@ ML/AI scoring is future work.
   snapshot (ip/mac/hostname/vendor/open_ports_count/highest_severity) when the incoming scan's
   `timestamp` is `>=` the current `last_seen_at`; an out-of-order (backfilled) scan only extends
   `first_seen_at`.
+- **`sort_by=ip` casts to `INET`, so host sorting is Postgres-only.** `HostRecord.ip` is a plain
+  `str` column, and a text sort orders `192.168.0.1`, `.10`, `.2` — visibly wrong in a host
+  inventory. `_HOST_SORT_COLUMNS["ip"]` therefore holds `cast(HostRecord.ip, INET)`
+  (`sqlalchemy.dialects.postgresql`). SQLite cannot compile it (`UnsupportedCompilationError`), so
+  that one path only works against the deployed DB; the other three sort columns are dialect-neutral.
 - **`SKIP LOCKED` is Postgres-only.** On other dialects the claim query runs without row locking, so
   concurrent workers are only safe against Postgres (the deployed DB).
 - **Findings are hosts' findings** — they reference `ScanHostRecord` (per-scan observation) rows via

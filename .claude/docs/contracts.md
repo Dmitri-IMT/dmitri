@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-13T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Shared contracts
@@ -105,7 +105,17 @@ which the Pydantic models now match exactly with `IPv4Address`.
 `backend/tests/test_contract_fidelity.py` fingerprints mounted Pydantic schemas against this file.
 Spec 030 added `OrgMember`, `OrgMemberListResponse`, `UpdateUserRoleRequest`, `PendingInvite`, and
 `PendingInviteListResponse` to that coverage, and separately pins operation ids and response-code
-sets for the four new admin operations. Query-parameter parity remains scoped to scans/findings.
+sets for the four new admin operations. Query-parameter parity covers scans, findings and — since DMI-100 — hosts
+(`OPERATION_PATHS`, `test_contract_fidelity.py:59`).
+
+**The gate has one declared-but-unimplemented exemption.** `UNIMPLEMENTED_PARAMS =
+{("/api/v1/hosts", "q")}` (`test_contract_fidelity.py:63`) is subtracted from the contract's
+parameter set before the comparison. The contract declares a free-text `q` on `/api/v1/hosts`;
+search is cut from v1, so the backend does not implement it and the contract keeps it anyway.
+Without the exemption, adding `/api/v1/hosts` to `OPERATION_PATHS` would fail on `q` alone. This is
+the intended final shape, not a stopgap — "the contract declares more of v1 than is built yet" is a
+standing condition here. Do not resolve it by implementing `q` or by deleting it from the contract.
+Drift on the other four host params (`page`, `per_page`, `sort_by`, `sort_order`) is still caught.
 
 Spec 032 added `ScanErrorCode` (eight-value string enum) and pointed both
 `ScanDetailResponse.error_code` and `CommandDetail.error_code` at it as optional nullable `$ref`s.

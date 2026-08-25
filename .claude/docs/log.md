@@ -5,6 +5,14 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-25
 
+* **Update**: `backend/routers.md`, `backend/schemas.md`, `backend/services.md` and `contracts.md`
+  — DMI-100 gave `GET /api/v1/hosts` `sort_by`/`sort_order`. Re-pinned `read_hosts`/`read_host` and
+  every `services/read.py` entry point to their shifted lines, added the `_HOST_SORT_COLUMNS` row,
+  rewrote the "sort params are specific to scans/findings" gotcha, added the `HostSortBy` alias to
+  the schema summary, and recorded two seams: `sort_by=ip` casts to `INET` and so is Postgres-only,
+  and the contract-fidelity gate now covers `/api/v1/hosts` with a named `UNIMPLEMENTED_PARAMS`
+  exemption for the deliberately unimplemented `q`.
+
 * **Creation**: `infra/pi-simulator.md` — DMI-111's ephemeral full-wire harness: local Postgres,
   migration and seed jobs, real API/worker/agent, fixed Docker bridge and Samba target, plus the
   connect-only deployed mode. The map pins the root command dispatcher and each compose/image/seed
