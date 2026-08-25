@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import textwrap
 import threading
@@ -117,6 +118,25 @@ class TestLoggedNmapRunnerRunXml:
         meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
         assert meta["terminated_by"] == "error"
         assert meta["exit_code"] == 1
+
+    def test_logs_invoked_scripts_and_failed_unit_stderr(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        (workspace / "logs").mkdir(parents=True)
+        runner = _make_logged_runner(workspace)
+        stderr = "failed to open a raw socket"
+        script = (
+            "import sys; "
+            f"sys.stderr.write({stderr!r}); "
+            "raise SystemExit(1)"
+        )
+
+        with caplog.at_level(logging.INFO), pytest.raises(UnitScanError):
+            runner.run_xml(["-c", script, "--script", "smb-protocols,vulners"])
+
+        assert "--script smb-protocols,vulners" in caplog.text
+        assert stderr in caplog.text
 
     def test_stage_appears_in_folder_name(self, tmp_path: Path) -> None:
         workspace = tmp_path / "workspace"

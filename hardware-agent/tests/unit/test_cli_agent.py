@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -230,3 +231,23 @@ def test_cli_bare_agent_ingest_config_error_exits_20(
         assert exc_info.value.code == 20
 
     assert "DMITRI_INGEST_URL is not set" in capsys.readouterr().err
+
+
+def test_cli_bare_agent_configures_info_logging_to_stdout() -> None:
+    with (
+        patch.object(sys, "argv", ["dmitri", "agent"]),
+        patch("agent.cli._check_nmap", return_value=True),
+        patch("agent.daemon.logging.basicConfig") as configure,
+        patch(
+            "agent.daemon.load_ingest_config",
+            side_effect=IngestConfigError("DEVICE_ID is required"),
+        ),
+    ):
+        with pytest.raises(SystemExit):
+            main()
+
+    configure.assert_called_once_with(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+    )

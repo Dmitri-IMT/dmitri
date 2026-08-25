@@ -335,6 +335,20 @@ class TestSending:
 
 class TestBackoff:
     @pytest.mark.asyncio
+    async def test_reconnect_is_visible_in_logs(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        dialer = Dialer([closed(1006, "gone")], [])
+        client = build_client(dialer)
+
+        with caplog.at_level(logging.INFO):
+            await drive(client)
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert messages.count("command channel connected") == 2
+        assert any("command channel lost:" in message for message in messages)
+
+    @pytest.mark.asyncio
     async def test_pinned_schedule_and_cap(self) -> None:
         dialer = Dialer(*[OSError("down")] * 6)
         sleeper = Sleeper()

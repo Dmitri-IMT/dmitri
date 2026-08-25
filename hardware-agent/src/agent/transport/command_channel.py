@@ -189,6 +189,7 @@ class CommandChannelClient:
         self._socket = await self._connect(self._url, self._proof_headers())
         await self._send(self._hello())
         self._ready = True
+        LOGGER.info("command channel connected")
         if on_connected is not None:
             await on_connected()
         while True:
