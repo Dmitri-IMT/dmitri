@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+import pytest
+from read_factories import seed_read_graph
+from sqlmodel import Session
+from starlette.testclient import TestClient
+
+
+def test_list_findings_filtered_by_host_id(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    finding = body["data"][0]
+    assert finding["finding_id"] == str(seeded["finding"].finding_id)
+    assert finding["host_id"] == str(seeded["host"].id)
+    assert seeded["host"].highest_severity in {f["severity"] for f in body["data"]}
+    assert str(seeded["other_host"].id) not in {f["host_id"] for f in body["data"]}
+    assert seeded["other_finding"].finding_id not in {
+        UUID(f["finding_id"]) for f in body["data"]
+    }
+
+
+def test_list_findings_unfiltered_returns_all_hosts(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        "/api/v1/findings", headers=bearer_headers(seeded["org"].id, "viewer")
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    host_ids = {f["host_id"] for f in body["data"]}
+    assert host_ids == {str(seeded["host"].id), str(seeded["other_host"].id)}
+
+
+def test_list_findings_filtered_by_foreign_host_id_returns_empty(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_findings_critical_filter_empty_returns_200(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['scan'].scan_id}&severity=critical",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_findings_filtered_by_foreign_scan_id_returns_empty(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['foreign_scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+
+
+def test_list_findings_filtered_by_foreign_scan_and_host_returns_empty(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?scan_id={seeded['foreign_scan'].scan_id}"
+        f"&host_id={seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    assert response.status_code != 404
+    assert response.status_code != 403
+    body = response.json()
+    assert body["total"] == 0
+    assert body["data"] == []
+    assert seeded["foreign_finding"].finding_id not in {
+        UUID(item["finding_id"]) for item in body["data"]
+    }
+
+
+@pytest.mark.parametrize(
+    ("query",),
+    (
+        ("severity=urgent",),
+        ("scan_id=not-a-uuid",),
+    ),
+)
+def test_list_findings_invalid_query_returns_validation_error(
+    client: TestClient, administrative_session: Session, bearer_headers, query: str
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/findings?{query}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"

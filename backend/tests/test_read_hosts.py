@@ -1,0 +1,327 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+from api.models.persistence import HostRecord
+from read_factories import seed_read_graph
+from sqlmodel import Session
+from starlette.testclient import TestClient
+
+
+def _add_host(
+    session: Session, org_id, *, ip: str, hostname: str, vendor: str
+) -> None:
+    now = datetime.now(timezone.utc)
+    session.add(
+        HostRecord(
+            identity_key=f"sortable-{ip}",
+            org_id=org_id,
+            ip=ip,
+            mac=None,
+            hostname=hostname,
+            vendor=vendor,
+            open_ports_count=0,
+            highest_severity=None,
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+    )
+    session.commit()
+
+
+@pytest.mark.parametrize("role", ["viewer", "admin"])
+def test_list_hosts_happy_path(
+    client: TestClient,
+    administrative_session: Session,
+    bearer_headers,
+    role: str,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        "/api/v1/hosts", headers=bearer_headers(seeded["org"].id, role)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["page"] == 1
+    host_ids = {row["host_id"] for row in body["data"]}
+    assert host_ids == {str(seeded["host"].id), str(seeded["other_host"].id)}
+    seeded_row = next(
+        row for row in body["data"] if row["host_id"] == str(seeded["host"].id)
+    )
+    assert (
+        datetime.fromisoformat(seeded_row["first_seen_at"])
+        == seeded["host"].first_seen_at
+    )
+
+
+def test_list_hosts_pages_beyond_the_first_twenty(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    now = datetime.now(timezone.utc)
+    for index in range(23):
+        administrative_session.add(
+            HostRecord(
+                identity_key=f"paging-{index}",
+                org_id=seeded["org"].id,
+                ip=f"192.168.9.{index + 1}",
+                mac=f"aa:bb:cc:00:00:{index:02x}",
+                hostname=f"paged-host-{index}",
+                vendor="Acme",
+                open_ports_count=0,
+                highest_severity=None,
+                first_seen_at=now,
+                last_seen_at=now - timedelta(minutes=index + 1),
+            )
+        )
+    administrative_session.commit()
+
+    headers = bearer_headers(seeded["org"].id, "admin")
+    first = client.get("/api/v1/hosts?page=1&per_page=20", headers=headers)
+    second = client.get("/api/v1/hosts?page=2&per_page=20", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_body = first.json()
+    second_body = second.json()
+
+    assert first_body["total"] == 25
+    assert second_body["total"] == 25
+    assert len(first_body["data"]) == 20
+    assert len(second_body["data"]) == 5
+    assert second_body["page"] == 2
+
+    first_ids = {row["host_id"] for row in first_body["data"]}
+    second_ids = {row["host_id"] for row in second_body["data"]}
+    assert first_ids.isdisjoint(second_ids)
+    assert len(first_ids | second_ids) == 25
+
+
+def test_list_hosts_sorts_by_hostname_ascending(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    _add_host(
+        administrative_session,
+        seeded["org"].id,
+        ip="192.168.1.30",
+        hostname="aaa",
+        vendor="Zeta",
+    )
+
+    response = client.get(
+        "/api/v1/hosts?sort_by=hostname&sort_order=asc",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    hostnames = [row["hostname"] for row in response.json()["data"]]
+    assert hostnames == ["aaa", "host-a", "host-b"]
+
+
+def test_list_hosts_sorts_by_vendor_descending(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    _add_host(
+        administrative_session,
+        seeded["org"].id,
+        ip="192.168.1.30",
+        hostname="aaa",
+        vendor="Zeta",
+    )
+
+    response = client.get(
+        "/api/v1/hosts?sort_by=vendor&sort_order=desc",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    vendors = [row["vendor"] for row in response.json()["data"]]
+    assert vendors == ["Zeta", "Acme", "Acme"]
+
+
+def test_list_hosts_sorts_by_ip_numerically_not_lexicographically(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    for ip in ("192.168.2.10", "192.168.2.2", "192.168.2.20"):
+        _add_host(
+            administrative_session,
+            seeded["org"].id,
+            ip=ip,
+            hostname=f"host-{ip}",
+            vendor="Acme",
+        )
+
+    response = client.get(
+        "/api/v1/hosts?sort_by=ip&sort_order=asc",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    ips = [row["ip"] for row in response.json()["data"]]
+    # A text sort would order these .10, .2, .20 -- the cast to INET is what
+    # keeps .2 ahead of .10, and only the real dialect compiles that cast.
+    assert ips == [
+        "192.168.1.10",
+        "192.168.1.20",
+        "192.168.2.2",
+        "192.168.2.10",
+        "192.168.2.20",
+    ]
+
+
+def test_list_hosts_without_sort_params_is_last_seen_at_desc(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    older = datetime.now(timezone.utc) - timedelta(hours=1)
+    administrative_session.add(
+        HostRecord(
+            identity_key="older-host",
+            org_id=seeded["org"].id,
+            ip="192.168.1.40",
+            mac=None,
+            hostname="older",
+            vendor="Acme",
+            open_ports_count=0,
+            highest_severity=None,
+            first_seen_at=older,
+            last_seen_at=older,
+        )
+    )
+    administrative_session.commit()
+
+    response = client.get(
+        "/api/v1/hosts", headers=bearer_headers(seeded["org"].id, "admin")
+    )
+    assert response.status_code == 200
+    last_seen = [row["last_seen_at"] for row in response.json()["data"]]
+    assert last_seen == sorted(last_seen, reverse=True)
+    assert response.json()["data"][-1]["hostname"] == "older"
+
+
+@pytest.mark.parametrize(
+    ("query",),
+    (
+        ("sort_by=not_a_column",),
+        ("sort_order=sideways",),
+    ),
+)
+def test_list_hosts_invalid_query_returns_validation_error(
+    client: TestClient, administrative_session: Session, bearer_headers, query: str
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/hosts?{query}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_list_hosts_pagination_is_disjoint_under_a_non_default_sort(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    for index in range(23):
+        _add_host(
+            administrative_session,
+            seeded["org"].id,
+            ip=f"192.168.9.{index + 1}",
+            hostname=f"paged-host-{index:02d}",
+            vendor="Acme",
+        )
+
+    headers = bearer_headers(seeded["org"].id, "admin")
+    query = "sort_by=hostname&sort_order=asc"
+    first = client.get(f"/api/v1/hosts?page=1&per_page=20&{query}", headers=headers)
+    second = client.get(f"/api/v1/hosts?page=2&per_page=20&{query}", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_ids = [row["host_id"] for row in first.json()["data"]]
+    second_ids = [row["host_id"] for row in second.json()["data"]]
+
+    assert len(first_ids) == 20
+    assert len(second_ids) == 5
+    assert set(first_ids).isdisjoint(second_ids)
+    assert len(set(first_ids) | set(second_ids)) == 25
+
+
+def test_get_host_by_id_happy_path(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["host_id"] == str(seeded["host"].id)
+    assert datetime.fromisoformat(body["first_seen_at"]) == seeded["host"].first_seen_at
+    assert datetime.fromisoformat(body["last_seen_at"]) == seeded["host"].last_seen_at
+    # Pin the wire format itself: pydantic renders a UTC instant with a "Z"
+    # suffix, and that is what the generated frontend client parses.
+    assert body["first_seen_at"].endswith("Z")
+    assert body["hostname"] == "host-a"
+    assert len(body["scan_history"]) == 1
+    assert body["scan_history"][0]["scan_id"] == str(seeded["scan"].scan_id)
+
+
+def test_mac_less_host_is_listed_and_readable(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    now = datetime.now(timezone.utc)
+    mac_less = HostRecord(
+        identity_key="ip:192.168.1.30",
+        org_id=seeded["org"].id,
+        ip="192.168.1.30",
+        mac=None,
+        hostname="host-routed",
+        vendor="Unknown",
+        open_ports_count=0,
+        highest_severity=None,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    administrative_session.add(mac_less)
+    administrative_session.commit()
+
+    headers = bearer_headers(seeded["org"].id, "admin")
+    listed = client.get("/api/v1/hosts", headers=headers)
+    assert listed.status_code == 200
+    row = next(
+        item for item in listed.json()["data"] if item["host_id"] == str(mac_less.id)
+    )
+    assert row["mac"] is None
+
+    detail = client.get(f"/api/v1/hosts/{mac_less.id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["mac"] is None
+
+
+def test_get_host_by_id_unknown_returns_404(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/hosts/{uuid4()}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 404
+
+
+def test_get_host_by_id_cross_org_returns_404_not_403(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/hosts/{seeded['foreign_host'].id}",
+        headers=bearer_headers(seeded["org"].id, "admin"),
+    )
+    assert response.status_code == 404
+    assert response.status_code != 403
