@@ -1,0 +1,22 @@
+# Connect-only mode: the agent talks to the deployed backend, so there is no db,
+# migrate, api, worker or seed here, and no provisioning of any kind. Registering an
+# agent against a deployed environment stays a deliberate manual act (PLAN.md §nspi
+# alternate mode). Confirm DEVICE_ID belongs to a throwaway org - never the pilot org.
+services:
+  agent:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/agent.Dockerfile
+    # The image entrypoint sources /shared/agent.env, which only seed.sh writes. Here
+    # the three variables come from the operator's .env instead.
+    entrypoint: ["dmitri", "agent"]
+    environment:
+      BACKEND_URL: ${BACKEND_URL:?set BACKEND_URL in docker/pi-simulator/.env}
+      DEVICE_ID: ${DEVICE_ID:?set DEVICE_ID in docker/pi-simulator/.env}
+      DEVICE_PRIVATE_KEY: ${DEVICE_PRIVATE_KEY:?set DEVICE_PRIVATE_KEY in docker/pi-simulator/.env}
+    cap_add: [NET_RAW, NET_ADMIN]
+
+  target:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/target.Dockerfile
