@@ -151,6 +151,8 @@ database survives:
 ./database.sh --test   # ...and run the backend suite against it
 ```
 
+For real local scan data, run the containerized Pi simulator documented in [docker/pi-simulator/README.md](docker/pi-simulator/README.md) (`./simulator.sh`; stop any backend already using port 8000).
+
 It also recovers from the state where the Supabase CLI still believes the stack is running
 after a container has exited, which otherwise makes `supabase start` refuse to run.
 

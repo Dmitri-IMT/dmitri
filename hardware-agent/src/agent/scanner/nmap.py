@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import shutil
 import subprocess
 import threading
@@ -151,6 +152,7 @@ class NmapRunner:
         xml_path = run_dir / "nmaprun.xml"
 
         command = [self.nmap_path, *arguments]
+        LOGGER.info("invoking nmap: %s", shlex.join(command))
         try:
             proc = subprocess.Popen(
                 command,
@@ -295,6 +297,11 @@ class LoggedNmapRunner(NmapRunner):
                 stderr_text = ""
                 if result.stderr_log.exists():
                     stderr_text = result.stderr_log.read_text(encoding="utf-8").strip()
+                LOGGER.error(
+                    "nmap failed with exit code %s: %s",
+                    result.exit_code,
+                    stderr_text or "no stderr output",
+                )
                 raise _classify_nonzero(stderr_text)
 
             if not xml_path.exists():

@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -24,10 +24,12 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 > **DMI-66 closed the device end of the link**: bare `dmitri agent` now runs a
 > [daemon](/hardware-agent/daemon.md) that dials the WS channel with an Ed25519 proof, reports its
 > available subnets, executes commands through the existing headless scan, and uploads results
-> through the ingest client. What is still missing is everything *physical*: Pi hardware is not yet
-> acquired, and service-manager packaging, key provisioning and clock synchronization are out of
-> DMI-66's scope — so the whole path is exercised against signed test requests and fake sockets
-> rather than real hardware. `docs/architecture/ARCHITECTURE.md` describes target state.
+> through the ingest client. What is still missing is the provisioned physical path: a board exists,
+> but its base configuration, service-manager packaging, key provisioning and clock synchronization
+> remain unfinished. Unit coverage still uses signed requests and fake sockets; DMI-111 additionally
+> exercises the whole software path with the real agent, WebSocket, API, worker, Postgres, and a
+> Samba target in the local [Pi simulator](/infra/pi-simulator.md), but it is not real hardware.
+> `docs/architecture/ARCHITECTURE.md` describes target state.
 
 ## Components
 
@@ -36,7 +38,7 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 | Hardware agent + TUI | [hardware-agent](/hardware-agent/overview.md) | **active** | Runs the Nmap scan pipeline, normalizes output, Textual TUI + headless CLI. |
 | Backend API + worker | [backend](/backend/overview.md) | reads + auth/admin + commands + ingest wired | FastAPI API, Postgres persistence, and CVE enrichment/risk worker. |
 | Shared contracts | [contracts](/contracts.md) | published active seam | Hand-authored OpenAPI + example JSON binding agent, backend, and frontend. |
-| Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, and Railway API, worker, and frontend static deployment config. |
+| Infra / DB | [infra](/infra/index.md) | partial | Supabase-managed Postgres, install scripts, the local Pi simulator, and Railway API, worker, and frontend static deployment config. |
 | Frontend (React) | [frontend](/frontend/overview.md) | auth/Home/Settings slice wired; static deployment configured | React 19 SPA with contract-typed API access, sessions, Home, public auth, Settings, and a Railway static bundle. |
 
 ## End-to-end flow

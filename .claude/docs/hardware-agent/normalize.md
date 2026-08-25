@@ -1,10 +1,10 @@
 ---
 type: Module
 title: normalize — contracts & findings extraction
-description: The Pydantic wire contracts (ScanPayload, HostPayload) and the NSE-to-findings extractor that produce the shared on-disk payload.
+description: The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -25,8 +25,10 @@ object — the seam that binds the agent to the (planned) backend.
 | `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`. | `contracts.py:17` |
 | `FindingPayload` | A vulnerability/observation: `ip` (`IPv4Address`, nullable)/port/service, `cve_id` (regex), `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, references. | `contracts.py:34` |
 | `extract_findings()` | Walks each host's host-scripts and port-scripts, dispatches per script id, dedups by `(ip, port, script, cve/title)`. | `findings.py:17` |
-| `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:707` |
+| `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:703` |
 | `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:104` |
+| `_extract_smb_signing_finding()` | Emits an SMB-signing finding from either a host script or a port script; the port fields remain null for host-scoped NSE output. | `findings.py:161` |
+| `_extract_smbv1_finding()` | Emits an SMBv1 finding from either script scope while rejecting SMB2-only protocol output. | `findings.py:200` |
 | `_extract_generic_findings()` | Fallback for unknown scripts: generic vuln-table walk, else CVE-regex scrape. | `findings.py:64` |
 
 ## How it connects
@@ -47,6 +49,9 @@ object — the seam that binds the agent to the (planned) backend.
   domain term **host** used everywhere else in the agent. See [glossary](/glossary.md).
 - `scan_mode` is `Literal["quick","standard","extensive","nspi","max"]` — no `full`; the legacy mode
   is being removed in favor of `max`.
+- `smb2-security-mode` and `smb-protocols` commonly arrive under Nmap's `<hostscript>`, where no
+  port is attached. Their extractors therefore preserve `port=None` instead of dropping the
+  finding; descriptions mention `TCP/<port>` only when the script was port-scoped.
 - The full OpenAPI surface still diverges from what is implemented on the backend today, but ingest
   is no longer the gap: DMI-63 mounted `POST /api/v1/scans` alongside the read path
   (`GET /hosts`, `/scans/{id}`, `/findings`) — see [contracts](/contracts.md).

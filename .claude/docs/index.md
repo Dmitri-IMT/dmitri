@@ -24,11 +24,11 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/overview](./hardware-agent/overview.md) — The package, its scan pipeline, and the front doors that drive it — TUI, headless CLI, and the remote command daemon.
 * [hardware-agent/cli](./hardware-agent/cli.md) — The dmitri CLI dispatcher, the headless entrypoint, scan tuning, and persisted user prefs.
 * [hardware-agent/discovery](./hardware-agent/discovery.md) — Thin per-stage Nmap-argument builders — host/port/service/NSE-vuln scanning.
-* [hardware-agent/normalize](./hardware-agent/normalize.md) — The Pydantic wire contracts and the NSE-to-findings extractor (the shared on-disk payload).
+* [hardware-agent/normalize](./hardware-agent/normalize.md) — The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
-* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that accepts backend commands, runs one headless scan at a time, uploads through ingest, and reports lifecycle status.
-* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The device end of the backend command channel: the shared Ed25519 signer, strict hello/command/status frames, hello-first ordering, and the pinned reconnect ladder.
+* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
+* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder.
 * [hardware-agent/transport](./hardware-agent/transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 
 ### Scan engine — `scanner/`
@@ -37,7 +37,7 @@ Full listing in [hardware-agent/scanner/index.md](./hardware-agent/scanner/index
 
 * [scanner/runner](./hardware-agent/scanner/runner.md) — ScanRunner — worker thread, cancellation, deadline guards, and the `_run()` pipeline body.
 * [scanner/stages](./hardware-agent/scanner/stages.md) — The threaded port and deep-inspection stages, with retry, circuit breaker, and payload builder.
-* [scanner/nmap](./hardware-agent/scanner/nmap.md) — NmapRunner / LoggedNmapRunner — run Nmap, parse XML, classify failures, stream logs.
+* [scanner/nmap](./hardware-agent/scanner/nmap.md) — NmapRunner / LoggedNmapRunner — execute Nmap, log argv and failed stderr, parse XML, and retain per-run artifacts.
 * [scanner/models](./hardware-agent/scanner/models.md) — The in-memory scan dataclasses that carry state across stages.
 * [scanner/errors](./hardware-agent/scanner/errors.md) — The scan exception hierarchy that encodes the contingency policy.
 * [scanner/progress](./hardware-agent/scanner/progress.md) — The ScanEvent stream, the ScanReporter protocol, and the progress mapper.
@@ -77,7 +77,8 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 Full listing in [infra/index.md](./infra/index.md).
 
 * [infra/supabase](./infra/supabase.md) — Supabase used purely as arms-length managed Postgres 17.
-* [infra/deployment](./infra/deployment.md) — Dev-environment installers and the three-service Railway + Supabase topology, with frontend build and backend env-var wiring.
+* [infra/deployment](./infra/deployment.md) — Dev-environment installers, the local Pi simulator, and the three-service Railway + Supabase topology.
+* [infra/pi-simulator](./infra/pi-simulator.md) — The ephemeral Docker harness that runs the real agent, backend, worker, Postgres, and a Samba scan target.
 
 ## Meta
 

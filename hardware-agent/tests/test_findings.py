@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo
-from agent.utils.nmap_xml import parse_ports
+from agent.utils.nmap_xml import parse_host_scripts, parse_ports
 
 
 def test_vulners_script_is_normalized_into_cve_findings() -> None:
@@ -81,6 +81,37 @@ def test_smb_signing_output_becomes_misconfiguration_finding() -> None:
     assert finding.port == 445
 
 
+def test_host_scoped_smb_signing_output_becomes_misconfiguration_finding() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <hostscript>
+            <script
+              id="smb2-security-mode"
+              output="&#xa;  311: &#xa;    Message signing enabled but not required"
+            >
+              <table key="311">
+                <elem>Message signing enabled but not required</elem>
+              </table>
+            </script>
+          </hostscript>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.0.40",
+        hostname="nas",
+        host_scripts=parse_host_scripts(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title == "SMB signing disabled"
+    assert finding.source_script == "smb2-security-mode"
+    assert finding.severity == "medium"
+    assert finding.port is None
+
+
 def test_smb_protocols_detects_smbv1_support() -> None:
     host_element = ET.fromstring("""
         <host>
@@ -111,6 +142,68 @@ def test_smb_protocols_detects_smbv1_support() -> None:
     assert finding.title == "SMBv1 protocol enabled"
     assert finding.severity == "high"
     assert finding.source_script == "smb-protocols"
+    assert finding.port == 445
+
+
+def test_host_scoped_smb_protocols_detects_smbv1_support() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <hostscript>
+            <script
+              id="smb-protocols"
+              output="&#xa;  dialects: &#xa;    NT LM 0.12 (SMBv1) [dangerous]
+                &#xa;    202"
+            >
+              <table key="dialects">
+                <elem>NT LM 0.12 (SMBv1) [dangerous]</elem>
+                <elem>202</elem>
+              </table>
+            </script>
+          </hostscript>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.0.50",
+        hostname="fileserver",
+        host_scripts=parse_host_scripts(host_element),
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.title == "SMBv1 protocol enabled"
+    assert finding.source_script == "smb-protocols"
+    assert finding.port is None
+
+
+def test_host_scoped_smb2_only_protocols_yields_no_finding() -> None:
+    host_element = ET.fromstring("""
+        <host>
+          <hostscript>
+            <script
+              id="smb-protocols"
+              output="&#xa;  dialects: &#xa;    202&#xa;    210&#xa;    300
+                &#xa;    302&#xa;    311"
+            >
+              <table key="dialects">
+                <elem>202</elem>
+                <elem>210</elem>
+                <elem>300</elem>
+                <elem>302</elem>
+                <elem>311</elem>
+              </table>
+            </script>
+          </hostscript>
+        </host>
+        """)
+    host = HostInfo(
+        ip="192.168.0.50",
+        hostname="fileserver",
+        host_scripts=parse_host_scripts(host_element),
+    )
+
+    assert extract_findings([host]) == []
 
 
 def test_http_methods_detects_risky_verbs() -> None:

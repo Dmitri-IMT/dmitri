@@ -3,6 +3,24 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-25
+
+* **Creation**: `infra/pi-simulator.md` — DMI-111's ephemeral full-wire harness: local Postgres,
+  migration and seed jobs, real API/worker/agent, fixed Docker bridge and Samba target, plus the
+  connect-only deployed mode. The map pins the root command dispatcher and each compose/image/seed
+  file, the intentional lack of a PowerShell twin, capability and port requirements, ignored
+  secrets, destructive `stop`, and the throwaway-org boundary.
+* **Update**: `infra/deployment.md`, `infra/index.md` and root `index.md` — linked the dedicated
+  simulator concept from the existing install/Railway map and added its frontmatter description to
+  both indexes. `overview.md` now distinguishes the real-container software path from the still
+  missing physical/operational Pi work.
+* **Update**: `hardware-agent/daemon.md`, `command-channel.md`, `normalize.md`, `scanner/nmap.md`
+  and their affected indexes — documented safe upload outcome logs, connection/loss visibility,
+  shell-quoted Nmap argv plus failed stderr, and host-scoped SMB signing/SMBv1 extraction with null
+  ports. Re-pinned changed symbol references, refreshed every edited timestamp/description, quoted
+  one pre-existing colon-bearing transport description so its YAML parses, and repaired the
+  deployment map's repo-doc citation depth.
+
 ## 2026-08-23
 
 * **Update**: `backend/auth.md` — DMI-108. `ResendMailer` now posts a **`multipart/alternative`**

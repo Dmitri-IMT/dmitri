@@ -119,9 +119,22 @@ class AgentDaemon:
             self._ingest.submit, result.payload, scan_id=command.scan_id
         )
         if submission.outcome == "accepted":
+            LOGGER.info(
+                "scan upload accepted: command=%s scan=%s status=%s",
+                command.command_id,
+                command.scan_id,
+                submission.status_code,
+            )
             await self._update(command.command_id, "done")
             return
-        LOGGER.error("upload rejected: %s", submission.message)
+        LOGGER.error(
+            "scan upload failed: command=%s scan=%s outcome=%s status=%s attempts=%s",
+            command.command_id,
+            command.scan_id,
+            submission.outcome,
+            submission.status_code,
+            submission.attempts,
+        )
         await self._update(command.command_id, "failed", "ingest_failed")
         if submission.outcome == "forbidden":
             await self._client.close(_FORBIDDEN_PARK)
@@ -144,6 +157,11 @@ class AgentDaemon:
 
 
 def run_daemon() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+    )
     try:
         config = load_ingest_config()
     except IngestConfigError as exc:

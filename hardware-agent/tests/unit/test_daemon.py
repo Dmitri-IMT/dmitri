@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from pathlib import Path
 from typing import Any
@@ -65,13 +66,21 @@ class FakeScan:
 
 
 class FakeIngest:
-    def __init__(self, *outcomes: str, gate: threading.Event | None = None) -> None:
+    def __init__(
+        self,
+        *outcomes: str,
+        gate: threading.Event | None = None,
+        message: str | None = None,
+        status_code: int | None = 202,
+    ) -> None:
         self.calls: list[tuple[Any, UUID]] = []
         self.threads: list[int] = []
         self.started = threading.Event()
         self.closed = False
         self._outcomes = list(outcomes) or ["accepted"]
         self._gate = gate
+        self._message = message
+        self._status_code = status_code
 
     def submit(self, payload: Any, *, scan_id: UUID) -> SubmissionResult:
         self.calls.append((payload, scan_id))
@@ -86,8 +95,8 @@ class FakeIngest:
             outcome=outcome,
             scan_id=scan_id,
             attempts=1,
-            status_code=202,
-            message=f"ingest said {outcome}",
+            status_code=self._status_code,
+            message=self._message or f"ingest said {outcome}",
         )
 
     def close(self) -> None:
@@ -238,6 +247,39 @@ class TestFrameOrder:
 
         assert scan.calls == [(subject.scan_mode, subject.subnet)]
         assert ingest.calls == [(PAYLOAD, subject.scan_id)]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("outcome", "status_code", "witness"),
+        [
+            ("accepted", 202, "scan upload accepted"),
+            ("unavailable", None, "outcome=unavailable status=None"),
+            ("forbidden", 403, "outcome=forbidden status=403"),
+        ],
+    )
+    async def test_upload_logs_witness_without_credentials(
+        self,
+        outcome: str,
+        status_code: int | None,
+        witness: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        private_key = "ab" * 32
+        bearer_token = "Bearer header.payload.signature"
+        ingest = FakeIngest(
+            outcome,
+            message=f"upstream echoed {private_key} and {bearer_token}",
+            status_code=status_code,
+        )
+        daemon, _, _, _ = build(ingest=ingest)
+
+        with caplog.at_level(logging.INFO):
+            await dispatch(daemon, command())
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any(witness in message for message in messages)
+        assert all(private_key not in message for message in messages)
+        assert all(bearer_token not in message for message in messages)
 
 
 class TestResponsiveness:

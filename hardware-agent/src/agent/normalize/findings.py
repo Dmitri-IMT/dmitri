@@ -163,9 +163,6 @@ def _extract_smb_signing_finding(
     port: PortInfo | None,
     script: ScriptResult,
 ) -> FindingPayload | None:
-    if port is None:
-        return None
-
     haystack = f"{script.output}\n{_stringify(script.data)}".lower()
     if "message_signing" not in haystack and "signing" not in haystack:
         return None
@@ -180,13 +177,14 @@ def _extract_smb_signing_finding(
         script.output
         or "smb2-security-mode reported SMB signing disabled or not required."
     )
+    location = f" on TCP/{port.port}" if port is not None else ""
     return _base_finding(
         host,
         port,
         severity="medium",
         title="SMB signing disabled",
         description=(
-            f"The host {host.ip} exposes SMB on TCP/{port.port} with message signing "
+            f"The host {host.ip} exposes SMB{location} with message signing "
             "disabled or not required, which can enable tampering or relay attacks."
         ),
         recommendation=(
@@ -204,20 +202,18 @@ def _extract_smbv1_finding(
     port: PortInfo | None,
     script: ScriptResult,
 ) -> FindingPayload | None:
-    if port is None:
-        return None
-
     haystack = f"{script.output}\n{_stringify(script.data)}".lower()
     if "smbv1" not in haystack and "nt lm 0.12" not in haystack:
         return None
 
+    location = f" on TCP/{port.port}" if port is not None else ""
     return _base_finding(
         host,
         port,
         severity="high",
         title="SMBv1 protocol enabled",
         description=(
-            f"The host {host.ip} appears to support SMBv1 on TCP/{port.port}, "
+            f"The host {host.ip} appears to support SMBv1{location}, "
             "which is deprecated and associated with multiple legacy attack paths."
         ),
         recommendation=(
