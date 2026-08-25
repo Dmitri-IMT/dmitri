@@ -56,7 +56,11 @@ SCHEMA_NAMES = (
     "AgentListResponse",
     "UpdateAgentTargetSubnetRequest",
 )
-OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings")
+OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
+
+# Parameters the contract declares that v1 deliberately does not implement.
+# Search is cut from v1 (docs/ui/IDEAS.md -> Hosts); see DMI-100.
+UNIMPLEMENTED_PARAMS = {("/api/v1/hosts", "q")}
 
 
 def _load_contract() -> dict[str, Any]:
@@ -297,7 +301,11 @@ def test_ingest_scan_endpoint_exists():
 @pytest.mark.parametrize("path", OPERATION_PATHS)
 def test_query_parameters_match_contract(path: str):
     contract = _load_contract()
-    contract_params = _operation_parameters(contract, path)
+    contract_params = {
+        name: entry
+        for name, entry in _operation_parameters(contract, path).items()
+        if (path, name) not in UNIMPLEMENTED_PARAMS
+    }
     app_params = _app_operation_parameters(path)
     assert set(contract_params) == set(app_params)
     for name in contract_params:

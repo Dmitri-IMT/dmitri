@@ -13,6 +13,7 @@ from api.core.severity import Severity
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
+HostSortBy = Literal["last_seen_at", "hostname", "vendor", "ip"]
 SortOrder = Literal["asc", "desc"]
 
 
