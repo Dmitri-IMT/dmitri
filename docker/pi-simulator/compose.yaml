@@ -1,0 +1,98 @@
+name: dmitri-sim
+
+x-backend: &backend
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  working_dir: /app
+  env_file: .env
+  environment:
+    UV_PROJECT_ENVIRONMENT: /opt/venv
+    UV_LINK_MODE: copy
+    DATABASE_URL_DIRECT: ${DATABASE_URL}
+    BACKEND_URL: http://api:8000
+  volumes:
+    - ../../backend:/app
+    - venv:/opt/venv
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dmitri_sim
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dmitri_sim"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *backend
+    command: uv run --frozen alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    command: uv run --frozen uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend
+    command: uv run --frozen backend-worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  seed:
+    <<: *backend
+    volumes:
+      - ../../backend:/app
+      - venv:/opt/venv
+      - shared:/shared
+      - ./seed.sh:/seed.sh:ro
+    command: sh /seed.sh
+    depends_on:
+      api:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/agent.Dockerfile
+    cap_add: [NET_RAW, NET_ADMIN]
+    volumes:
+      - shared:/shared:ro
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  target:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/target.Dockerfile
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.7.0/24
+
+volumes:
+  pgdata:
+  venv:
+  shared:
