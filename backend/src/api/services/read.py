@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import case
+from sqlalchemy import case, cast
+from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
 from api.core.error_codes import scan_error_code
@@ -21,6 +22,7 @@ from api.schemas.read import (
     HostDetailResponse,
     HostListResponse,
     HostScanHistoryEntry,
+    HostSortBy,
     HostSummary,
     Port,
     ScanDetailResponse,
@@ -42,6 +44,12 @@ _SCAN_SORT_COLUMNS = {
     "status": ScanRecord.status,
     "scan_mode": ScanRecord.scan_mode,
 }
+_HOST_SORT_COLUMNS = {
+    "last_seen_at": HostRecord.last_seen_at,
+    "hostname": HostRecord.hostname,
+    "vendor": HostRecord.vendor,
+    "ip": cast(HostRecord.ip, INET),
+}
 _SEVERITY_RANK = case(SEVERITY_ORDER, value=FindingRecord.severity, else_=0)
 _SEVERITY_RANK_TO_LABEL = {rank: label for label, rank in SEVERITY_ORDER.items()}
 
@@ -52,16 +60,20 @@ def list_hosts(
     org_id: UUID,
     page: int = DEFAULT_PAGE,
     per_page: int = DEFAULT_PER_PAGE,
+    sort_by: HostSortBy = "last_seen_at",
+    sort_order: SortOrder = "desc",
 ) -> HostListResponse:
     total = session.exec(
         select(func.count())
         .select_from(HostRecord)
         .where(HostRecord.org_id == org_id)
     ).one()
+    column = _HOST_SORT_COLUMNS[sort_by]
+    direction = column.desc() if sort_order == "desc" else column.asc()
     hosts = session.exec(
         select(HostRecord)
         .where(HostRecord.org_id == org_id)
-        .order_by(HostRecord.last_seen_at.desc(), HostRecord.id.asc())
+        .order_by(direction, HostRecord.id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     ).all()

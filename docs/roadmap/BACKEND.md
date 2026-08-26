@@ -184,7 +184,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 | **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, `active_command_id`, `available_subnets`, `target_subnet`. ✅ implemented DMI-78 ([B11-C2](#b11--frontend-contract-asks-)) |
 | **PATCH** | `/api/v1/agents/{agent_id}` | Web | JWT (admin) | **Choose the network to scan** — body `target_subnet`; refuses a CIDR the Pi is not reporting (`422 subnet_not_reported`) or a Pi reporting none (`409 device_offline`). ✅ shipped DMI-78 |
 | **GET** | `/api/v1/commands/{command_id}` | Web | JWT | Command lifecycle |
-| **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(renamed from `/devices` in B7; `GET /hosts` honours `page`/`per_page`)* |
+| **GET** | `/api/v1/hosts/…` | Web | JWT | Host inventory *(renamed from `/devices` in B7; `GET /hosts` honours `page`/`per_page` and `sort_by`/`sort_order` — DMI-100)* |
 | **POST** | `/api/v1/scans` | Pi | Ed25519 signature | Upload scan results *(exists in OpenAPI)* |
 | **GET** | `/api/v1/scans/{scan_id}` | Web | JWT | Scan results when ready *(exists)* |
 

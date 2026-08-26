@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -24,8 +24,8 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:22` |
-| `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:32` |
+| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`, `sort_by`, `sort_order`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:27` |
+| `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:46` |
 | `ingest_scan_route()` | `POST /api/v1/scans` (`operation_id="ingestScan"`, `202`) behind `Depends(require_agent)` → `ingest_scan(...)` → `ScanIngestAcceptedResponse`. `ScanOwnershipError` → `403 Forbidden`; `ScanClosedError` → `400 "Scan is no longer accepting results"`. | `backend/src/api/routers/scans.py:32` |
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
@@ -60,8 +60,12 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
   [`services/read.py`](/backend/services.md) rather than repeating the literals its service already
   defaults to; `read_scans` and `read_findings` still inline them. `read_hosts` gained these params
   in DMI-84 — before that it accepted no paging params and `list_hosts` silently capped every
-  response at 20 rows while `total` reported the true count. Filter/sort query params remain
-  specific to `read_scans` and `read_findings`.
+  response at 20 rows while `total` reported the true count. DMI-100 then gave it
+  `sort_by: HostSortBy = Query("last_seen_at")` and `sort_order: SortOrder = Query("desc")` in the
+  same shape `read_scans` uses, so only the `status`/`severity`-style **filter** params are still
+  specific to `read_scans` and `read_findings`. The contract also declares a free-text `q` on
+  `/api/v1/hosts` that `read_hosts` deliberately does not accept — search is cut from v1, and the
+  fidelity gate carries a named exemption for it (see [contracts](/contracts.md)).
 - **`DELETE /users/me` must stay declared above `DELETE /users/{user_id}`.** FastAPI matches in
   registration order; with the parameterised path first, `/users/me` is parsed as a uuid path param
   and answers `422` instead of deleting the caller. Both `/me` operations sit above it in the file.

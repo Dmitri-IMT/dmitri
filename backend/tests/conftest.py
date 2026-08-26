@@ -16,6 +16,7 @@ from alembic.script import ScriptDirectory
 from pydantic import SecretStr
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlmodel import Session, SQLModel
+from starlette.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -31,7 +32,8 @@ if DATABASE_URL_TEST is not None:
     os.environ["DATABASE_URL_DIRECT"] = DATABASE_URL_TEST
 
 from api.core.config import Settings  # noqa: E402
-from api.db.session import get_engine, reset_db_state  # noqa: E402
+from api.db.session import get_engine, get_session, reset_db_state  # noqa: E402
+from api.main import app  # noqa: E402
 from api.models import persistence  # noqa: E402, F401
 from api.models.command import Agent  # noqa: E402
 from api.models.identity import Org  # noqa: E402
@@ -188,6 +190,26 @@ def seeded_org(administrative_session: Session) -> Org:
     administrative_session.commit()
     administrative_session.refresh(org)
     return org
+
+
+@pytest.fixture
+def client(administrative_session: Session) -> Generator[TestClient, None, None]:
+    """A TestClient whose requests run on the migrated Postgres test database.
+
+    Route tests must exercise the real dialect: the read layer casts to INET and
+    the schema leans on Postgres-only features (RLS, partial and expression
+    indexes, ``postgresql_nulls_not_distinct``). A SQLite stand-in silently
+    compiles none of that.
+    """
+
+    def _override_get_session() -> Generator[Session, None, None]:
+        yield administrative_session
+
+    app.dependency_overrides[get_session] = _override_get_session
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture
