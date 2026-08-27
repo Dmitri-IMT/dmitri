@@ -4,10 +4,7 @@ import PageHeader from '@/components/PageHeader'
 function Agents() {
   return (
     <div data-testid="agents-page" className="flex flex-col">
-      <PageHeader
-        title="Agents"
-        subtitle="The Dmitri box on your network."
-      />
+      <PageHeader title="Agents" subtitle="The Dmitri box on your network." />
       <div className="flex flex-col items-center gap-6 py-16 text-center">
         <div className="flex max-w-prose flex-col items-center gap-4">
           <p data-testid="agents-note" className="font-title text-title-lg">
