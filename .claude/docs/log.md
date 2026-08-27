@@ -5,6 +5,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-27
 
+* **Update**: `frontend/screens.md`, `frontend/scan-status.md`, `frontend/tables.md` — PR #128
+  review pass: `ScanRow.tsx`/`HostRow.tsx` renamed to `scanListColumns.tsx`/`hostListColumns.tsx`;
+  new shared `findingColumns(hostColumn?)` and `portColumns` builders behind both findings and both
+  ports tables. `getLatestScanByQuery` now typed `Partial<ListScansQuery>`; findings MSW handler
+  ANDs its filters. Corrected the stale `scanListColumns` `path:line` ref.
 * **Update**: `frontend/tables.md` — `DataTableColumn` gains `align: 'right'` (heading and cell
   together); the alignment convention and the findings tables' severity-last column order from the
   2026-08-27 screen review; stale `path:line` refs for `DataTable`, `DataTableRowAction` and

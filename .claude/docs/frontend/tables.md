@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with a discriminated rowAction and an optional right-align per column, Pagination that greys edge controls, EmptyState with no CTA, outline StatusPill, and LoadingSkeleton bars on --border.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # frontend shared tables
@@ -33,6 +33,9 @@ read screen — scan list, scan detail (findings, hosts, ports), host inventory,
   host-detail findings use `expand` into [screens](./screens.md)'s `FindingPanel`. Scan-detail
   host rows combine expand (ports) with an `Open {hostname}` link. Ports tables pass no
   `rowAction`.
+- Both findings tables build their columns with `findingColumns(hostColumn?)` and both ports
+  tables share `portColumns`; the wrappers keep only their own empty-state copy, `testId` and
+  `caption`.
 - Sort clicks call `onSort(columnKey)` only; flip-versus-switch and page reset live in
   `Hosts.tsx`.
 

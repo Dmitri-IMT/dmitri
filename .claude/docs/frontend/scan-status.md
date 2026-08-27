@@ -26,7 +26,7 @@ guarantees severity order.
 
 ## How it connects
 
-- Scan list `ScanRow` uses both status helpers. Failed rows also hide counts.
+- Scan list `scanListColumns` uses both status helpers. Failed rows also hide counts.
 - Scan detail uses `isUnfinished` for the still-running branch and `bySeverityDesc` before render.
 - Host findings reuse `bySeverityDesc`. Pill chrome is [tables](./tables.md)'s `StatusPill`.
 - Failed-scan **sentences** stay in [scan-failure-reasons](./scan-failure-reasons.md), not here.
