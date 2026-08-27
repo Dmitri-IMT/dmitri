@@ -41,7 +41,7 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 | `src/pages/`, `src/components/` | Screens (auth, Home, Scans, ScanDetail, Hosts, HostDetail, Agents, Settings, Users, NotFound), the two shells, the top bar, `DataTable` and friends, and shared presentation components. | [screens](./screens.md), [tables](./tables.md) |
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes the four Home reads into one discriminated union. | [review](./review.md) |
 | `src/lib/scanStatus.ts`, `src/lib/severity.ts` | Scan-status pills / unfinished predicate, and the load-bearing `bySeverityDesc` comparator. | [scan-status](./scan-status.md) |
-| `src/lib/detailState.ts`, `src/hooks/useHostDetail.ts` | The shared detail-route state reader, and the host's two reads folded into one `DetailState`. | [host-detail](./host-detail.md) |
+| `src/lib/detailState.ts`, `src/pages/hosts/HostFindings.tsx` | The shared detail-route state reader, and the host's second read owning its own section states. | [host-detail](./host-detail.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types` (openapi-typescript). Committed; CI re-checks for drift. Sole source of request/response types. | — |
 | `vite.config.ts` | Loads Vite environment variables and rejects a missing `VITE_API_URL` before the production build starts. | — |
 | `Dockerfile`, `Caddyfile` | Build the SPA with Node 22, serve `dist/` with Caddy on Railway's `$PORT`, and rewrite deep links to `index.html`. | — |

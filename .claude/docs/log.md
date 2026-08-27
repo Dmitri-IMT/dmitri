@@ -5,6 +5,14 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-27
 
+* **Update**: `frontend/host-detail.md` (rewritten), `frontend/screens.md`, `frontend/overview.md`,
+  `frontend/index.md`, `index.md` — PR #128 fifth review pass. `hooks/useHostDetail.ts`
+  **deleted**: folding the host record and that host's findings into one `DetailState` blanked a
+  loaded host whenever findings were pending or failed, against DESIGN §5.6 and TRUTH 23. New
+  `pages/hosts/HostFindings.tsx` owns the findings query and its own three states
+  (`host-findings-error` + Retry); `HostDetail` now runs one `getHost` query through
+  `readDetailState` into `ReadDetailGate`. `FindingsTable` gained `isPending`, checked before the
+  empty branch. ARCHITECTURE §4.4 corrected — it documented the fold.
 * **Update**: `frontend/api.md`, `frontend/host-detail.md`, `frontend/tables.md` — PR #128 fourth
   review pass. `listFindingsForHost` folded into `listFindings(params: FindingListParams)`: one
   operation, one wrapper, and the object passed to the wrapper is the one passed to the query key.

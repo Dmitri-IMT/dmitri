@@ -385,13 +385,20 @@ a fast failure must not sit behind a slow success.
 - **Two queries**, because `HostDetailResponse` carries no findings (TRUTH rule 20):
   - `queryKeys.hosts.detail(hostId)` → `GET /hosts/{host_id}`
   - `queryKeys.findings.list({ host_id: hostId, per_page: 100 })` → `GET /findings?host_id=…`
-- **Composition:** a `useHostDetail(hostId)` hook folds both into one discriminated union, exactly
-  as `useHomeReview` and `useOrgDirectory` do — `{ state: 'loading' | 'error' | 'notFound' | 'ready' }`.
-  Either query failing is the page's error state; a 404 on the **host** query is `notFound`. A 404
-  cannot come from the findings query (a filter that matches nothing returns an empty list).
+- **Composition: none — the two reads stay independent.** The host query alone is the page state
+  (`readDetailState` → `ReadDetailGate`); a 404 on it is `notFound`, and a 404 cannot come from the
+  findings query (a filter that matches nothing returns an empty list). The findings query lives in
+  `HostFindings`, which owns its own pending / error / empty states per DESIGN §5.6 and TRUTH rule
+  23. **Do not fold them into one union.** A `useHostDetail` hook that did exactly that was built
+  and deleted: it threw away a loaded host — identity, ports, scan history — whenever the findings
+  read was pending or failed. The `useHomeReview` / `useOrgDirectory` fold is correct *there*
+  because those reads compose into a single verdict; these two do not.
 - **Sections:** identity header, findings, open ports, scan history.
   - **Findings** — same rows and same in-place panel as scan detail; the panel component is shared
     verbatim (`pages/scans/FindingPanel.tsx`). No findings → the positive sentence, no table.
+    Pending → the skeleton body (`FindingsTable`'s `isPending`, checked **before** the empty branch,
+    so a pending section never claims "No findings"). Failed → `host-findings-error` carrying
+    "Couldn't load this host's findings." plus `[Retry]`, which refetches findings only.
   - **Ports** — `DataTable` with **`rowAction: undefined`**. An inert table: no link, no expand, no
     row cursor, no row focus target. `ports.length === 0` → the positive "isn't exposing anything"
     sentence and no table (TRUTH rule 21). Row identity is `${port}/${protocol}`; `Port` has no id.
@@ -607,7 +614,7 @@ file outside it may be invented.
 |---|---|---|
 | `frontend/src/lib/scanStatus.ts` | **new** | `ScanStatus → { tone, label } \| null`, and the `isUnfinished(status)` predicate the counts cells branch on. No React. |
 | `frontend/src/lib/severity.ts` | **new** | `SEVERITY_ORDER` and `bySeverityDesc` (§4.2). No React. |
-| `frontend/src/lib/detailState.ts` | **new** | `DetailState<T>` and `readDetailState(id, query)` — the one place a detail query becomes `notFound` / `error` / `loading` / `ready`. Consumed by `ReadDetailGate`, produced by `ScanDetail` and `useHostDetail`. No React. |
+| `frontend/src/lib/detailState.ts` | **new** | `DetailState<T>` and `readDetailState(id, query)` — the one place a detail query becomes `notFound` / `error` / `loading` / `ready`. Consumed by `ReadDetailGate`, produced inline by `ScanDetail` and `HostDetail`. No React. |
 | `frontend/src/lib/scanFailureReasons.ts` | **untouched** | Imported as-is (§2.5). Do not extend, do not re-map. |
 
 ### Screens
@@ -625,7 +632,8 @@ file outside it may be invented.
 | `frontend/src/pages/scans/ScanUnfinishedNotice.tsx` | **new** | The still-running copy. |
 | `frontend/src/pages/Hosts.tsx` | **new** | HOST INVENTORY. Owns `page` / `sortBy` / `sortOrder` and `handleSort`. |
 | `frontend/src/pages/hosts/HostRow.tsx` | **new** | Cell renderers, including "(unnamed)" and the null-MAC "—". |
-| `frontend/src/pages/HostDetail.tsx` | **new** | HOST DETAIL. Renders `useHostDetail`'s state. |
+| `frontend/src/pages/HostDetail.tsx` | **new** | HOST DETAIL. One `getHost` query through `readDetailState` into `ReadDetailGate`; owns no read-state branch. |
+| `frontend/src/pages/hosts/HostFindings.tsx` | **new** | The findings section's own query and its own three states (§4.4). |
 | `frontend/src/pages/hosts/HostIdentity.tsx` | **new** | Title, the address line, the seen line. |
 | `frontend/src/pages/hosts/HostFindingsTable.tsx` | **new** | `DataTable` call site 6, reusing `FindingPanel`. |
 | `frontend/src/pages/hosts/HostPortsTable.tsx` | **new** | `DataTable` call site 7 (inert) + the no-ports sentence. |
@@ -640,7 +648,6 @@ precedent. Do not invent a different layout, and do not put screen-specific comp
 
 | Path | Change | Notes |
 |---|---|---|
-| `frontend/src/hooks/useHostDetail.ts` | **new** | Folds the two host-detail queries into one union (§4.4), mirroring `useOrgDirectory`. |
 | `frontend/src/hooks/useHomeReview.ts` | **extend** | **Key migration only** (§3). Three `queryKey` lines change; the `skipToken` narrowing, the resolution order and the returned union are untouched. |
 | `frontend/src/App.tsx` | **extend** | Five `<Route>`s inside the existing `AppShell` route, **outside** `RequireAdmin`, above the `*` catch-all. |
 | `frontend/src/components/TopBar.tsx` | **extend** | Three `NavLink`s — `nav-scans`, `nav-hosts`, `nav-agents` — in the Foundations order (Home · Scans · Hosts · Agents · Users · Settings). Not wrapped in `AdminOnly`. `/scans` and `/hosts` **must not** use `end`, so a detail route keeps its parent nav item active; `/` keeps its existing `end`. |

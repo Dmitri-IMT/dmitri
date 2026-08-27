@@ -241,11 +241,11 @@ rather than working around it.
 ## Task 8: Host detail
 
 - **Description**: HOST DETAIL at `/hosts/:hostId`, per `SCREENS.md` § HOST DETAIL,
-  `ARCHITECTURE.md` §4.4 and `DESIGN.md` §5.6. Two reads folded into one union by `useHostDetail`,
+  `ARCHITECTURE.md` §4.4 and `DESIGN.md` §5.6. Two independent reads — the host record gates the page, `HostFindings` owns the findings section (§4.4),
   mirroring `useOrgDirectory`. Findings are the second read, filtered by `host_id`, and render
   through the **same `FindingPanel`** Task 6 built — import it, do not reimplement it.
 - **Dependencies**: Task 2, Task 4, Task 6
-- **Target Files**: [`frontend/src/pages/HostDetail.tsx`, `frontend/src/hooks/useHostDetail.ts`,
+- **Target Files**: [`frontend/src/pages/HostDetail.tsx`, `frontend/src/pages/hosts/HostFindings.tsx`,
   `frontend/src/pages/hosts/HostIdentity.tsx`, `frontend/src/pages/hosts/HostFindingsTable.tsx`,
   `frontend/src/pages/hosts/HostPortsTable.tsx`,
   `frontend/src/pages/hosts/HostScanHistoryTable.tsx`, `frontend/src/pages/HostDetail.test.tsx`,
