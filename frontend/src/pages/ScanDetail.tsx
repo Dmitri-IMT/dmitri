@@ -1,12 +1,12 @@
 import { type ReactNode, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { readApiError } from '@/api/apiError'
 import { queryKeys } from '@/api/queryKeys'
 import { getScan } from '@/api/scans'
 import ErrorRetry from '@/components/ErrorRetry'
+import NotFoundNotice from '@/components/NotFoundNotice'
 import PageHeader from '@/components/PageHeader'
-import { Button } from '@/components/ui/button'
+import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
 import FindingsTable from '@/pages/scans/FindingsTable'
 import ScanDetailHeader from '@/pages/scans/ScanDetailHeader'
@@ -28,45 +28,35 @@ function ScanDetail() {
     enabled: scanId !== '',
   })
 
+  const detail = readDetailState(scanId, query)
+
   let header: ReactNode = <PageHeader title="Scan" />
   let body: ReactNode
 
-  if (
-    scanId === '' ||
-    (query.isError && readApiError(query.error).status === 404)
-  ) {
+  if (detail.state === 'notFound') {
     body = (
-      <div className="flex flex-col items-center gap-6 py-16 text-center">
-        <p
-          data-testid="scan-detail-not-found"
-          className="font-title text-title-sm"
-        >
-          That scan doesn&apos;t exist.
-        </p>
-        <Button asChild variant="outline">
-          <Link to="/scans" data-testid="scan-detail-back">
-            Back to scans
-          </Link>
-        </Button>
-      </div>
+      <NotFoundNotice
+        testId="scan-detail"
+        message="That scan doesn't exist."
+        backTo="/scans"
+        backLabel="Back to scans"
+      />
     )
-  } else if (query.isError) {
+  } else if (detail.state === 'error') {
     body = (
       <ErrorRetry
         testId="scan-detail-error"
         message="Couldn't load this scan."
-        onRetry={() => {
-          void query.refetch()
-        }}
+        onRetry={detail.retry}
       />
     )
-  } else if (query.isPending) {
+  } else if (detail.state === 'loading') {
     body = null
-  } else if (query.data.status === 'failed') {
-    header = <ScanDetailHeader scan={query.data} />
-    body = <ScanFailedNotice errorCode={query.data.error_code} />
-  } else if (isUnfinished(query.data.status)) {
-    header = <ScanDetailHeader scan={query.data} />
+  } else if (detail.data.status === 'failed') {
+    header = <ScanDetailHeader scan={detail.data} />
+    body = <ScanFailedNotice errorCode={detail.data.error_code} />
+  } else if (isUnfinished(detail.data.status)) {
+    header = <ScanDetailHeader scan={detail.data} />
     body = (
       <ScanUnfinishedNotice
         onCheck={() => {
@@ -76,7 +66,7 @@ function ScanDetail() {
       />
     )
   } else {
-    const scan = query.data
+    const scan = detail.data
     header = <ScanDetailHeader scan={scan} />
     body = (
       <div className="flex flex-col gap-12">
@@ -85,6 +75,10 @@ function ScanDetail() {
           <FindingsTable
             findings={scan.findings}
             hosts={scan.hosts}
+            testId="findings-table"
+            caption="Findings for this scan"
+            emptyTestId="scan-no-findings"
+            emptyCopy="No findings. Every host in this scan came back clean."
             openFindingId={openFindingId}
             onOpenFindingChange={setOpenFindingId}
           />

@@ -21,29 +21,10 @@ function hostLabel(
   return finding.host_ip ?? ''
 }
 
-function FindingsTable({
-  findings,
-  hosts,
-  openFindingId,
-  onOpenFindingChange,
-}: {
-  findings: FindingRecord[]
-  hosts: ScanHostView[]
-  openFindingId: string | null
-  onOpenFindingChange: (id: string | null) => void
-}) {
-  if (findings.length === 0) {
-    return (
-      <p data-testid="scan-no-findings" className="text-body-md">
-        No findings. Every host in this scan came back clean.
-      </p>
-    )
-  }
-
+function hostColumnFor(hosts: ScanHostView[]): DataTableColumn<FindingRecord> {
   const hostsById = new Map(hosts.map((host) => [host.host_id, host]))
-  const rows = [...findings].sort(bySeverityDesc)
 
-  const hostColumn: DataTableColumn<FindingRecord> = {
+  return {
     key: 'host',
     label: 'Host',
     width: 'w-1/5',
@@ -57,14 +38,44 @@ function FindingsTable({
       )
     },
   }
+}
+
+function FindingsTable({
+  findings,
+  hosts,
+  testId,
+  caption,
+  emptyTestId,
+  emptyCopy,
+  openFindingId,
+  onOpenFindingChange,
+}: {
+  findings: FindingRecord[]
+  hosts?: ScanHostView[]
+  testId: string
+  caption: string
+  emptyTestId: string
+  emptyCopy: string
+  openFindingId: string | null
+  onOpenFindingChange: (id: string | null) => void
+}) {
+  if (findings.length === 0) {
+    return (
+      <p data-testid={emptyTestId} className="text-body-md">
+        {emptyCopy}
+      </p>
+    )
+  }
+
+  const rows = [...findings].sort(bySeverityDesc)
 
   return (
     <DataTable
-      columns={findingColumns(hostColumn)}
+      columns={findingColumns(hosts && hostColumnFor(hosts))}
       rows={rows}
       rowId={(finding) => finding.finding_id}
-      testId="findings-table"
-      caption="Findings for this scan"
+      testId={testId}
+      caption={caption}
       rowAction={{
         kind: 'expand',
         panel: (finding) => <FindingPanel finding={finding} />,

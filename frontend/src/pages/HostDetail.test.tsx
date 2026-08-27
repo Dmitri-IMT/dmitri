@@ -122,7 +122,11 @@ describe('HostDetail', () => {
     renderPage(`/hosts/${HOST.host_id}`)
 
     await screen.findByTestId(`host-history-table-row-${SCAN_ID}`)
-    await user.click(screen.getByTestId(`host-history-table-row-${SCAN_ID}`))
+    await user.click(
+      within(screen.getByTestId(`host-history-table-row-${SCAN_ID}`)).getByRole(
+        'link',
+      ),
+    )
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/scans/${SCAN_ID}`,

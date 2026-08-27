@@ -272,7 +272,7 @@ describe('Hosts', () => {
     )
 
     await screen.findByTestId(`hosts-table-row-${newestHost.host_id}`)
-    await user.click(row(newestHost.host_id))
+    await user.click(within(row(newestHost.host_id)).getByRole('link'))
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/hosts/${newestHost.host_id}`,

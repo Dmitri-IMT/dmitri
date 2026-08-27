@@ -1,3 +1,4 @@
+import type { HostSortBy } from '@/api/hosts'
 import type { DataTableColumn } from '@/components/DataTable'
 import SeverityBadge from '@/components/SeverityBadge'
 import Timestamp from '@/components/Timestamp'
@@ -9,7 +10,7 @@ function dash() {
   return <span className="text-muted-foreground">—</span>
 }
 
-export const hostListColumns: DataTableColumn<HostSummary>[] = [
+export const hostListColumns: DataTableColumn<HostSummary, HostSortBy>[] = [
   {
     key: 'hostname',
     label: 'Host',

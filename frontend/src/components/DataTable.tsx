@@ -8,25 +8,27 @@ import {
   type ReactNode,
 } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import { Button } from '@/components/ui/button'
 
 export type SortOrder = 'asc' | 'desc'
 
-export type DataTableColumn<Row> = {
-  key: string
+type DataTableColumnBase<Row> = {
   label: string
   width: string
   render: (row: Row) => ReactNode
-  sortable?: boolean
   align?: 'right'
 }
 
-export type DataTableSort = {
-  by: string
+export type DataTableColumn<Row, SortKey extends string = never> =
+  | (DataTableColumnBase<Row> & { key: string; sortable?: false })
+  | (DataTableColumnBase<Row> & { key: SortKey; sortable: true })
+
+export type DataTableSort<SortKey extends string = never> = {
+  by: SortKey
   order: SortOrder
-  onChange: (key: string) => void
+  onChange: (key: SortKey) => void
 }
 
 export type DataTableRowAction<Row> =
@@ -43,8 +45,8 @@ export type DataTableRowAction<Row> =
       onOpenRowChange: (rowId: string | null) => void
     }
 
-export type DataTableProps<Row> = {
-  columns: DataTableColumn<Row>[]
+export type DataTableProps<Row, SortKey extends string = never> = {
+  columns: DataTableColumn<Row, SortKey>[]
   rows: Row[]
   rowId: (row: Row) => string
   testId: string
@@ -52,14 +54,14 @@ export type DataTableProps<Row> = {
   isPending?: boolean
   skeletonRows?: number
   empty?: ReactNode
-  sort?: DataTableSort
+  sort?: DataTableSort<SortKey>
   rowAction?: DataTableRowAction<Row>
 }
 
 const INTERACTIVE_ROW =
-  'group h-8 cursor-pointer border-t border-border text-caption-md hover:bg-card focus-within:bg-card focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50 active:bg-border'
+  'group relative h-8 cursor-pointer border-t border-border text-caption-md hover:bg-card focus-within:bg-card focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50 active:bg-border'
 
-function DataTable<Row>({
+function DataTable<Row, SortKey extends string = never>({
   columns,
   rows,
   rowId,
@@ -70,30 +72,27 @@ function DataTable<Row>({
   empty,
   sort,
   rowAction,
-}: DataTableProps<Row>): ReactElement {
-  const navigate = useNavigate()
+}: DataTableProps<Row, SortKey>): ReactElement {
   const tableId = useId()
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const openRowId = rowAction?.kind === 'expand' ? rowAction.openRowId : null
+  const previousOpenRowId = useRef<string | null>(null)
+  const isFirstRender = useRef(true)
 
   useEffect(() => {
-    if (openRowId !== null) {
-      rowRefs.current.get(openRowId)?.scrollIntoView({ block: 'nearest' })
-      triggerRefs.current.get(openRowId)?.focus()
-    }
+    const isDeepLink = isFirstRender.current
+    const opened = openRowId !== null && openRowId !== previousOpenRowId.current
+    isFirstRender.current = false
+    previousOpenRowId.current = openRowId
+    if (!opened) return
+
+    rowRefs.current.get(openRowId)?.scrollIntoView({ block: 'nearest' })
+    if (isDeepLink) triggerRefs.current.get(openRowId)?.focus()
   }, [openRowId])
 
   function panelId(id: string) {
     return `${tableId}-panel-${encodeURIComponent(id)}`
-  }
-
-  function handleLinkRowClick(
-    event: MouseEvent<HTMLTableRowElement>,
-    row: Row,
-  ) {
-    if ((event.target as HTMLElement).closest('a')) return
-    if (rowAction?.kind === 'link') navigate(rowAction.to(row))
   }
 
   function handleExpandRowClick(
@@ -106,7 +105,11 @@ function DataTable<Row>({
     }
   }
 
-  function renderCell(row: Row, column: DataTableColumn<Row>, index: number) {
+  function renderCell(
+    row: Row,
+    column: DataTableColumn<Row, SortKey>,
+    index: number,
+  ) {
     const content = column.render(row)
 
     if (index === 0 && rowAction?.kind === 'link') {
@@ -114,9 +117,10 @@ function DataTable<Row>({
         <Link
           to={rowAction.to(row)}
           aria-label={rowAction.label(row)}
-          className="block truncate underline-offset-4 outline-none group-hover:underline group-focus-within:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="block underline-offset-4 outline-none group-hover:underline group-focus-within:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          {content}
+          <span className="block truncate">{content}</span>
+          <span aria-hidden="true" className="absolute inset-0" />
         </Link>
       )
     }
@@ -251,19 +255,17 @@ function DataTable<Row>({
                         : 'h-8 border-t border-border text-caption-md'
                     }
                     onClick={
-                      isLink
-                        ? (event) => handleLinkRowClick(event, row)
-                        : isExpand
-                          ? (event) => handleExpandRowClick(event, id)
-                          : undefined
+                      isExpand
+                        ? (event) => handleExpandRowClick(event, id)
+                        : undefined
                     }
                   >
                     {columns.map((column, index) => (
                       <td
                         key={column.key}
-                        className={`max-w-0 truncate pr-4 align-middle ${
-                          column.align === 'right' ? 'text-right' : ''
-                        }`}
+                        className={`max-w-0 pr-4 align-middle ${
+                          index === 0 && isLink ? '' : 'truncate'
+                        } ${column.align === 'right' ? 'text-right' : ''}`}
                       >
                         {renderCell(row, column, index)}
                       </td>

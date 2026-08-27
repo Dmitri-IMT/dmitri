@@ -1,13 +1,13 @@
 import { type ReactNode, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import ErrorRetry from '@/components/ErrorRetry'
+import NotFoundNotice from '@/components/NotFoundNotice'
 import PageHeader from '@/components/PageHeader'
-import { Button } from '@/components/ui/button'
 import { useHostDetail } from '@/hooks/useHostDetail'
-import HostFindingsTable from '@/pages/hosts/HostFindingsTable'
 import HostIdentity from '@/pages/hosts/HostIdentity'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
+import FindingsTable from '@/pages/scans/FindingsTable'
 
 function HostDetail() {
   const { hostId = '' } = useParams()
@@ -19,19 +19,12 @@ function HostDetail() {
 
   if (detail.state === 'notFound') {
     body = (
-      <div className="flex flex-col items-center gap-6 py-16 text-center">
-        <p
-          data-testid="host-detail-not-found"
-          className="font-title text-title-sm"
-        >
-          That host doesn&apos;t exist.
-        </p>
-        <Button asChild variant="outline">
-          <Link to="/hosts" data-testid="host-detail-back">
-            Back to hosts
-          </Link>
-        </Button>
-      </div>
+      <NotFoundNotice
+        testId="host-detail"
+        message="That host doesn't exist."
+        backTo="/hosts"
+        backLabel="Back to hosts"
+      />
     )
   } else if (detail.state === 'error') {
     body = (
@@ -49,8 +42,12 @@ function HostDetail() {
       <div className="flex flex-col gap-12">
         <section className="flex flex-col gap-4">
           <h2 className="font-title text-title-sm">Findings</h2>
-          <HostFindingsTable
+          <FindingsTable
             findings={detail.findings}
+            testId="host-findings-table"
+            caption="Findings on this host"
+            emptyTestId="host-no-findings"
+            emptyCopy="No findings on this host."
             openFindingId={openFindingId}
             onOpenFindingChange={setOpenFindingId}
           />

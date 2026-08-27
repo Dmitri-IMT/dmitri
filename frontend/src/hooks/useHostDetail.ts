@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { readApiError } from '@/api/apiError'
 import { HOST_FINDINGS_PER_PAGE, listFindingsForHost } from '@/api/findings'
 import { getHost } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
+import { readDetailState } from '@/lib/detailState'
 import type { components } from '@/types/openapi'
 
 type HostDetailResponse = components['schemas']['HostDetailResponse']
@@ -30,14 +30,11 @@ export function useHostDetail(hostId: string): HostDetail {
     enabled: hostId !== '',
   })
 
-  if (
-    hostId === '' ||
-    (hostQuery.isError && readApiError(hostQuery.error).status === 404)
-  ) {
-    return { state: 'notFound' }
-  }
+  const host = readDetailState(hostId, hostQuery)
 
-  if (hostQuery.isError || findingsQuery.isError) {
+  if (host.state === 'notFound') return host
+
+  if (host.state === 'error' || findingsQuery.isError) {
     return {
       state: 'error',
       retry: () => {
@@ -47,13 +44,13 @@ export function useHostDetail(hostId: string): HostDetail {
     }
   }
 
-  if (hostQuery.isPending || findingsQuery.isPending) {
+  if (host.state === 'loading' || findingsQuery.isPending) {
     return { state: 'loading' }
   }
 
   return {
     state: 'ready',
-    host: hostQuery.data,
+    host: host.data,
     findings: findingsQuery.data.data,
   }
 }

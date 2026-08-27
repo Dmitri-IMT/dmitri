@@ -238,7 +238,9 @@ describe('Scans', () => {
     )
 
     await screen.findByTestId(`scans-table-row-${latestSuccessfulScan.scan_id}`)
-    await user.click(row(latestSuccessfulScan.scan_id))
+    await user.click(
+      within(row(latestSuccessfulScan.scan_id)).getByRole('link'),
+    )
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/scans/${latestSuccessfulScan.scan_id}`,

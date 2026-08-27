@@ -21,7 +21,7 @@ const rows: Row[] = [
   { id: 'two', name: 'Second row', detail: 'Second detail' },
 ]
 
-const columns: DataTableColumn<Row>[] = [
+const columns: DataTableColumn<Row, 'name'>[] = [
   {
     key: 'name',
     label: 'Name',
@@ -102,16 +102,21 @@ describe('DataTable', () => {
     expect(within(firstRow).getAllByRole('link')).toHaveLength(1)
     expect(firstRow).not.toHaveAttribute('tabindex')
     expect(firstRow).toHaveClass(
+      'relative',
       'focus-within:bg-card',
       'focus-within:ring-3',
       'focus-within:ring-inset',
       'focus-within:ring-ring/50',
     )
+    expect(link.querySelector('span[aria-hidden="true"]')).toHaveClass(
+      'absolute',
+      'inset-0',
+    )
 
     await user.tab()
     expect(link).toHaveFocus()
 
-    await user.click(firstRow)
+    await user.click(link)
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/rows/one')
   })
 
@@ -188,7 +193,7 @@ describe('DataTable', () => {
 
   it('lets the disclosure button toggle once and ignores links inside the row', async () => {
     const user = userEvent.setup()
-    const columnsWithLink: DataTableColumn<Row>[] = [
+    const columnsWithLink: DataTableColumn<Row, 'name'>[] = [
       columns[0],
       {
         ...columns[1],
