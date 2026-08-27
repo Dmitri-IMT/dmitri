@@ -1,14 +1,12 @@
 import type { HostSortBy } from '@/api/hosts'
 import type { DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import SeverityBadge from '@/components/SeverityBadge'
 import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 export const hostListColumns: DataTableColumn<HostSummary, HostSortBy>[] = [
   {
@@ -46,7 +44,7 @@ export const hostListColumns: DataTableColumn<HostSummary, HostSortBy>[] = [
           {host.mac}
         </span>
       ) : (
-        dash()
+        <EmptyMark />
       ),
   },
   {
@@ -77,7 +75,7 @@ export const hostListColumns: DataTableColumn<HostSummary, HostSortBy>[] = [
     width: 'w-1/10',
     render: (host) =>
       host.highest_severity == null ? (
-        dash()
+        <EmptyMark />
       ) : (
         <SeverityBadge severity={host.highest_severity} />
       ),

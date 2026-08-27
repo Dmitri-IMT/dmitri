@@ -1,4 +1,5 @@
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import FindingPanel from '@/pages/scans/FindingPanel'
 import { findingColumns } from '@/pages/scans/findingColumns'
 import { bySeverityDesc } from '@/lib/severity'
@@ -7,9 +8,6 @@ import type { components } from '@/types/openapi'
 type FindingRecord = components['schemas']['FindingRecord']
 type ScanHostView = components['schemas']['ScanHostView']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 function hostLabel(
   finding: FindingRecord,
@@ -30,7 +28,7 @@ function hostColumnFor(hosts: ScanHostView[]): DataTableColumn<FindingRecord> {
     width: 'w-1/5',
     render: (finding) => {
       const label = hostLabel(finding, hostsById)
-      if (label === '') return dash()
+      if (label === '') return <EmptyMark />
       return (
         <span className="block truncate" title={label}>
           {label}

@@ -1,12 +1,10 @@
 import type { DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import SeverityBadge from '@/components/SeverityBadge'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 export function findingColumns(
   hostColumn?: DataTableColumn<FindingRecord>,
@@ -32,7 +30,7 @@ export function findingColumns(
       align: 'right',
       render: (finding) =>
         finding.port == null ? (
-          dash()
+          <EmptyMark />
         ) : (
           <span className="block text-right tabular-nums">{finding.port}</span>
         ),
@@ -47,7 +45,7 @@ export function findingColumns(
             {finding.cve_id}
           </span>
         ) : (
-          dash()
+          <EmptyMark />
         ),
     },
     {

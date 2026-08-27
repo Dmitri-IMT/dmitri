@@ -1,11 +1,9 @@
 import type { DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import type { components } from '@/types/openapi'
 
 type Port = components['schemas']['Port']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 export const portColumns: DataTableColumn<Port>[] = [
   {
@@ -40,7 +38,7 @@ export const portColumns: DataTableColumn<Port>[] = [
           {port.version}
         </span>
       ) : (
-        dash()
+        <EmptyMark />
       ),
   },
 ]

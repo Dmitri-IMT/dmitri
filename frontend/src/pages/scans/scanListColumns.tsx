@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import EmptyMark from '@/components/EmptyMark'
 import type { DataTableColumn } from '@/components/DataTable'
 import SeverityBadge from '@/components/SeverityBadge'
 import StatusPill from '@/components/StatusPill'
@@ -8,9 +9,6 @@ import type { components } from '@/types/openapi'
 
 type ScanSummary = components['schemas']['ScanSummary']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 function statusCell(scan: ScanSummary): ReactNode {
   const pill = scanStatusPill(scan.status)
@@ -22,19 +20,19 @@ function statusCell(scan: ScanSummary): ReactNode {
 }
 
 function hostsCell(scan: ScanSummary): ReactNode {
-  if (hidesCounts(scan.status)) return dash()
+  if (hidesCounts(scan.status)) return <EmptyMark />
   return scan.host_count
 }
 
 function findingsCell(scan: ScanSummary): ReactNode {
-  if (hidesCounts(scan.status)) return dash()
+  if (hidesCounts(scan.status)) return <EmptyMark />
   if (scan.finding_count === 0) return 'None'
   return scan.finding_count
 }
 
 function highestCell(scan: ScanSummary): ReactNode {
   if (hidesCounts(scan.status) || scan.highest_severity == null) {
-    return dash()
+    return <EmptyMark />
   }
   return <SeverityBadge severity={scan.highest_severity} />
 }

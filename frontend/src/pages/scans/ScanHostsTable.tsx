@@ -1,14 +1,12 @@
 import { Link } from 'react-router'
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import { Button } from '@/components/ui/button'
 import { portColumns } from '@/pages/hosts/portColumns'
 import type { components } from '@/types/openapi'
 
 type ScanHostView = components['schemas']['ScanHostView']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 function hostName(host: ScanHostView): string {
   return host.hostname !== '' ? host.hostname : host.ip
@@ -85,7 +83,7 @@ function ScanHostsTable({
             {host.mac}
           </span>
         ) : (
-          dash()
+          <EmptyMark />
         ),
     },
     {

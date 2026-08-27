@@ -1,13 +1,11 @@
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import SeverityBadge from '@/components/SeverityBadge'
 import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
 type HostScanHistoryEntry = components['schemas']['HostScanHistoryEntry']
 
-function dash() {
-  return <span className="text-muted-foreground">—</span>
-}
 
 const columns: DataTableColumn<HostScanHistoryEntry>[] = [
   {
@@ -39,7 +37,7 @@ const columns: DataTableColumn<HostScanHistoryEntry>[] = [
     width: 'w-1/5',
     render: (entry) =>
       entry.highest_severity == null ? (
-        dash()
+        <EmptyMark />
       ) : (
         <SeverityBadge severity={entry.highest_severity} />
       ),
