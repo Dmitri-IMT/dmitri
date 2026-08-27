@@ -59,17 +59,20 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
 * [backend/migrations](./backend/migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
 
-## Frontend (auth, Home, Settings and user administration)
+## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 
 The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/index.md).
 
 * [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 * [frontend/linting](./frontend/linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
-* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, and the three read resource modules.
+* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
-* [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — /login, the guarded shell branch, and a catch-all that renders rather than redirects.
+* [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/hosts/agents), nested admin Users, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
+* [frontend/scan-status](./frontend/scan-status.md) — scanStatusPill maps every ScanStatus to tone and label; isUnfinished hides counts; bySeverityDesc is the only guaranteed worst-first order.
+* [frontend/tables](./frontend/tables.md) — DataTable with a discriminated rowAction and an optional right-align per column, Pagination that greys edge controls, EmptyState with no CTA, outline StatusPill, and LoadingSkeleton bars on --border.
+* [frontend/host-detail](./frontend/host-detail.md) — useHostDetail folds the host and findings reads into one union, mirroring useOrgDirectory.
 * [frontend/screens](./frontend/screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 
 ## Infrastructure

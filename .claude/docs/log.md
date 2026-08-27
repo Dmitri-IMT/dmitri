@@ -3,6 +3,22 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-27
+
+* **Update**: `frontend/tables.md` — `DataTableColumn` gains `align: 'right'` (heading and cell
+  together); the alignment convention and the findings tables' severity-last column order from the
+  2026-08-27 screen review; stale `path:line` refs for `DataTable`, `DataTableRowAction` and
+  `StatusPill` corrected.
+
+## 2026-08-26
+
+* **Creation**: `frontend/tables.md`, `frontend/scan-status.md`, `frontend/host-detail.md` — DMI-88
+  shared `DataTable` set, status/severity helpers, and the host-detail read union.
+* **Update**: `frontend/screens.md`, `frontend/app.md`, `frontend/api.md`, `frontend/overview.md`,
+  `frontend/review.md`, `frontend/index.md`, root `index.md` and `overview.md` — scan/host/agent
+  routes, prefix `queryKeys`, list/detail API wrappers, TopBar without `end` on Scans/Hosts, and
+  the fetch-free Agents page. Home still has no loading skeleton; table screens do.
+
 ## 2026-08-25
 
 * **Update**: `backend/routers.md`, `backend/schemas.md`, `backend/services.md` and `contracts.md`

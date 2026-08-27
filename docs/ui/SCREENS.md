@@ -363,7 +363,8 @@ screen that needs it.
 | --- | --- |
 | `TopBar` | every inside-shell screen |
 | `PageHeader` | Scans, Hosts, Agents, Users — **not Home** (the verdict is the header) |
-| `DataTable` | Scan list, Host inventory, findings on Scan detail, Users & invites |
+| `DataTable` | Scan list, host inventory, scan detail findings and hosts, host detail findings, ports and history. Users & invites is **not** retrofitted (tracked follow-up). |
+| `Pagination` | Scan list, host inventory |
 | `SeverityBadge` | Home (critical item), Scan detail, Host detail |
 | `StatusPill` | Agents (`queued → delivered → running → uploading → done`, online/offline), Scan list/detail (scan status) |
 | `Timestamp` | everywhere a time is rendered — owns the relative/absolute rule below |
@@ -404,6 +405,18 @@ Cross-screen rules. A screen spec may cite these instead of restating them.
    `Execute`, `OK` (§6).
 9. **Real content only.** Specs and mocks use real hostnames, real CVE ids, real IPs. No lorem
    ipsum, no `foo` (§6 use real words).
+10. **Columns align by content, except the first.** Text left-aligns. Numbers right-align in
+   tabular figures so the digits stack — a port under a port, a count under a count. **The first
+   column always starts flush left whatever it holds**: a right-aligned leading column pushes the
+   table's visible start into the middle of the frame while every neighbouring table begins at the
+   edge, and the reader sees a broken grid rather than a tidy number. So findings `Port` and the
+   `Open ports` counts right-align; the ports tables' leading `Port` does not. **A heading carries
+   its column's alignment** — a label stranded over empty space while its values sit at the far
+   side of the column is the defect this rule exists to prevent. *Decided 2026-08-27.*
+11. **Severity reads down the right edge.** No table opens with the severity badge. It closes the
+   row on scan list, scan detail findings, host detail findings and host scan history, and on host
+   inventory it is second to last, with `Last seen` closing. A reader scanning for the worst thing
+   follows one edge instead of hunting for the column per screen. *Decided 2026-08-27.*
 
 ## Screen index
 
@@ -417,11 +430,11 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Forgot password | `/forgot-password` | outside | public | B1 | ◐ |
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ✅ (C15 resolved) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
-| Scan list | `/scans` | inside | admin, viewer | B3 | ◐ |
-| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ (C10 resolved — screen unbuilt, DMI-88) |
-| Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ |
-| Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ (C11 resolved — `?host_id=`) |
-| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ ⚠️ blocked (C1, C2 — C12 resolved) |
+| Scan list | `/scans` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
+| Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ built (DMI-88; C10 resolved) |
+| Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
+| Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ built (DMI-88; C11 resolved — `?host_id=`) |
+| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ built (DMI-88) — read-only surface that DMI-89 grows (C1, C2, C12 resolved) |
 | Users & invites | `/users` | inside | admin | B2 | ◐ API ready (C4 closed); frontend screen not built |
 | Settings | `/settings` | inside | admin, viewer | B5 | ◐ details (read-only), password modal, activity disclosure and removal built; profile **editing** pending on C3 |
 
@@ -981,8 +994,10 @@ filtering yet (§12).
 **Three states:**
 - **Regular:** one row per scan. Whole row navigates (rule 4). An unfinished scan shows a
   `StatusPill` instead of counts — it has no counts yet.
-- **Blank:** no scans ever. Same content as blank Home, because it is the same fact — admin gets
-  [Run first scan] → AGENTS, viewer gets the line instead of the affordance.
+- **Blank:** no scans ever. Same content as blank Home, because it is the same fact. **No
+  `[Run first scan]` CTA and no viewer-only line** — `/agents` has no trigger until DMI-89, so a
+  button that names that action would fail consistency rule 8. The CTA and the role split return
+  when the trigger exists, and not before.
 - **Error:** page-level copy + [Retry]. `LoadingSkeleton` for the table body on first load only —
   never on background refetch, which would make a live list flicker.
 
@@ -991,16 +1006,15 @@ filtering yet (§12).
 | --- | --- |
 | Page title | "Scans" |
 | Columns | "When · Mode · Status · Hosts · Findings · Highest severity" |
-| Status — completed | (no pill; show the counts) |
+| Status — completed | "Completed" (neutral `StatusPill`; **not** a success color — green would be a new Foundations token competing with the severity badge on the same row. An em dash here would mean "looked, nothing there", which is the wrong sentence about a scan that succeeded.) |
 | Status — pending/accepted/processing | "Running…" |
 | Status — failed | "Failed" |
 | Findings cell — zero | "None" |
 | Highest severity — null on a completed scan | "—" |
 | Pagination | "Showing 1–20 of 47" · [Previous] [Next] |
 | Blank — heading | "No scans yet." |
-| Blank — body | "Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here." |
-| Blank — CTA (admin only) | "Run first scan" |
-| Blank — viewer line | "Ask your admin to run the first scan." |
+| Blank — body | "Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here. Scanning is set up on the Pi itself." |
+| Blank — CTA | *(none until DMI-89 ships the trigger on `/agents`. The `[Run first scan]` admin CTA and the viewer "Ask your admin" line return together when that trigger exists, and not before.)* |
 | Error | "Couldn't load the scans." · [Retry] |
 
 **Layout:**
@@ -1015,8 +1029,8 @@ filtering yet (§12).
 |   WHEN            MODE    STATUS     HOSTS  FINDINGS  HIGHEST                |
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
 |   2 min ago       quick   Running…      -         -   -                      |
-|   yesterday 21:40 quick   —            12         3   ▓ CRITICAL             |
-|   Jul 11  21:40   quick   —            12         0   —                      |
+|   yesterday 21:40 quick   Completed    12         3   ▓ CRITICAL             |
+|   Jul 11  21:40   quick   Completed    12         0   —                      |
 |   Jul 10  21:40   quick   Failed        -         -   -                      |
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
 |   Showing 1–20 of 47                          [Previous]  [Next]             |
@@ -1038,11 +1052,11 @@ the header last.
 
 **Data:**
 - `GET /api/v1/scans/{scan_id}` → `ScanDetailResponse` — **one request, everything embedded**:
-  `findings: FindingRead[]`, `hosts: ScanHostView[]`, `timestamp`, `subnet`, `scan_mode`,
+  `findings: FindingRecord[]`, `hosts: ScanHostView[]`, `timestamp`, `subnet`, `scan_mode`,
   `status`, `host_count`, `finding_count`, `command_id` (nullable), `error_code` (`ScanErrorCode | null`).
 - **No `GET /findings` call here, and no `GET /findings/{id}`.** `FindingRecord` arrives complete —
   `severity`, `title`, `description`, `recommendation`, `evidence`, `references`, `cve_id`,
-  `cvss_score`, `device_ip`, `port`, `protocol`, `service`. Opening a finding is **local state**.
+  `cvss_score`, `host_ip`, `port`, `protocol`, `service`. Opening a finding is **local state**.
 - **Failure reason:** on `status: failed`, `error_code` is on this same body (never null). Map it
   through `scanFailureReason()` in `frontend/src/lib/scanFailureReasons.ts` — **C10 resolved
   (DMI-75)**; rendering it is DMI-88. Do not fetch `GET /commands/{id}` for the sentence.
@@ -1054,8 +1068,8 @@ the header last.
 - **Regular, no findings (the good day):** the findings section says so in words and the host table
   carries the page. Positive framing, not an empty table (§7).
 - **Regular, unfinished:** `status` is `pending`/`accepted`/`processing` — the scan is running right
-  now. The page says so and polls; it does not render an empty findings table as though the answer
-  were "nothing".
+  now. The page says so and does **not** poll; live refresh arrives with the trigger (DMI-89). It
+  does not render an empty findings table as though the answer were "nothing".
 - **Regular, failed:** the failure **is** the content. Show the reason from `error_code` and what to
   do; suppress the empty findings and host tables entirely.
 - **Error:** page-level copy + [Retry]. 404 gets its own line.
@@ -1069,7 +1083,7 @@ row, open its panel. Absent or unmatched → render normally. No extra fetch (B3
 | Page title | "Scan — yesterday 21:40" |
 | Header line | "quick mode · 192.168.0.0/24 · 12 hosts · 3 findings" |
 | Findings section title | "Findings" |
-| Findings columns | "Severity · Finding · Host · Port · CVE" |
+| Findings columns | "Finding · Host · Port · CVE · Severity" |
 | No findings | "No findings. Every host in this scan came back clean." |
 | Finding panel — labels | "What it is" / "What to do" / "Evidence" / "References" |
 | Finding panel — CVSS | "CVSS 9.8" |
@@ -1092,17 +1106,17 @@ row, open its panel. Absent or unmatched → render normally. No extra fetch (B3
 |   ------------------------------------------------------------------        |
 |                                                                              |
 |   FINDINGS                                                                   |
-|   SEVERITY    FINDING                      HOST          PORT   CVE          |
+|   FINDING                      HOST          PORT   CVE            SEVERITY  |
 |   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   ▓ CRITICAL  PHP CGI argument injection   synology-nas  443    CVE-2024-4577|
+|   PHP CGI argument injection   synology-nas   443   CVE-2024-4577  ▓ CRITICAL|
 |   +----------------------------------------------------------------+        |
 |   |  WHAT IT IS    <description>                                    |  ← open|
 |   |  WHAT TO DO    <recommendation>                                 |        |
 |   |  EVIDENCE      <evidence>                (mono)                 |        |
 |   |  REFERENCES    <links>                        CVSS 9.8          |        |
 |   +----------------------------------------------------------------+        |
-|   ▓ HIGH      Outdated OpenSSH              pi-lab        22     CVE-2023-…  |
-|   ▓ LOW       Telnet port open              printer-hp    23     —           |
+|   Outdated OpenSSH             pi-lab          22   CVE-2023-…     ▓ HIGH    |
+|   Telnet port open             printer-hp      23   —              ▓ LOW     |
 |                                                                              |
 |   HOSTS                                                                      |
 |   HOST          IP             MAC                VENDOR      OPEN PORTS     |
@@ -1152,8 +1166,10 @@ observable from here.
 
 **Three states:**
 - **Regular:** one row per host, whole row navigates to `/hosts/:hostId`.
-- **Blank:** no scan has ever run, so nothing has been discovered. Same fact as blank Home; same
-  treatment — admin CTA to AGENTS, viewer gets the line.
+- **Blank:** no scan has ever run, so nothing has been discovered. Same fact as blank Home. **No
+  `[Run first scan]` CTA and no viewer-only line** — `/agents` has no trigger until DMI-89, so a
+  button that names that action would fail consistency rule 8. The CTA and the role split return
+  when the trigger exists, and not before.
 - **Error:** page-level copy + [Retry].
 
 **Copy:**
@@ -1166,9 +1182,8 @@ observable from here.
 | MAC — null | "—" |
 | Highest severity — null | "—" |
 | Blank — heading | "No hosts yet." |
-| Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here." |
-| Blank — CTA (admin only) | "Run first scan" |
-| Blank — viewer line | "Ask your admin to run the first scan." |
+| Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here. Scanning is set up on the Pi itself." |
+| Blank — CTA | *(none until DMI-89 ships the trigger on `/agents`. The `[Run first scan]` admin CTA and the viewer "Ask your admin" line return together when that trigger exists, and not before.)* |
 | Error | "Couldn't load the hosts." · [Retry] |
 
 **Layout:**
@@ -1213,7 +1228,7 @@ footnote; the attack surface is the page.
   `highest_severity`.
 - **Findings are a second call:** `HostDetailResponse` carries **no findings array**, but
   `highest_severity` is shown — so the page must explain that severity. Use
-  `GET /api/v1/findings?host_id={host_id}` → `FindingRead[]`, rendered with the same row +
+  `GET /api/v1/findings?host_id={host_id}` → `FindingRecord[]`, rendered with the same row +
   in-place panel as SCAN DETAIL.
 
 **Three states:**
@@ -1252,7 +1267,7 @@ footnote; the attack surface is the page.
 |   ------------------------------------------------------------------        |
 |                                                                              |
 |   FINDINGS                                                                   |
-|   ▓ CRITICAL  PHP CGI argument injection      443    CVE-2024-4577           |
+|   PHP CGI argument injection      443    CVE-2024-4577      ▓ CRITICAL       |
 |      (row expands in place — same panel as SCAN DETAIL)                      |
 |                                                                              |
 |   OPEN PORTS                                                                 |
@@ -1273,7 +1288,7 @@ footnote; the attack surface is the page.
 
 **Open questions:**
 1. ~~Does `GET /findings?device_id=…` accept the **`host_id`** UUID?~~ **✅ RESOLVED (C11) — the
-   filter is `?host_id=`.** `read_findings()` takes `host_id: UUID | None`, and `FindingRead`
+   filter is `?host_id=`.** `read_findings()` takes `host_id: UUID | None`, and `FindingRecord`
    carries `host_id`. The read model is `hosts` end to end; only the Pi ingest payload keeps
    `devices[]` (ADR-011 §5). Host detail can show findings.
 
