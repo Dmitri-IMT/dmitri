@@ -2,19 +2,18 @@ import { useQuery } from '@tanstack/react-query'
 import { HOST_FINDINGS_PER_PAGE, listFindingsForHost } from '@/api/findings'
 import { getHost } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
-import { readDetailState } from '@/lib/detailState'
+import { readDetailState, type DetailState } from '@/lib/detailState'
 import type { components } from '@/types/openapi'
 
 type HostDetailResponse = components['schemas']['HostDetailResponse']
 type FindingRecord = components['schemas']['FindingRecord']
 
-export type HostDetail =
-  | { state: 'loading' }
-  | { state: 'error'; retry: () => void }
-  | { state: 'notFound' }
-  | { state: 'ready'; host: HostDetailResponse; findings: FindingRecord[] }
+export type HostDetail = {
+  host: HostDetailResponse
+  findings: FindingRecord[]
+}
 
-export function useHostDetail(hostId: string): HostDetail {
+export function useHostDetail(hostId: string): DetailState<HostDetail> {
   const hostQuery = useQuery({
     queryKey: queryKeys.hosts.detail(hostId),
     queryFn: () => getHost(hostId),
@@ -50,7 +49,6 @@ export function useHostDetail(hostId: string): HostDetail {
 
   return {
     state: 'ready',
-    host: host.data,
-    findings: findingsQuery.data.data,
+    data: { host: host.data, findings: findingsQuery.data.data },
   }
 }
