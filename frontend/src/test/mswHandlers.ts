@@ -405,13 +405,12 @@ export const handlers = [
     const severity = params.get('severity')
     const hostId = params.get('host_id')
     const scanId = params.get('scan_id')
-    const rows = severity
-      ? findingFixtures.filter((finding) => finding.severity === severity)
-      : hostId
-        ? findingFixtures.filter((finding) => finding.host_id === hostId)
-        : scanId
-          ? findingFixtures.filter((finding) => finding.scan_id === scanId)
-          : findingFixtures
+    const rows = findingFixtures.filter(
+      (finding) =>
+        (severity === null || finding.severity === severity) &&
+        (hostId === null || finding.host_id === hostId) &&
+        (scanId === null || finding.scan_id === scanId),
+    )
     return HttpResponse.json(
       paginate(rows, request.url) satisfies FindingListResponse,
     )

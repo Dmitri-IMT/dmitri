@@ -31,7 +31,7 @@ export const LATEST_SUCCESSFUL_SCAN_QUERY = {
 } as const
 
 async function getLatestScanByQuery(
-  params: Record<string, string | number>,
+  params: Partial<ListScansQuery>,
 ): Promise<ScanSummary | null> {
   const response = await apiClient.get<ScanListResponse>('/scans', { params })
   return response.data.data[0] ?? null
