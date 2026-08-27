@@ -40,6 +40,7 @@ function hostColumnFor(hosts: ScanHostView[]): DataTableColumn<FindingRecord> {
 function FindingsTable({
   findings,
   hosts,
+  isPending = false,
   testId,
   caption,
   emptyTestId,
@@ -49,6 +50,7 @@ function FindingsTable({
 }: {
   findings: FindingRecord[]
   hosts?: ScanHostView[]
+  isPending?: boolean
   testId: string
   caption: string
   emptyTestId: string
@@ -56,6 +58,15 @@ function FindingsTable({
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
 }) {
+  const table = {
+    columns: findingColumns(hosts && hostColumnFor(hosts)),
+    rowId: (finding: FindingRecord) => finding.finding_id,
+    testId,
+    caption,
+  }
+
+  if (isPending) return <DataTable {...table} rows={[]} isPending />
+
   if (findings.length === 0) {
     return (
       <p data-testid={emptyTestId} className="text-body-md">
@@ -64,15 +75,10 @@ function FindingsTable({
     )
   }
 
-  const rows = [...findings].sort(bySeverityDesc)
-
   return (
     <DataTable
-      columns={findingColumns(hosts && hostColumnFor(hosts))}
-      rows={rows}
-      rowId={(finding) => finding.finding_id}
-      testId={testId}
-      caption={caption}
+      {...table}
+      rows={[...findings].sort(bySeverityDesc)}
       rowAction={{
         kind: 'expand',
         panel: (finding) => <FindingPanel finding={finding} />,

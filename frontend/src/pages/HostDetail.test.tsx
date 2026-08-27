@@ -56,7 +56,7 @@ describe('HostDetail', () => {
     )
     expect(screen.getByTestId('host-detail')).toHaveTextContent(HOST.ip)
     expect(
-      screen.getByTestId(
+      await screen.findByTestId(
         `host-findings-table-row-${criticalFinding.finding_id}`,
       ),
     ).toBeInTheDocument()
@@ -146,7 +146,8 @@ describe('HostDetail', () => {
     expectPageError()
   })
 
-  it('shows the page error and Retry when the findings read fails', async () => {
+  it('fails the findings section alone and keeps the rest of the host', async () => {
+    hostDetail(HOST, findingFixtures)
     server.use(
       http.get(
         `${baseURL}/findings`,
@@ -155,8 +156,53 @@ describe('HostDetail', () => {
     )
     renderPage(`/hosts/${HOST.host_id}`)
 
-    await screen.findByTestId('host-detail-error')
-    expectPageError()
+    expect(await screen.findByTestId('host-findings-error')).toHaveTextContent(
+      "Couldn't load this host's findings.",
+    )
+    expect(screen.getByTestId('host-findings-error-retry')).toHaveTextContent(
+      'Retry',
+    )
+    expect(screen.queryByTestId('host-detail-error')).not.toBeInTheDocument()
+    expect(screen.getByTestId('host-detail-identity')).toHaveTextContent(
+      HOST.hostname,
+    )
+    expect(screen.getByTestId('host-no-ports')).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`host-history-table-row-${SCAN_ID}`),
+    ).toBeInTheDocument()
+  })
+
+  it('retries the findings section without refetching the host', async () => {
+    const user = userEvent.setup()
+    let hostReads = 0
+    let findingsReads = 0
+    server.use(
+      http.get(`${baseURL}/hosts/:hostId`, () => {
+        hostReads += 1
+        return HttpResponse.json(HOST)
+      }),
+      http.get(`${baseURL}/findings`, () => {
+        findingsReads += 1
+        return findingsReads === 1
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({
+              data: [criticalFinding],
+              total: 1,
+              page: 1,
+            })
+      }),
+    )
+    renderPage(`/hosts/${HOST.host_id}`)
+
+    await screen.findByTestId('host-findings-error')
+    await user.click(screen.getByTestId('host-findings-error-retry'))
+
+    expect(
+      await screen.findByTestId(
+        `host-findings-table-row-${criticalFinding.finding_id}`,
+      ),
+    ).toBeInTheDocument()
+    expect(hostReads).toBe(1)
   })
 
   it('renders the not-found line and Back to hosts', async () => {
