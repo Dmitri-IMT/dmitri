@@ -1,3 +1,4 @@
+import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
@@ -16,7 +17,7 @@ function HostIdentity({ host }: { host: HostDetailResponse }) {
           {title}
         </h1>
         <p className="text-body-md text-muted-foreground">
-          {host.ip} · {host.mac ?? '—'} · {host.vendor}
+          {host.ip} · {host.mac ?? <EmptyMark />} · {host.vendor}
         </p>
         <p
           data-testid="host-detail-seen"
