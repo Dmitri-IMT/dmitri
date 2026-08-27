@@ -1,8 +1,23 @@
 import { apiClient } from './client'
-import type { components } from '../types/openapi'
+import type { components, operations } from '../types/openapi'
 
 type ScanSummary = components['schemas']['ScanSummary']
 type ScanListResponse = components['schemas']['ScanListResponse']
+type ScanDetailResponse = components['schemas']['ScanDetailResponse']
+type ListScansQuery = NonNullable<
+  operations['listScans']['parameters']['query']
+>
+
+export type ScanListParams = Required<
+  Pick<ListScansQuery, 'page' | 'per_page' | 'sort_by' | 'sort_order'>
+>
+
+export const SCANS_PER_PAGE = 20
+
+export const SCAN_LIST_SORT = {
+  sort_by: 'timestamp',
+  sort_order: 'desc',
+} as const
 
 export const LATEST_SCAN_QUERY = {
   per_page: 1,
@@ -16,7 +31,7 @@ export const LATEST_SUCCESSFUL_SCAN_QUERY = {
 } as const
 
 async function getLatestScanByQuery(
-  params: Record<string, string | number>,
+  params: Partial<ListScansQuery>,
 ): Promise<ScanSummary | null> {
   const response = await apiClient.get<ScanListResponse>('/scans', { params })
   return response.data.data[0] ?? null
@@ -28,4 +43,16 @@ export function getLatestScan(): Promise<ScanSummary | null> {
 
 export function getLatestSuccessfulScan(): Promise<ScanSummary | null> {
   return getLatestScanByQuery(LATEST_SUCCESSFUL_SCAN_QUERY)
+}
+
+export async function listScans(
+  params: ScanListParams,
+): Promise<ScanListResponse> {
+  const response = await apiClient.get<ScanListResponse>('/scans', { params })
+  return response.data
+}
+
+export async function getScan(scanId: string): Promise<ScanDetailResponse> {
+  const response = await apiClient.get<ScanDetailResponse>(`/scans/${scanId}`)
+  return response.data
 }

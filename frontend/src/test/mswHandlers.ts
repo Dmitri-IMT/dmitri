@@ -3,7 +3,13 @@ import type { components } from '@/types/openapi'
 
 type UserProfileResponse = components['schemas']['UserProfileResponse']
 type ScanSummary = components['schemas']['ScanSummary']
+type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 type ScanListResponse = components['schemas']['ScanListResponse']
+type ScanMode = components['schemas']['ScanMode']
+type ScanStatus = components['schemas']['ScanStatus']
+type HostSummary = components['schemas']['HostSummary']
+type HostDetailResponse = components['schemas']['HostDetailResponse']
+type HostListResponse = components['schemas']['HostListResponse']
 type FindingRecord = components['schemas']['FindingRecord']
 type FindingListResponse = components['schemas']['FindingListResponse']
 type InviteLookupResponse = components['schemas']['InviteLookupResponse']
@@ -140,12 +146,157 @@ export const highFinding: FindingRecord = {
   detected_at: minutesAgo(59),
 }
 
-function scanListResponse(data: ScanSummary[]): ScanListResponse {
-  return { data, total: data.length, page: 1 }
+const scanModes = [
+  'quick',
+  'standard',
+  'extensive',
+  'nspi',
+  'max',
+] as const satisfies readonly ScanMode[]
+
+const scanStatuses = [
+  'completed',
+  'failed',
+  'completed',
+  'accepted',
+  'completed',
+] as const satisfies readonly ScanStatus[]
+
+function fixtureId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
 }
 
-function findingListResponse(data: FindingRecord[]): FindingListResponse {
-  return { data, total: data.length, page: 1 }
+export const scanFixtures: ScanSummary[] = [
+  latestScan,
+  latestSuccessfulScan,
+  ...Array.from({ length: 23 }, (_, index): ScanSummary => {
+    const status = scanStatuses[index % scanStatuses.length]
+    const finished = status === 'completed'
+    return {
+      scan_id: fixtureId(100 + index),
+      timestamp: minutesAgo(120 + index * 30),
+      subnet: `10.${index}.0.0/24`,
+      scan_mode: scanModes[index % scanModes.length],
+      status,
+      host_count: finished ? 5 + index : 0,
+      finding_count: finished ? index % 4 : 0,
+      highest_severity:
+        finished && index % 4 > 0 ? (index % 2 === 0 ? 'high' : 'low') : null,
+    }
+  }),
+]
+
+export const hostFixtures: HostSummary[] = Array.from(
+  { length: 25 },
+  (_, index): HostSummary => ({
+    host_id:
+      index === 0
+        ? '55555555-5555-4555-8555-555555555555'
+        : fixtureId(200 + index),
+    ip: `192.168.1.${10 + index}`,
+    mac:
+      index === 24 ? null : `02:00:00:00:${String(index).padStart(2, '0')}:01`,
+    hostname: index === 24 ? '' : `host-${String(index + 1).padStart(2, '0')}`,
+    vendor: `Vendor ${String.fromCharCode(65 + index)}`,
+    first_seen_at: minutesAgo(10_000 + index * 60),
+    last_seen_at: minutesAgo(10 + index * 10),
+    open_ports_count: index % 5,
+    highest_severity:
+      index % 4 === 0
+        ? 'critical'
+        : index % 4 === 1
+          ? 'high'
+          : index % 4 === 2
+            ? 'medium'
+            : null,
+  }),
+)
+
+const otherHostFinding: FindingRecord = {
+  ...highFinding,
+  finding_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  host_id: hostFixtures[1].host_id,
+  host_ip: hostFixtures[1].ip,
+  severity: 'medium',
+  title: 'TLS certificate expired',
+  cve_id: null,
+  cvss_score: 5.3,
+}
+
+export const findingFixtures: FindingRecord[] = [
+  criticalFinding,
+  highFinding,
+  otherHostFinding,
+]
+
+export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
+  (host, index) => ({
+    ...host,
+    ports:
+      index % 5 === 0
+        ? []
+        : [
+            {
+              port: index % 2 === 0 ? 443 : 22,
+              protocol: 'tcp',
+              state: 'open',
+              service: index % 2 === 0 ? 'https' : 'ssh',
+              version: index % 2 === 0 ? 'nginx 1.24' : 'OpenSSH 9.6',
+            },
+          ],
+    scan_history: [
+      {
+        scan_id: latestSuccessfulScan.scan_id,
+        timestamp: latestSuccessfulScan.timestamp,
+        scan_mode: latestSuccessfulScan.scan_mode,
+        open_ports_count: host.open_ports_count,
+        highest_severity: host.highest_severity,
+      },
+    ],
+  }),
+)
+
+export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
+  (scan) => ({
+    ...scan,
+    hosts: hostDetailFixtures.slice(0, 2).map((host) => ({
+      host_id: host.host_id,
+      ip: host.ip,
+      mac: host.mac,
+      hostname: host.hostname,
+      vendor: host.vendor,
+      ports: host.ports,
+    })),
+    findings: findingFixtures.filter(
+      (finding) => finding.scan_id === scan.scan_id,
+    ),
+    error_code: scan.status === 'failed' ? 'device_offline' : null,
+  }),
+)
+
+export function paginate<T>(rows: T[], url: string) {
+  const params = new URL(url).searchParams
+  const page = Number(params.get('page') ?? 1)
+  const perPage = Number(params.get('per_page') ?? 20)
+  const start = (page - 1) * perPage
+  return { data: rows.slice(start, start + perPage), total: rows.length, page }
+}
+
+const hostSortKeys = [
+  'last_seen_at',
+  'hostname',
+  'vendor',
+  'ip',
+] as const satisfies readonly components['parameters']['HostSortBy'][]
+
+function compareHosts(
+  left: HostSummary,
+  right: HostSummary,
+  sortBy: components['parameters']['HostSortBy'],
+): number {
+  return String(left[sortBy]).localeCompare(String(right[sortBy]), undefined, {
+    numeric: true,
+  })
 }
 
 export const handlers = [
@@ -188,7 +339,22 @@ export const handlers = [
     `${baseURL}/invites/:inviteId`,
     () => new HttpResponse(null, { status: 204 }),
   ),
-  http.get(`${baseURL}/hosts`, () => HttpResponse.json([])),
+  http.get(`${baseURL}/hosts`, ({ request }) => {
+    const params = new URL(request.url).searchParams
+    const requestedSort = params.get('sort_by')
+    const sortBy = hostSortKeys.find((key) => key === requestedSort)
+    if (requestedSort !== null && sortBy === undefined) {
+      return new HttpResponse(null, { status: 422 })
+    }
+    const sortOrder = params.get('sort_order') === 'asc' ? 'asc' : 'desc'
+    const sorted = [...hostFixtures].sort((left, right) => {
+      const comparison = compareHosts(left, right, sortBy ?? 'last_seen_at')
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+    return HttpResponse.json(
+      paginate(sorted, request.url) satisfies HostListResponse,
+    )
+  }),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
   http.patch(`${baseURL}/users/:userId`, async ({ params, request }) => {
     const body = (await request.json()) as UpdateUserRoleRequest
@@ -211,19 +377,42 @@ export const handlers = [
   ),
   http.get(`${baseURL}/scans`, ({ request }) => {
     const status = new URL(request.url).searchParams.get('status')
-    if (status === 'completed') {
-      return HttpResponse.json(scanListResponse([latestSuccessfulScan]))
-    }
-    return HttpResponse.json(scanListResponse([latestScan]))
+    const rows = status
+      ? scanFixtures.filter((scan) => scan.status === status)
+      : scanFixtures
+    return HttpResponse.json(
+      paginate(rows, request.url) satisfies ScanListResponse,
+    )
+  }),
+  http.get(`${baseURL}/scans/:scanId`, ({ params }) => {
+    const scan = scanDetailFixtures.find(
+      (fixture) => fixture.scan_id === params.scanId,
+    )
+    return scan
+      ? HttpResponse.json(scan)
+      : new HttpResponse(null, { status: 404 })
+  }),
+  http.get(`${baseURL}/hosts/:hostId`, ({ params }) => {
+    const host = hostDetailFixtures.find(
+      (fixture) => fixture.host_id === params.hostId,
+    )
+    return host
+      ? HttpResponse.json(host)
+      : new HttpResponse(null, { status: 404 })
   }),
   http.get(`${baseURL}/findings`, ({ request }) => {
-    const severity = new URL(request.url).searchParams.get('severity')
-    if (severity === 'critical') {
-      return HttpResponse.json(findingListResponse([criticalFinding]))
-    }
-    if (severity === 'high') {
-      return HttpResponse.json(findingListResponse([highFinding]))
-    }
-    return HttpResponse.json(findingListResponse([]))
+    const params = new URL(request.url).searchParams
+    const severity = params.get('severity')
+    const hostId = params.get('host_id')
+    const scanId = params.get('scan_id')
+    const rows = findingFixtures.filter(
+      (finding) =>
+        (severity === null || finding.severity === severity) &&
+        (hostId === null || finding.host_id === hostId) &&
+        (scanId === null || finding.scan_id === scanId),
+    )
+    return HttpResponse.json(
+      paginate(rows, request.url) satisfies FindingListResponse,
+    )
   }),
 ]

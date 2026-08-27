@@ -23,6 +23,19 @@ function TopBar() {
           <NavLink to="/" end data-testid="nav-home" className={navLinkClass}>
             <span className="text-nav">Home</span>
           </NavLink>
+          <NavLink to="/scans" data-testid="nav-scans" className={navLinkClass}>
+            <span className="text-nav">Scans</span>
+          </NavLink>
+          <NavLink to="/hosts" data-testid="nav-hosts" className={navLinkClass}>
+            <span className="text-nav">Hosts</span>
+          </NavLink>
+          <NavLink
+            to="/agents"
+            data-testid="nav-agents"
+            className={navLinkClass}
+          >
+            <span className="text-nav">Agents</span>
+          </NavLink>
           <AdminOnly>
             <NavLink
               to="/users"

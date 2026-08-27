@@ -70,13 +70,10 @@ interaction in implementation before it has passed through that sequence.
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
 - **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
-- **UI status:** Login, Home, public auth, Settings change-password + Activity disclosure, and
-  Users & Invites are built. The remaining screen specs — Scans, Hosts, Agents — live in
-  [`ui/SCREENS.md`](../ui/SCREENS.md). Shared visual foundations are locked there: top-bar
-  shell, light-only theme, typography, fluid desktop viewport, palette, and component rules.
-  [`ui/SCREENS.md`](../ui/SCREENS.md) is the source of truth for the UI: where it disagrees with an
-  ADR or a roadmap doc, those get reconciled to it (ADR-008's `AppShell` was narrowed to a top bar
-  on 2026-07-13). The active UI documents replaced the removed March-era `ui/wireframes.md`.
+- **UI status:** Login, Home, public auth, Settings change-password + Activity disclosure,
+  Users & Invites, and the DMI-88 scan/host read surfaces (list + detail) are built. Agents exists
+  as a **permanent one-state page** (no fetch, no trigger). Live agent row and `[Scan now]` remain
+  DMI-89. Screen copy still lives in [`ui/SCREENS.md`](../ui/SCREENS.md).
 - **Contract asks — 3 of the original 8 still open.** C4 is closed: the published backend contract
   now has member list, pending-invite list, role change, revoke, and account-removal operations,
   and spec 034 consumed them — Users & Invites ships.
@@ -112,7 +109,8 @@ interaction in implementation before it has passed through that sequence.
    hides the nav item, `RequireAdmin` renders not-found in place of the route. Self-removal shipped
    in spec 033 under ADR-017. Profile editing remains blocked on C3, and invite/reset delivery still
    needs a verified sending domain.
-5. Scan list/detail; host inventory/detail; then Agents read state — no Pi pairing UI.
+5. ✅ Scan list/detail; host inventory/detail; Agents read-only page — spec 039 / DMI-88. No Pi
+   pairing UI. Scan trigger is milestone 6 / DMI-89.
 6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
 7. LLM explainer panel only when it is explicitly brought into scope.
 

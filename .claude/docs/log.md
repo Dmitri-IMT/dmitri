@@ -3,6 +3,59 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-27
+
+* **Update**: `frontend/host-detail.md` (rewritten), `frontend/screens.md`, `frontend/overview.md`,
+  `frontend/index.md`, `index.md` — PR #128 fifth review pass. `hooks/useHostDetail.ts`
+  **deleted**: folding the host record and that host's findings into one `DetailState` blanked a
+  loaded host whenever findings were pending or failed, against DESIGN §5.6 and TRUTH 23. New
+  `pages/hosts/HostFindings.tsx` owns the findings query and its own three states
+  (`host-findings-error` + Retry); `HostDetail` now runs one `getHost` query through
+  `readDetailState` into `ReadDetailGate`. `FindingsTable` gained `isPending`, checked before the
+  empty branch. ARCHITECTURE §4.4 corrected — it documented the fold.
+* **Update**: `frontend/api.md`, `frontend/host-detail.md`, `frontend/tables.md` — PR #128 fourth
+  review pass. `listFindingsForHost` folded into `listFindings(params: FindingListParams)`: one
+  operation, one wrapper, and the object passed to the wrapper is the one passed to the query key.
+  `HostIdentity` renders its absent MAC through `EmptyMark` instead of a bare `'—'`. Prettier run
+  over the seven column modules the previous pass touched (frontend CI runs `format:check`).
+* **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/api.md`, `frontend/overview.md`, `frontend/index.md` — PR #128 third review pass. New
+  `components/ReadDetailGate.tsx` takes a `DetailState<T>` and owns notFound / error / loading for
+  both detail screens, so `ScanDetail` and `HostDetail` render only the ready view (the scan
+  failed/unfinished split stays in `ScanDetail` — domain, not read state). `useHostDetail` now
+  returns `DetailState<HostDetail>` instead of a second hand-written union. New
+  `components/EmptyMark.tsx` replaces the seven copies of a local `dash()`. Host sorting moved off
+  the nested `last_seen_at` ternary onto `HOST_SORT_DEFAULT_ORDER`, a per-column default-order map
+  in `api/hosts.ts` (replacing `HOST_LIST_DEFAULT_SORT`); ARCHITECTURE §2.3 now documents that
+  rule.
+* **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/overview.md`, `frontend/index.md` — PR #128 second review pass. New
+  `components/ListSurface.tsx` (the one list-page state machine, shared by Scans and Hosts),
+  `components/NotFoundNotice.tsx` (the shared detail 404 block) and `lib/detailState.ts`
+  (`readDetailState`, used by `ScanDetail` and by `useHostDetail`). `HostFindingsTable.tsx`
+  **deleted** — `FindingsTable` now serves both screens. `DataTable` link rows became a single
+  stretched anchor (no row `onClick`, no `useNavigate`), its columns and `sort` are generic over a
+  `SortKey`, and its expand effect fires on a closed→open transition, focusing the caret only on
+  the `?finding=` deep link's first render.
+* **Update**: `frontend/screens.md`, `frontend/scan-status.md`, `frontend/tables.md` — PR #128
+  review pass: `ScanRow.tsx`/`HostRow.tsx` renamed to `scanListColumns.tsx`/`hostListColumns.tsx`;
+  new shared `findingColumns(hostColumn?)` and `portColumns` builders behind both findings and both
+  ports tables. `getLatestScanByQuery` now typed `Partial<ListScansQuery>`; findings MSW handler
+  ANDs its filters. Corrected the stale `scanListColumns` `path:line` ref.
+* **Update**: `frontend/tables.md` — `DataTableColumn` gains `align: 'right'` (heading and cell
+  together); the alignment convention and the findings tables' severity-last column order from the
+  2026-08-27 screen review; stale `path:line` refs for `DataTable`, `DataTableRowAction` and
+  `StatusPill` corrected.
+
+## 2026-08-26
+
+* **Creation**: `frontend/tables.md`, `frontend/scan-status.md`, `frontend/host-detail.md` — DMI-88
+  shared `DataTable` set, status/severity helpers, and the host-detail read union.
+* **Update**: `frontend/screens.md`, `frontend/app.md`, `frontend/api.md`, `frontend/overview.md`,
+  `frontend/review.md`, `frontend/index.md`, root `index.md` and `overview.md` — scan/host/agent
+  routes, prefix `queryKeys`, list/detail API wrappers, TopBar without `end` on Scans/Hosts, and
+  the fetch-free Agents page. Home still has no loading skeleton; table screens do.
+
 ## 2026-08-25
 
 * **Update**: `backend/routers.md`, `backend/schemas.md`, `backend/services.md` and `contracts.md`

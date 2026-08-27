@@ -4,16 +4,17 @@ title: frontend screens, shells and shared components
 description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-22T00:00:00Z
+timestamp: 2026-08-27T15:00:00Z
 ---
 
 # frontend screens, shells and shared components
 
 ## Purpose
 
-The visible surface of the app: two frames (signed-out and signed-in), eight routes, and the small
-set of components they share. The governing principle throughout is **absent, not disabled** — an
-operator never meets a control that looks live and isn't.
+The visible surface of the app: two frames (signed-out and signed-in), the public auth routes, the
+guarded reads (Home, scans, hosts, agents, Settings, Users), and the small set of components they
+share. The governing principle throughout is **absent, not disabled** — an operator never meets a
+control that looks live and isn't. Scan/host blank states have **no CTA** until DMI-89.
 
 ## Key classes / functions
 
@@ -21,7 +22,7 @@ operator never meets a control that looks live and isn't.
 |------|--------------|-----|
 | `AuthShell` | Outside-shell frame: wordmark + full-width `Ornament` + one centred card in the named 24rem `max-w-form` column. No top bar. | `frontend/src/components/AuthShell.tsx:4` |
 | `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` in the fluid named 70rem `max-w-frame` column. **No sidebar.** | `frontend/src/components/AppShell.tsx:5` |
-| `TopBar` | Wordmark left, the nav centred on the 70rem frame, and `[Log out]` right through a `1fr auto 1fr` grid. Home, the admin-only Users link and Settings use the dedicated `text-nav` token; active items keep the 2px `--accent` underline. Wrapping Users in `AdminOnly` keeps the component role-free. | `frontend/src/components/TopBar.tsx:13` |
+| `TopBar` | Wordmark left, the nav centred on the 70rem frame, and `[Log out]` right through a `1fr auto 1fr` grid. Home uses `end`; Scans and Hosts omit `end` so a detail route keeps the parent item active; Agents, Settings likewise omit `end`. Users stays wrapped in `AdminOnly`. Viewer and admin both see `nav-scans` / `nav-hosts` / `nav-agents`. | `frontend/src/components/TopBar.tsx:13` |
 | `AdminOnly` | Renders `children` for an admin and `null` for anyone else. Props are `{ children }` — no `fallback`, no `disabled`; the missing props are what make "absent, not disabled" unbypassable. Pairs with [auth](./auth.md)'s `RequireAdmin`, which closes the route the hidden link would have led to. | `frontend/src/components/AdminOnly.tsx:4` |
 | `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination; the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:7` |
 | `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
@@ -38,6 +39,17 @@ operator never meets a control that looks live and isn't.
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
 | `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
 | `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Items-pending order: deck → failed-scan card → stale-coverage card. | `frontend/src/pages/Home.tsx:10` |
+| `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state has no button or link. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
+| `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:13` |
+| `findingColumns(hostColumn?)` / `portColumns` | Shared column builders behind both findings tables and both ports tables. `findingColumns` inserts the caller's optional Host column and widens title/CVE when it is absent. | `frontend/src/pages/scans/findingColumns.tsx:11`, `frontend/src/pages/hosts/portColumns.tsx:11` |
+| `ScanDetail` | One `getScan` read through `readDetailState` (see [host-detail](./host-detail.md)) handed straight to `ReadDetailGate`, which owns notFound / error / loading. The screen's own body starts at `ready` and branches failed (operator sentence, no tables) → unfinished (`Check again` refetch, no `refetchInterval`) → completed empty findings (sentence, hosts table still) → findings worst-first plus hosts. `?finding=` seeds the open row. | `frontend/src/pages/ScanDetail.tsx:15` |
+| `FindingsTable` | The **one** findings surface. `hosts` present adds the Host column (scan detail); `isPending` renders the skeleton body ahead of the empty check, so a pending section never claims "No findings"; `testId` / `caption` / `emptyTestId` / `emptyCopy` carry the per-screen strings. Sorts worst-first and opens `FindingPanel` in an expand row. | `frontend/src/pages/scans/FindingsTable.tsx:40` |
+| `FindingPanel` | In-place finding body (description, recommendation, evidence, references, CVSS). Default export reused verbatim by host detail. | `frontend/src/pages/scans/FindingPanel.tsx:135` |
+| `Hosts` | HOST INVENTORY, through the same `ListSurface`. Owns `page`/`sortBy`/`sortOrder`; `handleSort(key: HostSortBy)` flips the order on the active column and otherwise takes the new column's `HOST_SORT_DEFAULT_ORDER` entry (`last_seen_at` desc, the three text columns asc), then resets page. The key is typed, so no runtime guard is needed and no column name is branched on. Renders server order. Empty hostname → `(unnamed)`; null MAC → `—`; seven cells always. | `frontend/src/pages/Hosts.tsx:16` |
+| `HostDetail` | One `getHost` read through `readDetailState` into `ReadDetailGate` ([host-detail](./host-detail.md)); the screen renders only the ready view. Title falls back to IP. Empty ports: sentence, no table (inert when present). History rows link to `/scans/:scanId`. | `frontend/src/pages/HostDetail.tsx:12` |
+| `HostFindings` | The findings section's own query and own three states, so a failed or pending findings read leaves identity, ports and history standing. Shares `FindingsTable` with scan detail. | `frontend/src/pages/hosts/HostFindings.tsx:11` |
+| `Agents` | Permanent one-state page: title, subtitle, device statement. **No fetch, no button, no link.** DMI-89 grows it rather than replacing it. | `frontend/src/pages/Agents.tsx:3` |
+| `DataTable` / `ListSurface` / `ReadDetailGate` / `Pagination` / `EmptyState` / `NotFoundNotice` / `EmptyMark` / `StatusPill` / `LoadingSkeleton` | Shared table and page-state set — see [tables](./tables.md). | `frontend/src/components/DataTable.tsx:64` |
 | `Users` | The admin org directory at `/users`, nested under `RequireAdmin`. Switches over [directory](./directory.md)'s `useOrgDirectory()` and renders exactly one of loading / blank / error / ready, holds the pending state for all four dialogs, and raises the toast on each row action's success. | `frontend/src/pages/Users.tsx:24` |
 | `DirectoryTable` | Five columns, **four** headings — Person · Role · Status · Last seen — with the fifth header carrying `sr-only` text for the actions cell. One `<tr>` per person; members before invites, never interleaved. No row navigates anywhere: there is no per-person detail screen to navigate to. | `frontend/src/pages/users/DirectoryTable.tsx:179` |
 | `RoleCell` | Single early return: an invite row or the caller's own row renders `row-role-text-{id}` as plain text, everyone else gets the Radix `Select` at `row-role-{id}`. The two testids are mutually exclusive by construction. The trigger is stripped to `h-auto rounded-none border-0 px-0 py-0`, leaving only the chevron: a bordered trigger indented its value relative to the plain-text rows, so the Role column read as two different left edges. | `frontend/src/pages/users/DirectoryTable.tsx:35` |
@@ -63,6 +75,8 @@ operator never meets a control that looks live and isn't.
 
 - `Home` consumes [review](./review.md)'s `useHomeReview()`; `Users` consumes
   [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
+  Scan/host screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
+  `HostDetail` consumes [host-detail](./host-detail.md).
   `Login`, `TopBar`, `AcceptInvite`, `Settings` and `AccountDetails` consume
   [auth](./auth.md)'s `useSession()` — `Settings` for `user` and `deleteAccount`, `AccountDetails`
   for the read-only identity, and `TopBar` by way of `AdminOnly`.
@@ -74,8 +88,9 @@ operator never meets a control that looks live and isn't.
 
 ## Notes / gotchas
 
-- **Loading renders nothing below the top bar** — no skeleton, no spinner, no placeholder sentence.
-  Any placeholder in the verdict's position is read as a verdict.
+- **Home still renders nothing below the top bar while loading** — no skeleton, no spinner, no
+  placeholder sentence in the verdict's position. Scan and host **tables** do show
+  [tables](./tables.md)'s `LoadingSkeleton` under live headings.
 - **Blank and all-clear are distinct states** and are never collapsed; the footer is omitted
   entirely in the blank state.
 - **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
@@ -162,6 +177,7 @@ operator never meets a control that looks live and isn't.
 [6] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
 [7] [specs/033-settings-leave-organization](../../../specs/033-settings-leave-organization/TRUTH.md)
 [8] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
+[9] [specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md](../../../specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md)
 - **Column widths are declared as shares, never as pixels.** A `<colgroup>` assigns percentages
   summing to 100 — below `sm` 30·15·20·25·10, at `sm` and up 35·15·20·20·10 — so every column is a
   fraction of whatever the table currently is and the row scales with the shell. Person yields

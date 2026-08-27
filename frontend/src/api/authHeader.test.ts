@@ -77,6 +77,7 @@ describe('every resource module reaches the auth interceptor on its own', () => 
     await listFindings({
       scan_id: '22222222-2222-4222-8222-222222222222',
       severity: 'critical',
+      per_page: 100,
     })
 
     expect(seen).toEqual(['Bearer token-ghi'])

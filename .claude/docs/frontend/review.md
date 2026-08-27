@@ -4,7 +4,7 @@ title: the verdict derivation and the Home read hook
 description: deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
 resource: frontend/src/lib/review.ts
 tags: [frontend, domain, verdict, tanstack-query]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 
 # the verdict derivation and the Home read hook
@@ -23,7 +23,7 @@ one union the page can switch over.
 | `STALE_COVERAGE_DAYS` | `3`. Declared once and referenced by name everywhere, tests included — the only place the number appears. | `frontend/src/lib/review.ts:7` |
 | `deriveReview({ latestScan, latestSuccessfulScan, criticalFindings, highFindings, now })` | Returns `{ reviewCount, deckFindings, scanItem, coverageItem }`. Pure: no React, no network, and `now` is injected rather than read from the wall clock. | `frontend/src/lib/review.ts:37` |
 | `deckFindings` ordering | Critical → high, newest-first within each severity — imposed here, because the API guarantees no caller-chosen order. | `frontend/src/lib/review.ts:44` |
-| `useHomeReview()` | Four TanStack Query reads → `deriveReview()` → one `HomeReview` union plus `retry()`. The two scan reads are plain `useQuery`; the two findings reads are one `useQueries` over `HOME_SEVERITIES`, destructured back to `[criticalQuery, highQuery]`. | `frontend/src/hooks/useHomeReview.ts:25` |
+| `useHomeReview()` | Four TanStack Query reads → `deriveReview()` → one `HomeReview` union plus `retry()`. Keys come from [api](./api.md)'s `queryKeys` (`scans.latest`, `findings.list`). The two scan reads are plain `useQuery`; the two findings reads are one `useQueries` over `HOME_SEVERITIES`. | `frontend/src/hooks/useHomeReview.ts:26` |
 | `HomeReview` | `{ state: 'loading' \| 'blank' \| 'clear' \| 'pending' \| 'error' }`; only `clear`/`pending` carry verdict data, so a partial render is unrepresentable. | `frontend/src/hooks/useHomeReview.ts:18` |
 
 ## How it connects

@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
-import { adminProfile, viewerProfile } from '@/test/mswHandlers'
+import {
+  adminProfile,
+  criticalFinding,
+  latestScan,
+  viewerProfile,
+} from '@/test/mswHandlers'
 import { getAccessToken } from '@/api/tokenStore'
 import TopBar from './TopBar'
 
@@ -43,6 +48,12 @@ describe('TopBar', () => {
       expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
         'href',
         '/',
+      )
+      expect(screen.getByTestId('nav-scans')).toHaveAttribute('href', '/scans')
+      expect(screen.getByTestId('nav-hosts')).toHaveAttribute('href', '/hosts')
+      expect(screen.getByTestId('nav-agents')).toHaveAttribute(
+        'href',
+        '/agents',
       )
       expect(screen.getByTestId('nav-settings')).toHaveAttribute(
         'href',
@@ -87,24 +98,24 @@ describe('TopBar', () => {
     expect(logOut).toHaveAttribute('data-variant', 'ghost')
   })
 
-  it('keeps the navigation centred when it grows to four destinations', async () => {
+  it('keeps the navigation centred when it grows past six destinations', async () => {
     renderTopBarAs(adminProfile)
     await screen.findByTestId('nav-users')
     const nav = screen.getByRole('navigation')
-    const fourthDestination = screen
+    const extraDestination = screen
       .getByTestId('nav-settings')
       .cloneNode(true) as HTMLAnchorElement
-    fourthDestination.setAttribute('href', '/fourth')
-    fourthDestination.dataset.testid = 'nav-fourth'
+    extraDestination.setAttribute('href', '/fourth')
+    extraDestination.dataset.testid = 'nav-fourth'
 
-    nav.append(fourthDestination)
+    nav.append(extraDestination)
     expect(within(nav).getByTestId('nav-fourth')).toHaveAttribute(
       'href',
       '/fourth',
     )
 
     const links = within(nav).getAllByRole('link')
-    expect(links).toHaveLength(4)
+    expect(links).toHaveLength(7)
     for (const link of links) {
       const label = link.firstElementChild
       expect(label).toBeInstanceOf(HTMLSpanElement)
@@ -121,7 +132,7 @@ describe('TopBar', () => {
     const users = await screen.findByTestId('nav-users')
     expect(users).toHaveAttribute('href', '/users')
     expect(users).toHaveAccessibleName('Users')
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getAllByRole('link')).toHaveLength(6)
   })
 
   it('renders no Users nav item at all for a viewer', async () => {
@@ -133,7 +144,43 @@ describe('TopBar', () => {
     expect(
       screen.queryByRole('link', { name: 'Users' }),
     ).not.toBeInTheDocument()
-    expect(screen.getAllByRole('link')).toHaveLength(2)
+    expect(screen.getAllByRole('link')).toHaveLength(5)
+  })
+
+  it.each([
+    ['admin', adminProfile],
+    ['viewer', viewerProfile],
+  ])(
+    'shows Scans, Hosts and Agents for a %s, pointing at their routes',
+    async (_label, profile) => {
+      renderTopBarAs(profile)
+      await screen.findByTestId('nav-agents')
+
+      expect(screen.getByTestId('nav-scans')).toHaveAttribute('href', '/scans')
+      expect(screen.getByTestId('nav-scans')).toHaveAccessibleName('Scans')
+      expect(screen.getByTestId('nav-hosts')).toHaveAttribute('href', '/hosts')
+      expect(screen.getByTestId('nav-hosts')).toHaveAccessibleName('Hosts')
+      expect(screen.getByTestId('nav-agents')).toHaveAttribute(
+        'href',
+        '/agents',
+      )
+      expect(screen.getByTestId('nav-agents')).toHaveAccessibleName('Agents')
+    },
+  )
+
+  it.each([
+    [`/scans/${latestScan.scan_id}`, 'nav-scans', 'Scans'],
+    [`/hosts/${criticalFinding.host_id}`, 'nav-hosts', 'Hosts'],
+  ])('at %s keeps %s active and Home inactive', async (route, testId, name) => {
+    renderTopBarAs(viewerProfile, route)
+    await screen.findByTestId(testId)
+
+    const parent = screen.getByTestId(testId)
+    expect(parent).toHaveAccessibleName(name)
+    expect(parent).toHaveAttribute('aria-current', 'page')
+    expect(parent).toHaveClass('border-accent', 'text-foreground')
+    expect(screen.getByTestId('nav-home')).not.toHaveAttribute('aria-current')
+    expect(screen.getByTestId('nav-home')).toHaveClass('text-muted-foreground')
   })
 
   it.each([
@@ -155,10 +202,13 @@ describe('TopBar', () => {
   it('the Log out control calls signOut', async () => {
     const user = userEvent.setup()
     renderWithProviders(<TopBar />)
-    await screen.findByTestId('top-bar')
+    await screen.findByTestId('nav-users')
     expect(getAccessToken()).not.toBeNull()
 
     const logOut = screen.getByRole('button', { name: 'Log out' })
+    await user.tab()
+    await user.tab()
+    await user.tab()
     await user.tab()
     await user.tab()
     await user.tab()
