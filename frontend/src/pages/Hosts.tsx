@@ -13,7 +13,14 @@ import EmptyState from '@/components/EmptyState'
 import ErrorRetry from '@/components/ErrorRetry'
 import PageHeader from '@/components/PageHeader'
 import Pagination from '@/components/Pagination'
-import { hostListColumns } from '@/pages/hosts/HostRow'
+import { hostListColumns } from '@/pages/hosts/hostListColumns'
+
+const HOST_SORT_KEYS: readonly HostSortBy[] = [
+  'hostname',
+  'ip',
+  'vendor',
+  'last_seen_at',
+]
 
 function Hosts() {
   const [page, setPage] = useState(1)
@@ -25,7 +32,8 @@ function Hosts() {
   )
 
   function handleSort(key: string) {
-    const next = key as HostSortBy
+    const next = HOST_SORT_KEYS.find((candidate) => candidate === key)
+    if (next === undefined) return
     setSortOrder(
       next === sortBy
         ? sortOrder === 'desc'

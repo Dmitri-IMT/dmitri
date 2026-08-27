@@ -1,10 +1,10 @@
 import { Link } from 'react-router'
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
+import { portColumns } from '@/pages/hosts/portColumns'
 import type { components } from '@/types/openapi'
 
 type ScanHostView = components['schemas']['ScanHostView']
-type Port = components['schemas']['Port']
 
 function dash() {
   return <span className="text-muted-foreground">—</span>
@@ -13,44 +13,6 @@ function dash() {
 function hostName(host: ScanHostView): string {
   return host.hostname !== '' ? host.hostname : host.ip
 }
-
-const portColumns: DataTableColumn<Port>[] = [
-  {
-    key: 'port',
-    label: 'Port',
-    width: 'w-1/5',
-    render: (port) => <span className="block tabular-nums">{port.port}</span>,
-  },
-  {
-    key: 'protocol',
-    label: 'Protocol',
-    width: 'w-1/5',
-    render: (port) => port.protocol,
-  },
-  {
-    key: 'service',
-    label: 'Service',
-    width: 'w-1/5',
-    render: (port) => (
-      <span className="block truncate" title={port.service}>
-        {port.service}
-      </span>
-    ),
-  },
-  {
-    key: 'version',
-    label: 'Version',
-    width: 'w-2/5',
-    render: (port) =>
-      port.version ? (
-        <span className="block truncate" title={port.version}>
-          {port.version}
-        </span>
-      ) : (
-        dash()
-      ),
-  },
-]
 
 function HostPortsPanel({ host }: { host: ScanHostView }) {
   const name = hostName(host)

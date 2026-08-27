@@ -7,7 +7,7 @@ import EmptyState from '@/components/EmptyState'
 import ErrorRetry from '@/components/ErrorRetry'
 import PageHeader from '@/components/PageHeader'
 import Pagination from '@/components/Pagination'
-import { scanListColumns } from '@/pages/scans/ScanRow'
+import { scanListColumns } from '@/pages/scans/scanListColumns'
 
 function Scans() {
   const [page, setPage] = useState(1)
