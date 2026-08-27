@@ -1,6 +1,10 @@
 import { skipToken, useQueries, useQuery } from '@tanstack/react-query'
 import { getLatestScan, getLatestSuccessfulScan } from '@/api/scans'
-import { HOME_SEVERITIES, listFindings } from '@/api/findings'
+import {
+  HOME_FINDINGS_PER_PAGE,
+  HOME_SEVERITIES,
+  listFindings,
+} from '@/api/findings'
 import { queryKeys } from '@/api/queryKeys'
 import { deriveReview, type ScanItem, type CoverageItem } from '@/lib/review'
 import type { components } from '@/types/openapi'
@@ -39,13 +43,20 @@ export function useHomeReview(): HomeReview {
   // `skipToken` both disables the read until the scan id lands and narrows it away,
   // so the query function never has to assert the id is present.
   const [criticalQuery, highQuery] = useQueries({
-    queries: HOME_SEVERITIES.map((severity) => ({
-      queryKey: queryKeys.findings.list({ scan_id: scanId, severity }),
-      queryFn:
-        scanId === undefined
-          ? skipToken
-          : () => listFindings({ scan_id: scanId, severity }),
-    })),
+    queries: HOME_SEVERITIES.map((severity) => {
+      const params = {
+        scan_id: scanId,
+        severity,
+        per_page: HOME_FINDINGS_PER_PAGE,
+      }
+      return {
+        queryKey: queryKeys.findings.list(params),
+        queryFn:
+          scanId === undefined
+            ? skipToken
+            : () => listFindings({ ...params, scan_id: scanId }),
+      }
+    }),
   })
 
   const retry = () => {

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { HOST_FINDINGS_PER_PAGE, listFindingsForHost } from '@/api/findings'
+import { HOST_FINDINGS_PER_PAGE, listFindings } from '@/api/findings'
 import { getHost } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
 import { readDetailState, type DetailState } from '@/lib/detailState'
@@ -20,12 +20,13 @@ export function useHostDetail(hostId: string): DetailState<HostDetail> {
     enabled: hostId !== '',
   })
 
+  const findingsParams = {
+    host_id: hostId,
+    per_page: HOST_FINDINGS_PER_PAGE,
+  }
   const findingsQuery = useQuery({
-    queryKey: queryKeys.findings.list({
-      host_id: hostId,
-      per_page: HOST_FINDINGS_PER_PAGE,
-    }),
-    queryFn: () => listFindingsForHost(hostId),
+    queryKey: queryKeys.findings.list(findingsParams),
+    queryFn: () => listFindings(findingsParams),
     enabled: hostId !== '',
   })
 

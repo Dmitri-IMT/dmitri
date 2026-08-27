@@ -11,7 +11,7 @@ import {
   highFinding,
 } from '@/test/mswHandlers'
 import { getLatestScan, getLatestSuccessfulScan } from '@/api/scans'
-import { listFindings } from '@/api/findings'
+import { HOME_FINDINGS_PER_PAGE, listFindings } from '@/api/findings'
 import { useHomeReview } from './useHomeReview'
 
 const baseURL = 'http://localhost:8000/api/v1'
@@ -311,10 +311,12 @@ describe('useHomeReview', () => {
       const critical = await listFindings({
         scan_id: latestScan.scan_id,
         severity: 'critical',
+        per_page: HOME_FINDINGS_PER_PAGE,
       })
       const high = await listFindings({
         scan_id: latestScan.scan_id,
         severity: 'high',
+        per_page: HOME_FINDINGS_PER_PAGE,
       })
 
       expect(critical.data).toEqual([criticalFinding])
