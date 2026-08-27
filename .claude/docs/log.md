@@ -5,6 +5,15 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-27
 
+* **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/overview.md`, `frontend/index.md` — PR #128 second review pass. New
+  `components/ListSurface.tsx` (the one list-page state machine, shared by Scans and Hosts),
+  `components/NotFoundNotice.tsx` (the shared detail 404 block) and `lib/detailState.ts`
+  (`readDetailState`, used by `ScanDetail` and by `useHostDetail`). `HostFindingsTable.tsx`
+  **deleted** — `FindingsTable` now serves both screens. `DataTable` link rows became a single
+  stretched anchor (no row `onClick`, no `useNavigate`), its columns and `sort` are generic over a
+  `SortKey`, and its expand effect fires on a closed→open transition, focusing the caret only on
+  the `?finding=` deep link's first render.
 * **Update**: `frontend/screens.md`, `frontend/scan-status.md`, `frontend/tables.md` — PR #128
   review pass: `ScanRow.tsx`/`HostRow.tsx` renamed to `scanListColumns.tsx`/`hostListColumns.tsx`;
   new shared `findingColumns(hostColumn?)` and `portColumns` builders behind both findings and both
