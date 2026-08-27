@@ -584,7 +584,7 @@ file outside it may be invented.
 | `frontend/src/api/queryKeys.ts` | **new** | The key hierarchy in §3 and the three param types. No fetching, no invalidation helper. |
 | `frontend/src/api/scans.ts` | **extend** | Add `listScans(params)`, `getScan(scanId)`, `SCANS_PER_PAGE`, `SCAN_LIST_SORT`, `ScanListParams`. Leave `getLatestScan` / `getLatestSuccessfulScan` and their two exported query constants untouched — Home depends on them. |
 | `frontend/src/api/hosts.ts` | **new** | `listHosts(params)`, `getHost(hostId)`, `HOSTS_PER_PAGE`, `HOST_LIST_DEFAULT_SORT_BY`, `HOST_SORT_DEFAULT_ORDER`, `HostListParams`, `HostSortBy`. |
-| `frontend/src/api/findings.ts` | **extend** | Add `listFindingsForHost(hostId)` and `HOST_FINDINGS_PER_PAGE`. Leave `listFindings` and `HOME_SEVERITIES` untouched. |
+| `frontend/src/api/findings.ts` | **extend** | Add `HOST_FINDINGS_PER_PAGE` and widen the single `listFindings(params: FindingListParams)` wrapper to carry the host filter — `GET /findings` has one operation, so it keeps one wrapper. Leave `HOME_SEVERITIES` untouched. |
 
 ### Shared components
 

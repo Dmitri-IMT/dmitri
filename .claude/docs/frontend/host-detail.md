@@ -25,11 +25,11 @@ paint a half page, so `useHostDetail` folds the second one in the same way
 | `DetailState<T>` | `{ state: 'loading' }` / `{ state: 'error'; retry }` / `{ state: 'notFound' }` / `{ state: 'ready'; data: T }`. | `frontend/src/lib/detailState.ts:4` |
 | `readDetailState(id, query)` | Empty `id` **or** a 404 (`readApiError(...).status === 404`) is `notFound`; any other error carries a `retry` that refetches; pending is `loading`; otherwise `ready` with the data. Used directly by `ScanDetail`. | `frontend/src/lib/detailState.ts:10` |
 | `HostDetail` | The ready payload only — `{ host; findings }`. The hook returns `DetailState<HostDetail>`, not a second hand-written union. | `frontend/src/hooks/useHostDetail.ts:11` |
-| `useHostDetail(hostId)` | Returns `DetailState<HostDetail>`. `readDetailState` over `getHost` (keyed `queryKeys.hosts.detail`), then the findings read (`listFindingsForHost`, keyed `queryKeys.findings.list({ host_id, per_page: 100 })`) folded in: either error is `error`, either pending is `loading`. `retry` refetches both. | `frontend/src/hooks/useHostDetail.ts:16` |
+| `useHostDetail(hostId)` | Returns `DetailState<HostDetail>`. `readDetailState` over `getHost` (keyed `queryKeys.hosts.detail`), then the findings read (`listFindings`, one `{ host_id, per_page: 100 }` object serving both the key and the request) folded in: either error is `error`, either pending is `loading`. `retry` refetches both. | `frontend/src/hooks/useHostDetail.ts:16` |
 
 ## How it connects
 
-- Consumes [api](./api.md)'s `getHost` and `listFindingsForHost`.
+- Consumes [api](./api.md)'s `getHost` and `listFindings`.
 - Consumed by [screens](./screens.md)'s `HostDetail`; `readDetailState` is also consumed directly
   by `ScanDetail`. Both screens hand the result to `ReadDetailGate` ([tables](./tables.md)), which
   owns the `NotFoundNotice` / `ErrorRetry` / placeholder-header chrome. Findings on both screens open `pages/scans/FindingPanel.tsx` inside

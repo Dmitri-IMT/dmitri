@@ -5,6 +5,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-27
 
+* **Update**: `frontend/api.md`, `frontend/host-detail.md`, `frontend/tables.md` — PR #128 fourth
+  review pass. `listFindingsForHost` folded into `listFindings(params: FindingListParams)`: one
+  operation, one wrapper, and the object passed to the wrapper is the one passed to the query key.
+  `HostIdentity` renders its absent MAC through `EmptyMark` instead of a bare `'—'`. Prettier run
+  over the seven column modules the previous pass touched (frontend CI runs `format:check`).
 * **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
   `frontend/api.md`, `frontend/overview.md`, `frontend/index.md` — PR #128 third review pass. New
   `components/ReadDetailGate.tsx` takes a `DetailState<T>` and owns notFound / error / loading for

@@ -43,9 +43,9 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listScans(params)` | `GET /scans` with required `page`, `per_page`, `sort_by`, `sort_order`. The scan list always sends `SCAN_LIST_SORT` (`timestamp`/`desc`) plus `SCANS_PER_PAGE` 20. | `frontend/src/api/scans.ts:48` |
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:55` |
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort params (`HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` gives each sortable column its starting order — `desc` for `last_seen_at`, `asc` for `hostname`/`vendor`/`ip`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts:30` |
-| `listFindings({ scan_id, severity })` | One severity per call (never a list or comma-joined string), `per_page: 100`, returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:23` |
-| `listFindingsForHost(hostId)` | `GET /findings?host_id=&per_page=100`. Host detail's second read. | `frontend/src/api/findings.ts:36` |
-| `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:15` |
+| `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
+| `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
+| `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:19` |
 | `queryKeys` | Prefix-shaped TanStack keys: `['scans']` / `['hosts']` / `['findings']` so a prefix invalidate would sweep list and detail. No invalidation helper — that is DMI-89. Home's three keys now call these builders. | `frontend/src/api/queryKeys.ts:7` |
 
 ## How it connects
@@ -62,8 +62,8 @@ On top of that sit the thin, contract-typed read modules the screens call.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
 - The three Home reads are consumed by [review](./review.md)'s `useHomeReview()`; scan/host list
-  and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` /
-  `listFindingsForHost` directly. The six org calls in `users.ts`/`invites.ts` are consumed by
+  and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` / `listFindings`
+  directly. The six org calls in `users.ts`/`invites.ts` are consumed by
   [directory](./directory.md)'s `useOrgDirectory()` and by the Users screen's four dialogs.
 - Consumes the generated types from `src/types/openapi.d.ts` (see [overview](./overview.md)).
 - Behavioral proof lives in `src/api/client.test.ts` (one-refresh-on-401, refresh-failure→event,
