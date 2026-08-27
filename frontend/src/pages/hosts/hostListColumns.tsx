@@ -7,7 +7,6 @@ import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
 
-
 export const hostListColumns: DataTableColumn<HostSummary, HostSortBy>[] = [
   {
     key: 'hostname',

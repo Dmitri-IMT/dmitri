@@ -5,7 +5,6 @@ import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 
-
 export function findingColumns(
   hostColumn?: DataTableColumn<FindingRecord>,
 ): DataTableColumn<FindingRecord>[] {

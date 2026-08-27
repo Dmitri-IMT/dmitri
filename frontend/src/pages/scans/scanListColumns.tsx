@@ -9,7 +9,6 @@ import type { components } from '@/types/openapi'
 
 type ScanSummary = components['schemas']['ScanSummary']
 
-
 function statusCell(scan: ScanSummary): ReactNode {
   const pill = scanStatusPill(scan.status)
   return (

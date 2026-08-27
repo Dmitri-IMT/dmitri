@@ -7,7 +7,6 @@ import type { components } from '@/types/openapi'
 
 type ScanHostView = components['schemas']['ScanHostView']
 
-
 function hostName(host: ScanHostView): string {
   return host.hostname !== '' ? host.hostname : host.ip
 }

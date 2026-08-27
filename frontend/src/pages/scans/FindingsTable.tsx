@@ -8,7 +8,6 @@ import type { components } from '@/types/openapi'
 type FindingRecord = components['schemas']['FindingRecord']
 type ScanHostView = components['schemas']['ScanHostView']
 
-
 function hostLabel(
   finding: FindingRecord,
   hostsById: Map<string, ScanHostView>,

@@ -6,7 +6,6 @@ import type { components } from '@/types/openapi'
 
 type HostScanHistoryEntry = components['schemas']['HostScanHistoryEntry']
 
-
 const columns: DataTableColumn<HostScanHistoryEntry>[] = [
   {
     key: 'timestamp',

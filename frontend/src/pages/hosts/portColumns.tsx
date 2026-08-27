@@ -4,7 +4,6 @@ import type { components } from '@/types/openapi'
 
 type Port = components['schemas']['Port']
 
-
 export const portColumns: DataTableColumn<Port>[] = [
   {
     key: 'port',
