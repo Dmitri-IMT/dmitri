@@ -141,7 +141,10 @@ export const SCANS_PER_PAGE = 20
 export const HOSTS_PER_PAGE = 20
 export const HOST_FINDINGS_PER_PAGE = 100   // mirrors HOME_FINDINGS_PER_PAGE in api/findings.ts
 export const SCAN_LIST_SORT = { sort_by: 'timestamp', sort_order: 'desc' } as const
-export const HOST_LIST_DEFAULT_SORT = { sort_by: 'last_seen_at', sort_order: 'desc' } as const
+export const HOST_LIST_DEFAULT_SORT_BY = 'last_seen_at'
+export const HOST_SORT_DEFAULT_ORDER: Record<HostSortBy, SortOrder> = {
+  last_seen_at: 'desc', hostname: 'asc', vendor: 'asc', ip: 'asc',
+}
 ```
 
 **Page and sort state live in component `useState`, not in URL search params.** Decided by the
@@ -154,8 +157,10 @@ link returns to page 1 in the default order. Only `?finding=` is read from the U
   and `highest_severity` are not in `HostSortBy`; a header the server cannot honour must not look
   clickable.
 - Default `last_seen_at` desc.
-- Clicking the **active** column flips `sort_order`; clicking a different column switches `sort_by`
-  and resets `sort_order` to `desc`.
+- Clicking the **active** column flips `sort_order`. Clicking a different column switches `sort_by`
+  and resets `sort_order` to that column's entry in `HOST_SORT_DEFAULT_ORDER` — `desc` for
+  `last_seen_at` (newest first), `asc` for the three text columns (A–Z first). The map is the
+  single source of the rule; there is no branch on a column name in the page.
 - **Any sort change resets `page` to 1**, in the same state update as the sort change.
 
 **The scan list has no sort UI at all.** It is fixed at `timestamp` desc (TRUTH rule 2). No column
@@ -352,11 +357,16 @@ a fast failure must not sit behind a slow success.
 - **Query:** `queryKeys.hosts.list({ page, per_page: 20, sort_by, sort_order })` →
   `listHosts(params)` → `GET /hosts`.
 - **State:** `useState` for `page`, `sortBy`, `sortOrder`, defaulting to `1`,
-  `'last_seen_at'`, `'desc'`. One handler owns the rules in §2.3:
+  `HOST_LIST_DEFAULT_SORT_BY`, and that column's `HOST_SORT_DEFAULT_ORDER` entry. One handler owns
+  the rules in §2.3:
 
   ```ts
   function handleSort(key: HostSortBy) {
-    setSortOrder(key === sortBy && sortOrder === 'desc' ? 'asc' : 'desc')
+    setSortOrder(
+      key === sortBy
+        ? sortOrder === 'desc' ? 'asc' : 'desc'
+        : HOST_SORT_DEFAULT_ORDER[key],
+    )
     setSortBy(key)
     setPage(1)          // never omit — rule 16
   }
@@ -573,7 +583,7 @@ file outside it may be invented.
 |---|---|---|
 | `frontend/src/api/queryKeys.ts` | **new** | The key hierarchy in §3 and the three param types. No fetching, no invalidation helper. |
 | `frontend/src/api/scans.ts` | **extend** | Add `listScans(params)`, `getScan(scanId)`, `SCANS_PER_PAGE`, `SCAN_LIST_SORT`, `ScanListParams`. Leave `getLatestScan` / `getLatestSuccessfulScan` and their two exported query constants untouched — Home depends on them. |
-| `frontend/src/api/hosts.ts` | **new** | `listHosts(params)`, `getHost(hostId)`, `HOSTS_PER_PAGE`, `HOST_LIST_DEFAULT_SORT`, `HostListParams`, `HostSortBy`. |
+| `frontend/src/api/hosts.ts` | **new** | `listHosts(params)`, `getHost(hostId)`, `HOSTS_PER_PAGE`, `HOST_LIST_DEFAULT_SORT_BY`, `HOST_SORT_DEFAULT_ORDER`, `HostListParams`, `HostSortBy`. |
 | `frontend/src/api/findings.ts` | **extend** | Add `listFindingsForHost(hostId)` and `HOST_FINDINGS_PER_PAGE`. Leave `listFindings` and `HOME_SEVERITIES` untouched. |
 
 ### Shared components
@@ -585,6 +595,11 @@ file outside it may be invented.
 | `frontend/src/components/LoadingSkeleton.tsx` | **new** | §6. |
 | `frontend/src/components/StatusPill.tsx` | **new** | §6, §2.6. |
 | `frontend/src/components/Pagination.tsx` | **new** | §6. Two call sites. |
+| `frontend/src/components/ErrorRetry.tsx` | **new** | §6. The error notice + Retry button, shared by both list and both detail surfaces. |
+| `frontend/src/components/NotFoundNotice.tsx` | **new** | §6. The 404 notice + back link, shared by both detail surfaces. |
+| `frontend/src/components/ListSurface.tsx` | **new** | The whole list-page state machine (error / pending / empty / rows + pagination) in one place. `/scans` and `/hosts` pass columns and copy; neither owns a branch. |
+| `frontend/src/components/ReadDetailGate.tsx` | **new** | The detail-page counterpart: owns `notFound` / `error` / `loading` and the placeholder `PageHeader`, renders `children(data)` only when ready. `ScanDetail` and `HostDetail` own no read-state branch — the scan `failed` / unfinished split stays in `ScanDetail`, because that is domain, not read state. |
+| `frontend/src/components/EmptyMark.tsx` | **new** | The `—` absence mark (TRUTH rule 17). One definition; every column module imports it. |
 
 ### Pure logic
 
@@ -592,6 +607,7 @@ file outside it may be invented.
 |---|---|---|
 | `frontend/src/lib/scanStatus.ts` | **new** | `ScanStatus → { tone, label } \| null`, and the `isUnfinished(status)` predicate the counts cells branch on. No React. |
 | `frontend/src/lib/severity.ts` | **new** | `SEVERITY_ORDER` and `bySeverityDesc` (§4.2). No React. |
+| `frontend/src/lib/detailState.ts` | **new** | `DetailState<T>` and `readDetailState(id, query)` — the one place a detail query becomes `notFound` / `error` / `loading` / `ready`. Consumed by `ReadDetailGate`, produced by `ScanDetail` and `useHostDetail`. No React. |
 | `frontend/src/lib/scanFailureReasons.ts` | **untouched** | Imported as-is (§2.5). Do not extend, do not re-map. |
 
 ### Screens

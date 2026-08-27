@@ -6,6 +6,16 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 ## 2026-08-27
 
 * **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/api.md`, `frontend/overview.md`, `frontend/index.md` — PR #128 third review pass. New
+  `components/ReadDetailGate.tsx` takes a `DetailState<T>` and owns notFound / error / loading for
+  both detail screens, so `ScanDetail` and `HostDetail` render only the ready view (the scan
+  failed/unfinished split stays in `ScanDetail` — domain, not read state). `useHostDetail` now
+  returns `DetailState<HostDetail>` instead of a second hand-written union. New
+  `components/EmptyMark.tsx` replaces the seven copies of a local `dash()`. Host sorting moved off
+  the nested `last_seen_at` ternary onto `HOST_SORT_DEFAULT_ORDER`, a per-column default-order map
+  in `api/hosts.ts` (replacing `HOST_LIST_DEFAULT_SORT`); ARCHITECTURE §2.3 now documents that
+  rule.
+* **Update**: `frontend/tables.md`, `frontend/host-detail.md`, `frontend/screens.md`,
   `frontend/overview.md`, `frontend/index.md` — PR #128 second review pass. New
   `components/ListSurface.tsx` (the one list-page state machine, shared by Scans and Hosts),
   `components/NotFoundNotice.tsx` (the shared detail 404 block) and `lib/detailState.ts`
