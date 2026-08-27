@@ -14,10 +14,18 @@ export type HostListParams = Required<
 
 export const HOSTS_PER_PAGE = 20
 
-export const HOST_LIST_DEFAULT_SORT = {
-  sort_by: 'last_seen_at',
-  sort_order: 'desc',
-} as const
+export const HOST_LIST_DEFAULT_SORT_BY = 'last_seen_at'
+
+/** The order a column starts in the first time it becomes the sort column. */
+export const HOST_SORT_DEFAULT_ORDER: Record<
+  HostSortBy,
+  HostListParams['sort_order']
+> = {
+  last_seen_at: 'desc',
+  hostname: 'asc',
+  vendor: 'asc',
+  ip: 'asc',
+}
 
 export async function listHosts(
   params: HostListParams,

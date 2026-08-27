@@ -140,6 +140,25 @@ describe('Hosts', () => {
     )
   })
 
+  it('starts Last seen descending when the sort switches back to it', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<Hosts />, { route: '/hosts' })
+
+    await screen.findByTestId(`hosts-table-row-${newestHost.host_id}`)
+    await user.click(screen.getByTestId('hosts-table-sort-hostname'))
+
+    expect(screen.getByRole('columnheader', { name: 'Host' })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    )
+
+    await user.click(screen.getByTestId('hosts-table-sort-last_seen_at'))
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Last seen' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+  })
+
   it('renders the server order for vendor even when that payload is unsorted', async () => {
     const user = userEvent.setup()
     const scrambled = [

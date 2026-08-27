@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  HOST_LIST_DEFAULT_SORT,
+  HOST_LIST_DEFAULT_SORT_BY,
+  HOST_SORT_DEFAULT_ORDER,
   HOSTS_PER_PAGE,
   listHosts,
   type HostListParams,
@@ -14,11 +15,9 @@ import { hostListColumns } from '@/pages/hosts/hostListColumns'
 
 function Hosts() {
   const [page, setPage] = useState(1)
-  const [sortBy, setSortBy] = useState<HostSortBy>(
-    HOST_LIST_DEFAULT_SORT.sort_by,
-  )
+  const [sortBy, setSortBy] = useState<HostSortBy>(HOST_LIST_DEFAULT_SORT_BY)
   const [sortOrder, setSortOrder] = useState<HostListParams['sort_order']>(
-    HOST_LIST_DEFAULT_SORT.sort_order,
+    HOST_SORT_DEFAULT_ORDER[HOST_LIST_DEFAULT_SORT_BY],
   )
 
   function handleSort(key: HostSortBy) {
@@ -27,9 +26,7 @@ function Hosts() {
         ? sortOrder === 'desc'
           ? 'asc'
           : 'desc'
-        : key === 'last_seen_at'
-          ? 'desc'
-          : 'asc',
+        : HOST_SORT_DEFAULT_ORDER[key],
     )
     setSortBy(key)
     setPage(1)
