@@ -17,6 +17,8 @@ type OrgMember = components['schemas']['OrgMember']
 type PendingInvite = components['schemas']['PendingInvite']
 type UpdateUserRoleRequest = components['schemas']['UpdateUserRoleRequest']
 type InviteCreatedResponse = components['schemas']['InviteCreatedResponse']
+type AgentDetail = components['schemas']['AgentDetail']
+type CommandDetail = components['schemas']['CommandDetail']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
@@ -42,6 +44,35 @@ export const viewerProfile: UserProfileResponse = {
   email: 'viewer@dmitri.dev',
   role: 'viewer',
 }
+
+export const defaultAgent: AgentDetail = {
+  agent_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  display_name: 'DMITRI-NSPI-01',
+  online: true,
+  last_seen_at: minutesAgo(1),
+  available_subnets: [
+    { interface: 'eth0', cidr: '192.168.0.0/24', is_default_route: false },
+    { interface: 'wlan0', cidr: '10.12.0.0/16', is_default_route: true },
+  ],
+  target_subnet: '192.168.0.0/24',
+  active_command_id: null,
+}
+export const agentFixture = defaultAgent
+
+export const defaultCommand: CommandDetail = {
+  command_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  scan_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  agent_id: defaultAgent.agent_id,
+  scan_mode: 'quick',
+  subnet: '192.168.0.0/24',
+  status: 'queued',
+  error_code: null,
+  created_at: minutesAgo(1),
+  delivered_at: null,
+  started_at: null,
+  completed_at: null,
+}
+export const commandFixture = defaultCommand
 
 export const liveInvite: InviteLookupResponse = {
   email: 'ana@northwind.example',
@@ -356,6 +387,32 @@ export const handlers = [
     )
   }),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
+  http.get(`${baseURL}/agents`, () =>
+    HttpResponse.json({ data: [defaultAgent] }),
+  ),
+  http.get(`${baseURL}/agents/:agentId`, () => HttpResponse.json(defaultAgent)),
+  http.patch(`${baseURL}/agents/:agentId`, async ({ request }) => {
+    const body =
+      (await request.json()) as components['schemas']['UpdateAgentTargetSubnetRequest']
+    return HttpResponse.json({
+      ...defaultAgent,
+      target_subnet: body.target_subnet,
+    })
+  }),
+  http.post(`${baseURL}/agents/:agentId/commands`, () =>
+    HttpResponse.json(
+      {
+        command_id: defaultCommand.command_id,
+        scan_id: defaultCommand.scan_id,
+        agent_id: defaultAgent.agent_id,
+        status: 'queued' as const,
+      },
+      { status: 202 },
+    ),
+  ),
+  http.get(`${baseURL}/commands/:commandId`, () =>
+    HttpResponse.json(defaultCommand),
+  ),
   http.patch(`${baseURL}/users/:userId`, async ({ params, request }) => {
     const body = (await request.json()) as UpdateUserRoleRequest
     return HttpResponse.json({
