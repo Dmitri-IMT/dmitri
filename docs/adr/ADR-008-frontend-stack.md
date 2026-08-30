@@ -190,10 +190,13 @@ do app até concluir.
 > limitado no 403, ou de login bem-sucedido com escopo restrito. Registrar a resolução em AUTH.md +
 > contrato.
 
-**Papéis e guards:** o papel (`admin`/`viewer` — AUTH.md) vem nas claims do JWT. Uma rota de
-layout protegida envolve o `AppShell` (não autenticado → `/login`); rotas de admin e ações de
-mutação (ex.: botão "Scan now", visível só para `admin`) têm gating por papel no cliente — como
-UX apenas: a autorização real é sempre do backend.
+**Papéis e guards:** o papel (`admin`/`viewer` — AUTH.md) vem de **`GET /users/me`**, não de
+claims decodificadas do JWT. O access token carrega apenas identidade de sessão; o
+`SessionProvider` (spec 020) é o único leitor do papel e nada no SPA decodifica o token — um payload
+com `role: admin` não altera o que a UI renderiza (B11-C16). Uma rota de layout protegida envolve o
+`AppShell` (não autenticado → `/login`); rotas de admin e ações de mutação (ex.: botão "Scan now",
+visível só para `admin`) têm gating por papel no cliente — como UX apenas: a autorização real é
+sempre do backend.
 
 ---
 

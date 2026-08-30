@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend shared tables
-description: DataTable with a discriminated rowAction, stretched-link rows and compile-time sort keys, ListSurface and ReadDetailGate holding the list- and detail-page state machines, Pagination that greys edge controls, EmptyState with no CTA, outline StatusPill, and LoadingSkeleton bars on --border.
+description: DataTable with a discriminated rowAction, stretched-link rows and compile-time sort keys, ListSurface and ReadDetailGate holding the list- and detail-page state machines, Pagination that greys edge controls, EmptyState with optional action and note slots, taller outline StatusPill, and LoadingSkeleton bars on --border.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-08-27T15:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # frontend shared tables
@@ -23,18 +23,20 @@ read screen — scan list, scan detail (findings, hosts, ports), host inventory,
 | `DataTableRowAction` | `link` puts one `<Link>` in the first cell whose absolutely-positioned child span covers the `relative` `<tr>` — **one** destination, no row `onClick` and no `useNavigate`. `expand` is a disclosure (`aria-expanded` / `aria-controls`) over a `colSpan` panel row, and keeps its own `closest('button, a')` guard so an in-panel link is not swallowed. Absent means **no button and no link in any row**. | `frontend/src/components/DataTable.tsx:34` |
 | `DataTableColumn` | A two-member union over the same base (`label`, `width`, `render`, optional `align: 'right'`): a plain column takes any string `key`, a `sortable: true` column's `key` must be the table's `SortKey`. `align` moves the **heading** as well as the cell, so a numeric column's label sits over its digits instead of drifting to the far left of the column. | `frontend/src/components/DataTable.tsx:24` |
 | `DataTableSort` | `{ by, order, onChange }` all typed in the same `SortKey`, so `Hosts.handleSort(key: HostSortBy)` is the only legal handler and a mistyped column key fails to compile instead of no-opping. | `frontend/src/components/DataTable.tsx:28` |
-| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + pagination — shared by the scan list and the host inventory. One `testId` prefix derives all four (`-table`, `-error`, `-blank`, and the pagination's own). Pages own only their query params, columns and copy. | `frontend/src/components/ListSurface.tsx:29` |
+| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + pagination — shared by the scan list and the host inventory. `empty` accepts optional `action` and `note` React nodes (passed through to `EmptyState`). One `testId` prefix derives all four (`-table`, `-error`, `-blank`, and the pagination's own). Pages own only their query params, columns and copy. | `frontend/src/components/ListSurface.tsx:29` |
 | `NotFoundNotice` | The shared 404 block for a detail route: the sentence at `${testId}-not-found` and a real Back link at `${testId}-back`. Rendered by `ReadDetailGate`, never by a screen. | `frontend/src/components/NotFoundNotice.tsx:11` |
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>` and owns notFound → error → loading, plus the placeholder `PageHeader` those three share. Calls `children(data)` only when ready, so neither detail screen holds a read-state branch. One `testId` prefix derives the wrapper, the 404 block and `${testId}-error`. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it — including `HostIdentity`'s MAC — instead of keeping a local `dash()` or a bare `'—'` string. | `frontend/src/components/EmptyMark.tsx:2` |
 | `Pagination` | Range line plus Previous/Next. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:11` |
-| `EmptyState` | Heading, body, ornament. **No** `action`/`cta` prop — that absence is what keeps scan/host blank states CTA-free until DMI-89. | `frontend/src/components/EmptyState.tsx:9` |
-| `StatusPill` | Outline-only tone-and-label (`running` / `failed` / `neutral`). Never takes a `ScanStatus`. | `frontend/src/components/StatusPill.tsx:16` |
+| `EmptyState` | Heading, body, optional `action` and `note` slots, ornament. `AgentsBlank` uses `note` only — the one blank state with no action. | `frontend/src/components/EmptyState.tsx:12` |
+| `StatusPill` | Outline-only tone-and-label (`running` / `failed` / `neutral`). Never takes a `ScanStatus` or `CommandStatus` — callers pass resolved tone and label. Height matched to the Agents `[Scan now]` button (`h-8`, `text-body-md`), which ripples to scan list and scan detail. | `frontend/src/components/StatusPill.tsx:16` |
 | `LoadingSkeleton` | `rows × columns` bars using `bg-border` (not `bg-muted`, which is white on this palette). Used only inside a pending `DataTable`. | `frontend/src/components/LoadingSkeleton.tsx:10` |
 
 ## How it connects
 
-- Scan list and host inventory render through `ListSurface` with `rowAction: { kind: 'link' }`.
+- Scan list and host inventory render through `ListSurface` with `rowAction: { kind: 'link' }` and
+  `FirstScanCta` / `FirstScanNote` in `empty`. [agents-screen](./agents-screen.md)'s
+  `CommandStatus` also uses `StatusPill` for the command lifecycle.
   Both findings sections use `expand` into [screens](./screens.md)'s `FindingPanel`. Scan-detail
   host rows combine expand (ports) with an `Open {hostname}` link. Ports tables pass no
   `rowAction`.
@@ -70,3 +72,4 @@ read screen — scan list, scan detail (findings, hosts, ports), host inventory,
 
 [1] [specs/039-frontend-scans-hosts-read-surfaces/ARCHITECTURE.md](../../../specs/039-frontend-scans-hosts-read-surfaces/ARCHITECTURE.md)
 [2] [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md)
+[3] [specs/040-agents-scan-trigger/ARCHITECTURE.md](../../../specs/040-agents-scan-trigger/ARCHITECTURE.md)

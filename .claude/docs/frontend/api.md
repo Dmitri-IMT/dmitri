@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # frontend API layer
@@ -46,15 +46,20 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:19` |
-| `queryKeys` | Prefix-shaped TanStack keys: `['scans']` / `['hosts']` / `['findings']` so a prefix invalidate would sweep list and detail. No invalidation helper — that is DMI-89. Home's three keys now call these builders. | `frontend/src/api/queryKeys.ts:7` |
+| `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list discovers the MVP's single `agent_id`; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with `QUICK_SCAN_MODE` (`'quick' satisfies ScanMode`). | `frontend/src/api/agents.ts:14` |
+| `QUICK_SCAN_MODE` | The only scan mode the product sends — `satisfies ScanMode`, not an enum (`erasableSyntaxOnly`). | `frontend/src/api/agents.ts:12` |
+| `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
+| `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
+| `queryKeys` | Prefix-shaped TanStack keys: `scans`, `hosts`, `findings`, `agents`, and `commands`. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |
 
 ## How it connects
 
 - **Import direction is asymmetric and load-bearing.** `instances.ts` is the leaf: it requires a
   non-empty `VITE_API_URL`, creates both Axios objects, and imports nothing else. `client.ts`
   imports the bare instances plus `refresh` from `auth.ts`, and arms the interceptors. The read
-  modules (`users`, `scans`, `findings`) import `apiClient` **from `client.ts`**, never from
-  `instances.ts`. `auth.ts` is the one exception — it imports `authClient` from `instances.ts`,
+  modules (`users`, `scans`, `hosts`, `findings`, `agents`, `commands`) import `apiClient` **from
+  `client.ts`**, never from `instances.ts`. `auth.ts` is the one exception — it imports `authClient`
+  from `instances.ts`,
   because `client.ts` depends on it and the other direction would be a genuine cycle.
   `passwords.ts` follows the ordinary rule (`./client`) and is deliberately **not** folded into
   `auth.ts`: doing so would either recreate that cycle or leave the change-password call bypassing
@@ -63,8 +68,9 @@ On top of that sit the thin, contract-typed read modules the screens call.
   token + query cache and navigates to `/login`.
 - The three Home reads are consumed by [review](./review.md)'s `useHomeReview()`; scan/host list
   and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` / `listFindings`
-  directly. The six org calls in `users.ts`/`invites.ts` are consumed by
-  [directory](./directory.md)'s `useOrgDirectory()` and by the Users screen's four dialogs.
+  directly. [agents-screen](./agents-screen.md) calls `agents.ts` and `commands.ts`. The six org
+  calls in `users.ts`/`invites.ts` are consumed by [directory](./directory.md)'s
+  `useOrgDirectory()` and by the Users screen's four dialogs.
 - Consumes the generated types from `src/types/openapi.d.ts` (see [overview](./overview.md)).
 - Behavioral proof lives in `src/api/client.test.ts` (one-refresh-on-401, refresh-failure→event,
   concurrent single-flight, cookie scoping) — MSW intercepts at the network layer so these real
@@ -100,7 +106,9 @@ On top of that sit the thin, contract-typed read modules the screens call.
 - **Path tails are relative to the `/api/v1` baseURL** set in `instances.ts` — never repeat the prefix.
 - The MSW `/scans` handler paginates and honours `sort_by`/`sort_order`; `/hosts` does the same
   (replacing the old bare-array `/hosts` handler). `/findings` still branches on `severity` for
-  Home. Fixtures live in `src/test/scansHarness.ts` and `src/test/hostsHarness.ts`.
+  Home. `/agents`, `/agents/:id`, `PATCH /agents/:id`, `POST /agents/:id/commands`, and
+  `GET /commands/:id` have default handlers in `mswHandlers.ts`; per-test overrides live in
+  `src/test/agentsHarness.ts`. Scan/host fixtures remain in `scansHarness.ts` and `hostsHarness.ts`.
 - **MSW handler order is load-bearing where a literal segment collides with a parameter.** `:userId`
   also matches `me`, and MSW resolves the first matching handler, so `DELETE /users/me` must stay
   above `DELETE /users/:userId`. Reversed, account deletion resolves against the remove-a-member

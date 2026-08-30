@@ -189,7 +189,8 @@ AGENTS  (one row — single-agent MVP; discovered via GET /agents, contract ask 
                                     pill becomes [View scan] → SCAN DETAIL
         failed ..................→ error pill (CommandDetail.error_code) + [Retry]
      503 device_offline .........→ toast "Pi seems to be offline." + refresh agent status
-     409 device_busy ............→ toast (copy TBD) + GET /agents/{id} → poll active_command_id
+     409 device_busy ............→ toast "That Pi is already scanning. Showing the scan in progress."
+                                    + GET /agents/{id} → poll active_command_id
                                     (the Pi is mid-scan; adopt its command, don't start one)
 ```
 
@@ -287,4 +288,4 @@ Design calls, not contract gaps — settle these in this doc or in SCREENS.md.
 | # | Question | Owner |
 | --- | --- | --- |
 | 1 | Coverage-stale threshold: "no completed scan in **N** days". Pi `online: false` is immediate; N is not chosen. | product |
-| 2 | 409 `device_busy` toast copy | copywriting pass in SCREENS.md |
+| ~~2~~ | ~~409 `device_busy` toast copy~~ | **✅ Settled DMI-89** — see SCREENS § AGENTS |

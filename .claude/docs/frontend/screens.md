@@ -4,7 +4,7 @@ title: frontend screens, shells and shared components
 description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-27T15:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -14,7 +14,8 @@ timestamp: 2026-08-27T15:00:00Z
 The visible surface of the app: two frames (signed-out and signed-in), the public auth routes, the
 guarded reads (Home, scans, hosts, agents, Settings, Users), and the small set of components they
 share. The governing principle throughout is **absent, not disabled** — an operator never meets a
-control that looks live and isn't. Scan/host blank states have **no CTA** until DMI-89.
+control that looks live and isn't. Scan/host/Home blank states carry `FirstScanCta` for admins
+(DMI-89); the no-device Agents blank is the one blank state with no action.
 
 ## Key classes / functions
 
@@ -39,16 +40,17 @@ control that looks live and isn't. Scan/host blank states have **no CTA** until 
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
 | `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
 | `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Items-pending order: deck → failed-scan card → stale-coverage card. | `frontend/src/pages/Home.tsx:10` |
-| `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state has no button or link. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
+| `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state carries `FirstScanCta` + `FirstScanNote`. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
 | `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:13` |
 | `findingColumns(hostColumn?)` / `portColumns` | Shared column builders behind both findings tables and both ports tables. `findingColumns` inserts the caller's optional Host column and widens title/CVE when it is absent. | `frontend/src/pages/scans/findingColumns.tsx:11`, `frontend/src/pages/hosts/portColumns.tsx:11` |
 | `ScanDetail` | One `getScan` read through `readDetailState` (see [host-detail](./host-detail.md)) handed straight to `ReadDetailGate`, which owns notFound / error / loading. The screen's own body starts at `ready` and branches failed (operator sentence, no tables) → unfinished (`Check again` refetch, no `refetchInterval`) → completed empty findings (sentence, hosts table still) → findings worst-first plus hosts. `?finding=` seeds the open row. | `frontend/src/pages/ScanDetail.tsx:15` |
 | `FindingsTable` | The **one** findings surface. `hosts` present adds the Host column (scan detail); `isPending` renders the skeleton body ahead of the empty check, so a pending section never claims "No findings"; `testId` / `caption` / `emptyTestId` / `emptyCopy` carry the per-screen strings. Sorts worst-first and opens `FindingPanel` in an expand row. | `frontend/src/pages/scans/FindingsTable.tsx:40` |
 | `FindingPanel` | In-place finding body (description, recommendation, evidence, references, CVSS). Default export reused verbatim by host detail. | `frontend/src/pages/scans/FindingPanel.tsx:135` |
-| `Hosts` | HOST INVENTORY, through the same `ListSurface`. Owns `page`/`sortBy`/`sortOrder`; `handleSort(key: HostSortBy)` flips the order on the active column and otherwise takes the new column's `HOST_SORT_DEFAULT_ORDER` entry (`last_seen_at` desc, the three text columns asc), then resets page. The key is typed, so no runtime guard is needed and no column name is branched on. Renders server order. Empty hostname → `(unnamed)`; null MAC → `—`; seven cells always. | `frontend/src/pages/Hosts.tsx:16` |
+| `Hosts` | HOST INVENTORY, through the same `ListSurface`. Owns `page`/`sortBy`/`sortOrder`; `handleSort(key: HostSortBy)` flips the order on the active column and otherwise takes the new column's `HOST_SORT_DEFAULT_ORDER` entry (`last_seen_at` desc, the three text columns asc), then resets page. The key is typed, so no runtime guard is needed and no column name is branched on. Renders server order. Empty hostname → `(unnamed)`; null MAC → `—`; seven cells always. Blank state carries `FirstScanCta` + `FirstScanNote`. | `frontend/src/pages/Hosts.tsx:16` |
 | `HostDetail` | One `getHost` read through `readDetailState` into `ReadDetailGate` ([host-detail](./host-detail.md)); the screen renders only the ready view. Title falls back to IP. Empty ports: sentence, no table (inert when present). History rows link to `/scans/:scanId`. | `frontend/src/pages/HostDetail.tsx:12` |
 | `HostFindings` | The findings section's own query and own three states, so a failed or pending findings read leaves identity, ports and history standing. Shares `FindingsTable` with scan detail. | `frontend/src/pages/hosts/HostFindings.tsx:11` |
-| `Agents` | Permanent one-state page: title, subtitle, device statement. **No fetch, no button, no link.** DMI-89 grows it rather than replacing it. | `frontend/src/pages/Agents.tsx:3` |
+| `Agents` | Fetches the single MVP agent, shows online/target network, admin-only subnet chooser and `[Scan now]`, and follows the command lifecycle with a 5s poll. Both roles read; controls are `AdminOnly`. Permanent Pi note survives at the foot. See [agents-screen](./agents-screen.md). | `frontend/src/pages/Agents.tsx:10` |
+| `FirstScanCta` / `FirstScanNote` | Admin link to `/agents` (`first-scan-cta`) and viewer line (`first-scan-note`) for Home, Scans and Hosts blank states. `FirstScanNote` reads `useSession()` for the inverse guard. | `frontend/src/components/FirstScanCta.tsx:6` |
 | `DataTable` / `ListSurface` / `ReadDetailGate` / `Pagination` / `EmptyState` / `NotFoundNotice` / `EmptyMark` / `StatusPill` / `LoadingSkeleton` | Shared table and page-state set — see [tables](./tables.md). | `frontend/src/components/DataTable.tsx:64` |
 | `Users` | The admin org directory at `/users`, nested under `RequireAdmin`. Switches over [directory](./directory.md)'s `useOrgDirectory()` and renders exactly one of loading / blank / error / ready, holds the pending state for all four dialogs, and raises the toast on each row action's success. | `frontend/src/pages/Users.tsx:24` |
 | `DirectoryTable` | Five columns, **four** headings — Person · Role · Status · Last seen — with the fifth header carrying `sr-only` text for the actions cell. One `<tr>` per person; members before invites, never interleaved. No row navigates anywhere: there is no per-person detail screen to navigate to. | `frontend/src/pages/users/DirectoryTable.tsx:179` |
@@ -66,15 +68,16 @@ control that looks live and isn't. Scan/host blank states have **no CTA** until 
 | `Verdict` | The verdict + context sentence, shared by all-clear (centred) and items-pending (left-aligned), including the `1 thing needs your review.` singular split. Context comes from the **latest successful** scan and its own `host_count`. | `frontend/src/pages/home/Verdict.tsx:12` |
 | `ReviewItemCard` | Square-edged card: `FINDING`/`SCAN`/`COVERAGE` label (the only place `--accent` appears on Home), severity badge top-right for findings. **Takes no `href` and no `onAction`.** | `frontend/src/pages/home/ReviewItemCard.tsx:18` |
 | `FindingDeck` | One finding at a time with `←`/`→` and a `{i} of {n}` line, over the already-fetched array. | `frontend/src/pages/home/FindingDeck.tsx:8` |
-| `HomeBlank` / `HomeError` / `HomeFooter` | First-run copy (no CTA, does not import `useSession`); the error copy + `[Retry]`; the last-scan line via `Timestamp`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
+| `HomeBlank` / `HomeError` / `HomeFooter` | First-run copy (`No scans yet.` + short body sentence from `SCREENS.md`), `FirstScanCta` + `FirstScanNote`; error copy + `[Retry]`; footer last-scan + Pi-status lines. | `frontend/src/pages/home/HomeBlank.tsx:4` |
 | `Timestamp` / `formatTimestamp` | Relative inside 7 days, absolute beyond, exact value in `title`. | `frontend/src/components/Timestamp.tsx:21` |
 | `SeverityBadge` | Severity-coloured text on a 10% tint of the same hue with a 1px full-colour border — never white-on-solid. Severity type aliases the generated schema. | `frontend/src/components/SeverityBadge.tsx:20` |
 | `Ornament` | Full-width inline SVG rule with a filled vector lozenge centred between two hairline segments; fills its container with no props. | `frontend/src/components/Ornament.tsx:1` |
 
 ## How it connects
 
-- `Home` consumes [review](./review.md)'s `useHomeReview()`; `Users` consumes
-  [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
+- `Home` consumes [review](./review.md)'s `useHomeReview()`; `Agents` consumes
+  [agents-screen](./agents-screen.md)'s `useAgentScreen()` and `useScanCommand()`. `Users`
+  consumes [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
   Scan/host screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
   `HostDetail` consumes [host-detail](./host-detail.md).
   `Login`, `TopBar`, `AcceptInvite`, `Settings` and `AccountDetails` consume
@@ -178,6 +181,7 @@ control that looks live and isn't. Scan/host blank states have **no CTA** until 
 [7] [specs/033-settings-leave-organization](../../../specs/033-settings-leave-organization/TRUTH.md)
 [8] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
 [9] [specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md](../../../specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md)
+[10] [specs/040-agents-scan-trigger/TRUTH.md](../../../specs/040-agents-scan-trigger/TRUTH.md)
 - **Column widths are declared as shares, never as pixels.** A `<colgroup>` assigns percentages
   summing to 100 — below `sm` 30·15·20·25·10, at `sm` and up 35·15·20·20·10 — so every column is a
   fraction of whatever the table currently is and the row scales with the shell. Person yields

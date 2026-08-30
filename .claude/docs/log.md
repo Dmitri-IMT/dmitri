@@ -3,6 +3,18 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-29
+
+* **Creation**: `frontend/command-status.md`, `frontend/agents-screen.md` — DMI-89 / spec 040.
+  Command lifecycle mapping (`commandStatusPill`, `isTerminalCommandStatus`) and the Agents screen
+  (`useAgentScreen`, `useScanCommand`, `pages/agents/*`, `subnetLabel`, `FirstScanCta`).
+* **Update**: `frontend/api.md` — `agents.ts` and `commands.ts`, `agents`/`commands` query key
+  groups, first invalidation call site in `useScanCommand`, MSW/agentsHarness note.
+* **Update**: `frontend/api.md`, `frontend/screens.md`, `frontend/tables.md`,
+  `frontend/scan-status.md`, `frontend/overview.md`, `frontend/index.md`, root `overview.md` —
+  Agents fetches and triggers; `EmptyState` action/note slots; taller `StatusPill`; blank-state CTAs
+  on Home/Scans/Hosts.
+
 ## 2026-08-27
 
 * **Update**: `frontend/host-detail.md` (rewritten), `frontend/screens.md`, `frontend/overview.md`,

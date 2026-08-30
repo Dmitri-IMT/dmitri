@@ -366,11 +366,12 @@ screen that needs it.
 | `DataTable` | Scan list, host inventory, scan detail findings and hosts, host detail findings, ports and history. Users & invites is **not** retrofitted (tracked follow-up). |
 | `Pagination` | Scan list, host inventory |
 | `SeverityBadge` | Home (critical item), Scan detail, Host detail |
-| `StatusPill` | Agents (`queued → delivered → running → uploading → done`, online/offline), Scan list/detail (scan status) |
+| `StatusPill` | Agents (command lifecycle), Scan list/detail (scan status). Shared `h-8` height; `failed` and `expired` share a tone, separated by copy. |
 | `Timestamp` | everywhere a time is rendered — owns the relative/absolute rule below |
-| `EmptyState` | every table-led screen + blank Home |
+| `EmptyState` | table-led screen blanks + `AgentsBlank` (optional `action` and `note` slots) |
+| `FirstScanCta` | blank Home, Scans and Hosts — admin link to `/agents`; viewer line via `FirstScanNote` |
 | `LoadingSkeleton` | every table-led screen |
-| `Toast` | Users & invites — role change, remove, revoke **succeeding** (first call site); Scan now errors (503 `device_offline`, 409 `device_busy`) when Agents unblocks |
+| `Toast` | Users & invites — role change, remove, revoke **succeeding**; Agents — scan trigger refusals (`503 device_offline`, `409 device_busy`, subnet stale) and subnet PATCH refusals |
 | `Ornament` | Home, auth screens — the engraving detail: a filled lozenge on a full-width hairline, broken either side. **Inline SVG, never a Unicode glyph** — a glyph cannot be given a stroke weight, a size or a rule to sit on, and it renders differently wherever the face is missing. Sizes to its container with no props. |
 
 **Cut from the candidate list:** `Sidebar` (top bar chosen above) · `MetricCard` (the MVP has no
@@ -434,7 +435,7 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ built (DMI-88; C10 resolved) |
 | Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
 | Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ built (DMI-88; C11 resolved — `?host_id=`) |
-| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ◐ built (DMI-88) — read-only surface that DMI-89 grows (C1, C2, C12 resolved) |
+| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ✅ built (DMI-89) — scan trigger, subnet chooser, command poll |
 | Users & invites | `/users` | inside | admin | B2 | ◐ API ready (C4 closed); frontend screen not built |
 | Settings | `/settings` | inside | admin, viewer | B5 | ◐ details (read-only), password modal, activity disclosure and removal built; profile **editing** pending on C3 |
 
@@ -994,10 +995,8 @@ filtering yet (§12).
 **Three states:**
 - **Regular:** one row per scan. Whole row navigates (rule 4). An unfinished scan shows a
   `StatusPill` instead of counts — it has no counts yet.
-- **Blank:** no scans ever. Same content as blank Home, because it is the same fact. **No
-  `[Run first scan]` CTA and no viewer-only line** — `/agents` has no trigger until DMI-89, so a
-  button that names that action would fail consistency rule 8. The CTA and the role split return
-  when the trigger exists, and not before.
+- **Blank:** no scans ever. Same first-run CTA as blank Home — admin `[Run first scan]` → Agents;
+  viewer "Ask your admin to run the first scan."
 - **Error:** page-level copy + [Retry]. `LoadingSkeleton` for the table body on first load only —
   never on background refetch, which would make a live list flicker.
 
@@ -1013,8 +1012,9 @@ filtering yet (§12).
 | Highest severity — null on a completed scan | "—" |
 | Pagination | "Showing 1–20 of 47" · [Previous] [Next] |
 | Blank — heading | "No scans yet." |
-| Blank — body | "Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here. Scanning is set up on the Pi itself." |
-| Blank — CTA | *(none until DMI-89 ships the trigger on `/agents`. The `[Run first scan]` admin CTA and the viewer "Ask your admin" line return together when that trigger exists, and not before.)* |
+| Blank — body | "Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here." |
+| Blank — CTA (admin only) | "Run first scan" |
+| Blank — viewer line | "Ask your admin to run the first scan." |
 | Error | "Couldn't load the scans." · [Retry] |
 
 **Layout:**
@@ -1068,8 +1068,9 @@ the header last.
 - **Regular, no findings (the good day):** the findings section says so in words and the host table
   carries the page. Positive framing, not an empty table (§7).
 - **Regular, unfinished:** `status` is `pending`/`accepted`/`processing` — the scan is running right
-  now. The page says so and does **not** poll; live refresh arrives with the trigger (DMI-89). It
-  does not render an empty findings table as though the answer were "nothing".
+  now. The page says so and does **not** poll; the run log refreshes when a command completes on
+  Agents (cache invalidation). It does not render an empty findings table as though the answer were
+  "nothing".
 - **Regular, failed:** the failure **is** the content. Show the reason from `error_code` and what to
   do; suppress the empty findings and host tables entirely.
 - **Error:** page-level copy + [Retry]. 404 gets its own line.
@@ -1166,10 +1167,7 @@ observable from here.
 
 **Three states:**
 - **Regular:** one row per host, whole row navigates to `/hosts/:hostId`.
-- **Blank:** no scan has ever run, so nothing has been discovered. Same fact as blank Home. **No
-  `[Run first scan]` CTA and no viewer-only line** — `/agents` has no trigger until DMI-89, so a
-  button that names that action would fail consistency rule 8. The CTA and the role split return
-  when the trigger exists, and not before.
+- **Blank:** no scan has ever run, so nothing has been discovered. Same first-run CTA as blank Home.
 - **Error:** page-level copy + [Retry].
 
 **Copy:**
@@ -1182,8 +1180,9 @@ observable from here.
 | MAC — null | "—" |
 | Highest severity — null | "—" |
 | Blank — heading | "No hosts yet." |
-| Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here. Scanning is set up on the Pi itself." |
-| Blank — CTA | *(none until DMI-89 ships the trigger on `/agents`. The `[Run first scan]` admin CTA and the viewer "Ask your admin" line return together when that trigger exists, and not before.)* |
+| Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here." |
+| Blank — CTA (admin only) | "Run first scan" |
+| Blank — viewer line | "Ask your admin to run the first scan." |
 | Error | "Couldn't load the hosts." · [Retry] |
 
 **Layout:**
@@ -1358,18 +1357,18 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 | Trigger | "Scan now" |
 | Needs-network heading | "Which network should Dmitri scan?" |
 | Needs-network body | "This box is connected to more than one network. Pick the one you want scanned — usually the office network, not the internet connection." |
-| Needs-network options | "Ethernet · 192.168.0.0/24" / "Wi-Fi · 10.12.0.0/16 (internet connection)" |
-| Needs-network confirm | "Scan this network" |
+| Needs-network options | "Ethernet · 192.168.0.0/24" / "Wi-Fi · 10.12.0.0/16 (internet connection)" — **derived** from reported `interface` by prefix (`eth*`/`en*` → Ethernet, `wl*` → Wi-Fi; unfamiliar names render raw) |
+| Needs-network confirm | "Set this Network" |
 | Pill — queued | "Queued" |
 | Pill — delivered | "Sent to the Pi" |
 | Pill — running | "Scanning…" |
 | Pill — uploading | "Uploading results…" |
 | Pill — done | "View scan" |
-| Pill — failed | "Scan failed — `<error_code>`" · [Retry] |
-| Pill — expired | "The Pi never picked up the scan." · [Retry] |
+| Pill — failed | "Scan failed" pill + operator sentence from `scanFailureReason(error_code)` (not the raw code) · [Retry] |
+| Pill — expired | "Not picked up" pill + "The Pi never picked up the scan. Check that it's powered on and connected to the network." · [Retry] |
 | Hint under trigger | "A scan usually takes about 10 minutes." |
 | Toast — 503 `device_offline` | "Pi seems to be offline." |
-| Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." *(FLOWS open decision #2 — this is the proposed copy)* |
+| Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." |
 | Blank — heading | "No Pi connected yet." |
 | Blank — body | "Dmitri scans your network from a small box installed on site. Your installer sets it up — once it's online, it shows up here and you can run your first scan." |
 | Blank — viewer/admin line | "Contact whoever installed Dmitri if you were expecting to see one." |
@@ -1413,7 +1412,7 @@ Needs a network — admin, first run:
 |   |    ( ) Ethernet · 192.168.0.0/24                                |        |
 |   |    ( ) Wi-Fi    · 10.12.0.0/16   (internet connection)          |        |
 |   |                                                                 |        |
-|   |                                   [ Scan this network ]         |        |
+|   |                                   [ Set this Network ]         |        |
 |   +----------------------------------------------------------------+        |
 ```
 
@@ -1425,7 +1424,7 @@ Scanning:
 ```
 
 **Open questions:**
-1. **Offline: keep `[Scan now]` or hide it?** Spec says **keep it visible and enabled.** `online` is
+1. ~~**Offline: keep `[Scan now]` or hide it?**~~ **✅ RESOLVED — keep visible and enabled** (shipped DMI-89). `online` is
    derived from the WebSocket registry and can be momentarily stale. The backend makes **one**
    delivery attempt and does not retry ([`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)),
    which makes keeping the button live *more* important, not less: **the operator clicking again
@@ -1438,9 +1437,7 @@ Scanning:
    *never picked up*. Pill copy updated accordingly.
 3. Pill vs stepper for the five lifecycle states — pill chosen; stepper parked
    ([`IDEAS.md`](IDEAS.md) → Agents).
-4. ~~Blocked on **C1** and **C2**.~~ **Unblocked 2026-08-12 (DMI-78).** `GET /agents`,
-   `GET /agents/{id}` with `available_subnets` + `target_subnet`, and the `PATCH` that sets it all
-   exist. The screen is fully designed and now buildable — the SPA work is DMI-89.
+4. ~~Blocked on **C1** and **C2**.~~ **✅ Unblocked and built** — DMI-78 (contract) + DMI-89 (SPA).
 
 ---
 
