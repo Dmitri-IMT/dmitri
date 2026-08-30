@@ -1,12 +1,15 @@
+import type { ReactNode } from 'react'
 import Ornament from '@/components/Ornament'
 
 type EmptyStateProps = {
   heading: string
   body: string
   testId: string
+  action?: ReactNode
+  note?: ReactNode
 }
 
-function EmptyState({ heading, body, testId }: EmptyStateProps) {
+function EmptyState({ heading, body, testId, action, note }: EmptyStateProps) {
   return (
     <div
       data-testid={testId}
@@ -15,6 +18,8 @@ function EmptyState({ heading, body, testId }: EmptyStateProps) {
       <div className="flex max-w-prose flex-col items-center gap-6">
         <h2 className="font-title text-title-sm">{heading}</h2>
         <p className="text-body-md text-muted-foreground">{body}</p>
+        {action}
+        {note}
       </div>
       <div className="w-24">
         <Ornament />
