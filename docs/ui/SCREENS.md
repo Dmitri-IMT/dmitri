@@ -1368,7 +1368,8 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 | Pill — expired | "Not picked up" pill + "The Pi never picked up the scan. Check that it's powered on and connected to the network." · [Retry] |
 | Hint under trigger | "A scan usually takes about 10 minutes." |
 | Toast — 503 `device_offline` | "Pi seems to be offline." |
-| Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." |
+| Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." — only when the Pi's run is actually adopted |
+| Toast — any other refused trigger | "Couldn't start the scan." — including a busy Pi that reports no run to adopt |
 | Blank — heading | "No Pi connected yet." |
 | Blank — body | "Dmitri scans your network from a small box installed on site. Your installer sets it up — once it's online, it shows up here and you can run your first scan." |
 | Blank — viewer/admin line | "Contact whoever installed Dmitri if you were expecting to see one." |

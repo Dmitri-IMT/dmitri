@@ -529,7 +529,8 @@ happened, give the next action, no error codes.
 | Element | Copy | Source |
 |---|---|---|
 | Toast — `503 device_offline` | "Pi seems to be offline." | verbatim |
-| Toast — `409 device_busy` | "That Pi is already scanning. Showing the scan in progress." | verbatim — this adopts SCREENS.md's proposed wording and closes FLOWS open decision #2 |
+| Toast — `409 device_busy`, a run adopted | "That Pi is already scanning. Showing the scan in progress." | verbatim — this adopts SCREENS.md's proposed wording and closes FLOWS open decision #2 |
+| Toast — any other refused trigger, `409 device_busy` with no run to adopt included | "Couldn't start the scan." | **invented** — the screen stays on `[Scan now]`, so no adopt copy may claim a run is showing |
 | Toast — `422 subnet_not_reported` | "The Pi doesn't report that network any more. Pick the network to scan again." | **invented** |
 | Blank — heading | "No Pi connected yet." | verbatim |
 | Blank — body | "Dmitri scans your network from a small box installed on site. Your installer sets it up — once it's online, it shows up here and you can run your first scan." | verbatim |

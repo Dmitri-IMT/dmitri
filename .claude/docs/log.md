@@ -3,6 +3,16 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-30
+
+* **Update**: `frontend/agents-screen.md` — PR #129 review pass. `useScanCommand` lost its
+  `onSubnetStale` argument and its object outcome: `trigger()` now resolves to one
+  `TriggerOutcome` (`'followed' | 'subnet-stale' | 'refused'`) and `ScanControl` dispatches on it.
+  Focus moved from two `focusRequest` counters plus `querySelector('[data-testid=…]')` to a React 19
+  `ref` on `CommandStatus` and `autoFocus` on `[Scan now]`. `409 device_busy` with no
+  `active_command_id` now toasts the generic start failure. Test split: new
+  `Agents.invalidation.test.tsx` owns the done-sweep.
+
 ## 2026-08-29
 
 * **Creation**: `frontend/command-status.md`, `frontend/agents-screen.md` — DMI-89 / spec 040.
