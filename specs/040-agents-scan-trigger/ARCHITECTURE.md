@@ -283,9 +283,7 @@ export type ScanCommand = {
   trigger: () => Promise<TriggerOutcome>
 }
 
-export type TriggerOutcome =
-  | { outcome: 'followed'; commandId: string; source: 'created' | 'busy-adopted' }
-  | { outcome: 'refused' }
+export type TriggerOutcome = 'followed' | 'subnet-stale' | 'refused'
 
 export function useScanCommand(agent: AgentDetail): ScanCommand
 ```
@@ -478,17 +476,14 @@ if (status === 409 && code === 'device_busy') {
     queryKey: queryKeys.agents.detail(agent.agent_id),
     queryFn: () => getAgent(agent.agent_id),
   })
-  show(/* SCREENS.md § AGENTS — 409 toast copy */)
   if (detail.active_command_id) {
     setFollowedCommandId(detail.active_command_id)
     setLastObservedActiveCommandId(detail.active_command_id)
-    return {
-      outcome: 'followed',
-      commandId: detail.active_command_id,
-      source: 'busy-adopted',
-    }
+    show(/* SCREENS.md § AGENTS — 409 toast copy */)
+    return 'followed'
   }
-  return { outcome: 'refused' }
+  show(/* SCREENS.md § AGENTS — generic start-failure copy */)
+  return 'refused'
 }
 ```
 
@@ -500,7 +495,9 @@ if (status === 409 && code === 'device_busy') {
   Adoption is a `setState`, not a code path.
 - **`active_command_id` may come back `null`** if the run finished between the POST and this read.
   **The followed id is not cleared** (§5.1); writing `null` here would discard a
-  terminal pill the operator is still reading. The toast tells them what happened; the `fetchQuery`
+  terminal pill the operator is still reading. With no id to follow, nothing is adopted and the
+  screen stays on `[Scan now]`, so the toast is the **generic start failure** — the adopt copy
+  ("Showing the scan in progress.") would describe a state the UI never enters. The `fetchQuery`
   above has already refreshed the row. No retry loop, no invented id.
 
 ---
@@ -901,6 +898,7 @@ precedent. Screen-specific components do not go in `src/components/`.
 | `frontend/src/components/FirstScanCta.test.tsx` | **new** | Both exports, both roles: exactly one renders per role, never both, never neither. |
 | `frontend/src/pages/Agents.test.tsx` | **extend** | Rewritten around the real screen (§11.4). The 039 assertion "contains no button and no link" is **replaced**, not worked around. |
 | `frontend/src/pages/Agents.command.test.tsx` | **new** | The lifecycle, polling, resume and adoption suite (§11.5) — split out because it owns fake timers. |
+| `frontend/src/pages/Agents.invalidation.test.tsx` | **new** | The done-sweep suite (§11.5) — split out because it is the only case that mounts the product lists (`Scans`, `Hosts`, `HostFindings`) beside the agents card. |
 | `frontend/src/pages/Scans.test.tsx` | **extend** | The blank state now carries a CTA for an admin and a line for a viewer. |
 | `frontend/src/pages/Hosts.test.tsx` | **extend** | Same. |
 | `frontend/src/pages/Home.test.tsx` | **extend** | Same, on `HomeBlank`. |
@@ -1063,12 +1061,12 @@ jsdom — `document.visibilityState` is `'visible'`.
 | Pill walks the lifecycle | `commandStatuses(['queued','delivered','running','uploading','done'])`; advance 5s at a time and assert each label in turn, with no operator action between |
 | Terminal states stop the asking | count handler invocations; after `done`, advance 15s and assert the count **did not grow** |
 | Completion opens the scan | `[View scan]` links to `/scans/{scan_id}` on `done` — and assert it is **absent** at `queued`, `running` and `uploading` |
-| Completion refreshes the product | render the scan list alongside, with a `/scans` handler returning a new row on its second call; reach `done` and assert the new row appears **with no operator action** |
 | Run survives navigation | `active_command_id` set on the agent fixture, nothing started in-session → the pill renders the polled state on first paint |
 | Adopting a run never started here | same fixture, and the pill shows a state the test never triggered |
 | **An adopted run reaches `done`** (§5.1 latch — the regression test for the defect this spec was refined to fix) | `active_command_id` set on the agent fixture and **nothing started in-session**; the agent handler returns `active_command_id: null` from its second call onward, so the done-sweep's refetch clears it exactly as the server would. Advance to `done` and assert `[View scan]` is present and links to `/scans/{scan_id}`. Without the latch the pill unmounts here and the assertion fails |
 | **A background agent-read failure does not discard the run** (§4) | a run in flight; the `GET /agents/{id}` handler fails on its **second** call while the command handler keeps returning `running` → the page **stays on the card**, `agents-error` is absent, and the pill still shows the run |
 | Already scanning | POST → `409 device_busy`, with the agent handler then returning an `active_command_id` → the toast copy renders, **no error state appears**, and the pill shows the in-progress run |
+| Busy with nothing to adopt | POST → `409 device_busy` with the agent handler reporting no `active_command_id` → the **generic start-failure** toast renders, no status region appears, and `[Scan now]` is still on screen (§5.5) |
 | Unreachable device | POST → `503 device_offline` → the toast copy renders **and** `GET /agents/{id}` is called again (assert through a handler whose second response changes the visible online line) |
 | Stale network refused | POST → `422 subnet_not_reported` → the toast copy renders and the chooser is open again |
 | Expired is not failed | one render at `expired`, one at `failed`; each carries its own sentence, and each sentence is absent from the other |
@@ -1080,6 +1078,8 @@ jsdom — `document.visibilityState` is `'visible'`.
 | Passive adoption | mount with an active id → status renders without programmatically displacing existing focus |
 | Stable status region | pending `Starting…` resolves to queued and later poll states → the same `agents-command-status` root remains mounted and focus is not moved again |
 | (rule 4, no raw codes) | on `failed` with `error_code: 'device_offline'`, the operator sentence renders and the string `"device_offline"` does **not** appear |
+
+| Completion refreshes the product (`Agents.invalidation.test.tsx`) | render the scan, host and finding lists alongside, counting reads per family; reach `done` and assert each family is re-read exactly once **with no operator action**, and that further polls do not repeat the sweep |
 
 Testids: `agents-pill`, `agents-command-status`, `agents-view-scan`, `agents-retry`, and the shared `toast`.
 

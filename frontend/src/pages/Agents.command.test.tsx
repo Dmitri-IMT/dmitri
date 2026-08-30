@@ -13,10 +13,7 @@ import {
 import { defaultAgent, defaultCommand, viewerProfile } from '@/test/mswHandlers'
 import { server } from '@/test/setup'
 import { signedInAs } from '@/test/usersHarness'
-import HostFindings from './hosts/HostFindings'
 import Agents from './Agents'
-import Hosts from './Hosts'
-import Scans from './Scans'
 
 afterEach(() => {
   focusManager.setFocused(undefined)
@@ -475,6 +472,22 @@ describe('Agents command lifecycle', () => {
       expect(screen.queryByTestId('agents-error')).not.toBeInTheDocument()
     })
 
+    it('reports a plain start failure when a busy Pi exposes no command to adopt', async () => {
+      const user = userEvent.setup()
+      commandRefused(409, 'device_busy')
+      renderWithProviders(<Agents />)
+
+      await user.click(await screen.findByTestId('agents-scan-now'))
+
+      expect(await screen.findByTestId('toast')).toHaveTextContent(
+        "Couldn't start the scan.",
+      )
+      expect(
+        screen.queryByTestId('agents-command-status'),
+      ).not.toBeInTheDocument()
+      expect(screen.getByTestId('agents-scan-now')).toBeInTheDocument()
+    })
+
     it('toasts an offline refusal and re-reads the visible agent state', async () => {
       const user = userEvent.setup()
       let detailReads = 0
@@ -810,90 +823,6 @@ describe('Agents command lifecycle', () => {
       releasePost()
       expect(await screen.findByText('Queued')).toBeInTheDocument()
       expect(postCount).toBe(1)
-    })
-  })
-
-  describe('cache invalidation', () => {
-    it('refreshes each completed-product family once and does not repeat the done sweep', async () => {
-      vi.useFakeTimers()
-      let commandReads = 0
-      let agentDetailReads = 0
-      let scanReads = 0
-      let hostReads = 0
-      let findingReads = 0
-      server.use(
-        http.get(`${baseURL}/agents`, () =>
-          HttpResponse.json({
-            data: [
-              { ...defaultAgent, active_command_id: defaultCommand.command_id },
-            ],
-          }),
-        ),
-        http.get(`${baseURL}/agents/:agentId`, () => {
-          agentDetailReads += 1
-          return HttpResponse.json({
-            ...defaultAgent,
-            active_command_id:
-              agentDetailReads === 1 ? defaultCommand.command_id : null,
-          })
-        }),
-        http.get(`${baseURL}/commands/:commandId`, () => {
-          commandReads += 1
-          const done = commandReads > 1
-          return HttpResponse.json({
-            ...defaultCommand,
-            status: done ? ('done' as const) : ('queued' as const),
-            completed_at: done ? new Date().toISOString() : null,
-          })
-        }),
-        http.get(`${baseURL}/scans`, () => {
-          scanReads += 1
-          return HttpResponse.json({ data: [], total: 0, page: 1 })
-        }),
-        http.get(`${baseURL}/hosts`, () => {
-          hostReads += 1
-          return HttpResponse.json({ data: [], total: 0, page: 1 })
-        }),
-        http.get(`${baseURL}/findings`, () => {
-          findingReads += 1
-          return HttpResponse.json({ data: [], total: 0, page: 1 })
-        }),
-      )
-      renderWithProviders(
-        <>
-          <Agents />
-          <Scans />
-          <Hosts />
-          <HostFindings hostId="host-for-invalidation" />
-        </>,
-      )
-
-      await vi.waitFor(() => {
-        expect(screen.getByText('Queued')).toBeInTheDocument()
-        expect(scanReads).toBe(1)
-        expect(hostReads).toBe(1)
-        expect(findingReads).toBe(1)
-        expect(agentDetailReads).toBe(1)
-      })
-      await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS)
-      await vi.waitFor(() => {
-        expect(screen.getByText('Done')).toBeInTheDocument()
-        expect(scanReads).toBe(2)
-        expect(hostReads).toBe(2)
-        expect(findingReads).toBe(2)
-        expect(agentDetailReads).toBe(2)
-      })
-
-      await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
-      expect(commandReads).toBe(2)
-      expect(scanReads).toBe(2)
-      expect(hostReads).toBe(2)
-      expect(findingReads).toBe(2)
-      expect(agentDetailReads).toBe(2)
-      expect(screen.getByTestId('agents-view-scan')).toHaveAttribute(
-        'href',
-        `/scans/${defaultCommand.scan_id}`,
-      )
     })
   })
 })

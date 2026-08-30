@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 import CommandStatus from './CommandStatus'
@@ -7,34 +7,39 @@ import type { ScanCommand } from '@/hooks/useScanCommand'
 function ScanControl({
   scanCommand,
   hasTarget,
+  autoFocus,
+  onSubnetStale,
 }: {
   scanCommand: ScanCommand
   hasTarget: boolean
+  autoFocus: boolean
+  onSubnetStale: () => void
 }) {
-  const statusRef = useRef<HTMLDivElement | null>(null)
-  const [focusRequest, setFocusRequest] = useState(0)
+  const focusStatusOnMount = useRef(false)
 
-  useEffect(() => {
-    if (focusRequest === 0) return
-    statusRef.current
-      ?.querySelector<HTMLElement>('[data-testid="agents-command-status"]')
-      ?.focus()
-  }, [focusRequest])
-
-  async function triggerAndFocus() {
-    const result = await scanCommand.trigger()
-    if (result.outcome === 'followed') {
-      setFocusRequest((request) => request + 1)
+  async function triggerScan() {
+    const outcome = await scanCommand.trigger()
+    if (outcome === 'followed') {
+      focusStatusOnMount.current = true
+    } else if (outcome === 'subnet-stale') {
+      onSubnetStale()
     }
+  }
+
+  function receiveStatus(node: HTMLDivElement | null) {
+    if (!node || !focusStatusOnMount.current) return
+    focusStatusOnMount.current = false
+    node.focus()
   }
 
   if (scanCommand.following) {
     return (
-      <div ref={statusRef} className="flex justify-end">
+      <div className="flex justify-end">
         <CommandStatus
+          ref={receiveStatus}
           command={scanCommand.command}
           triggering={scanCommand.triggering}
-          onRetry={() => void triggerAndFocus()}
+          onRetry={() => void triggerScan()}
         />
       </div>
     )
@@ -47,8 +52,9 @@ function ScanControl({
       <div className="flex justify-end">
         <Button
           type="button"
+          autoFocus={autoFocus}
           disabled={scanCommand.triggering}
-          onClick={() => void triggerAndFocus()}
+          onClick={() => void triggerScan()}
           data-testid="agents-scan-now"
         >
           {scanCommand.triggering ? 'Starting…' : 'Scan now'}

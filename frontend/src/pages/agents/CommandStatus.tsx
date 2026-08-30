@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { Link } from 'react-router'
 import AdminOnly from '@/components/AdminOnly'
 import StatusPill from '@/components/StatusPill'
@@ -13,14 +14,17 @@ function CommandStatus({
   command,
   triggering,
   onRetry,
+  ref,
 }: {
   command: CommandDetail | null
   triggering: boolean
   onRetry: () => void
+  ref?: Ref<HTMLDivElement>
 }) {
   if (!command) {
     return (
       <div
+        ref={ref}
         data-testid="agents-command-status"
         className="text-body-sm text-muted-foreground"
         role="status"
@@ -38,6 +42,7 @@ function CommandStatus({
 
   return (
     <div
+      ref={ref}
       data-testid="agents-command-status"
       className="flex flex-col items-end gap-2 text-right"
       role="status"

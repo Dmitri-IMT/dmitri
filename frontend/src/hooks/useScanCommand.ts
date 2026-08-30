@@ -11,6 +11,8 @@ import type { components } from '@/types/openapi'
 type AgentDetail = components['schemas']['AgentDetail']
 type CommandDetail = components['schemas']['CommandDetail']
 
+export type TriggerOutcome = 'followed' | 'subnet-stale' | 'refused'
+
 export type ScanCommand = {
   command: CommandDetail | null
   following: boolean
@@ -18,18 +20,7 @@ export type ScanCommand = {
   trigger: () => Promise<TriggerOutcome>
 }
 
-export type TriggerOutcome =
-  | {
-      outcome: 'followed'
-      commandId: string
-      source: 'created' | 'busy-adopted'
-    }
-  | { outcome: 'refused' }
-
-export function useScanCommand(
-  agent: AgentDetail,
-  onSubnetStale: () => void,
-): ScanCommand {
+export function useScanCommand(agent: AgentDetail): ScanCommand {
   const queryClient = useQueryClient()
   const { show } = useToast()
   const [triggering, setTriggering] = useState(false)
@@ -74,10 +65,8 @@ export function useScanCommand(
     })
   }, [agent.agent_id, commandQuery.data, queryClient])
 
-  async function trigger() {
-    if (!agent.target_subnet || triggeringRef.current) {
-      return { outcome: 'refused' } as const
-    }
+  async function trigger(): Promise<TriggerOutcome> {
+    if (!agent.target_subnet || triggeringRef.current) return 'refused'
     triggeringRef.current = true
     setTriggering(true)
     try {
@@ -86,11 +75,7 @@ export function useScanCommand(
         subnet: agent.target_subnet,
       })
       setFollowedCommandId(command.command_id)
-      return {
-        outcome: 'followed',
-        commandId: command.command_id,
-        source: 'created',
-      } as const
+      return 'followed'
     } catch (error) {
       const { status, code } = readApiError(error)
       if (status === 409 && code === 'device_busy') {
@@ -102,13 +87,9 @@ export function useScanCommand(
           setFollowedCommandId(detail.active_command_id)
           setLastObservedActiveCommandId(detail.active_command_id)
           show('That Pi is already scanning. Showing the scan in progress.')
-          return {
-            outcome: 'followed',
-            commandId: detail.active_command_id,
-            source: 'busy-adopted',
-          } as const
+          return 'followed'
         }
-        show('That Pi is already scanning. Showing the scan in progress.')
+        show("Couldn't start the scan.")
       } else if (status === 503 && code === 'device_offline') {
         show('Pi seems to be offline.')
         void queryClient.invalidateQueries({
@@ -118,14 +99,14 @@ export function useScanCommand(
         show(
           "The Pi doesn't report that network any more. Pick the network to scan again.",
         )
-        onSubnetStale()
         void queryClient.invalidateQueries({
           queryKey: queryKeys.agents.detail(agent.agent_id),
         })
+        return 'subnet-stale'
       } else {
         show("Couldn't start the scan.")
       }
-      return { outcome: 'refused' } as const
+      return 'refused'
     } finally {
       triggeringRef.current = false
       setTriggering(false)
