@@ -9,6 +9,7 @@ import {
   type HostSortBy,
 } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
+import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
@@ -58,7 +59,9 @@ function Hosts() {
         errorMessage="Couldn't load the hosts."
         empty={{
           heading: 'No hosts yet.',
-          body: 'Once a scan runs, every device Dmitri finds on your network shows up here. Scanning is set up on the Pi itself.',
+          body: 'Once a scan runs, every device Dmitri finds on your network shows up here.',
+          action: <FirstScanCta />,
+          note: <FirstScanNote />,
         }}
         sort={{ by: sortBy, order: sortOrder, onChange: handleSort }}
         rowAction={{

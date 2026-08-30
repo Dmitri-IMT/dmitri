@@ -7,7 +7,7 @@ import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import LocationProbe from '@/test/LocationProbe'
 import { baseURL } from '@/test/hostsHarness'
-import { hostFixtures } from '@/test/mswHandlers'
+import { adminProfile, hostFixtures, viewerProfile } from '@/test/mswHandlers'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
@@ -15,6 +15,10 @@ type HostListResponse = components['schemas']['HostListResponse']
 
 const unnamedHost = hostFixtures[24]
 const newestHost = hostFixtures[0]
+
+function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
+  server.use(http.get(`${baseURL}/users/me`, () => HttpResponse.json(profile)))
+}
 
 function emptyList(): HostListResponse {
   return { data: [], total: 0, page: 1 }
@@ -238,13 +242,36 @@ describe('Hosts', () => {
     }
   })
 
-  it('renders the blank state with no button and no link', async () => {
+  it('renders the first-scan link for an admin blank state', async () => {
+    overrideUser(adminProfile)
     hostList([])
     renderWithProviders(<Hosts />, { route: '/hosts' })
 
     const blank = await screen.findByTestId('hosts-blank')
     expect(blank).toHaveTextContent('No hosts yet.')
-    expect(within(blank).queryByRole('button')).not.toBeInTheDocument()
+    expect(blank).not.toHaveTextContent('Scanning is set up on the Pi itself.')
+    expect(within(blank).getByTestId('first-scan-cta')).toHaveAttribute(
+      'href',
+      '/agents',
+    )
+    expect(
+      within(blank).queryByTestId('first-scan-note'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('renders only the admin-direction note for a viewer blank state', async () => {
+    overrideUser(viewerProfile)
+    hostList([])
+    renderWithProviders(<Hosts />, { route: '/hosts' })
+
+    const blank = await screen.findByTestId('hosts-blank')
+    expect(within(blank).getByTestId('first-scan-note')).toHaveTextContent(
+      'Ask your admin to run the first scan.',
+    )
+    expect(
+      within(blank).queryByTestId('first-scan-cta'),
+    ).not.toBeInTheDocument()
     expect(within(blank).queryByRole('link')).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })

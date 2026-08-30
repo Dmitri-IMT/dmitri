@@ -8,9 +8,11 @@ import { renderWithProviders } from '@/test/renderWithProviders'
 import LocationProbe from '@/test/LocationProbe'
 import { baseURL } from '@/test/scansHarness'
 import {
+  adminProfile,
   latestScan,
   latestSuccessfulScan,
   scanFixtures,
+  viewerProfile,
 } from '@/test/mswHandlers'
 import type { components } from '@/types/openapi'
 
@@ -32,6 +34,10 @@ const failedScan: ScanSummary = {
   host_count: 0,
   finding_count: 0,
   highest_severity: null,
+}
+
+function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
+  server.use(http.get(`${baseURL}/users/me`, () => HttpResponse.json(profile)))
 }
 
 const rowKinds: ScanSummary[] = [
@@ -118,13 +124,36 @@ describe('Scans', () => {
     expect(screen.queryByTestId('scans-error')).not.toBeInTheDocument()
   })
 
-  it('renders the blank state with no button and no link', async () => {
+  it('renders the first-scan link for an admin blank state', async () => {
+    overrideUser(adminProfile)
     scanList([])
     renderWithProviders(<Scans />, { route: '/scans' })
 
     const blank = await screen.findByTestId('scans-blank')
     expect(blank).toHaveTextContent('No scans yet.')
-    expect(within(blank).queryByRole('button')).not.toBeInTheDocument()
+    expect(blank).not.toHaveTextContent('Scanning is set up on the Pi itself.')
+    expect(within(blank).getByTestId('first-scan-cta')).toHaveAttribute(
+      'href',
+      '/agents',
+    )
+    expect(
+      within(blank).queryByTestId('first-scan-note'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('renders only the admin-direction note for a viewer blank state', async () => {
+    overrideUser(viewerProfile)
+    scanList([])
+    renderWithProviders(<Scans />, { route: '/scans' })
+
+    const blank = await screen.findByTestId('scans-blank')
+    expect(within(blank).getByTestId('first-scan-note')).toHaveTextContent(
+      'Ask your admin to run the first scan.',
+    )
+    expect(
+      within(blank).queryByTestId('first-scan-cta'),
+    ).not.toBeInTheDocument()
     expect(within(blank).queryByRole('link')).not.toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
