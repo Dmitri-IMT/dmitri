@@ -20,4 +20,13 @@ export const queryKeys = {
     all: ['findings'] as const,
     list: (params: FindingListParams) => ['findings', 'list', params] as const,
   },
+  agents: {
+    all: ['agents'] as const,
+    list: () => ['agents', 'list'] as const,
+    detail: (agentId: string) => ['agents', 'detail', agentId] as const,
+  },
+  commands: {
+    all: ['commands'] as const,
+    detail: (commandId: string) => ['commands', 'detail', commandId] as const,
+  },
 } as const
