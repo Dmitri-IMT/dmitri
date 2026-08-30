@@ -4,7 +4,7 @@ title: frontend scan status and severity order
 description: scanStatusPill maps every ScanStatus to tone and label; isUnfinished hides counts; bySeverityDesc is the only guaranteed worst-first order.
 resource: frontend/src/lib/scanStatus.ts
 tags: [frontend, scans, severity]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # frontend scan status and severity order
@@ -30,6 +30,7 @@ guarantees severity order.
 - Scan detail uses `isUnfinished` for the still-running branch and `bySeverityDesc` before render.
 - Host findings reuse `bySeverityDesc`. Pill chrome is [tables](./tables.md)'s `StatusPill`.
 - Failed-scan **sentences** stay in [scan-failure-reasons](./scan-failure-reasons.md), not here.
+  Command lifecycle pills live in [command-status](./command-status.md).
 
 ## Notes / gotchas
 

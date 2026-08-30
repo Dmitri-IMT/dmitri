@@ -1,3 +1,4 @@
+import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import Ornament from '@/components/Ornament'
 
 function HomeBlank() {
@@ -6,18 +7,15 @@ function HomeBlank() {
       <p data-testid="home-verdict" className="font-title text-title-lg">
         No scans yet.
       </p>
-      <p className="text-body-md text-muted-foreground">
-        A scan looks at every machine on your network and reports what an
-        attacker could see: which are exposed, and which are running software
-        with known vulnerabilities. It takes about ten minutes and changes
-        nothing on them.
-      </p>
       <p
-        data-testid="home-blank-note"
+        data-testid="home-blank-body"
         className="text-body-md text-muted-foreground"
       >
-        Scanning is set up on the Pi itself.
+        Dmitri scans your network for devices and known vulnerabilities, then
+        reports anything worth your attention here.
       </p>
+      <FirstScanCta />
+      <FirstScanNote />
       <Ornament />
     </div>
   )

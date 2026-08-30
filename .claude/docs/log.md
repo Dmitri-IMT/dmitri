@@ -3,6 +3,35 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-08-30
+
+* **Update**: `frontend/agents-screen.md` — PR #129 second review pass. `CommandStatus` collapsed
+  its two duplicated `role="status"` roots into one region that stays mounted from `Starting…`
+  through every fetched state, so `ScanControl` can hold a real ref to a stable node; `ScanControl`
+  replaced the mount latch plus inline callback ref with a `focusEpoch` generation keyed to the
+  `'followed'` outcome and a `useLayoutEffect`. `usePrimaryAgent.refetch` now guards the detail
+  refetch on `agentId` — refetching the `skipToken` sentinel key errored it and stranded a
+  no-device install on the error screen. `usePrimaryAgent` added to the table.
+* **Update**: `frontend/agents-screen.md` — PR #129 review pass. `useScanCommand` lost its
+  `onSubnetStale` argument and its object outcome: `trigger()` now resolves to one
+  `TriggerOutcome` (`'followed' | 'subnet-stale' | 'refused'`) and `ScanControl` dispatches on it.
+  Focus moved from two `focusRequest` counters plus `querySelector('[data-testid=…]')` to a React 19
+  `ref` on `CommandStatus` and `autoFocus` on `[Scan now]`. `409 device_busy` with no
+  `active_command_id` now toasts the generic start failure. Test split: new
+  `Agents.invalidation.test.tsx` owns the done-sweep.
+
+## 2026-08-29
+
+* **Creation**: `frontend/command-status.md`, `frontend/agents-screen.md` — DMI-89 / spec 040.
+  Command lifecycle mapping (`commandStatusPill`, `isTerminalCommandStatus`) and the Agents screen
+  (`useAgentScreen`, `useScanCommand`, `pages/agents/*`, `subnetLabel`, `FirstScanCta`).
+* **Update**: `frontend/api.md` — `agents.ts` and `commands.ts`, `agents`/`commands` query key
+  groups, first invalidation call site in `useScanCommand`, MSW/agentsHarness note.
+* **Update**: `frontend/api.md`, `frontend/screens.md`, `frontend/tables.md`,
+  `frontend/scan-status.md`, `frontend/overview.md`, `frontend/index.md`, root `overview.md` —
+  Agents fetches and triggers; `EmptyState` action/note slots; taller `StatusPill`; blank-state CTAs
+  on Home/Scans/Hosts.
+
 ## 2026-08-27
 
 * **Update**: `frontend/host-detail.md` (rewritten), `frontend/screens.md`, `frontend/overview.md`,

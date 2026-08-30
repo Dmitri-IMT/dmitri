@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -19,8 +19,8 @@ Schneider/Beckhoff/Balluff/Altus on Ethernet; the Pi joins over Wi-Fi).
 
 > **Build status.** The backend's data reads, auth, identity administration, command channel, and
 > ingest are wired. The React frontend has login → Home, public auth, Settings, Users & Invites,
-> and the DMI-88 scan/host read surfaces plus a fetch-free Agents page; the scan trigger and live
-> agent row remain DMI-89.
+> and the DMI-88 scan/host read surfaces plus the DMI-89 Agents scan trigger (subnet chooser,
+> `[Scan now]`, command poll). Home's Pi-status footer line remains unbuilt.
 > **DMI-66 closed the device end of the link**: bare `dmitri agent` now runs a
 > [daemon](/hardware-agent/daemon.md) that dials the WS channel with an Ed25519 proof, reports its
 > available subnets, executes commands through the existing headless scan, and uploads results

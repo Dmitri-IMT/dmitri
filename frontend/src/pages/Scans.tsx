@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queryKeys'
 import { listScans, SCAN_LIST_SORT, SCANS_PER_PAGE } from '@/api/scans'
+import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
 import { scanListColumns } from '@/pages/scans/scanListColumns'
@@ -30,7 +31,9 @@ function Scans() {
         errorMessage="Couldn't load the scans."
         empty={{
           heading: 'No scans yet.',
-          body: 'Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here. Scanning is set up on the Pi itself.',
+          body: 'Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here.',
+          action: <FirstScanCta />,
+          note: <FirstScanNote />,
         }}
         rowAction={{
           kind: 'link',

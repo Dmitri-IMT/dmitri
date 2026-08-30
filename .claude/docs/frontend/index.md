@@ -8,7 +8,7 @@ added the self-service exit from the organization, confirmed by typing your own 
 added the admin users-and-invites surface — the product's first role-gated route and its first
 table. Spec 035 added executable UI-foundation lint rules and aligned the shells, navigation and
 Settings structure with the named design tokens. Spec 039 (DMI-88) added the scan and host read
-surfaces, the shared `DataTable`, and a permanent one-state Agents page with no trigger. App source
+surfaces, the shared `DataTable`, and the Agents scan trigger (DMI-89). App source
 lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/`.
 
 ## Overview
@@ -17,7 +17,7 @@ lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/
 
 ## API layer
 
-* [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
+* [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys with invalidation on command completion, and the read, agent, command, account and org-administration resource modules.
 
 ## Engineering guardrails
 
@@ -34,6 +34,8 @@ lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/
 * [directory](./directory.md) — DirectoryRow — the merged member/invite display union — and useOrgDirectory(), which folds two list reads into one state union where error outranks loading.
 * [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [scan-status](./scan-status.md) — scanStatusPill maps every ScanStatus to tone and label; isUnfinished hides counts; bySeverityDesc is the only guaranteed worst-first order.
-* [tables](./tables.md) — DataTable with a discriminated rowAction, stretched-link rows and compile-time sort keys, ListSurface and ReadDetailGate holding the list- and detail-page state machines, Pagination that greys edge controls, EmptyState with no CTA, outline StatusPill, and LoadingSkeleton bars on --border.
+* [command-status](./command-status.md) — commandStatusPill maps every CommandStatus to tone and label; isTerminalCommandStatus stops the Agents poll.
+* [agents-screen](./agents-screen.md) — usePrimaryAgent reads list+detail and useAgentScreen folds them into AgentScreen; useScanCommand latches the followed command, polls GET /commands/{id}, and invalidates read caches on done.
+* [tables](./tables.md) — DataTable with a discriminated rowAction, stretched-link rows and compile-time sort keys, ListSurface and ReadDetailGate holding the list- and detail-page state machines, Pagination that greys edge controls, EmptyState with optional action and note slots, taller outline StatusPill, and LoadingSkeleton bars on --border.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
 * [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.

@@ -17,7 +17,7 @@ function StatusPill({ tone, label }: StatusPillProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center border px-2 py-1 text-caption-md',
+        'inline-flex h-8 items-center border px-2 text-body-md',
         TONE_CLASS[tone],
       )}
     >

@@ -63,7 +63,8 @@ interaction in implementation before it has passed through that sequence.
 - **Trigger scan UX:** admin-only `POST …/agents/{agent_id}/commands`; display a status pill as
   `queued → delivered → running → uploading → done`, then offer **View scan**. On **`503`** +
   `device_offline` show *"Pi seems to be offline."*; on **`409`** + `device_busy`, adopt the Pi's
-  running command via `AgentDetail.active_command_id` (copy still to be decided). Poll
+  running command via `AgentDetail.active_command_id` (toast: "That Pi is already scanning.
+  Showing the scan in progress."). Poll
   `GET /commands/{id}` every 5s and invalidate the scans, agents, and findings caches once done.
   **Read `active_command_id` on mount** so the pill survives navigation and reloads during a
   ~10-minute scan. See [`ui/FLOWS.md`](../ui/FLOWS.md#b4--scan-now-command-flow)
@@ -71,26 +72,24 @@ interaction in implementation before it has passed through that sequence.
 - **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
 - **UI status:** Login, Home, public auth, Settings change-password + Activity disclosure,
-  Users & Invites, and the DMI-88 scan/host read surfaces (list + detail) are built. Agents exists
-  as a **permanent one-state page** (no fetch, no trigger). Live agent row and `[Scan now]` remain
-  DMI-89. Screen copy still lives in [`ui/SCREENS.md`](../ui/SCREENS.md).
-- **Contract asks — 3 of the original 8 still open.** C4 is closed: the published backend contract
+  Users & Invites, DMI-88 scan/host read surfaces, and **DMI-89 Agents scan trigger** are built.
+  Screen copy still lives in [`ui/SCREENS.md`](../ui/SCREENS.md).
+- **Contract asks — 1 of the original 8 still open.** C4 is closed: the published backend contract
   now has member list, pending-invite list, role change, revoke, and account-removal operations,
   and spec 034 consumed them — Users & Invites ships.
-  The remaining original blockers are `GET /agents` (C1), target-network persistence (C2 partial),
-  and profile update (C3 partial). `HostSummary.first_seen_at`, finding CVE data, invite auto-login,
+  ~~C1 (`GET /agents`) and C2 (`target_subnet` persistence)~~ are **closed (DMI-78)** and wired on
+  the Agents screen (DMI-89). The remaining open ask is profile update (C3 partial).
+  `HostSummary.first_seen_at`, finding CVE data, invite auto-login,
   and forced-password-change disposition remain resolved as recorded in
   [`BACKEND.md` B11](BACKEND.md#b11--frontend-contract-asks-).
 - **Role comes from `GET /users/me`, not a JWT claim** (B11-C16, closed). Spec 020's session layer is
-  its only reader and nothing in the SPA decodes a token. ⚠️ **REVALIDATE:**
-  [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis still says the role rides in JWT claims and
-  now contradicts the shipped code — it needs an amendment.
-- **`GET /agents/{agent_id}` is now implemented backend-side** (DMI-78), alongside `GET /agents` and
-  the `PATCH` that sets `target_subnet`. Spec 020 wrote `src/api/agents.ts` against the detail route
-  and left it **called by nothing**; wiring it, and Home's deliberately unbuilt Pi-status footer
-  line, is DMI-89.
-- **Open design decisions (1):** the 409 busy-Pi copy. *(The stale-coverage threshold is decided —
-  spec 020 locked it at **3 days**, owned by `STALE_COVERAGE_DAYS` in `frontend/src/lib/review.ts`.)*
+  its only reader and nothing in the SPA decodes a token. [`ADR-008`](../adr/ADR-008-frontend-stack.md)
+  §Papéis was amended 2026-08-29 to match.
+- **`GET /agents/{agent_id}` is implemented and wired** (DMI-78/DMI-89). Home's Pi-status footer
+  line is built from that read (DMI-89 follow-up).
+- **Open design decisions (0):** *(409 busy-Pi copy settled in DMI-89.)* The stale-coverage
+  threshold is decided — spec 020 locked it at **3 days**, owned by `STALE_COVERAGE_DAYS` in
+  `frontend/src/lib/review.ts`.
 
 ## Milestones
 
@@ -110,8 +109,8 @@ interaction in implementation before it has passed through that sequence.
    in spec 033 under ADR-017. Profile editing remains blocked on C3, and invite/reset delivery still
    needs a verified sending domain.
 5. ✅ Scan list/detail; host inventory/detail; Agents read-only page — spec 039 / DMI-88. No Pi
-   pairing UI. Scan trigger is milestone 6 / DMI-89.
-6. **"Scan now" trigger + status** — September (B10 Control); [`PI.md`](PI.md) installer-provisioned daemon.
+   pairing UI.
+6. ✅ **"Scan now" trigger + status** — spec 040 / DMI-89 (September B10 Control).
 7. LLM explainer panel only when it is explicitly brought into scope.
 
 ## Ripple

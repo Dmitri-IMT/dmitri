@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import DataTable, {
   type DataTableColumn,
@@ -18,7 +18,12 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
   rowId: (row: Row) => string
   caption: string
   errorMessage: string
-  empty: { heading: string; body: string }
+  empty: {
+    heading: string
+    body: string
+    action?: ReactNode
+    note?: ReactNode
+  }
   rowAction: DataTableRowAction<Row>
   sort?: DataTableSort<SortKey>
   page: number
@@ -68,6 +73,8 @@ function ListSurface<Row, SortKey extends string = never>({
         testId={`${testId}-blank`}
         heading={empty.heading}
         body={empty.body}
+        action={empty.action}
+        note={empty.note}
       />
     )
   }

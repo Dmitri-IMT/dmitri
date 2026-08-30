@@ -4,7 +4,7 @@ title: frontend package overview
 description: The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-29T00:00:00Z
 ---
 
 # frontend package overview
@@ -21,8 +21,9 @@ INVITE** (all public) and **SETTINGS** (guarded), plus the second nav item that 
 transitional one-item centring.
 Spec 035 added executable UI-foundation guardrails and aligned the existing shells, navigation,
 Settings surface and auth screens with the named width, type and spacing tokens.
-Spec 039 (DMI-88) added SCAN LIST, SCAN DETAIL, HOST INVENTORY, HOST DETAIL, a one-state Agents
-page, and the shared table primitives. DMI-89 still owns the scan trigger and live agent row.
+Spec 039 (DMI-88) added SCAN LIST, SCAN DETAIL, HOST INVENTORY, HOST DETAIL, and a read-only Agents
+page shell. Spec 040 (DMI-89) shipped the scan trigger: agent reads, subnet chooser, `[Scan now]`,
+command poll, cache invalidation on completion, and `FirstScanCta` on Home/Scans/Hosts blanks.
 
 The product frame is the verdict, not a dashboard: Home answers "does anything need me?" in one
 sentence, backed by a pure derivation over four reads.
@@ -34,13 +35,15 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 
 | Area | What lives there | Doc |
 |------|------------------|-----|
-| `src/api/` | The typed API layer: the two bare Axios instances (`instances.ts`), the module that arms them with the Bearer + refresh interceptors (`client.ts`), the auth resource module (`auth.ts`), the in-memory token store (`tokenStore.ts`), the session-expiry event bus (`authEvents.ts`), the change-password module (`passwords.ts`), prefix-shaped `queryKeys.ts`, and the read resource modules (`users`/`scans`/`hosts`/`findings`). | [api](./api.md) |
+| `src/api/` | The typed API layer: the two bare Axios instances (`instances.ts`), the module that arms them with the Bearer + refresh interceptors (`client.ts`), the auth resource module (`auth.ts`), the in-memory token store (`tokenStore.ts`), the session-expiry event bus (`authEvents.ts`), the change-password module (`passwords.ts`), prefix-shaped `queryKeys.ts`, and the resource modules (`users`/`scans`/`hosts`/`findings`/`agents`/`commands`). | [api](./api.md) |
 | `src/auth/` | The session layer: `SessionProvider` (boot refresh as a query, sign-in/sign-out/invite acceptance), `useSession`, and the `RequireSession` route guard. | [auth](./auth.md) |
 | `src/App.tsx`, `src/main.tsx` | The provider nest and the route table. | [app](./app.md) |
 | `eslint.config.js`, `eslint-rules/` | The local authored-source rules for named Tailwind widths, type and spacing plus shared interactive primitives. | [linting](./linting.md) |
 | `src/pages/`, `src/components/` | Screens (auth, Home, Scans, ScanDetail, Hosts, HostDetail, Agents, Settings, Users, NotFound), the two shells, the top bar, `DataTable` and friends, and shared presentation components. | [screens](./screens.md), [tables](./tables.md) |
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes the four Home reads into one discriminated union. | [review](./review.md) |
 | `src/lib/scanStatus.ts`, `src/lib/severity.ts` | Scan-status pills / unfinished predicate, and the load-bearing `bySeverityDesc` comparator. | [scan-status](./scan-status.md) |
+| `src/lib/commandStatus.ts` | Command lifecycle pills and the terminal predicate for the Agents poll. | [command-status](./command-status.md) |
+| `src/hooks/useAgentScreen.ts`, `src/hooks/useScanCommand.ts`, `src/pages/agents/` | The Agents screen read union, command follow/poll/trigger, and screen-specific sections. | [agents-screen](./agents-screen.md) |
 | `src/lib/detailState.ts`, `src/pages/hosts/HostFindings.tsx` | The shared detail-route state reader, and the host's second read owning its own section states. | [host-detail](./host-detail.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types` (openapi-typescript). Committed; CI re-checks for drift. Sole source of request/response types. | — |
 | `vite.config.ts` | Loads Vite environment variables and rejects a missing `VITE_API_URL` before the production build starts. | — |
@@ -73,10 +76,9 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
   deleting it makes Tailwind v4 fall back to its default `prefers-color-scheme: dark` media query,
   which would activate the stray `dark:` classes still present in the untouched shadcn
   `button.tsx`/`input.tsx`.
-- **`GET /agents/{agent_id}` is implemented backend-side** (DMI-78). Spec 020's unused
-  `src/api/agents.ts` was deleted 2026-07-31 rather than left speculative. DMI-88 shipped a
-  **permanent, fetch-free Agents page**; wiring `listAgents`/`getAgent`, Home's Pi-status footer,
-  and `[Scan now]` is DMI-89.
+- **`GET /agents` and the command channel are wired in the SPA** (DMI-89). `src/api/agents.ts` and
+  `src/api/commands.ts` serve the Agents screen. **Home's Pi-status footer line is still not
+  built** — `HomeFooter` reads no agent data.
 - **`format:check` currently fails repo-wide on a Windows working copy.** Roughly 50 files —
   including ones no feature has touched — report as unformatted because the checkout is CRLF and
   Prettier expects LF. It reproduces on a clean tree, so it is a line-ending condition, not a
