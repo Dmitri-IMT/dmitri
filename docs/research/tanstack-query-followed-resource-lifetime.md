@@ -287,6 +287,13 @@ mechanism is `ensureQueryFn`, which returns
 error."* — `utils.ts:446-476`. §4's `retry` in the `error` state must not blanket-
 refetch the command query while it is skipped.
 
+> **This caveat landed (2026-08-30, PR #129 review).** `usePrimaryAgent.refetch` did
+> blanket-refetch the `skipToken` detail query, erroring the `agents.detail('')`
+> sentinel key; since `useAgentScreen` reads `detailQuery.isError` as a page failure,
+> Retry stranded a no-device install on the error screen instead of the blank one.
+> Fixed by guarding the detail refetch on `agentId`. The same shape applies to any
+> future retry over a skipped query.
+
 **Verdict for this defect:** the `skipToken`-vs-`enabled` axis is a red herring. The
 `?? ''` in the key is the whole problem.
 

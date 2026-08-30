@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-08-30
 
+* **Update**: `frontend/agents-screen.md` — PR #129 second review pass. `CommandStatus` collapsed
+  its two duplicated `role="status"` roots into one region that stays mounted from `Starting…`
+  through every fetched state, so `ScanControl` can hold a real ref to a stable node; `ScanControl`
+  replaced the mount latch plus inline callback ref with a `focusEpoch` generation keyed to the
+  `'followed'` outcome and a `useLayoutEffect`. `usePrimaryAgent.refetch` now guards the detail
+  refetch on `agentId` — refetching the `skipToken` sentinel key errored it and stranded a
+  no-device install on the error screen. `usePrimaryAgent` added to the table.
 * **Update**: `frontend/agents-screen.md` — PR #129 review pass. `useScanCommand` lost its
   `onSubnetStale` argument and its object outcome: `trigger()` now resolves to one
   `TriggerOutcome` (`'followed' | 'subnet-stale' | 'refused'`) and `ScanControl` dispatches on it.

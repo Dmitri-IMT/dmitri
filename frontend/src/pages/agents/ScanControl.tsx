@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 import CommandStatus from './CommandStatus'
@@ -15,28 +15,28 @@ function ScanControl({
   autoFocus: boolean
   onSubnetStale: () => void
 }) {
-  const focusStatusOnMount = useRef(false)
+  const statusRef = useRef<HTMLDivElement>(null)
+  const [focusEpoch, setFocusEpoch] = useState(0)
+
+  useLayoutEffect(() => {
+    if (focusEpoch === 0) return
+    statusRef.current?.focus()
+  }, [focusEpoch])
 
   async function triggerScan() {
     const outcome = await scanCommand.trigger()
     if (outcome === 'followed') {
-      focusStatusOnMount.current = true
+      setFocusEpoch((epoch) => epoch + 1)
     } else if (outcome === 'subnet-stale') {
       onSubnetStale()
     }
-  }
-
-  function receiveStatus(node: HTMLDivElement | null) {
-    if (!node || !focusStatusOnMount.current) return
-    focusStatusOnMount.current = false
-    node.focus()
   }
 
   if (scanCommand.following) {
     return (
       <div className="flex justify-end">
         <CommandStatus
-          ref={receiveStatus}
+          ref={statusRef}
           command={scanCommand.command}
           triggering={scanCommand.triggering}
           onRetry={() => void triggerScan()}

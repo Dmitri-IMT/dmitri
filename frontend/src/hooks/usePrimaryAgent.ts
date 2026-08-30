@@ -19,7 +19,7 @@ export function usePrimaryAgent() {
     agent: detailQuery.data ?? null,
     refetch: () => {
       void listQuery.refetch()
-      void detailQuery.refetch()
+      if (agentId) void detailQuery.refetch()
     },
   }
 }

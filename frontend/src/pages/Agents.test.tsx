@@ -516,4 +516,19 @@ describe('Agents', () => {
     await user.click(screen.getByTestId('agents-error-retry'))
     expect(await screen.findByTestId('agents-card')).toBeInTheDocument()
   })
+
+  it('retries a first-load failure on a no-device install and reaches the blank state', async () => {
+    const user = userEvent.setup()
+    agentsFail()
+    renderWithProviders(<Agents />)
+
+    expect(await screen.findByTestId('agents-error')).toHaveTextContent(
+      "Couldn't load the agents.",
+    )
+    noAgents()
+    await user.click(screen.getByTestId('agents-error-retry'))
+    expect(await screen.findByTestId('agents-blank')).toHaveTextContent(
+      'No Pi connected yet.',
+    )
+  })
 })
