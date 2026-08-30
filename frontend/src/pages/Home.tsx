@@ -27,9 +27,11 @@ function Home() {
             />
             <Ornament />
           </div>
-          {review.latestSuccessfulScan && (
-            <HomeFooter scan={review.latestSuccessfulScan} />
-          )}
+          <HomeFooter
+            scan={review.latestSuccessfulScan ?? undefined}
+            agent={review.agent}
+            variant="clear"
+          />
         </>
       )
     case 'pending':
@@ -51,9 +53,7 @@ function Home() {
               )}
             </div>
           </div>
-          {review.latestSuccessfulScan && (
-            <HomeFooter scan={review.latestSuccessfulScan} />
-          )}
+          <HomeFooter agent={review.agent} variant="pending" />
         </>
       )
   }

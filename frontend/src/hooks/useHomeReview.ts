@@ -6,11 +6,13 @@ import {
   listFindings,
 } from '@/api/findings'
 import { queryKeys } from '@/api/queryKeys'
+import { usePrimaryAgent } from '@/hooks/usePrimaryAgent'
 import { deriveReview, type ScanItem, type CoverageItem } from '@/lib/review'
 import type { components } from '@/types/openapi'
 
 type ScanSummary = components['schemas']['ScanSummary']
 type FindingRecord = components['schemas']['FindingRecord']
+type AgentDetail = components['schemas']['AgentDetail']
 
 interface HomeReviewData {
   reviewCount: number
@@ -18,6 +20,7 @@ interface HomeReviewData {
   scanItem: ScanItem | null
   coverageItem: CoverageItem | null
   latestSuccessfulScan: ScanSummary | null
+  agent: AgentDetail | null
 }
 
 export type HomeReview =
@@ -39,6 +42,8 @@ export function useHomeReview(): HomeReview {
   })
 
   const scanId = scanQuery.data?.scan_id
+
+  const { agent, refetch: refetchAgent } = usePrimaryAgent()
 
   // `skipToken` both disables the read until the scan id lands and narrows it away,
   // so the query function never has to assert the id is present.
@@ -64,6 +69,7 @@ export function useHomeReview(): HomeReview {
     successfulScanQuery.refetch()
     criticalQuery.refetch()
     highQuery.refetch()
+    refetchAgent()
   }
 
   if (scanQuery.isError) {
@@ -115,6 +121,7 @@ export function useHomeReview(): HomeReview {
     scanItem,
     coverageItem,
     latestSuccessfulScan,
+    agent,
   }
 
   return reviewCount === 0

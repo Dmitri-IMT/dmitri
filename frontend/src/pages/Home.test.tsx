@@ -129,6 +129,12 @@ describe('Home', () => {
     expect(screen.queryByTestId('home-item-scan')).not.toBeInTheDocument()
     expect(screen.queryByTestId('home-item-coverage')).not.toBeInTheDocument()
     expect(screen.getByTestId('home-footer')).toBeInTheDocument()
+    expect(screen.getByTestId('home-footer-scan')).toHaveTextContent(
+      /Last scan: .+ · 12 hosts · standard mode/,
+    )
+    expect(screen.getByTestId('home-footer-pi')).toHaveTextContent(
+      /Pi status: online · last seen .+/,
+    )
   })
 
   it('AC 11 — medium/low-only findings yield the all-clear verdict with no finding card', async () => {
@@ -153,6 +159,10 @@ describe('Home', () => {
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
       '2 things need your review.',
     )
+    expect(screen.getByTestId('home-footer-pi')).toHaveTextContent(
+      /Pi status: online · last seen .+/,
+    )
+    expect(screen.queryByTestId('home-footer-scan')).not.toBeInTheDocument()
   })
 
   it('items-pending order is finding deck → failed-scan card → stale-coverage card', async () => {
@@ -203,25 +213,36 @@ describe('Home', () => {
     expect(screen.queryByTestId('home-deck')).not.toBeInTheDocument()
   })
 
-  it.each([
-    ['admin', adminProfile],
-    ['viewer', viewerProfile],
-  ])(
-    'AC 14 — blank renders home-blank-note with no scan-triggering control for the %s role',
-    async (_label, profile) => {
-      overrideUser(profile)
-      overrideScans(null, null)
-      renderWithProviders(<Home />)
+  it('AC 14 — admin blank links to the first scan and retires the Pi sentence', async () => {
+    overrideUser(adminProfile)
+    overrideScans(null, null)
+    renderWithProviders(<Home />)
 
-      await screen.findByTestId('home-blank-note')
-      expect(screen.getByTestId('home-blank-note')).toHaveTextContent(
-        'Scanning is set up on the Pi itself.',
-      )
-      expect(screen.queryAllByRole('button')).toHaveLength(0)
-      expect(screen.queryAllByRole('link')).toHaveLength(0)
-      expect(screen.queryByTestId('home-footer')).not.toBeInTheDocument()
-    },
-  )
+    expect(await screen.findByTestId('home-blank-body')).toHaveTextContent(
+      'Dmitri scans your network for devices and known vulnerabilities, then reports anything worth your attention here.',
+    )
+    const cta = screen.getByTestId('first-scan-cta')
+    expect(cta).toHaveAttribute('href', '/agents')
+    expect(screen.queryByTestId('first-scan-note')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Scanning is set up on the Pi itself.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByTestId('home-footer')).not.toBeInTheDocument()
+  })
+
+  it('AC 14 — viewer blank shows only the admin-direction note', async () => {
+    overrideUser(viewerProfile)
+    overrideScans(null, null)
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByTestId('first-scan-note')).toHaveTextContent(
+      'Ask your admin to run the first scan.',
+    )
+    expect(screen.queryByTestId('first-scan-cta')).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    expect(screen.queryByTestId('home-footer')).not.toBeInTheDocument()
+  })
 
   it('AC 15 — error renders the copy and Retry, with no verdict text present', async () => {
     overrideScansUnfilteredError()
@@ -314,7 +335,9 @@ describe('Home', () => {
       renderWithProviders(<Home />)
 
       if (state === 'blank') {
-        await screen.findByTestId('home-blank-note')
+        await screen.findByTestId(
+          profile.role === 'admin' ? 'first-scan-cta' : 'first-scan-note',
+        )
       } else if (state === 'error') {
         await screen.findByTestId('home-error')
       } else {
