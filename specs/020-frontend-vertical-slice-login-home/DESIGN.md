@@ -286,12 +286,12 @@ now require.
 │                        No scans yet.                                       │  #home-verdict
 │                        [IM Fell 40]                                        │
 │                                                                            │
-│        A scan looks at every machine on your network and reports           │  #home-blank-body
-│        what an attacker could see: which are exposed, and which are        │
-│        running software with known vulnerabilities. It takes about         │
-│        ten minutes and changes nothing on them.                            │
+│        Dmitri scans your network for devices and known vulnerabilities,      │  #home-blank-body
+│        then reports anything worth your attention here.                      │
 │                                                                            │
-│                 Scanning is set up on the Pi itself.                       │  #home-blank-note
+│                 [Run first scan]  (admin only; spec 040)                   │  #home-blank-cta
+│                                                                            │
+│                 ~~Scanning is set up on the Pi itself.~~                   │  #home-blank-note — retired in spec 040
 │                                                                            │
 │                             ·  ·  ❦  ·  ·                                  │
 │                                                                            │
@@ -556,8 +556,8 @@ reset a password that was fine.
 | Footer — Pi online | `Pi · online · last seen {relative}` ⛔ blocked |
 | Footer — Pi offline | `Pi · offline · last seen {relative}` ⛔ blocked |
 | Blank — verdict | `No scans yet.` |
-| Blank — body | `A scan looks at every machine on your network and reports what an attacker could see: which are exposed, and which are running software with known vulnerabilities. It takes about ten minutes and changes nothing on them.` |
-| Blank — how scanning works | `Scanning is set up on the Pi itself.` — one sentence, both roles, not a button |
+| Blank — body | `Dmitri scans your network for devices and known vulnerabilities, then reports anything worth your attention here.` |
+| Blank — how scanning works | ~~`Scanning is set up on the Pi itself.`~~ — **retired** in spec 040; replaced by `[Run first scan]` (`#home-blank-cta`) and viewer note |
 | Error | `Couldn't load your network's status.` |
 | Error button | `Retry` |
 | Not found — heading | `That page doesn't exist.` |
