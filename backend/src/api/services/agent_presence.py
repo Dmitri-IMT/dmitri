@@ -18,12 +18,20 @@ def default_session_factory() -> Session:
     return Session(get_engine())
 
 
-def touch_agent_last_seen(session: Session, agent_id: UUID, now: datetime) -> None:
+def agent_is_revoked(session: Session, agent_id: UUID) -> bool:
+    agent = session.get(Agent, agent_id)
+    return agent is not None and agent.revoked_at is not None
+
+
+def touch_unless_revoked(session: Session, agent_id: UUID, now: datetime) -> bool:
     agent = session.get(Agent, agent_id)
     if agent is None:
-        return
+        return False
+    if agent.revoked_at is not None:
+        return True
     agent.last_seen_at = now
     session.commit()
+    return False
 
 
 def mark_connected(session: Session, agent_id: UUID, now: datetime) -> None:
@@ -48,19 +56,19 @@ def reconcile_all(session: Session) -> None:
     session.commit()
 
 
-async def async_touch_agent_last_seen(
+async def async_touch_unless_revoked(
     session_factory: SessionFactory,
     agent_id: UUID,
     now: datetime,
-) -> None:
-    def sync_work() -> None:
+) -> bool:
+    def sync_work() -> bool:
         session = session_factory()
         try:
-            touch_agent_last_seen(session, agent_id, now)
+            return touch_unless_revoked(session, agent_id, now)
         finally:
             session.close()
 
-    await run_in_threadpool(sync_work)
+    return await run_in_threadpool(sync_work)
 
 
 async def async_mark_connected(

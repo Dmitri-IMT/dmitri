@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from api.schemas.agent_frames import AvailableSubnet
 from api.services import agent_connections
+from starlette.websockets import WebSocketState
 
 AGENT_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 T0 = datetime(2026, 7, 27, 12, 0, 0, tzinfo=UTC)
@@ -55,7 +56,9 @@ def test_replace_closes_old_socket():
     asyncio.run(agent_connections.register(AGENT_ID, ws_a, now=T0))
     asyncio.run(agent_connections.register(AGENT_ID, ws_b, now=T1))
 
-    ws_a.close.assert_awaited_once_with(code=4000, reason="replaced")
+    ws_a.close.assert_awaited_once_with(
+        code=agent_connections.CLOSE_REPLACED, reason="replaced"
+    )
     assert agent_connections.is_online(AGENT_ID)
     assert agent_connections.get_socket(AGENT_ID) is ws_b
 
@@ -181,3 +184,48 @@ def test_concurrent_register_leaves_one_entry():
     assert len(agent_connections._registry) == 1
     assert agent_connections.is_online(agent_id)
     assert agent_connections.get_socket(agent_id) in (ws_a, ws_b)
+
+
+def test_close_codes_are_the_published_contract_values():
+    assert agent_connections.CLOSE_REPLACED == 4000
+    assert agent_connections.CLOSE_REVOKED == 4001
+
+
+def test_close_revoked_closes_connected_socket_with_4001():
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+
+    asyncio.run(agent_connections.close_revoked(ws))
+
+    ws.close.assert_awaited_once_with(code=4001, reason="revoked")
+
+
+def test_close_revoked_is_noop_when_socket_not_connected():
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.DISCONNECTED
+
+    asyncio.run(agent_connections.close_revoked(ws))
+
+    ws.close.assert_not_awaited()
+
+
+def test_close_revoked_swallows_close_failure():
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+    ws.close.side_effect = RuntimeError("already closed")
+
+    asyncio.run(agent_connections.close_revoked(ws))
+
+    ws.close.assert_awaited_once()
+
+
+def test_close_revoked_leaves_registry_untouched():
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(agent_connections.close_revoked(ws))
+
+    assert agent_connections.is_online(AGENT_ID)
+    assert agent_connections.get_socket(AGENT_ID) is ws
+    assert agent_connections.last_seen_at(AGENT_ID) == T0

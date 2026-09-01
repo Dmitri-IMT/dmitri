@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -15,8 +16,9 @@ from api.schemas.agent_frames import AgentErrorFrame, AgentHelloFrame, AgentStat
 from api.services import agent_connections
 from api.services.agent_presence import (
     SessionFactory,
-    async_touch_agent_last_seen,
-    touch_agent_last_seen,
+    agent_is_revoked,
+    async_touch_unless_revoked,
+    touch_unless_revoked,
 )
 from api.services.commands import apply_status
 
@@ -26,16 +28,38 @@ async def send_error(websocket: WebSocket, message: str) -> None:
     await websocket.send_text(frame.model_dump_json())
 
 
+async def _reject_frame(
+    session_factory: SessionFactory,
+    websocket: WebSocket,
+    *,
+    agent_id: UUID,
+    message: str,
+) -> None:
+    await send_error(websocket, message)
+
+    def sync_work() -> bool:
+        session = session_factory()
+        try:
+            return agent_is_revoked(session, agent_id)
+        finally:
+            session.close()
+
+    if await run_in_threadpool(sync_work):
+        await agent_connections.close_revoked(websocket)
+
+
 async def _apply_status_frame(
     session_factory: SessionFactory,
     *,
     agent_id: UUID,
     frame: AgentStatusFrame,
     now: datetime,
-) -> bool:
-    def sync_work() -> bool:
+) -> Literal["ok", "unknown_command", "revoked"]:
+    def sync_work() -> Literal["ok", "unknown_command", "revoked"]:
         session = session_factory()
         try:
+            if touch_unless_revoked(session, agent_id, now):
+                return "revoked"
             applied = apply_status(
                 session,
                 agent_id=agent_id,
@@ -44,7 +68,6 @@ async def _apply_status_frame(
                 now=now,
                 error_code=frame.error_code,
             )
-            unknown = False
             if not applied:
                 exists = (
                     session.exec(
@@ -55,9 +78,9 @@ async def _apply_status_frame(
                     ).first()
                     is not None
                 )
-                unknown = not exists
-            touch_agent_last_seen(session, agent_id, now)
-            return unknown
+                if not exists:
+                    return "unknown_command"
+            return "ok"
         finally:
             session.close()
 
@@ -75,11 +98,15 @@ async def handle_agent_frame(
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError:
-        await send_error(websocket, "invalid JSON")
+        await _reject_frame(
+            session_factory, websocket, agent_id=agent_id, message="invalid JSON"
+        )
         return
 
     if not isinstance(data, dict):
-        await send_error(websocket, "invalid frame")
+        await _reject_frame(
+            session_factory, websocket, agent_id=agent_id, message="invalid frame"
+        )
         return
 
     frame_type = data.get("type")
@@ -87,7 +114,15 @@ async def handle_agent_frame(
         try:
             frame = AgentHelloFrame.model_validate(data)
         except ValidationError:
-            await send_error(websocket, "invalid hello frame")
+            await _reject_frame(
+                session_factory,
+                websocket,
+                agent_id=agent_id,
+                message="invalid hello frame",
+            )
+            return
+        if await async_touch_unless_revoked(session_factory, agent_id, now):
+            await agent_connections.close_revoked(websocket)
             return
         await agent_connections.set_hello(
             agent_id,
@@ -96,32 +131,48 @@ async def handle_agent_frame(
             available_subnets=frame.available_subnets,
             now=now,
         )
-        await async_touch_agent_last_seen(session_factory, agent_id, now)
         return
 
     if frame_type == "status":
         try:
             frame = AgentStatusFrame.model_validate(data)
         except ValidationError:
-            await send_error(websocket, "invalid status frame")
+            await _reject_frame(
+                session_factory,
+                websocket,
+                agent_id=agent_id,
+                message="invalid status frame",
+            )
             return
-        await agent_connections.touch(agent_id, websocket, now=now)
-        unknown = await _apply_status_frame(
+        outcome = await _apply_status_frame(
             session_factory, agent_id=agent_id, frame=frame, now=now
         )
-        if unknown:
+        if outcome == "revoked":
+            await agent_connections.close_revoked(websocket)
+            return
+        await agent_connections.touch(agent_id, websocket, now=now)
+        if outcome == "unknown_command":
             await send_error(websocket, "unknown command_id")
         return
 
     if frame_type == "command":
-        await send_error(websocket, "invalid inbound frame")
+        await _reject_frame(
+            session_factory,
+            websocket,
+            agent_id=agent_id,
+            message="invalid inbound frame",
+        )
         return
 
     if frame_type is None:
-        await send_error(websocket, "missing type")
+        await _reject_frame(
+            session_factory, websocket, agent_id=agent_id, message="missing type"
+        )
         return
 
-    await send_error(websocket, "unknown frame type")
+    await _reject_frame(
+        session_factory, websocket, agent_id=agent_id, message="unknown frame type"
+    )
 
 
 async def run_agent_channel(

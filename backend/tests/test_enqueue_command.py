@@ -16,6 +16,7 @@ from api.services import agent_connections, commands
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+from starlette.websockets import WebSocketState
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 STALE = T0 - timedelta(minutes=20)
@@ -254,6 +255,40 @@ def test_device_offline_expires_command_without_scan(
             "details": {},
         }
     }
+    command = administrative_session.exec(select(Command)).one()
+    assert command.status == "expired"
+    assert command.scan_id is None
+    assert administrative_session.exec(select(ScanRecord)).all() == []
+
+
+def test_revoked_agent_with_live_socket_returns_503_without_scan(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    provisioned_agent.revoked_at = T0
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+
+    async def register() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+
+    asyncio.run(register())
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json=REQUEST_BODY,
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "device_offline"
+    ws.send_text.assert_not_awaited()
     command = administrative_session.exec(select(Command)).one()
     assert command.status == "expired"
     assert command.scan_id is None

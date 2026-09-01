@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketState
 
 from api.schemas.agent_frames import AvailableSubnet
+
+CLOSE_REPLACED = 4000
+CLOSE_REVOKED = 4001
 
 _registry: dict[UUID, AgentConnection] = {}
 _lock = asyncio.Lock()
@@ -31,7 +34,7 @@ async def register(agent_id: UUID, websocket: WebSocket, *, now: datetime) -> No
             # gone before its handler's finally/unregister ran), so a raise
             # here must not block installing the new connection below.
             try:
-                await existing.websocket.close(code=4000, reason="replaced")
+                await existing.websocket.close(code=CLOSE_REPLACED, reason="replaced")
             except Exception:
                 pass
         _registry[agent_id] = AgentConnection(
@@ -40,6 +43,15 @@ async def register(agent_id: UUID, websocket: WebSocket, *, now: datetime) -> No
             connected_at=now,
             last_seen_at=now,
         )
+
+
+async def close_revoked(websocket: WebSocket) -> None:
+    if websocket.application_state is not WebSocketState.CONNECTED:
+        return
+    try:
+        await websocket.close(code=CLOSE_REVOKED, reason="revoked")
+    except Exception:
+        pass
 
 
 async def unregister(agent_id: UUID, websocket: WebSocket, *, now: datetime) -> None:

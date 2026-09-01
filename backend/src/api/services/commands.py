@@ -14,7 +14,7 @@ from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
 from api.schemas.commands import CommandDetail
-from api.services import agent_connections
+from api.services import agent_connections, agent_presence
 from api.services.command_lifecycle import (
     NON_TERMINAL,
     PI_OWNED,
@@ -273,7 +273,15 @@ async def deliver(
     now: datetime,
 ) -> Command:
     socket = agent_connections.get_socket(command.agent_id)
-    if socket is None:
+    # Read revocation before the `or` so short-circuiting cannot hide the check:
+    # an idle revoked agent has a registered socket and has sent no frame, so
+    # nothing else would catch it before the command goes out.
+    revoked = await run_in_threadpool(
+        agent_presence.agent_is_revoked, session, command.agent_id
+    )
+    if socket is None or revoked:
+        if socket is not None:
+            await agent_connections.close_revoked(socket)
         await run_in_threadpool(_expire_queued_command, session, command.id)
         raise DeviceOfflineError
 

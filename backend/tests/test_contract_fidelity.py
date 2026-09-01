@@ -486,3 +486,17 @@ def test_error_code_fidelity(response_name: str):
         status, set()
     )
     assert route_codes == contract_codes
+
+
+def test_agent_websocket_close_code_table_publishes_revoked():
+    contract = _load_contract()
+    operation = contract["paths"]["/api/v1/agents/{agent_id}/commands"]["get"]
+    assert operation["operationId"] == "connectAgentCommandsWebSocket"
+    rows = [
+        line
+        for line in operation["description"].splitlines()
+        if line.strip().startswith("| `4001`")
+    ]
+    assert len(rows) == 1
+    assert "`revoked`" in rows[0]
+    assert "Stay down" in rows[0]
