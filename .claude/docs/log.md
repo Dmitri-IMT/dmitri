@@ -3,6 +3,28 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-01
+
+* **Update**: `backend/services.md` — DMI-97 / spec 041, revocation now takes effect on a live
+  agent connection. The upgrade-time `403` was checked once, so a revoked Pi kept its existing
+  socket, kept receiving commands and kept reporting status for days. Two gates added:
+  **per-frame**, where `_apply_status_frame` calls `touch_unless_revoked` before `apply_status`
+  (one `Agent` SELECT still, the trailing `touch_agent_last_seen` dropped) and the `hello` branch
+  gates before `set_hello` so a revoked device cannot refresh `available_subnets`; and
+  **per-delivery**, where `deliver()` reads revocation through `run_in_threadpool`, hoisted above
+  the `if`, closing the idle-agent hole. Malformed frames route through the new `_reject_frame`
+  (error frame first, then one query, then close). New registry constants `CLOSE_REPLACED = 4000`
+  / `CLOSE_REVOKED = 4001` plus best-effort `close_revoked()`; `4001 revoked` published in the WS
+  close-code table in `contracts/openapi/openapi.yaml`. New presence reads `agent_is_revoked` /
+  `touch_unless_revoked` / `async_touch_unless_revoked`, all fail-closed. `touch_agent_last_seen`
+  and its `async_*` wrapper are **both gone** — the two gates took their last call sites, so the
+  pre-push audit removed them as orphans of this change (its row left `services.md` with them).
+  `run_agent_channel` and the upgrade-time check are deliberately unchanged. Notes gained the
+  pull-based-revocation entry and its residual idle-socket gap.
+* **Update**: `frontend/agents-screen.md` — the no-device blank state no longer renders the
+  permanent Pi note, the Scans/Hosts links or the `Ornament`; the closing block is now gated on
+  `screen.state !== 'blank'`, so `AgentsBlank` stands alone as TRUTH rule 25 intends.
+
 ## 2026-08-30
 
 * **Update**: `frontend/agents-screen.md` — PR #129 second review pass. `CommandStatus` collapsed

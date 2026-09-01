@@ -4,7 +4,7 @@ title: Agents screen and scan command hook
 description: usePrimaryAgent reads list+detail and useAgentScreen folds them into AgentScreen; useScanCommand latches the followed command, polls GET /commands/{id}, and invalidates read caches on done.
 resource: frontend/src/pages/Agents.tsx
 tags: [frontend, agents, commands, tanstack-query]
-timestamp: 2026-08-30T12:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # Agents screen and scan command hook
@@ -26,7 +26,7 @@ pieces live under `pages/agents/`; pure subnet labelling lives in `subnetLabel.t
 | `useScanCommand(agent)` | Latches `followedCommandId` (never cleared on terminal — only replaced by a newer id). Polls `GET /commands/{id}` every 5s until [command-status](./command-status.md)'s `isTerminalCommandStatus`. On `done`, invalidates `scans`, `hosts`, `findings`, and `agents.detail` once per command id. `trigger()` posts `{ scan_mode: 'quick', subnet }` via [api](./api.md) and resolves to **one** `TriggerOutcome`. | `frontend/src/hooks/useScanCommand.ts:23` |
 | `TriggerOutcome` | `'followed' \| 'subnet-stale' \| 'refused'` — the hook's whole answer to one press. The caller dispatches: focus the status region, reopen the chooser, or do nothing. The hook owns no UI callback. | `frontend/src/hooks/useScanCommand.ts:15` |
 | `subnetLabel()` / `subnetOptionSuffix()` / `findAvailableSubnet()` | Pure interface→label mapping (`eth*`/`en*` → Ethernet, `wl*` → Wi-Fi, else raw name) plus the internet-route suffix. No React. | `frontend/src/lib/subnetLabel.ts:15` |
-| `Agents` | Composes `PageHeader`, the `useAgentScreen` branch, and the permanent Pi note + Scans/Hosts links. | `frontend/src/pages/Agents.tsx:10` |
+| `Agents` | Composes `PageHeader`, the `useAgentScreen` branch, and the Pi note + Scans/Hosts links + `Ornament`. That closing block is gated on `screen.state !== 'blank'`: a no-device install sees `AgentsBlank` alone, since the note explains a Pi the operator does not have yet. | `frontend/src/pages/Agents.tsx:10` |
 | `AgentCard` | Owns chooser vs scan-control exclusivity; wires `useScanCommand` and `TargetSubnetSection`. Reopens the chooser on `'subnet-stale'`, and passes `autoFocus` to `ScanControl` after a subnet save. | `frontend/src/pages/agents/AgentCard.tsx:11` |
 | `TargetSubnetSection` | "Scanning: …" read line + `[Change]`; `AdminOnly` chooser with `[Set this Network]` confirm, PATCH + `setQueryData` (no refetch). Refusals are toasts; chooser stays open. | `frontend/src/pages/agents/TargetSubnetSection.tsx:16` |
 | `ScanControl` | One slot: `[Scan now]` or `CommandStatus`. Trigger stays visible when offline; disabled only while POST in flight. Dispatches the `TriggerOutcome`: `'followed'` bumps `focusEpoch` (a `useLayoutEffect` then focuses `statusRef`), `'subnet-stale'` calls `onSubnetStale`. | `frontend/src/pages/agents/ScanControl.tsx:7` |

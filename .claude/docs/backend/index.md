@@ -22,7 +22,7 @@ not a missing client or backend route.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, and command lifecycle/delivery.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
 
 ## Auth
 
