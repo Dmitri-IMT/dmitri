@@ -146,11 +146,11 @@ def test_touch_unless_revoked_writes_nothing_for_revoked_agent(
     administrative_session.add(provisioned_agent)
     administrative_session.commit()
 
-    revoked = agent_presence.touch_unless_revoked(
+    outcome = agent_presence.touch_unless_revoked(
         administrative_session, provisioned_agent.id, T1
     )
 
-    assert revoked is True
+    assert outcome == "revoked"
     with Session(migrated_database) as session:
         agent = session.get(Agent, provisioned_agent.id)
         assert agent is not None
@@ -160,11 +160,11 @@ def test_touch_unless_revoked_writes_nothing_for_revoked_agent(
 def test_touch_unless_revoked_bumps_last_seen_at_for_healthy_agent(
     administrative_session: Session, provisioned_agent: Agent
 ):
-    revoked = agent_presence.touch_unless_revoked(
+    outcome = agent_presence.touch_unless_revoked(
         administrative_session, provisioned_agent.id, T1
     )
 
-    assert revoked is False
+    assert outcome == "ok"
     administrative_session.refresh(provisioned_agent)
     assert provisioned_agent.last_seen_at == T1
 
@@ -174,7 +174,7 @@ def test_touch_unless_revoked_loads_the_agent_once(provisioned_agent: Agent):
     session.get.return_value = provisioned_agent
 
     assert (
-        agent_presence.touch_unless_revoked(session, provisioned_agent.id, T1) is False
+        agent_presence.touch_unless_revoked(session, provisioned_agent.id, T1) == "ok"
     )
 
     assert session.get.call_count == 1
@@ -205,7 +205,7 @@ def test_revocation_reads_report_unknown_agent_as_not_revoked(
     )
     assert (
         agent_presence.touch_unless_revoked(administrative_session, AGENT_ID, T1)
-        is False
+        == "ok"
     )
 
 
@@ -232,7 +232,7 @@ def test_async_agent_is_revoked_matches_sync(
     assert provisioned_agent.last_seen_at != T1
 
 
-@pytest.mark.parametrize("revoked_at, expected", [(None, False), (T0, True)])
+@pytest.mark.parametrize("revoked_at, expected", [(None, "ok"), (T0, "revoked")])
 def test_async_touch_unless_revoked_matches_sync(
     migrated_database: Engine,
     administrative_session: Session,
@@ -250,4 +250,4 @@ def test_async_touch_unless_revoked_matches_sync(
         )
     )
 
-    assert result is expected
+    assert result == expected

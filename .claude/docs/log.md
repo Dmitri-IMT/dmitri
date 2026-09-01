@@ -23,9 +23,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   pull-based-revocation entry and its residual idle-socket gap.
 * **Update**: `backend/services.md` — PR #130 review pass. The reject path's session lifecycle moved
   into `agent_presence` as `async_agent_is_revoked`, so `agent_ws` no longer opens a `Session` of its
-  own; `handle_agent_frame` binds `_reject_frame` once as a local `reject(message)` closure instead of
-  stamping the four-argument call onto all six failure arms; and `deliver()`'s revoked-socket close is
-  a flat `if` beside the offline branch rather than nested inside it.
+  own, and `deliver()`'s revoked-socket close became a flat `if` beside the offline branch rather than
+  nested inside it. Then the dispatcher went **parse-once**: `_reject_frame` is gone, replaced by a
+  pure `_parse_frame` returning `_Hello | _Status | _Reject`, so `handle_agent_frame` has one reject
+  site and two apply sites instead of six failure arms. `touch_unless_revoked` now returns
+  `Literal["ok", "revoked"]` rather than an inverted bool, matching `_apply_status_frame`'s
+  vocabulary.
 * **Update**: `frontend/agents-screen.md` — the no-device blank state no longer renders the
   permanent Pi note, the Scans/Hosts links or the `Ornament`; the closing block is now gated on
   `screen.state !== 'blank'`, so `AgentsBlank` stands alone as TRUTH rule 25 intends.

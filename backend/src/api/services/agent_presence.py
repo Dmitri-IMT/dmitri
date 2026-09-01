@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import update
@@ -23,15 +24,17 @@ def agent_is_revoked(session: Session, agent_id: UUID) -> bool:
     return agent is not None and agent.revoked_at is not None
 
 
-def touch_unless_revoked(session: Session, agent_id: UUID, now: datetime) -> bool:
+def touch_unless_revoked(
+    session: Session, agent_id: UUID, now: datetime
+) -> Literal["ok", "revoked"]:
     agent = session.get(Agent, agent_id)
     if agent is None:
-        return False
+        return "ok"
     if agent.revoked_at is not None:
-        return True
+        return "revoked"
     agent.last_seen_at = now
     session.commit()
-    return False
+    return "ok"
 
 
 def mark_connected(session: Session, agent_id: UUID, now: datetime) -> None:
@@ -74,8 +77,8 @@ async def async_touch_unless_revoked(
     session_factory: SessionFactory,
     agent_id: UUID,
     now: datetime,
-) -> bool:
-    def sync_work() -> bool:
+) -> Literal["ok", "revoked"]:
+    def sync_work() -> Literal["ok", "revoked"]:
         session = session_factory()
         try:
             return touch_unless_revoked(session, agent_id, now)

@@ -222,6 +222,35 @@ INVALID_FRAMES = [
 ]
 
 
+@pytest.mark.parametrize(
+    "raw_text, expected",
+    [
+        ("{not json", "invalid JSON"),
+        ("[1, 2]", "invalid frame"),
+        (json.dumps({"type": "hello"}), "invalid hello frame"),
+        (json.dumps({"type": "status"}), "invalid status frame"),
+        (json.dumps({"type": "command"}), "invalid inbound frame"),
+        (json.dumps({"agent_version": "1.0.0"}), "missing type"),
+        (json.dumps({"type": "goodbye"}), "unknown frame type"),
+    ],
+)
+def test_parse_frame_rejects_with_the_published_message(raw_text: str, expected: str):
+    parsed = agent_ws._parse_frame(raw_text)
+
+    assert isinstance(parsed, agent_ws._Reject)
+    assert parsed.message == expected
+
+
+def test_parse_frame_accepts_hello_and_status_without_io():
+    hello = agent_ws._parse_frame(_hello_payload())
+    status = agent_ws._parse_frame(_status_payload())
+
+    assert isinstance(hello, agent_ws._Hello)
+    assert hello.frame.agent_version
+    assert isinstance(status, agent_ws._Status)
+    assert status.frame.command_id == COMMAND_ID
+
+
 @pytest.mark.parametrize("raw_text", INVALID_FRAMES)
 def test_invalid_frames_send_error_and_keep_socket_usable(raw_text: str):
     ws = AsyncMock()
