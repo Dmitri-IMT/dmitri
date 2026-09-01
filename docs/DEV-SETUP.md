@@ -265,20 +265,31 @@ uv run backend-bootstrap-org --org-name "NSPi Lab" --email you@example.com
 # expires_at=...
 ```
 
-Then redeem the token to set a password (**minimum 12 characters**):
+Then redeem the token to set a password (**minimum 12 characters**). The token goes in the
+**body**, not the path, and the request carries **no email** — the invite already knows the
+address:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/invites/<TOKEN>/accept" \
+curl -X POST "http://127.0.0.1:8000/api/v1/invites/accept" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"correct-horse-battery"}'
+  -d '{"token":"<TOKEN>","password":"correct-horse-battery"}'
 ```
 
-A `201` returns tokens and confirms the account exists. Those are the credentials you type
-into the login screen. Re-running `backend-bootstrap-org` with the same org name exits `1`
-rather than creating a duplicate.
+A `201` returns tokens and confirms the account exists. The email from
+`backend-bootstrap-org` plus this password are the credentials you type into the login
+screen. Re-running `backend-bootstrap-org` with the same org name exits `1` rather than
+creating a duplicate.
+
+> **The route takes no other shape.** `POST /api/v1/invites/<TOKEN>/accept` is the pre-DMI-77
+> path form and now 404s; sending `email` in the body fails `extra="forbid"`. The live
+> contract is `backend/src/api/routers/invites.py` and `docs/ui/SCREENS.md`.
 
 > Password checks call **HaveIBeenPwned** by default. Offline, set `HIBP_ENABLED=false` in
 > `.env` or the accept call fails.
+>
+> The policy also rejects a password **containing your own email**, matching any
+> `>= 3`-character part of it (`test@dmitri.local` bans `test`, `dmitri`, `local`). A
+> `400 password_policy_violation` names the rule you hit.
 
 ### Tests
 

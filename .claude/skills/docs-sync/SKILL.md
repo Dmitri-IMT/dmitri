@@ -4,7 +4,9 @@ description: >-
   Update the .claude/docs OKF code-map, the human docs/ knowledge base, and the root setup scripts
   (install.sh/.ps1, database.sh/.ps1, lint.sh/.ps1, and simulator.sh without a .ps1 twin) after code changes land. Owns .claude/docs fully;
   for docs/ it delegates to architecture-adr-sync / roadmap-sync / openapi-contract-sync and only
-  patches unambiguous factual drift. Run once at the end of the feature-orchestrator pipeline, or
+  patches unambiguous factual drift — except docs/DEV-SETUP.md, the local-run walkthrough, which it
+  owns and updates whenever a setup command, route, env var, port or gate changes.
+  Run once at the end of the feature-orchestrator pipeline, or
   manually via /docs-sync when code has moved and the docs or scripts may be stale.
 ---
 
@@ -16,6 +18,7 @@ Keep the two documentation layers current with the code, scoped to what changed.
 |-------|-----------|--------|
 | `.claude/docs/` (OKF code-map) | **fully owned** | Always update to match changed source. |
 | `docs/` (human KB) | curated, partly target-state | Delegate + patch only unambiguous factual drift; report the rest. |
+| `docs/DEV-SETUP.md` (how to run it locally) | **fully owned**, like a root script | Always update when the diff changes a local-run step. |
 | Root scripts (`install`, `database`, `lint` mirror pairs; standalone `simulator.sh`) | executable docs | Patch only when the diff invalidates something they encode; report anything bigger. |
 
 The `.claude/docs/` conventions (frontmatter, body shape, linking, standing facts) live in
@@ -47,7 +50,28 @@ changed, say so and exit early.
    - contracts ↔ routes → `openapi-contract-sync`
    Outside those, patch only **low-risk factual drift** (a renamed symbol, a moved path, a changed
    default). Leave decisions and target-state claims alone.
-4. **Update the root scripts (only when the diff invalidates them).** These are executable
+4. **Update `docs/DEV-SETUP.md` (whenever a local-run step changed).** It is the only doc a
+   newcomer follows command by command, so a stale line there costs an afternoon rather than a
+   moment of confusion. Unlike the rest of `docs/`, it describes **the present**, never a target
+   state — so patch it in full rather than reporting the drift. Triggers, checked against the
+   diff:
+   - **A route a setup step calls by hand** — the bootstrap/invite curl commands above all,
+     including method, path, and request body. Read the router, not the memory of it.
+   - **A new or changed env var** in `backend/.env.example` / `frontend/.env.example`, especially
+     one whose shipped default is unusable locally (those belong in *Gotchas*).
+   - **A changed run command, port, or entrypoint** (`api.main:app`, `api.worker_main`, `dmitri`,
+     an npm script, a Supabase port in `supabase/config.toml`).
+   - **A changed migration, database, or test-gate step** — keep it consistent with `.claude/CLAUDE.md`
+     § Formatting and lint gates.
+   - **A validation rule a setup step can trip**, such as the password policy the invite curl must
+     satisfy.
+
+   Keep the walkthrough runnable end to end: when you change a step, re-check the *Running the
+   whole stack* sequence and the *Gotchas* list for the same fact stated twice. Scope decisions
+   recorded there (what is deliberately out of the installers' reach) stay a human call — report,
+   never widen.
+
+5. **Update the root scripts (only when the diff invalidates them).** These are executable
    documentation and drift silently — nothing fails, the script just stops doing the right thing.
    Check them against the change; a trigger is one of:
    - **New or changed dependency / toolchain** (a `pyproject.toml` extra, `package.json` engine or
@@ -69,7 +93,7 @@ changed, say so and exit early.
    (`docs/DEV-SETUP.md` records those decisions). Widening scope is a human call: report it.
    Do not execute the scripts to verify — they mutate the machine; verify by reading.
 
-5. **Report contested items.** Anything you did not edit because it needs a human call goes into the
+6. **Report contested items.** Anything you did not edit because it needs a human call goes into the
    run's report to the operator (orchestrator mode: also append a "Docs drift" list to the feature's
    `TRUTU.md` at the end of the file).
 
