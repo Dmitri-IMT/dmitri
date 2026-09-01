@@ -485,7 +485,7 @@ describe('Agents', () => {
     expect(screen.queryByTestId('agents-chooser')).not.toBeInTheDocument()
   })
 
-  it('renders the no-device blank without an action', async () => {
+  it('renders the no-device blank without an action or closing note', async () => {
     noAgents()
     renderWithProviders(<Agents />)
 
@@ -495,10 +495,9 @@ describe('Agents', () => {
     expect(screen.getByTestId('agents-blank-note')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agents-scan-now')).not.toBeInTheDocument()
-    expect(screen.getByTestId('agents-note')).toHaveTextContent(
-      'Scanning is set up on the Pi itself.',
-    )
-    expectClosingNoteLinks()
+    expect(screen.queryByTestId('agents-note')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agents-scans-link')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agents-hosts-link')).not.toBeInTheDocument()
     assertApprovedAgentsTestIds(screen.getByTestId('agents-page'))
   })
 

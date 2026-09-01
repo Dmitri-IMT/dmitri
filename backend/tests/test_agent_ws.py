@@ -83,12 +83,28 @@ def _error_from_mock(ws: AsyncMock) -> AgentErrorFrame:
     return AgentErrorFrame.model_validate_json(ws.send_text.await_args.args[0])
 
 
-def _tracking_session_factory():
+def _agent_stub(*, revoked_at: datetime | None = None) -> MagicMock:
+    agent = MagicMock(spec=Agent)
+    agent.revoked_at = revoked_at
+    agent.last_seen_at = T0
+    return agent
+
+
+def _tracking_session_factory(
+    *, agent: MagicMock | None = None, get_error=None, configure=None
+):
     open_sessions: list[MagicMock] = []
     closed_sessions: list[MagicMock] = []
+    loaded = _agent_stub() if agent is None else agent
 
     def factory() -> MagicMock:
         session = MagicMock(spec=Session)
+        if get_error is not None:
+            session.get.side_effect = get_error
+        else:
+            session.get.return_value = loaded
+        if configure is not None:
+            configure(session)
         open_sessions.append(session)
 
         def close() -> None:
@@ -150,6 +166,7 @@ def test_status_touches_without_prior_hello(
 
     error = _error_from_mock(ws)
     assert error.message == "unknown command_id"
+    ws.close.assert_not_awaited()
     assert agent_connections.get_hello(provisioned_agent.id) is None
     assert agent_connections.last_seen_at(provisioned_agent.id) == T1
     with Session(migrated_database) as session:
@@ -158,54 +175,83 @@ def test_status_touches_without_prior_hello(
         assert agent.last_seen_at == T1
 
 
+INVALID_FRAMES = [
+    "not json",
+    json.dumps("bare string"),
+    json.dumps({"status": "running"}),
+    json.dumps({"type": "hello", "agent_version": "0.1.0"}),
+    json.dumps({"type": "nope"}),
+    json.dumps(
+        {
+            "type": "hello",
+            "agent_version": "0.2.0",
+            "available_subnets": [
+                {"interface": "eth0", "cidr": "10.0.0.0/24"},
+            ],
+        }
+    ),
+    json.dumps(
+        {
+            "type": "hello",
+            "agent_version": "0.2.0",
+            "available_subnets": [
+                {
+                    "interface": "eth0",
+                    "cidr": "10.0.0.0/24",
+                    "is_default_route": None,
+                },
+            ],
+        }
+    ),
+    json.dumps(
+        {
+            "type": "status",
+            "command_id": str(COMMAND_ID),
+            "status": "queued",
+        }
+    ),
+    json.dumps(
+        {
+            "type": "command",
+            "command_id": str(COMMAND_ID),
+            "scan_id": str(COMMAND_ID),
+            "scan_mode": "standard",
+            "subnet": "10.0.0.0/24",
+        }
+    ),
+]
+
+
 @pytest.mark.parametrize(
-    "raw_text",
+    "raw_text, expected",
     [
-        "not json",
-        json.dumps("bare string"),
-        json.dumps({"status": "running"}),
-        json.dumps({"type": "hello", "agent_version": "0.1.0"}),
-        json.dumps({"type": "nope"}),
-        json.dumps(
-            {
-                "type": "hello",
-                "agent_version": "0.2.0",
-                "available_subnets": [
-                    {"interface": "eth0", "cidr": "10.0.0.0/24"},
-                ],
-            }
-        ),
-        json.dumps(
-            {
-                "type": "hello",
-                "agent_version": "0.2.0",
-                "available_subnets": [
-                    {
-                        "interface": "eth0",
-                        "cidr": "10.0.0.0/24",
-                        "is_default_route": None,
-                    },
-                ],
-            }
-        ),
-        json.dumps(
-            {
-                "type": "status",
-                "command_id": str(COMMAND_ID),
-                "status": "queued",
-            }
-        ),
-        json.dumps(
-            {
-                "type": "command",
-                "command_id": str(COMMAND_ID),
-                "scan_id": str(COMMAND_ID),
-                "scan_mode": "standard",
-                "subnet": "10.0.0.0/24",
-            }
-        ),
+        ("{not json", "invalid JSON"),
+        ("[1, 2]", "invalid frame"),
+        (json.dumps({"type": "hello"}), "invalid hello frame"),
+        (json.dumps({"type": "status"}), "invalid status frame"),
+        (json.dumps({"type": "command"}), "invalid inbound frame"),
+        (json.dumps({"agent_version": "1.0.0"}), "missing type"),
+        (json.dumps({"type": "goodbye"}), "unknown frame type"),
     ],
 )
+def test_parse_frame_rejects_with_the_published_message(raw_text: str, expected: str):
+    parsed = agent_ws._parse_frame(raw_text)
+
+    assert isinstance(parsed, agent_ws._Reject)
+    assert parsed.message == expected
+
+
+def test_parse_frame_accepts_hello_and_status_without_io():
+    hello = agent_ws._parse_frame(_hello_payload())
+    status = agent_ws._parse_frame(_status_payload())
+
+    assert isinstance(hello, agent_ws._Hello)
+    assert hello.frame.agent_version
+    assert isinstance(status, agent_ws._Status)
+    assert status.frame.command_id == COMMAND_ID
+
+
+@pytest.mark.parametrize("raw_text", INVALID_FRAMES)
 def test_invalid_frames_send_error_and_keep_socket_usable(raw_text: str):
     ws = AsyncMock()
     session_factory = _tracking_session_factory()
@@ -216,14 +262,16 @@ def test_invalid_frames_send_error_and_keep_socket_usable(raw_text: str):
     error = _error_from_mock(ws)
     assert error.type == "error"
     assert error.message
-    assert session_factory.open_sessions == []
-    assert session_factory.closed_sessions == []
+    assert len(session_factory.open_sessions) == 1
+    assert session_factory.closed_sessions == session_factory.open_sessions
+    assert session_factory.open_sessions[0].get.call_count == 1
+    ws.close.assert_not_awaited()
 
     ws.send_text.reset_mock()
     asyncio.run(_handle(_hello_payload(), session_factory, ws, agent_id=AGENT_ID))
     ws.send_text.assert_not_awaited()
     assert agent_connections.get_hello(AGENT_ID) is not None
-    assert len(session_factory.open_sessions) == 1
+    assert len(session_factory.open_sessions) == 2
     assert session_factory.closed_sessions == session_factory.open_sessions
 
 
@@ -278,6 +326,7 @@ def test_two_frames_use_distinct_sessions_closed_per_frame():
         session_factory.open_sessions[0] is not session_factory.open_sessions[1]
     )
     assert session_factory.closed_sessions == session_factory.open_sessions
+    ws.close.assert_not_awaited()
 
 
 def test_no_session_outlives_ws_loop():
@@ -291,6 +340,7 @@ def test_no_session_outlives_ws_loop():
 
     assert len(session_factory.open_sessions) == 2
     assert session_factory.closed_sessions == session_factory.open_sessions
+    ws.close.assert_not_awaited()
 
 
 def test_run_agent_channel_processes_frames_and_survives_errors(
@@ -323,3 +373,131 @@ def test_run_agent_channel_processes_frames_and_survives_errors(
         agent = session.get(Agent, provisioned_agent.id)
         assert agent is not None
         assert agent.last_seen_at is not None
+
+
+def _connected_ws() -> AsyncMock:
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+    return ws
+
+
+def test_revoked_status_frame_writes_no_transition_and_closes(monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        agent_ws, "apply_status", lambda *a, **k: calls.append((a, k)) or True
+    )
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory(agent=_agent_stub(revoked_at=T0))
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(_status_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    assert calls == []
+    ws.send_text.assert_not_awaited()
+    ws.close.assert_awaited_once_with(code=4001, reason="revoked")
+    assert session_factory.closed_sessions == session_factory.open_sessions
+
+
+def test_revoked_hello_frame_leaves_registry_subnets_unchanged():
+    ws = _connected_ws()
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+    asyncio.run(
+        _handle(
+            _hello_payload(), _tracking_session_factory(), ws, agent_id=AGENT_ID
+        )
+    )
+    before = agent_connections.get_hello(AGENT_ID)
+    assert before is not None
+
+    revoked_hello = json.dumps(
+        {
+            "type": "hello",
+            "agent_version": "9.9.9",
+            "available_subnets": [
+                {
+                    "interface": "eth9",
+                    "cidr": "172.16.0.0/24",
+                    "is_default_route": True,
+                }
+            ],
+        }
+    )
+    asyncio.run(
+        _handle(
+            revoked_hello,
+            _tracking_session_factory(agent=_agent_stub(revoked_at=T0)),
+            ws,
+            agent_id=AGENT_ID,
+        )
+    )
+
+    assert agent_connections.get_hello(AGENT_ID) == before
+    ws.close.assert_awaited_once_with(code=4001, reason="revoked")
+
+
+def test_status_frame_loads_the_agent_once():
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory()
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(_status_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    session = session_factory.open_sessions[0]
+    assert session.get.call_count == 1
+    assert session.get.call_args.args[0] is Agent
+    ws.close.assert_not_awaited()
+
+
+def test_status_frame_fails_closed_when_revocation_read_raises(monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        agent_ws, "apply_status", lambda *a, **k: calls.append((a, k)) or True
+    )
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory(
+        get_error=RuntimeError("database down")
+    )
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    with pytest.raises(RuntimeError, match="database down"):
+        asyncio.run(_handle(_status_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    assert calls == []
+    ws.close.assert_not_awaited()
+    assert session_factory.closed_sessions == session_factory.open_sessions
+
+
+def _unknown_command(session: MagicMock) -> None:
+    session.exec.return_value.first.return_value = None
+
+
+@pytest.mark.parametrize("raw_text", INVALID_FRAMES)
+def test_revoked_invalid_frame_sends_error_then_closes(raw_text: str):
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory(agent=_agent_stub(revoked_at=T0))
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(raw_text, session_factory, ws, agent_id=AGENT_ID))
+
+    error = _error_from_mock(ws)
+    assert error.type == "error"
+    ws.close.assert_awaited_once_with(code=4001, reason="revoked")
+    assert [call[0] for call in ws.mock_calls] == ["send_text", "close"]
+    assert len(session_factory.open_sessions) == 1
+    assert session_factory.open_sessions[0].get.call_count == 1
+    assert session_factory.closed_sessions == session_factory.open_sessions
+
+
+def test_unknown_command_id_opens_no_second_session(monkeypatch):
+    monkeypatch.setattr(agent_ws, "apply_status", lambda *a, **k: False)
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory(configure=_unknown_command)
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(_status_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    error = _error_from_mock(ws)
+    assert error.message == "unknown command_id"
+    ws.close.assert_not_awaited()
+    assert len(session_factory.open_sessions) == 1
+    assert session_factory.closed_sessions == session_factory.open_sessions

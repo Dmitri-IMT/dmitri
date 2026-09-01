@@ -3,6 +3,36 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-01
+
+* **Update**: `backend/services.md` — DMI-97 / spec 041, revocation now takes effect on a live
+  agent connection. The upgrade-time `403` was checked once, so a revoked Pi kept its existing
+  socket, kept receiving commands and kept reporting status for days. Two gates added:
+  **per-frame**, where `_apply_status_frame` calls `touch_unless_revoked` before `apply_status`
+  (one `Agent` SELECT still, the trailing `touch_agent_last_seen` dropped) and the `hello` branch
+  gates before `set_hello` so a revoked device cannot refresh `available_subnets`; and
+  **per-delivery**, where `deliver()` reads revocation through `run_in_threadpool`, hoisted above
+  the `if`, closing the idle-agent hole. Malformed frames route through the new `_reject_frame`
+  (error frame first, then one query, then close). New registry constants `CLOSE_REPLACED = 4000`
+  / `CLOSE_REVOKED = 4001` plus best-effort `close_revoked()`; `4001 revoked` published in the WS
+  close-code table in `contracts/openapi/openapi.yaml`. New presence reads `agent_is_revoked` /
+  `touch_unless_revoked` / `async_touch_unless_revoked`, all fail-closed. `touch_agent_last_seen`
+  and its `async_*` wrapper are **both gone** — the two gates took their last call sites, so the
+  pre-push audit removed them as orphans of this change (its row left `services.md` with them).
+  `run_agent_channel` and the upgrade-time check are deliberately unchanged. Notes gained the
+  pull-based-revocation entry and its residual idle-socket gap.
+* **Update**: `backend/services.md` — PR #130 review pass. The reject path's session lifecycle moved
+  into `agent_presence` as `async_agent_is_revoked`, so `agent_ws` no longer opens a `Session` of its
+  own, and `deliver()`'s revoked-socket close became a flat `if` beside the offline branch rather than
+  nested inside it. Then the dispatcher went **parse-once**: `_reject_frame` is gone, replaced by a
+  pure `_parse_frame` returning `_Hello | _Status | _Reject`, so `handle_agent_frame` has one reject
+  site and two apply sites instead of six failure arms. `touch_unless_revoked` now returns
+  `Literal["ok", "revoked"]` rather than an inverted bool, matching `_apply_status_frame`'s
+  vocabulary.
+* **Update**: `frontend/agents-screen.md` — the no-device blank state no longer renders the
+  permanent Pi note, the Scans/Hosts links or the `Ornament`; the closing block is now gated on
+  `screen.state !== 'blank'`, so `AgentsBlank` stands alone as TRUTH rule 25 intends.
+
 ## 2026-08-30
 
 * **Update**: `frontend/agents-screen.md` — PR #129 second review pass. `CommandStatus` collapsed

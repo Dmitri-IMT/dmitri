@@ -9,8 +9,9 @@ import pytest
 from api.models.command import Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
-from api.services import agent_connections, commands
+from api.services import agent_connections, agent_presence, commands
 from sqlmodel import Session, select
+from starlette.websockets import WebSocketState
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 
@@ -167,4 +168,70 @@ def test_deliver_leaves_no_scan_when_command_expired_during_send(
     assert command.status == "expired"
     assert command.scan_id is None
     assert command.delivered_at is None
+    assert administrative_session.exec(select(ScanRecord)).all() == []
+
+
+def test_deliver_to_revoked_agent_closes_socket_without_sending(
+    administrative_session: Session, provisioned_agent, seeded_org
+):
+    command = _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+    )
+    provisioned_agent.revoked_at = T0
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+
+    ws = AsyncMock()
+    ws.application_state = WebSocketState.CONNECTED
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        with pytest.raises(commands.DeviceOfflineError):
+            await commands.deliver(
+                administrative_session, command=command, now=T0
+            )
+
+    asyncio.run(run())
+
+    ws.send_text.assert_not_awaited()
+    ws.close.assert_awaited_once_with(
+        code=agent_connections.CLOSE_REVOKED, reason="revoked"
+    )
+    administrative_session.refresh(command)
+    assert command.status == "expired"
+    assert command.error_code == "device_offline"
+    assert command.scan_id is None
+    assert command.delivered_at is None
+    assert administrative_session.exec(select(ScanRecord)).all() == []
+
+
+def test_deliver_propagates_failed_revocation_read_without_sending(
+    administrative_session: Session, provisioned_agent, seeded_org, monkeypatch
+):
+    command = _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+    )
+    ws = AsyncMock()
+
+    def boom(session, agent_id):
+        raise RuntimeError("revocation read failed")
+
+    monkeypatch.setattr(agent_presence, "agent_is_revoked", boom)
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        with pytest.raises(RuntimeError, match="revocation read failed"):
+            await commands.deliver(
+                administrative_session, command=command, now=T0
+            )
+
+    asyncio.run(run())
+
+    ws.send_text.assert_not_awaited()
+    administrative_session.refresh(command)
+    assert command.status == "queued"
     assert administrative_session.exec(select(ScanRecord)).all() == []

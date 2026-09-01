@@ -188,6 +188,7 @@ export interface paths {
          *     | `1012` | Backend restarting (deploy). | Redial promptly with backoff. |
          *     | `1000` | Normal closure. | Redial with backoff. |
          *     | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Stay down.** Redialling makes the two connections evict each other. |
+         *     | `4001` `revoked` | The device is revoked; the backend will not accept it again. | **Stay down.** |
          *
          *     A `403` on the upgrade means the device is revoked **or** `{agent_id}` is not a well-formed
          *     UUID; both are permanent without human intervention. A `401` is retryable only after fixing

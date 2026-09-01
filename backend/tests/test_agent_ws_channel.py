@@ -554,3 +554,48 @@ def test_unpublished_error_code_is_stored_verbatim_and_reads_unknown(
     )
     assert response.status_code == 200
     assert response.json()["error_code"] == "unknown"
+
+
+def test_revoked_agent_status_frame_closes_socket_and_applies_nothing(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="queued",
+        scan_id=scan.scan_id,
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        _sync(ws)
+        provisioned_agent.revoked_at = T0
+        administrative_session.add(provisioned_agent)
+        administrative_session.commit()
+
+        ws.send_text(_status_payload(command_id=command.id, status="running"))
+        assert ws.receive() == {
+            "type": "websocket.close",
+            "code": 4001,
+            "reason": "revoked",
+        }
+
+    assert not agent_connections.is_online(provisioned_agent.id)
+    administrative_session.expire_all()
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    administrative_session.refresh(provisioned_agent)
+    assert command.status == "queued"
+    assert command.delivered_at is None
+    assert command.started_at is None
+    assert scan.status == "pending"
+    assert provisioned_agent.connected_at is None
