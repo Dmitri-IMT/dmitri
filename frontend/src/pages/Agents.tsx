@@ -34,51 +34,53 @@ function Agents() {
       )}
       {screen.state === 'blank' && <AgentsBlank />}
       {screen.state === 'ready' && <AgentCard agent={screen.agent} />}
-      <div className="flex flex-col items-center gap-6 text-center">
-        <div className="flex max-w-prose flex-col items-center gap-4">
-          <p data-testid="agents-note" className="text-body-md">
-            Scanning is set up on the Pi itself.
-          </p>
-          <p className="text-body-md text-muted-foreground">
-            The Dmitri box is installed and configured on site. It scans the
-            network chosen above and uploads what it finds here.
-          </p>
-          <p className="text-body-md text-muted-foreground">
-            Every scan it runs appears under{' '}
-            <Button
-              asChild
-              variant="link"
-              className="h-auto p-0 font-normal focus-visible:underline"
-            >
-              <Link
-                to="/scans"
-                data-testid="agents-scans-link"
-                className="text-body-md text-primary"
+      {screen.state !== 'blank' && (
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="flex max-w-prose flex-col items-center gap-4">
+            <p data-testid="agents-note" className="text-body-md">
+              Scanning is set up on the Pi itself.
+            </p>
+            <p className="text-body-md text-muted-foreground">
+              The Dmitri box is installed and configured on site. It scans the
+              network chosen above and uploads what it finds here.
+            </p>
+            <p className="text-body-md text-muted-foreground">
+              Every scan it runs appears under{' '}
+              <Button
+                asChild
+                variant="link"
+                className="h-auto p-0 font-normal focus-visible:underline"
               >
-                Scans
-              </Link>
-            </Button>
-            , and every device it finds appears under{' '}
-            <Button
-              asChild
-              variant="link"
-              className="h-auto p-0 font-normal focus-visible:underline"
-            >
-              <Link
-                to="/hosts"
-                data-testid="agents-hosts-link"
-                className="text-body-md text-primary"
+                <Link
+                  to="/scans"
+                  data-testid="agents-scans-link"
+                  className="text-body-md text-primary"
+                >
+                  Scans
+                </Link>
+              </Button>
+              , and every device it finds appears under{' '}
+              <Button
+                asChild
+                variant="link"
+                className="h-auto p-0 font-normal focus-visible:underline"
               >
-                Hosts
-              </Link>
-            </Button>
-            .
-          </p>
+                <Link
+                  to="/hosts"
+                  data-testid="agents-hosts-link"
+                  className="text-body-md text-primary"
+                >
+                  Hosts
+                </Link>
+              </Button>
+              .
+            </p>
+          </div>
+          <div className="w-24">
+            <Ornament />
+          </div>
         </div>
-        <div className="w-24">
-          <Ornament />
-        </div>
-      </div>
+      )}
     </div>
   )
 }
