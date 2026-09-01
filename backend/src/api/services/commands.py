@@ -279,9 +279,9 @@ async def deliver(
     revoked = await run_in_threadpool(
         agent_presence.agent_is_revoked, session, command.agent_id
     )
+    if revoked and socket is not None:
+        await agent_connections.close_revoked(socket)
     if socket is None or revoked:
-        if socket is not None:
-            await agent_connections.close_revoked(socket)
         await run_in_threadpool(_expire_queued_command, session, command.id)
         raise DeviceOfflineError
 

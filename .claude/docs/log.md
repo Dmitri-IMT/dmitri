@@ -21,6 +21,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   pre-push audit removed them as orphans of this change (its row left `services.md` with them).
   `run_agent_channel` and the upgrade-time check are deliberately unchanged. Notes gained the
   pull-based-revocation entry and its residual idle-socket gap.
+* **Update**: `backend/services.md` — PR #130 review pass. The reject path's session lifecycle moved
+  into `agent_presence` as `async_agent_is_revoked`, so `agent_ws` no longer opens a `Session` of its
+  own; `handle_agent_frame` binds `_reject_frame` once as a local `reject(message)` closure instead of
+  stamping the four-argument call onto all six failure arms; and `deliver()`'s revoked-socket close is
+  a flat `if` beside the offline branch rather than nested inside it.
 * **Update**: `frontend/agents-screen.md` — the no-device blank state no longer renders the
   permanent Pi note, the Scans/Hosts links or the `Ornament`; the closing block is now gated on
   `screen.state !== 'blank'`, so `AgentsBlank` stands alone as TRUTH rule 25 intends.

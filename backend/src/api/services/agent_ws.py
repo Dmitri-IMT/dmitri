@@ -16,7 +16,7 @@ from api.schemas.agent_frames import AgentErrorFrame, AgentHelloFrame, AgentStat
 from api.services import agent_connections
 from api.services.agent_presence import (
     SessionFactory,
-    agent_is_revoked,
+    async_agent_is_revoked,
     async_touch_unless_revoked,
     touch_unless_revoked,
 )
@@ -36,15 +36,7 @@ async def _reject_frame(
     message: str,
 ) -> None:
     await send_error(websocket, message)
-
-    def sync_work() -> bool:
-        session = session_factory()
-        try:
-            return agent_is_revoked(session, agent_id)
-        finally:
-            session.close()
-
-    if await run_in_threadpool(sync_work):
+    if await async_agent_is_revoked(session_factory, agent_id):
         await agent_connections.close_revoked(websocket)
 
 
@@ -95,18 +87,19 @@ async def handle_agent_frame(
     raw_text: str,
     now: datetime,
 ) -> None:
+    async def reject(message: str) -> None:
+        await _reject_frame(
+            session_factory, websocket, agent_id=agent_id, message=message
+        )
+
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError:
-        await _reject_frame(
-            session_factory, websocket, agent_id=agent_id, message="invalid JSON"
-        )
+        await reject("invalid JSON")
         return
 
     if not isinstance(data, dict):
-        await _reject_frame(
-            session_factory, websocket, agent_id=agent_id, message="invalid frame"
-        )
+        await reject("invalid frame")
         return
 
     frame_type = data.get("type")
@@ -114,14 +107,10 @@ async def handle_agent_frame(
         try:
             frame = AgentHelloFrame.model_validate(data)
         except ValidationError:
-            await _reject_frame(
-                session_factory,
-                websocket,
-                agent_id=agent_id,
-                message="invalid hello frame",
-            )
+            await reject("invalid hello frame")
             return
-        if await async_touch_unless_revoked(session_factory, agent_id, now):
+        revoked = await async_touch_unless_revoked(session_factory, agent_id, now)
+        if revoked:
             await agent_connections.close_revoked(websocket)
             return
         await agent_connections.set_hello(
@@ -137,12 +126,7 @@ async def handle_agent_frame(
         try:
             frame = AgentStatusFrame.model_validate(data)
         except ValidationError:
-            await _reject_frame(
-                session_factory,
-                websocket,
-                agent_id=agent_id,
-                message="invalid status frame",
-            )
+            await reject("invalid status frame")
             return
         outcome = await _apply_status_frame(
             session_factory, agent_id=agent_id, frame=frame, now=now
@@ -156,23 +140,14 @@ async def handle_agent_frame(
         return
 
     if frame_type == "command":
-        await _reject_frame(
-            session_factory,
-            websocket,
-            agent_id=agent_id,
-            message="invalid inbound frame",
-        )
+        await reject("invalid inbound frame")
         return
 
     if frame_type is None:
-        await _reject_frame(
-            session_factory, websocket, agent_id=agent_id, message="missing type"
-        )
+        await reject("missing type")
         return
 
-    await _reject_frame(
-        session_factory, websocket, agent_id=agent_id, message="unknown frame type"
-    )
+    await reject("unknown frame type")
 
 
 async def run_agent_channel(

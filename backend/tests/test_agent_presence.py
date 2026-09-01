@@ -210,6 +210,29 @@ def test_revocation_reads_report_unknown_agent_as_not_revoked(
 
 
 @pytest.mark.parametrize("revoked_at, expected", [(None, False), (T0, True)])
+def test_async_agent_is_revoked_matches_sync(
+    migrated_database: Engine,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    revoked_at,
+    expected,
+):
+    provisioned_agent.revoked_at = revoked_at
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+
+    result = asyncio.run(
+        agent_presence.async_agent_is_revoked(
+            partial(Session, migrated_database), provisioned_agent.id
+        )
+    )
+
+    assert result is expected
+    administrative_session.refresh(provisioned_agent)
+    assert provisioned_agent.last_seen_at != T1
+
+
+@pytest.mark.parametrize("revoked_at, expected", [(None, False), (T0, True)])
 def test_async_touch_unless_revoked_matches_sync(
     migrated_database: Engine,
     administrative_session: Session,

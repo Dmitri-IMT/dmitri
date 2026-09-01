@@ -56,6 +56,20 @@ def reconcile_all(session: Session) -> None:
     session.commit()
 
 
+async def async_agent_is_revoked(
+    session_factory: SessionFactory,
+    agent_id: UUID,
+) -> bool:
+    def sync_work() -> bool:
+        session = session_factory()
+        try:
+            return agent_is_revoked(session, agent_id)
+        finally:
+            session.close()
+
+    return await run_in_threadpool(sync_work)
+
+
 async def async_touch_unless_revoked(
     session_factory: SessionFactory,
     agent_id: UUID,
