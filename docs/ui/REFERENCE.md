@@ -148,15 +148,15 @@ How these map onto the upcoming frontend screen specs (React 19 SPA, shadcn/ui, 
 | Principle | Application |
 | --- | --- |
 | Interface first (1) | Specify every screen before any React code; `FLOWS.md` and `SCREENS.md` are the UI contract, not an afterthought. |
-| Epicenter design (2) | Home is a review, and its epicenter = the verdict line — whether anything needs the operator's attention ([SCREENS.md](SCREENS.md) §Home). Scan detail epicenter = findings list. Agents screen epicenter = agent status + "Scan now". Design chrome last. |
+| Epicenter design (2) | Home is a work board, and its epicenter = the attention table — the vulnerabilities waiting to be reviewed ([SCREENS.md](SCREENS.md) §Home). Scan detail epicenter = the vulnerabilities. Devices screen epicenter = the device's state and the network it targets. Design chrome last. |
 | Half, not half-assed (3) | MVP = read UI + "Scan now" trigger, done well. No LLM analysis panel, no report builder, no notification center — a complete half, not a sketchy whole. |
 | Appetite (4) | Timebox each screen's design. When a screen runs over, cut scope (e.g. drop filters from host inventory v1), never quality of what remains. Compare to baseline: today users have no web UI at all. |
-| Right fidelity (5) | Breadboard the flows first (login → Home → scan detail; Agents → Scan now → poll status), fat-marker the layouts, and only then write ASCII wireframes. Don't debate paddings in a breadboard. |
+| Right fidelity (5) | Breadboard the flows first (login → Home → scan detail; Scans → Scan now → poll status), fat-marker the layouts, and only then write ASCII wireframes. Don't debate paddings in a breadboard. |
 | Copywriting (6) | Write the real copy in the wireframes: "Pi seems to be offline", "Scan started — this usually takes about 10 minutes", "No critical findings". Buttons say what they do ("Scan now", not "Execute"). Use real hostnames/CVEs in mocks, never lorem ipsum. |
 | Three states + blank slate (7) | Every screen ships with regular/blank/error designed. "No scans yet" on Home must explain what a scan is and point at "Scan now" — the blank slate is the onboarding. Error state for a dead Pi is a first-class design, not a toast afterthought. |
 | Opinionated, no preferences (8) | Two roles, fixed severity colors, one default scan mode surfaced. No settings page in the MVP; the product decides. Feature requests start at no. |
 | Context over consistency (9) | The read-only viewer's Home can omit "Scan now" entirely rather than showing a disabled button; each page shows just what advances that user's next step. |
-| Zero training (10) | The org admin is non-technical: severity badges over CVSS vectors, plain-language finding summaries, inline hint where confusion is likely (e.g. what "agent last seen" means). |
+| Zero training (10) | The org admin is non-technical: plain severity words over CVSS vectors, plain-language finding summaries, inline hint where confusion is likely (e.g. what "agent last seen" means). |
 | One interface (11) | User management lives inside the same AppShell as everything else — an admin nav item, not a second app. |
 | Problem when it's a problem (12) | No pagination-for-thousands, multi-org tenancy UI, or mobile layout until real usage demands them. |
 | One piece done (13) | First build slice: login → Home with live scan and finding data, end to end, before touching the other screens. |

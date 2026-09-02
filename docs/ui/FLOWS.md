@@ -121,17 +121,18 @@ path; nothing below is viewer-specific except those two omissions.
 
 ```text
 LOGIN → HOME (the nav name is "Home"; its job is a judgment, not a metrics wall)
-      verdict line (epicenter) — the product answers "is anything wrong since I last looked?"
-      review items — rendered only when something warrants attention:
+      attention board (epicenter) — a table of vulnerabilities waiting to be reviewed;
+        the page title carries the state, and an empty board renders nothing at all
+      review items / events — rendered only when something warrants attention:
         critical/high finding
           (latest COMPLETED scan) ............→ SCAN DETAIL, that finding row open
         scan failed (latest scan) ............→ SCAN DETAIL (failure reason)
         coverage stale (Pi offline /
           no completed scan in N days) .......→ AGENTS                ⚠️ N undecided
         new device on the network ............→ HOST DETAIL           ⚠️ cut from v1 (#4)
-      quiet context footer: last scan · Pi status — muted links, no metric cards
+      below the board: an event board (left) and an activity log (right) — no metric cards
       nav: Scans ................→ SCAN LIST → row → SCAN DETAIL
-      nav: Hosts ................→ HOST INVENTORY → row → HOST DETAIL
+      nav: Network ..............→ NETWORK (list) → row → NETWORK DETAIL
 
 SCAN DETAIL
       host row ..................→ host panel (in place)

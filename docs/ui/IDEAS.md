@@ -85,42 +85,18 @@ March-era `wireframes.md` (2026-07-10).
 
 ## Visual direction
 
-An opinionated visual identity, per [`REFERENCE.md` §8](REFERENCE.md) — the product commits to one
-look instead of exporting taste to a settings page. Anchor references live next to this doc:
-[`nous-home.png`](nous-research/nous-home.png) (Nous Research home),
-[`hermes.png`](nous-research/hermes.png) (Hermes agent UI),
-[`psyche-header.png`](nous-research/psyche-header.png) (Nous Psyche header).
-
-- Deep purple as the main color, reserved for focal points — the role the muted blue plays in
-  `hermes.png` (PINNED / AGENTS labels, active row): small, saturated, and the only loud thing
-  on an otherwise quiet surface
-- Surfaces: paper white — the MVP is light-only ([`SCREENS.md` §Theme](SCREENS.md#theme)); body
-  text near-black with a slight grey cast, never pure `#000`. Greyish-black surfaces belong to the
-  deferred dark mode.
-- Deep purple is the only brand accent and **never carries severity**; severity owns its own hues
-  (critical red · high orange · medium amber · low blue) — [`SCREENS.md` §Color](SCREENS.md#color)
-- Blocky over roundy: minimal-to-zero border radius on cards, buttons, badges and inputs —
-  hard edges and flat rectangular blocks; the references reinforce it (dashed-rule separators
-  on `nous-home.png`, square-bordered LIGHT/DARK toggles on `psyche-header.png`)
-- Typography is **decided** — [`SCREENS.md` §Typography](SCREENS.md#typography): IM Fell English
-  for titles at every level (never below 16px), IBM Plex Mono for all non-title text including
-  data. No third face; IBM Plex Sans is the named escape hatch if mono prose proves tiring.
-- Ornamental art: small, beautiful engraving-style drawings with medieval and Catholic
-  references — like the vine/figure engraving in the `psyche-header.png` corner; imagery gets
-  a duotone treatment in the accent color (the cyanotype-blue photos on `nous-home.png`)
-- From 37signals take the simplicity and signal-over-noise vision, not the voice — no
-  personal/"fun" personality baked into the visual language
+Superseded by [`FOUNDATIONS.md`](FOUNDATIONS.md) (2026-09-02).
 
 ## Theming & accessibility
 
-The MVP ships **light only** — decided 2026-07-13, [`SCREENS.md` §Theme](SCREENS.md#theme). The
-items below are what a later dark mode would have to answer; none of them are MVP work.
+The MVP ships **light only** — see [`FOUNDATIONS.md`](FOUNDATIONS.md) §Theme. The items below are
+what a later dark mode would have to answer; none of them are MVP work.
 
-- Dark mode: greyish-black surface, re-derived palette (not an inversion of the light tokens)
+- Dark mode: re-derived from [`FOUNDATIONS.md`](FOUNDATIONS.md) from scratch, never an inversion
+  of the light tokens
 - Light/dark theme toggle in the top bar *(salvaged; deferred with dark mode — note a toggle is a
   preference, and §8 says the product should have a point of view instead)*
-- Severity palette re-checked for AA contrast on the dark surface
-- `Informational` severity reserved as a visual token even while the contract has four levels *(salvaged)*
+- Every token re-checked for AA contrast on the dark surface
 
 ## LLM explainer (deferred)
 
