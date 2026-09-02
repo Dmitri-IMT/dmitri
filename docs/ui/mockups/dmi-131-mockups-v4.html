@@ -1,0 +1,776 @@
+<!doctype html><meta charset="utf-8">
+<title>Dmitri Mockups v4</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --canvas:#FCFCFC; --card:#FFFFFF; --ink:#0F172A; --muted:#475569;
+  --rule:#E2E8F0; --edge:#64748B; --accent:#4F46E5; --accent-hover:#4338CA;
+  --hover:#F1F5F9;
+  --sans:"Inter","Helvetica Neue",Arial,sans-serif;
+  --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px}
+
+/* ---------- page chrome ---------- */
+.masthead{padding:56px 0 8px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font-size:36px;line-height:1.15;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+.lede{margin:0;max-width:66ch;color:var(--muted);font-size:16px}
+.toc{margin:26px 0 0;padding:18px 0 0;list-style:none;display:grid;
+  grid-template-columns:repeat(3,1fr);gap:10px 20px;border-top:1px solid var(--rule)}
+.toc a{display:flex;gap:10px;text-decoration:none;color:inherit;align-items:baseline;padding:2px 0;border-radius:4px}
+.toc a:hover .q{color:var(--accent-hover)}
+.toc a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.toc .n{font-family:var(--mono);font-size:11px;color:var(--edge);flex:none}
+.toc .q{font-size:13.5px;color:var(--muted)}
+
+section{padding-top:64px}
+.sec-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid var(--rule);padding-bottom:12px}
+h2{margin:0;font-size:23px;font-weight:600;letter-spacing:-.01em}
+.sec-tag{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--edge)}
+.sec-tag.now{color:var(--accent)}
+.ask{margin:14px 0 22px;font-size:15px;color:var(--muted);max-width:78ch}
+.ask b{color:var(--ink);font-weight:600}
+.var{display:flex;flex-direction:column;gap:10px;min-width:0}
+.var-n{margin:0;font-size:13px;color:var(--muted)}
+.frame{overflow-x:auto;border-radius:12px}
+.stack{display:flex;flex-direction:column;gap:26px}
+
+/* ---------- the desktop screen mock ---------- */
+.mock{
+  width:1120px;zoom:.62;background:var(--canvas);border:1px solid var(--rule);
+  border-radius:14px;overflow:hidden;font-size:15px;color:var(--ink);line-height:1.5}
+.bar{height:64px;background:var(--card);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;padding:0 28px;position:relative}
+.brand{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.mnav{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:26px;font-size:15px}
+.mnav span{color:var(--muted)}
+.mnav .on{color:var(--ink);font-weight:600}
+.mnav .hv{color:var(--ink);font-weight:600}
+.acct{margin-left:auto;font-size:15px;color:var(--ink)}
+.page{padding:34px 40px 46px;display:flex;flex-direction:column;gap:30px}
+.page.tight{padding-bottom:34px}
+
+.ph h3{margin:0;font-size:27px;font-weight:600;letter-spacing:-.02em}
+.ph p{margin:5px 0 0;font-size:15px;color:var(--muted)}
+.back{display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;font-size:15px;
+  color:var(--muted);text-decoration:none;font-weight:500}
+.back:hover{color:var(--ink)}
+.back svg{width:16px;height:16px;flex:none}
+.ph.det{margin-bottom:-6px}
+.blk{display:flex;flex-direction:column;gap:14px}
+.cards{display:flex;flex-direction:column;gap:24px}
+.blk.card{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:20px}
+.grp-h{font-size:17px;font-weight:600}
+.det-h{font-size:22px;font-weight:600;letter-spacing:-.01em}
+
+/* tables: one fixed row height, ellipsis instead of wrap */
+.t{width:100%;border-collapse:collapse;text-align:left;table-layout:fixed}
+.t th{font-size:12.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--edge);padding:0 14px 10px 0;border-bottom:1px solid var(--rule);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t td{height:56px;padding:0 14px 0 0;border-bottom:1px solid var(--rule);font-size:15px;vertical-align:middle}
+.t tr:last-child td{border-bottom:0}
+.t td>div{overflow:hidden}
+.t .l1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t .sub{display:block;font-size:13.5px;color:var(--muted);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t .num{font-variant-numeric:tabular-nums}
+.t .r{text-align:right}
+.t th.r{padding-right:0}
+.dim{color:var(--muted)}
+.mono{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.sev{font-weight:600;color:var(--ink)}
+.rows tbody tr{cursor:pointer}
+.rows tbody tr:hover td,.rows tbody tr.hov td{background:var(--hover)}
+.hint{font-size:13px;color:var(--edge)}
+.b{font-weight:600}
+
+/* controls */
+.btn{font-family:inherit;font-size:15px;font-weight:500;line-height:1;height:40px;
+  padding:0 16px;border-radius:8px;border:1px solid var(--edge);background:var(--card);
+  color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;height:42px;padding:0 20px}
+.btn.sm{height:36px;padding:0 14px;font-size:14px}
+.btn.pri.sm{height:36px;padding:0 14px;font-size:14px}
+.link{color:var(--accent);font-weight:500;text-decoration:none}
+.rm{color:var(--muted);font-weight:500;text-decoration:none}
+.rm:hover{color:#B91C1C}
+/* select trigger, shadcn shape with a ghost variant: text flush with the column header */
+.sel{display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 8px;margin-left:-8px;
+  border:0;border-radius:6px;background:transparent;font-size:15px;line-height:1;color:var(--ink);cursor:pointer}
+.sel:hover{background:var(--hover)}
+.t td.rolecell>div{overflow:visible;line-height:0}
+.sel svg{width:16px;height:16px;color:var(--ink);opacity:.5;flex:none}
+/* pagination, shadcn shape: ghost items, outlined current page */
+.pgn{display:flex;justify-content:flex-end;margin-top:2px}
+.pgn ul{display:flex;align-items:center;gap:4px;margin:0;padding:0;list-style:none}
+.pgi{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;
+  min-width:36px;padding:0 10px;border:1px solid transparent;border-radius:6px;
+  background:transparent;font-size:14px;font-weight:500;color:var(--ink);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.pgi.page{padding:0;width:36px}
+.pgi.cur{border-color:var(--rule);background:var(--card)}
+.pgi:hover,.pgi.hov{background:var(--hover)}
+.pgi svg{width:16px;height:16px;flex:none}
+
+/* scan settings: tabs + description, the chosen pattern */
+.settings{margin-top:18px;display:flex;flex-direction:column;gap:16px}
+.settings .det-h+p{margin:-4px 0 0;font-size:15px;color:var(--muted)}
+.tabs{display:inline-flex;align-self:flex-start;gap:2px;padding:3px;
+  background:var(--hover);border-radius:8px}
+.tab{height:32px;padding:0 16px;display:inline-flex;align-items:center;border-radius:6px;
+  font-size:14px;font-weight:500;color:var(--muted);cursor:pointer}
+.tab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(15,23,42,.10)}
+.tabbody{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.tabbody p{margin:0;font-size:15px;color:var(--muted)}
+.metaline{font-size:13.5px;color:var(--edge)}
+.btnrow{display:flex;gap:10px;align-items:center}
+
+/* a mock frame with the dialog pattern shown beside it */
+.beside{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.beside .frame{flex:0 1 auto;min-width:0}
+.dlgcol{flex:none;width:320px;display:flex;flex-direction:column;gap:8px}
+.dlgcol .cap{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--edge)}
+.dlg{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:20px;
+  box-shadow:0 12px 32px rgba(15,23,42,.12);display:flex;flex-direction:column;gap:8px}
+.dlg h4{margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.dlg p{margin:0;font-size:14px;color:var(--muted)}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+
+/* reference table for the wording, outside the mock */
+.ref{margin-top:22px;background:var(--card);border:1px solid var(--rule);border-radius:12px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:12px}
+.ref .cap{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--edge)}
+.ref .t td{height:auto;padding:12px 16px 12px 0}
+.ref .t td .w{white-space:normal;color:var(--muted);font-size:14.5px}
+.ref .t td .src{display:block;font-family:var(--mono);font-size:11.5px;color:var(--edge);margin-top:4px}
+
+/* network list toolbar */
+.tools{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:-6px}
+.input{display:inline-flex;align-items:center;gap:8px;height:40px;width:264px;padding:0 12px;
+  border:1px solid var(--rule);border-radius:8px;background:var(--card);
+  font-size:15px;color:var(--edge)}
+.input svg{width:16px;height:16px;opacity:.6;flex:none}
+.selbox{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 12px;
+  border-radius:8px;background:transparent;font-size:15px;color:var(--ink);cursor:pointer}
+.selbox:hover{background:var(--hover)}
+.selbox svg{width:16px;height:16px;opacity:.5;flex:none}
+/* a device that has stopped answering */
+.rows tbody tr.gone td{color:var(--muted)}
+.rows tbody tr.gone .sev{color:var(--muted);font-weight:500}
+/* the collapsed "not seen recently" group */
+.grouprow td{border-bottom:0}
+.groupbtn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 10px;margin-left:-10px;
+  border-radius:6px;font-size:14.5px;font-weight:500;color:var(--muted);cursor:pointer}
+.groupbtn:hover{background:var(--hover)}
+.groupbtn svg{width:16px;height:16px;flex:none;opacity:.7}
+
+/* home boards */
+.board{height:248px;margin-bottom:18px;display:flex;flex-direction:column;justify-content:flex-start}
+.half{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.panel{display:flex;flex-direction:column;gap:14px}
+.evt{display:flex;flex-direction:column}
+.evt .row{padding:13px 0;border-bottom:1px solid var(--rule);font-size:15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evt .row:last-child{border-bottom:0;padding-bottom:0}
+.log{display:flex;flex-direction:column}
+.log .row{display:flex;gap:18px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--rule)}
+.log .row:last-child{border-bottom:0}
+.log .when{width:104px;flex:none;font-size:13.5px;color:var(--edge);font-variant-numeric:tabular-nums}
+.log .txt{flex:1;min-width:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* summary strip: same left and right edge as the table under it */
+.strip{display:flex;gap:52px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  padding:16px 0}
+.strip div{display:flex;flex-direction:column;gap:3px}
+.strip dt{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--edge)}
+.strip dd{margin:0;font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.hostcard{display:flex;flex-direction:column;gap:4px}
+.hostcard .t1{font-size:27px;font-weight:600;letter-spacing:-.02em}
+.hostcard .t2{font-size:15px;color:var(--muted)}
+.rowend{display:flex;justify-content:flex-end}
+
+.callout{margin:16px 0 0;font-size:13px;color:var(--muted);border-left:2px solid var(--rule);
+  padding-left:14px;max-width:80ch}
+.callout b{color:var(--ink);font-weight:600}
+.qline{margin:22px 0 0;font-size:15px;color:var(--ink);border-left:2px solid var(--accent);
+  padding-left:14px;max-width:80ch}
+.foot{margin-top:72px;padding-top:18px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--edge)}
+@media (max-width:900px){
+  .toc{grid-template-columns:1fr}
+  .mock{zoom:.42}
+  .dlgcol{width:100%}
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">DMI-131 · Screen layouts · v4</div>
+  <h1>Dmitri screen mockups, version 4</h1>
+  <p class="lede">This is round 4, and two things need your review: the <b>Scan settings</b> block at the bottom of the Scans page, now with all five real scan types, and the <b>Network page</b>, a new screen that lists every device on the client's network. Every other screen — Home, Scan detail, Network detail and Users — is carried over from round 3 with no change.</p>
+  <ul class="toc">
+    <li><a href="#s2"><span class="n">Q1</span><span class="q">Are the five scan descriptions right, in these words?</span></a></li>
+    <li><a href="#s2"><span class="n">Q2</span><span class="q">Is "Scan now" plus a separate "Use this scan type" clear enough?</span></a></li>
+    <li><a href="#s3"><span class="n">Q3</span><span class="q">Do silent devices stay in the list, or collapse to a group?</span></a></li>
+  </ul>
+  <ul class="toc" style="border-top:0;padding-top:0;margin-top:4px">
+    <li><a href="#s1"><span class="n">01</span><span class="q">Home — unchanged</span></a></li>
+    <li><a href="#s2"><span class="n">02</span><span class="q">Scans and scan settings — review</span></a></li>
+    <li><a href="#s3"><span class="n">03</span><span class="q">Network — new, review</span></a></li>
+    <li><a href="#s4"><span class="n">04</span><span class="q">Scan detail — unchanged</span></a></li>
+    <li><a href="#s5"><span class="n">05</span><span class="q">Network detail — unchanged</span></a></li>
+    <li><a href="#s6"><span class="n">06</span><span class="q">Users — unchanged</span></a></li>
+  </ul>
+</header>
+
+<!-- ==================== 01 HOME ==================== -->
+<section id="s1">
+  <div class="sec-head"><h2>Home</h2><span class="sec-tag">carried over</span></div>
+  <p class="ask">The attention board sits at the top with no heading over it. Rows are clickable — the whole row lights up on hover, shown on the third row. When nothing needs attention the table is not drawn at all, and Events and Activity move up.</p>
+
+  <div class="stack">
+    <div class="var">
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span class="on">Home</span><span>Scans</span><span class="hv">Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page">
+            <div class="ph"><h3>4 things need your attention</h3><p>Last scan finished today at 06:12</p></div>
+
+            <div class="board">
+              <table class="t rows">
+                <colgroup><col style="width:46%"><col style="width:34%"><col style="width:20%"></colgroup>
+                <thead><tr><th>Vulnerability</th><th>Device</th><th>Severity</th></tr></thead>
+                <tbody>
+                  <tr><td><div><span class="l1">Router firmware is out of date</span><span class="sub">CVE-2024-33112</span></div></td><td><div><span class="l1">Netgear R7000</span><span class="sub mono">192.168.1.1</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td></tr>
+                  <tr><td><div><span class="l1">Remote desktop is open to the whole network</span></div></td><td><div><span class="l1">Office PC</span><span class="sub mono">192.168.1.22</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td></tr>
+                  <tr class="hov"><td><div><span class="l1">Camera still uses the password it came with</span></div></td><td><div><span class="l1">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td></tr>
+                  <tr><td><div><span class="l1">Old file sharing is switched on</span><span class="sub">CVE-2020-0796</span></div></td><td><div><span class="l1">Office NAS</span><span class="sub mono">192.168.1.30</span></div></td><td><div><span class="l1"><span class="sev">Medium</span></span></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="half">
+              <div class="panel">
+                <div class="grp-h">Events</div>
+                <div class="evt">
+                  <div class="row">Dmitri box has been offline for 3 days</div>
+                  <div class="row">Maria has not signed in for 60 days</div>
+                  <div class="row">New device joined the network: iPhone</div>
+                </div>
+                <nav class="pgn" aria-label="Events pages">
+                  <ul>
+                    <li><span class="pgi page" role="link" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span></li>
+                    <li><span class="pgi page cur" aria-current="page">1</span></li>
+                    <li><span class="pgi page">2</span></li>
+                    <li><span class="pgi page">3</span></li>
+                    <li><span class="pgi page" role="link" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></li>
+                  </ul>
+                </nav>
+              </div>
+              <div class="panel">
+                <div class="grp-h">Activity</div>
+                <div class="log">
+                  <div class="row"><span class="when">Today 06:12</span><span class="txt">Standard scan finished</span></div>
+                  <div class="row"><span class="when">Today 06:07</span><span class="txt">Standard scan started</span></div>
+                  <div class="row"><span class="when">Yesterday 19:22</span><span class="txt">Guilherme changed Maria's role to Viewer</span></div>
+                  <div class="row"><span class="when">Sun 21:40</span><span class="txt">iPhone first seen on the network</span></div>
+                  <div class="row"><span class="when">Sat 06:10</span><span class="txt">Standard scan finished</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="var-n">Nav: the active item is bold with no underline. Hover is bold too — "Network" above shows the hover state. The name at the right is plain text, no avatar.</p>
+    </div>
+
+    <div class="var">
+      <p class="var-n">Empty state — no table, no empty card. Events and Activity move up to the title.</p>
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span class="on">Home</span><span>Scans</span><span>Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page tight">
+            <div class="ph"><h3>Nothing needs your attention</h3><p>Last scan finished today at 06:12</p></div>
+            <div class="half">
+              <div class="panel">
+                <div class="grp-h">Events</div>
+                <div class="evt">
+                  <div class="row">Dmitri box has been offline for 3 days</div>
+                  <div class="row">Maria has not signed in for 60 days</div>
+                  <div class="row">New device joined the network: iPhone</div>
+                </div>
+                <nav class="pgn" aria-label="Events pages">
+                  <ul>
+                    <li><span class="pgi page" role="link" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span></li>
+                    <li><span class="pgi page cur" aria-current="page">1</span></li>
+                    <li><span class="pgi page">2</span></li>
+                    <li><span class="pgi page">3</span></li>
+                    <li><span class="pgi page" role="link" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></li>
+                  </ul>
+                </nav>
+              </div>
+              <div class="panel">
+                <div class="grp-h">Activity</div>
+                <div class="log">
+                  <div class="row"><span class="when">Today 06:12</span><span class="txt">Standard scan finished</span></div>
+                  <div class="row"><span class="when">Today 06:07</span><span class="txt">Standard scan started</span></div>
+                  <div class="row"><span class="when">Sun 21:40</span><span class="txt">iPhone first seen on the network</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 02 SCANS ==================== -->
+<section id="s2">
+  <div class="sec-head"><h2>Scans and scan settings</h2><span class="sec-tag now">review this</span></div>
+  <p class="ask">The page is the scans table, then a 48&nbsp;px gap, then <b>Scan settings</b>. The five tabs are the five scan types the box really runs. Two buttons, two different jobs: <b>Use this scan type</b> changes the daily scan and asks you to confirm; <b>Scan now</b> runs the selected type one time and leaves the daily scan alone.</p>
+
+  <div class="stack">
+    <div class="var">
+      <p class="var-n"><b>Frame A — at rest.</b> Standard is selected and Standard is already the daily scan, so "Use this scan type" is not drawn. Only "Scan now" remains.</p>
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span>Home</span><span class="on">Scans</span><span>Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page">
+            <div class="ph"><h3>Scans</h3></div>
+            <table class="t rows">
+              <colgroup><col style="width:24%"><col style="width:14%"><col style="width:16%"><col style="width:28%"><col style="width:18%"></colgroup>
+              <thead><tr><th>When</th><th>Mode</th><th>Duration</th><th>Result</th><th>Highest severity</th></tr></thead>
+              <tbody>
+                <tr><td><div><span class="l1">2 Sep 2026, 06:12</span><span class="sub">Today</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1 num">4 min 12 s</span></div></td><td><div><span class="l1">2 new vulnerabilities</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td></tr>
+                <tr><td><div><span class="l1">1 Sep 2026, 06:10</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1 num">3 min 58 s</span></div></td><td><div><span class="l1">Nothing new</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+                <tr><td><div><span class="l1">31 Aug 2026, 22:04</span></div></td><td><div><span class="l1">Extensive</span></div></td><td><div><span class="l1 num">26 min 40 s</span></div></td><td><div><span class="l1">5 new vulnerabilities</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td></tr>
+                <tr><td><div><span class="l1">30 Aug 2026, 06:11</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1">Failed</span><span class="sub">The box lost its network connection</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+                <tr><td><div><span class="l1">29 Aug 2026, 06:09</span></div></td><td><div><span class="l1">Quick</span></div></td><td><div><span class="l1 num">1 min 20 s</span></div></td><td><div><span class="l1">Nothing new</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+                <tr><td><div><span class="l1">28 Aug 2026, 06:10</span></div></td><td><div><span class="l1">NSPi</span></div></td><td><div><span class="l1 num">22 min 31 s</span></div></td><td><div><span class="l1">1 new vulnerability</span></div></td><td><div><span class="l1"><span class="sev">Medium</span></span></div></td></tr>
+              </tbody>
+            </table>
+
+            <div class="settings" style="margin-top:48px">
+              <div class="det-h">Scan settings</div>
+              <div class="tabbody">
+                <div class="tabs" role="tablist">
+                  <span class="tab" role="tab">Quick</span>
+                  <span class="tab on" role="tab" aria-selected="true">Standard</span>
+                  <span class="tab" role="tab">Extensive</span>
+                  <span class="tab" role="tab">Max</span>
+                  <span class="tab" role="tab">NSPi</span>
+                </div>
+                <p>Checks the 1000 most-used ports, then asks each device what it is running — file sharing, remote login, web pages — and matches that against known weaknesses. Takes about 5 to 10 minutes.</p>
+                <div class="metaline">Daily scan uses: Standard</div>
+                <div class="btnrow">
+                  <button class="btn pri" type="button">Scan now</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="var">
+      <p class="var-n"><b>Frame B — Max selected, not yet confirmed.</b> The note under the description says what each button will do. "Use this scan type" opens the dialog shown on the right.</p>
+      <div class="beside">
+        <div class="frame">
+          <div class="mock">
+            <div class="bar">
+              <div class="brand">Dmitri</div>
+              <nav class="mnav"><span>Home</span><span class="on">Scans</span><span>Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+              <div class="acct">Guilherme</div>
+            </div>
+            <div class="page">
+              <div class="ph"><h3>Scans</h3></div>
+              <table class="t rows">
+                <colgroup><col style="width:24%"><col style="width:14%"><col style="width:16%"><col style="width:28%"><col style="width:18%"></colgroup>
+                <thead><tr><th>When</th><th>Mode</th><th>Duration</th><th>Result</th><th>Highest severity</th></tr></thead>
+                <tbody>
+                  <tr><td><div><span class="l1">2 Sep 2026, 06:12</span><span class="sub">Today</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1 num">4 min 12 s</span></div></td><td><div><span class="l1">2 new vulnerabilities</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td></tr>
+                  <tr><td><div><span class="l1">1 Sep 2026, 06:10</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1 num">3 min 58 s</span></div></td><td><div><span class="l1">Nothing new</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+                  <tr><td><div><span class="l1">31 Aug 2026, 22:04</span></div></td><td><div><span class="l1">Extensive</span></div></td><td><div><span class="l1 num">26 min 40 s</span></div></td><td><div><span class="l1">5 new vulnerabilities</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td></tr>
+                </tbody>
+              </table>
+
+              <div class="settings" style="margin-top:48px">
+                <div class="det-h">Scan settings</div>
+                <div class="tabbody">
+                  <div class="tabs" role="tablist">
+                    <span class="tab" role="tab">Quick</span>
+                    <span class="tab" role="tab">Standard</span>
+                    <span class="tab" role="tab">Extensive</span>
+                    <span class="tab on" role="tab" aria-selected="true">Max</span>
+                    <span class="tab" role="tab">NSPi</span>
+                  </div>
+                  <p>Opens every port on every device and runs the full check list, and reports even the smallest findings. Takes 45 minutes or more.</p>
+                  <div class="metaline">Daily scan uses: Standard</div>
+                  <div class="metaline">Scan now runs a Max scan once. Your daily scan stays Standard.</div>
+                  <div class="btnrow">
+                    <button class="btn" type="button">Use this scan type</button>
+                    <button class="btn pri" type="button">Scan now</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dlgcol">
+          <div class="cap">After "Use this scan type"</div>
+          <div class="dlg">
+            <h4>Make Max your daily scan?</h4>
+            <p>Every morning's scan will take 45 minutes or more instead of about 8 minutes.</p>
+            <div class="acts">
+              <button class="btn sm" type="button">Cancel</button>
+              <button class="btn pri sm" type="button">Confirm</button>
+            </div>
+          </div>
+          <p class="var-n">Shown at full size. In the product it opens over the page, with the page dimmed behind it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ref">
+    <div class="cap">The five descriptions, for your approval</div>
+    <table class="t">
+      <colgroup><col style="width:15%"><col style="width:85%"></colgroup>
+      <thead><tr><th>Scan type</th><th>One-line description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><div><span class="l1 b">Quick</span></div></td>
+          <td><div><span class="w">Looks at the 1000 most-used ports on every device and reports the known weaknesses it finds there. Takes about 2 to 5 minutes.<span class="src">hardware-agent/src/agent/tui/screens/scan_mode.py:15 · config.py:36 (vulners only)</span></span></div></td>
+        </tr>
+        <tr>
+          <td><div><span class="l1 b">Standard</span></div></td>
+          <td><div><span class="w">Checks the 1000 most-used ports, then asks each device what it is running — file sharing, remote login, web pages — and matches that against known weaknesses. Takes about 5 to 10 minutes.<span class="src">scan_mode.py:16 · config.py:27 (smb, ssh, http scripts)</span></span></div></td>
+        </tr>
+        <tr>
+          <td><div><span class="l1 b">Extensive</span></div></td>
+          <td><div><span class="w">Widens the search to 10000 ports and adds certificate and encryption checks. It also reports milder problems that the shorter scans leave out. Takes about 20 to 35 minutes.<span class="src">scan_mode.py:18 · config.py:38 (ssl-cert, ssl-enum-ciphers) · config.py:95 (min CVSS 3.0)</span></span></div></td>
+        </tr>
+        <tr>
+          <td><div><span class="l1 b">Max</span></div></td>
+          <td><div><span class="w">Opens every port on every device and runs the full check list, and reports even the smallest findings. Takes 45 minutes or more.<span class="src">scan_mode.py:21 · port_discovery.py:40 (all ports) · config.py:97 (min CVSS 1.0)</span></span></div></td>
+        </tr>
+        <tr>
+          <td><div><span class="l1 b">NSPi</span></div></td>
+          <td><div><span class="w">For sites with industrial equipment. It checks the usual ports plus the ones controllers and PLCs use, and adds the checks those machines need. Takes about 20 to 30 minutes.<span class="src">scan_mode.py:26 · config.py:52 (ports 502, 4840, 44818) · config.py:54 (modbus-discover, enip-info)</span></span></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="callout"><b>Note:</b> the durations come straight from the scan-mode screen the box already ships (<b>scan_mode.py</b>), so they match what the hardware really does. The Mode column in the table above now uses these five real names — earlier rounds showed a made-up "Deep".</p>
+</section>
+
+<!-- ==================== 03 NETWORK (LIST) ==================== -->
+<section id="s3">
+  <div class="sec-head"><h2>Network</h2><span class="sec-tag now">new · review this</span></div>
+  <p class="ask">Every device Dmitri has seen on the client's network. Sorted by highest severity first, then by name, so the devices that need work sit at the top. Any row opens the Network detail page in section&nbsp;05. A device with no name is listed by its address instead, the same rule the detail header uses.</p>
+
+  <div class="stack">
+    <div class="var">
+      <p class="var-n"><b>Frame A — the list.</b> Search and the filter sit above the table on the right. The fourth row shows the hover state.</p>
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span>Home</span><span>Scans</span><span class="on">Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page">
+            <div class="ph"><h3>Network</h3><p>14 devices · last scan today 06:12</p></div>
+            <div class="tools">
+              <span class="input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search devices</span>
+              <span class="selbox">All devices<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <table class="t rows">
+              <colgroup><col style="width:28%"><col style="width:20%"><col style="width:16%"><col style="width:19%"><col style="width:17%"></colgroup>
+              <thead><tr><th>Device</th><th>Type and vendor</th><th>Highest severity</th><th>Open vulnerabilities</th><th>Last seen</th></tr></thead>
+              <tbody>
+                <tr><td><div><span class="l1 b">Netgear R7000</span><span class="sub mono">192.168.1.1</span></div></td><td><div><span class="l1">Router · Netgear</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1">Camera · Hikvision</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">2</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office PC</span><span class="sub mono">192.168.1.22</span></div></td><td><div><span class="l1">Computer · Dell</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr class="hov"><td><div><span class="l1 b">Office NAS</span><span class="sub mono">192.168.1.30</span></div></td><td><div><span class="l1">Storage · Synology</span></div></td><td><div><span class="l1"><span class="sev">Medium</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Living-room TV</span><span class="sub mono">192.168.1.44</span></div></td><td><div><span class="l1">TV · Samsung</span></div></td><td><div><span class="l1"><span class="sev">Low</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b mono">192.168.1.63</span><span class="sub">No name yet</span></div></td><td><div><span class="l1">Sensor · Espressif</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Maria's iPhone</span><span class="sub mono">192.168.1.72</span></div></td><td><div><span class="l1">Phone · Apple</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office printer</span><span class="sub mono">192.168.1.19</span></div></td><td><div><span class="l1">Printer · Brother</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+              </tbody>
+            </table>
+            <nav class="pgn" aria-label="Device pages">
+              <ul>
+                <li><span class="pgi page" role="link" aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></span></li>
+                <li><span class="pgi page cur" aria-current="page">1</span></li>
+                <li><span class="pgi page">2</span></li>
+                <li><span class="pgi page" role="link" aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span></li>
+              </ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="var">
+      <p class="var-n"><b>Frame B — a device that has stopped answering, kept in place.</b> The whole row goes muted and a line under the name says how long it has been quiet. No colour, no chip.</p>
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span>Home</span><span>Scans</span><span class="on">Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page">
+            <div class="ph"><h3>Network</h3><p>14 devices · last scan today 06:12</p></div>
+            <div class="tools">
+              <span class="input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search devices</span>
+              <span class="selbox">All devices<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <table class="t rows">
+              <colgroup><col style="width:28%"><col style="width:20%"><col style="width:16%"><col style="width:19%"><col style="width:17%"></colgroup>
+              <thead><tr><th>Device</th><th>Type and vendor</th><th>Highest severity</th><th>Open vulnerabilities</th><th>Last seen</th></tr></thead>
+              <tbody>
+                <tr><td><div><span class="l1 b">Netgear R7000</span><span class="sub mono">192.168.1.1</span></div></td><td><div><span class="l1">Router · Netgear</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1">Camera · Hikvision</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">2</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office PC</span><span class="sub mono">192.168.1.22</span></div></td><td><div><span class="l1">Computer · Dell</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office NAS</span><span class="sub mono">192.168.1.30</span></div></td><td><div><span class="l1">Storage · Synology</span></div></td><td><div><span class="l1"><span class="sev">Medium</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr class="gone"><td><div><span class="l1 b">Living-room TV</span><span class="sub">Not seen for 3 weeks</span></div></td><td><div><span class="l1">TV · Samsung</span></div></td><td><div><span class="l1"><span class="sev">Low</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">12 Aug 2026</span></div></td></tr>
+                <tr><td><div><span class="l1 b mono">192.168.1.63</span><span class="sub">No name yet</span></div></td><td><div><span class="l1">Sensor · Espressif</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Maria's iPhone</span><span class="sub mono">192.168.1.72</span></div></td><td><div><span class="l1">Phone · Apple</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office printer</span><span class="sub mono">192.168.1.19</span></div></td><td><div><span class="l1">Printer · Brother</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="qline"><b>Question:</b> does a device that has not answered in weeks stay in the list, as in Frame&nbsp;B, or move to a collapsed "Not seen recently" group at the bottom, as in Frame&nbsp;C?</p>
+
+  <div class="stack" style="margin-top:18px">
+    <div class="var">
+      <p class="var-n"><b>Frame C — the collapsed group.</b> Quiet devices leave the main list and sit behind one line at the bottom. The count tells you they are still there.</p>
+      <div class="frame">
+        <div class="mock">
+          <div class="bar">
+            <div class="brand">Dmitri</div>
+            <nav class="mnav"><span>Home</span><span>Scans</span><span class="on">Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+            <div class="acct">Guilherme</div>
+          </div>
+          <div class="page">
+            <div class="ph"><h3>Network</h3><p>14 devices · last scan today 06:12</p></div>
+            <div class="tools">
+              <span class="input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search devices</span>
+              <span class="selbox">All devices<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <table class="t rows">
+              <colgroup><col style="width:28%"><col style="width:20%"><col style="width:16%"><col style="width:19%"><col style="width:17%"></colgroup>
+              <thead><tr><th>Device</th><th>Type and vendor</th><th>Highest severity</th><th>Open vulnerabilities</th><th>Last seen</th></tr></thead>
+              <tbody>
+                <tr><td><div><span class="l1 b">Netgear R7000</span><span class="sub mono">192.168.1.1</span></div></td><td><div><span class="l1">Router · Netgear</span></div></td><td><div><span class="l1"><span class="sev">Critical</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1">Camera · Hikvision</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">2</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office PC</span><span class="sub mono">192.168.1.22</span></div></td><td><div><span class="l1">Computer · Dell</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office NAS</span><span class="sub mono">192.168.1.30</span></div></td><td><div><span class="l1">Storage · Synology</span></div></td><td><div><span class="l1"><span class="sev">Medium</span></span></div></td><td><div><span class="l1 num">1</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b mono">192.168.1.63</span><span class="sub">No name yet</span></div></td><td><div><span class="l1">Sensor · Espressif</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Maria's iPhone</span><span class="sub mono">192.168.1.72</span></div></td><td><div><span class="l1">Phone · Apple</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr><td><div><span class="l1 b">Office printer</span><span class="sub mono">192.168.1.19</span></div></td><td><div><span class="l1">Printer · Brother</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1 num">0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+                <tr class="grouprow"><td colspan="5"><div style="overflow:visible;line-height:0"><span class="groupbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>Not seen recently (2)</span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="callout"><b>The trade:</b> Frame B keeps one list, so a device you are looking for is always where you left it. Frame C keeps the top of the page short, but a device that goes quiet seems to disappear.</p>
+</section>
+
+<!-- ==================== 04 SCAN DETAIL ==================== -->
+<section id="s4">
+  <div class="sec-head"><h2>Scan detail</h2><span class="sec-tag">carried over</span></div>
+  <p class="ask">Back link is an arrow and the word "Back". The summary strip runs edge to edge with the tables below it. Vulnerabilities sit under plain bold headings.</p>
+
+  <div class="frame">
+    <div class="mock">
+      <div class="bar">
+        <div class="brand">Dmitri</div>
+        <nav class="mnav"><span>Home</span><span class="on">Scans</span><span>Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+        <div class="acct">Guilherme</div>
+      </div>
+      <div class="page">
+        <div class="ph det"><a class="back" href="#s4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</a><h3>Scan · 31 Aug 2026, 22:04</h3></div>
+        <div class="strip">
+          <div><dt>Mode</dt><dd>Extensive</dd></div>
+          <div><dt>Duration</dt><dd>26 min 40 s</dd></div>
+          <div><dt>Devices seen</dt><dd>14</dd></div>
+          <div><dt>Vulnerabilities</dt><dd>5</dd></div>
+        </div>
+
+        <div class="cards">
+        <div class="blk card"><div class="det-h">Critical</div>
+          <table class="t rows">
+            <colgroup><col style="width:42%"><col style="width:24%"><col style="width:11%"><col style="width:23%"></colgroup>
+            <thead><tr><th>Vulnerability</th><th>Device</th><th>Port</th><th>CVE</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Router firmware is out of date</span></div></td><td><div><span class="l1">Netgear R7000</span><span class="sub mono">192.168.1.1</span></div></td><td><div><span class="l1 num">443</span></div></td><td><div><span class="l1 mono">CVE-2024-33112</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="blk card"><div class="det-h">High</div>
+          <table class="t rows">
+            <colgroup><col style="width:42%"><col style="width:24%"><col style="width:11%"><col style="width:23%"></colgroup>
+            <thead><tr><th>Vulnerability</th><th>Device</th><th>Port</th><th>CVE</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Remote desktop is open to the whole network</span></div></td><td><div><span class="l1">Office PC</span><span class="sub mono">192.168.1.22</span></div></td><td><div><span class="l1 num">3389</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+              <tr><td><div><span class="l1">Camera still uses the password it came with</span></div></td><td><div><span class="l1">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1 num">554</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="blk card"><div class="det-h">Medium</div>
+          <table class="t rows">
+            <colgroup><col style="width:42%"><col style="width:24%"><col style="width:11%"><col style="width:23%"></colgroup>
+            <thead><tr><th>Vulnerability</th><th>Device</th><th>Port</th><th>CVE</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Old file sharing is switched on</span></div></td><td><div><span class="l1">Office NAS</span><span class="sub mono">192.168.1.30</span></div></td><td><div><span class="l1 num">445</span></div></td><td><div><span class="l1 mono">CVE-2020-0796</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="blk card"><div class="det-h">Low</div>
+          <table class="t rows">
+            <colgroup><col style="width:42%"><col style="width:24%"><col style="width:11%"><col style="width:23%"></colgroup>
+            <thead><tr><th>Vulnerability</th><th>Device</th><th>Port</th><th>CVE</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Web page served without encryption</span></div></td><td><div><span class="l1">Front-door camera</span><span class="sub mono">192.168.1.51</span></div></td><td><div><span class="l1 num">80</span></div></td><td><div><span class="l1 dim">—</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="blk card"><div class="det-h">Devices seen</div>
+          <table class="t rows">
+            <colgroup><col style="width:28%"><col style="width:22%"><col style="width:20%"><col style="width:15%"><col style="width:15%"></colgroup>
+            <thead><tr><th>Device</th><th>Address</th><th>Vendor</th><th class="r">Open ports</th><th class="r">Vulnerabilities</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Netgear R7000</span></div></td><td><div><span class="l1 mono">192.168.1.1</span></div></td><td><div><span class="l1">Netgear</span></div></td><td class="r"><div><span class="l1 num">4</span></div></td><td class="r"><div><span class="l1 num">1</span></div></td></tr>
+              <tr><td><div><span class="l1">Office PC</span></div></td><td><div><span class="l1 mono">192.168.1.22</span></div></td><td><div><span class="l1">Dell</span></div></td><td class="r"><div><span class="l1 num">6</span></div></td><td class="r"><div><span class="l1 num">1</span></div></td></tr>
+              <tr><td><div><span class="l1">Office NAS</span></div></td><td><div><span class="l1 mono">192.168.1.30</span></div></td><td><div><span class="l1">Synology</span></div></td><td class="r"><div><span class="l1 num">7</span></div></td><td class="r"><div><span class="l1 num">1</span></div></td></tr>
+              <tr><td><div><span class="l1">Front-door camera</span></div></td><td><div><span class="l1 mono">192.168.1.51</span></div></td><td><div><span class="l1">Hikvision</span></div></td><td class="r"><div><span class="l1 num">3</span></div></td><td class="r"><div><span class="l1 num">2</span></div></td></tr>
+              <tr><td><div><span class="l1 dim">No name</span></div></td><td><div><span class="l1 mono">192.168.1.63</span></div></td><td><div><span class="l1">Espressif</span></div></td><td class="r"><div><span class="l1 num">1</span></div></td><td class="r"><div><span class="l1 num">0</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 05 NETWORK DETAIL ==================== -->
+<section id="s5">
+  <div class="sec-head"><h2>Network detail</h2><span class="sec-tag">carried over</span></div>
+  <p class="ask">Vulnerabilities first, then the services running on the device, then the scan history. The port sits under the service name as muted text. This is the page a row on the new Network list opens.</p>
+
+  <div class="frame">
+    <div class="mock">
+      <div class="bar">
+        <div class="brand">Dmitri</div>
+        <nav class="mnav"><span>Home</span><span>Scans</span><span class="on">Network</span><span>Devices</span><span>Users</span><span>Settings</span></nav>
+        <div class="acct">Guilherme</div>
+      </div>
+      <div class="page">
+        <div class="ph det"><a class="back" href="#s5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>Back</a>
+          <div class="hostcard"><span class="t1">Front-door camera</span><span class="t2">192.168.1.51 · Hikvision</span></div>
+        </div>
+
+        <div class="blk"><div class="det-h">Vulnerabilities</div>
+          <table class="t rows">
+            <colgroup><col style="width:44%"><col style="width:11%"><col style="width:21%"><col style="width:13%"><col style="width:11%"></colgroup>
+            <thead><tr><th>Vulnerability</th><th>Port</th><th>CVE</th><th>First seen</th><th>Severity</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Camera still uses the password it came with</span></div></td><td><div><span class="l1 num">554</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1">31 Aug 2026</span></div></td><td><div><span class="l1"><span class="sev">High</span></span></div></td></tr>
+              <tr><td><div><span class="l1">Web page served without encryption</span></div></td><td><div><span class="l1 num">80</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1">4 Jun 2026</span></div></td><td><div><span class="l1"><span class="sev">Low</span></span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="blk"><div class="det-h">Services running on this device</div>
+          <table class="t rows">
+            <colgroup><col style="width:38%"><col style="width:20%"><col style="width:26%"><col style="width:16%"></colgroup>
+            <thead><tr><th>Service</th><th>Protocol</th><th>Version</th><th>Last seen</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">Web (HTTP)</span><span class="sub mono">80</span></div></td><td><div><span class="l1">tcp</span></div></td><td><div><span class="l1">Boa 0.94.14rc21</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+              <tr><td><div><span class="l1">Video stream (RTSP)</span><span class="sub mono">554</span></div></td><td><div><span class="l1">tcp</span></div></td><td><div><span class="l1">Hikvision RTSP 1.0</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+              <tr><td><div><span class="l1">Camera control panel</span><span class="sub mono">8000</span></div></td><td><div><span class="l1">tcp</span></div></td><td><div><span class="l1 dim">—</span></div></td><td><div><span class="l1">Today 06:12</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="blk"><div class="det-h">Scan history</div>
+          <table class="t rows">
+            <colgroup><col style="width:34%"><col style="width:20%"><col style="width:26%"><col style="width:20%"></colgroup>
+            <thead><tr><th>When</th><th>Mode</th><th>Result</th><th class="r">Vulnerabilities</th></tr></thead>
+            <tbody>
+              <tr><td><div><span class="l1">2 Sep 2026, 06:12</span></div></td><td><div><span class="l1">Standard</span></div></td><td><div><span class="l1">Nothing new</span></div></td><td class="r"><div><span class="l1 num">2</span></div></td></tr>
+              <tr><td><div><span class="l1">31 Aug 2026, 22:04</span></div></td><td><div><span class="l1">Extensive</span></div></td><td><div><span class="l1">1 new vulnerability</span></div></td><td class="r"><div><span class="l1 num">2</span></div></td></tr>
+              <tr><td><div><span class="l1">29 Aug 2026, 06:09</span></div></td><td><div><span class="l1">Quick</span></div></td><td><div><span class="l1">Nothing new</span></div></td><td class="r"><div><span class="l1 num">1</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 06 USERS ==================== -->
+<section id="s6">
+  <div class="sec-head"><h2>Users</h2><span class="sec-tag">carried over</span></div>
+  <p class="ask">Role is a dropdown in the row. Every person except you has a Remove link in the last column. The invite button sits under the table on the right.</p>
+
+  <div class="frame">
+    <div class="mock">
+      <div class="bar">
+        <div class="brand">Dmitri</div>
+        <nav class="mnav"><span>Home</span><span>Scans</span><span>Network</span><span>Devices</span><span class="on">Users</span><span>Settings</span></nav>
+        <div class="acct">Guilherme</div>
+      </div>
+      <div class="page">
+        <div class="ph"><h3>Users</h3></div>
+        <table class="t">
+          <colgroup><col style="width:32%"><col style="width:18%"><col style="width:16%"><col style="width:20%"><col style="width:14%"></colgroup>
+          <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Last seen</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div><span class="l1">gui@ronthocorp.com</span><span class="sub">You</span></div></td><td class="rolecell"><div><span class="sel">Admin<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></div></td><td><div><span class="l1">Active</span></div></td><td><div><span class="l1">Today 08:40</span></div></td><td class="r"><div></div></td></tr>
+            <tr><td><div><span class="l1">maria@ronthocorp.com</span></div></td><td class="rolecell"><div><span class="sel">Viewer<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></div></td><td><div><span class="l1">Active</span></div></td><td><div><span class="l1">2 days ago</span></div></td><td class="r"><div><a class="rm" href="#s6">Remove</a></div></td></tr>
+            <tr><td><div><span class="l1">ops@ronthocorp.com</span></div></td><td class="rolecell"><div><span class="sel">Admin<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></div></td><td><div><span class="l1">Active</span></div></td><td><div><span class="l1">Yesterday</span></div></td><td class="r"><div><a class="rm" href="#s6">Remove</a></div></td></tr>
+            <tr><td><div><span class="l1">joao@ronthocorp.com</span></div></td><td class="rolecell"><div><span class="sel">Viewer<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></div></td><td><div><span class="l1">Invited</span><span class="sub">Sent 1 Sep</span></div></td><td><div><span class="l1 dim">—</span></div></td><td class="r"><div><a class="rm" href="#s6">Remove</a></div></td></tr>
+          </tbody>
+        </table>
+        <div class="rowend"><button class="btn pri" type="button">Invite a user</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<p class="foot">Drawn at 1120 px, shown at about two thirds. Sample data only — no real network was scanned for this page.</p>
+
+</div>

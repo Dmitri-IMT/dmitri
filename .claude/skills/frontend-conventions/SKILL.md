@@ -10,8 +10,8 @@ description: >-
 
 # Frontend conventions (`frontend/`)
 
-Binding. `docs/ui/SCREENS.md` §Foundations and `docs/adr/ADR-008-frontend-stack.md` outrank this
-file; where a feature's approved `ARCHITECTURE.md` / `DESIGN.md` is more specific, it wins.
+Binding. `docs/ui/FOUNDATIONS.md` and `docs/adr/ADR-008-frontend-stack.md` outrank this file;
+where a feature's approved `ARCHITECTURE.md` / `DESIGN.md` is more specific, it wins.
 
 Depth, with primary sources for every claim:
 
@@ -46,38 +46,43 @@ Depth, with primary sources for every claim:
 - **Query keys are coarse→fine arrays**, so a prefix invalidates a family.
 - Data fetching lives in TanStack Query, never in an Effect.
 
-## Styling — `SCREENS.md` §Foundations is law
+## Styling
+
+Values live in `docs/ui/FOUNDATIONS.md` (binding, 2026-09-02). Until DMI-132 lands,
+`frontend/src/index.css` and the local lint rules still carry the previous token values; do not
+add new usages of retired tokens.
 
 - **No magic numbers.** Every color, size, radius, border width and space is a token. A raw hex
   or pixel value in a component is a bug — including arbitrary-value utilities (`p-[13px]`,
   `text-[15px]`), which are the same bug in brackets.
-- **The only layout widths are the named containers:** `max-w-frame`
-  (`--container-frame: 70rem`) for both the top bar and every inside-shell page, and
-  `max-w-form` (`--container-form: 24rem`) for a standalone short form. `max-w-prose` is a
+- **The only layout widths are the named containers:** `max-w-frame` for both the top bar and
+  every inside-shell page, and `max-w-form` for a standalone short form. `max-w-prose` is a
   reading measure, not a layout container. A card sizes to its content, never to its column.
-- **The type scale is closed:** `text-title-lg`, `text-title-md`, `text-title-sm`,
-  `text-title-xs`, `text-body-md`, `text-body-sm`, `text-caption-md`, and `text-nav`.
-  `text-nav` is 11px and navigation-only. Raw framework sizes such as `text-xs`, `text-sm`,
-  `text-base` and `text-lg` are not scale tokens, even when their pixels match.
-- **Spacing uses the nine permitted steps** on Tailwind's 4px base: `1 2 3 4 6 8 12 16 24`.
+- **The type scale is closed, and you pick from it by NAME**, never by pixel and never by a raw
+  framework size. `text-xs`, `text-sm`, `text-base` and `text-lg` are not scale tokens even when
+  their pixels match. The token names and their current values are in `FOUNDATIONS.md` §Type.
+- **Spacing uses the nine permitted steps** on Tailwind's 4px base: `0 1 2 3 4 6 8 12 16 24`.
   No `p-5`, no `gap-7`. Do not invent a `--space-*` token layer; the stock utilities are the
   scale.
 - **Components carry no outer margin.** A component renders flush to its own box; the parent
   supplies the gap via `gap-*` on a flex/grid container, never sibling margins. A `mb-4` baked
   into a shared component dictates its spacing at every future call site.
-- **Section separation is decided once per screen.** Long prose-led sections prefer whitespace;
-  short, unlike sections may use a rule, but then use it at every boundary. The inter-section
-  step is `6`, `8` or `12`, never an arbitrary value.
-- **Every interactive element specifies its full state:** cursor, hover, focus-visible, active,
-  and disabled. Tailwind v4 preflight sets `cursor: default` on `<button>`, so a clickable
-  control must add `cursor-pointer`; do not assume the browser supplies it. Hover and keyboard
-  focus must both have visible affordances, and the focus ring is never removed.
+- **Section separation is decided once per screen.** The inter-section step is `6`, `8` or `12`,
+  never an arbitrary value, and never smaller than the inter-group step.
+- **Every interactive element specifies all five states:** rest, hover, focus-visible, active,
+  and disabled — plus the cursor. Tailwind v4 preflight sets `cursor: default` on `<button>`, so
+  a clickable control must add `cursor-pointer`; do not assume the browser supplies it. Hover and
+  keyboard focus must both have visible affordances, and the focus ring is never removed.
+- **Absent, not disabled.** Disabled is reserved for progress or incomplete-input states on an
+  action the user is permitted to take.
 - **Four local lint rules enforce these authored-style rules:** `local/no-arbitrary-utility`,
   `local/no-raw-type-size`, `local/spacing-scale`, and `local/no-bare-interactive`. Their only
   exemptions are vendored shadcn source (`src/components/ui/**`), test files
   (`src/**/*.test.{ts,tsx}`), and the test harness (`src/test/**`). Never widen an exemption to
-  make the gate pass; fix the rule or the application code.
-- **No `dark:` utility, no `prefers-color-scheme`, no theme toggle.** One light theme ships.
+  make the gate pass; fix the rule or the application code. The rules hard-code token names, so
+  a token rename and its lint edit ship in the same commit.
+- **No `dark:` utility, no `prefers-color-scheme`, no theme toggle.** One light theme ships,
+  desktop only (1440 target, 1280 minimum).
 - Components size to their container, never the viewport; `min-w-0` on flex children; long
   values wrap, truncate or scroll rather than widening the page. The body never scrolls
   horizontally.
