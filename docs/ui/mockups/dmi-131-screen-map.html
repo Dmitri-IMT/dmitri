@@ -1,0 +1,368 @@
+<!doctype html><meta charset="utf-8">
+<title>Dmitri Screen Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --paper: #FCFCFC;
+    --card: #FFFFFF;
+    --ink: #0F172A;
+    --muted: #475569;
+    --rule: #E2E8F0;
+    --accent: #4F46E5;
+    --now: #991B1B;
+    --soon: #854D0E;
+    --know: #1E40AF;
+    --clear: #166534;
+    --r: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 56px 28px 96px; }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+  h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--muted); font-size: 16px; max-width: 62ch; margin: 0 0 8px; }
+  .meta { color: var(--muted); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  section { margin-top: 44px; }
+  .sechead { border-bottom: 1px solid var(--rule); padding-bottom: 10px; margin-bottom: 20px; }
+  .sechead p { color: var(--muted); font-size: 14px; margin: 4px 0 0; max-width: 68ch; }
+
+  /* nav strip */
+  .strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+  .navitem {
+    background: var(--card); border: 1px solid var(--rule); border-radius: var(--r);
+    border-top: 3px solid var(--accent);
+    padding: 12px 14px; min-width: 140px; flex: 1 1 140px;
+  }
+  .navitem .name { font-weight: 600; font-size: 15px; }
+  .navitem .was { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .navitem.keep { border-top-color: var(--rule); }
+  .tagline { display: inline-block; margin-top: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--accent); }
+  .navitem.keep .tagline { color: var(--muted); }
+
+  /* screen cards */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); padding: 18px 20px 20px; }
+  .card .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .route { font-size: 12.5px; color: var(--muted); font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+  .aud { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--rule); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+  dl { margin: 14px 0 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; }
+  dt { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 2px; }
+  dd { margin: 0; font-size: 14px; }
+  dd ul { margin: 0; padding-left: 17px; }
+  dd li { margin-bottom: 2px; }
+  .issue { font-weight: 600; color: var(--accent); }
+  .none { color: var(--muted); }
+  .q { font-style: italic; }
+
+  /* matrix */
+  .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 720px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  th.rowhead, td.rowhead { font-weight: 600; white-space: nowrap; border-left: 3px solid var(--rule); }
+  tr.g-now td.rowhead { border-left-color: var(--now); }
+  tr.g-soon td.rowhead { border-left-color: var(--soon); }
+  tr.g-know td.rowhead { border-left-color: var(--know); }
+  tr.g-clear td.rowhead { border-left-color: var(--clear); }
+  td.absent { color: var(--muted); }
+
+  /* cut list + decisions */
+  .list { display: flex; flex-direction: column; gap: 0; background: var(--card);
+    border: 1px solid var(--rule); border-radius: var(--r); }
+  .row { display: grid; grid-template-columns: minmax(190px, 260px) minmax(0, 1fr); gap: 16px;
+    padding: 12px 18px; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .row:last-child { border-bottom: 0; }
+  .row .what { font-weight: 600; }
+  .row .why { color: var(--muted); }
+  ol.decisions { counter-reset: d; list-style: none; margin: 0; padding: 0;
+    background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); }
+  ol.decisions li { counter-increment: d; display: grid; grid-template-columns: 30px minmax(0, 1fr);
+    gap: 14px; padding: 13px 18px; border-bottom: 1px solid var(--rule); font-size: 14.5px; }
+  ol.decisions li:last-child { border-bottom: 0; }
+  ol.decisions li::before { content: counter(d); font-weight: 700; color: var(--accent);
+    font-variant-numeric: tabular-nums; }
+  footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="meta">DMI-127 · Information architecture</p>
+    <h1>Dmitri Screen Map</h1>
+    <p class="lede">Every screen in the web app, with the one thing it exists to show, the one action it offers, and where findings appear grouped by how soon they need work. Comment on any card: this map is the input to the per-screen issues, and to the restyle that follows.</p>
+    <p class="lede">Bound by decisions already made — findings are grouped into cards, never chipped per row; copy never says the network is safe; one primary action per screen, in the page header; top bar navigation; light theme; desktop.</p>
+  </header>
+
+  <section>
+    <div class="sechead">
+      <h2>Navigation, in order</h2>
+      <p>Six items in the top bar. Three names change to plain words. Every rename is a proposal for you to accept or reject — the routes and the data behind them do not change.</p>
+    </div>
+    <div class="strip">
+      <div class="navitem keep"><div class="name">Home</div><div class="was">unchanged</div><span class="tagline">Keep</span></div>
+      <div class="navitem keep"><div class="name">Scans</div><div class="was">unchanged</div><span class="tagline">Keep</span></div>
+      <div class="navitem"><div class="name">Devices</div><div class="was">today: Hosts</div><span class="tagline">Rename — proposal</span></div>
+      <div class="navitem"><div class="name">Scanner</div><div class="was">today: Agents</div><span class="tagline">Rename — proposal</span></div>
+      <div class="navitem"><div class="name">People</div><div class="was">today: Users · admin only</div><span class="tagline">Rename — proposal</span></div>
+      <div class="navitem keep"><div class="name">Settings</div><div class="was">unchanged</div><span class="tagline">Keep</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>The screens</h2>
+      <p>Nine cards. Epicenter is the one thing the screen cannot live without — it gets designed first and the rest is caption.</p>
+    </div>
+    <div class="grid">
+
+      <article class="card">
+        <div class="top"><h3>Home</h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/</div>
+        <dl>
+          <dt>Epicenter</dt><dd>One sentence saying whether anything needs you since you last looked.</dd>
+          <dt>Primary</dt><dd><strong>Start scan</strong> (admin). Viewer: none — a viewer cannot scan, so the button is absent, not greyed out.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>The verdict sentence, large, first</li>
+            <li>Fix now / Fix soon / Good to know cards, or one All clear card</li>
+            <li>A card when the last scan did not finish</li>
+            <li>A card when the scanner has not been seen for days</li>
+            <li>A quiet footer line: last scan, scanner status</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>Yes</strong> — all four groups. This is their home.</dd>
+          <dt>Today → next</dt><dd>Today a verdict plus a loose deck of item cards; next, the same verdict over three fixed urgency groups and a header action.</dd>
+          <dt>Issue</dt><dd><span class="issue">DMI-117</span> decides it, <span class="issue">DMI-123</span> builds it</dd>
+          <dt>Question</dt><dd class="q">Does Home carry the Start scan button, or does that stay only on Scanner?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Scans</h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/scans</div>
+        <dl>
+          <dt>Epicenter</dt><dd>The run log — every scan, newest first, did it work and did it find anything.</dd>
+          <dt>Primary</dt><dd><strong>Start scan</strong> (admin). Viewer: none.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>One row per scan: when, status, devices, findings</li>
+            <li>A running scan appears at once and says "Running…"</li>
+            <li>A failed scan says Failed and links to the reason</li>
+            <li>Nothing yet: one sentence and the scan button</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>No.</strong> Counts only — a row says how many findings, not how urgent.</dd>
+          <dt>Today → next</dt><dd>Adds the header scan button and drops the "Dmitri scans your network…" restatement.</dd>
+          <dt>Issue</dt><dd class="none">none yet</dd>
+          <dt>Question</dt><dd class="q">Is a highest-severity column still wanted once rows carry no chips?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Scan detail</h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/scans/:scanId</div>
+        <dl>
+          <dt>Epicenter</dt><dd>What this scan found, sorted by how soon it needs work.</dd>
+          <dt>Primary</dt><dd><span class="none">None.</span> The page is a result; there is nothing to do to it from here.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>Header: when, network, device count, finding count</li>
+            <li>Findings inside the urgency group cards</li>
+            <li>A finding opens in place: what it is, what to do, evidence</li>
+            <li>The devices seen in this scan</li>
+            <li>If the scan failed, the reason replaces the tables</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>Yes</strong> — Fix now, Fix soon, Good to know, plus All clear on a clean scan.</dd>
+          <dt>Today → next</dt><dd>Today one findings table with a severity column; next, the same findings split across three cards.</dd>
+          <dt>Issue</dt><dd class="none">none yet</dd>
+          <dt>Question</dt><dd class="q">Inside a group, what orders the rows — device, or the CVSS number?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Devices <span class="route">(today: Hosts)</span></h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/hosts</div>
+        <dl>
+          <dt>Epicenter</dt><dd>Everything on the network — the list of what you own.</dd>
+          <dt>Primary</dt><dd><span class="none">None.</span> The list is read-only; devices arrive by scanning, not by adding.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>One row per device: name, address, maker, open ports</li>
+            <li>Last seen, so a device that left is still listed</li>
+            <li>How many findings the device has</li>
+            <li>Whole row opens the device</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>Count only</strong> — the number of Fix now items per device, in words.</dd>
+          <dt>Today → next</dt><dd>Rename to Devices, drop the severity chip column, drop the product restatement.</dd>
+          <dt>Issue</dt><dd><span class="issue">DMI-126</span> (filters), rename unowned</dd>
+          <dt>Question</dt><dd class="q">Does a device that has not answered in weeks get its own "gone" wording?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Device detail</h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/hosts/:hostId</div>
+        <dl>
+          <dt>Epicenter</dt><dd>What this machine leaves open to the network.</dd>
+          <dt>Primary</dt><dd><span class="none">None.</span> Nothing here can be changed from Dmitri.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>Identity: name, address, maker, first and last seen</li>
+            <li>Its findings, in the urgency groups</li>
+            <li>Its open ports and what runs on them</li>
+            <li>The scans that saw it, newest first</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>Yes</strong> — the same group cards, scoped to this device.</dd>
+          <dt>Today → next</dt><dd>Findings move from a flat list into the group cards; the rest stands.</dd>
+          <dt>Issue</dt><dd class="none">none yet</dd>
+          <dt>Question</dt><dd class="q">Do ports come before findings, or after?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Scanner <span class="route">(today: Agents)</span></h3><span class="aud">Admin · Viewer (read)</span></div>
+        <div class="route">/agents</div>
+        <dl>
+          <dt>Epicenter</dt><dd>Can I scan right now — the box's live state and the trigger together.</dd>
+          <dt>Primary</dt><dd><strong>Start scan</strong> (admin), moved into the page header. Viewer: none.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>The box: name, online or offline, last seen</li>
+            <li>Which network it is pointed at, chosen from a plain list</li>
+            <li>Live progress while a scan runs, surviving a page reload</li>
+            <li>When it finishes, a link to the scan</li>
+            <li>If no box is set up, what to do about it</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>No.</strong> This screen reports equipment, not findings.</dd>
+          <dt>Today → next</dt><dd>Rename to Scanner; the scan button leaves the card and goes to the header.</dd>
+          <dt>Issue</dt><dd class="none">none yet</dd>
+          <dt>Question</dt><dd class="q">Is "Scanner" right, or does the owner call the box something else already?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>People <span class="route">(today: Users)</span></h3><span class="aud">Admin only</span></div>
+        <div class="route">/users</div>
+        <dl>
+          <dt>Epicenter</dt><dd>Who can get in, and at what level.</dd>
+          <dt>Primary</dt><dd><strong>Invite person</strong>, in the header.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>One table of members and pending invites</li>
+            <li>Person, level, status, last seen</li>
+            <li>Change someone's level, or remove them</li>
+            <li>An invite link you can copy, shown once</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>No.</strong></dd>
+          <dt>Today → next</dt><dd>Rename to People; "Admin / Viewer" get plain-word labels. Table already built.</dd>
+          <dt>Issue</dt><dd class="none">none yet</dd>
+          <dt>Question</dt><dd class="q">What plain words replace Admin and Viewer — "Full access" and "Can view"?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Settings</h3><span class="aud">Admin · Viewer</span></div>
+        <div class="route">/settings</div>
+        <dl>
+          <dt>Epicenter</dt><dd>Who you are signed in as, and what you can do to that account.</dd>
+          <dt>Primary</dt><dd><strong>Change password</strong>, in the header, opening a dialog.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>Your email and access level, as text you cannot edit</li>
+            <li>Change password</li>
+            <li>What activity is recorded, hidden until asked for</li>
+            <li>Leave this organization, last and set apart</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>No.</strong></dd>
+          <dt>Today → next</dt><dd>Three stacked sections become identity first, then the action, then the exit.</dd>
+          <dt>Issue</dt><dd><span class="issue">DMI-110</span></dd>
+          <dt>Question</dt><dd class="q">Should the network the box scans be readable here, even though it is set on Scanner?</dd>
+        </dl>
+      </article>
+
+      <article class="card">
+        <div class="top"><h3>Getting in</h3><span class="aud">Signed out</span></div>
+        <div class="route">/login · /forgot-password · /reset-password · /invite · not found</div>
+        <dl>
+          <dt>Epicenter</dt><dd>One card, centred, with one job and one button.</dd>
+          <dt>Primary</dt><dd>One per screen: <strong>Log in</strong> · <strong>Send reset link</strong> · <strong>Set password</strong> · <strong>Create account</strong>. Not found: <strong>Go to Home</strong>.</dd>
+          <dt>Shows</dt><dd><ul>
+            <li>Product name, the fields, one button</li>
+            <li>Errors under the field that caused them</li>
+            <li>Invite screen greets you by organization and level</li>
+            <li>A dead link removes the form and says how to get a new one</li>
+          </ul></dd>
+          <dt>Urgency</dt><dd><strong>No.</strong> Nobody is signed in.</dd>
+          <dt>Today → next</dt><dd>Four near-identical screens become one card shape with different contents.</dd>
+          <dt>Issue</dt><dd><span class="issue">DMI-132</span> restyle only</dd>
+          <dt>Question</dt><dd class="none">None.</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>Where findings appear</h2>
+      <p>Four groups, five screens that can carry them. "Grouped card" means a full card with its heading and rows. "Count only" means a number in a row, no card.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Group</th><th>Home</th><th>Scan detail</th><th>Device detail</th><th>Devices</th><th>Scans</th></tr>
+        </thead>
+        <tbody>
+          <tr class="g-now"><td class="rowhead">Fix now</td><td>Grouped card</td><td>Grouped card</td><td>Grouped card</td><td>Count only</td><td class="absent">Absent</td></tr>
+          <tr class="g-soon"><td class="rowhead">Fix soon</td><td>Grouped card</td><td>Grouped card</td><td>Grouped card</td><td class="absent">Absent</td><td class="absent">Absent</td></tr>
+          <tr class="g-know"><td class="rowhead">Good to know</td><td class="absent">Absent — Home stays quiet</td><td>Grouped card</td><td>Grouped card</td><td class="absent">Absent</td><td class="absent">Absent</td></tr>
+          <tr class="g-clear"><td class="rowhead">All clear</td><td>Grouped card</td><td>Grouped card</td><td>Grouped card</td><td class="absent">Absent</td><td class="absent">Absent</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>Cut list</h2>
+      <p>Things the screens render today that this map drops. Veto any of them.</p>
+    </div>
+    <div class="list">
+      <div class="row"><div class="what">Severity chips on rows</div><div class="why">The group heading already says how soon; a coloured dot asks the reader to learn a code.</div></div>
+      <div class="row"><div class="what">"Highest severity" column</div><div class="why">Same reason, in a table. A count of Fix now items says more in plain words.</div></div>
+      <div class="row"><div class="what">"Dmitri scans your network…" on Scans, Devices and blank Home</div><div class="why">The reader is already inside the product. Three copies of the pitch.</div></div>
+      <div class="row"><div class="what">The engraving ornament on Home</div><div class="why">It belongs to the retired paper-and-serif look, not the new one.</div></div>
+      <div class="row"><div class="what">Buttons inside content cards</div><div class="why">One primary action per screen, always in the header, so it is in the same place everywhere.</div></div>
+      <div class="row"><div class="what">Raw addresses and jargon as row titles</div><div class="why">A device is named by its name; the address becomes secondary text.</div></div>
+      <div class="row"><div class="what">Scan mode shown per row</div><div class="why">The product only ever runs one mode. Showing it implies a choice that does not exist.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>Decisions this map asks for</h2>
+      <p>Six answers unblock the per-screen issues.</p>
+    </div>
+    <ol class="decisions">
+      <li>Approve or reject the three renames: Hosts → Devices, Agents → Scanner, Users → People.</li>
+      <li>Decide whether Start scan appears on Home and Scans, or only on Scanner.</li>
+      <li>Confirm Good to know is hidden on Home and shown only on the detail screens.</li>
+      <li>Choose the plain words for the two access levels, replacing Admin and Viewer.</li>
+      <li>Confirm the severity chip and the highest-severity column are cut from every table.</li>
+      <li>Decide what a device that has stopped answering is called, and whether it stays in the list.</li>
+    </ol>
+  </section>
+
+  <footer>
+    Feeds DMI-127 (information architecture). Per-screen issues: DMI-117 and DMI-123 (Home), DMI-110 (Settings), DMI-126 (Devices filters). Restyle targets for DMI-132.
+  </footer>
+</div>

@@ -1,0 +1,560 @@
+<!doctype html><meta charset="utf-8">
+<title>Dmitri Look Picker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --canvas:#FCFCFC; --card:#FFFFFF; --ink:#0F172A; --muted:#475569;
+  --rule:#E2E8F0; --edge:#64748B; --accent:#4F46E5; --accent-hover:#4338CA;
+  --sans:"Inter","Helvetica Neue",Arial,sans-serif;
+  --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px}
+
+/* ---------- page chrome ---------- */
+.masthead{padding:56px 0 28px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font-size:38px;line-height:1.15;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+.lede{margin:0;max-width:64ch;color:var(--muted);font-size:16px}
+
+.strip{position:sticky;top:0;z-index:9;background:rgba(252,252,252,.94);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--rule);
+  margin:0 -28px;padding:12px 28px}
+.strip-in{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.strip a{display:block;text-decoration:none;color:inherit;border-left:2px solid var(--accent);
+  padding:2px 0 2px 10px;border-radius:2px}
+.strip a:hover .s-rec{color:var(--accent-hover)}
+.strip a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.s-num{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.s-name{font-size:13px;color:var(--muted)}
+.s-rec{font-size:14px;font-weight:600;color:var(--accent)}
+
+section{padding-top:56px}
+.sec-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid var(--rule);padding-bottom:12px;margin-bottom:8px}
+.sec-num{font-family:var(--mono);font-size:13px;color:var(--edge)}
+h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.01em}
+.why{margin:0 0 26px;color:var(--muted);font-size:14px;max-width:70ch}
+
+.grid{display:grid;gap:20px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g5{grid-template-columns:repeat(5,1fr)}
+
+/* ---------- option card ---------- */
+.opt{background:var(--card);border:1px solid var(--rule);border-radius:12px;
+  padding:16px;display:flex;flex-direction:column;gap:14px}
+.opt.rec{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.09)}
+.opt.dim{opacity:.58}
+.opt.warn{border-color:#FCA5A5}
+.opt-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px}
+.opt-name{font-size:15px;font-weight:600}
+.opt-name small{display:block;font-weight:400;font-size:12px;color:var(--muted)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--accent);background:#EEF2FF;border:1px solid #C7D2FE;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.tag.today{color:var(--muted);background:#F1F5F9;border-color:#E2E8F0}
+.tag.risk{color:#9A3412;background:#FFEDD5;border-color:#FED7AA}
+.tag.open{color:#334155;background:#F1F5F9;border-color:#CBD5E1}
+.note{margin:0;font-size:13px;color:var(--muted)}
+.spec{margin:0;font-family:var(--mono);font-size:11.5px;color:var(--edge);line-height:1.6}
+
+/* ---------- the mini screen (one object, reused) ---------- */
+.screen{
+  --s-sans:var(--sans); --s-acc:#4F46E5; --s-r-card:12px; --s-r-ctl:8px;
+  --s-pad:16px; --s-h:40px; --s-title:20px; --s-body:15px; --s-cap:13px;
+  font-family:var(--s-sans);
+  background:#FCFCFC;border:1px solid var(--rule);border-radius:var(--s-r-card);
+  padding:var(--s-pad);display:flex;flex-direction:column;gap:calc(var(--s-pad)*.75)}
+.scr-title{font-size:var(--s-title);line-height:1.3;font-weight:600;letter-spacing:-.01em}
+.scr-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.scr-grp{border-top:3px solid #B91C1C;padding-top:calc(var(--s-pad)*.55);
+  display:flex;flex-direction:column;gap:calc(var(--s-pad)*.5)}
+.scr-grp.soon{border-top-color:#B45309}
+.scr-grp-h{font-size:var(--s-cap);font-weight:600;line-height:1.2}
+.scr-card{background:#FFFFFF;border:1px solid var(--rule);border-radius:var(--s-r-card);
+  padding:var(--s-pad);display:flex;flex-direction:column;gap:calc(var(--s-pad)*.7)}
+.scr-row{display:flex;align-items:center;gap:10px}
+.scr-row-t{flex:1;font-size:var(--s-body);line-height:1.5;min-width:0}
+.scr-kv{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  border-top:1px solid var(--rule);padding-top:calc(var(--s-pad)*.6)}
+.scr-k{font-size:var(--s-cap);color:var(--muted)}
+.scr-v{font-family:var(--mono);font-size:var(--s-cap);letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums}
+.btn{font-family:inherit;font-size:var(--s-body);font-weight:500;line-height:1;
+  height:var(--s-h);padding:0 calc(var(--s-pad)*.9);border-radius:var(--s-r-ctl);
+  border:1px solid var(--edge);background:#FFFFFF;color:var(--ink);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.btn-pri{background:var(--s-acc);border-color:var(--s-acc);color:#FFFFFF;font-weight:600;align-self:flex-start}
+.btn:focus-visible{outline:2px solid var(--s-acc);outline-offset:2px}
+
+/* ---------- pills ---------- */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;line-height:1;
+  font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid;white-space:nowrap}
+.p-crit{color:#991B1B;background:#FEE2E2;border-color:#FECACA}
+.p-high{color:#9A3412;background:#FFEDD5;border-color:#FED7AA}
+.p-med{color:#854D0E;background:#FEF9C3;border-color:#FDE68A}
+.p-low{color:#1E40AF;background:#DBEAFE;border-color:#BFDBFE}
+.p-safe{color:#166534;background:#DCFCE7;border-color:#BBF7D0}
+.p-neut{color:#334155;background:#F1F5F9;border-color:#E2E8F0}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.pill-old{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:400;
+  letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:0;
+  border:1px solid;background:transparent}
+
+/* ---------- accent swatches ---------- */
+.sw-bar{height:44px;border-radius:8px}
+.nav{display:flex;gap:14px;align-items:center;font-size:14px;border-bottom:1px solid var(--rule);padding-bottom:8px}
+.nav span{color:var(--muted)}
+.nav .on{font-weight:600;position:relative}
+.nav .on::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:2px;background:currentColor}
+.link{font-size:14px;text-decoration:underline;text-underline-offset:2px;cursor:default}
+.ring{font-size:13px;color:var(--muted);border:1px solid var(--rule);border-radius:8px;
+  padding:7px 10px;background:#fff}
+.ratio{font-family:var(--mono);font-size:12px;color:var(--muted);
+  display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--rule);padding-top:8px}
+.ratio b{color:var(--ink);font-weight:600}
+
+/* ---------- tables / two-column option cards ---------- */
+.scroll{overflow-x:auto}
+.cols{display:grid;grid-template-columns:88px 1fr;gap:4px 14px;font-size:13px;align-items:baseline}
+.cols dt{color:var(--edge);font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.cols dd{margin:0;color:var(--muted)}
+.cols dd.ink{color:var(--ink)}
+.sub{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--edge);margin:26px 0 12px}
+.callout{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#9A3412;
+  background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px 12px;margin-top:14px}
+.final{background:var(--card);border:1px solid var(--rule);border-radius:16px;padding:22px}
+.final .screen{--s-pad:20px;--s-title:26px}
+.final h3{margin:0 0 4px;font-size:16px;font-weight:600}
+.foot{margin-top:64px;padding-top:18px;border-top:1px solid var(--rule);
+  font-size:12.5px;color:var(--edge);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+/* ---------- urgency patterns (decision 04) ---------- */
+.btn-sm{--s-h:28px;--s-body:13px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)}
+.ustack{display:flex;flex-direction:column;gap:10px}
+.ugrp{background:#FFFFFF;border:1px solid var(--rule);border-top:3px solid var(--u);
+  border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.ugrp-h{font-size:14px;font-weight:600;line-height:1.2}
+.ugrp-s{font-size:12px;color:var(--muted)}
+.urow{display:flex;align-items:center;gap:10px}
+.urow-t{flex:1;font-size:13.5px;line-height:1.45;min-width:0}
+.ubox{background:#FFFFFF;border:1px solid var(--rule);border-radius:10px;
+  padding:14px;display:flex;flex-direction:column;gap:16px}
+.usec{display:flex;flex-direction:column;gap:9px}
+.usec-h{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:600;line-height:1.2}
+.usec-h svg{flex:none;color:var(--u)}
+.ubar{border-left:3px solid var(--u);padding-left:11px}
+.unote{margin:22px 0 0;font-size:13px;color:var(--muted);max-width:78ch;
+  border-left:2px solid var(--rule);padding-left:14px}
+.unote b{color:var(--ink);font-weight:600}
+@media (max-width:1100px){
+  .g5,.g4,.g3{grid-template-columns:repeat(2,1fr)}
+  .strip-in{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">DMI&#8209;131 · five decided · one open</div>
+    <h1>Pick the new look of Dmitri</h1>
+    <p class="lede">The five foundation decisions are made: Inter, radix&#8209;maia, indigo
+    <span class="scr-v">#4F46E5</span>, borrow the design.md idea, and a FOUNDATIONS.md one-pager —
+    each is kept below, marked <em>Chosen</em>, with the options it beat dimmed. One question is
+    still open, and it is what this page is now for: <a href="#d4" style="color:var(--accent)">how
+    findings are categorised by urgency</a>. Three patterns are drawn on the same six findings, so
+    pick one.</p>
+  </header>
+
+  <nav class="strip" aria-label="The five decisions">
+    <div class="strip-in">
+      <a href="#d1"><span class="s-num">01</span> <span class="s-name">Typeface · Inter</span><br><span class="s-rec">Chosen</span></a>
+      <a href="#d2"><span class="s-num">02</span> <span class="s-name">Preset · radix&#8209;maia</span><br><span class="s-rec">Chosen</span></a>
+      <a href="#d3"><span class="s-num">03</span> <span class="s-name">Accent · #4F46E5</span><br><span class="s-rec">Chosen</span></a>
+      <a href="#d4" style="border-left-color:#B45309"><span class="s-num">04</span> <span class="s-name">Urgency pattern</span><br><span class="s-rec" style="color:#B45309">Pick one</span></a>
+      <a href="#d5"><span class="s-num">05</span> <span class="s-name">Docs · borrow + FOUNDATIONS</span><br><span class="s-rec">Chosen</span></a>
+    </div>
+  </nav>
+
+  <!-- 1 ================================================ TYPEFACE -->
+  <section id="d1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Typeface</h2></div>
+    <p class="why">One family in two cuts sets every word in the product, so this choice decides
+    whether Dmitri reads as safe, friendly or playful.</p>
+
+    <div class="grid g4">
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">Inter Variable<small>OFL · fontsource 5.3.0</small></span><span class="tag">&#10003; Chosen</span></div>
+        <div class="screen" style="--s-sans:'Inter','Helvetica Neue',Arial,sans-serif">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn" style="--s-h:32px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note">Tall x-height, cut for UI. Ships with Linear. Safest legible choice.</p>
+        <p class="spec">title-sm 20/600 · body-md 15/400 · caption 13/400</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Figtree Variable<small>OFL · fontsource 5.3.0</small></span></div>
+        <div class="screen" style="--s-sans:'Figtree','Helvetica Neue',Arial,sans-serif">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn" style="--s-h:32px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note">Geometric-humanist. The closest legal stand-in for OpenAI Sans — pick it if
+        “round” outranks “safe”.</p>
+        <p class="spec">title-sm 20/600 · body-md 15/400 · caption 13/400</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Nunito Variable<small>OFL · fontsource 5.3.0</small></span><span class="tag risk">Reads playful</span></div>
+        <div class="screen" style="--s-sans:'Nunito','Helvetica Neue',Arial,sans-serif">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn" style="--s-h:32px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note">The roundest of the three. Risk: the product reports security problems, and
+        this face softens that news.</p>
+        <p class="spec">title-sm 20/600 · body-md 15/400 · caption 13/400</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">IM Fell + Plex Mono<small>what ships today</small></span><span class="tag today">Today</span></div>
+        <div class="screen" style="--s-sans:Georgia,'Times New Roman',serif;--s-r-card:0;--s-r-ctl:0;--s-h:32px;--s-pad:14px;--s-title:20px;--s-body:14px;--s-cap:12px;background:#FAF8F4;border-color:#E7E0D4">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri" style="--s-acc:#7C3AED;font-family:var(--mono);font-size:13px">Start scan</button></div>
+          <div class="scr-card" style="border-color:#E7E0D4;font-family:var(--mono)">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn" style="font-family:var(--mono);font-size:12px">View</button></div></div>
+            <div class="scr-kv" style="border-color:#E7E0D4"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note">Serif titles, mono body, zero radius, warm paper. This is the direction being
+        retired as a whole.</p>
+        <p class="spec">serif title 20 · mono body 14 · radius 0</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 ================================================ PRESET -->
+  <section id="d2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>shadcn preset</h2></div>
+    <p class="why">The preset fixes radius, padding and control height for every button, input and
+    card in the app at once.</p>
+
+    <div class="grid g2">
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">radix&#8209;nova<small>tight · 4px radius · 32px controls</small></span><span class="tag today">Today</span></div>
+        <div class="screen" style="--s-r-card:4px;--s-r-ctl:4px;--s-pad:10px;--s-h:32px">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note">Built for information-dense dashboards: “tighter padding and reduced
+        margins”. It fights a brief written for an occasional, non-technical reader.</p>
+      </div>
+
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">radix&#8209;maia<small>soft · 12px radius · 40px controls</small></span><span class="tag">&#10003; Chosen</span></div>
+        <div class="screen" style="--s-r-card:12px;--s-r-ctl:8px;--s-pad:16px;--s-h:40px">
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+            <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+              <button class="btn" style="--s-h:32px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1</span></div>
+          </div>
+        </div>
+        <p class="note"><strong>The note recommends maia:</strong> larger radii and generous spacing,
+        the preset written for consumer products and softer aesthetics — which is the brief.</p>
+        <p class="spec">--radius: 12px · --control-radius: 8px · density zoned, tight only inside tables</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ================================================ ACCENT -->
+  <section id="d3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Accent colour</h2></div>
+    <p class="why">One accent carries the primary button, the active nav item and the focus ring —
+    and it must never be mistaken for a severity colour.</p>
+
+    <div class="grid g5">
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">Indigo&#8209;600<small class="scr-v">#4F46E5</small></span><span class="tag">&#10003; Chosen</span></div>
+        <div class="sw-bar" style="background:#4F46E5"></div>
+        <button class="btn btn-pri" style="--s-acc:#4F46E5;--s-h:36px;--s-body:14px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)">Start scan</button>
+        <div class="nav"><span class="on" style="color:#4F46E5">Home</span><span>Devices</span><span>Scans</span></div>
+        <span class="link" style="color:#4F46E5">View this finding</span>
+        <div class="ring" style="box-shadow:0 0 0 2px #fff,0 0 0 4px #4F46E5">Focus ring</div>
+        <div class="ratio"><span>on white</span><b>6.29 AA</b></div>
+        <p class="note">Adjacent to today’s purple, so “purple never carries severity” survives as
+        “indigo never carries severity”.</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Stripe indigo<small class="scr-v">#533AFD</small></span></div>
+        <div class="sw-bar" style="background:#533AFD"></div>
+        <button class="btn btn-pri" style="--s-acc:#533AFD;--s-h:36px;--s-body:14px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)">Start scan</button>
+        <div class="nav"><span class="on" style="color:#533AFD">Home</span><span>Devices</span><span>Scans</span></div>
+        <span class="link" style="color:#533AFD">View this finding</span>
+        <div class="ring" style="box-shadow:0 0 0 2px #fff,0 0 0 4px #533AFD">Focus ring</div>
+        <div class="ratio"><span>on white</span><b>6.19 AA</b></div>
+        <p class="note">Louder, more branded. A fine alternative.</p>
+      </div>
+
+      <div class="opt warn dim">
+        <div class="opt-head"><span class="opt-name">Blue&#8209;700<small class="scr-v">#1D4ED8</small></span><span class="tag risk">Collides</span></div>
+        <div class="sw-bar" style="background:#1D4ED8"></div>
+        <button class="btn btn-pri" style="--s-acc:#1D4ED8;--s-h:36px;--s-body:14px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)">Start scan</button>
+        <div class="nav"><span class="on" style="color:#1D4ED8">Home</span><span>Devices</span><span>Scans</span></div>
+        <span class="link" style="color:#1D4ED8">View this finding</span>
+        <div class="ring" style="box-shadow:0 0 0 2px #fff,0 0 0 4px #1D4ED8">Focus ring</div>
+        <div class="ratio"><span>on white</span><b>6.70 AA</b></div>
+        <div class="callout"><span aria-hidden="true">▲</span><span><strong>This is the exact hex of
+        severity <em>low</em> today.</strong> The button and the risk word would be the same
+        blue.<br><span class="pill p-low" style="margin-top:8px"><span class="dot"></span>Low</span></span></div>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Blue&#8209;600<small class="scr-v">#2563EB</small></span><span class="tag risk">Same blue</span></div>
+        <div class="sw-bar" style="background:#2563EB"></div>
+        <button class="btn btn-pri" style="--s-acc:#2563EB;--s-h:36px;--s-body:14px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)">Start scan</button>
+        <div class="nav"><span class="on" style="color:#2563EB">Home</span><span>Devices</span><span>Scans</span></div>
+        <span class="link" style="color:#2563EB">View this finding</span>
+        <div class="ring" style="box-shadow:0 0 0 2px #fff,0 0 0 4px #2563EB">Focus ring</div>
+        <div class="ratio"><span>on white</span><b>5.17 AA</b></div>
+        <p class="note">Friendliest and lightest, but carries the same blue-versus-<em>low</em>
+        confusion.</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Violet&#8209;600<small class="scr-v">#7C3AED</small></span><span class="tag today">Today</span></div>
+        <div class="sw-bar" style="background:#7C3AED"></div>
+        <button class="btn btn-pri" style="--s-acc:#7C3AED;--s-h:36px;--s-body:14px;--s-pad:14px;--s-r-ctl:8px;font-family:var(--sans)">Start scan</button>
+        <div class="nav"><span class="on" style="color:#7C3AED">Home</span><span>Devices</span><span>Scans</span></div>
+        <span class="link" style="color:#7C3AED">View this finding</span>
+        <div class="ring" style="box-shadow:0 0 0 2px #fff,0 0 0 4px #7C3AED">Focus ring</div>
+        <div class="ratio"><span>on white</span><b>5.70 AA</b></div>
+        <p class="note">Passes on white. Keeping it is defensible — it just reads less “app” than
+        indigo.</p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">Rejected outright: <span class="scr-v">#0284C7</span> 4.10 ·
+    <span class="scr-v">#059669</span> 3.77 · <span class="scr-v">#0D9488</span> 3.74 — all fail AA for
+    normal text.</p>
+  </section>
+
+  <!-- 4 ================================================ URGENCY -->
+  <section id="d4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Urgency: how findings are categorised</h2><span class="tag open">The open one</span></div>
+    <p class="why">The owner is not an engineer — “High” is our word, not theirs — and a chip beside
+    every row asks them to read six labels and compare them before they know what to do first. The
+    three patterns below carry the same six findings, so only the pattern changes.</p>
+
+    <div class="grid g3">
+
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">A · Grouped cards<small>one card per group, nothing on the row</small></span><span class="tag">Recommended</span></div>
+        <div class="ustack">
+          <div class="ugrp" style="--u:#B91C1C">
+            <div><div class="ugrp-h">Fix now</div><div class="ugrp-s">2 things</div></div>
+            <div class="urow"><span class="urow-t">Camera uses the default password</span><button class="btn btn-sm">View</button></div>
+            <div class="urow"><span class="urow-t">Printer is reachable from the internet</span><button class="btn btn-sm">View</button></div>
+          </div>
+          <div class="ugrp" style="--u:#B45309">
+            <div><div class="ugrp-h">Fix soon</div><div class="ugrp-s">2 things</div></div>
+            <div class="urow"><span class="urow-t">Router firmware is out of date</span><button class="btn btn-sm">View</button></div>
+            <div class="urow"><span class="urow-t">Guest Wi-Fi has no password</span><button class="btn btn-sm">View</button></div>
+          </div>
+          <div class="ugrp" style="--u:#1D4ED8">
+            <div><div class="ugrp-h">Good to know</div><div class="ugrp-s">2 things</div></div>
+            <div class="urow"><span class="urow-t">Laptop is missing updates</span><button class="btn btn-sm">View</button></div>
+            <div class="urow"><span class="urow-t">NAS shares a folder publicly</span><button class="btn btn-sm">View</button></div>
+          </div>
+          <div class="ugrp" style="--u:#15803D">
+            <div><div class="ugrp-h">All clear</div><div class="ugrp-s">Nothing needs your attention</div></div>
+          </div>
+        </div>
+        <p class="note">The heading carries the urgency, so each row is just the sentence. Three
+        headings to read instead of six labels, and the order on the page <em>is</em> the order to
+        work in. The empty state is the same object, so “all clear” looks deliberate, not blank.</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt-head"><span class="opt-name">B · Sections with an icon<small>one card, three headings</small></span></div>
+        <div class="ubox">
+            <div class="usec" style="--u:#B91C1C">
+              <div class="usec-h"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.9 15.1 14H.9z"/><path d="M8 6.3v3.1"/><path d="M8 11.7h.01"/></svg>Fix now</div>
+              <div class="urow"><span class="urow-t">Camera uses the default password</span><button class="btn btn-sm">View</button></div>
+              <div class="urow"><span class="urow-t">Printer is reachable from the internet</span><button class="btn btn-sm">View</button></div>
+            </div>
+            <div class="usec" style="--u:#B45309">
+              <div class="usec-h"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.4V8l2.5 1.5"/></svg>Fix soon</div>
+              <div class="urow"><span class="urow-t">Router firmware is out of date</span><button class="btn btn-sm">View</button></div>
+              <div class="urow"><span class="urow-t">Guest Wi-Fi has no password</span><button class="btn btn-sm">View</button></div>
+            </div>
+            <div class="usec" style="--u:#1D4ED8">
+              <div class="usec-h"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 7.4v3.6"/><path d="M8 5h.01"/></svg>Good to know</div>
+              <div class="urow"><span class="urow-t">Laptop is missing updates</span><button class="btn btn-sm">View</button></div>
+              <div class="urow"><span class="urow-t">NAS shares a folder publicly</span><button class="btn btn-sm">View</button></div>
+            </div>
+        </div>
+        <p class="note">Lighter: one card, spacing alone separates the groups. The icon repeats the
+        colour so the meaning does not rest on hue. Weaker when a group is long — the heading
+        scrolls away and the rows lose their label.</p>
+      </div>
+
+      <div class="opt">
+        <div class="opt-head"><span class="opt-name">C · One list, colour bar<small>ordered by urgency, no headings</small></span><span class="tag risk">Least explicit</span></div>
+        <div class="ubox" style="gap:11px">
+            <div class="urow ubar" style="--u:#B91C1C"><span class="urow-t">Camera uses the default password</span><button class="btn btn-sm">View</button></div>
+            <div class="urow ubar" style="--u:#B91C1C"><span class="urow-t">Printer is reachable from the internet</span><button class="btn btn-sm">View</button></div>
+            <div class="urow ubar" style="--u:#B45309"><span class="urow-t">Router firmware is out of date</span><button class="btn btn-sm">View</button></div>
+            <div class="urow ubar" style="--u:#B45309"><span class="urow-t">Guest Wi-Fi has no password</span><button class="btn btn-sm">View</button></div>
+            <div class="urow ubar" style="--u:#1D4ED8"><span class="urow-t">Laptop is missing updates</span><button class="btn btn-sm">View</button></div>
+            <div class="urow ubar" style="--u:#1D4ED8"><span class="urow-t">NAS shares a folder publicly</span><button class="btn btn-sm">View</button></div>
+        </div>
+        <p class="note">The shortest to scan and the hardest to learn: the bar means nothing until
+        someone explains it, and colour alone fails for a colour-blind reader. Shown so it can be
+        rejected on sight rather than in the abstract.</p>
+      </div>
+
+    </div>
+
+    <p class="unote"><b>The system defines</b> the three group names, their colours, their order and
+    the all-clear state — a screen never invents a fourth group or renames one.<br>
+    <b>The screen decides</b> which finding lands in which group, and what the row says.</p>
+  </section>
+
+  <!-- 5 ================================================ DOCS -->
+  <section id="d5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Docs and agent tooling</h2></div>
+    <p class="why">Nothing visual here — this decides where the token values live and which format
+    an agent reads before it writes a screen.</p>
+
+    <div class="sub">design.md tooling</div>
+    <div class="grid g3">
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Adopt format + CI linter</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">YAML token format for agents, plus <span class="scr-v">npx @google/design.md lint</span> checking WCAG contrast and token references.</dd>
+          <dt>Costs</dt><dd>A second source of truth beside <span class="scr-v">index.css</span>.</dd>
+        </dl>
+      </div>
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">Borrow the idea only</span><span class="tag">&#10003; Chosen</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">The split — tokens give exact values, prose says why — as the shape of FOUNDATIONS.md. Adopt the shadcn MCP server instead.</dd>
+          <dt>Costs</dt><dd>None. Revisit if the palette starts drifting.</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Ignore</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">Nothing changes.</dd>
+          <dt>Costs</dt><dd>The component inventory stays written down but not reachable by an agent.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="sub">Foundations one-pager location</div>
+    <div class="grid g3">
+      <div class="opt rec">
+        <div class="opt-head"><span class="opt-name">docs/ui/FOUNDATIONS.md</span><span class="tag">&#10003; Chosen</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">One binding page of values, history in FOUNDATIONS&#8209;DECISIONS.md, the skill quoting the token sheet.</dd>
+          <dt>Costs</dt><dd>−408 lines from SCREENS.md; two new files.</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Stay in SCREENS.md</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">No move. One file to open.</dd>
+          <dt>Costs</dt><dd>§Foundations is 408 lines and ~40% history that argues for values this revamp discards.</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <div class="opt dim-head"><span class="opt-name">Inside the skill</span></div>
+        <dl class="cols">
+          <dt>Gives</dt><dd class="ink">The agent loads the values with no extra read.</dd>
+          <dt>Costs</dt><dd>Humans lose the doc; the skill becomes the only copy.</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================ COMBINATION -->
+  <section id="final">
+    <div class="sec-head"><span class="sec-num">→</span><h2>The recommended combination</h2></div>
+    <p class="why">The five chosen values applied together, with urgency drawn as pattern A: one
+    primary action in the page header, group headings instead of a label on every row.</p>
+
+    <div class="grid g2">
+      <div class="final" style="border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.09)">
+        <div class="opt-head" style="margin-bottom:14px"><span class="opt-name">Inter · maia · indigo · grouped urgency</span><span class="tag">&#10003; Chosen</span></div>
+        <div class="screen" style="--s-sans:'Inter','Helvetica Neue',Arial,sans-serif;--s-acc:#4F46E5">
+          <div class="nav" style="font-family:inherit;margin-bottom:4px"><span class="on" style="color:#4F46E5">Home</span><span>Devices</span><span>Scans</span><span>Settings</span></div>
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+              <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+                <button class="btn" style="--s-h:32px;--s-body:14px">View</button></div></div>
+            <div class="scr-grp soon"><div class="scr-grp-h">Fix soon</div>
+              <div class="scr-row"><span class="scr-row-t">Laptop is missing updates</span>
+                <button class="btn" style="--s-h:32px;--s-body:14px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1 · 8 devices seen</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="final">
+        <div class="opt-head" style="margin-bottom:14px"><span class="opt-name">Purple, for reference<small>#7C3AED — the retired accent</small></span><span class="tag today">Reference</span></div>
+        <div class="screen" style="--s-sans:'Inter','Helvetica Neue',Arial,sans-serif;--s-acc:#7C3AED">
+          <div class="nav" style="font-family:inherit;margin-bottom:4px"><span class="on" style="color:#7C3AED">Home</span><span>Devices</span><span>Scans</span><span>Settings</span></div>
+          <div class="scr-head"><div class="scr-title">Nothing needs your attention</div>
+            <button class="btn btn-pri">Start scan</button></div>
+          <div class="scr-card">
+            <div class="scr-grp"><div class="scr-grp-h">Fix now</div>
+              <div class="scr-row"><span class="scr-row-t">Router firmware is out of date</span>
+                <button class="btn" style="--s-h:32px;--s-body:14px">View</button></div></div>
+            <div class="scr-grp soon"><div class="scr-grp-h">Fix soon</div>
+              <div class="scr-row"><span class="scr-row-t">Laptop is missing updates</span>
+                <button class="btn" style="--s-h:32px;--s-body:14px">View</button></div></div>
+            <div class="scr-kv"><span class="scr-k">Device</span><span class="scr-v">192.168.1.1 · 8 devices seen</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>Source: docs/ui/DESIGN-SYSTEM-RESEARCH.md §4 and §9 · 2026&#8209;09&#8209;02</span>
+    <span class="scr-v">canvas #FCFCFC · card #FFFFFF · ink #0F172A · muted #475569 · rule #E2E8F0 · edge #64748B</span>
+  </div>
+</div>
