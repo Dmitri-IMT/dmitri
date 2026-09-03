@@ -9,7 +9,14 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, ValidationError, constr
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    constr,
+    model_validator,
+)
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketException
 
@@ -54,6 +61,30 @@ class AgentHello(BaseModel):
     available_subnets: list[AvailableSubnet]
 
 
+class NspiOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    submode: Literal["inventory", "read_only_mapping", "active_validation"] = (
+        "inventory"
+    )
+    active_risk_acknowledged: bool = False
+    change_ticket: constr(min_length=1, max_length=120) | None = None
+
+    @model_validator(mode="after")
+    def validate_active_confirmation(self) -> NspiOptions:
+        if self.submode == "active_validation":
+            if not self.active_risk_acknowledged or self.change_ticket is None:
+                raise ValueError(
+                    "active_validation requires acknowledgement and change_ticket"
+                )
+        elif self.active_risk_acknowledged or self.change_ticket is not None:
+            raise ValueError(
+                "active acknowledgement and change_ticket require active_validation"
+            )
+        return self
+
+
 class AgentCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,6 +93,13 @@ class AgentCommand(BaseModel):
     scan_id: UUID
     scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"]
     subnet: CIDR
+    nspi_options: NspiOptions | None = None
+
+    @model_validator(mode="after")
+    def validate_nspi_options(self) -> AgentCommand:
+        if self.scan_mode != "nspi" and self.nspi_options is not None:
+            raise ValueError("nspi_options requires scan_mode='nspi'")
+        return self
 
 
 class AgentStatus(BaseModel):

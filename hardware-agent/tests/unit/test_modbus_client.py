@@ -4,6 +4,7 @@ import threading
 
 from agent.ot.modbus.client import (
     ModbusClientController,
+    ModbusReadSession,
     probe_device_identification,
 )
 from pymodbus.exceptions import ModbusIOException
@@ -144,6 +145,103 @@ def test_read_only_adapter_has_no_write_or_raw_pdu_surface() -> None:
         "execute",
     }
     assert forbidden.isdisjoint(vars(client_module))
+    assert forbidden.isdisjoint(vars(ModbusReadSession))
+
+
+class _ReadResponse:
+    def __init__(self, *, bits=None, registers=None, exception_code=None) -> None:
+        self.bits = bits or []
+        self.registers = registers or []
+        self.exception_code = exception_code
+
+    def isError(self) -> bool:
+        return self.exception_code is not None
+
+
+class _ReadClient:
+    def __init__(self, response) -> None:
+        self.response = response
+        self.calls = []
+        self.closed = False
+
+    def connect(self) -> bool:
+        return True
+
+    def close(self) -> None:
+        self.closed = True
+
+    def _read(self, name, address, **kwargs):
+        self.calls.append((name, address, kwargs))
+        return self.response
+
+    def read_coils(self, address, **kwargs):
+        return self._read("coil", address, **kwargs)
+
+    def read_discrete_inputs(self, address, **kwargs):
+        return self._read("discrete_input", address, **kwargs)
+
+    def read_holding_registers(self, address, **kwargs):
+        return self._read("holding_register", address, **kwargs)
+
+    def read_input_registers(self, address, **kwargs):
+        return self._read("input_register", address, **kwargs)
+
+
+def test_mapping_adapter_dispatches_all_four_typed_reads() -> None:
+    clients = []
+
+    def factory(*args, **kwargs):
+        del args, kwargs
+        client = _ReadClient(_ReadResponse(bits=[True, False], registers=[7, 8]))
+        clients.append(client)
+        return client
+
+    for address_space in (
+        "coil",
+        "discrete_input",
+        "holding_register",
+        "input_register",
+    ):
+        with ModbusReadSession(
+            "192.168.10.30", 502, timeout=1.0, client_factory=factory
+        ) as session:
+            result = session.read(address_space, 10, 2, 7)
+
+        assert result.status == "readable"
+        assert result.values == (
+            [True, False]
+            if address_space in {"coil", "discrete_input"}
+            else [7, 8]
+        )
+        assert clients[-1].calls == [
+            (address_space, 10, {"count": 2, "device_id": 7})
+        ]
+        assert clients[-1].closed is True
+
+
+def test_mapping_adapter_normalises_exception_and_returned_timeout() -> None:
+    exception_client = _ReadClient(_ReadResponse(exception_code=2))
+    with ModbusReadSession(
+        "192.168.10.30",
+        502,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: exception_client,
+    ) as session:
+        exception = session.read("holding_register", 0, 1, 1)
+
+    timeout_client = _ReadClient(ModbusIOException("No response received"))
+    with ModbusReadSession(
+        "192.168.10.30",
+        502,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: timeout_client,
+    ) as session:
+        timeout = session.read("holding_register", 0, 1, 1)
+
+    assert exception.status == "illegal_address"
+    assert exception.exception_code == 2
+    assert timeout.status == "timeout"
+    assert timeout.request_sent is True
 
 
 def test_cancellation_closes_an_active_client() -> None:

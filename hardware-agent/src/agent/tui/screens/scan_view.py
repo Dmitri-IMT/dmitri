@@ -94,6 +94,15 @@ class ScanViewScreen(DmitriScreen):
         lines.append(f"Target:   {payload.subnet}")
         lines.append(f"Date:     {payload.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         mode_label = MODE_LABELS.get(payload.scan_mode, payload.scan_mode.capitalize())
+        if payload.scan_mode == "nspi" and payload.metadata:
+            submode = payload.metadata.get("nspi_submode")
+            submode_label = {
+                "inventory": "Inventory",
+                "read_only_mapping": "Read-only mapping",
+                "active_validation": "Active validation",
+            }.get(str(submode))
+            if submode_label:
+                mode_label = f"{mode_label} · {submode_label}"
         lines.append(f"Mode:     {mode_label}")
         if payload.metadata and "elapsed_seconds" in payload.metadata:
             elapsed = payload.metadata["elapsed_seconds"]
@@ -135,6 +144,8 @@ class ScanViewScreen(DmitriScreen):
                 for service in device.industrial_services:
                     confidence = service.confidence.upper()
                     lines.append(f"    Modbus TCP {service.port} - {confidence}")
+                    if service.mapping_source:
+                        lines.append(f"      Mapping plan: {service.mapping_source}")
                     for unit in service.units:
                         detail = unit.device_identification
                         fields = []
@@ -151,6 +162,32 @@ class ScanViewScreen(DmitriScreen):
                         lines.append(
                             f"      Unit ID {unit.unit_id}: {unit.status}{suffix}"
                         )
+                        for address_range in unit.address_ranges:
+                            end = (
+                                address_range.start_address
+                                + address_range.count
+                                - 1
+                            )
+                            summary_parts = []
+                            if address_range.nonzero_count is not None:
+                                summary_parts.append(
+                                    f"nonzero {address_range.nonzero_count}"
+                                )
+                            if address_range.value_min is not None:
+                                summary_parts.append(f"min {address_range.value_min}")
+                            if address_range.value_max is not None:
+                                summary_parts.append(f"max {address_range.value_max}")
+                            summary = (
+                                f" · {' · '.join(summary_parts)}"
+                                if summary_parts
+                                else ""
+                            )
+                            lines.append(
+                                "        "
+                                f"{address_range.address_space} "
+                                f"{address_range.start_address}-{end}: "
+                                f"{address_range.status}{summary}"
+                            )
 
             device_findings = findings_by_ip.get(ip_str, [])
             if device_findings:
@@ -182,6 +219,14 @@ class ScanViewScreen(DmitriScreen):
             )
             lines.append(f"Modbus services:        {modbus_services}")
             lines.append(f"Modbus Unit IDs:        {modbus_units}")
+            mapped_ranges = sum(
+                len(unit.address_ranges)
+                for device in payload.hosts
+                for service in device.industrial_services
+                for unit in service.units
+            )
+            if mapped_ranges:
+                lines.append(f"Modbus mapped ranges:   {mapped_ranges}")
 
         return "\n".join(lines)
 

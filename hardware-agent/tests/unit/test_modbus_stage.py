@@ -129,3 +129,69 @@ def test_inventory_serialises_to_host_payload_and_metadata() -> None:
     assert metadata["modbus_units"] == 1
     assert metadata["modbus_requests_sent"] == 1
     assert metadata["modbus_write_requests_sent"] == 0
+
+
+def test_host_payload_preserves_service_cpes_for_backend_enrichment() -> None:
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc-a",
+        ports=[
+            PortInfo(
+                port=502,
+                service=ServiceInfo(
+                    name="modbus",
+                    cpes=[
+                        "cpe:2.3:o:schneider-electric:"
+                        "modicon_m340_firmware:2.60:*:*:*:*:*:*:*"
+                    ],
+                ),
+            )
+        ],
+    )
+
+    payload = build_host_payload(host)
+
+    assert payload.ports[0].cpes == host.ports[0].service.cpes
+
+
+def test_read_only_mapping_dispatches_after_inventory(monkeypatch) -> None:
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc-a",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+    )
+    mapped = []
+    monkeypatch.setattr(
+        "agent.scanner.stages.inventory_modbus_host",
+        lambda *args, **kwargs: [_service()],
+    )
+
+    def fake_map(host_arg, service, **kwargs):
+        mapped.append((host_arg.ip, service.port, kwargs["policy"].version))
+
+    monkeypatch.setattr("agent.scanner.stages.map_modbus_service", fake_map)
+
+    run_ot_inspection_stage(
+        AgentSettings(scan_mode="nspi", nspi_submode="read_only_mapping"),
+        [host],
+    )
+
+    assert mapped == [("192.168.10.30", 502, 1)]
+
+
+def test_inventory_submode_never_dispatches_mapping(monkeypatch) -> None:
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc-a",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+    )
+    monkeypatch.setattr(
+        "agent.scanner.stages.inventory_modbus_host",
+        lambda *args, **kwargs: [_service()],
+    )
+    monkeypatch.setattr(
+        "agent.scanner.stages.map_modbus_service",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError()),
+    )
+
+    run_ot_inspection_stage(AgentSettings(scan_mode="nspi"), [host])

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import LargeBinary
+from sqlalchemy import JSON, Column, LargeBinary
 from sqlmodel import Field, SQLModel, UniqueConstraint
 
 from api.models.persistence import UTC_TIMESTAMP, utc_now
@@ -47,6 +47,10 @@ class Command(SQLModel, table=True):
     )
     scan_mode: str
     subnet: str
+    nspi_options: dict[str, object] | None = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
     status: str
     error_code: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

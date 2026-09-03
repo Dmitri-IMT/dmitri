@@ -24,7 +24,10 @@ from agent.normalize.contracts import (
     ModbusValidationPayload,
     PortPayload,
 )
+from agent.ot.modbus.fingerprints import correlate_fc43_fingerprints
 from agent.ot.modbus.inventory import has_modbus_candidate, inventory_modbus_host
+from agent.ot.modbus.mapper import MappingBudget, map_modbus_service
+from agent.ot.policy import OtAutomationPolicy
 from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
@@ -283,6 +286,8 @@ def run_ot_inspection_stage(
     reporter: ScanReporter | None = None,
     cancel_event: threading.Event | None = None,
     modbus_controller: ModbusClientController | None = None,
+    policy: OtAutomationPolicy | None = None,
+    deadline: float | None = None,
 ) -> None:
     """Run serial, bounded OT enrichment after the existing NSE stage."""
 
@@ -290,19 +295,21 @@ def run_ot_inspection_stage(
         return
     eligible_hosts = [host for host in hosts if has_modbus_candidate(host)]
     hosts_total = len(eligible_hosts)
+    action = (
+        "Mapping Modbus read-only ranges..."
+        if settings.nspi_submode == "read_only_mapping"
+        else "Inventorying Modbus devices..."
+    )
     _emit(
         reporter,
         ScanEvent(
             kind="ot_stage_started",
-            message=(
-                "Inventorying Modbus devices..."
-                if hosts_total
-                else "No Modbus candidates found"
-            ),
+            message=action if hosts_total else "No Modbus candidates found",
             hosts_total=hosts_total,
         ),
     )
     hosts_done = 0
+    effective_policy = policy or OtAutomationPolicy()
     for host in eligible_hosts:
         if cancel_event is not None and cancel_event.is_set():
             break
@@ -311,12 +318,34 @@ def run_ot_inspection_stage(
             cancel_event=cancel_event,
             controller=modbus_controller,
         )
+        if settings.nspi_submode == "read_only_mapping":
+            budget = MappingBudget(
+                maximum=effective_policy.max_mapping_requests_per_host,
+                used=sum(
+                    service.requests_sent for service in host.industrial_services
+                ),
+            )
+            for service in host.industrial_services:
+                map_modbus_service(
+                    host,
+                    service,
+                    policy=effective_policy,
+                    cancel_event=cancel_event,
+                    controller=modbus_controller,
+                    deadline=deadline,
+                    budget=budget,
+                )
+        correlate_fc43_fingerprints(host)
         hosts_done += 1
         _emit(
             reporter,
             ScanEvent(
                 kind="modbus_host_inspected",
-                message=f"Inventoried Modbus on {host.ip}",
+                message=(
+                    f"Mapped Modbus on {host.ip}"
+                    if settings.nspi_submode == "read_only_mapping"
+                    else f"Inventoried Modbus on {host.ip}"
+                ),
                 hosts_done=hosts_done,
                 hosts_total=hosts_total,
                 ip=host.ip,
@@ -326,7 +355,11 @@ def run_ot_inspection_stage(
         reporter,
         ScanEvent(
             kind="ot_stage_done",
-            message="Modbus inventory complete",
+            message=(
+                "Modbus read-only mapping complete"
+                if settings.nspi_submode == "read_only_mapping"
+                else "Modbus inventory complete"
+            ),
             units_total=hosts_total,
             units_skipped=hosts_total - hosts_done,
         ),
@@ -350,6 +383,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                 ),
                 service=port.service.name or "unknown",
                 version=port.service.banner,
+                cpes=sorted(set(port.service.cpes)),
             )
             for port in sorted(
                 host.ports,
@@ -361,6 +395,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                 port=service.port,
                 confidence=service.confidence,
                 evidence_sources=service.evidence_sources,
+                mapping_source=service.mapping_source,
                 units=[
                     ModbusUnitPayload(
                         unit_id=unit.unit_id,
@@ -385,6 +420,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                             if unit.device_identification is not None
                             else None
                         ),
+                        identification_sources=unit.identification_sources,
                         address_ranges=[
                             ModbusAddressRangePayload(
                                 address_space=item.address_space,
@@ -439,6 +475,9 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
     else:
         port_stage = f"{' '.join(discovery_arguments(settings.scan_mode))} -Pn -T4"
     deep_scripts = deep_stage_scripts(settings.scan_mode)
+    ot_inspection = (
+        settings.nspi_submode if settings.scan_mode == "nspi" else "disabled"
+    )
     return (
         f"discovery=-sn -PE -T4; ports={port_stage}; "
         "deep_inspection="
@@ -446,7 +485,7 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
         "scripts="
         f"{','.join(deep_scripts)}; "
         f"min_cvss={settings.min_cvss}; "
-        f"ot_inspection={'inventory' if settings.scan_mode == 'nspi' else 'disabled'}; "
+        f"ot_inspection={ot_inspection}; "
         f"workers={settings.max_workers}; "
         f"host_batch_size={settings.host_batch_size}"
     )
@@ -497,7 +536,7 @@ def build_metadata(
         metadata.update(
             {
                 "nspi_policy_version": 1,
-                "nspi_submode": "inventory",
+                "nspi_submode": settings.nspi_submode,
                 "modbus_candidates": len(modbus_services),
                 "modbus_confirmed": sum(
                     service.confidence == "confirmed" for service in modbus_services
@@ -510,6 +549,22 @@ def build_metadata(
                 ),
                 "modbus_timeouts": sum(
                     service.timeouts for service in modbus_services
+                ),
+                "modbus_mapping_requests_sent": sum(
+                    service.mapping_requests_sent for service in modbus_services
+                ),
+                "modbus_mapping_ranges_readable": sum(
+                    item.status == "readable"
+                    for service in modbus_services
+                    for unit in service.units
+                    for item in unit.address_ranges
+                ),
+                "modbus_mapping_ranges_skipped": sum(
+                    service.mapping_ranges_skipped for service in modbus_services
+                ),
+                "modbus_cpe_candidates": sum(
+                    "fc43-fingerprint-catalog" in service.evidence_sources
+                    for service in modbus_services
                 ),
                 "modbus_write_requests_sent": 0,
             }

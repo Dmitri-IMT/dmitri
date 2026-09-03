@@ -1,6 +1,7 @@
 # DESIGN — NSPi OT inventory and Modbus assessment
 
-Status: proposal for implementation review.
+Status: implementation in progress; implemented details are identified in
+`TASKS.md`.
 
 ## 1. Scan algorithm
 
@@ -16,7 +17,9 @@ For every `nspi` scan:
    evidence source.
 6. Under `inventory`, send FC43/MEI 14 only when identification is still missing
    and there is an allowed Unit ID. Do not enumerate 1..247 a second time.
-7. Under `read_only_mapping`, validate and execute only the exact target rules.
+7. Under `read_only_mapping`, execute a matching local site/vendor profile or
+   the fixed generic baseline, using only discovered Unit IDs and typed
+   FC01-FC04 reads.
 8. Under `active_validation`, revalidate both permission gates and execute only
    the exact single-point FC05/FC06 operations after inventory. Mapping results
    never become write targets automatically.
@@ -82,6 +85,13 @@ range:
 The bisection option is off in the generic baseline and may be enabled only by a
 reviewed site/vendor mapping profile. It finds readable islands without an
 unconditional address-by-address sweep.
+
+The generic baseline is four independent zero-based ranges: `0-3` for coils,
+discrete inputs, holding registers and input registers. It uses blocks of four,
+summary capture, a 100 ms delay and at most four responding/exception Unit IDs.
+Identification and mapping share the product ceiling of 32 requests per host.
+Profiles are capped at 16 ranges, 256 addresses per range, blocks of 64 bits or
+32 registers, and raw capture of 128 values per range.
 
 ### Learning what an address does
 
@@ -222,6 +232,15 @@ Do not create a finding solely because Modbus is present. The inventory may
 still recommend segmentation, allowlisting, monitoring and migration to an
 authenticated security layer where supported.
 
+The first deterministic fingerprint catalogue consumes identification whose
+provenance includes a PyModbus FC43 response. It recognises canonical Schneider
+Electric/Schneider Automation names, M340 identifiers (`M340`, `BMX P34`) and
+M580 identifiers (`M580`, `BME P58`, `BME H58`), but only with a complete
+numeric revision such as `2.60` or `V3.10`. It emits a versioned firmware CPE on
+the observed port. Any missing version, unknown family, free-form build string
+or unsupported vendor yields no candidate. The existing backend then performs
+CPE-to-NVD correlation and its normal KEV/EPSS/risk enrichment.
+
 ## 6. Expected JSON
 
 The exact field names are fixed during the contract task, but the intended
@@ -245,7 +264,10 @@ shape is:
           "protocol": "tcp",
           "state": "open",
           "service": "modbus",
-          "version": null
+          "version": null,
+          "cpes": [
+            "cpe:2.3:o:schneider-electric:modicon_m340_firmware:2.60:*:*:*:*:*:*:*"
+          ]
         }
       ],
       "industrial_services": [
@@ -254,10 +276,12 @@ shape is:
           "port": 502,
           "confidence": "confirmed",
           "evidence_sources": ["nmap-service", "modbus-discover", "pymodbus"],
+          "mapping_source": "generic_baseline",
           "units": [
             {
               "unit_id": 1,
               "status": "responding",
+              "identification_sources": ["pymodbus-fc43"],
               "device_identification": {
                 "vendor_name": "Schneider Electric",
                 "product_code": "BMX P34",

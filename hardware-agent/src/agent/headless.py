@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from agent import config
+from agent.config import NspiSubmode
 from agent.normalize.contracts import ScanPayload
 from agent.paths import default_results_dir, load_config
 from agent.scanner.nmap import NmapRunner
@@ -36,7 +37,11 @@ class StderrReporter:
         print(event.message, file=sys.stderr)
 
 
-def validate_inputs(mode: str, subnet: str) -> None:
+def validate_inputs(
+    mode: str,
+    subnet: str,
+    nspi_submode: str | None = None,
+) -> None:
     if mode not in config.SCAN_MODES:
         raise InvalidScanInput(
             f"Unknown scan mode {mode!r}; must be one of {config.SCAN_MODES}"
@@ -49,6 +54,19 @@ def validate_inputs(mode: str, subnet: str) -> None:
         ipaddress.IPv4Network(subnet, strict=False)
     except ValueError as exc:
         raise InvalidScanInput(f"Invalid subnet {subnet!r}: {exc}") from exc
+    if nspi_submode is not None:
+        if mode != "nspi":
+            raise InvalidScanInput("An NSPi submode can only be used with mode 'nspi'")
+        if nspi_submode not in config.NSPI_SUBMODES:
+            raise InvalidScanInput(
+                f"Unknown NSPi submode {nspi_submode!r}; "
+                f"must be one of {config.NSPI_SUBMODES}"
+            )
+        if nspi_submode == "active_validation":
+            raise InvalidScanInput(
+                "NSPi active_validation is not available until guarded "
+                "write restoration is implemented"
+            )
 
 
 def _resolve_workspace_root(workspace_root: Path | None) -> Path:
@@ -67,8 +85,9 @@ def run_headless_scan(
     workspace_root: Path | None = None,
     reporter: ScanReporter | None = None,
     runner: NmapRunner | None = None,
+    nspi_submode: NspiSubmode | None = None,
 ) -> HeadlessScanResult:
-    validate_inputs(mode, subnet)
+    validate_inputs(mode, subnet, nspi_submode)
 
     workspace_root = _resolve_workspace_root(workspace_root)
     try:
@@ -97,6 +116,7 @@ def run_headless_scan(
         on_error=_on_error,
         workspace_root=workspace_root,
         runner=runner,
+        nspi_submode=nspi_submode or "inventory",
     )
     scan_runner.run_blocking()
 

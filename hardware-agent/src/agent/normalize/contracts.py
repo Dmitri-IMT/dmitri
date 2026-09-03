@@ -21,6 +21,7 @@ class PortPayload(BaseModel):
     state: Literal["open", "closed", "filtered"]
     service: constr(min_length=1)
     version: str | None = None
+    cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
 class ModbusDeviceIdentificationPayload(BaseModel):
@@ -81,6 +82,7 @@ class ModbusUnitPayload(BaseModel):
     exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
     error: str | None = None
     device_identification: ModbusDeviceIdentificationPayload | None = None
+    identification_sources: list[constr(min_length=1)] = Field(default_factory=list)
     address_ranges: list[ModbusAddressRangePayload] = Field(default_factory=list)
     validations: list[ModbusValidationPayload] = Field(default_factory=list)
 
@@ -90,6 +92,7 @@ class ModbusTcpServicePayload(BaseModel):
     port: Annotated[int, Field(ge=1, le=65535)]
     confidence: Literal["suspected", "confirmed"]
     evidence_sources: list[constr(min_length=1)] = Field(default_factory=list)
+    mapping_source: str | None = None
     units: list[ModbusUnitPayload] = Field(default_factory=list)
 
 

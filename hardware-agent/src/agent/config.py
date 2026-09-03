@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
+NSPI_SUBMODES: tuple[str, ...] = (
+    "inventory",
+    "read_only_mapping",
+    "active_validation",
+)
+NspiSubmode = Literal["inventory", "read_only_mapping", "active_validation"]
 
 
 @dataclass(slots=True)
@@ -22,6 +28,7 @@ class AgentSettings:
     scan_deadline_s: int = 0
     unit_failure_threshold: float = 0.5
     transient_retries: int = 1
+    nspi_submode: NspiSubmode = "inventory"
 
 
 STANDARD_NSE_SCRIPTS = (

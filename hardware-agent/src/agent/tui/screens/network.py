@@ -95,7 +95,7 @@ class NetworkScreen(DmitriScreen):
             callback=self._on_mode_result,
         )
 
-    def _on_mode_result(self, result: tuple[str, str] | None) -> None:
+    def _on_mode_result(self, result: tuple[str, str, str | None] | None) -> None:
         if result is None:
             return
         self.dismiss(result)

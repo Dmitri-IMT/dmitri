@@ -9,6 +9,7 @@ from uuid import uuid4
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
+    ModbusAddressRangePayload,
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
@@ -120,6 +121,7 @@ def test_render_contains_plain_language_modbus_inventory():
             port=502,
             confidence="confirmed",
             evidence_sources=["modbus-discover", "pymodbus"],
+            mapping_source="generic_baseline",
             units=[
                 ModbusUnitPayload(
                     unit_id=7,
@@ -129,6 +131,19 @@ def test_render_contains_plain_language_modbus_inventory():
                         product_code="BMX P34",
                         major_minor_revision="2.60",
                     ),
+                    address_ranges=[
+                        ModbusAddressRangePayload(
+                            address_space="holding_register",
+                            start_address=0,
+                            count=4,
+                            status="readable",
+                            nonzero_count=3,
+                            value_min=0,
+                            value_max=1450,
+                            value_sha256="sha256:test",
+                            observed_at=datetime.now(timezone.utc),
+                        )
+                    ],
                 )
             ],
         )
@@ -138,12 +153,16 @@ def test_render_contains_plain_language_modbus_inventory():
 
     assert "Industrial inventory:" in rendered
     assert "Modbus TCP 502 - CONFIRMED" in rendered
+    assert "Mapping plan: generic_baseline" in rendered
     assert "Unit ID 7: responding" in rendered
     assert "vendor Schneider Electric" in rendered
     assert "product BMX P34" in rendered
     assert "firmware 2.60" in rendered
+    assert "holding_register 0-3: readable" in rendered
+    assert "nonzero 3 · min 0 · max 1450" in rendered
     assert "Modbus services:        1" in rendered
     assert "Modbus Unit IDs:        1" in rendered
+    assert "Modbus mapped ranges:   1" in rendered
 
 
 def test_render_no_raw_json():

@@ -500,6 +500,20 @@ export interface components {
         /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
+        NspiSubmode: "inventory" | "read_only_mapping" | "active_validation";
+        NspiOptions: {
+            /**
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** @default inventory */
+            submode: components["schemas"]["NspiSubmode"];
+            /** @default false */
+            active_risk_acknowledged: boolean;
+            change_ticket?: string | null;
+        };
+        /** @enum {string} */
         CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
         /** @enum {string} */
         ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
@@ -585,6 +599,8 @@ export interface components {
             error?: string | null;
             device_identification?: components["schemas"]["ModbusDeviceIdentificationPayload"] | null;
             /** @default [] */
+            identification_sources: string[];
+            /** @default [] */
             address_ranges: components["schemas"]["ModbusAddressRangePayload"][];
             /** @default [] */
             validations: components["schemas"]["ModbusValidationPayload"][];
@@ -600,6 +616,7 @@ export interface components {
             confidence: "suspected" | "confirmed";
             /** @default [] */
             evidence_sources: string[];
+            mapping_source?: string | null;
             /** @default [] */
             units: components["schemas"]["ModbusUnitPayload"][];
         };
@@ -752,6 +769,7 @@ export interface components {
         CreateCommandRequest: {
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         CommandSummary: {
             /** Format: uuid */
@@ -769,6 +787,7 @@ export interface components {
             agent_id: string;
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
             status: components["schemas"]["CommandStatus"];
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             /** Format: date-time */
@@ -843,6 +862,7 @@ export interface components {
             scan_id: string;
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         /**
          * @description **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to

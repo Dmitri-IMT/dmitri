@@ -1,6 +1,8 @@
 # ARCHITECTURE — NSPi OT inventory and Modbus assessment
 
-Status: proposal for implementation review.
+Status: implementation in progress. `inventory`, `read_only_mapping`, submode
+selection and the initial FC43 fingerprint catalogue are implemented;
+`active_validation` and relational OT persistence remain planned.
 
 This is a cross-layer feature: `hardware-agent/`, `backend/`, the shared OpenAPI
 contract and `frontend/` all change. The existing NSPi Nmap/NSE path remains the
@@ -33,7 +35,7 @@ OT interpretation
         v
 bounded Modbus inspection
   - inventory: FC43/14 fallback where useful
-  - read-only mapping: configured FC01/02/03/04 ranges
+  - read-only mapping: profile or baseline FC01/02/03/04 ranges
   - active validation: exact FC05/FC06 point + mandatory restoration
         v
 normalise one typed payload
@@ -92,8 +94,7 @@ vendor script is a second command and cannot mutate that tuple.
 ```json
 {
   "version": 1,
-  "submode": "inventory",
-  "protocols": ["modbus_tcp"]
+  "submode": "inventory"
 }
 ```
 
@@ -166,7 +167,6 @@ The intended wire model is:
 NspiOptions
   version: 1
   submode: inventory | read_only_mapping | active_validation
-  protocols: [modbus_tcp]
   active_risk_acknowledged          # active_validation only
   change_ticket?                    # active_validation audit reference
 ```
@@ -207,13 +207,15 @@ policy and the per-scan request. The backend cannot enable a locally disabled
 validation. In v1 there is at most one operation per target and no more than
 five operations in a scan; an installation may lower both limits.
 
-When no mapping profile matches, the built-in generic baseline samples a small,
-fixed set of zero-based ranges under the same global request budget. The exact
-ranges, block sizes, delays and Unit-ID cap are frozen and tested together in
-Task 5 using Task 2's laboratory fixture; they are product constants rather
-than per-scan operator questions. The runtime never expands them based on time
-remaining. The report labels this result as a baseline sample rather than a
-complete address map.
+When no mapping profile matches, the built-in generic baseline reads four
+zero-based samples: addresses `0-3` in coils, discrete inputs, holding registers
+and input registers. Each sample is one block of four values, uses summary
+capture and is labelled `generic baseline sample`. Mapping reuses at most four
+discovered Unit IDs, waits 100 ms between requests and shares a hard ceiling of
+32 Modbus requests per host with identification. A local policy may lower that
+request ceiling and alter the delay within `25-2000 ms`, but cannot raise the
+hard ceiling. The runtime never expands ranges based on time remaining and the
+report describes the result as a baseline sample, not a complete address map.
 
 The model is added consistently to:
 
@@ -237,11 +239,13 @@ ModbusTcpServicePayload
   port
   confidence: suspected | confirmed
   evidence_sources[]               # service fingerprint, NSE, PyModbus
+  mapping_source?                  # generic_baseline, site:name or vendor:name
   units[]
 
 ModbusUnitPayload
   unit_id                           # observed byte; active policy only uses 1..247
   status: responding | exception | timeout | skipped
+  identification_sources[]         # e.g. modbus-discover, pymodbus-fc43
   device_identification?
     vendor_name?
     product_code?
@@ -298,6 +302,8 @@ Add a focused `agent/ot/modbus/` package:
   four read functions.
 - `mapper.py`: validates target rules, chunks ranges, applies budgets/delays and
   records response/exception status.
+- `fingerprints.py`: maps reviewed exact FC43 vendor/product/version tuples to
+  high-confidence CPE candidates without guessing ambiguous products.
 - `validation.py`: separately guarded FC05/FC06 adapter and the
   read/write/read/restore/verify state machine. Read-only components never
   import its write adapter.
@@ -341,7 +347,7 @@ isolated/maintenance state remain mandatory.
 
 ## 7. Backend persistence and reads
 
-Add scan-scoped relational records:
+The complete product will add scan-scoped relational records:
 
 ```text
 industrial_services  -> scan_hosts, ports
@@ -357,10 +363,12 @@ sources may be bounded JSON because their vendor keys vary. Unique constraints
 make ingest idempotent within a scan. All reads remain organisation-scoped
 through the owning scan.
 
-The scan-detail and host-detail APIs return industrial services. Scan lists do
-not embed them. Existing CPE enrichment receives only a high-confidence mapping
-from a small, tested fingerprint catalogue; ambiguous fingerprints remain
-inventory and are not guessed into a CPE.
+The first catalogue accepts only FC43-backed Schneider Electric/Schneider
+Automation Modicon M340 and M580 identifications with an unambiguous numeric
+firmware revision. It attaches the versioned firmware CPE to the same TCP port,
+which reuses the current CPE-to-NVD/KEV/EPSS enrichment pipeline. Missing,
+ambiguous or unsupported fingerprints remain inventory and are not guessed
+into a CPE. Relational persistence and OT-specific read APIs remain Task 10.
 
 ## 8. Presentation
 

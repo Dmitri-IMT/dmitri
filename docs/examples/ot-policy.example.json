@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "inter_request_delay_ms": 100,
+  "max_mapping_requests_per_host": 24,
+  "mapping_profiles": [
+    {
+      "name": "tcc-modbus-lab",
+      "selector": {
+        "cidrs": ["192.168.10.0/24"],
+        "macs": [],
+        "vendors": [],
+        "products": []
+      },
+      "unit_ids": [1],
+      "ranges": [
+        {
+          "address_space": "holding_register",
+          "start_address": 0,
+          "count": 16,
+          "block_size": 8,
+          "capture_values": "summary",
+          "bisect_on_illegal_address": false,
+          "minimum_block_size": 1,
+          "label": "laboratory holding-register sample"
+        },
+        {
+          "address_space": "coil",
+          "start_address": 0,
+          "count": 8,
+          "block_size": 8,
+          "capture_values": "summary",
+          "bisect_on_illegal_address": false,
+          "minimum_block_size": 1,
+          "label": "laboratory coil sample"
+        }
+      ]
+    }
+  ]
+}

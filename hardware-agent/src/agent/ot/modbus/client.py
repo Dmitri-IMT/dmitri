@@ -3,12 +3,14 @@ from __future__ import annotations
 import contextlib
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ModbusIOException
 
 from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
+from agent.ot.policy import AddressSpace
 
 _DEVICE_ID_FIELDS = {
     0: "vendor_name",
@@ -52,6 +54,128 @@ class ModbusClientController:
                 client.close()
 
 
+@dataclass(slots=True)
+class ModbusReadResult:
+    status: str
+    values: list[int | bool] | None = None
+    exception_code: int | None = None
+    error: str | None = None
+    request_sent: bool = False
+
+
+class ModbusReadSession:
+    """One-connection, FC01-FC04-only adapter for bounded mapping."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        *,
+        timeout: float,
+        client_factory: Callable[..., Any] = ModbusTcpClient,
+        controller: ModbusClientController | None = None,
+    ) -> None:
+        self._client = client_factory(host, port=port, timeout=timeout, retries=0)
+        self._controller = controller
+        self._registered = False
+        self._connected: bool | None = None
+
+    def __enter__(self) -> ModbusReadSession:
+        if self._controller is not None:
+            self._registered = self._controller.register(self._client)
+            if not self._registered:
+                self._connected = False
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        del args
+        self.close()
+
+    def close(self) -> None:
+        if self._registered and self._controller is not None:
+            self._controller.release(self._client)
+            self._registered = False
+        with contextlib.suppress(Exception):
+            self._client.close()
+
+    def read(
+        self,
+        address_space: AddressSpace,
+        start_address: int,
+        count: int,
+        unit_id: int,
+    ) -> ModbusReadResult:
+        if self._connected is None:
+            try:
+                self._connected = bool(self._client.connect())
+            except (ModbusException, OSError, RuntimeError, ValueError) as exc:
+                self._connected = False
+                return ModbusReadResult(status="error", error=str(exc) or None)
+        if not self._connected:
+            return ModbusReadResult(
+                status="error",
+                error="Modbus TCP connection failed or scan was cancelled",
+            )
+        methods = {
+            "coil": self._client.read_coils,
+            "discrete_input": self._client.read_discrete_inputs,
+            "holding_register": self._client.read_holding_registers,
+            "input_register": self._client.read_input_registers,
+        }
+        try:
+            response = methods[address_space](
+                start_address,
+                count=count,
+                device_id=unit_id,
+            )
+            if isinstance(response, ModbusIOException):
+                return ModbusReadResult(
+                    status="timeout",
+                    error=str(response) or None,
+                    request_sent=True,
+                )
+            if response.isError():
+                exception_code = getattr(response, "exception_code", None)
+                code = exception_code if isinstance(exception_code, int) else None
+                status = {1: "illegal_function", 2: "illegal_address"}.get(
+                    code, "error"
+                )
+                return ModbusReadResult(
+                    status=status,
+                    exception_code=code,
+                    error=str(response),
+                    request_sent=True,
+                )
+            raw_values = (
+                getattr(response, "bits", [])[:count]
+                if address_space in {"coil", "discrete_input"}
+                else getattr(response, "registers", [])[:count]
+            )
+            values = [
+                bool(value)
+                if address_space in {"coil", "discrete_input"}
+                else int(value)
+                for value in raw_values
+            ]
+            if len(values) != count:
+                return ModbusReadResult(
+                    status="error",
+                    error=f"Expected {count} values, received {len(values)}",
+                    request_sent=True,
+                )
+            return ModbusReadResult(
+                status="readable", values=values, request_sent=True
+            )
+        except (TimeoutError, ModbusIOException) as exc:
+            return ModbusReadResult(
+                status="timeout", error=str(exc) or None, request_sent=True
+            )
+        except (ModbusException, OSError, RuntimeError, ValueError) as exc:
+            return ModbusReadResult(
+                status="error", error=str(exc) or None, request_sent=True
+            )
+
+
 def probe_device_identification(
     host: str,
     port: int,
@@ -82,6 +206,12 @@ def probe_device_identification(
             object_id=0,
             device_id=unit_id,
         )
+        if isinstance(response, ModbusIOException):
+            return ModbusUnit(
+                unit_id=unit_id,
+                status="timeout",
+                error=str(response) or None,
+            )
         if response.isError():
             exception_code = getattr(response, "exception_code", None)
             return ModbusUnit(
@@ -94,11 +224,15 @@ def probe_device_identification(
                 ),
                 error=str(response),
             )
+        identification = _decode_device_information(
+            getattr(response, "information", {})
+        )
         return ModbusUnit(
             unit_id=unit_id,
             status="responding",
-            device_identification=_decode_device_information(
-                getattr(response, "information", {})
+            device_identification=identification,
+            identification_sources=(
+                ["pymodbus-fc43"] if identification is not None else []
             ),
         )
     except (TimeoutError, ModbusIOException) as exc:

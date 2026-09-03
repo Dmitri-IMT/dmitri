@@ -283,7 +283,14 @@ class TestInboundValidation:
 
     @pytest.mark.asyncio
     async def test_valid_command_is_dispatched_with_parsed_fields(self) -> None:
-        dialer = Dialer([command_frame(scan_mode="nspi")])
+        dialer = Dialer(
+            [
+                command_frame(
+                    scan_mode="nspi",
+                    nspi_options={"version": 1, "submode": "read_only_mapping"},
+                )
+            ]
+        )
         client = build_client(dialer)
 
         commands = await drive(client)
@@ -291,6 +298,25 @@ class TestInboundValidation:
         assert commands[0].scan_id == SCAN_ID
         assert commands[0].scan_mode == "nspi"
         assert commands[0].subnet == "192.168.1.0/24"
+        assert commands[0].nspi_options is not None
+        assert commands[0].nspi_options.submode == "read_only_mapping"
+
+    @pytest.mark.asyncio
+    async def test_nspi_options_on_general_mode_is_rejected(self) -> None:
+        dialer = Dialer(
+            [
+                command_frame(
+                    nspi_options={"version": 1, "submode": "inventory"}
+                ),
+                command_frame(),
+            ]
+        )
+        client = build_client(dialer)
+
+        commands = await drive(client)
+
+        assert len(commands) == 1
+        assert commands[0].nspi_options is None
 
 
 class TestSending:

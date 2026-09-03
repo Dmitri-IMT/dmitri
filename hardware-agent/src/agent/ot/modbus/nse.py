@@ -108,6 +108,9 @@ def _unit_from_details(unit_id: int, details: Any) -> ModbusUnit:
         exception_code=exception_code,
         error=error,
         device_identification=identification,
+        identification_sources=(
+            ["modbus-discover"] if identification is not None else []
+        ),
     )
 
 
@@ -192,6 +195,9 @@ def _merge_unit(units: dict[int, ModbusUnit], candidate: ModbusUnit) -> None:
             current.device_identification,
             candidate.device_identification,
         )
+    for source in candidate.identification_sources:
+        if source not in current.identification_sources:
+            current.identification_sources.append(source)
 
 
 def _merge_identification(

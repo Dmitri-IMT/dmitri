@@ -258,12 +258,18 @@ def test_agent_models_emit_every_field_the_contract_requires() -> None:
         assert not missing, f"{schema_name} requires {sorted(missing)}"
 
 
-def test_port_payload_omits_cpes_which_the_contract_leaves_optional() -> None:
+def test_port_payload_preserves_optional_cpes_for_backend_enrichment() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     schema = spec["components"]["schemas"]["PortPayload"]
     assert "cpes" in schema["properties"]
     assert "cpes" not in schema["required"]
-    assert "cpes" not in PortPayload.model_fields
+    assert "cpes" in PortPayload.model_fields
+    assert PortPayload(
+        port=502,
+        protocol="tcp",
+        state="open",
+        service="modbus",
+    ).cpes == []
 
 
 def test_health_503_references_database_unavailable_error() -> None:

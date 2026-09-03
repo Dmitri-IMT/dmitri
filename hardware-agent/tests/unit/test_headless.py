@@ -276,6 +276,43 @@ class TestInputValidation:
         assert calls == []
         assert not (tmp_path / "results").exists()
 
+    def test_read_only_mapping_is_preserved_in_result_metadata(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        _patch_discovery(monkeypatch, [])
+
+        result = headless.run_headless_scan(
+            "nspi",
+            SUBNET,
+            nspi_submode="read_only_mapping",
+            workspace_root=tmp_path,
+            runner=_FakeRunner(),
+        )
+
+        assert result.payload is not None
+        assert result.payload.metadata["nspi_submode"] == "read_only_mapping"
+
+    @pytest.mark.parametrize(
+        ("mode", "submode"),
+        [
+            ("quick", "read_only_mapping"),
+            ("nspi", "unknown"),
+            ("nspi", "active_validation"),
+        ],
+    )
+    def test_invalid_or_unavailable_submode_is_rejected_before_scan(
+        self, mode: str, submode: str, tmp_path
+    ) -> None:
+        with pytest.raises(headless.InvalidScanInput):
+            headless.run_headless_scan(
+                mode,
+                SUBNET,
+                nspi_submode=submode,  # type: ignore[arg-type]
+                workspace_root=tmp_path,
+            )
+
+        assert not (tmp_path / "results").exists()
+
 
 class TestExitCodeContract:
     def test_exit_codes_match_adr(self) -> None:

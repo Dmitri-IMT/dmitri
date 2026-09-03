@@ -16,8 +16,8 @@ uv sync --extra dev --locked
 uv run pytest tests/integration/test_modbus_lab.py -q
 ```
 
-O teste local esperado termina com `3 passed`. Ele sobe um servidor apenas em
-`127.0.0.1`, valida o FC43 e encerra o servidor ao final.
+O teste local esperado termina com `4 passed`. Ele sobe um servidor apenas em
+`127.0.0.1`, valida FC43 e FC01-FC04 e encerra o servidor ao final.
 
 Confirme a interface e o CIDR que pertencem ao laboratório:
 
@@ -111,6 +111,7 @@ e identificação; ele não deve ser confundido com monitoramento passivo.
 - JSON, logs, PCAP e confirmação do responsável pelo laboratório;
 - divergências entre o inventário e a lista conhecida de CLPs/gateways.
 
-O `read_only_mapping` permanece como o próximo incremento. Ele só será
-habilitado depois que seus limites de faixa, orçamento de requisições, atraso e
-captura de valores estiverem implementados e testados.
+O `read_only_mapping` já está disponível como escolha explícita. Ele mantém o
+inventory e acrescenta leituras FC01-FC04 limitadas por política. Use o
+[roteiro específico](nspi-modbus-read-only-mapping.md) para validar suas faixas,
+orçamento de requisições, atraso, captura de valores e ausência de escrita.

@@ -1,6 +1,6 @@
 # TRUTH — NSPi OT inventory and Modbus assessment
 
-Status: proposal for implementation review.
+Status: accepted product behaviour; implementation is tracked in `TASKS.md`.
 
 This document fixes the product behaviour. `ARCHITECTURE.md` explains where it
 lives, `DESIGN.md` explains the protocol details, and `TASKS.md` is the execution
@@ -132,6 +132,15 @@ outside an exact disposable point explicitly authorised for active validation:
 30. Network/interface detection, candidate selection, Unit-ID reuse,
     fingerprinting, CVE correlation, result persistence and report generation
     are automatic after the scan is started.
+31. The built-in mapping baseline is deliberately incomplete: four addresses
+    starting at zero in each FC01-FC04 space, summary capture, one request at a
+    time, at most four discovered Unit IDs and at most 32 total Modbus requests
+    per host including identification. A local policy may reduce but never
+    raise hard product ceilings.
+32. The first FC43 correlation catalogue covers only exact Schneider
+    Electric/Schneider Automation Modicon M340 and M580 families with a strict
+    numeric firmware revision. Unsupported or ambiguous values produce no CPE
+    and therefore no inferred CVE.
 
 ## Definition of the first usable release
 
@@ -140,7 +149,8 @@ PyModbus laboratory server and a real authorised test PLC and receive:
 
 - the same Nmap/NSE coverage as today;
 - structured Modbus endpoint, Unit ID and device-identification data;
-- bounded read-only range results when a mapping policy is supplied;
+- bounded read-only range results from an installed policy or the labelled
+  built-in baseline;
 - evidence-backed findings separated from inventory;
 - a guarded FC05/FC06 validation against an explicitly configured disposable
   lab point, including verified restoration or an explicit failure state;

@@ -25,6 +25,7 @@ class ScanCategoryScreen(DmitriScreen):
     def __init__(self, subnet: str) -> None:
         super().__init__()
         self._subnet = subnet
+        self._category: str | None = None
 
     def compose_body(self):
         with Vertical(id="scancategory-container"):
@@ -62,6 +63,7 @@ class ScanCategoryScreen(DmitriScreen):
     def _push_mode_screen(self, category: str) -> None:
         from agent.tui.screens.scan_mode import ScanModeScreen
 
+        self._category = category
         self.app.push_screen(
             ScanModeScreen(category=category),
             callback=self._on_mode_result,
@@ -70,7 +72,10 @@ class ScanCategoryScreen(DmitriScreen):
     def _on_mode_result(self, mode: str | None) -> None:
         if mode is None:
             return
-        self.dismiss((self._subnet, mode))
+        if self._category == "nspi":
+            self.dismiss((self._subnet, "nspi", mode))
+        else:
+            self.dismiss((self._subnet, mode, None))
 
     def action_back(self) -> None:
         self.dismiss(None)

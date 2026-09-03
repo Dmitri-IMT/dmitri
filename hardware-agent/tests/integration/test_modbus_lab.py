@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from agent.ot.modbus.client import probe_device_identification
 from agent.ot.modbus.inventory import inventory_modbus_host
+from agent.ot.modbus.mapper import map_modbus_service
+from agent.ot.policy import OtAutomationPolicy
 from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.stages import build_host_payload
 from pymodbus.client import ModbusTcpClient
@@ -93,3 +95,34 @@ def test_inventory_round_trips_from_lab_target_to_json_contract() -> None:
     assert service["confidence"] == "confirmed"
     assert identification["vendor_name"] == "Dmitri Laboratory"
     assert identification["product_code"] == "MODBUS-TARGET"
+
+
+def test_read_only_mapping_reads_all_four_spaces_from_lab_target() -> None:
+    with ModbusLabServer() as lab:
+        host = HostInfo(
+            ip=lab.host,
+            hostname="modbus-lab",
+            ports=[PortInfo(port=lab.port, service=ServiceInfo(name="modbus"))],
+        )
+        host.industrial_services = inventory_modbus_host(host, timeout=1.0)
+        service = host.industrial_services[0]
+        map_modbus_service(
+            host,
+            service,
+            policy=OtAutomationPolicy(inter_request_delay_ms=25),
+            timeout=1.0,
+        )
+
+    ranges = service.units[0].address_ranges
+    payload = build_host_payload(host)
+    assert payload.industrial_services[0].mapping_source == "generic_baseline"
+    assert [(item.address_space, item.status) for item in ranges] == [
+        ("coil", "readable"),
+        ("discrete_input", "readable"),
+        ("holding_register", "readable"),
+        ("input_register", "readable"),
+    ]
+    assert ranges[2].nonzero_count == 3
+    assert ranges[2].value_min == 0
+    assert ranges[2].value_max == 1450
+    assert service.mapping_requests_sent == 4

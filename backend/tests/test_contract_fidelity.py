@@ -33,6 +33,7 @@ SCHEMA_NAMES = (
     "ScanListResponse",
     "CommandSummary",
     "CommandDetail",
+    "NspiOptions",
     "HostSummary",
     "ScanHostView",
     "HostDetailResponse",

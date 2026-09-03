@@ -66,12 +66,18 @@ class HomeScreen(DmitriScreen):
             option = menu.get_option_at_index(menu.highlighted)
             self._activate_item(option.id)
 
-    def _on_network_result(self, result: tuple[str, str] | None) -> None:
+    def _on_network_result(
+        self, result: tuple[str, str, str | None] | None
+    ) -> None:
         if result is None:
             return
-        subnet, mode = result
+        subnet, mode, nspi_submode = result
         self.app.push_screen(
-            ScanProgressScreen(subnet=subnet, scan_mode=mode),
+            ScanProgressScreen(
+                subnet=subnet,
+                scan_mode=mode,
+                nspi_submode=nspi_submode,
+            ),
             callback=self._on_scan_complete,
         )
 

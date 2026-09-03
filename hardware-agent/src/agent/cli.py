@@ -18,7 +18,10 @@ def main() -> None:
         _run_agent(args[1:])
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
-        print("Usage: dmitri [start|agent [<mode> <subnet>]]", file=sys.stderr)
+        print(
+            "Usage: dmitri [start|agent [<mode> [<nspi-submode>] <subnet>]]",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
 
 
@@ -48,8 +51,8 @@ def _run_tui() -> None:
 
 
 def _run_agent(args: list[str]) -> None:
-    if len(args) not in (0, 2):
-        print("Usage: dmitri agent [<mode> <subnet>]", file=sys.stderr)
+    if len(args) not in (0, 2, 3):
+        _print_agent_usage()
         raise SystemExit(2)
 
     if not _check_nmap():
@@ -65,10 +68,20 @@ def _run_agent(args: list[str]) -> None:
 
     from agent import headless
 
-    mode, subnet = args
+    nspi_submode = None
+    if len(args) == 3:
+        mode, nspi_submode, subnet = args
+        if mode != "nspi":
+            _print_agent_usage()
+            raise SystemExit(2)
+    else:
+        mode, subnet = args
     try:
         result = headless.run_headless_scan(
-            mode, subnet, reporter=headless.StderrReporter()
+            mode,
+            subnet,
+            reporter=headless.StderrReporter(),
+            nspi_submode=nspi_submode,
         )
     except headless.InvalidScanInput as exc:
         print(str(exc), file=sys.stderr)
@@ -84,6 +97,13 @@ def _run_agent(args: list[str]) -> None:
     if result.error is not None:
         print(str(result.error), file=sys.stderr)
     raise SystemExit(headless.EXIT_CODES[result.outcome])
+
+
+def _print_agent_usage() -> None:
+    print(
+        "Usage: dmitri agent [<mode> [<nspi-submode>] <subnet>]",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":

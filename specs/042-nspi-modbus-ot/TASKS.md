@@ -27,14 +27,15 @@ Never run a repository-wide formatter.
   `hardware-agent/src/agent/transport/command_channel.py`,
   `backend/src/api/schemas/scan.py`, `backend/src/api/schemas/commands.py`,
   `backend/src/api/schemas/agent_frames.py`, `frontend/src/types/openapi.d.ts`,
-  `docs/adr/ADR-012-nspi-active-modbus-safety.md`, contract-fidelity tests.
+  `docs/adr/ADR-018-nspi-active-modbus-safety.md`, contract-fidelity tests.
 - **Success Criteria**: One versioned wire shape represents `inventory`,
   `read_only_mapping` and `active_validation`; all bounds validate on both trust
   boundaries; old commands/payloads remain valid; non-NSPi misuse fails;
   read-only paths cannot receive validation operations; agent/backend/OpenAPI
   fidelity tests pass.
-- **Status**: IN PROGRESS — result contracts are frozen; command-side
-  `NspiOptions` and the ADR remain.
+- **Status**: COMPLETE — the versioned option is present in agent, backend,
+  OpenAPI and generated frontend types; persistence/delivery preserve it and
+  ADR-018 records the safety decision.
 
 ## Task 2: Pin PyModbus and build the deterministic Modbus laboratory target
 
@@ -82,8 +83,8 @@ Never run a repository-wide formatter.
 - **Success Criteria**: Identification and every allowed read work against the
   fixture; timeout/cancel close the connection; API-surface and request-spy
   tests prove that no write function is reachable.
-- **Status**: IN PROGRESS — FC43 and cancellation are complete; FC01-FC04 are
-  deferred to `read_only_mapping`.
+- **Status**: COMPLETE — FC43, FC01-FC04, exception normalisation, cancellation
+  and the deliberately read-only API are covered by unit/integration tests.
 
 ## Task 5: Build the bounded address mapper
 
@@ -101,7 +102,9 @@ Never run a repository-wide formatter.
   clearly labelled baseline sample; caps cannot be raised by input; request
   count is deterministic; partial observations survive error/cancel/deadline;
   raw values appear only when enabled by installed policy.
-- **Status**: PENDING
+- **Status**: COMPLETE — deterministic profile resolution, generic baseline,
+  chunking, delay, shared request budget, capture modes, hashing, cancellation
+  and illegal-address-only bisection are implemented and tested.
 
 ## Task 6: Implement guarded active validation and restoration
 
@@ -128,8 +131,9 @@ Never run a repository-wide formatter.
 
 - **Description**: Add the `ot_inspection` stage after deep inspection and
   before normalisation. Consume Task 3 output first, use Task 4 only as a useful
-  fallback, invoke Task 5 only for configured mapping and invoke Task 6 only for
-  `active_validation`. Thread submode, local policy and cancellation through
+  fallback, invoke Task 5 only for `read_only_mapping` using a profile or the
+  built-in baseline, and invoke Task 6 only for `active_validation`. Thread
+  submode, local policy and cancellation through
   `ScanRunner`; extend progress weights/events and partial metadata.
 - **Dependencies**: 3, 4, 5, 6
 - **Target Files**: `hardware-agent/src/agent/scanner/stages.py`,
@@ -140,8 +144,8 @@ Never run a repository-wide formatter.
   submodes; their findings remain; complete NSE identification prevents a
   duplicate fallback; OT concurrency is one; zero Modbus hosts succeeds;
   cancellation has the correct normal/restoration-critical semantics.
-- **Status**: IN PROGRESS — `inventory` is integrated; mapping and validation
-  dispatch remain.
+- **Status**: IN PROGRESS — `inventory` and `read_only_mapping` are integrated
+  after the unchanged NSE path; only `active_validation` dispatch remains.
 
 ## Task 8: Normalise findings and write the complete local JSON
 
@@ -158,8 +162,9 @@ Never run a repository-wide formatter.
   Unit/range/operation and restoration; port 502 alone creates no finding;
   confirmed FC05/FC06 read-back creates the intended finding; unverified restore
   is prominent; legacy non-NSPi payloads are unchanged.
-- **Status**: IN PROGRESS — inventory observations and audit counters are in the
-  local JSON; range/validation findings remain.
+- **Status**: IN PROGRESS — inventory, ranges, mapping counters and the
+  evidence-backed unauthenticated-read finding are in local JSON; validation
+  results/findings remain.
 
 ## Task 9: Thread submode and local automation policy through CLI, TUI and daemon
 
@@ -182,8 +187,9 @@ Never run a repository-wide formatter.
   enablement; the ordinary scan command contains no arbitrary target/range/write
   values; command redelivery/recovery preserves options; constructor/call-site
   grep is recorded in review.
-- **Status**: IN PROGRESS — all existing NSPi entry points use the automatic
-  inventory default; explicit submode selection and local policy remain.
+- **Status**: IN PROGRESS — CLI, TUI, daemon/WebSocket and backend commands
+  preserve explicit inventory/mapping selection and inventory remains the
+  default. Active acknowledgement and validation-policy fields remain.
 
 ## Task 10: Persist OT observations and expose tenant-safe reads
 
@@ -216,7 +222,10 @@ Never run a repository-wide formatter.
 - **Success Criteria**: Supported exact fingerprints enqueue the existing job;
   ambiguous/missing versions do not; NSE CVE enrichment behaves as before;
   read/write findings show their direct evidence and source provenance.
-- **Status**: PENDING
+- **Status**: IN PROGRESS — exact FC43-backed Modicon M340/M580 revisions emit
+  versioned firmware CPEs into the existing port CPE/NVD/KEV/EPSS pipeline;
+  ambiguous fingerprints are skipped. Additional reviewed families and the
+  active-write finding remain.
 
 ## Task 12: Present NSPi submodes and OT results in TUI and web
 
@@ -238,7 +247,9 @@ Never run a repository-wide formatter.
   clear; primary results explain risk/evidence/action without requiring NSE,
   CPE or exception-code knowledge; no generic write/exploit button appears;
   non-NSPi scans are unchanged; frontend lint, typecheck, tests and build pass.
-- **Status**: PENDING
+- **Status**: IN PROGRESS — TUI and web select inventory or read-only mapping,
+  active validation is visibly unavailable, and the TUI presents mapped-range
+  summaries. Persisted web OT detail and active confirmation remain.
 
 ## Task 13: Add the optional Redpoint Schneider laboratory adapter
 

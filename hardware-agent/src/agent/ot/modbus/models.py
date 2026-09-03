@@ -38,6 +38,7 @@ class ModbusUnit:
     exception_code: int | None = None
     error: str | None = None
     device_identification: ModbusDeviceIdentification | None = None
+    identification_sources: list[str] = field(default_factory=list)
     address_ranges: list[ModbusAddressRange] = field(default_factory=list)
     validations: list[ModbusValidation] = field(default_factory=list)
 
@@ -93,3 +94,6 @@ class ModbusService:
     units: list[ModbusUnit] = field(default_factory=list)
     requests_sent: int = 0
     timeouts: int = 0
+    mapping_source: str | None = None
+    mapping_requests_sent: int = 0
+    mapping_ranges_skipped: int = 0

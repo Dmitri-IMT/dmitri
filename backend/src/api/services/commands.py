@@ -54,6 +54,7 @@ def enqueue(
     agent_id: UUID,
     scan_mode: str,
     subnet: str,
+    nspi_options: dict[str, object] | None = None,
     now: datetime,
 ) -> Command:
     command = Command(
@@ -61,6 +62,7 @@ def enqueue(
         agent_id=agent_id,
         scan_mode=scan_mode,
         subnet=subnet,
+        nspi_options=nspi_options,
         status="queued",
         created_at=now,
     )
@@ -84,6 +86,7 @@ def get_command_detail(
         agent_id=command.agent_id,
         scan_mode=command.scan_mode,
         subnet=command.subnet,
+        nspi_options=command.nspi_options,
         status=command.status,
         error_code=normalise_error_code(command.error_code),
         created_at=command.created_at,
@@ -292,6 +295,7 @@ async def deliver(
         scan_id=scan_id,
         scan_mode=command.scan_mode,
         subnet=command.subnet,
+        nspi_options=command.nspi_options,
     )
 
     try:
@@ -314,6 +318,7 @@ def _claim_agent(
     agent_id: UUID,
     scan_mode: str,
     subnet: str,
+    nspi_options: dict[str, object] | None,
     now: datetime,
 ) -> Command:
     """Authorize the agent, retire stale rows, and insert the `queued` command.
@@ -343,6 +348,7 @@ def _claim_agent(
             agent_id=agent_id,
             scan_mode=scan_mode,
             subnet=subnet,
+            nspi_options=nspi_options,
             now=now,
         )
     except IntegrityError as exc:
@@ -358,6 +364,7 @@ async def enqueue_for_agent(
     agent_id: UUID,
     scan_mode: str,
     subnet: str,
+    nspi_options: dict[str, object] | None = None,
     now: datetime,
 ) -> Command:
     """Queue a scan on one Pi and hand it to the live command channel.
@@ -377,6 +384,7 @@ async def enqueue_for_agent(
         agent_id=agent_id,
         scan_mode=scan_mode,
         subnet=subnet,
+        nspi_options=nspi_options,
         now=now,
     )
     return await deliver(session, command=command, now=now)
