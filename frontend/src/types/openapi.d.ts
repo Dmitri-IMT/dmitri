@@ -525,6 +525,84 @@ export interface components {
             /** @default [] */
             cpes: string[];
         };
+        ModbusDeviceIdentificationPayload: {
+            vendor_name?: string | null;
+            product_code?: string | null;
+            major_minor_revision?: string | null;
+            vendor_url?: string | null;
+            product_name?: string | null;
+            model_name?: string | null;
+            user_application_name?: string | null;
+            /** @default {} */
+            objects: {
+                [key: string]: string;
+            };
+        };
+        ModbusAddressRangePayload: {
+            /** @enum {string} */
+            address_space: "coil" | "discrete_input" | "holding_register" | "input_register";
+            start_address: number;
+            count: number;
+            /** @enum {string} */
+            status: "readable" | "illegal_address" | "illegal_function" | "timeout" | "error" | "skipped";
+            exception_code?: number | null;
+            label?: string | null;
+            nonzero_count?: number | null;
+            value_min?: number | null;
+            value_max?: number | null;
+            values?: (number | boolean)[] | null;
+            value_sha256?: string | null;
+            /** Format: date-time */
+            observed_at: string;
+        };
+        ModbusValidationPayload: {
+            /** @enum {string} */
+            address_space: "coil" | "holding_register";
+            address: number;
+            label: string;
+            /** @enum {integer} */
+            function_code: 5 | 6;
+            original_value?: number | boolean | null;
+            expected_current_value: number | boolean;
+            test_value: number | boolean;
+            /** @enum {string} */
+            write_status: "accepted" | "rejected" | "timeout" | "error" | "skipped";
+            read_back_value?: number | boolean | null;
+            /** @enum {string} */
+            restoration_status: "not_required" | "verified" | "unverified" | "failed";
+            final_value?: number | boolean | null;
+            change_ticket: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            completed_at: string;
+        };
+        ModbusUnitPayload: {
+            unit_id: number;
+            /** @enum {string} */
+            status: "responding" | "exception" | "timeout" | "error" | "skipped";
+            exception_code?: number | null;
+            error?: string | null;
+            device_identification?: components["schemas"]["ModbusDeviceIdentificationPayload"] | null;
+            /** @default [] */
+            address_ranges: components["schemas"]["ModbusAddressRangePayload"][];
+            /** @default [] */
+            validations: components["schemas"]["ModbusValidationPayload"][];
+        };
+        ModbusTcpServicePayload: {
+            /**
+             * @default modbus_tcp
+             * @constant
+             */
+            protocol: "modbus_tcp";
+            port: number;
+            /** @enum {string} */
+            confidence: "suspected" | "confirmed";
+            /** @default [] */
+            evidence_sources: string[];
+            /** @default [] */
+            units: components["schemas"]["ModbusUnitPayload"][];
+        };
         HostPayload: {
             /** Format: ipv4 */
             ip: string;
@@ -533,6 +611,8 @@ export interface components {
             vendor: string;
             /** @default [] */
             ports: components["schemas"]["PortPayload"][];
+            /** @default [] */
+            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
         };
         ScanHostView: {
             /** Format: uuid */

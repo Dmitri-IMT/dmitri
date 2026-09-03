@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from agent.config import NSPI_NSE_SCRIPTS, NSPI_PORTS
+from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
+from agent.scanner.models import PortInfo
 
 EXPECTED_SCRIPTS = (
     "modbus-discover",
@@ -36,6 +38,33 @@ class TestNspiNseScripts:
 
     def test_s7_info_excluded(self) -> None:
         assert "s7-info" not in NSPI_NSE_SCRIPTS
+
+    def test_generated_nse_argv_keeps_exact_script_tuple(self) -> None:
+        class CapturingRunner:
+            nmap_path = "nmap"
+
+            def __init__(self) -> None:
+                self.arguments = None
+
+            def run_xml(self, arguments, *, timeout=None):
+                import xml.etree.ElementTree as ET
+
+                self.arguments = arguments
+                return ET.fromstring("<nmaprun><host /></nmaprun>")
+
+        runner = CapturingRunner()
+        run_nse_vulnerability_scan(
+            runner,
+            "192.168.10.30",
+            [PortInfo(port=502)],
+            version_intensity=5,
+            scripts=NSPI_NSE_SCRIPTS,
+            min_cvss=5.0,
+        )
+
+        assert runner.arguments is not None
+        script_index = runner.arguments.index("--script")
+        assert runner.arguments[script_index + 1] == ",".join(EXPECTED_SCRIPTS)
 
 
 class TestNspiPorts:

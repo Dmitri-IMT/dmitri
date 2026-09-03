@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent.ot.modbus.models import ModbusService
+
 
 @dataclass(slots=True)
 class ScriptResult:
@@ -57,6 +59,7 @@ class HostInfo:
     state: str = "up"
     ports: list[PortInfo] = field(default_factory=list)
     host_scripts: list[ScriptResult] = field(default_factory=list)
+    industrial_services: list[ModbusService] = field(default_factory=list)
 
     @property
     def open_ports(self) -> list[PortInfo]:

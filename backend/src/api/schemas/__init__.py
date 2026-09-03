@@ -9,6 +9,9 @@ from .persistence import (
 from .scan import (
     FindingPayload,
     HostPayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusTcpServicePayload,
+    ModbusUnitPayload,
     PortPayload,
     ScanIngestAcceptedResponse,
     ScanIngestRequest,
@@ -17,6 +20,9 @@ from .scan import (
 __all__ = [
     "FindingPayload",
     "HostPayload",
+    "ModbusDeviceIdentificationPayload",
+    "ModbusTcpServicePayload",
+    "ModbusUnitPayload",
     "PortPayload",
     "PersistedFinding",
     "PersistedScanDetail",

@@ -10,6 +10,9 @@ import yaml
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusTcpServicePayload,
+    ModbusUnitPayload,
     PortPayload,
     ScanPayload,
 )
@@ -23,6 +26,9 @@ from agent.transport.command_channel import (
 CONTRACT_MODELS = (
     ("ScanIngestRequest", ScanPayload),
     ("HostPayload", HostPayload),
+    ("ModbusTcpServicePayload", ModbusTcpServicePayload),
+    ("ModbusUnitPayload", ModbusUnitPayload),
+    ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
     ("PortPayload", PortPayload),
     ("FindingPayload", FindingPayload),
     ("AvailableSubnet", AvailableSubnet),
@@ -85,6 +91,40 @@ def test_scan_payload_accepts_optional_mac_and_enriched_findings() -> None:
 
     assert payload.hosts[0].mac is None
     assert payload.findings[0].cve_id == "CVE-2024-12345"
+
+
+def test_scan_payload_accepts_modbus_inventory() -> None:
+    host = HostPayload(
+        ip="192.168.10.30",
+        mac=None,
+        hostname="plc-lab",
+        vendor="Schneider Electric",
+        industrial_services=[
+            ModbusTcpServicePayload(
+                port=502,
+                confidence="confirmed",
+                evidence_sources=["modbus-discover", "pymodbus"],
+                units=[
+                    ModbusUnitPayload(
+                        unit_id=1,
+                        status="responding",
+                        device_identification=ModbusDeviceIdentificationPayload(
+                            vendor_name="Schneider Electric",
+                            product_code="BMX P34",
+                            major_minor_revision="2.60",
+                        ),
+                    )
+                ],
+            )
+        ],
+    )
+
+    dumped = host.model_dump(mode="json")
+
+    assert dumped["industrial_services"][0]["protocol"] == "modbus_tcp"
+    assert dumped["industrial_services"][0]["units"][0][
+        "device_identification"
+    ]["product_code"] == "BMX P34"
 
 
 def test_scan_payload_accepts_extensive_nspi_and_max() -> None:
@@ -214,7 +254,7 @@ def test_agent_models_emit_every_field_the_contract_requires() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
-        missing = set(schema["required"]) - set(model.model_fields)
+        missing = set(schema.get("required", [])) - set(model.model_fields)
         assert not missing, f"{schema_name} requires {sorted(missing)}"
 
 

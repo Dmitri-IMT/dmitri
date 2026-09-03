@@ -130,6 +130,28 @@ class ScanViewScreen(DmitriScreen):
             if _has_iolink_banner(device):
                 lines.append("  [bold]⚙ IO-Link Master detected[/bold]")
 
+            if device.industrial_services:
+                lines.append("  Industrial inventory:")
+                for service in device.industrial_services:
+                    confidence = service.confidence.upper()
+                    lines.append(f"    Modbus TCP {service.port} - {confidence}")
+                    for unit in service.units:
+                        detail = unit.device_identification
+                        fields = []
+                        if detail is not None:
+                            if detail.vendor_name:
+                                fields.append(f"vendor {detail.vendor_name}")
+                            if detail.product_code:
+                                fields.append(f"product {detail.product_code}")
+                            if detail.major_minor_revision:
+                                fields.append(
+                                    f"firmware {detail.major_minor_revision}"
+                                )
+                        suffix = f"; {', '.join(fields)}" if fields else ""
+                        lines.append(
+                            f"      Unit ID {unit.unit_id}: {unit.status}{suffix}"
+                        )
+
             device_findings = findings_by_ip.get(ip_str, [])
             if device_findings:
                 lines.append("  Vulnerabilities:")
@@ -149,6 +171,17 @@ class ScanViewScreen(DmitriScreen):
         lines.append(f"Total devices:          {device_count}")
         lines.append(f"Total open ports:       {total_ports}")
         lines.append(f"Vulnerabilities found:  {len(payload.findings)}")
+        modbus_services = sum(
+            len(device.industrial_services) for device in payload.hosts
+        )
+        if modbus_services:
+            modbus_units = sum(
+                len(service.units)
+                for device in payload.hosts
+                for service in device.industrial_services
+            )
+            lines.append(f"Modbus services:        {modbus_services}")
+            lines.append(f"Modbus Unit IDs:        {modbus_units}")
 
         return "\n".join(lines)
 

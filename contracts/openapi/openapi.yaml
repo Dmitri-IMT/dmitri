@@ -2215,6 +2215,209 @@ components:
             type: string
             minLength: 1
           default: []
+    ModbusDeviceIdentificationPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        vendor_name:
+          type: [string, 'null']
+        product_code:
+          type: [string, 'null']
+        major_minor_revision:
+          type: [string, 'null']
+        vendor_url:
+          type: [string, 'null']
+        product_name:
+          type: [string, 'null']
+        model_name:
+          type: [string, 'null']
+        user_application_name:
+          type: [string, 'null']
+        objects:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+    ModbusAddressRangePayload:
+      type: object
+      additionalProperties: false
+      required:
+        - address_space
+        - start_address
+        - count
+        - status
+        - observed_at
+      properties:
+        address_space:
+          type: string
+          enum: [coil, discrete_input, holding_register, input_register]
+        start_address:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        count:
+          type: integer
+          minimum: 1
+          maximum: 65536
+        status:
+          type: string
+          enum: [readable, illegal_address, illegal_function, timeout, error, skipped]
+        exception_code:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 255
+        label:
+          type: [string, 'null']
+        nonzero_count:
+          type: [integer, 'null']
+          minimum: 0
+        value_min:
+          type: [integer, 'null']
+        value_max:
+          type: [integer, 'null']
+        values:
+          anyOf:
+            - type: array
+              items:
+                anyOf:
+                  - type: integer
+                  - type: boolean
+            - type: 'null'
+        value_sha256:
+          type: [string, 'null']
+        observed_at:
+          type: string
+          format: date-time
+    ModbusValidationPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - address_space
+        - address
+        - label
+        - function_code
+        - expected_current_value
+        - test_value
+        - write_status
+        - restoration_status
+        - change_ticket
+        - started_at
+        - completed_at
+      properties:
+        address_space:
+          type: string
+          enum: [coil, holding_register]
+        address:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+          minLength: 1
+        function_code:
+          type: integer
+          enum: [5, 6]
+        original_value:
+          anyOf:
+            - type: integer
+            - type: boolean
+            - type: 'null'
+        expected_current_value:
+          anyOf:
+            - type: integer
+            - type: boolean
+        test_value:
+          anyOf:
+            - type: integer
+            - type: boolean
+        write_status:
+          type: string
+          enum: [accepted, rejected, timeout, error, skipped]
+        read_back_value:
+          anyOf:
+            - type: integer
+            - type: boolean
+            - type: 'null'
+        restoration_status:
+          type: string
+          enum: [not_required, verified, unverified, failed]
+        final_value:
+          anyOf:
+            - type: integer
+            - type: boolean
+            - type: 'null'
+        change_ticket:
+          type: string
+          minLength: 1
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    ModbusUnitPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - unit_id
+        - status
+      properties:
+        unit_id:
+          type: integer
+          minimum: 0
+          maximum: 255
+        status:
+          type: string
+          enum: [responding, exception, timeout, error, skipped]
+        exception_code:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 255
+        error:
+          type: [string, 'null']
+        device_identification:
+          anyOf:
+            - $ref: '#/components/schemas/ModbusDeviceIdentificationPayload'
+            - type: 'null'
+        address_ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusAddressRangePayload'
+          default: []
+        validations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusValidationPayload'
+          default: []
+    ModbusTcpServicePayload:
+      type: object
+      additionalProperties: false
+      required:
+        - port
+        - confidence
+      properties:
+        protocol:
+          type: string
+          const: modbus_tcp
+          default: modbus_tcp
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        confidence:
+          type: string
+          enum: [suspected, confirmed]
+        evidence_sources:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusUnitPayload'
+          default: []
     HostPayload:
       type: object
       additionalProperties: false
@@ -2243,6 +2446,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PortPayload'
+          default: []
+        industrial_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusTcpServicePayload'
           default: []
     ScanHostView:
       type: object

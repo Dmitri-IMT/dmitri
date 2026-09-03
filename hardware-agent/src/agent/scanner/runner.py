@@ -14,6 +14,7 @@ from agent.config import AgentSettings, min_cvss_for_mode, subprocess_timeout_fo
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
+from agent.ot.modbus.client import ModbusClientController
 from agent.scanner import stages
 from agent.scanner.errors import (
     BudgetExceeded,
@@ -50,6 +51,7 @@ class ScanRunner:
         self._thread: threading.Thread | None = None
         self._runner_lock = threading.Lock()
         self._active_runner: NmapRunner | None = None
+        self._modbus_controller = ModbusClientController()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -64,6 +66,7 @@ class ScanRunner:
             runner = self._active_runner
         if runner is not None:
             runner.terminate_active()
+        self._modbus_controller.cancel()
 
     @property
     def is_cancelled(self) -> bool:
@@ -111,6 +114,7 @@ class ScanRunner:
                 elapsed_seconds=elapsed_seconds,
                 hosts_discovered=len(hosts),
                 findings_count=len(findings),
+                hosts=hosts,
                 partial_result=partial_result,
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
@@ -248,6 +252,18 @@ class ScanRunner:
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
+
+                if self.scan_mode == "nspi":
+                    interrupted_stage = "ot_inspection"
+                    stages.run_ot_inspection_stage(
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                        modbus_controller=self._modbus_controller,
+                    )
+                    self._check_cancel()
+                    self._check_deadline(deadline)
 
             interrupted_stage = "normalize"
             self._emit(

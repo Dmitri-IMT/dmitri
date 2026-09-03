@@ -39,6 +39,7 @@ class ScanProgressScreen(DmitriScreen):
         "ports": "port scanning",
         "port_scan": "port scanning",
         "deep_inspection": "deep inspection",
+        "ot_inspection": "Modbus inventory",
         "normalize": "results generation",
     }
 
@@ -328,6 +329,31 @@ class ScanProgressScreen(DmitriScreen):
             else:
                 line = f"[green]✓[/green] {total} hosts scanned"
             self._finish_stage("scripts", line)
+            return
+        if kind == "ot_stage_started":
+            if event.hosts_total == 0:
+                log.write("[dim]No Modbus candidates found[/dim]")
+            else:
+                self._start_stage("ot", "Inventorying Modbus devices...")
+            return
+        if kind == "modbus_host_inspected":
+            log.write(
+                f"[dim]  -> Inventoried {event.ip} "
+                f"({event.hosts_done}/{event.hosts_total})[/dim]"
+            )
+            return
+        if kind == "ot_stage_done":
+            if "ot" not in self._stage_lines:
+                return
+            inspected = event.units_total - event.units_skipped
+            if event.units_skipped:
+                line = (
+                    f"[yellow]![/yellow] {inspected} Modbus hosts inventoried "
+                    f"({event.units_skipped} skipped)"
+                )
+            else:
+                line = f"[green]OK[/green] {inspected} Modbus hosts inventoried"
+            self._finish_stage("ot", line)
             return
         if kind == "normalize_started":
             if "scripts" in self._stage_lines:

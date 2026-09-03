@@ -27,6 +27,86 @@ class PortPayload(BaseModel):
     cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
+class ModbusDeviceIdentificationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vendor_name: str | None = None
+    product_code: str | None = None
+    major_minor_revision: str | None = None
+    vendor_url: str | None = None
+    product_name: str | None = None
+    model_name: str | None = None
+    user_application_name: str | None = None
+    objects: dict[str, str] = Field(default_factory=dict)
+
+
+class ModbusAddressRangePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address_space: Literal[
+        "coil", "discrete_input", "holding_register", "input_register"
+    ]
+    start_address: Annotated[int, Field(ge=0, le=65535)]
+    count: Annotated[int, Field(ge=1, le=65536)]
+    status: Literal[
+        "readable",
+        "illegal_address",
+        "illegal_function",
+        "timeout",
+        "error",
+        "skipped",
+    ]
+    exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
+    label: str | None = None
+    nonzero_count: Annotated[int | None, Field(default=None, ge=0)]
+    value_min: int | None = None
+    value_max: int | None = None
+    values: list[int | bool] | None = None
+    value_sha256: str | None = None
+    observed_at: datetime
+
+
+class ModbusValidationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address_space: Literal["coil", "holding_register"]
+    address: Annotated[int, Field(ge=0, le=65535)]
+    label: constr(min_length=1)
+    function_code: Literal[5, 6]
+    original_value: int | bool | None = None
+    expected_current_value: int | bool
+    test_value: int | bool
+    write_status: Literal["accepted", "rejected", "timeout", "error", "skipped"]
+    read_back_value: int | bool | None = None
+    restoration_status: Literal["not_required", "verified", "unverified", "failed"]
+    final_value: int | bool | None = None
+    change_ticket: constr(min_length=1)
+    started_at: datetime
+    completed_at: datetime
+
+
+class ModbusUnitPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit_id: Annotated[int, Field(ge=0, le=255)]
+    status: Literal["responding", "exception", "timeout", "error", "skipped"]
+    exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
+    error: str | None = None
+    device_identification: ModbusDeviceIdentificationPayload | None = None
+    address_ranges: list[ModbusAddressRangePayload] = Field(default_factory=list)
+    validations: list[ModbusValidationPayload] = Field(default_factory=list)
+
+
+class ModbusTcpServicePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol: Literal["modbus_tcp"] = "modbus_tcp"
+    port: Annotated[int, Field(ge=1, le=65535)]
+    confidence: Literal["suspected", "confirmed"]
+    evidence_sources: list[constr(min_length=1)] = Field(default_factory=list)
+    units: list[ModbusUnitPayload] = Field(default_factory=list)
+
+
 class HostPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -35,6 +115,7 @@ class HostPayload(BaseModel):
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
     ports: list[PortPayload]
+    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
 
 
 class FindingPayload(BaseModel):

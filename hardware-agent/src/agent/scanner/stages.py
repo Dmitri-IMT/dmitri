@@ -15,7 +15,16 @@ from agent.discovery.port_discovery import (
     scan_ports_batch,
 )
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
-from agent.normalize.contracts import HostPayload, PortPayload
+from agent.normalize.contracts import (
+    HostPayload,
+    ModbusAddressRangePayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusTcpServicePayload,
+    ModbusUnitPayload,
+    ModbusValidationPayload,
+    PortPayload,
+)
+from agent.ot.modbus.inventory import has_modbus_candidate, inventory_modbus_host
 from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
@@ -27,6 +36,7 @@ from agent.scanner.progress import ScanEvent
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
+    from agent.ot.modbus.client import ModbusClientController
     from agent.scanner.models import HostInfo
     from agent.scanner.nmap import NmapRunner
     from agent.scanner.progress import ScanReporter
@@ -267,6 +277,62 @@ def run_deep_inspection_stage(
     )
 
 
+def run_ot_inspection_stage(
+    settings: AgentSettings,
+    hosts: list[HostInfo],
+    reporter: ScanReporter | None = None,
+    cancel_event: threading.Event | None = None,
+    modbus_controller: ModbusClientController | None = None,
+) -> None:
+    """Run serial, bounded OT enrichment after the existing NSE stage."""
+
+    if settings.scan_mode != "nspi":
+        return
+    eligible_hosts = [host for host in hosts if has_modbus_candidate(host)]
+    hosts_total = len(eligible_hosts)
+    _emit(
+        reporter,
+        ScanEvent(
+            kind="ot_stage_started",
+            message=(
+                "Inventorying Modbus devices..."
+                if hosts_total
+                else "No Modbus candidates found"
+            ),
+            hosts_total=hosts_total,
+        ),
+    )
+    hosts_done = 0
+    for host in eligible_hosts:
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        host.industrial_services = inventory_modbus_host(
+            host,
+            cancel_event=cancel_event,
+            controller=modbus_controller,
+        )
+        hosts_done += 1
+        _emit(
+            reporter,
+            ScanEvent(
+                kind="modbus_host_inspected",
+                message=f"Inventoried Modbus on {host.ip}",
+                hosts_done=hosts_done,
+                hosts_total=hosts_total,
+                ip=host.ip,
+            ),
+        )
+    _emit(
+        reporter,
+        ScanEvent(
+            kind="ot_stage_done",
+            message="Modbus inventory complete",
+            units_total=hosts_total,
+            units_skipped=hosts_total - hosts_done,
+        ),
+    )
+
+
 def build_host_payload(host: HostInfo) -> HostPayload:
     return HostPayload(
         ip=host.ip,
@@ -290,6 +356,77 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                 key=lambda item: (item.port, item.protocol),
             )
         ],
+        industrial_services=[
+            ModbusTcpServicePayload(
+                port=service.port,
+                confidence=service.confidence,
+                evidence_sources=service.evidence_sources,
+                units=[
+                    ModbusUnitPayload(
+                        unit_id=unit.unit_id,
+                        status=unit.status,
+                        exception_code=unit.exception_code,
+                        error=unit.error,
+                        device_identification=(
+                            ModbusDeviceIdentificationPayload(
+                                vendor_name=unit.device_identification.vendor_name,
+                                product_code=unit.device_identification.product_code,
+                                major_minor_revision=(
+                                    unit.device_identification.major_minor_revision
+                                ),
+                                vendor_url=unit.device_identification.vendor_url,
+                                product_name=unit.device_identification.product_name,
+                                model_name=unit.device_identification.model_name,
+                                user_application_name=(
+                                    unit.device_identification.user_application_name
+                                ),
+                                objects=unit.device_identification.objects,
+                            )
+                            if unit.device_identification is not None
+                            else None
+                        ),
+                        address_ranges=[
+                            ModbusAddressRangePayload(
+                                address_space=item.address_space,
+                                start_address=item.start_address,
+                                count=item.count,
+                                status=item.status,
+                                exception_code=item.exception_code,
+                                label=item.label,
+                                nonzero_count=item.nonzero_count,
+                                value_min=item.value_min,
+                                value_max=item.value_max,
+                                values=item.values,
+                                value_sha256=item.value_sha256,
+                                observed_at=item.observed_at,
+                            )
+                            for item in unit.address_ranges
+                        ],
+                        validations=[
+                            ModbusValidationPayload(
+                                address_space=item.address_space,
+                                address=item.address,
+                                label=item.label,
+                                function_code=item.function_code,
+                                original_value=item.original_value,
+                                expected_current_value=item.expected_current_value,
+                                test_value=item.test_value,
+                                write_status=item.write_status,
+                                read_back_value=item.read_back_value,
+                                restoration_status=item.restoration_status,
+                                final_value=item.final_value,
+                                change_ticket=item.change_ticket,
+                                started_at=item.started_at,
+                                completed_at=item.completed_at,
+                            )
+                            for item in unit.validations
+                        ],
+                    )
+                    for unit in service.units
+                ],
+            )
+            for service in host.industrial_services
+        ],
     )
 
 
@@ -309,6 +446,7 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
         "scripts="
         f"{','.join(deep_scripts)}; "
         f"min_cvss={settings.min_cvss}; "
+        f"ot_inspection={'inventory' if settings.scan_mode == 'nspi' else 'disabled'}; "
         f"workers={settings.max_workers}; "
         f"host_batch_size={settings.host_batch_size}"
     )
@@ -322,6 +460,7 @@ def build_metadata(
     elapsed_seconds: float,
     hosts_discovered: int,
     findings_count: int,
+    hosts: list[HostInfo] | None = None,
     partial_result: bool = False,
     interrupted_stage: str | None = None,
     terminated_by: str | None = None,
@@ -349,4 +488,30 @@ def build_metadata(
         metadata["interrupted_stage"] = interrupted_stage
     if terminated_by is not None:
         metadata["terminated_by"] = terminated_by
+    if settings.scan_mode == "nspi":
+        modbus_services = [
+            service
+            for host in hosts or []
+            for service in host.industrial_services
+        ]
+        metadata.update(
+            {
+                "nspi_policy_version": 1,
+                "nspi_submode": "inventory",
+                "modbus_candidates": len(modbus_services),
+                "modbus_confirmed": sum(
+                    service.confidence == "confirmed" for service in modbus_services
+                ),
+                "modbus_units": sum(
+                    len(service.units) for service in modbus_services
+                ),
+                "modbus_requests_sent": sum(
+                    service.requests_sent for service in modbus_services
+                ),
+                "modbus_timeouts": sum(
+                    service.timeouts for service in modbus_services
+                ),
+                "modbus_write_requests_sent": 0,
+            }
+        )
     return metadata

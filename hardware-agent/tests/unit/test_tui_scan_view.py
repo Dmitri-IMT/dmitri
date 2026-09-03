@@ -9,6 +9,9 @@ from uuid import uuid4
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusTcpServicePayload,
+    ModbusUnitPayload,
     PortPayload,
     ScanPayload,
 )
@@ -107,6 +110,40 @@ def test_render_contains_summary():
     assert "Total devices:" in rendered
     assert "Total open ports:" in rendered
     assert "Vulnerabilities found:" in rendered
+
+
+def test_render_contains_plain_language_modbus_inventory():
+    payload = _make_payload()
+    payload.scan_mode = "nspi"
+    payload.hosts[0].industrial_services = [
+        ModbusTcpServicePayload(
+            port=502,
+            confidence="confirmed",
+            evidence_sources=["modbus-discover", "pymodbus"],
+            units=[
+                ModbusUnitPayload(
+                    unit_id=7,
+                    status="responding",
+                    device_identification=ModbusDeviceIdentificationPayload(
+                        vendor_name="Schneider Electric",
+                        product_code="BMX P34",
+                        major_minor_revision="2.60",
+                    ),
+                )
+            ],
+        )
+    ]
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "Industrial inventory:" in rendered
+    assert "Modbus TCP 502 - CONFIRMED" in rendered
+    assert "Unit ID 7: responding" in rendered
+    assert "vendor Schneider Electric" in rendered
+    assert "product BMX P34" in rendered
+    assert "firmware 2.60" in rendered
+    assert "Modbus services:        1" in rendered
+    assert "Modbus Unit IDs:        1" in rendered
 
 
 def test_render_no_raw_json():

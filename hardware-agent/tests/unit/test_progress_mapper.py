@@ -19,7 +19,14 @@ class TestStageWeightsTable:
     @pytest.mark.parametrize("mode", ALL_MODES)
     def test_row_sums_to_100(self, mode: str) -> None:
         w = _weights(mode)
-        assert w.discovery + w.port_scan + w.deep_inspection + w.normalize == 100
+        assert (
+            w.discovery
+            + w.port_scan
+            + w.deep_inspection
+            + w.ot_inspection
+            + w.normalize
+            == 100
+        )
 
     def test_table_has_exactly_five_modes(self) -> None:
         assert set(STAGE_WEIGHTS) == set(ALL_MODES)
@@ -52,7 +59,9 @@ class TestBandBoundaries:
     ) -> None:
         w = _weights(mode)
         mapper = ProgressMapper(mode)
-        expected = float(w.discovery + w.port_scan + w.deep_inspection)
+        expected = float(
+            w.discovery + w.port_scan + w.deep_inspection + w.ot_inspection
+        )
         assert mapper.update(ScanEvent(kind="normalize_started")) == expected
 
     @pytest.mark.parametrize("mode", ALL_MODES)

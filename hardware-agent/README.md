@@ -17,6 +17,9 @@ Python-based service intended to run on a Raspberry Pi with Raspberry Pi OS Lite
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
 - The TUI entrypoint writes a JSON payload compatible with the shared contracts.
+- `nspi` adds a serial Modbus inventory stage after the existing 14 NSE scripts.
+  It reuses `modbus-discover` evidence and performs at most a bounded FC43/MEI 14
+  identification fallback; it does not read process addresses or send writes.
 
 ## Running the Agent
 
@@ -39,7 +42,12 @@ Headless scans (no TUI):
 
 ```bash
 uv run dmitri agent quick 192.168.1.0/24
+uv run dmitri agent nspi 192.168.1.0/24
 ```
+
+The headless command prints the exact result-file path to stdout. Modbus data is
+stored under each host's `industrial_services` property. See the
+[inventory laboratory checklist](../docs/tests/nspi-modbus-inventory.md).
 
 ## Integration Points
 - Scan mode and subnet are chosen in the TUI or passed to `dmitri agent <mode> <subnet>`.
