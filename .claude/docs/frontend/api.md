@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-08-29T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # frontend API layer
@@ -46,8 +46,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:19` |
-| `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list discovers the MVP's single `agent_id`; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with `QUICK_SCAN_MODE` (`'quick' satisfies ScanMode`). | `frontend/src/api/agents.ts:14` |
-| `QUICK_SCAN_MODE` | The only scan mode the product sends — `satisfies ScanMode`, not an enum (`erasableSyntaxOnly`). | `frontend/src/api/agents.ts:12` |
+| `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list for the devices table and Home's first-agent read; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with caller-chosen `scan_mode` and the agent's `target_subnet`. | `frontend/src/api/agents.ts:10` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
 | `queryKeys` | Prefix-shaped TanStack keys: `scans`, `hosts`, `findings`, `agents`, and `commands`. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |
@@ -68,7 +67,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
   token + query cache and navigates to `/login`.
 - The three Home reads are consumed by [review](./review.md)'s `useHomeReview()`; scan/host list
   and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` / `listFindings`
-  directly. [agents-screen](./agents-screen.md) calls `agents.ts` and `commands.ts`. The six org
+  directly. [devices-screen](./devices-screen.md) calls `agents.ts` and `commands.ts`. The six org
   calls in `users.ts`/`invites.ts` are consumed by [directory](./directory.md)'s
   `useOrgDirectory()` and by the Users screen's four dialogs.
 - Consumes the generated types from `src/types/openapi.d.ts` (see [overview](./overview.md)).

@@ -15,7 +15,7 @@ type RoleChangeDialogProps = {
 
 const BODY = {
   admin: "They'll be able to run scans and invite people.",
-  viewer: "They'll only be able to see scans, hosts and findings.",
+  viewer: "They'll only be able to see scans, hosts and vulnerabilities.",
 } as const
 
 function RoleChangeDialog({
@@ -49,7 +49,7 @@ function RoleChangeDialog({
       locked={isSubmitting}
       initialFocusRef={confirmRef}
     >
-      <Dialog.Title className="font-title text-title-sm">
+      <Dialog.Title className="text-title-sm">
         Make {email} {ROLE_NOUN[nextRole]}?
       </Dialog.Title>
       <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
@@ -58,7 +58,7 @@ function RoleChangeDialog({
       <p
         role="alert"
         data-testid="role-error"
-        className="text-body-sm text-destructive"
+        className="text-body-sm text-ink"
       >
         {error}
       </p>

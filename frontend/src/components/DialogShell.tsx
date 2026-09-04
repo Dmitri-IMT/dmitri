@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
-import { Dialog } from 'radix-ui'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
-const WIDTH = { sm: 'max-w-sm', md: 'max-w-md' } as const
+// `sm:` because the primitive's own cap is `sm:max-w-md`; an unprefixed width would lose
+// to it above 640px and every dialog would render at the same size.
+const WIDTH = { sm: 'sm:max-w-sm', md: 'sm:max-w-md' } as const
 
 type DialogShellProps = {
   open: boolean
@@ -38,7 +40,7 @@ function DialogShell({
   }, [open])
 
   return (
-    <Dialog.Root
+    <Dialog
       open={open}
       onOpenChange={(next) => {
         if (!locked) {
@@ -46,31 +48,29 @@ function DialogShell({
         }
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-foreground/20" />
-        <Dialog.Content
-          data-testid={testId}
-          onOpenAutoFocus={
-            initialFocusRef
-              ? (event) => {
-                  event.preventDefault()
-                  initialFocusRef.current?.focus()
-                }
-              : undefined
+      <DialogContent
+        data-testid={testId}
+        showCloseButton={false}
+        onOpenAutoFocus={
+          initialFocusRef
+            ? (event) => {
+                event.preventDefault()
+                initialFocusRef.current?.focus()
+              }
+            : undefined
+        }
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          const opener = openerRef.current
+          if (opener instanceof HTMLElement && opener.isConnected) {
+            opener.focus()
           }
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            const opener = openerRef.current
-            if (opener instanceof HTMLElement && opener.isConnected) {
-              opener.focus()
-            }
-          }}
-          className={`fixed top-1/2 left-1/2 flex w-full ${WIDTH[size]} -translate-x-1/2 -translate-y-1/2 flex-col gap-4 border border-input bg-card p-6`}
-        >
-          {children}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        }}
+        className={WIDTH[size]}
+      >
+        {children}
+      </DialogContent>
+    </Dialog>
   )
 }
 

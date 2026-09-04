@@ -9,7 +9,7 @@ type ErrorRetryProps = {
 function ErrorRetry({ message, testId, onRetry }: ErrorRetryProps) {
   return (
     <div className="flex flex-col items-center gap-6 py-16 text-center">
-      <p data-testid={testId} className="font-title text-title-sm">
+      <p data-testid={testId} className="text-title-sm">
         {message}
       </p>
       <Button

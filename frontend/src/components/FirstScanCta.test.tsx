@@ -19,11 +19,11 @@ function renderFor(profile: typeof adminProfile | typeof viewerProfile) {
 }
 
 describe('first-scan affordances', () => {
-  it('shows only the Agents link to an admin', async () => {
+  it('shows only the Devices link to an admin', async () => {
     renderFor(adminProfile)
 
     const link = await screen.findByRole('link', { name: 'Run first scan' })
-    expect(link).toHaveAttribute('href', '/agents')
+    expect(link).toHaveAttribute('href', '/devices')
     expect(screen.getByTestId('first-scan-cta')).toBe(link)
     expect(screen.queryByTestId('first-scan-note')).not.toBeInTheDocument()
   })

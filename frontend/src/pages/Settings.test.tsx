@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { adminProfile, viewerProfile } from '@/test/mswHandlers'
 import {
   ACTIVITY_NOTE,
+  captureDeleteRequests,
+  openLeave,
   openPassword,
   renderSettings,
   signedInAs,
@@ -33,6 +35,22 @@ describe('Settings', () => {
       expect(document.activeElement).toBe(document.body)
     },
   )
+
+  it('requires typing your own email before the delete-account action proceeds', async () => {
+    const deletes = captureDeleteRequests()
+    renderSettings()
+
+    const user = await openLeave()
+    const input = screen.getByTestId('confirm-by-typing-input')
+    expect(screen.getByTestId('confirm-by-typing-submit')).toBeDisabled()
+
+    await user.type(input, 'wrong@dmitri.dev')
+    expect(screen.getByTestId('confirm-by-typing-submit')).toBeDisabled()
+    await user.click(screen.getByTestId('confirm-by-typing-submit'))
+
+    expect(deletes).toEqual([])
+    expect(screen.getByTestId('confirm-by-typing-dialog')).toBeInTheDocument()
+  })
 
   it('orders the four sections as details, password, activity, then leave', async () => {
     renderSettings()

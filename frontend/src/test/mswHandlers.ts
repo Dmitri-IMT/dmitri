@@ -18,6 +18,7 @@ type PendingInvite = components['schemas']['PendingInvite']
 type UpdateUserRoleRequest = components['schemas']['UpdateUserRoleRequest']
 type InviteCreatedResponse = components['schemas']['InviteCreatedResponse']
 type AgentDetail = components['schemas']['AgentDetail']
+type AgentSummary = components['schemas']['AgentSummary']
 type CommandDetail = components['schemas']['CommandDetail']
 
 const baseURL = 'http://localhost:8000/api/v1'
@@ -25,6 +26,9 @@ const baseURL = 'http://localhost:8000/api/v1'
 const NOW_MS = Date.now()
 function minutesAgo(minutes: number): string {
   return new Date(NOW_MS - minutes * 60 * 1000).toISOString()
+}
+function weeksAgo(weeks: number): string {
+  return new Date(NOW_MS - weeks * 7 * 24 * 60 * 60 * 1000).toISOString()
 }
 
 export const validLoginResponse = {
@@ -58,6 +62,67 @@ export const defaultAgent: AgentDetail = {
   active_command_id: null,
 }
 export const agentFixture = defaultAgent
+
+const secondAgentDetail: AgentDetail = {
+  agent_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  display_name: 'Reception spare',
+  online: true,
+  last_seen_at: minutesAgo(10),
+  available_subnets: [
+    { interface: 'eth0', cidr: '192.168.0.0/24', is_default_route: true },
+  ],
+  target_subnet: null,
+  active_command_id: null,
+}
+
+const thirdAgentDetail: AgentDetail = {
+  agent_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  display_name: 'Old office',
+  online: false,
+  last_seen_at: weeksAgo(4),
+  available_subnets: [
+    { interface: 'eth0', cidr: '172.16.0.0/24', is_default_route: true },
+  ],
+  target_subnet: '172.16.0.0/24',
+  active_command_id: null,
+}
+
+export const agentSummaries: AgentSummary[] = [
+  {
+    agent_id: defaultAgent.agent_id,
+    display_name: defaultAgent.display_name,
+    online: defaultAgent.online,
+    last_seen_at: defaultAgent.last_seen_at,
+    target_subnet: defaultAgent.target_subnet,
+    active_command_id: defaultAgent.active_command_id,
+  },
+  {
+    agent_id: secondAgentDetail.agent_id,
+    display_name: secondAgentDetail.display_name,
+    online: secondAgentDetail.online,
+    last_seen_at: secondAgentDetail.last_seen_at,
+    target_subnet: secondAgentDetail.target_subnet,
+    active_command_id: secondAgentDetail.active_command_id,
+  },
+  {
+    agent_id: thirdAgentDetail.agent_id,
+    display_name: thirdAgentDetail.display_name,
+    online: thirdAgentDetail.online,
+    last_seen_at: thirdAgentDetail.last_seen_at,
+    target_subnet: thirdAgentDetail.target_subnet,
+    active_command_id: thirdAgentDetail.active_command_id,
+  },
+]
+
+export const agentDetails: Record<string, AgentDetail> = {
+  [defaultAgent.agent_id]: defaultAgent,
+  [secondAgentDetail.agent_id]: secondAgentDetail,
+  [thirdAgentDetail.agent_id]: thirdAgentDetail,
+}
+
+function agentById(agentId: string): AgentDetail | undefined {
+  return agentDetails[agentId]
+}
 
 export const defaultCommand: CommandDetail = {
   command_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -388,14 +453,20 @@ export const handlers = [
   }),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
   http.get(`${baseURL}/agents`, () =>
-    HttpResponse.json({ data: [defaultAgent] }),
+    HttpResponse.json({ data: agentSummaries }),
   ),
-  http.get(`${baseURL}/agents/:agentId`, () => HttpResponse.json(defaultAgent)),
-  http.patch(`${baseURL}/agents/:agentId`, async ({ request }) => {
+  http.get(`${baseURL}/agents/:agentId`, ({ params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json(agent)
+  }),
+  http.patch(`${baseURL}/agents/:agentId`, async ({ request, params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
     const body =
       (await request.json()) as components['schemas']['UpdateAgentTargetSubnetRequest']
     return HttpResponse.json({
-      ...defaultAgent,
+      ...agent,
       target_subnet: body.target_subnet,
     })
   }),

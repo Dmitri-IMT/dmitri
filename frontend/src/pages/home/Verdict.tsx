@@ -19,21 +19,20 @@ function Verdict({ reviewCount, latestSuccessfulScan }: VerdictProps) {
         isClear ? 'items-center text-center' : 'items-start text-left',
       )}
     >
-      <p data-testid="home-verdict" className="font-title text-title-lg">
+      <p data-testid="home-verdict" className="text-title-lg">
         {isClear
-          ? 'Nothing needs your attention.'
+          ? 'Nothing needs your attention'
           : reviewCount === 1
-            ? '1 thing needs your review.'
-            : `${reviewCount} things need your review.`}
+            ? '1 thing needs your attention'
+            : `${reviewCount} things need your attention`}
       </p>
-      {isClear && latestSuccessfulScan && (
+      {latestSuccessfulScan && (
         <p
           data-testid="home-context"
           className="text-body-md text-muted-foreground"
         >
           Last scan finished{' '}
-          <Timestamp value={latestSuccessfulScan.timestamp} /> —{' '}
-          {latestSuccessfulScan.host_count} hosts, no critical findings.
+          <Timestamp value={latestSuccessfulScan.timestamp} />
         </p>
       )}
     </div>

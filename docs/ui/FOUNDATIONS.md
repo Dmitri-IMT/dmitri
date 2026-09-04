@@ -57,21 +57,25 @@ not scale tokens even when the pixels match.
 | `--canvas` | `#FCFCFC` | page surface | — |
 | `--card` | `#FFFFFF` | cards, dialogs, table headers, popovers | 1.01 vs canvas — the border separates, not the tint |
 | `--ink` | `#0F172A` | primary text | 17.85 on white |
-| `--ink-muted` | `#475569` | secondary text, timestamps, helper copy, silent-device rows | 7.58 on white |
+| `--ink-muted` | `#475569` | secondary text, timestamps, helper copy, silent-machine rows | 7.58 on white |
 | `--rule` | `#E2E8F0` | decorative separators, table row lines | non-text |
 | `--edge` | `#64748B` | control boundaries: input, select, button outlines | 4.76 on white (3:1 floor) |
 | `--accent` | `#4F46E5` | primary button, active nav item, focus ring | 6.29 on white |
-| `--accent-hover` / `--accent-active` | one step darker each | hover / pressed accent | — |
+| `--accent-hover` | `#4338CA` | hover on accent controls (indigo-700) | — |
+| `--accent-active` | `#3730A3` | pressed accent (indigo-800) | — |
 | `--accent-foreground` | `#FFFFFF` | text on the accent | — |
 
 - `#64748B` is the **hard floor for any text**. Nothing lighter.
 - Keep the `--rule` / `--edge` split: an input outline owes 3:1 (WCAG 1.4.11); a row line owes
   nothing.
+- The `outline` button variant uses `border-border` (`--rule`, `#E2E8F0`, ~1.2:1 against white)
+  where §Color assigns `--edge` (`#64748B`) to control boundaries. That is a pre-existing mismatch
+  that spreads once the outlined button becomes the card-footer control.
 - **One accent, never severity.** Indigo never carries severity, and severity never borrows it.
 - **Severity has no hue.** `Critical` / `High` / `Medium` / `Low` are set as a **bold `--ink`
   word** — in a table cell and as a section heading alike. No chip, pill, tag, dot, badge,
-  coloured text, coloured side bar or coloured card edge, anywhere. The API taxonomy
-  (critical / high / medium / low / informational) is unchanged.
+  coloured text, coloured side bar or coloured card edge, anywhere. The API `Severity` union has
+  four members — `critical`, `high`, `medium`, `low`.
 
 ## Spacing
 
@@ -164,6 +168,10 @@ a native control.
 - `prefers-reduced-motion: reduce` is **mandatory** — a global block dropping non-essential
   animation to `0.01ms` (WCAG 2.3.3).
 - A duration written inline in a component is a bug, like a raw hex.
+- **Duration tokens are not in `@theme`.** `--duration-fast`, `--duration-base` and
+  `--duration-slow` live in `:root` (`index.css:36-38`) but are not registered in the
+  `@theme inline` block, so Tailwind does not emit `duration-base` and this motion spec is
+  unreachable from utility classes without an arbitrary value. The ease tokens *are* in `@theme`.
 
 ## Icons
 
@@ -190,7 +198,8 @@ the same vertical; the bar's bottom hairline is full-bleed.
 | Nav type | `text-body-md`. |
 | Nav active | **Bold, no underline.** Hover is **also bold** — the weight change is the whole affordance. No rule, no pill, no bottom border. |
 | Wordmark | The word **"Dmitri"** only. No icon, no mark, no lockup. |
-| User identity | **The user's name.** No avatar — the product has no profile pictures. |
+| User identity | **The user's email.** Truncated with an ellipsis when it would crowd the bar; full value
+  in `title`. No avatar — the product has no profile pictures. |
 | Back link | A Lucide **`arrow-left` + the word "Back"**, one text link **above the page title**. The gap to the title is a step from the spacing scale. |
 
 The nav names domains, not actions, and items do not get renamed between releases.
@@ -207,7 +216,7 @@ The nav names domains, not actions, and items do not get renamed between release
 | Highest-severity column | Kept on list tables: a row summarising several vulnerabilities shows its worst one as a word. |
 | IDs | Truncate to the first 8 characters; the full value is in the `title`. Never wrap a UUID. |
 | Inline select in a cell | shadcn `Select` with a **ghost, borderless trigger** — the text plus a small chevron close to the text, **aligned with the column header**. |
-| Silent devices | A device unseen for weeks is **not removed and not flagged as an error**. Its row is set in `--ink-muted` with a second line reading **"Not seen for N weeks"**; no chip, no icon, no colour. Those rows also **collapse into one group row at the bottom of the table**, labelled **"Not seen recently (N)"**, which expands. The group row is always last, after the severity/name sort. This is a `DataTable` pattern. |
+| Silent machines | A machine unseen for weeks is **not removed and not flagged as an error**. Its row is set in `--ink-muted` with a second line reading **"Not seen for N weeks"**; no chip, no icon, no colour. Those rows also **collapse into one group row at the bottom of the table**, labelled **"Not seen recently (N)"**, which expands. The group row is always last, after the severity/name sort. This is a `DataTable` pattern. |
 | Loading | `LoadingSkeleton` for the table body on first load only, never on background refetch. |
 | Empty | A table never renders bare with no rows. |
 
@@ -248,7 +257,8 @@ hand-rolled.
 | No product restatement | The reader is already inside the product. "Dmitri scans your network…" does not appear anywhere. |
 | Labels over paragraphs | Say it in a label, a group heading or an icon before saying it in prose. |
 | Explanatory copy under a control | **Deleted, not reworded.** |
-| One word per concept | One owner-facing word for *device*, *vulnerability*, *scan*, *risk*, used everywhere. |
+| One word per concept | One owner-facing word per concept — *device* and *machine* are not interchangeable
+  (see Vocabulary). |
 | Buttons | Verb + noun (`Start scan`, `Remove device`). Never `Confirm`, `OK`, or a bare verb. |
 | Good news reads as good news | Zero vulnerabilities is a reassuring sentence, not a blank panel. |
 | Real content only | Real hostnames, real CVE ids, real IPs. No lorem ipsum, no `foo`. |
@@ -260,17 +270,22 @@ hand-rolled.
 | --- | --- |
 | *Finding* | **Retired.** The owner-facing word is **Vulnerability** — both the table column and the general word. The API taxonomy is untouched. |
 | Roles | **Admin** and **Viewer**. Unchanged. |
-| Nav names | **Network** (was Hosts) · **Devices** (was Agents). A *device* is the Dmitri box running inside a network. |
-| *Open ports* | Retired. The heading is a plain sentence-case phrase about the **services running on this device**. **🔓 Exact wording open** (§4.11 of the research note). |
+| Nav names | **Network** (was Hosts) · **Devices** (was Agents). |
+| *Device* | The Dmitri box that scans a network. Listed on **Devices**; configured on the box detail
+  screen. |
+| *Machine* | A host on the customer's network — what **Network** lists. Never called a *device* in
+  owner-facing copy. |
+| *Open ports* | Retired. The heading is a plain sentence-case phrase about the **services running on
+  this machine**. **🔓 Exact wording open** (§4.11 of the research note). |
 | *Seen in these scans* | **Rejected.** The scan-history heading on the detail screens needs a replacement. **🔓 Wording open** — the same open item. |
 | Home's attention-board empty state | **Nothing is rendered at all** — no text, no empty card. The canvas shows through and the page title carries the message. |
 
 ## Scan settings pattern
 
 A **shadcn `Tabs` segmented control**, one tab per scan type, with a **one-line plain
-description beneath the tab strip** and a **secondary "Use this scan type" button**. It sits
-below the scans table on the Scans page. Radio cards and a selectable list with a description
-column are rejected.
+description beneath the tab strip** and a **secondary "Use this scan type" button**. It sits on
+the **box detail screen** (`/devices/:agentId`) — scan type is per box, not on the Scans run log.
+Radio cards and a selectable list with a description column are rejected.
 
 | Tab | Description (ships verbatim) |
 | --- | --- |

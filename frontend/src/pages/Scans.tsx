@@ -30,8 +30,8 @@ function Scans() {
         caption="Scan run log"
         errorMessage="Couldn't load the scans."
         empty={{
-          heading: 'No scans yet.',
-          body: 'Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here.',
+          heading: 'No scans yet',
+          body: 'Your first scan finds the machines on your network and what needs fixing.',
           action: <FirstScanCta />,
           note: <FirstScanNote />,
         }}
@@ -40,9 +40,12 @@ function Scans() {
           to: (scan) => `/scans/${scan.scan_id}`,
           label: (scan) => `Open scan ${scan.scan_id}`,
         }}
-        page={page}
-        perPage={SCANS_PER_PAGE}
-        onPageChange={setPage}
+        pagination={{
+          page,
+          perPage: SCANS_PER_PAGE,
+          total: query.data?.total ?? 0,
+          onPageChange: setPage,
+        }}
       />
     </div>
   )

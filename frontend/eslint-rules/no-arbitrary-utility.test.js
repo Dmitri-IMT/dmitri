@@ -18,7 +18,7 @@ function arbitraryValueMessage(token) {
   return (
     `\`${token}\` is an arbitrary value. Use a named token: widths are \`max-w-frame\` or ` +
     '`max-w-form`, spacing is a scale step (`1 2 3 4 6 8 12 16 24`), type is a ' +
-    '`text-title-*` / `text-body-*` / `text-caption-*` / `text-nav` token. Add the token to ' +
+    '`text-title-*` / `text-body-*` / `text-caption-*` token. Add the token to ' +
     '`frontend/src/index.css` if it does not exist yet.'
   )
 }
@@ -49,6 +49,10 @@ ruleTester.run('no-arbitrary-utility', rule, {
     {
       code: 'const view = <div className={`grid-cols-[1fr_auto] ${layout}`} />',
       errors: [{ message: arbitraryValueMessage('grid-cols-[1fr_auto]') }],
+    },
+    {
+      code: '<div className="md:max-w-[45rem]" />',
+      errors: [{ message: arbitraryValueMessage('max-w-[45rem]') }],
     },
     {
       code: "cva('base', { variants: { width: { wide: 'max-w-[45rem]' } } })",

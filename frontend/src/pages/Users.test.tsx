@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
@@ -119,7 +119,7 @@ describe('Users directory table', () => {
       'Status',
       'Last seen',
     ])
-    expect(within(headers[4]).getByText('Actions')).toHaveClass('sr-only')
+    expect(headers[4]).toHaveTextContent('Actions')
   })
 
   it('shows headings over skeleton cells while loading, with no invite action', async () => {
@@ -189,6 +189,42 @@ describe('Users directory table', () => {
 
     expect(await screen.findByTestId('users-table')).toBeInTheDocument()
     expect(screen.getByTestId('user-row-self')).toBeInTheDocument()
+  })
+
+  it('changes a member role through the inline select and confirmation', async () => {
+    let members = [selfMember, recentMember]
+    server.use(
+      http.get(`${baseURL}/users`, () => HttpResponse.json({ data: members })),
+      http.get(`${baseURL}/invites`, () => HttpResponse.json({ data: [] })),
+      http.patch(`${baseURL}/users/:userId`, async ({ request }) => {
+        const body = (await request.json()) as {
+          role: typeof recentMember.role
+        }
+        members = members.map((member) =>
+          member.user_id === recentMember.user_id
+            ? { ...member, role: body.role }
+            : member,
+        )
+        return HttpResponse.json({ ...recentMember, role: body.role })
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<Users />)
+
+    await user.click(
+      await screen.findByTestId(`row-role-${recentMember.user_id}`),
+    )
+    await user.click(await screen.findByRole('option', { name: 'Admin' }))
+    await user.click(await screen.findByTestId('role-confirm'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(`row-role-${recentMember.user_id}`),
+      ).toHaveTextContent('Admin'),
+    )
+    expect(await screen.findByTestId('toast')).toHaveTextContent(
+      `${recentMember.email} is now an admin.`,
+    )
   })
 
   it('routes an admin to the screen and a viewer to the not-found page', async () => {

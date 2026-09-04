@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { server } from '@/test/setup'
 import { SessionProvider } from '@/auth/SessionProvider'
 import App from './App'
+import indexHtml from '../index.html?raw'
 
 const baseURL = 'http://localhost:8000/api/v1'
 
@@ -144,6 +145,32 @@ describe('App', () => {
     expect(screen.getByTestId('top-bar')).toBeInTheDocument()
     expect(screen.queryByTestId('login-form')).not.toBeInTheDocument()
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/settings')
+  })
+
+  it.each([
+    ['/network', 'network-page'],
+    ['/devices', 'devices-page'],
+    [`/devices/${'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}`, 'device-detail'],
+  ])('resolves %s inside the app shell', async (route, testId) => {
+    renderApp(route)
+
+    await screen.findByTestId(testId)
+    expect(screen.getByTestId('top-bar')).toBeInTheDocument()
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(route)
+  })
+
+  it.each(['/hosts', '/agents'])(
+    'renders not-found for the retired route %s, with no redirect',
+    async (route) => {
+      renderApp(route)
+
+      await screen.findByTestId('not-found')
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(route)
+    },
+  )
+
+  it('names the product in the browser title', () => {
+    expect(indexHtml).toContain('<title>Dmitri</title>')
   })
 
   it('signed out, an unknown path lands on /login (AC 19)', async () => {

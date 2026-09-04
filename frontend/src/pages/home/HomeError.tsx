@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button'
 function HomeError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center gap-4 text-center">
-      <p data-testid="home-error" className="font-title text-title-md">
-        Couldn&apos;t load your network&apos;s status.
+      <p data-testid="home-error" className="text-title-md">
+        Couldn&apos;t load what needs your attention.
       </p>
       <Button
         type="button"
@@ -12,7 +12,7 @@ function HomeError({ onRetry }: { onRetry: () => void }) {
         data-testid="home-retry"
         onClick={onRetry}
       >
-        Retry
+        Try again
       </Button>
     </div>
   )

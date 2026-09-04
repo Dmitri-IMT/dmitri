@@ -1,24 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { components } from '@/types/openapi'
-import { isUnfinished, scanStatusPill } from './scanStatus'
+import { isUnfinished, scanStatusLabel } from './scanStatus'
 
 type ScanStatus = components['schemas']['ScanStatus']
 
-const EXPECTED_STATUS_PILLS: Record<
-  ScanStatus,
-  { tone: 'running' | 'failed' | 'neutral'; label: string }
-> = {
-  pending: { tone: 'running', label: 'Running…' },
-  accepted: { tone: 'running', label: 'Running…' },
-  processing: { tone: 'running', label: 'Running…' },
-  completed: { tone: 'neutral', label: 'Completed' },
-  failed: { tone: 'failed', label: 'Failed' },
+const EXPECTED_LABELS: Record<ScanStatus, string> = {
+  pending: 'Running…',
+  accepted: 'Running…',
+  processing: 'Running…',
+  completed: 'Completed',
+  failed: 'Failed',
 }
 
-describe('scanStatusPill', () => {
-  it('maps every scan status to its pill presentation', () => {
-    for (const status of Object.keys(EXPECTED_STATUS_PILLS) as ScanStatus[]) {
-      expect(scanStatusPill(status)).toEqual(EXPECTED_STATUS_PILLS[status])
+describe('scanStatusLabel', () => {
+  it('maps every scan status to a label and nothing else', () => {
+    for (const status of Object.keys(EXPECTED_LABELS) as ScanStatus[]) {
+      expect(scanStatusLabel(status)).toBe(EXPECTED_LABELS[status])
     }
   })
 })

@@ -40,9 +40,7 @@ function SubnetChooser({
       }}
     >
       <div className="flex max-w-prose flex-col gap-6">
-        <h3 className="font-title text-title-xs">
-          Which network should Dmitri scan?
-        </h3>
+        <h3 className="text-title-xs">Which network should this box scan?</h3>
         <p className="text-body-md text-muted-foreground">
           This box is connected to more than one network. Pick the one you want
           scanned; usually the office network, not the internet connection.
@@ -86,7 +84,7 @@ function SubnetChooser({
           aria-describedby={refusal ? refusalId : undefined}
           data-testid="agents-chooser-confirm"
         >
-          {saving ? 'Saving…' : 'Set this Network'}
+          {saving ? 'Saving…' : 'Set this network'}
         </Button>
       </div>
     </form>

@@ -101,9 +101,7 @@ function InviteDialog({ open, onOpenChange, onDone }: InviteDialogProps) {
           className="flex flex-col gap-4"
           key="created"
         >
-          <Dialog.Title className="font-title text-title-sm">
-            Invite sent.
-          </Dialog.Title>
+          <Dialog.Title className="text-title-sm">Invite sent.</Dialog.Title>
           <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
             We emailed an invite to {created.email}. It works once, and expires
             in {expiryPhrase(created.expires_at)}.
@@ -156,9 +154,7 @@ function InviteDialog({ open, onOpenChange, onDone }: InviteDialogProps) {
           className="flex flex-col gap-4"
           key="form"
         >
-          <Dialog.Title className="font-title text-title-sm">
-            Invite a user
-          </Dialog.Title>
+          <Dialog.Title className="text-title-sm">Invite a user</Dialog.Title>
           <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
             Create a link that lets someone join your organization.
           </Dialog.Description>
@@ -180,7 +176,7 @@ function InviteDialog({ open, onOpenChange, onDone }: InviteDialogProps) {
               id="invite-error"
               role="alert"
               data-testid="invite-error"
-              className="text-body-sm text-destructive"
+              className="text-body-sm text-ink"
             >
               {error}
             </p>
@@ -192,8 +188,8 @@ function InviteDialog({ open, onOpenChange, onDone }: InviteDialogProps) {
               data-testid="invite-role-note"
               className="max-w-prose text-caption-md text-muted-foreground"
             >
-              A viewer can see scans, hosts and findings. An admin can also run
-              scans and invite people.
+              A viewer can see scans, hosts and vulnerabilities. An admin can
+              also run scans and invite people.
             </p>
             <Select
               value={role}

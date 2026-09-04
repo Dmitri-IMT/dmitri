@@ -41,6 +41,8 @@ export default tseslint.config(
       'local/no-raw-type-size': 'error',
       'local/spacing-scale': 'error',
       'local/no-bare-interactive': 'error',
+      'local/no-raw-hex': 'error',
+      'local/no-dark-variant': 'error',
     },
   },
 )

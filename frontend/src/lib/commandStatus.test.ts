@@ -1,35 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import type { components } from '@/types/openapi'
-import { commandStatusPill, isTerminalCommandStatus } from './commandStatus'
+import { commandStatusLabel, isTerminalCommandStatus } from './commandStatus'
 
 type CommandStatus = components['schemas']['CommandStatus']
 
-const EXPECTED_STATUS_PILLS: Record<
-  CommandStatus,
-  { tone: 'running' | 'failed' | 'neutral'; label: string }
-> = {
-  queued: { tone: 'running', label: 'Queued' },
-  delivered: { tone: 'running', label: 'Sent to the Pi' },
-  running: { tone: 'running', label: 'Scanning…' },
-  uploading: { tone: 'running', label: 'Uploading results…' },
-  done: { tone: 'neutral', label: 'Done' },
-  failed: { tone: 'failed', label: 'Scan failed' },
-  expired: { tone: 'failed', label: 'Not picked up' },
+const EXPECTED_LABELS: Record<CommandStatus, string> = {
+  queued: 'Queued',
+  delivered: 'Sent to the Pi',
+  running: 'Scanning…',
+  uploading: 'Uploading results…',
+  done: 'Done',
+  failed: 'Scan failed',
+  expired: 'Not picked up',
 }
 
-describe('commandStatusPill', () => {
-  it('maps every command status to its pill presentation', () => {
-    for (const status of Object.keys(
-      EXPECTED_STATUS_PILLS,
-    ) as CommandStatus[]) {
-      expect(commandStatusPill(status)).toEqual(EXPECTED_STATUS_PILLS[status])
+describe('commandStatusLabel', () => {
+  it('maps every command status to a label and nothing else', () => {
+    for (const status of Object.keys(EXPECTED_LABELS) as CommandStatus[]) {
+      expect(commandStatusLabel(status)).toBe(EXPECTED_LABELS[status])
     }
   })
 
   it('distinguishes failed commands from expired commands', () => {
-    expect(commandStatusPill('failed').label).not.toBe(
-      commandStatusPill('expired').label,
-    )
+    expect(commandStatusLabel('failed')).not.toBe(commandStatusLabel('expired'))
   })
 })
 
