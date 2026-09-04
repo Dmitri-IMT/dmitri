@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { Route, Routes } from 'react-router'
 import { focusManager } from '@tanstack/react-query'
 import { COMMAND_POLL_INTERVAL_MS } from '@/api/commands'
 import { renderWithProviders } from '@/test/renderWithProviders'
@@ -8,9 +9,11 @@ import { baseURL } from '@/test/agentsHarness'
 import { defaultAgent, defaultCommand } from '@/test/mswHandlers'
 import { server } from '@/test/setup'
 import HostFindings from './hosts/HostFindings'
-import Agents from './Agents'
-import Hosts from './Hosts'
+import DeviceDetail from './DeviceDetail'
+import Network from './Network'
 import Scans from './Scans'
+
+const agentRoute = `/devices/${defaultAgent.agent_id}`
 
 afterEach(() => {
   focusManager.setFocused(undefined)
@@ -18,7 +21,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Agents command cache invalidation', () => {
+describe('DeviceDetail command cache invalidation', () => {
   it('refreshes each completed-product family once and does not repeat the done sweep', async () => {
     vi.useFakeTimers()
     let commandReads = 0
@@ -66,16 +69,19 @@ describe('Agents command cache invalidation', () => {
     )
     renderWithProviders(
       <>
-        <Agents />
+        <Routes>
+          <Route path="/devices/:agentId" element={<DeviceDetail />} />
+        </Routes>
         <Scans />
-        <Hosts />
+        <Network />
         <HostFindings hostId="host-for-invalidation" />
       </>,
+      { route: agentRoute },
     )
 
     await vi.waitFor(() => {
       expect(screen.getByText('Queued')).toBeInTheDocument()
-      expect(scanReads).toBe(1)
+      expect(scanReads).toBe(2)
       expect(hostReads).toBe(1)
       expect(findingReads).toBe(1)
       expect(agentDetailReads).toBe(1)
@@ -83,7 +89,7 @@ describe('Agents command cache invalidation', () => {
     await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS)
     await vi.waitFor(() => {
       expect(screen.getByText('Done')).toBeInTheDocument()
-      expect(scanReads).toBe(2)
+      expect(scanReads).toBe(4)
       expect(hostReads).toBe(2)
       expect(findingReads).toBe(2)
       expect(agentDetailReads).toBe(2)
@@ -91,7 +97,7 @@ describe('Agents command cache invalidation', () => {
 
     await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
     expect(commandReads).toBe(2)
-    expect(scanReads).toBe(2)
+    expect(scanReads).toBe(4)
     expect(hostReads).toBe(2)
     expect(findingReads).toBe(2)
     expect(agentDetailReads).toBe(2)

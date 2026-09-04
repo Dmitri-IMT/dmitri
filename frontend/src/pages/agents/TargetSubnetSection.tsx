@@ -2,11 +2,12 @@ import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 import { useUpdateTargetSubnet } from '@/hooks/useUpdateTargetSubnet'
 import { useSession } from '@/auth/useSession'
-import { findAvailableSubnet, subnetLabel } from '@/lib/subnetLabel'
+import { findAvailableSubnet } from '@/lib/subnetLabel'
 import SubnetChooser from './SubnetChooser'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
+type AvailableSubnet = components['schemas']['AvailableSubnet']
 
 type Props = {
   agent: AgentDetail
@@ -18,6 +19,14 @@ type Props = {
 type ChooserSessionProps = {
   agent: AgentDetail
   onSaved: () => void
+}
+
+function watchedNetworkLabel(
+  cidr: string,
+  subnet: AvailableSubnet | null,
+): string {
+  if (subnet) return `${subnet.cidr} (${subnet.interface})`
+  return cidr
 }
 
 function ChooserSession({ agent, onSaved }: ChooserSessionProps) {
@@ -43,31 +52,34 @@ function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
     : null
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-6">
-        <p
-          data-testid="agents-network"
-          className="min-w-0 text-body-md text-muted-foreground"
-        >
-          {agent.target_subnet
-            ? `Scanning: ${target ? subnetLabel(target) : agent.target_subnet}`
-            : user?.role === 'viewer'
-              ? 'No network chosen yet. Ask your admin to choose one.'
-              : 'No network chosen yet.'}
-        </p>
-        {!open && agent.target_subnet && (
-          <AdminOnly>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(true)}
-              data-testid="agents-network-change"
-            >
-              Change
-            </Button>
-          </AdminOnly>
-        )}
-      </div>
+    <div className="flex flex-col gap-2">
+      <h3 className="text-title-sm">Watched network</h3>
+      {!open && (
+        <div className="flex items-center justify-between gap-6">
+          <p
+            data-testid="agents-network"
+            className="min-w-0 text-body-md text-muted-foreground"
+          >
+            {agent.target_subnet
+              ? watchedNetworkLabel(agent.target_subnet, target)
+              : user?.role === 'viewer'
+                ? 'No network chosen yet. Ask your admin to choose one.'
+                : 'No network chosen yet.'}
+          </p>
+          {agent.target_subnet && (
+            <AdminOnly>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(true)}
+                data-testid="agents-network-change"
+              >
+                Change
+              </Button>
+            </AdminOnly>
+          )}
+        </div>
+      )}
       {open && (
         <AdminOnly>
           <ChooserSession

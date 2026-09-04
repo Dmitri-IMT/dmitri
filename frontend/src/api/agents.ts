@@ -7,10 +7,6 @@ type UpdateAgentTargetSubnetRequest =
   components['schemas']['UpdateAgentTargetSubnetRequest']
 type CreateCommandRequest = components['schemas']['CreateCommandRequest']
 type CommandSummary = components['schemas']['CommandSummary']
-type ScanMode = components['schemas']['ScanMode']
-
-export const QUICK_SCAN_MODE = 'quick' satisfies ScanMode
-
 export async function listAgents(): Promise<AgentListResponse> {
   const response = await apiClient.get<AgentListResponse>('/agents')
   return response.data

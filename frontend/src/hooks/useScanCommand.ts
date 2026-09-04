@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createScanCommand, getAgent, QUICK_SCAN_MODE } from '@/api/agents'
+import { createScanCommand, getAgent } from '@/api/agents'
 import { readApiError } from '@/api/apiError'
 import { COMMAND_POLL_INTERVAL_MS, getCommand } from '@/api/commands'
 import { queryKeys } from '@/api/queryKeys'
@@ -10,6 +10,7 @@ import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
 type CommandDetail = components['schemas']['CommandDetail']
+type ScanMode = components['schemas']['ScanMode']
 
 export type TriggerOutcome = 'followed' | 'subnet-stale' | 'refused'
 
@@ -17,7 +18,7 @@ export type ScanCommand = {
   command: CommandDetail | null
   following: boolean
   triggering: boolean
-  trigger: () => Promise<TriggerOutcome>
+  trigger: (scanMode: ScanMode) => Promise<TriggerOutcome>
 }
 
 export function useScanCommand(agent: AgentDetail): ScanCommand {
@@ -65,13 +66,13 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     })
   }, [agent.agent_id, commandQuery.data, queryClient])
 
-  async function trigger(): Promise<TriggerOutcome> {
+  async function trigger(scanMode: ScanMode): Promise<TriggerOutcome> {
     if (!agent.target_subnet || triggeringRef.current) return 'refused'
     triggeringRef.current = true
     setTriggering(true)
     try {
       const command = await createScanCommand(agent.agent_id, {
-        scan_mode: QUICK_SCAN_MODE,
+        scan_mode: scanMode,
         subnet: agent.target_subnet,
       })
       setFollowedCommandId(command.command_id)

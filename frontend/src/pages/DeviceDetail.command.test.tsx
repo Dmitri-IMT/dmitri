@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { Route, Routes } from 'react-router'
 import { focusManager } from '@tanstack/react-query'
 import { COMMAND_POLL_INTERVAL_MS } from '@/api/commands'
 import { renderWithProviders } from '@/test/renderWithProviders'
@@ -13,7 +14,18 @@ import {
 import { defaultAgent, defaultCommand, viewerProfile } from '@/test/mswHandlers'
 import { server } from '@/test/setup'
 import { signedInAs } from '@/test/usersHarness'
-import Agents from './Agents'
+import DeviceDetail from './DeviceDetail'
+
+const agentRoute = `/devices/${defaultAgent.agent_id}`
+
+function renderDeviceDetail() {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/devices/:agentId" element={<DeviceDetail />} />
+    </Routes>,
+    { route: agentRoute },
+  )
+}
 
 afterEach(() => {
   focusManager.setFocused(undefined)
@@ -21,9 +33,9 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Agents command lifecycle', () => {
+describe('DeviceDetail command lifecycle', () => {
   describe('trigger and polling', () => {
-    it('sends quick mode and the stored subnet, then focuses the status', async () => {
+    it('Scan now uses the selected type', async () => {
       const user = userEvent.setup()
       const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus')
       let body: unknown
@@ -44,11 +56,12 @@ describe('Agents command lifecycle', () => {
           },
         ),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
+      await user.click(await screen.findByTestId('scan-type-tab-max'))
       await user.click(await screen.findByTestId('agents-scan-now'))
       expect(await screen.findByText('Queued')).toBeInTheDocument()
-      expect(body).toEqual({ scan_mode: 'quick', subnet: '192.168.0.0/24' })
+      expect(body).toEqual({ scan_mode: 'max', subnet: '192.168.0.0/24' })
       expect(screen.getByTestId('agents-command-status')).toHaveFocus()
       expect(screen.getByTestId('agents-command-status')).toHaveAttribute(
         'aria-live',
@@ -90,7 +103,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       await vi.waitFor(() =>
         expect(screen.getByText('Queued')).toBeInTheDocument(),
@@ -158,7 +171,7 @@ describe('Agents command lifecycle', () => {
           }),
         ),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByTestId('agents-view-scan')).toHaveAttribute(
         'href',
@@ -171,7 +184,7 @@ describe('Agents command lifecycle', () => {
     it('adopts and displays a running command that this screen did not start', async () => {
       const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus')
       withActiveCommand({ ...defaultCommand, status: 'running' })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Scanning…')).toBeInTheDocument()
       expect(screen.getByTestId('agents-command-status')).not.toHaveFocus()
@@ -202,7 +215,7 @@ describe('Agents command lifecycle', () => {
           HttpResponse.json({ ...defaultCommand, status: 'running' as const }),
         ),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByTestId('agents-scan-now')).toBeInTheDocument()
       fireEvent.focus(window)
@@ -256,7 +269,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Scanning…')).toBeInTheDocument()
       focusManager.setFocused(false)
@@ -303,7 +316,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Scanning…')).toBeInTheDocument()
       focusManager.setFocused(false)
@@ -339,14 +352,14 @@ describe('Agents command lifecycle', () => {
           HttpResponse.json({ ...defaultCommand, status: 'running' as const }),
         ),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Scanning…')).toBeInTheDocument()
       fireEvent.focus(window)
       focusManager.setFocused(true)
       await waitFor(() => expect(detailReads).toBeGreaterThan(1))
 
-      expect(screen.getByTestId('agents-card')).toBeInTheDocument()
+      expect(screen.getByTestId('device-detail')).toBeInTheDocument()
       expect(screen.queryByTestId('agents-error')).not.toBeInTheDocument()
       expect(screen.getByText('Scanning…')).toBeInTheDocument()
     })
@@ -359,7 +372,7 @@ describe('Agents command lifecycle', () => {
         status: 'failed',
         error_code: 'agent_disconnected',
       })
-      const { unmount } = renderWithProviders(<Agents />)
+      const { unmount } = renderDeviceDetail()
       expect(await screen.findByText('Scan failed')).toBeInTheDocument()
       expect(
         screen.getByText(/stopped responding while the scan was running/i),
@@ -372,7 +385,7 @@ describe('Agents command lifecycle', () => {
       unmount()
 
       withActiveCommand({ ...defaultCommand, status: 'expired' })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
       expect(await screen.findByText('Not picked up')).toBeInTheDocument()
       expect(screen.getByText(/never picked up the scan/i)).toBeInTheDocument()
       expect(
@@ -387,7 +400,7 @@ describe('Agents command lifecycle', () => {
         status: 'failed',
         error_code: 'device_offline',
       })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Scan failed')).toBeInTheDocument()
       expect(
@@ -405,7 +418,7 @@ describe('Agents command lifecycle', () => {
         scan_id: null,
         completed_at: new Date().toISOString(),
       })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Done')).toBeInTheDocument()
       expect(screen.queryByTestId('agents-view-scan')).not.toBeInTheDocument()
@@ -418,7 +431,7 @@ describe('Agents command lifecycle', () => {
         status: 'done',
         completed_at: new Date().toISOString(),
       })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       expect(await screen.findByText('Done')).toBeInTheDocument()
       expect(screen.getByTestId('agents-view-scan')).toHaveAttribute(
@@ -454,7 +467,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       await user.click(await screen.findByTestId('agents-scan-now'))
       expect(await screen.findByText('Queued')).toBeInTheDocument()
@@ -475,7 +488,7 @@ describe('Agents command lifecycle', () => {
     it('reports a plain start failure when a busy Pi exposes no command to adopt', async () => {
       const user = userEvent.setup()
       commandRefused(409, 'device_busy')
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       await user.click(await screen.findByTestId('agents-scan-now'))
 
@@ -501,7 +514,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       const trigger = await screen.findByTestId('agents-scan-now')
       await user.click(trigger)
@@ -537,7 +550,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       await user.click(await screen.findByTestId('agents-scan-now'))
 
@@ -546,18 +559,15 @@ describe('Agents command lifecycle', () => {
       )
       expect(await screen.findByTestId('agents-chooser')).toBeInTheDocument()
       expect(screen.queryByTestId('agents-scan-now')).not.toBeInTheDocument()
-      await waitFor(() =>
-        expect(screen.getByTestId('agents-network')).toHaveTextContent(
-          'No network chosen yet.',
-        ),
-      )
+      expect(await screen.findByTestId('agents-chooser')).toBeInTheDocument()
+      expect(screen.queryByTestId('agents-network')).not.toBeInTheDocument()
       expect(screen.queryByText('subnet_not_reported')).not.toBeInTheDocument()
     })
 
     it('requires both the documented status and code for a refusal branch', async () => {
       const user = userEvent.setup()
       commandRefused(409, 'device_offline')
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       await user.click(await screen.findByTestId('agents-scan-now'))
 
@@ -604,7 +614,7 @@ describe('Agents command lifecycle', () => {
             }),
           ),
         )
-        renderWithProviders(<Agents />)
+        renderDeviceDetail()
 
         await user.click(await screen.findByTestId('agents-scan-now'))
         expect(await screen.findByTestId('agents-retry')).toHaveTextContent(
@@ -625,7 +635,7 @@ describe('Agents command lifecycle', () => {
         status: 'failed',
         error_code: 'device_offline',
       })
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       const retry = await screen.findByTestId('agents-retry')
       await user.click(retry)
@@ -687,7 +697,7 @@ describe('Agents command lifecycle', () => {
             })
           }),
         )
-        renderWithProviders(<Agents />)
+        renderDeviceDetail()
 
         await user.click(await screen.findByTestId('agents-retry'))
 
@@ -738,7 +748,7 @@ describe('Agents command lifecycle', () => {
           })
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       const trigger = await screen.findByTestId('agents-scan-now')
       await user.click(trigger)
@@ -810,7 +820,7 @@ describe('Agents command lifecycle', () => {
           )
         }),
       )
-      renderWithProviders(<Agents />)
+      renderDeviceDetail()
 
       const trigger = await screen.findByTestId('agents-scan-now')
       void user.click(trigger)
