@@ -21,9 +21,8 @@ labelling lives in `subnetLabel.ts`; scan-mode labels and defaults live in `lib/
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `Devices` | `GET /agents` → `DataTable` of every box. Own error / pending / blank / table ladder inline (not `ListSurface`). Offline rows render muted via `rowTone`. Blank is `DevicesBlank` — note only, no action. | `frontend/src/pages/Devices.tsx:13` |
+| `Devices` | `GET /agents` through `ListSurface`. Offline rows render muted via `rowTone`. Blank uses `empty.note` only — no action. | `frontend/src/pages/Devices.tsx:13` |
 | `deviceListColumns(now)` | Box name, watched network (or "No network chosen yet"), online/offline label, last report with `Timestamp`. | `frontend/src/pages/agents/deviceListColumns.tsx:8` |
-| `DevicesBlank` | No-device blank: `EmptyState` with `note` only — **no `action`**. | `frontend/src/pages/agents/DevicesBlank.tsx:3` |
 | `DeviceDetail` | One `getAgent` read through `readDetailState` into `ReadDetailGate` with `backTo="/devices"`. Ready view is `DeviceDetailBody`. | `frontend/src/pages/DeviceDetail.tsx:79` |
 | `DeviceDetailBody` | Back link, `AgentIdentity`, `TargetSubnetSection`, then scan section gated on chooser state. Admin picks scan type via `ScanTypeTabs`; viewers see `ScanTypeReadOnly`. | `frontend/src/pages/DeviceDetail.tsx:22` |
 | `ScanTypeTabs` / `ScanTypeReadOnly` | Radix `Tabs` over `SCAN_MODE_ORDER` with per-mode description; read-only shows the default mode label for viewers. | `frontend/src/pages/agents/ScanTypeTabs.tsx:13` |
