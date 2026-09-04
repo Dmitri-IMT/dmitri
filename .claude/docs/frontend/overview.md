@@ -39,7 +39,7 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 | `src/lib/review.ts`, `src/hooks/useHomeReview.ts` | The pure verdict derivation and the hook that composes Home reads into one discriminated union. | [review](./review.md) |
 | `src/lib/scanStatus.ts`, `src/lib/severity.ts` | Scan-status labels / count hiding, and the load-bearing `bySeverityDesc` comparator. | [scan-status](./scan-status.md) |
 | `src/lib/commandStatus.ts` | Command lifecycle labels and the terminal predicate for the device-detail poll. | [command-status](./command-status.md) |
-| `src/lib/scanModes.ts`, `src/lib/silentDevice.ts` | Scan-mode labels/order/default; network quiet-row helpers. | [devices-screen](./devices-screen.md), [screens](./screens.md) |
+| `src/lib/scanModes.ts`, `src/lib/hostLastSeen.ts` | Scan-mode labels/order/default; host last-seen quiet-row helpers. | [devices-screen](./devices-screen.md), [screens](./screens.md) |
 | `src/hooks/useScanCommand.ts`, `src/pages/agents/`, `src/pages/Devices.tsx`, `src/pages/DeviceDetail.tsx` | Command follow/poll/trigger and device-detail sections. | [devices-screen](./devices-screen.md) |
 | `src/lib/detailState.ts`, `src/pages/hosts/HostFindings.tsx` | The shared detail-route state reader, and the host's second read owning its own section states. | [host-detail](./host-detail.md) |
 | `src/types/openapi.d.ts` | Generated from the frozen contract by `npm run gen:types`. Committed; CI re-checks for drift. | — |

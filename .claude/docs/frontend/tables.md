@@ -27,7 +27,7 @@ directory table.
 | `DataTableCollapsedGroup` | `{ rows, label(count), testId }` — a disclosure row that reveals additional rows (Network's "Not seen recently" bucket). | `frontend/src/components/DataTable.tsx:56` |
 | `DataTableColumn` | A two-member union over the same base (`label`, `width`, `render`, optional `align: 'right'`): a plain column takes any string `key`, a `sortable: true` column's `key` must be the table's `SortKey`. | `frontend/src/components/DataTable.tsx:30` |
 | `DataTableSort` | `{ by, order, onChange }` all typed in the same `SortKey`. | `frontend/src/components/DataTable.tsx:34` |
-| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + pagination — shared by the scan list. `empty` accepts optional `action` and `note` React nodes. Optional `rowTone` passes through to `DataTable`. | `frontend/src/components/ListSurface.tsx:36` |
+| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + optional pagination — shared by Scans, Network and Devices. `empty` accepts optional `action` and `note` React nodes; `blank` overrides with custom empty UI. Optional `partitionRows` feeds `collapsedGroup` on `DataTable`. Optional `rowTone` passes through. | `frontend/src/components/ListSurface.tsx:36` |
 | `NotFoundNotice` | The shared 404 block for a detail route: the sentence at `${testId}-not-found` and a real Back link at `${testId}-back`. Rendered by `ReadDetailGate`, never by a screen. | `frontend/src/components/NotFoundNotice.tsx:11` |
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>`, `backTo`, and `backLabel`; owns notFound → error → loading with a placeholder `PageHeader` in non-ready states. Calls `children(data)` only when ready. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it. | `frontend/src/components/EmptyMark.tsx:2` |
@@ -40,8 +40,8 @@ directory table.
 
 - Scan list renders through `ListSurface` with `rowAction: { kind: 'link' }` and
   `FirstScanCta` / `FirstScanNote` in `empty`.
-- Network and Devices own their own error/pending/blank/table ladders inline; Network additionally
-  uses `collapsedGroup` and `rowTone` via `isSilent()` ([screens](./screens.md)).
+- Network and Devices render through `ListSurface`; Network additionally uses `partitionRows` with
+  `isQuietHost()` for the quiet group ([screens](./screens.md)).
 - [devices-screen](./devices-screen.md)'s `CommandStatus` renders status as plain text from
   [command-status](./command-status.md).
 - Both findings sections use `expand` into [screens](./screens.md)'s `FindingPanel`. Scan-detail
