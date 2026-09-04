@@ -11,9 +11,9 @@ function LoadingSkeleton({ rows, columns }: LoadingSkeletonProps) {
   return (
     <tbody>
       {Array.from({ length: rows }, (_, row) => (
-        <tr key={row} className="h-8 border-t border-border">
+        <tr key={row} className="h-row border-t border-border">
           {Array.from({ length: columns }, (_, column) => (
-            <td key={column} className="h-8 pr-4 align-middle">
+            <td key={column} className="h-row pr-4 align-middle">
               <span
                 className={cn(
                   'block h-3 bg-border',

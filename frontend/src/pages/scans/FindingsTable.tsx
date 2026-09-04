@@ -1,3 +1,4 @@
+import CellLink from '@/components/CellLink'
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
 import FindingPanel from '@/pages/scans/FindingPanel'
@@ -8,7 +9,7 @@ import type { components } from '@/types/openapi'
 type FindingRecord = components['schemas']['FindingRecord']
 type ScanHostView = components['schemas']['ScanHostView']
 
-function hostLabel(
+function machineLabel(
   finding: FindingRecord,
   hostsById: Map<string, ScanHostView>,
 ): string {
@@ -18,20 +19,27 @@ function hostLabel(
   return finding.host_ip ?? ''
 }
 
-function hostColumnFor(hosts: ScanHostView[]): DataTableColumn<FindingRecord> {
+function machineColumnFor(
+  hosts: ScanHostView[],
+): DataTableColumn<FindingRecord> {
   const hostsById = new Map(hosts.map((host) => [host.host_id, host]))
 
   return {
     key: 'host',
-    label: 'Host',
-    width: 'w-1/5',
+    label: 'Machine',
+    width: 'w-11/50',
     render: (finding) => {
-      const label = hostLabel(finding, hostsById)
+      const label = machineLabel(finding, hostsById)
       if (label === '') return <EmptyMark />
-      return (
+      const name = (
         <span className="block truncate" title={label}>
           {label}
         </span>
+      )
+      return finding.host_id ? (
+        <CellLink to={`/network/${finding.host_id}`}>{name}</CellLink>
+      ) : (
+        name
       )
     },
   }
@@ -43,8 +51,6 @@ function FindingsTable({
   isPending = false,
   testId,
   caption,
-  emptyTestId,
-  emptyCopy,
   openFindingId,
   onOpenFindingChange,
 }: {
@@ -53,27 +59,17 @@ function FindingsTable({
   isPending?: boolean
   testId: string
   caption: string
-  emptyTestId: string
-  emptyCopy: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
 }) {
   const table = {
-    columns: findingColumns(hosts && hostColumnFor(hosts)),
+    columns: findingColumns(hosts && machineColumnFor(hosts)),
     rowId: (finding: FindingRecord) => finding.finding_id,
     testId,
     caption,
   }
 
   if (isPending) return <DataTable {...table} rows={[]} isPending />
-
-  if (findings.length === 0) {
-    return (
-      <p data-testid={emptyTestId} className="text-body-md">
-        {emptyCopy}
-      </p>
-    )
-  }
 
   return (
     <DataTable

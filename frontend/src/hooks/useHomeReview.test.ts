@@ -219,7 +219,7 @@ describe('useHomeReview', () => {
       server.events.removeAllListeners()
     })
 
-    it('issues exactly six requests on load, none after, and only retry adds more', async () => {
+    it('issues exactly four requests on load, none after, and only retry adds more', async () => {
       const requests: URL[] = []
       server.events.on('request:match', ({ request }) => {
         requests.push(new URL(request.url))
@@ -242,7 +242,7 @@ describe('useHomeReview', () => {
 
       await waitFor(() => expect(result.current.state).toBe('pending'))
 
-      expect(requests).toHaveLength(6)
+      expect(requests).toHaveLength(4)
 
       const scanRequests = requests.filter((url) =>
         url.pathname.endsWith('/scans'),
@@ -250,14 +250,8 @@ describe('useHomeReview', () => {
       const findingRequests = requests.filter((url) =>
         url.pathname.endsWith('/findings'),
       )
-      const agentRequests = requests.filter(
-        (url) =>
-          url.pathname.endsWith('/agents') ||
-          /\/agents\/[^/]+$/.test(url.pathname),
-      )
       expect(scanRequests).toHaveLength(2)
       expect(findingRequests).toHaveLength(2)
-      expect(agentRequests).toHaveLength(2)
 
       for (const url of requests) {
         const perPage = url.searchParams.get('per_page')
@@ -274,13 +268,13 @@ describe('useHomeReview', () => {
       expect(new Set(severities)).toEqual(new Set(['critical', 'high']))
 
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(requests).toHaveLength(6)
+      expect(requests).toHaveLength(4)
 
       await act(async () => {
         result.current.retry()
       })
-      await waitFor(() => expect(requests.length).toBeGreaterThan(6))
-      expect(requests).toHaveLength(12)
+      await waitFor(() => expect(requests.length).toBeGreaterThan(4))
+      expect(requests).toHaveLength(8)
     })
   })
 

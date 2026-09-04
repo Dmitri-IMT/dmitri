@@ -93,7 +93,7 @@ function PasswordDialog({
         data-testid="settings-form"
         className="flex flex-col gap-4"
       >
-        <Dialog.Title className="font-title text-title-sm">
+        <Dialog.Title className="text-title-sm">
           Change your password
         </Dialog.Title>
         <div className="flex flex-col gap-1">
@@ -113,7 +113,7 @@ function PasswordDialog({
             id="settings-current-error"
             role="alert"
             data-testid="settings-current-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {currentError}
           </p>
@@ -142,7 +142,7 @@ function PasswordDialog({
             id="settings-new-error"
             role="alert"
             data-testid="settings-new-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {newError}
           </p>
@@ -164,7 +164,7 @@ function PasswordDialog({
             id="settings-confirm-error"
             role="alert"
             data-testid="settings-confirm-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {confirmError}
           </p>
@@ -172,7 +172,7 @@ function PasswordDialog({
         <p
           role="alert"
           data-testid="settings-error"
-          className="text-body-md text-destructive"
+          className="text-body-md text-ink"
         >
           {formError}
         </p>

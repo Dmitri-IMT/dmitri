@@ -9,7 +9,7 @@ function AccountDetails() {
 
   return (
     <section data-testid="settings-details" className="flex flex-col gap-4">
-      <h2 className="font-title text-title-sm">Your details</h2>
+      <h2 className="text-title-sm">Your details</h2>
       <dl className="flex flex-col gap-2 text-body-md">
         <div className="flex min-w-0 gap-4">
           <dt className="shrink-0 text-muted-foreground">Email</dt>

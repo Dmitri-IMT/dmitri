@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getHost } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
 import ReadDetailGate from '@/components/ReadDetailGate'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import HostFindings from '@/pages/hosts/HostFindings'
 import HostIdentity from '@/pages/hosts/HostIdentity'
@@ -21,29 +22,43 @@ function HostDetail() {
   return (
     <ReadDetailGate
       testId="host-detail"
-      title="Host"
-      notFoundMessage="That host doesn't exist."
-      errorMessage="Couldn't load this host."
-      backTo="/hosts"
-      backLabel="Back to hosts"
+      title="Machine"
+      notFoundMessage="That machine doesn't exist."
+      errorMessage="Couldn't load this machine."
+      backTo="/network"
+      backLabel="Back to the network"
       detail={readDetailState(hostId, query)}
     >
       {(host) => (
         <>
           <HostIdentity host={host} />
-          <div className="flex flex-col gap-12">
-            <section className="flex flex-col gap-4">
-              <h2 className="font-title text-title-sm">Findings</h2>
-              <HostFindings hostId={host.host_id} />
-            </section>
-            <section className="flex flex-col gap-4">
-              <h2 className="font-title text-title-sm">Open ports</h2>
-              <HostPortsTable ports={host.ports} />
-            </section>
-            <section className="flex flex-col gap-4">
-              <h2 className="font-title text-title-sm">Seen in these scans</h2>
-              <HostScanHistoryTable history={host.scan_history} />
-            </section>
+          <div className="flex flex-col gap-8">
+            <Card>
+              <CardHeader>
+                <h2 className="text-title-sm">Vulnerabilities</h2>
+              </CardHeader>
+              <CardContent>
+                <HostFindings hostId={host.host_id} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <h2 className="text-title-sm">
+                  Services running on this machine
+                </h2>
+              </CardHeader>
+              <CardContent>
+                <HostPortsTable ports={host.ports} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <h2 className="text-title-sm">Scan history</h2>
+              </CardHeader>
+              <CardContent>
+                <HostScanHistoryTable history={host.scan_history} />
+              </CardContent>
+            </Card>
           </div>
         </>
       )}

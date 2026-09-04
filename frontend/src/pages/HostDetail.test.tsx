@@ -21,21 +21,21 @@ const UNNAMED_HOST = hostDetailFixtures[24]
 const OTHER_HOST_FINDING = findingFixtures[2]
 const SCAN_ID = latestSuccessfulScan.scan_id
 
-function renderPage(route: string) {
+function renderPage(route: string, state?: unknown) {
   return renderWithProviders(
     <>
       <Routes>
-        <Route path="/hosts/:hostId" element={<HostDetail />} />
+        <Route path="/network/:hostId" element={<HostDetail />} />
       </Routes>
       <LocationProbe />
     </>,
-    { route },
+    { route, state },
   )
 }
 
 function expectPageError() {
   expect(screen.getByTestId('host-detail-error')).toHaveTextContent(
-    "Couldn't load this host.",
+    "Couldn't load this machine.",
   )
   expect(screen.getByTestId('host-detail-error-retry')).toHaveTextContent(
     'Retry',
@@ -49,7 +49,7 @@ function expectPageError() {
 describe('HostDetail', () => {
   it("renders only this host's findings, identity, empty-ports copy, and history", async () => {
     hostDetail(HOST, findingFixtures)
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     expect(await screen.findByTestId('host-detail-identity')).toHaveTextContent(
       HOST.hostname,
@@ -67,18 +67,44 @@ describe('HostDetail', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.getByTestId('host-no-ports')).toHaveTextContent(
-      "No open ports. This host isn't exposing anything.",
+      'No services are running on this machine.',
     )
+    expect(
+      screen.getByRole('heading', { name: 'Services running on this machine' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Scan history' }),
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('host-ports-table')).not.toBeInTheDocument()
     expect(
       screen.getByTestId(`host-history-table-row-${SCAN_ID}`),
     ).toBeInTheDocument()
   })
 
+  it('adopts the vulnerability vocabulary on the network detail screen', async () => {
+    hostDetail(HOST, findingFixtures)
+    renderPage(`/network/${HOST.host_id}`)
+
+    await screen.findByTestId(
+      `host-findings-table-row-${criticalFinding.finding_id}`,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('table', { name: 'Vulnerabilities on this machine' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Vulnerability' }),
+    ).toBeInTheDocument()
+    expect(screen.queryAllByText(/finding/i)).toHaveLength(0)
+  })
+
   it('opens a finding panel with CVE, CVSS, and reference links', async () => {
     const user = userEvent.setup()
     hostDetail(HOST, findingFixtures)
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     await screen.findByTestId(
       `host-findings-table-row-${criticalFinding.finding_id}`,
@@ -100,13 +126,13 @@ describe('HostDetail', () => {
       screen.getByRole('link', { name: criticalFinding.references[0] }),
     ).toHaveAttribute('href', criticalFinding.references[0])
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
-      `/hosts/${HOST.host_id}`,
+      `/network/${HOST.host_id}`,
     )
   })
 
   it('renders an inert ports table when the host has open ports', async () => {
     hostDetail(HOST_WITH_PORTS, findingFixtures)
-    renderPage(`/hosts/${HOST_WITH_PORTS.host_id}`)
+    renderPage(`/network/${HOST_WITH_PORTS.host_id}`)
 
     const table = await screen.findByTestId('host-ports-table')
     expect(screen.queryByTestId('host-no-ports')).not.toBeInTheDocument()
@@ -119,7 +145,7 @@ describe('HostDetail', () => {
   it('navigates to the scan when a history row is activated', async () => {
     const user = userEvent.setup()
     hostDetail(HOST, findingFixtures)
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     await screen.findByTestId(`host-history-table-row-${SCAN_ID}`)
     await user.click(
@@ -128,6 +154,31 @@ describe('HostDetail', () => {
       ),
     )
 
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/scans/${SCAN_ID}`,
+    )
+    expect(screen.getByTestId('location-state')).toHaveTextContent(
+      `{"from":"/network/${HOST.host_id}"}`,
+    )
+  })
+
+  it('sends Back to the network list by default', async () => {
+    const user = userEvent.setup()
+    hostDetail(HOST, findingFixtures)
+    renderPage(`/network/${HOST.host_id}`)
+
+    await screen.findByTestId('host-detail-identity')
+    await user.click(screen.getByRole('link', { name: 'Back' }))
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/network')
+  })
+
+  it('sends Back to the screen that opened the machine', async () => {
+    const user = userEvent.setup()
+    hostDetail(HOST, findingFixtures)
+    renderPage(`/network/${HOST.host_id}`, { from: `/scans/${SCAN_ID}` })
+
+    await screen.findByTestId('host-detail-identity')
+    await user.click(screen.getByRole('link', { name: 'Back' }))
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/scans/${SCAN_ID}`,
     )
@@ -140,7 +191,7 @@ describe('HostDetail', () => {
         () => new HttpResponse(null, { status: 500 }),
       ),
     )
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     await screen.findByTestId('host-detail-error')
     expectPageError()
@@ -154,10 +205,10 @@ describe('HostDetail', () => {
         () => new HttpResponse(null, { status: 500 }),
       ),
     )
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     expect(await screen.findByTestId('host-findings-error')).toHaveTextContent(
-      "Couldn't load this host's findings.",
+      "Couldn't load this machine's vulnerabilities.",
     )
     expect(screen.getByTestId('host-findings-error-retry')).toHaveTextContent(
       'Retry',
@@ -166,7 +217,13 @@ describe('HostDetail', () => {
     expect(screen.getByTestId('host-detail-identity')).toHaveTextContent(
       HOST.hostname,
     )
+    expect(
+      screen.getByRole('heading', { name: 'Services running on this machine' }),
+    ).toBeInTheDocument()
     expect(screen.getByTestId('host-no-ports')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Scan history' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByTestId(`host-history-table-row-${SCAN_ID}`),
     ).toBeInTheDocument()
@@ -192,7 +249,7 @@ describe('HostDetail', () => {
             })
       }),
     )
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     await screen.findByTestId('host-findings-error')
     await user.click(screen.getByTestId('host-findings-error-retry'))
@@ -205,21 +262,21 @@ describe('HostDetail', () => {
     expect(hostReads).toBe(1)
   })
 
-  it('renders the not-found line and Back to hosts', async () => {
+  it('renders the not-found line and Back to the network', async () => {
     const user = userEvent.setup()
     hostNotFound()
-    renderPage(`/hosts/${HOST.host_id}`)
+    renderPage(`/network/${HOST.host_id}`)
 
     expect(
       await screen.findByTestId('host-detail-not-found'),
-    ).toHaveTextContent("That host doesn't exist.")
-    await user.click(screen.getByRole('link', { name: 'Back to hosts' }))
-    expect(screen.getByTestId('location-probe')).toHaveTextContent('/hosts')
+    ).toHaveTextContent("That machine doesn't exist.")
+    await user.click(screen.getByRole('link', { name: 'Back to the network' }))
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/network')
   })
 
   it('uses the IP as the title when hostname is empty', async () => {
     hostDetail(UNNAMED_HOST, [])
-    renderPage(`/hosts/${UNNAMED_HOST.host_id}`)
+    renderPage(`/network/${UNNAMED_HOST.host_id}`)
 
     expect(await screen.findByTestId('host-detail-identity')).toHaveTextContent(
       UNNAMED_HOST.ip,

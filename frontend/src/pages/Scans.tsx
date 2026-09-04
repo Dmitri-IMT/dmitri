@@ -30,8 +30,8 @@ function Scans() {
         caption="Scan run log"
         errorMessage="Couldn't load the scans."
         empty={{
-          heading: 'No scans yet.',
-          body: 'Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here.',
+          heading: 'No scans yet',
+          body: 'Your first scan finds the machines on your network and what needs fixing.',
           action: <FirstScanCta />,
           note: <FirstScanNote />,
         }}

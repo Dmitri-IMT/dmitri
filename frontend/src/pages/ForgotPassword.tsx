@@ -43,7 +43,7 @@ function ForgotPassword() {
     <Link
       to="/login"
       data-testid="forgot-back"
-      className="self-center text-body-md text-accent underline"
+      className="cursor-pointer self-center text-body-md text-accent underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       Back to sign in
     </Link>
@@ -56,11 +56,7 @@ function ForgotPassword() {
           data-testid="forgot-success"
           className="flex flex-col items-stretch gap-4"
         >
-          <p
-            ref={confirmationRef}
-            tabIndex={-1}
-            className="font-title text-title-sm"
-          >
+          <p ref={confirmationRef} tabIndex={-1} className="text-title-sm">
             Check your email.
           </p>
           <p className="text-body-md text-muted-foreground">
@@ -81,12 +77,12 @@ function ForgotPassword() {
           data-testid="forgot-form"
           className="flex flex-col gap-4"
         >
-          <span className="font-title text-title-sm">Reset your password</span>
+          <span className="text-title-sm">Reset your password</span>
           <p className="text-body-md text-muted-foreground">
             Enter your email and we&apos;ll send you a link to set a new
             password.
           </p>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="forgot-email">Email</Label>
             <Input
               id="forgot-email"
@@ -102,7 +98,7 @@ function ForgotPassword() {
           <p
             role="alert"
             data-testid="forgot-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {error}
           </p>

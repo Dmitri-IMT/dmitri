@@ -15,20 +15,15 @@ type Role = DirectoryRow['role']
 const COLUMNS = ['Person', 'Role', 'Status', 'Last seen']
 const ROLE_LABEL = { admin: 'Admin', viewer: 'Viewer' } as const
 
-// `table-fixed` splits columns evenly unless told otherwise, which gave the actions cell
-// a button's width plus a column of dead space while Person truncated. Shares, not widths:
-// each column is a percentage of whatever the table is, so the whole row scales with the
-// shell and nothing is pinned to a pixel count. Person yields share below `sm`, where the
-// table is narrow enough that Last seen would otherwise clip its own text.
-//   below sm: 30 · 15 · 20 · 25 · 10     sm and up: 35 · 15 · 20 · 20 · 10
+// Column shares per DESIGN §10: 34 · 14 · 18 · 20 · 14.
 function Columns() {
   return (
     <colgroup>
-      <col className="w-3/10 sm:w-7/20" />
-      <col className="w-3/20" />
+      <col className="w-17/50" />
+      <col className="w-7/50" />
+      <col className="w-9/50" />
       <col className="w-1/5" />
-      <col className="w-1/4 sm:w-1/5" />
-      <col className="w-1/10" />
+      <col className="w-7/50" />
     </colgroup>
   )
 }
@@ -76,7 +71,7 @@ function RoleCell({
       <SelectTrigger
         data-testid={`row-role-${row.id}`}
         aria-label={`Role for ${row.email}`}
-        className="h-auto rounded-none border-0 px-0 py-0 text-caption-md"
+        className="h-auto w-fit justify-start gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-caption-md shadow-none hover:bg-transparent focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <SelectValue />
       </SelectTrigger>
@@ -112,7 +107,7 @@ function Row({
   return (
     <tr
       data-testid={isSelf ? 'user-row-self' : `user-row-${row.id}`}
-      className="h-8 border-t border-border text-caption-md"
+      className="h-row border-t border-border text-caption-md"
     >
       <td className="max-w-0 truncate pr-4" title={row.email}>
         {row.email}
@@ -166,7 +161,7 @@ function SkeletonRows() {
   return (
     <tbody>
       {[0, 1, 2].map((index) => (
-        <tr key={index} className="h-8 border-t border-border">
+        <tr key={index} className="h-row border-t border-border">
           {[0, 1, 2, 3, 4].map((cell) => (
             <td key={cell} className="pr-4">
               <span className="block h-3 w-full bg-muted" />

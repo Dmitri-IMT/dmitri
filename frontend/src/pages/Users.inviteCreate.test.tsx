@@ -56,7 +56,7 @@ describe('Users invite creation', () => {
 
     const note = within(dialog).getByTestId('invite-role-note')
     expect(note).toHaveTextContent(
-      'A viewer can see scans, hosts and findings. An admin can also run scans and invite people.',
+      'A viewer can see scans, hosts and vulnerabilities. An admin can also run scans and invite people.',
     )
     expect(within(dialog).getByTestId('invite-role')).toHaveAttribute(
       'aria-describedby',

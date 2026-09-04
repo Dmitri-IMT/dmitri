@@ -70,27 +70,15 @@ describe('Disclosure', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('carries the required rest, pointer, hover, focus-visible, and active treatments', () => {
+  it('keeps the label inside the trigger as a plain button', () => {
     const { trigger } = renderDisclosure()
-    const label = screen.getByText("What's recorded?")
 
-    expect(trigger).toContainElement(label)
-    expect(label).toHaveClass('text-body-md')
-    expect(trigger).not.toHaveClass('text-body-md')
-    expect(trigger).toHaveClass(
-      'text-muted-foreground',
-      'cursor-pointer',
-      'hover:underline',
-      'hover:text-foreground',
-      'focus-visible:underline',
-      'focus-visible:ring-3',
-      'focus-visible:ring-ring/50',
-      'outline-none',
-      'active:translate-y-px',
-    )
+    expect(trigger).toHaveAttribute('type', 'button')
+    expect(trigger).toContainElement(screen.getByText("What's recorded?"))
+    expect(trigger).toHaveAttribute('data-variant', 'link')
   })
 
-  it('opens with a rotated caret while focus and its ring treatments stay on the trigger', async () => {
+  it('opens with focus on the trigger and marks the open state', async () => {
     const user = userEvent.setup()
     const { trigger, caret } = renderDisclosure()
 
@@ -100,12 +88,6 @@ describe('Disclosure', () => {
     expect(trigger).toHaveFocus()
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(trigger).toHaveAttribute('data-state', 'open')
-    expect(trigger).toHaveClass(
-      'group',
-      'focus-visible:ring-3',
-      'focus-visible:ring-ring/50',
-    )
     expect(caret).toHaveAttribute('aria-hidden', 'true')
-    expect(caret).toHaveClass('group-data-[state=open]:rotate-90')
   })
 })

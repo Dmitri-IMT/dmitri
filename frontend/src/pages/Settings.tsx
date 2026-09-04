@@ -3,6 +3,7 @@ import { readApiError } from '@/api/apiError'
 import { useSession } from '@/auth/useSession'
 import ConfirmByTyping from '@/components/ConfirmByTyping'
 import Disclosure from '@/components/Disclosure'
+import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import AccountDetails from '@/pages/settings/AccountDetails'
 import PasswordDialog from '@/pages/settings/PasswordDialog'
@@ -34,14 +35,11 @@ function Settings() {
 
   return (
     <div data-testid="settings-idle" className="flex flex-col gap-12">
-      <h1 className="border-b border-rule pb-4 font-title text-title-lg">
-        Settings
-      </h1>
-      <div className="flex flex-col gap-3">
+      <PageHeader title="Settings" />
+      <div className="flex flex-col gap-12">
         <AccountDetails />
-        <hr aria-hidden className="border-t border-dashed border-rule" />
         <section className="flex flex-col gap-4">
-          <h2 className="font-title text-title-sm">Password</h2>
+          <h2 className="text-title-sm">Password</h2>
           <div className="flex flex-col items-start gap-2">
             <Button
               type="button"
@@ -62,15 +60,11 @@ function Settings() {
             </p>
           </div>
         </section>
-        <hr aria-hidden className="border-t border-dashed border-rule" />
         <section
           data-testid="settings-activity"
           className="flex flex-col gap-2"
         >
-          <h2
-            data-testid="settings-activity-label"
-            className="font-title text-title-sm"
-          >
+          <h2 data-testid="settings-activity-label" className="text-title-sm">
             Activity
           </h2>
           <Disclosure
@@ -82,43 +76,36 @@ function Settings() {
               data-testid="settings-activity-note"
               className="max-w-prose text-body-md text-muted-foreground"
             >
-              Your organization's admins can see when you last used Dmitri and
-              when you last signed in. We record only these times — not what you
-              viewed or did.
+              Your organization&apos;s admins can see when you last used Dmitri
+              and when you last signed in. We record only these times — not what
+              you viewed or did.
             </p>
           </Disclosure>
         </section>
         {user && (
-          <>
-            <hr aria-hidden className="border-t border-dashed border-rule" />
-            <section
-              data-testid="settings-leave"
-              className="flex flex-col gap-4"
-            >
-              <div className="flex flex-col gap-1">
-                <span className="font-title text-title-sm">
-                  Leave this organization
-                </span>
-                <p
-                  data-testid="settings-leave-body"
-                  className="max-w-prose text-body-md text-muted-foreground"
-                >
-                  Your account is deleted and you lose access to this
-                  organization's scans, hosts and findings straight away. This
-                  can't be undone — an admin would have to invite you again.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                className="self-start"
-                onClick={() => setIsLeaveOpen(true)}
-                data-testid="settings-leave-trigger"
+          <section data-testid="settings-leave" className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-title-sm">Leave this organisation</span>
+              <p
+                data-testid="settings-leave-body"
+                className="max-w-prose text-body-md text-muted-foreground"
               >
-                Delete my account
-              </Button>
-            </section>
-          </>
+                Your account is deleted and you lose access to this
+                organisation&apos;s scans, network and vulnerabilities straight
+                away. This can&apos;t be undone — an admin would have to invite
+                you again.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              onClick={() => setIsLeaveOpen(true)}
+              data-testid="settings-leave-trigger"
+            >
+              Delete my account
+            </Button>
+          </section>
         )}
       </div>
       <PasswordDialog

@@ -72,7 +72,7 @@ function ResetPassword() {
     return (
       <AuthShell>
         <div data-testid="reset-dead" className="flex flex-col gap-4">
-          <p ref={deadRef} tabIndex={-1} className="font-title text-title-sm">
+          <p ref={deadRef} tabIndex={-1} className="text-title-sm">
             This link has expired.
           </p>
           <p className="text-body-md text-muted-foreground">
@@ -81,7 +81,7 @@ function ResetPassword() {
           <Link
             to="/forgot-password"
             data-testid="reset-request"
-            className="self-center text-body-md text-accent underline"
+            className="cursor-pointer self-center text-body-md text-accent underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             Request a new link
           </Link>
@@ -98,8 +98,8 @@ function ResetPassword() {
           data-testid="reset-form"
           className="flex flex-col gap-4"
         >
-          <span className="font-title text-title-sm">Set a new password</span>
-          <div className="flex flex-col gap-1">
+          <span className="text-title-sm">Set a new password</span>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="reset-password">New password</Label>
             <Input
               id="reset-password"
@@ -124,12 +124,12 @@ function ResetPassword() {
               id="reset-password-error"
               role="alert"
               data-testid="reset-password-error"
-              className="text-body-md text-destructive"
+              className="text-body-md text-ink"
             >
               {passwordError}
             </p>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="reset-confirm">Confirm new password</Label>
             <Input
               id="reset-confirm"
@@ -146,7 +146,7 @@ function ResetPassword() {
               id="reset-confirm-error"
               role="alert"
               data-testid="reset-confirm-error"
-              className="text-body-md text-destructive"
+              className="text-body-md text-ink"
             >
               {confirmError}
             </p>
@@ -154,7 +154,7 @@ function ResetPassword() {
           <p
             role="alert"
             data-testid="reset-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {formError}
           </p>

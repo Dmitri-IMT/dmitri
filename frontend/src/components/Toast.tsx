@@ -35,7 +35,7 @@ function ToastProvider({ children }: { children: ReactNode }) {
             <Toast.Description className="text-body-md">
               {raised.message}
             </Toast.Description>
-            <Toast.Close className="text-body-sm text-muted-foreground underline">
+            <Toast.Close className="cursor-pointer text-body-sm text-muted-foreground underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
               Dismiss
             </Toast.Close>
           </Toast.Root>

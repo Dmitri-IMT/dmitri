@@ -16,10 +16,7 @@ function NotFoundNotice({
 }: NotFoundNoticeProps) {
   return (
     <div className="flex flex-col items-center gap-6 py-16 text-center">
-      <p
-        data-testid={`${testId}-not-found`}
-        className="font-title text-title-sm"
-      >
+      <p data-testid={`${testId}-not-found`} className="text-title-sm">
         {message}
       </p>
       <Button asChild variant="outline">

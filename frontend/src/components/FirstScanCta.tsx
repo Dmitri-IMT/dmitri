@@ -7,7 +7,7 @@ export function FirstScanCta() {
   return (
     <AdminOnly>
       <Button asChild data-testid="first-scan-cta">
-        <Link to="/agents">Run first scan</Link>
+        <Link to="/devices">Run first scan</Link>
       </Button>
     </AdminOnly>
   )

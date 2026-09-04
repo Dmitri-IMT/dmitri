@@ -3,6 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import DataTable, {
   type DataTableColumn,
   type DataTableRowAction,
+  type DataTableRowTone,
   type DataTableSort,
 } from '@/components/DataTable'
 import EmptyState from '@/components/EmptyState'
@@ -25,6 +26,7 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
     note?: ReactNode
   }
   rowAction: DataTableRowAction<Row>
+  rowTone?: (row: Row) => DataTableRowTone
   sort?: DataTableSort<SortKey>
   page: number
   perPage: number
@@ -40,6 +42,7 @@ function ListSurface<Row, SortKey extends string = never>({
   errorMessage,
   empty,
   rowAction,
+  rowTone,
   sort,
   page,
   perPage,
@@ -81,7 +84,12 @@ function ListSurface<Row, SortKey extends string = never>({
 
   return (
     <div className="flex flex-col gap-4">
-      <DataTable {...table} rows={query.data.data} rowAction={rowAction} />
+      <DataTable
+        {...table}
+        rows={query.data.data}
+        rowAction={rowAction}
+        rowTone={rowTone}
+      />
       <Pagination
         page={page}
         perPage={perPage}
