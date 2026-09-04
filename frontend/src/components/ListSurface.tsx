@@ -36,6 +36,7 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
   pagination?: {
     page: number
     perPage: number
+    total: number
     onPageChange: (page: number) => void
   }
 }
@@ -108,7 +109,7 @@ function ListSurface<Row, SortKey extends string = never>({
         <Pagination
           page={pagination.page}
           perPage={pagination.perPage}
-          total={query.data.total!}
+          total={pagination.total}
           onPageChange={pagination.onPageChange}
           testId={testId}
         />

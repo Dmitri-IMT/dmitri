@@ -79,6 +79,7 @@ describe('ListSurface', () => {
         pagination={{
           page: 1,
           perPage: 20,
+          total: 40,
           onPageChange: () => {},
         }}
       />,

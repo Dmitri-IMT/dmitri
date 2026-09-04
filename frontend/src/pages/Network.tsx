@@ -114,6 +114,7 @@ function Network() {
         pagination={{
           page,
           perPage: HOSTS_PER_PAGE,
+          total: query.data?.total ?? 0,
           onPageChange: setPage,
         }}
       />

@@ -12,27 +12,29 @@ type ScanHostView = components['schemas']['ScanHostView']
 
 type FindingsTableProps = {
   findings: FindingRecord[]
-  variant: 'scan' | 'host'
-  hosts?: ScanHostView[]
   isPending?: boolean
   testId: string
   caption: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
-}
+} & (
+  | { variant: 'scan'; hosts: ScanHostView[] }
+  | { variant: 'host' }
+)
 
 function FindingsTable({
   findings,
-  variant,
-  hosts,
   isPending = false,
   testId,
   caption,
   openFindingId,
   onOpenFindingChange,
+  ...rest
 }: FindingsTableProps) {
   const columns =
-    variant === 'scan' ? scanFindingColumns(hosts ?? []) : hostFindingColumns()
+    rest.variant === 'scan'
+      ? scanFindingColumns(rest.hosts)
+      : hostFindingColumns()
 
   const table = {
     columns,
