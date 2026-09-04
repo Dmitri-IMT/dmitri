@@ -39,6 +39,7 @@ function HostFindings({ hostId }: { hostId: string }) {
   return (
     <FindingsTable
       findings={query.data?.data ?? []}
+      variant="host"
       isPending={query.isPending}
       testId="host-findings-table"
       caption="Vulnerabilities on this machine"
