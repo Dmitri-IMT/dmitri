@@ -19,7 +19,6 @@ import { hostListColumns } from '@/pages/hosts/hostListColumns'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
-type HostListResponse = components['schemas']['HostListResponse']
 
 function Network() {
   const now = new Date()
@@ -77,11 +76,9 @@ function Network() {
           )
         }
       />
-      <ListSurface<HostSummary, HostListResponse, HostSortBy>
+      <ListSurface<HostSummary, HostSortBy>
         testId="network"
         query={query}
-        selectRows={(data) => data.data}
-        isEmpty={(data) => data.total === 0}
         columns={hostListColumns(now)}
         rowId={(host) => host.host_id}
         caption="Machines on your network"
@@ -118,7 +115,6 @@ function Network() {
           page,
           perPage: HOSTS_PER_PAGE,
           onPageChange: setPage,
-          total: (data) => data.total,
         }}
       />
     </div>

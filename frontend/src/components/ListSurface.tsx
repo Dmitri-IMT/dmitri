@@ -11,11 +11,11 @@ import EmptyState from '@/components/EmptyState'
 import ErrorRetry from '@/components/ErrorRetry'
 import Pagination from '@/components/Pagination'
 
-export type ListSurfaceProps<Row, Data, SortKey extends string = never> = {
+type ListPage<Row> = { data: Row[]; total?: number }
+
+export type ListSurfaceProps<Row, SortKey extends string = never> = {
   testId: string
-  query: UseQueryResult<Data>
-  selectRows: (data: Data) => Row[]
-  isEmpty: (data: Data) => boolean
+  query: UseQueryResult<ListPage<Row>>
   columns: DataTableColumn<Row, SortKey>[]
   rowId: (row: Row) => string
   caption: string
@@ -26,7 +26,6 @@ export type ListSurfaceProps<Row, Data, SortKey extends string = never> = {
     action?: ReactNode
     note?: ReactNode
   }
-  blank?: ReactNode
   rowAction: DataTableRowAction<Row>
   rowTone?: (row: Row) => DataTableRowTone
   sort?: DataTableSort<SortKey>
@@ -38,27 +37,23 @@ export type ListSurfaceProps<Row, Data, SortKey extends string = never> = {
     page: number
     perPage: number
     onPageChange: (page: number) => void
-    total: (data: Data) => number
   }
 }
 
-function ListSurface<Row, Data, SortKey extends string = never>({
+function ListSurface<Row, SortKey extends string = never>({
   testId,
   query,
-  selectRows,
-  isEmpty,
   columns,
   rowId,
   caption,
   errorMessage,
   empty,
-  blank,
   rowAction,
   rowTone,
   sort,
   partitionRows,
   pagination,
-}: ListSurfaceProps<Row, Data, SortKey>): ReactElement {
+}: ListSurfaceProps<Row, SortKey>): ReactElement {
   const table = {
     columns,
     rowId,
@@ -81,8 +76,9 @@ function ListSurface<Row, Data, SortKey extends string = never>({
 
   if (query.isPending) return <DataTable {...table} rows={[]} isPending />
 
-  if (isEmpty(query.data)) {
-    if (blank) return <>{blank}</>
+  const isEmpty = (query.data.total ?? query.data.data.length) === 0
+
+  if (isEmpty) {
     return (
       <EmptyState
         testId={`${testId}-blank`}
@@ -94,7 +90,7 @@ function ListSurface<Row, Data, SortKey extends string = never>({
     )
   }
 
-  const selected = selectRows(query.data)
+  const selected = query.data.data
   const partitioned = partitionRows
     ? partitionRows(selected)
     : { rows: selected }
@@ -112,7 +108,7 @@ function ListSurface<Row, Data, SortKey extends string = never>({
         <Pagination
           page={pagination.page}
           perPage={pagination.perPage}
-          total={pagination.total(query.data)}
+          total={query.data.total!}
           onPageChange={pagination.onPageChange}
           testId={testId}
         />

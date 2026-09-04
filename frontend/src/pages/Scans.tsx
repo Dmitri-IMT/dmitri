@@ -6,10 +6,6 @@ import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
 import { scanListColumns } from '@/pages/scans/scanListColumns'
-import type { components } from '@/types/openapi'
-
-type ScanSummary = components['schemas']['ScanSummary']
-type ScanListResponse = components['schemas']['ScanListResponse']
 
 function Scans() {
   const [page, setPage] = useState(1)
@@ -26,11 +22,9 @@ function Scans() {
   return (
     <div data-testid="scans-page" className="flex flex-col gap-12">
       <PageHeader title="Scans" />
-      <ListSurface<ScanSummary, ScanListResponse>
+      <ListSurface
         testId="scans"
         query={query}
-        selectRows={(data) => data.data}
-        isEmpty={(data) => data.total === 0}
         columns={scanListColumns}
         rowId={(scan) => scan.scan_id}
         caption="Scan run log"
@@ -50,7 +44,6 @@ function Scans() {
           page,
           perPage: SCANS_PER_PAGE,
           onPageChange: setPage,
-          total: (data) => data.total,
         }}
       />
     </div>
