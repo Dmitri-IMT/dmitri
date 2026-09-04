@@ -1,4 +1,3 @@
-import AdminOnly from '@/components/AdminOnly'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DEFAULT_SCAN_MODE,
@@ -10,6 +9,10 @@ import type { components } from '@/types/openapi'
 
 type ScanMode = components['schemas']['ScanMode']
 
+function isScanMode(value: string): value is ScanMode {
+  return (SCAN_MODE_ORDER as readonly string[]).includes(value)
+}
+
 function ScanTypeTabs({
   value,
   onChange,
@@ -18,34 +21,34 @@ function ScanTypeTabs({
   onChange: (mode: ScanMode) => void
 }) {
   return (
-    <AdminOnly>
-      <div className="flex flex-col gap-4" data-testid="scan-type-tabs">
-        <h3 className="text-title-sm">Scan type</h3>
-        <Tabs
-          value={value}
-          onValueChange={(next) => onChange(next as ScanMode)}
-        >
-          <TabsList className="w-full bg-rule p-1">
-            {SCAN_MODE_ORDER.map((mode) => (
-              <TabsTrigger
-                key={mode}
-                value={mode}
-                data-testid={`scan-type-tab-${mode}`}
-                className="text-ink-muted data-active:bg-card data-active:text-ink data-active:font-semibold data-active:shadow-sm"
-              >
-                {SCAN_MODE_LABEL[mode]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <p
-          data-testid="scan-type-description"
-          className="min-h-scan-type-description text-body-md text-muted-foreground"
-        >
-          {SCAN_MODE_DESCRIPTION[value]}
-        </p>
-      </div>
-    </AdminOnly>
+    <div className="flex flex-col gap-4" data-testid="scan-type-tabs">
+      <h3 className="text-title-sm">Scan type</h3>
+      <Tabs
+        value={value}
+        onValueChange={(next) => {
+          if (isScanMode(next)) onChange(next)
+        }}
+      >
+        <TabsList className="w-full bg-rule p-1">
+          {SCAN_MODE_ORDER.map((mode) => (
+            <TabsTrigger
+              key={mode}
+              value={mode}
+              data-testid={`scan-type-tab-${mode}`}
+              className="text-ink-muted data-active:bg-card data-active:text-ink data-active:font-semibold data-active:shadow-sm"
+            >
+              {SCAN_MODE_LABEL[mode]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <p
+        data-testid="scan-type-description"
+        className="min-h-scan-type-description text-body-md text-muted-foreground"
+      >
+        {SCAN_MODE_DESCRIPTION[value]}
+      </p>
+    </div>
   )
 }
 
