@@ -10,18 +10,16 @@ import {
 } from '@/api/hosts'
 import { queryKeys } from '@/api/queryKeys'
 import { getLatestSuccessfulScan } from '@/api/scans'
-import DataTable from '@/components/DataTable'
-import EmptyState from '@/components/EmptyState'
-import ErrorRetry from '@/components/ErrorRetry'
 import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
+import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
-import Pagination from '@/components/Pagination'
 import Timestamp from '@/components/Timestamp'
-import { isSilent } from '@/lib/silentDevice'
+import { isQuietHost, partitionQuietHosts } from '@/lib/hostLastSeen'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
+type HostListResponse = components['schemas']['HostListResponse']
 
 function Network() {
   const now = new Date()
@@ -60,16 +58,6 @@ function Network() {
 
   const total = query.data?.total
   const latestScan = latestScanQuery.data
-  const rows = query.data?.data ?? []
-  const quietRows = rows.filter((host) => isSilent(host.last_seen_at, now))
-  const recentRows = rows.filter((host) => !isSilent(host.last_seen_at, now))
-  const table = {
-    columns: hostListColumns(now),
-    rowId: (host: HostSummary) => host.host_id,
-    testId: 'network-table',
-    caption: 'Machines on your network',
-    sort: { by: sortBy, order: sortOrder, onChange: handleSort },
-  }
 
   return (
     <div data-testid="network-page" className="flex flex-col gap-12">
@@ -89,52 +77,50 @@ function Network() {
           )
         }
       />
-      {query.isError ? (
-        <ErrorRetry
-          testId="network-error"
-          message="Couldn't load your network."
-          onRetry={() => {
-            void query.refetch()
-          }}
-        />
-      ) : query.isPending ? (
-        <DataTable {...table} rows={[]} isPending />
-      ) : query.data.total === 0 ? (
-        <EmptyState
-          testId="network-blank"
-          heading="No machines yet"
-          body="Your first scan finds the machines on your network and what needs fixing."
-          action={<FirstScanCta />}
-          note={<FirstScanNote />}
-        />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <DataTable
-            {...table}
-            rows={recentRows}
-            rowAction={{
-              kind: 'link',
-              to: (host) => `/network/${host.host_id}`,
-              label: (host) => `Open ${host.hostname || host.ip}`,
-            }}
-            rowTone={(host) =>
-              isSilent(host.last_seen_at, now) ? 'muted' : undefined
-            }
-            collapsedGroup={{
-              rows: quietRows,
-              label: (count) => `Not seen recently (${count})`,
-              testId: 'network-quiet',
-            }}
-          />
-          <Pagination
-            page={page}
-            perPage={HOSTS_PER_PAGE}
-            total={query.data.total}
-            onPageChange={setPage}
-            testId="network"
-          />
-        </div>
-      )}
+      <ListSurface<HostSummary, HostListResponse, HostSortBy>
+        testId="network"
+        query={query}
+        selectRows={(data) => data.data}
+        isEmpty={(data) => data.total === 0}
+        columns={hostListColumns(now)}
+        rowId={(host) => host.host_id}
+        caption="Machines on your network"
+        errorMessage="Couldn't load your network."
+        empty={{
+          heading: 'No machines yet',
+          body: 'Your first scan finds the machines on your network and what needs fixing.',
+          action: <FirstScanCta />,
+          note: <FirstScanNote />,
+        }}
+        sort={{ by: sortBy, order: sortOrder, onChange: handleSort }}
+        partitionRows={(hosts) => {
+          const { recent, quiet } = partitionQuietHosts(hosts, now)
+          return {
+            rows: recent,
+            collapsedGroup: quiet.length
+              ? {
+                  rows: quiet,
+                  label: (count) => `Not seen recently (${count})`,
+                  testId: 'network-quiet',
+                }
+              : undefined,
+          }
+        }}
+        rowAction={{
+          kind: 'link',
+          to: (host) => `/network/${host.host_id}`,
+          label: (host) => `Open ${host.hostname || host.ip}`,
+        }}
+        rowTone={(host) =>
+          isQuietHost(host.last_seen_at, now) ? 'muted' : undefined
+        }
+        pagination={{
+          page,
+          perPage: HOSTS_PER_PAGE,
+          onPageChange: setPage,
+          total: (data) => data.total,
+        }}
+      />
     </div>
   )
 }

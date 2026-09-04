@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import DataTable, {
+  type DataTableCollapsedGroup,
   type DataTableColumn,
   type DataTableRowAction,
   type DataTableRowTone,
@@ -10,11 +11,11 @@ import EmptyState from '@/components/EmptyState'
 import ErrorRetry from '@/components/ErrorRetry'
 import Pagination from '@/components/Pagination'
 
-type ListPage<Row> = { data: Row[]; total: number }
-
-export type ListSurfaceProps<Row, SortKey extends string = never> = {
+export type ListSurfaceProps<Row, Data, SortKey extends string = never> = {
   testId: string
-  query: UseQueryResult<ListPage<Row>>
+  query: UseQueryResult<Data>
+  selectRows: (data: Data) => Row[]
+  isEmpty: (data: Data) => boolean
   columns: DataTableColumn<Row, SortKey>[]
   rowId: (row: Row) => string
   caption: string
@@ -25,29 +26,39 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
     action?: ReactNode
     note?: ReactNode
   }
+  blank?: ReactNode
   rowAction: DataTableRowAction<Row>
   rowTone?: (row: Row) => DataTableRowTone
   sort?: DataTableSort<SortKey>
-  page: number
-  perPage: number
-  onPageChange: (page: number) => void
+  partitionRows?: (rows: Row[]) => {
+    rows: Row[]
+    collapsedGroup?: DataTableCollapsedGroup<Row>
+  }
+  pagination?: {
+    page: number
+    perPage: number
+    onPageChange: (page: number) => void
+    total: (data: Data) => number
+  }
 }
 
-function ListSurface<Row, SortKey extends string = never>({
+function ListSurface<Row, Data, SortKey extends string = never>({
   testId,
   query,
+  selectRows,
+  isEmpty,
   columns,
   rowId,
   caption,
   errorMessage,
   empty,
+  blank,
   rowAction,
   rowTone,
   sort,
-  page,
-  perPage,
-  onPageChange,
-}: ListSurfaceProps<Row, SortKey>): ReactElement {
+  partitionRows,
+  pagination,
+}: ListSurfaceProps<Row, Data, SortKey>): ReactElement {
   const table = {
     columns,
     rowId,
@@ -70,7 +81,8 @@ function ListSurface<Row, SortKey extends string = never>({
 
   if (query.isPending) return <DataTable {...table} rows={[]} isPending />
 
-  if (query.data.total === 0) {
+  if (isEmpty(query.data)) {
+    if (blank) return <>{blank}</>
     return (
       <EmptyState
         testId={`${testId}-blank`}
@@ -82,21 +94,29 @@ function ListSurface<Row, SortKey extends string = never>({
     )
   }
 
+  const selected = selectRows(query.data)
+  const partitioned = partitionRows
+    ? partitionRows(selected)
+    : { rows: selected }
+
   return (
     <div className="flex flex-col gap-4">
       <DataTable
         {...table}
-        rows={query.data.data}
+        rows={partitioned.rows}
         rowAction={rowAction}
         rowTone={rowTone}
+        collapsedGroup={partitioned.collapsedGroup}
       />
-      <Pagination
-        page={page}
-        perPage={perPage}
-        total={query.data.total}
-        onPageChange={onPageChange}
-        testId={testId}
-      />
+      {pagination && (
+        <Pagination
+          page={pagination.page}
+          perPage={pagination.perPage}
+          total={pagination.total(query.data)}
+          onPageChange={pagination.onPageChange}
+          testId={testId}
+        />
+      )}
     </div>
   )
 }
