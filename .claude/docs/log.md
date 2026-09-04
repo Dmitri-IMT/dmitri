@@ -3,6 +3,28 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-04
+
+* **Update**: nuke optionals after spec 042 restyle. Deleted orphaned `HomeFooter` and the unused
+  `listAgents` read in `useHomeReview` (four Home reads, not five). Flattened `commandStatusLabel`
+  / `scanStatusLabel` to strings. `/devices` imports `Devices` directly; `Agents.tsx` re-export and
+  husk `Agents*.test.tsx` files removed. Touched: `review.md`, `overview.md`, `screens.md`,
+  `app.md`, `devices-screen.md`, `command-status.md`, `scan-status.md`, `frontend/index.md`,
+  root `index.md`.
+
+* **Update**: spec 042 / DMI-131 design-system v2 — frontend code-map sweep. Routes renamed
+  (`/network`, `/devices`, `/devices/:agentId`; `/hosts` and `/agents` gone). `agents-screen.md`
+  replaced by `devices-screen.md` (`Devices` list + `DeviceDetail` scan trigger; `usePrimaryAgent`
+  and `useAgentScreen` deleted). Home pending state: `AttentionTable` + `AttentionNotices` replace
+  `FindingDeck`/`ReviewItemCard`. `SeverityWord` replaces `SeverityBadge`; `StatusPill` and pill
+  mappers deleted (`scanStatusLabel`, `commandStatusLabel` are text-only). Six ESLint rules
+  (`no-raw-hex`, `no-dark-variant` added). `DataTable` gains `rowTone` and `collapsedGroup`
+  (Network quiet machines). `ReadDetailGate` gains required `backTo`/`backLabel`. `PageHeader`
+  gains `subtitle`. Auth authority moved from `SCREENS.md` to `FOUNDATIONS.md` in cross-links.
+  Touched: `app.md`, `screens.md`, `overview.md`, `tables.md`, `linting.md`, `review.md`,
+  `scan-status.md`, `command-status.md`, `host-detail.md`, `api.md`, `frontend/index.md`,
+  root `index.md`.
+
 ## 2026-09-01
 
 * **Update**: `backend/services.md` — DMI-97 / spec 041, revocation now takes effect on a live

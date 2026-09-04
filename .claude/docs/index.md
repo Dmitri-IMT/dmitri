@@ -67,11 +67,13 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/linting](./frontend/linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
 * [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
-* [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/hosts/agents), nested admin Users, and a catch-all that renders rather than redirects.
-* [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/network/devices), nested admin Users, and a catch-all that renders rather than redirects.
+* [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes four reads into one discriminated union.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
-* [frontend/scan-status](./frontend/scan-status.md) — scanStatusPill maps every ScanStatus to tone and label; isUnfinished hides counts; bySeverityDesc is the only guaranteed worst-first order.
-* [frontend/tables](./frontend/tables.md) — DataTable with a discriminated rowAction and an optional right-align per column, Pagination that greys edge controls, EmptyState with no CTA, outline StatusPill, and LoadingSkeleton bars on --border.
+* [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
+* [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
+* [frontend/devices-screen](./frontend/devices-screen.md) — Devices list and DeviceDetail scan trigger — useScanCommand, scan-type tabs, and cache invalidation on done.
+* [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
 * [frontend/screens](./frontend/screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 
