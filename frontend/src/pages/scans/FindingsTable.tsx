@@ -17,10 +17,7 @@ type FindingsTableProps = {
   caption: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
-} & (
-  | { variant: 'scan'; hosts: ScanHostView[] }
-  | { variant: 'host' }
-)
+} & ({ variant: 'scan'; hosts: ScanHostView[] } | { variant: 'host' })
 
 function FindingsTable({
   findings,
