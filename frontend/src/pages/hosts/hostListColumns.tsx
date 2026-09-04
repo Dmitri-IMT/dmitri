@@ -2,13 +2,13 @@ import type { HostSortBy } from '@/api/hosts'
 import type { DataTableColumn } from '@/components/DataTable'
 import SeverityWord from '@/components/SeverityWord'
 import Timestamp from '@/components/Timestamp'
-import { isSilent, weeksSince } from '@/lib/silentDevice'
+import { isQuietHost, weeksSinceLastSeen } from '@/lib/hostLastSeen'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
 
 function machineCell(host: HostSummary, now: Date) {
-  const quiet = isSilent(host.last_seen_at, now)
+  const quiet = isQuietHost(host.last_seen_at, now)
   return (
     <>
       {host.hostname ? (
@@ -27,7 +27,7 @@ function machineCell(host: HostSummary, now: Date) {
       )}
       {quiet && (
         <span className="block truncate text-muted-foreground">
-          Not seen for {weeksSince(host.last_seen_at, now)} weeks
+          Not seen for {weeksSinceLastSeen(host.last_seen_at, now)} weeks
         </span>
       )}
     </>

@@ -1,7 +1,7 @@
 import BackLink from '@/components/BackLink'
 import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
-import { isSilent, weeksSince } from '@/lib/silentDevice'
+import { isQuietHost, weeksSinceLastSeen } from '@/lib/hostLastSeen'
 import type { components } from '@/types/openapi'
 
 type HostDetailResponse = components['schemas']['HostDetailResponse']
@@ -9,7 +9,7 @@ type HostDetailResponse = components['schemas']['HostDetailResponse']
 function HostIdentity({ host }: { host: HostDetailResponse }) {
   const now = new Date()
   const title = host.hostname !== '' ? host.hostname : host.ip
-  const quiet = isSilent(host.last_seen_at, now)
+  const quiet = isQuietHost(host.last_seen_at, now)
 
   return (
     <div data-testid="host-detail-header" className="flex flex-col gap-2">
@@ -32,7 +32,7 @@ function HostIdentity({ host }: { host: HostDetailResponse }) {
       >
         First seen <Timestamp value={host.first_seen_at} now={now} /> ·{' '}
         {quiet ? (
-          <>not seen for {weeksSince(host.last_seen_at, now)} weeks</>
+          <>not seen for {weeksSinceLastSeen(host.last_seen_at, now)} weeks</>
         ) : (
           <>
             last seen <Timestamp value={host.last_seen_at} now={now} />
