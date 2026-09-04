@@ -3,11 +3,11 @@ import { createClassStringVisitor } from './class-strings.js'
 const RAW_TYPE = /^text-(xs|sm|base|lg|xl|[2-9]xl)$/
 
 const TYPE_SIZES = {
-  'text-xs': { px: 12, replacement: 'text-caption-md' },
-  'text-sm': { px: 14, replacement: 'text-body-md' },
+  'text-xs': { px: 12 },
+  'text-sm': { px: 14, replacement: 'text-body-sm' },
   'text-base': { px: 16 },
   'text-lg': { px: 18 },
-  'text-xl': { px: 20, replacement: 'text-title-sm' },
+  'text-xl': { px: 20 },
   'text-2xl': { px: 24 },
   'text-3xl': { px: 30 },
   'text-4xl': { px: 36 },
