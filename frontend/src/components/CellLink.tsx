@@ -9,7 +9,7 @@ function CellLink({ to, children }: { to: string; children: ReactNode }) {
     <Link
       to={to}
       state={fromHere(location)}
-      className="block max-w-full cursor-pointer truncate underline-offset-4 outline-none hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 active:decoration-2"
+      className="relative z-10 block max-w-full cursor-pointer truncate underline-offset-4 outline-none hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring/50 active:decoration-2"
     >
       {children}
     </Link>
