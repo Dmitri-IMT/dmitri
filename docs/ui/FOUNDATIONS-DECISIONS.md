@@ -109,3 +109,11 @@ scans"*.
 | Final wording for the services heading, and a replacement for *"Seen in these scans"* | [`FOUNDATIONS.md`](FOUNDATIONS.md) §Copy rules & vocabulary · research note §4.11 |
 | Device naming fallback when no name is found | the Network screen issue |
 | Whether the `Users` nav item keeps its name | not commented in review; keep "Users" |
+
+## Moved with DMI-132 (2026-09-04)
+
+**Scan settings — from the Scans page to the box detail screen** *(Round 6 had placed the
+tabs-and-description block below the scans table.)* Retired because scan type is a **per-box**
+setting: a customer may run several Dmitri boxes on several networks, and each box needs its own
+watched network, scan-type preview and `[Scan now]`. The Scans page keeps the run log only; the
+scan-settings pattern now lives on `/devices/:agentId`.
