@@ -12,7 +12,7 @@ from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
 from api.services import agent_connections, agent_presence, commands
 from sqlmodel import Session, select
-from starlette.websockets import WebSocketState
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 STALE = T0 - timedelta(minutes=20)
@@ -91,8 +91,19 @@ def test_deliver_success_sets_delivered_at_and_stub_scan(
     assert started[0].payload == {"scan_mode": "standard"}
 
 
+@pytest.mark.parametrize(
+    "send_error",
+    [
+        WebSocketDisconnect(code=1006),
+        OSError("broken pipe"),
+        RuntimeError('Cannot call "send" once a close message has been sent.'),
+    ],
+)
 def test_deliver_send_failure_expires_without_scan(
-    administrative_session: Session, provisioned_agent, seeded_org
+    administrative_session: Session,
+    provisioned_agent,
+    seeded_org,
+    send_error: BaseException,
 ):
     command = _seed_queued_command(
         administrative_session,
@@ -100,7 +111,7 @@ def test_deliver_send_failure_expires_without_scan(
         agent_id=provisioned_agent.id,
     )
     ws = AsyncMock()
-    ws.send_text.side_effect = RuntimeError("dead socket")
+    ws.send_text.side_effect = send_error
 
     async def run() -> None:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
@@ -119,6 +130,30 @@ def test_deliver_send_failure_expires_without_scan(
     assert command.scan_id is None
     assert command.delivered_at is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
+
+
+def test_deliver_send_bug_is_not_treated_as_offline(
+    administrative_session: Session, provisioned_agent, seeded_org
+):
+    command = _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+    )
+    ws = AsyncMock()
+    ws.send_text.side_effect = ValueError("bad frame")
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        with pytest.raises(ValueError, match="bad frame"):
+            await commands.deliver(
+                administrative_session, command=command, now=T0
+            )
+
+    asyncio.run(run())
+
+    administrative_session.refresh(command)
+    assert command.status == "queued"
 
 
 def test_deliver_no_socket_raises_offline_without_awaiting_send(

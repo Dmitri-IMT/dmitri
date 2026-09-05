@@ -7,6 +7,7 @@ from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
+from starlette.websockets import WebSocketDisconnect
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
@@ -106,6 +107,23 @@ def command_for_scan(session: Session, scan_id: UUID) -> Command | None:
     return session.exec(select(Command).where(Command.scan_id == scan_id)).first()
 
 
+def _append_scan_failed(session: Session, scan_id: UUID) -> None:
+    scan_record = session.get(ScanRecord, scan_id)
+    if scan_record is None:
+        return
+    append_activity(
+        session,
+        ActivityAppend(
+            org_id=scan_record.org_id,
+            kind="scan_failed",
+            occurred_at=utc_now(),
+            actor_user_id=None,
+            subject_id=scan_id,
+            payload={"scan_mode": scan_record.scan_mode},
+        ),
+    )
+
+
 def apply_status(
     session: Session,
     *,
@@ -156,19 +174,7 @@ def apply_status(
             .values(status=scan_status_for(status))
         )
         if status == "failed":
-            scan_record = session.get(ScanRecord, scan_id)
-            if scan_record is not None:
-                append_activity(
-                    session,
-                    ActivityAppend(
-                        org_id=scan_record.org_id,
-                        kind="scan_failed",
-                        occurred_at=utc_now(),
-                        actor_user_id=None,
-                        subject_id=scan_id,
-                        payload={"scan_mode": scan_record.scan_mode},
-                    ),
-                )
+            _append_scan_failed(session, scan_id)
     session.commit()
     return True
 
@@ -228,19 +234,7 @@ def sweep_stale_commands(
                 .values(status=scan_status_for(command_status))
             )
             if command_status == "failed":
-                scan_record = session.get(ScanRecord, scan_id)
-                if scan_record is not None:
-                    append_activity(
-                        session,
-                        ActivityAppend(
-                            org_id=scan_record.org_id,
-                            kind="scan_failed",
-                            occurred_at=utc_now(),
-                            actor_user_id=None,
-                            subject_id=scan_id,
-                            payload={"scan_mode": scan_record.scan_mode},
-                        ),
-                    )
+                _append_scan_failed(session, scan_id)
     if rows:
         session.commit()
     return len(rows)
@@ -337,9 +331,10 @@ async def deliver(
 
     try:
         await socket.send_text(frame.model_dump_json())
-    except Exception:
-        # A WebSocket that raised on send is already closed — there is nothing
-        # left to retry against, so give up and let the operator re-trigger.
+    except (WebSocketDisconnect, OSError, RuntimeError):
+        # Starlette maps a dead transport OSError to WebSocketDisconnect(1006);
+        # a socket already marked DISCONNECTED raises RuntimeError instead
+        # (same as the receive loop in agent_ws). Nothing left to retry.
         await run_in_threadpool(_expire_queued_command, session, command.id)
         raise DeviceOfflineError from None
 
