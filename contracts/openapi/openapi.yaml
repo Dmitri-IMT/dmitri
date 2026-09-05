@@ -174,6 +174,7 @@ paths:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/ScanStatusFilter'
+        - $ref: '#/components/parameters/ScanAgentIdFilter'
         - $ref: '#/components/parameters/ScanSortBy'
         - $ref: '#/components/parameters/SortOrder'
       responses:
@@ -1244,6 +1245,14 @@ components:
       description: Filter scans by lifecycle status.
       schema:
         $ref: '#/components/schemas/ScanStatus'
+    ScanAgentIdFilter:
+      name: agent_id
+      in: query
+      required: false
+      description: Limit scans to those produced by this box.
+      schema:
+        type: string
+        format: uuid
     ScanSortBy:
       name: sort_by
       in: query
@@ -2446,6 +2455,20 @@ components:
           anyOf:
             - $ref: '#/components/schemas/Severity'
             - type: 'null'
+        agent_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        box_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+        duration:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
     ScanDetailResponse:
       type: object
       additionalProperties: false
@@ -2508,6 +2531,20 @@ components:
         finding_count:
           type: integer
           minimum: 0
+        agent_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        box_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+        duration:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
     ScanListResponse:
       type: object
       additionalProperties: false

@@ -73,9 +73,7 @@ export function hostListColumns(
       width: 'w-5/50',
       align: 'right',
       render: (host) => (
-        <span className="block text-right tabular-nums">
-          {host.open_ports_count}
-        </span>
+        <span className="block tabular-nums">{host.open_ports_count}</span>
       ),
     },
     {

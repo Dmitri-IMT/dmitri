@@ -61,7 +61,7 @@ const columns: DataTableColumn<ScanHostView>[] = [
     width: 'w-7/50',
     align: 'right',
     render: (host) => (
-      <span className="block text-right tabular-nums">{host.ports.length}</span>
+      <span className="block tabular-nums">{host.ports.length}</span>
     ),
   },
 ]

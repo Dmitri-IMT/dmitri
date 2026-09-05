@@ -80,6 +80,14 @@ const INTERACTIVE_ROW =
 
 const INERT_ROW = 'h-row border-t border-border text-caption-md'
 
+function columnTextAlign(align: 'right' | undefined): string {
+  return align === 'right' ? 'text-right' : ''
+}
+
+function sortButtonJustify(align: 'right' | undefined): string {
+  return align === 'right' ? 'justify-end' : 'justify-start'
+}
+
 function DataTable<Row, SortKey extends string = never>({
   columns,
   rows,
@@ -216,7 +224,7 @@ function DataTable<Row, SortKey extends string = never>({
               key={column.key}
               className={`max-w-0 pr-4 align-middle ${
                 index === 0 && isLink ? '' : 'truncate'
-              } ${column.align === 'right' ? 'text-right' : ''}`}
+              } ${columnTextAlign(column.align)}`}
             >
               {renderCell(row, column, index)}
             </td>
@@ -267,9 +275,7 @@ function DataTable<Row, SortKey extends string = never>({
                   key={column.key}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={`truncate pr-4 font-normal uppercase ${
-                    column.align === 'right' ? 'text-right' : ''
-                  }`}
+                  className={`truncate pr-4 font-normal uppercase ${columnTextAlign(column.align)}`}
                 >
                   {sort && column.sortable ? (
                     <Button
@@ -277,11 +283,7 @@ function DataTable<Row, SortKey extends string = never>({
                       variant="link"
                       aria-label={column.label}
                       data-testid={`${testId}-sort-${column.key}`}
-                      className={`h-auto max-w-full gap-1 rounded-none px-0 py-0 text-caption-md font-normal text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:decoration-2 ${
-                        column.align === 'right'
-                          ? 'justify-end'
-                          : 'justify-start'
-                      }`}
+                      className={`h-auto max-w-full gap-1 rounded-none px-0 py-0 text-caption-md font-normal text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:decoration-2 ${sortButtonJustify(column.align)}`}
                       onClick={() => sort.onChange(column.key)}
                     >
                       <span

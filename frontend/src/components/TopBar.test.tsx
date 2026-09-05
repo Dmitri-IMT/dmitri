@@ -66,7 +66,10 @@ describe('TopBar', () => {
         'Settings',
       )
       expect(
-        screen.getByRole('button', { name: 'Log out' }),
+        screen.queryByRole('button', { name: 'Log out' }),
+      ).not.toBeInTheDocument()
+      expect(
+        await screen.findByRole('button', { name: profile.email }),
       ).toBeInTheDocument()
     },
   )
@@ -76,7 +79,6 @@ describe('TopBar', () => {
     const topBar = await screen.findByTestId('top-bar')
     const wordmark = screen.getByText('Dmitri')
     const nav = screen.getByRole('navigation')
-    const logOut = screen.getByRole('button', { name: 'Log out' })
     const identity = await screen.findByTestId('user-identity')
     const frame = nav.parentElement
 
@@ -85,9 +87,11 @@ describe('TopBar', () => {
     expect(frame?.children).toHaveLength(3)
     expect(frame?.children.item(0)).toBe(wordmark)
     expect(frame?.children.item(1)).toBe(nav)
-    expect(frame?.children.item(2)).toBe(identity.parentElement)
-    expect(identity.parentElement).toContainElement(logOut)
-    expect(logOut).toHaveAttribute('data-variant', 'ghost')
+    expect(frame?.children.item(2)).toBe(identity)
+    expect(identity).toHaveAttribute('data-variant', 'ghost')
+    expect(
+      screen.queryByRole('button', { name: 'Log out' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the Users nav item, pointing at /users, for an admin', async () => {
@@ -155,6 +159,7 @@ describe('TopBar', () => {
     const identity = await screen.findByTestId('user-identity')
     expect(identity).toHaveTextContent(adminProfile.email)
     expect(identity).toHaveAttribute('title', adminProfile.email)
+    expect(identity).toHaveAccessibleName(adminProfile.email)
   })
 
   it.each([
@@ -190,7 +195,7 @@ describe('TopBar', () => {
     await screen.findByTestId('nav-users')
     expect(getAccessToken()).not.toBeNull()
 
-    const logOut = screen.getByRole('button', { name: 'Log out' })
+    const identity = screen.getByTestId('user-identity')
     await user.tab()
     await user.tab()
     await user.tab()
@@ -198,9 +203,12 @@ describe('TopBar', () => {
     await user.tab()
     await user.tab()
     await user.tab()
-    expect(logOut).toHaveFocus()
+    expect(identity).toHaveFocus()
 
     await user.keyboard('{Enter}')
+    const logOut = await screen.findByRole('menuitem', { name: 'Log out' })
+    expect(logOut).toHaveAttribute('data-testid', 'log-out')
+    await user.click(logOut)
 
     await waitFor(() => expect(getAccessToken()).toBeNull())
   })

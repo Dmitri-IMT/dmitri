@@ -69,6 +69,7 @@ def test_deliver_success_sets_delivered_at_and_stub_scan(
     assert scan.subnet == "192.168.1.0/24"
     assert scan.scan_mode == "standard"
     assert scan.status == "pending"
+    assert scan.agent_id == provisioned_agent.id
 
 
 def test_deliver_send_failure_expires_without_scan(

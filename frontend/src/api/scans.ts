@@ -10,7 +10,8 @@ type ListScansQuery = NonNullable<
 
 export type ScanListParams = Required<
   Pick<ListScansQuery, 'page' | 'per_page' | 'sort_by' | 'sort_order'>
->
+> &
+  Pick<ListScansQuery, 'agent_id'>
 
 export const SCANS_PER_PAGE = 20
 

@@ -81,7 +81,7 @@ describe('DeviceDetail command cache invalidation', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Queued')).toBeInTheDocument()
-      expect(scanReads).toBe(2)
+      expect(scanReads).toBe(3)
       expect(hostReads).toBe(1)
       expect(findingReads).toBe(1)
       expect(agentDetailReads).toBe(1)
@@ -89,7 +89,7 @@ describe('DeviceDetail command cache invalidation', () => {
     await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS)
     await vi.waitFor(() => {
       expect(screen.getByText('Done')).toBeInTheDocument()
-      expect(scanReads).toBe(4)
+      expect(scanReads).toBe(6)
       expect(hostReads).toBe(2)
       expect(findingReads).toBe(2)
       expect(agentDetailReads).toBe(2)
@@ -97,7 +97,7 @@ describe('DeviceDetail command cache invalidation', () => {
 
     await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
     expect(commandReads).toBe(2)
-    expect(scanReads).toBe(4)
+    expect(scanReads).toBe(6)
     expect(hostReads).toBe(2)
     expect(findingReads).toBe(2)
     expect(agentDetailReads).toBe(2)

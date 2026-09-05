@@ -7,7 +7,9 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
 from api.core.error_codes import scan_error_code
+from api.core.scan_read import scan_duration_seconds
 from api.core.severity import SEVERITY_ORDER, Severity
+from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
@@ -173,6 +175,7 @@ def get_scan_detail(
     findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
 
     command = commands.command_for_scan(session, scan_id)
+    agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
     return ScanDetailResponse(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -188,6 +191,9 @@ def get_scan_detail(
         ),
         host_count=len(hosts),
         finding_count=len(findings),
+        agent_id=scan.agent_id,
+        box_name=agent.display_name if agent is not None else None,
+        duration=scan_duration_seconds(scan.status, scan.metadata_json),
     )
 
 
@@ -198,12 +204,15 @@ def list_scans(
     page: int = 1,
     per_page: int = 20,
     status: ScanStatus | None = None,
+    agent_id: UUID | None = None,
     sort_by: ScanSortBy = "timestamp",
     sort_order: SortOrder = "desc",
 ) -> ScanListResponse:
     predicates = [ScanRecord.org_id == org_id]
     if status is not None:
         predicates.append(ScanRecord.status == status)
+    if agent_id is not None:
+        predicates.append(ScanRecord.agent_id == agent_id)
 
     total = session.exec(
         select(func.count()).select_from(ScanRecord).where(*predicates)
@@ -211,15 +220,16 @@ def list_scans(
 
     column = _SCAN_SORT_COLUMNS[sort_by]
     direction = column.desc() if sort_order == "desc" else column.asc()
-    scans = session.exec(
-        select(ScanRecord)
+    rows = session.exec(
+        select(ScanRecord, Agent.display_name)
+        .outerjoin(Agent, Agent.id == ScanRecord.agent_id)
         .where(*predicates)
         .order_by(direction, ScanRecord.scan_id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     ).all()
 
-    ids = [scan.scan_id for scan in scans]
+    ids = [scan.scan_id for scan, _ in rows]
     host_counts: dict[UUID, int] = {}
     finding_agg: dict[UUID, tuple[int, int | None]] = {}
     if ids:
@@ -252,8 +262,9 @@ def list_scans(
                 highest_severity=_severity_from_rank(
                     finding_agg.get(scan.scan_id, (0, None))[1]
                 ),
+                box_name=box_name,
             )
-            for scan in scans
+            for scan, box_name in rows
         ],
         total=total,
         page=page,
@@ -337,6 +348,7 @@ def _to_scan_summary(
     host_count: int,
     finding_count: int,
     highest_severity: str | None,
+    box_name: str | None,
 ) -> ScanSummary:
     return ScanSummary(
         scan_id=scan.scan_id,
@@ -347,6 +359,9 @@ def _to_scan_summary(
         host_count=host_count,
         finding_count=finding_count,
         highest_severity=highest_severity,
+        agent_id=scan.agent_id,
+        box_name=box_name,
+        duration=scan_duration_seconds(scan.status, scan.metadata_json),
     )
 
 

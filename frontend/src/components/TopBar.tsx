@@ -3,6 +3,12 @@ import { cn } from '@/lib/utils'
 import { useSession } from '@/auth/useSession'
 import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -55,26 +61,29 @@ function TopBar() {
             Settings
           </NavLink>
         </nav>
-        <div className="flex min-w-0 items-center gap-4 justify-self-end">
-          {user && (
-            <span
-              data-testid="user-identity"
-              title={user.email}
-              className="min-w-0 truncate text-body-md text-muted-foreground"
-            >
-              {user.email}
-            </span>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            className="shrink-0"
-            data-testid="log-out"
-            onClick={() => void signOut()}
-          >
-            Log out
-          </Button>
-        </div>
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                title={user.email}
+                data-testid="user-identity"
+                className="min-w-0 max-w-full justify-self-end truncate px-2 font-normal text-muted-foreground"
+              >
+                {user.email}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem
+                data-testid="log-out"
+                onSelect={() => void signOut()}
+              >
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </header>
   )

@@ -13,6 +13,16 @@ import Pagination from '@/components/Pagination'
 
 type ListPage<Row> = { data: Row[]; total?: number }
 
+type ListSurfaceEmpty =
+  | {
+      kind?: 'page'
+      heading: string
+      body: string
+      action?: ReactNode
+      note?: ReactNode
+    }
+  | { kind: 'section'; body: string }
+
 export type ListSurfaceProps<Row, SortKey extends string = never> = {
   testId: string
   query: UseQueryResult<ListPage<Row>>
@@ -20,12 +30,7 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
   rowId: (row: Row) => string
   caption: string
   errorMessage: string
-  empty: {
-    heading: string
-    body: string
-    action?: ReactNode
-    note?: ReactNode
-  }
+  empty: ListSurfaceEmpty
   rowAction: DataTableRowAction<Row>
   rowTone?: (row: Row) => DataTableRowTone
   sort?: DataTableSort<SortKey>
@@ -80,6 +85,13 @@ function ListSurface<Row, SortKey extends string = never>({
   const isEmpty = (query.data.total ?? query.data.data.length) === 0
 
   if (isEmpty) {
+    if (empty.kind === 'section') {
+      return (
+        <p data-testid={`${testId}-blank`} className="text-body-md">
+          {empty.body}
+        </p>
+      )
+    }
     return (
       <EmptyState
         testId={`${testId}-blank`}

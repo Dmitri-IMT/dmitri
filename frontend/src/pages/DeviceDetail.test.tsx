@@ -2,13 +2,25 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router'
+import { http, HttpResponse } from 'msw'
 import { focusManager } from '@tanstack/react-query'
 import DeviceDetail from '@/pages/DeviceDetail'
 import { agentDetail, withActiveCommand } from '@/test/agentsHarness'
-import { defaultAgent, defaultCommand, viewerProfile } from '@/test/mswHandlers'
+import {
+  defaultAgent,
+  defaultCommand,
+  latestSuccessfulScan,
+  viewerProfile,
+} from '@/test/mswHandlers'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import { signedInAs } from '@/test/usersHarness'
 import { SCAN_MODE_DESCRIPTION } from '@/lib/scanModes'
+import { server } from '@/test/setup'
+import { baseURL } from '@/test/scansHarness'
+import type { components } from '@/types/openapi'
+
+type ScanSummary = components['schemas']['ScanSummary']
+type ScanListResponse = components['schemas']['ScanListResponse']
 
 const agentRoute = `/devices/${defaultAgent.agent_id}`
 
@@ -166,5 +178,60 @@ describe('DeviceDetail', () => {
     expect(screen.getByTestId('agents-chooser')).toBeInTheDocument()
     expect(screen.queryByTestId('scan-type-tabs')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agents-scan-now')).not.toBeInTheDocument()
+  })
+
+  it('shows empty scan history copy when this box has no scans', async () => {
+    server.use(
+      http.get(`${baseURL}/scans`, () =>
+        HttpResponse.json({
+          data: [],
+          total: 0,
+          page: 1,
+        } satisfies ScanListResponse),
+      ),
+    )
+    renderDeviceDetail()
+
+    expect(
+      await screen.findByTestId('device-scan-history-blank'),
+    ).toHaveTextContent('No scans from this box yet.')
+  })
+
+  it('loads history for this box and lists When, Mode, Status, Duration', async () => {
+    const requested: string[] = []
+    const failed: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '77777777-7777-4777-8777-777777777777',
+      status: 'failed',
+      duration: null,
+      host_count: 0,
+      finding_count: 0,
+      highest_severity: null,
+    }
+    server.use(
+      http.get(`${baseURL}/scans`, ({ request }) => {
+        requested.push(new URL(request.url).searchParams.get('agent_id') ?? '')
+        return HttpResponse.json({
+          data: [latestSuccessfulScan, failed],
+          total: 2,
+          page: 1,
+        } satisfies ScanListResponse)
+      }),
+    )
+    renderDeviceDetail()
+
+    const table = await screen.findByTestId('device-scan-history-table')
+    await waitFor(() => {
+      expect(requested).toContain(defaultAgent.agent_id)
+    })
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['When', 'Mode', 'Status', 'Duration'])
+    const failedRow = screen.getByTestId(
+      `device-scan-history-table-row-${failed.scan_id}`,
+    )
+    expect(within(failedRow).getAllByRole('cell')[3]).toHaveTextContent('—')
   })
 })

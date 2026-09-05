@@ -203,6 +203,61 @@ def test_list_scans_zero_finding_scan_reports_null_highest_severity(
     )
     assert row["finding_count"] == 0
     assert row["highest_severity"] is None
+    assert "agent_id" in row
+    assert "box_name" in row
+    assert "duration" in row
+
+
+def test_list_scans_filters_by_agent_id(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    agent = Agent(
+        org_id=seeded["org"].id,
+        display_name="HQ",
+        public_key=b"\x01" * 32,
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    now = datetime.now(timezone.utc)
+    owned = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded["org"].id,
+        agent_id=agent.id,
+        timestamp=now,
+        subnet="10.9.0.0/24",
+        scan_mode="quick",
+        status="pending",
+    )
+    administrative_session.add(owned)
+    administrative_session.commit()
+    headers = bearer_headers(seeded["org"].id, "admin")
+    response = client.get(
+        f"/api/v1/scans?agent_id={agent.id}",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["data"][0]["scan_id"] == str(owned.scan_id)
+    assert body["data"][0]["agent_id"] == str(agent.id)
+    assert body["data"][0]["box_name"] == "HQ"
+
+
+def test_get_scan_by_id_includes_box_and_duration_fields(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    headers = bearer_headers(seeded["org"].id, "viewer")
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}", headers=headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "agent_id" in body
+    assert "box_name" in body
+    assert "duration" in body
 
 
 @pytest.mark.parametrize(

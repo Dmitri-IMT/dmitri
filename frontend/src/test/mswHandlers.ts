@@ -187,6 +187,9 @@ export const latestScan: ScanSummary = {
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
+  agent_id: defaultAgent.agent_id,
+  box_name: defaultAgent.display_name,
+  duration: null,
 }
 
 export const latestSuccessfulScan: ScanSummary = {
@@ -198,6 +201,9 @@ export const latestSuccessfulScan: ScanSummary = {
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
+  agent_id: defaultAgent.agent_id,
+  box_name: defaultAgent.display_name,
+  duration: 500,
 }
 
 export const criticalFinding: FindingRecord = {
@@ -278,6 +284,9 @@ export const scanFixtures: ScanSummary[] = [
       finding_count: finished ? index % 4 : 0,
       highest_severity:
         finished && index % 4 > 0 ? (index % 2 === 0 ? 'high' : 'low') : null,
+      agent_id: defaultAgent.agent_id,
+      box_name: defaultAgent.display_name,
+      duration: finished ? 45 : null,
     }
   }),
 ]
@@ -504,10 +513,14 @@ export const handlers = [
     () => new HttpResponse(null, { status: 204 }),
   ),
   http.get(`${baseURL}/scans`, ({ request }) => {
-    const status = new URL(request.url).searchParams.get('status')
-    const rows = status
-      ? scanFixtures.filter((scan) => scan.status === status)
-      : scanFixtures
+    const params = new URL(request.url).searchParams
+    const status = params.get('status')
+    const agentId = params.get('agent_id')
+    const rows = scanFixtures.filter((scan) => {
+      if (status && scan.status !== status) return false
+      if (agentId && scan.agent_id !== agentId) return false
+      return true
+    })
     return HttpResponse.json(
       paginate(rows, request.url) satisfies ScanListResponse,
     )

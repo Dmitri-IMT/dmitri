@@ -174,6 +174,7 @@ def test_ingest_scan_accepts_enriched_findings_example(
     assert str(record.scan_id) == payload["scan_id"]
     assert record.scan_mode == scan.scan_mode
     assert record.status == "completed"
+    assert record.agent_id == provisioned_agent.id
 
 
 def test_worker_processes_pending_jobs_separately(
@@ -455,6 +456,40 @@ def test_ingest_scan_rejects_placeholder_owned_by_another_agent(
     assert (
         runtime_session.exec(
             select(EnrichmentJobRecord).where(EnrichmentJobRecord.scan_id == scan_id)
+        ).first()
+        is None
+    )
+
+
+def test_persist_scan_refuses_stub_agent_mismatch(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    other_agent = _seed_agent(runtime_session, seeded_org.id)
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    stub = runtime_session.get(ScanRecord, scan_id)
+    stub.agent_id = other_agent.id
+    runtime_session.add(stub)
+    runtime_session.commit()
+    scan = _scan_with_findable_payload(scan_id)
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    with pytest.raises(ScanOwnershipError):
+        ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(stub)
+    assert stub.agent_id == other_agent.id
+    assert stub.status == "pending"
+    assert (
+        runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
         ).first()
         is None
     )
