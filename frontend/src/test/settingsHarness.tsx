@@ -17,7 +17,7 @@ export const baseURL = 'http://localhost:8000/api/v1'
 export const CURRENT = 'old-long-enough-password'
 export const NEXT = 'new-long-enough-password'
 export const ACTIVITY_NOTE =
-  "Your organization's admins can see when you last used Dmitri and when you last signed in. We record only these times — not what you viewed or did."
+  "Everyone in your organization can see when you last signed in, and a log of changes to the organization: scans, machines that join the network, invitations, role changes, and members joining or leaving. We don't record what you viewed."
 export const LAST_ADMIN_REFUSAL =
   "You're the only admin. Make someone else an admin first, then you can leave."
 export const GENERIC_LEAVE_FAILURE = "Couldn't delete your account."

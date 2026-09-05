@@ -20,6 +20,7 @@ type InviteCreatedResponse = components['schemas']['InviteCreatedResponse']
 type AgentDetail = components['schemas']['AgentDetail']
 type AgentSummary = components['schemas']['AgentSummary']
 type CommandDetail = components['schemas']['CommandDetail']
+type HomeSnapshot = components['schemas']['HomeSnapshot']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
@@ -379,6 +380,26 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
   }),
 )
 
+export function homeSnapshot(
+  overrides: Partial<HomeSnapshot> = {},
+  attentionPage = 1,
+): HomeSnapshot {
+  return {
+    review_state: 'pending',
+    review_count: 2,
+    latest_successful_scan: latestSuccessfulScan,
+    notices: [],
+    attention: {
+      data: [criticalFinding, highFinding],
+      total: 2,
+      page: attentionPage,
+    },
+    events: { data: [], total: 0, page: 1 },
+    activity: { data: [], total: 0, page: 1 },
+    ...overrides,
+  }
+}
+
 export function paginate<T>(rows: T[], url: string) {
   const params = new URL(url).searchParams
   const page = Number(params.get('page') ?? 1)
@@ -555,5 +576,17 @@ export const handlers = [
     return HttpResponse.json(
       paginate(rows, request.url) satisfies FindingListResponse,
     )
+  }),
+  http.get(`${baseURL}/home`, ({ request }) => {
+    const url = new URL(request.url)
+    const attentionPage = Number(url.searchParams.get('attention_page') ?? '1')
+    const eventsPage = Number(url.searchParams.get('events_page') ?? '1')
+    const activityPage = Number(url.searchParams.get('activity_page') ?? '1')
+    const snapshot = homeSnapshot({}, attentionPage)
+    return HttpResponse.json({
+      ...snapshot,
+      events: { ...snapshot.events, page: eventsPage },
+      activity: { ...snapshot.activity, page: activityPage },
+    })
   }),
 ]

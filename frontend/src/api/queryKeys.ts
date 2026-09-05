@@ -1,10 +1,21 @@
 import type { FindingListParams } from './findings'
+import type { HomePages } from './home'
 import type { HostListParams } from './hosts'
 import type { ScanListParams } from './scans'
 
 export type { FindingListParams, HostListParams, ScanListParams }
 
 export const queryKeys = {
+  home: {
+    snapshot: (pages: HomePages) =>
+      [
+        'home',
+        'snapshot',
+        pages.attentionPage,
+        pages.eventsPage,
+        pages.activityPage,
+      ] as const,
+  },
   scans: {
     all: ['scans'] as const,
     latest: (scope: 'any' | 'completed') => ['scans', 'latest', scope] as const,

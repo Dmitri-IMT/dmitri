@@ -1,7 +1,9 @@
 import CellLink from '@/components/CellLink'
 import DataTable, { type DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
+import Pagination from '@/components/Pagination'
 import SeverityWord from '@/components/SeverityWord'
+import { HOME_ATTENTION_PER_PAGE } from '@/api/home'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
@@ -53,26 +55,46 @@ const columns: DataTableColumn<FindingRecord>[] = [
   },
 ]
 
-function AttentionTable({ findings }: { findings: FindingRecord[] }) {
-  if (findings.length === 0) {
-    return null
-  }
+type AttentionTableProps = {
+  findings: FindingRecord[]
+  total: number
+  page: number
+  onPageChange: (page: number) => void
+}
 
+function AttentionTable({
+  findings,
+  total,
+  page,
+  onPageChange,
+}: AttentionTableProps) {
   return (
-    <DataTable
-      columns={columns}
-      rows={findings}
-      rowId={(finding) => finding.finding_id}
-      testId="home-table"
-      caption="Vulnerabilities needing your attention"
-      rowAction={{
-        kind: 'link',
-        to: (finding) =>
-          `/scans/${finding.scan_id}?finding=${finding.finding_id}`,
-        label: (finding) =>
-          `${finding.title} on ${finding.host_ip ?? 'unknown machine'}`,
-      }}
-    />
+    <>
+      {findings.length > 0 && (
+        <DataTable
+          columns={columns}
+          rows={findings}
+          rowId={(finding) => finding.finding_id}
+          testId="home-table"
+          caption="Vulnerabilities needing your attention"
+          rowAction={{
+            kind: 'link',
+            to: (finding) =>
+              `/scans/${finding.scan_id}?finding=${finding.finding_id}`,
+            label: (finding) =>
+              `${finding.title} on ${finding.host_ip ?? 'unknown machine'}`,
+          }}
+        />
+      )}
+      <Pagination
+        page={page}
+        perPage={HOME_ATTENTION_PER_PAGE}
+        total={total}
+        onPageChange={onPageChange}
+        testId="home-attention"
+        label="Attention pages"
+      />
+    </>
   )
 }
 

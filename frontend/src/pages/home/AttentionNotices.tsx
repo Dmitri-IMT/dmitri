@@ -1,30 +1,32 @@
-import type { CoverageItem, ScanItem } from '@/lib/review'
+import type { components } from '@/types/openapi'
 
-function AttentionNotices({
-  scanItem,
-  coverageItem,
-}: {
-  scanItem: ScanItem | null
-  coverageItem: CoverageItem | null
-}) {
+type HomeNotice = components['schemas']['HomeNotice']
+
+function noticeTestId(kind: HomeNotice['kind']): string {
+  switch (kind) {
+    case 'failed_scan':
+      return 'home-item-scan'
+    case 'stale_coverage':
+      return 'home-item-coverage'
+    default: {
+      const _exhaustive: never = kind
+      return _exhaustive
+    }
+  }
+}
+
+function AttentionNotices({ notices }: { notices: HomeNotice[] }) {
   return (
     <>
-      {scanItem && (
+      {notices.map((notice, index) => (
         <p
-          data-testid="home-item-scan"
+          key={`${notice.kind}-${index}`}
+          data-testid={noticeTestId(notice.kind)}
           className="text-body-md text-muted-foreground"
         >
-          Last night&apos;s scan didn&apos;t finish.
+          {notice.text}
         </p>
-      )}
-      {coverageItem && (
-        <p
-          data-testid="home-item-coverage"
-          className="text-body-md text-muted-foreground"
-        >
-          No successful scan in {coverageItem.daysSinceLastSuccess} days.
-        </p>
-      )}
+      ))}
     </>
   )
 }
