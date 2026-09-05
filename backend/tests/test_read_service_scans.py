@@ -50,6 +50,13 @@ def _seed_scan_history_org(
     org_a = make_org(session, "Scan History A")
     org_b = make_org(session, "Scan History B")
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    agent_a = Agent(
+        org_id=org_a.id,
+        display_name="Scan History Box",
+        public_key=b"\x02" * 32,
+    )
+    session.add(agent_a)
+    session.flush()
     scans_a: list[ScanRecord] = []
     for i in range(25):
         scan = ScanRecord(
@@ -60,6 +67,7 @@ def _seed_scan_history_org(
             scan_mode="quick" if i % 2 == 0 else "standard",
             status="failed" if i % 3 == 0 else "completed",
             metadata_json={},
+            agent_id=agent_a.id,
         )
         session.add(scan)
         scans_a.append(scan)

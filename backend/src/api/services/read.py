@@ -220,15 +220,16 @@ def list_scans(
 
     column = _SCAN_SORT_COLUMNS[sort_by]
     direction = column.desc() if sort_order == "desc" else column.asc()
-    scans = session.exec(
-        select(ScanRecord)
+    rows = session.exec(
+        select(ScanRecord, Agent.display_name)
+        .outerjoin(Agent, Agent.id == ScanRecord.agent_id)
         .where(*predicates)
         .order_by(direction, ScanRecord.scan_id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
     ).all()
 
-    ids = [scan.scan_id for scan in scans]
+    ids = [scan.scan_id for scan, _ in rows]
     host_counts: dict[UUID, int] = {}
     finding_agg: dict[UUID, tuple[int, int | None]] = {}
     if ids:
@@ -252,16 +253,6 @@ def list_scans(
             ).all()
         }
 
-    agent_ids = {s.agent_id for s in scans if s.agent_id is not None}
-    agents_by_id: dict[UUID, Agent] = {}
-    if agent_ids:
-        agents_by_id = {
-            a.id: a
-            for a in session.exec(
-                select(Agent).where(Agent.id.in_(agent_ids))
-            ).all()
-        }
-
     return ScanListResponse(
         data=[
             _to_scan_summary(
@@ -271,13 +262,9 @@ def list_scans(
                 highest_severity=_severity_from_rank(
                     finding_agg.get(scan.scan_id, (0, None))[1]
                 ),
-                agent=(
-                    agents_by_id.get(scan.agent_id)
-                    if scan.agent_id is not None
-                    else None
-                ),
+                box_name=box_name,
             )
-            for scan in scans
+            for scan, box_name in rows
         ],
         total=total,
         page=page,
@@ -361,7 +348,7 @@ def _to_scan_summary(
     host_count: int,
     finding_count: int,
     highest_severity: str | None,
-    agent: Agent | None,
+    box_name: str | None,
 ) -> ScanSummary:
     return ScanSummary(
         scan_id=scan.scan_id,
@@ -373,7 +360,7 @@ def _to_scan_summary(
         finding_count=finding_count,
         highest_severity=highest_severity,
         agent_id=scan.agent_id,
-        box_name=agent.display_name if agent is not None else None,
+        box_name=box_name,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
     )
 
