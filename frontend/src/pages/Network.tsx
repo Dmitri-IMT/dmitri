@@ -116,6 +116,7 @@ function Network() {
           perPage: HOSTS_PER_PAGE,
           total: query.data?.total ?? 0,
           onPageChange: setPage,
+          label: 'Machine pages',
         }}
       />
     </div>

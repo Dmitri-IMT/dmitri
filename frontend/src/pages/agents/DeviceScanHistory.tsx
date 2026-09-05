@@ -39,6 +39,7 @@ function DeviceScanHistory({ agentId }: { agentId: string }) {
           perPage: SCANS_PER_PAGE,
           total: query.data?.total ?? 0,
           onPageChange: setPage,
+          label: 'Scan pages',
         }}
       />
     </section>

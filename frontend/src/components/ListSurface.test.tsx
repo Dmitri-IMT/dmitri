@@ -81,11 +81,15 @@ describe('ListSurface', () => {
           perPage: 20,
           total: 40,
           onPageChange: () => {},
+          label: 'Example pages',
         }}
       />,
     )
 
     expect(screen.getByTestId('example-pagination')).toBeVisible()
+    expect(
+      screen.getByRole('navigation', { name: 'Example pages' }),
+    ).toBeVisible()
   })
 
   it('passes partitioned rows and collapsedGroup to DataTable', () => {

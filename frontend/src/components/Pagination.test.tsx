@@ -13,6 +13,7 @@ function renderPagination(page: number, total = 47) {
       total={total}
       onPageChange={onPageChange}
       testId="scans"
+      label="Scan pages"
     />,
   )
 
@@ -20,6 +21,17 @@ function renderPagination(page: number, total = 47) {
 }
 
 describe('Pagination', () => {
+  it('names the nav root for the surface the caller passed', () => {
+    renderPagination(2)
+
+    expect(
+      screen.getByRole('navigation', { name: 'Scan pages' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('navigation', { name: 'Pagination' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('names the previous and next controls without writing the words', () => {
     renderPagination(2)
 
