@@ -25,7 +25,7 @@ export function scanDurationCell(
 ): ReactNode {
   const copy = formatScanDuration(scan.duration)
   return (
-    <span data-testid={testId} className="block text-right tabular-nums">
+    <span data-testid={testId} className="block tabular-nums">
       {copy ?? <EmptyMark />}
     </span>
   )

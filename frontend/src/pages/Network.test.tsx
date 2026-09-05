@@ -242,9 +242,6 @@ describe('Network', () => {
       'Highest severity',
       'Last seen',
     ])
-    expect(
-      screen.getByRole('columnheader', { name: 'Services' }),
-    ).toHaveClass('text-center')
   })
 
   it('lists a machine with no hostname by its address, with No name yet', async () => {

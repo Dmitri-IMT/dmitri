@@ -61,7 +61,7 @@ export function scanFindingColumns(
         finding.port == null ? (
           <EmptyMark />
         ) : (
-          <span className="block text-right tabular-nums">{finding.port}</span>
+          <span className="block tabular-nums">{finding.port}</span>
         ),
     },
     {
@@ -101,7 +101,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
         finding.port == null ? (
           <EmptyMark />
         ) : (
-          <span className="block text-right tabular-nums">{finding.port}</span>
+          <span className="block tabular-nums">{finding.port}</span>
         ),
     },
     {

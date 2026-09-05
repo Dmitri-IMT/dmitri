@@ -22,7 +22,7 @@ function statusCell(scan: ScanSummary): ReactNode {
 
 function countCell(scan: ScanSummary, value: ReactNode): ReactNode {
   if (hidesCounts(scan.status)) return <EmptyMark />
-  return <span className="block text-right tabular-nums">{value}</span>
+  return <span className="block tabular-nums">{value}</span>
 }
 
 function highestCell(scan: ScanSummary): ReactNode {
@@ -68,8 +68,7 @@ export const scanListColumns: DataTableColumn<ScanSummary>[] = [
     label: 'Duration',
     width: 'w-1/12',
     align: 'right',
-    render: (scan) =>
-      scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
+    render: (scan) => scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
   },
   {
     key: 'host_count',

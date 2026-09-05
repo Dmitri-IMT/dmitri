@@ -19,10 +19,7 @@ function StripEntry({
   testId?: string
 }) {
   return (
-    <div
-      data-testid={testId}
-      className="flex min-w-0 flex-col gap-1"
-    >
+    <div data-testid={testId} className="flex min-w-0 flex-col gap-1">
       <span className="text-caption-md uppercase text-edge">{label}</span>
       <span className="truncate text-body-md tabular-nums">{value}</span>
     </div>

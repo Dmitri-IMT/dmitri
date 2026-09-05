@@ -25,7 +25,7 @@ type DataTableColumnBase<Row> = {
   label: string
   width: string
   render: (row: Row) => ReactNode
-  align?: 'right' | 'center'
+  align?: 'right'
 }
 
 export type DataTableColumn<Row, SortKey extends string = never> =
@@ -80,34 +80,12 @@ const INTERACTIVE_ROW =
 
 const INERT_ROW = 'h-row border-t border-border text-caption-md'
 
-function columnTextAlign(align: 'right' | 'center' | undefined): string {
-  switch (align) {
-    case 'right':
-      return 'text-right'
-    case 'center':
-      return 'text-center'
-    case undefined:
-      return ''
-    default: {
-      const _never: never = align
-      return _never
-    }
-  }
+function columnTextAlign(align: 'right' | undefined): string {
+  return align === 'right' ? 'text-right' : ''
 }
 
-function sortButtonJustify(align: 'right' | 'center' | undefined): string {
-  switch (align) {
-    case 'right':
-      return 'justify-end'
-    case 'center':
-      return 'justify-center'
-    case undefined:
-      return 'justify-start'
-    default: {
-      const _never: never = align
-      return _never
-    }
-  }
+function sortButtonJustify(align: 'right' | undefined): string {
+  return align === 'right' ? 'justify-end' : 'justify-start'
 }
 
 function DataTable<Row, SortKey extends string = never>({
