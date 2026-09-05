@@ -541,3 +541,152 @@ def test_list_scans_row_omits_error_code(
 
     assert len(result.data) == 1
     assert "error_code" not in result.data[0].model_dump()
+
+
+def test_list_scans_filters_by_agent_id_includes_pending_stub(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Box Filter Org")
+    agent_a = Agent(
+        org_id=org.id,
+        display_name="Site A",
+        public_key=b"\x01" * 32,
+    )
+    agent_b = Agent(
+        org_id=org.id,
+        display_name="Site B",
+        public_key=b"\x02" * 32,
+    )
+    administrative_session.add(agent_a)
+    administrative_session.add(agent_b)
+    administrative_session.commit()
+    administrative_session.refresh(agent_a)
+    administrative_session.refresh(agent_b)
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    stub = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        agent_id=agent_a.id,
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="quick",
+        status="pending",
+    )
+    other = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        agent_id=agent_b.id,
+        timestamp=now,
+        subnet="10.0.1.0/24",
+        scan_mode="standard",
+        status="completed",
+        metadata_json={"elapsed_seconds": 12},
+    )
+    administrative_session.add(stub)
+    administrative_session.add(other)
+    administrative_session.commit()
+
+    result = read.list_scans(
+        administrative_session, org_id=org.id, agent_id=agent_a.id
+    )
+
+    assert result.total == 1
+    assert result.data[0].scan_id == stub.scan_id
+    assert result.data[0].status == "pending"
+    assert result.data[0].duration is None
+
+
+def test_list_scans_duration_and_box_name(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Duration Org")
+    agent = Agent(
+        org_id=org.id,
+        display_name="Warehouse",
+        public_key=b"\x01" * 32,
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    now = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    completed = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        agent_id=agent.id,
+        timestamp=now,
+        subnet="10.1.0.0/24",
+        scan_mode="standard",
+        status="completed",
+        metadata_json={"elapsed_seconds": 500},
+    )
+    failed = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        agent_id=agent.id,
+        timestamp=now,
+        subnet="10.1.0.0/24",
+        scan_mode="standard",
+        status="failed",
+        metadata_json={"elapsed_seconds": 500},
+    )
+    unattributed = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.1.0.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json={},
+    )
+    administrative_session.add(completed)
+    administrative_session.add(failed)
+    administrative_session.add(unattributed)
+    administrative_session.commit()
+
+    result = read.list_scans(
+        administrative_session, org_id=org.id, per_page=100, sort_order="asc"
+    )
+    by_id = {row.scan_id: row for row in result.data}
+
+    assert by_id[completed.scan_id].duration == 500
+    assert by_id[completed.scan_id].agent_id == agent.id
+    assert by_id[completed.scan_id].box_name == "Warehouse"
+    assert by_id[failed.scan_id].duration is None
+    assert by_id[unattributed.scan_id].agent_id is None
+    assert by_id[unattributed.scan_id].box_name is None
+    assert by_id[unattributed.scan_id].duration is None
+
+
+def test_get_scan_detail_includes_box_and_duration(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Detail Box Org")
+    agent = Agent(
+        org_id=org.id,
+        display_name="Reception",
+        public_key=b"\x01" * 32,
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        agent_id=agent.id,
+        timestamp=datetime(2026, 6, 3, tzinfo=timezone.utc),
+        subnet="10.2.0.0/24",
+        scan_mode="extensive",
+        status="completed",
+        metadata_json={"elapsed_seconds": 45},
+    )
+    administrative_session.add(scan)
+    administrative_session.commit()
+
+    detail = read.get_scan_detail(
+        administrative_session, scan.scan_id, org_id=org.id
+    )
+
+    assert detail is not None
+    assert detail.agent_id == agent.id
+    assert detail.box_name == "Reception"
+    assert detail.duration == 45

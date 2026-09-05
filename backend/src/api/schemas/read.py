@@ -116,6 +116,9 @@ class ScanDetailResponse(BaseModel):
     error_code: ScanErrorCode | None = None
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
+    agent_id: UUID | None = None
+    box_name: str | None = None
+    duration: Annotated[int | None, Field(default=None, ge=0)] = None
 
 
 class ScanSummary(BaseModel):
@@ -129,6 +132,9 @@ class ScanSummary(BaseModel):
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
+    agent_id: UUID | None = None
+    box_name: str | None = None
+    duration: Annotated[int | None, Field(default=None, ge=0)] = None
 
 
 class ScanListResponse(BaseModel):

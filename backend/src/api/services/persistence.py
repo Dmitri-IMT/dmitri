@@ -101,6 +101,11 @@ def persist_scan(
         session.add(scan_record)
     else:
         scan_record = existing
+        if (
+            scan_record.agent_id is not None
+            and scan_record.agent_id != agent_id
+        ):
+            raise ScanOwnershipError
         scan_record.timestamp = scan.timestamp
         scan_record.subnet = scan.subnet
         scan_record.scan_mode = scan.scan_mode

@@ -243,6 +243,7 @@ def _record_delivery(
         ScanRecord(
             scan_id=scan_id,
             org_id=command.org_id,
+            agent_id=command.agent_id,
             timestamp=now,
             subnet=command.subnet,
             scan_mode=command.scan_mode,
