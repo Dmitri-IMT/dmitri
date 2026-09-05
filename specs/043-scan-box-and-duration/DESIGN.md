@@ -29,7 +29,7 @@ No new routes. Three existing screens gain cells or sections; navigation rules s
   └────────────────────────────► /scans/:scanId
 
 /scans/:scanId                  Scan detail
-  │ summary strip gains Duration fifth entry; no Box field (TRUTH rule 16)
+  │ summary strip gains a Duration entry, always shown; no Box field (TRUTH rule 16)
   └─ (unchanged links to /network/:hostId from machines seen)
 
 /devices/:agentId               Device detail
@@ -135,8 +135,9 @@ row opens the scan. No submit-on-enter elsewhere.
 
 ## 3. Scan detail (`/scans/:scanId`)
 
-**Epicenter unchanged:** vulnerability cards, then machines seen. **Adds** Duration as the fifth
-summary-strip entry on completed scans. **Does not** add a Box field (TRUTH rule 16, out of scope).
+**Epicenter unchanged:** vulnerability cards, then machines seen. **Adds** Duration as a
+summary-strip entry on every scan, `—` when there is no duration. **Does not** add a Box field
+(TRUTH rule 16, out of scope).
 
 **Vertical rhythm (unchanged):** intra-group `2`, inter-group `8`, inter-section `12`.
 
@@ -160,9 +161,11 @@ summary-strip entry on completed scans. **Does not** add a Box field (TRUTH rule
 
 **Summary strip.** Same hairline, step `4` vertical padding, step `12` horizontal gap between
 entries, labels `--text-caption-md` uppercase `--edge`, values `--text-body-md` tabular where
-numeric. Entry order: Mode · Network · Machines seen · Vulnerabilities · **Duration** (fifth,
-TRUTH rule 16). Duration value from `formatScanDuration(ScanDetailResponse.duration)`; when
-absent on a **completed** scan that did not report time, value is `EmptyMark`.
+numeric. Entry order: Mode · Network · Machines seen · Vulnerabilities · **Duration** (last,
+TRUTH rule 16). Duration always renders — it is not gated by `hidesCounts`, which governs the two
+counts only — so on a failed or running scan it closes a three-entry strip. Value from
+`formatScanDuration(ScanDetailResponse.duration)`; whenever that is absent, value is `EmptyMark`
+(TRUTH rule 14).
 
 Strip aligns to the tables' left and right edges (Foundations §Cards & sections).
 
@@ -172,13 +175,15 @@ Same strip layout; Duration value cell is `EmptyMark` (`—`). Not zero, not hid
 
 ### 3.3 Failed scan
 
-Inherits 042 §5.1 failed mockup: strip shows **Mode** and **Network** only. Duration is omitted
-with Machines seen and Vulnerabilities (`hidesCounts` applies). Failed block below unchanged.
+Inherits 042 §5.1 failed mockup: strip shows **Mode**, **Network** and **Duration**. Machines
+seen and Vulnerabilities are dropped (`hidesCounts` applies to the counts only); Duration stays
+and its value cell is `EmptyMark` (`—`), per TRUTH rule 14. Failed block below unchanged.
 
 ### 3.4 Running scan
 
-Inherits 042 §5.1 running mockup: strip shows Mode and Network only. Duration omitted. Unfinished
-notice unchanged.
+Inherits 042 §5.1 running mockup: strip shows Mode, Network and Duration, the last as `EmptyMark`
+(`—`), per TRUTH rule 14. Machines seen and Vulnerabilities are dropped. Unfinished notice
+unchanged.
 
 ### 3.5 No vulnerabilities, not found, error
 
@@ -375,7 +380,7 @@ regenerated `frontend/src/types/openapi.d.ts`; do not invent parallel names in t
 | `frontend/src/lib/scanDuration.ts` | **New.** `formatScanDuration(seconds)`: seconds → owner duration copy; returns `null` for EmptyMark. |
 | `frontend/src/lib/scanDuration.test.ts` | **New.** Vitest beside source; `45`, `59`, `60`, `500`, `null` cases. |
 | `frontend/src/pages/scans/scanListColumns.tsx` | **Changed.** Insert Box after When, Duration after Status; update `colgroup` widths §2.1. |
-| `frontend/src/pages/scans/ScanDetailHeader.tsx` | **Changed.** `ScanSummaryStrip` adds fifth `StripEntry` for Duration when not `hidesCounts`. |
+| `frontend/src/pages/scans/ScanDetailHeader.tsx` | **Changed.** `ScanSummaryStrip` adds a `StripEntry` for Duration, always rendered, outside the `hidesCounts` branch — that predicate governs counts only. |
 | `frontend/src/pages/agents/DeviceScanHistory.tsx` | **New.** Section heading, the four-column table, list/query/pagination/blank/loading/error. |
 | `frontend/src/pages/agents/deviceScanHistoryColumns.tsx` | **New.** `DataTableColumn<ScanSummary>[]` for When · Mode · Status · Duration; reuses `Timestamp`, `SCAN_MODE_LABEL`, `scanStatusLabel`, `formatScanDuration` and `EmptyMark`. |
 | `frontend/src/pages/DeviceDetail.tsx` | **Changed.** Mount `DeviceScanHistory` below scan controls at step `12`. |
@@ -428,7 +433,7 @@ Existing device-detail ids unchanged (`device-detail`, `agents-scan-now`, etc.).
 | Surface | Loading | Blank | Error | Attributed box | Unattributed box | Duration present | Duration absent (failed / running / no report) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Scans list | Skeleton body | No scans yet (042) | Couldn't load… (042) | Box = display name | Box = `EmptyMark` | Duration copy | Duration = `EmptyMark` |
-| Scan detail strip | (page gate) | n/a | (page gate) | n/a (no Box) | n/a | Duration copy | Completed: `EmptyMark`; failed/running: entry omitted |
+| Scan detail strip | (page gate) | n/a | (page gate) | n/a (no Box) | n/a | Duration copy | `EmptyMark` — completed with no duration, failed and running alike |
 | Device history | Section skeleton under column headings | No scans from this box yet. | Section error + retry | n/a (no Box column) | n/a (no Box column) | Duration copy | Duration = `EmptyMark` |
 
 ---

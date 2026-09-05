@@ -206,6 +206,7 @@ describe('ScanDetail', () => {
         hosts: [],
         finding_count: 0,
         host_count: 0,
+        duration: null,
       }),
     )
     renderPage(`/scans/${SCAN_ID}`)
@@ -215,8 +216,27 @@ describe('ScanDetail', () => {
     expect(strip).toHaveTextContent('Network')
     expect(strip).not.toHaveTextContent('Machines seen')
     expect(strip).not.toHaveTextContent('Vulnerabilities')
-    expect(strip).not.toHaveTextContent('Duration')
-    expect(strip).not.toHaveTextContent('—')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent('—')
+  })
+
+  it('keeps Duration in the strip on a running scan, as an em dash', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        findings: [],
+        hosts: [],
+        finding_count: 0,
+        host_count: 0,
+        duration: null,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const strip = await screen.findByTestId('scan-summary-strip')
+    expect(strip).not.toHaveTextContent('Machines seen')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent('—')
   })
 
   it('adopts the vulnerability vocabulary, with no reader-facing "finding"', async () => {

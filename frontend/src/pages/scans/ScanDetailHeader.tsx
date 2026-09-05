@@ -42,13 +42,13 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
             label="Vulnerabilities"
             value={String(scan.finding_count)}
           />
-          <StripEntry
-            label="Duration"
-            value={durationCopy ?? <EmptyMark />}
-            testId="scan-summary-duration"
-          />
         </>
       )}
+      <StripEntry
+        label="Duration"
+        value={durationCopy ?? <EmptyMark />}
+        testId="scan-summary-duration"
+      />
     </div>
   )
 }
