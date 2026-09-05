@@ -598,6 +598,9 @@ export interface components {
             host_count: number;
             finding_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
+            agent_id?: string | null;
+            box_name?: string | null;
+            duration?: number | null;
         };
         ScanDetailResponse: {
             /** Format: uuid */
@@ -617,6 +620,9 @@ export interface components {
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             host_count: number;
             finding_count: number;
+            agent_id?: string | null;
+            box_name?: string | null;
+            duration?: number | null;
         };
         ScanListResponse: {
             data: components["schemas"]["ScanSummary"][];
@@ -1305,6 +1311,8 @@ export interface components {
         SortOrder: "asc" | "desc";
         /** @description Filter scans by lifecycle status. */
         ScanStatusFilter: components["schemas"]["ScanStatus"];
+        /** @description Limit scans to those produced by this box. */
+        ScanAgentIdFilter: string;
         ScanSortBy: "timestamp" | "status" | "scan_mode";
         HostSortBy: "last_seen_at" | "hostname" | "vendor" | "ip";
         SeverityFilter: components["schemas"]["Severity"];
@@ -1403,6 +1411,8 @@ export interface operations {
                 per_page?: components["parameters"]["PerPage"];
                 /** @description Filter scans by lifecycle status. */
                 status?: components["parameters"]["ScanStatusFilter"];
+                /** @description Limit scans to those produced by this box. */
+                agent_id?: components["parameters"]["ScanAgentIdFilter"];
                 sort_by?: components["parameters"]["ScanSortBy"];
                 sort_order?: components["parameters"]["SortOrder"];
             };
