@@ -191,6 +191,10 @@ describe('ScanDetail', () => {
     expect(strip).toHaveTextContent(latestSuccessfulScan.subnet)
     expect(strip).toHaveTextContent('Machines seen')
     expect(strip).toHaveTextContent('Vulnerabilities')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent(
+      '8 min',
+    )
   })
 
   it('drops the unknowable counts from the strip on a failed scan', async () => {
@@ -211,6 +215,7 @@ describe('ScanDetail', () => {
     expect(strip).toHaveTextContent('Network')
     expect(strip).not.toHaveTextContent('Machines seen')
     expect(strip).not.toHaveTextContent('Vulnerabilities')
+    expect(strip).not.toHaveTextContent('Duration')
     expect(strip).not.toHaveTextContent('—')
   })
 

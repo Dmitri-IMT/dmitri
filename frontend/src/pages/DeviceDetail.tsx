@@ -10,6 +10,7 @@ import { useScanCommand } from '@/hooks/useScanCommand'
 import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
+import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
 import ScanControl from '@/pages/agents/ScanControl'
 import ScanTypeTabs, { ScanTypeReadOnly } from '@/pages/agents/ScanTypeTabs'
 import TargetSubnetSection from '@/pages/agents/TargetSubnetSection'
@@ -62,6 +63,7 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
           />
         </div>
       )}
+      <DeviceScanHistory agentId={agent.agent_id} />
     </div>
   )
 }

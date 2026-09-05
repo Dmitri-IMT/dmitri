@@ -1,14 +1,28 @@
+import type { ReactNode } from 'react'
 import BackLink from '@/components/BackLink'
+import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
+import { formatScanDuration } from '@/lib/scanDuration'
 import { SCAN_MODE_LABEL } from '@/lib/scanModes'
 import { hidesCounts } from '@/lib/scanStatus'
 import type { components } from '@/types/openapi'
 
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 
-function StripEntry({ label, value }: { label: string; value: string }) {
+function StripEntry({
+  label,
+  value,
+  testId,
+}: {
+  label: string
+  value: ReactNode
+  testId?: string
+}) {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div
+      data-testid={testId}
+      className="flex min-w-0 flex-col gap-1"
+    >
       <span className="text-caption-md uppercase text-edge">{label}</span>
       <span className="truncate text-body-md tabular-nums">{value}</span>
     </div>
@@ -16,6 +30,7 @@ function StripEntry({ label, value }: { label: string; value: string }) {
 }
 
 export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
+  const durationCopy = formatScanDuration(scan.duration)
   return (
     <div
       data-testid="scan-summary-strip"
@@ -29,6 +44,11 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
           <StripEntry
             label="Vulnerabilities"
             value={String(scan.finding_count)}
+          />
+          <StripEntry
+            label="Duration"
+            value={durationCopy ?? <EmptyMark />}
+            testId="scan-summary-duration"
           />
         </>
       )}

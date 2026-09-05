@@ -25,7 +25,7 @@ type DataTableColumnBase<Row> = {
   label: string
   width: string
   render: (row: Row) => ReactNode
-  align?: 'right'
+  align?: 'right' | 'center'
 }
 
 export type DataTableColumn<Row, SortKey extends string = never> =
@@ -79,6 +79,36 @@ const INTERACTIVE_ROW =
   'group relative h-row cursor-pointer border-t border-border text-caption-md hover:bg-card focus-within:bg-card focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50 active:bg-border'
 
 const INERT_ROW = 'h-row border-t border-border text-caption-md'
+
+function columnTextAlign(align: 'right' | 'center' | undefined): string {
+  switch (align) {
+    case 'right':
+      return 'text-right'
+    case 'center':
+      return 'text-center'
+    case undefined:
+      return ''
+    default: {
+      const _never: never = align
+      return _never
+    }
+  }
+}
+
+function sortButtonJustify(align: 'right' | 'center' | undefined): string {
+  switch (align) {
+    case 'right':
+      return 'justify-end'
+    case 'center':
+      return 'justify-center'
+    case undefined:
+      return 'justify-start'
+    default: {
+      const _never: never = align
+      return _never
+    }
+  }
+}
 
 function DataTable<Row, SortKey extends string = never>({
   columns,
@@ -216,7 +246,7 @@ function DataTable<Row, SortKey extends string = never>({
               key={column.key}
               className={`max-w-0 pr-4 align-middle ${
                 index === 0 && isLink ? '' : 'truncate'
-              } ${column.align === 'right' ? 'text-right' : ''}`}
+              } ${columnTextAlign(column.align)}`}
             >
               {renderCell(row, column, index)}
             </td>
@@ -267,9 +297,7 @@ function DataTable<Row, SortKey extends string = never>({
                   key={column.key}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={`truncate pr-4 font-normal uppercase ${
-                    column.align === 'right' ? 'text-right' : ''
-                  }`}
+                  className={`truncate pr-4 font-normal uppercase ${columnTextAlign(column.align)}`}
                 >
                   {sort && column.sortable ? (
                     <Button
@@ -277,11 +305,7 @@ function DataTable<Row, SortKey extends string = never>({
                       variant="link"
                       aria-label={column.label}
                       data-testid={`${testId}-sort-${column.key}`}
-                      className={`h-auto max-w-full gap-1 rounded-none px-0 py-0 text-caption-md font-normal text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:decoration-2 ${
-                        column.align === 'right'
-                          ? 'justify-end'
-                          : 'justify-start'
-                      }`}
+                      className={`h-auto max-w-full gap-1 rounded-none px-0 py-0 text-caption-md font-normal text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline active:decoration-2 ${sortButtonJustify(column.align)}`}
                       onClick={() => sort.onChange(column.key)}
                     >
                       <span

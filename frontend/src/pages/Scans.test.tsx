@@ -80,7 +80,7 @@ function row(scanId: string) {
 
 function countCells(scanId: string) {
   const cells = within(row(scanId)).getAllByRole('cell')
-  return { hosts: cells[3], findings: cells[4], highest: cells[5] }
+  return { hosts: cells[5], findings: cells[6], highest: cells[7] }
 }
 
 function expectHiddenCounts(scanId: string) {
@@ -111,8 +111,10 @@ describe('Scans', () => {
         .map((header) => header.textContent),
     ).toEqual([
       'When',
+      'Box',
       'Mode',
       'Status',
+      'Duration',
       'Machines',
       'Vulnerabilities',
       'Highest severity',
@@ -249,7 +251,7 @@ describe('Scans', () => {
     }
   })
 
-  it('renders the mode label, no settings block, and no Duration or Result column', async () => {
+  it('renders the mode label, Duration column, and no Result column', async () => {
     scanList([latestSuccessfulScan])
     renderWithProviders(<Scans />, { route: '/scans' })
 
@@ -258,14 +260,14 @@ describe('Scans', () => {
     const headers = within(screen.getByTestId('scans-table'))
       .getAllByRole('columnheader')
       .map((header) => header.textContent)
-    expect(headers).not.toContain('Duration')
+    expect(headers).toContain('Duration')
     expect(headers).not.toContain('Result')
     expect(screen.getByTestId('scans-page')).not.toHaveTextContent(
       /scan type|scan settings|Use this scan type/i,
     )
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
     expect(
-      within(row(latestSuccessfulScan.scan_id)).getAllByRole('cell')[1],
+      within(row(latestSuccessfulScan.scan_id)).getAllByRole('cell')[2],
     ).toHaveTextContent(SCAN_MODE_LABEL[latestSuccessfulScan.scan_mode])
   })
 
