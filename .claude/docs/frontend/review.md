@@ -20,7 +20,7 @@ Home answers "does anything need me?" from one snapshot. The server owns attenti
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `getHome(pages)` | `GET /home` with `attention_page`, `events_page`, `activity_page`. No `per_page` query param. | `frontend/src/api/home.ts:16` |
-| `HOME_ATTENTION_PER_PAGE` / `HOME_EVENTS_PER_PAGE` / `HOME_ACTIVITY_PER_PAGE` | `8` / `5` / `8`. Mirror server constants; the client cannot override them. | `frontend/src/api/home.ts:12` |
+| `HOME_ATTENTION_PER_PAGE` / `HOME_EVENTS_PER_PAGE` / `HOME_ACTIVITY_PER_PAGE` | `8` / `5` / `8`. Mirror `api.core.home_constants`; the client cannot override them. `test_home_page_sizes_match_frontend_exports` fails if the two files drift. | `frontend/src/api/home.ts:12` |
 | `queryKeys.home.snapshot(pages)` | Key includes the three page integers independently so one panel can page without resetting the others. | `frontend/src/api/queryKeys.ts` |
 | `useHome(pages)` | One `useQuery` with `placeholderData: keepPreviousData`. After the first load, a page change never returns `loading`. | `frontend/src/hooks/useHome.ts:14` |
 | `HomeView` | `loading` / `error` carry `retry`. `blank` / `clear` / `pending` carry `snapshot` plus `retry`. | `frontend/src/hooks/useHome.ts:5` |

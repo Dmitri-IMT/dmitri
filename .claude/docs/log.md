@@ -5,6 +5,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-05
 
+* **Update**: Home feed tidy. `_append_scan_failed` is the one write for failed scans;
+  `deliver()` treats only `WebSocketDisconnect` / `OSError` / `RuntimeError` as offline;
+  Events/Activity always mount `Pagination` (it hides itself); page-size constants are
+  gated against `frontend/src/api/home.ts`. Touched: `backend/services.md`,
+  `frontend/screens.md`, `frontend/review.md`.
+
 * **Update**: spec 044 Home snapshot. Replaced `useHomeReview` / `lib/review.ts` with `GET /home`
   + `useHome`. Documented `activity` table, `append_activity`, `derive_home_events`, required
   `Pagination` `label`, and Events/Activity panels. Touched: `frontend/review.md`,

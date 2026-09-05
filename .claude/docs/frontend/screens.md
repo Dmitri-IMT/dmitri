@@ -67,8 +67,9 @@ the no-device Devices blank is the one blank state with no action.
 | `NotFound` | `That page doesn't exist.` plus a real `Go to Home` **link**, inside the shell. | `frontend/src/pages/NotFound.tsx:3` |
 | `Verdict` | Title from `review_count` plus last-scan `Timestamp`. Clear and pending are both left-aligned. | `frontend/src/pages/home/Verdict.tsx:11` |
 | `AttentionNotices` | Prints `notices[].text` verbatim. `failed_scan` → `home-item-scan`; `stale_coverage` → `home-item-coverage`. | `frontend/src/pages/home/AttentionNotices.tsx:18` |
-| `AttentionTable` | Findings table plus `Pagination` labelled `Attention pages` when `total > 8`. | `frontend/src/pages/home/AttentionTable.tsx:65` |
-| `HomeSidePanels` | Two-column Events and Activity cards. Rows print server `text`. | `frontend/src/pages/home/HomeSidePanels.tsx:16` |
+| `AttentionTable` | Findings table plus `Pagination` labelled `Attention pages`. `Pagination` itself is `null` when `total <= perPage`. | `frontend/src/pages/home/AttentionTable.tsx:65` |
+| `EventsPanel` / `ActivityPanel` | Card, verbatim `text` rows or blank copy, then the same `Pagination` (labels `Events pages` / `Activity pages`). | `frontend/src/pages/home/EventsPanel.tsx:14`, `frontend/src/pages/home/ActivityPanel.tsx:16` |
+| `HomeSidePanels` | Two-column Events and Activity cards. | `frontend/src/pages/home/HomeSidePanels.tsx:16` |
 | `HomeBlank` / `HomeError` | First-run copy (`No scans yet` + body sentence), `FirstScanCta` + `FirstScanNote`; error copy + `[Try again]`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
 | `Timestamp` / `formatTimestamp` | Relative inside 7 days, absolute beyond, exact value in `title`. | `frontend/src/components/Timestamp.tsx:21` |
 | `SeverityWord` | Severity as semibold text (`Critical`, `High`, …). Null renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
@@ -92,9 +93,9 @@ the no-device Devices blank is the one blank state with no action.
 
 ## Notes / gotchas
 
-- **Home still renders nothing below the top bar while loading** — no skeleton, no spinner, no
-  placeholder sentence in the verdict's position. Scan and host **tables** do show
-  [tables](./tables.md)'s `LoadingSkeleton` under live headings.
+- **Home loading is a skeleton**, `data-testid="home-loading"`: attention-shaped bars plus two
+  panel cards. Scan and host **tables** still use [tables](./tables.md)'s `LoadingSkeleton`
+  under live headings.
 - **Blank and all-clear are distinct states** and are never collapsed.
 - **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
   named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and Log out widths cannot
@@ -103,8 +104,9 @@ the no-device Devices blank is the one blank state with no action.
   `<button>` (changed from v3), so without it every button in the app shows an arrow. The class is
   a local addition to the vendored shadcn `buttonVariants` base and would be lost if the shadcn CLI
   re-adds the component; a comment in `ui/button.tsx` records why it is there.
-- **The attention table links out; it does not paginate locally.** It renders the already-fetched
-  `deckFindings` array as a full `DataTable` with stretched-link rows to scan detail.
+- **Attention paging is server-side.** `AttentionTable` renders the current snapshot page and
+  `Pagination`; changing page refetches `GET /home` with a new `attention_page`. Rows still
+  link out to scan detail.
 - **Error regions are rendered always, empty when clean.** An `aria-live`/`role="alert"` region must
   pre-exist in the DOM to be announced; a conditionally-mounted error is silent to a screen reader.
   Every auth form follows this. On Login the 401 and network messages are distinct and name neither
