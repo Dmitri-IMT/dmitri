@@ -188,7 +188,7 @@ a native control.
 ## Chrome & navigation
 
 **Top bar, no sidebar.** One horizontal bar above every inside-shell screen: wordmark left, nav
-centred on a `1fr auto 1fr` grid, user identity and `[Log out]` right. The bar's contents and
+centred on a `1fr auto 1fr` grid, user identity right. The bar's contents and
 the page beneath it both hold `--container-frame`, so the wordmark and the page title start on
 the same vertical; the bar's bottom hairline is full-bleed.
 
@@ -198,8 +198,9 @@ the same vertical; the bar's bottom hairline is full-bleed.
 | Nav type | `text-body-md`. |
 | Nav active | **Bold, no underline.** Hover is **also bold** — the weight change is the whole affordance. No rule, no pill, no bottom border. |
 | Wordmark | The word **"Dmitri"** only. No icon, no mark, no lockup. |
-| User identity | **The user's email.** Truncated with an ellipsis when it would crowd the bar; full value
-  in `title`. No avatar — the product has no profile pictures. |
+| User identity | **The user's email**, as the trigger of a menu. Truncated with an ellipsis when it
+  would crowd the bar; full value in `title`. No avatar — the product has no profile pictures. |
+| User menu | Opens under the identity. Holds **`Log out`** and nothing else today. |
 | Back link | A Lucide **`arrow-left` + the word "Back"**, one text link **above the page title**. The gap to the title is a step from the spacing scale. |
 
 The nav names domains, not actions, and items do not get renamed between releases.

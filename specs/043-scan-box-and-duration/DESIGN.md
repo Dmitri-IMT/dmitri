@@ -460,13 +460,14 @@ display text. The whole row opens the scan. The owner opens a box from Devices. 
 was amended to match.
 
 **Q3 (CLOSED 2026-09-05): Rendered preview artifact.** Published and reviewed; the link is at the
-top of this document. Two review notes fell **outside this spec** and are not drawn into it —
-each needs its own ticket against Foundations:
+top of this document. Three review notes fell **outside this spec**. Two are not drawn into it and
+each needs its own ticket against Foundations; the third landed here, as noted:
 
 - Rename the run-log `Highest severity` column to `Severity` (Foundations §Tables names the
   highest-severity column; `scanListColumns.tsx` ships the long label).
-- Replace the top bar's `[Log out]` with a menu under the user's email (Foundations §Chrome fixes
-  identity and `[Log out]` side by side, and the product has no popover-menu pattern yet).
+- Replace the top bar's `[Log out]` with a menu under the user's email. **Landed on this branch**
+  rather than deferred: `components/ui/dropdown-menu.tsx` adds the popover-menu pattern and
+  `TopBar.tsx` makes the identity its trigger. Foundations §Chrome was updated to match.
 - Show a column heading's full name on hover when it truncates.
 
 **Q4 (CLOSED 2026-09-05): Interim history row content.** Moot — Q1 closed, so there are no
