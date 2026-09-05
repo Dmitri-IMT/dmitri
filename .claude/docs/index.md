@@ -68,7 +68,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/network/devices), nested admin Users, and a catch-all that renders rather than redirects.
-* [frontend/review](./frontend/review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes four reads into one discriminated union.
+* [frontend/review](./frontend/review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.

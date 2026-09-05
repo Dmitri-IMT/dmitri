@@ -1,51 +1,45 @@
 ---
 type: Module
-title: the verdict derivation and the Home read hook
-description: deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes four reads into one discriminated union.
-resource: frontend/src/lib/review.ts
-tags: [frontend, domain, verdict, tanstack-query]
-timestamp: 2026-09-04T00:00:00Z
+title: the Home snapshot hook
+description: useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
+resource: frontend/src/hooks/useHome.ts
+tags: [frontend, domain, verdict, tanstack-query, home]
+timestamp: 2026-09-05T00:00:00Z
 ---
 
-# the verdict derivation and the Home read hook
+# the Home snapshot hook
 
 ## Purpose
 
-Home's whole product claim — "does anything need me?" — is decided here, deliberately away from the
-DOM. `deriveReview()` is pure and synchronous, so the entire rule table is testable without a
-render; `useHomeReview()` is the thin shell that fetches, feeds it, and collapses loading/error into
-one union the page can switch over.
+Home answers "does anything need me?" from one snapshot. The server owns attention order, notices,
+`review_count`, derived events, and activity sentences. `useHome()` is a single TanStack Query over
+`getHome` and a five-state union the page can switch on.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `STALE_COVERAGE_DAYS` | `3`. Declared once and referenced by name everywhere, tests included — the only place the number appears. | `frontend/src/lib/review.ts:7` |
-| `deriveReview({ latestScan, latestSuccessfulScan, criticalFindings, highFindings, now })` | Returns `{ reviewCount, deckFindings, scanItem, coverageItem }`. Pure: no React, no network, and `now` is injected rather than read from the wall clock. | `frontend/src/lib/review.ts:37` |
-| `deckFindings` ordering | Critical → high, newest-first within each severity — imposed here, because the API guarantees no caller-chosen order. Consumed by [screens](./screens.md)'s `AttentionTable`, not a carousel. | `frontend/src/lib/review.ts:44` |
-| `useHomeReview()` | Four TanStack Query reads → `deriveReview()` → one `HomeReview` union plus `retry()`. Keys come from [api](./api.md)'s `queryKeys` (`scans.latest`, `findings.list`). The two scan reads are plain `useQuery`; the two findings reads are one `useQueries` over `HOME_SEVERITIES`. | `frontend/src/hooks/useHomeReview.ts:30` |
-| `HomeReview` | `{ state: 'loading' \| 'blank' \| 'clear' \| 'pending' \| 'error' }`; only `clear`/`pending` carry verdict data, so a partial render is unrepresentable. | `frontend/src/hooks/useHomeReview.ts:23` |
+| `getHome(pages)` | `GET /home` with `attention_page`, `events_page`, `activity_page`. No `per_page` query param. | `frontend/src/api/home.ts:16` |
+| `HOME_ATTENTION_PER_PAGE` / `HOME_EVENTS_PER_PAGE` / `HOME_ACTIVITY_PER_PAGE` | `8` / `5` / `8`. Mirror server constants; the client cannot override them. | `frontend/src/api/home.ts:12` |
+| `queryKeys.home.snapshot(pages)` | Key includes the three page integers independently so one panel can page without resetting the others. | `frontend/src/api/queryKeys.ts` |
+| `useHome(pages)` | One `useQuery` with `placeholderData: keepPreviousData`. After the first load, a page change never returns `loading`. | `frontend/src/hooks/useHome.ts:14` |
+| `HomeView` | `loading` / `error` carry `retry`. `blank` / `clear` / `pending` carry `snapshot` plus `retry`. | `frontend/src/hooks/useHome.ts:5` |
 
 ## How it connects
 
-- Reads flow in from [api](./api.md)'s `scans.ts` and `findings.ts` — the
-  **envelopes**, not their `data` arrays.
-- The union is consumed by [screens](./screens.md)'s `Home`, which renders exactly one variant.
+- The wire type is `components['schemas']['HomeSnapshot']` from [api](./api.md).
+- [screens](./screens.md)'s `Home` holds three `useState(1)` page integers and switches on `state`.
+- `lib/review.ts` and `useHomeReview` are gone. Attention order and notices live in
+  [`backend/src/api/services/home.py`](../backend/services.md).
 
 ## Notes / gotchas
 
-- **`reviewCount` comes from the envelopes' `total`, never `deckFindings.length`.** The attention
-  table shows at most 100 rows; a scan with 37 criticals must say 37 even if fewer rows are held.
-- **Two scan reads, not one.** Staleness is measured against `latestSuccessfulScan`, so a *recent
-  failed* scan cannot mask stale coverage.
-- **Blank is keyed off the unfiltered `latestScan` read** (`total === 0` on a `200`), never off a
-  `404` — a 404 is an error, not an empty network.
-- **Any** of the four reads failing yields `error`; there is no partial verdict.
-- **The findings reads gate on `skipToken`, not `enabled`.**
-- **`FindingDeck` and `ReviewItemCard` are gone** (spec 042). Pending state renders `AttentionTable`
-  plus `AttentionNotices` for scan/coverage sentences.
+- **`review_count` is the snapshot field**, not `attention.data.length`. Notices count toward it.
+- **First load** renders `home-loading`. A later page change keeps the previous snapshot on screen.
+- **One HTTP error** replaces the whole page. There is no per-panel error envelope.
+- Home must not call `GET /scans` or `GET /findings`.
 
 # Citations
 
-[1] [specs/020-frontend-vertical-slice-login-home/ARCHITECTURE.md](../../../specs/020-frontend-vertical-slice-login-home/ARCHITECTURE.md)
-[2] [specs/042-design-system/TRUTH.md](../../../specs/042-design-system/TRUTH.md)
+[1] [specs/044-home-feed-and-attention-pagination/ARCHITECTURE.md](../../../specs/044-home-feed-and-attention-pagination/ARCHITECTURE.md)
+[2] [specs/044-home-feed-and-attention-pagination/TRUTH.md](../../../specs/044-home-feed-and-attention-pagination/TRUTH.md)

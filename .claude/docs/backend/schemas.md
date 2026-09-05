@@ -64,6 +64,8 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `OrgMemberListResponse` | `{data: OrgMember[]}` with extras forbidden. | `backend/src/api/schemas/users.py:27` |
 | `UpdateUserRoleRequest` | Exactly one `role`, constrained to `admin` or `viewer`. | `backend/src/api/schemas/users.py:33` |
 
+| `HomeSnapshot` | `review_state`, `review_count`, `latest_successful_scan`, `notices`, `attention`, `events`, `activity`. Nested pages reuse `FindingRead` / `ScanSummary`. | `backend/src/api/schemas/home.py:72` |
+
 Consumed by [`routers/users.py`](/backend/routers.md) for self profile and admin member operations.
 
 ## Key classes / functions — `auth.py` (auth request/response)

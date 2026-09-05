@@ -49,9 +49,13 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `LastAdminError` | Refuses a self-delete or role change that would leave the org without an admin; routers map it to `409 last_admin`. | `backend/src/api/services/users.py:12` |
 | `count_org_admins()` | Counts admin rows in one org. Role change calls it only after taking the org advisory lock. | `backend/src/api/services/users.py:16` |
 | `list_org_members()` | Returns one org's users ordered by `last_seen_at DESC NULLS LAST`, then `id` for deterministic ties. | `backend/src/api/services/users.py:24` |
-| `change_member_role()` | Takes the org-admin advisory lock, performs an org-scoped lookup, protects the final admin, writes the role, and commits. Unknown/foreign target returns `None`. | `backend/src/api/services/users.py:32` |
-| `delete_self()` | Hard-deletes the caller unless they are their org's only admin. | `backend/src/api/services/users.py:53` |
-| `delete_member()` | Org-scoped hard delete; unknown and foreign identifiers both return `False`. | `backend/src/api/services/users.py:60` |
+| `change_member_role()` | Takes the org-admin advisory lock, performs an org-scoped lookup, protects the final admin, writes the role, appends `role_changed`, and commits. Unknown/foreign target returns `None`. | `backend/src/api/services/users.py:35` |
+| `delete_self()` | Appends `account_deleted` then hard-deletes the caller unless they are their org's only admin. | `backend/src/api/services/users.py:77` |
+| `delete_member()` | Appends `member_removed` then org-scoped hard delete; unknown and foreign identifiers both return `False`. | `backend/src/api/services/users.py:95` |
+| `append_activity()` | Inserts one `activity` row in the caller's transaction. Duplicate unique key is a no-op. Does not commit. `occurred_at` is always `utc_now()` at the call site. | `backend/src/api/services/activity.py:37` |
+| `activity_text()` | Admin/viewer sentence matrix. Scan and machine rows are identical across roles. | `backend/src/api/services/activity.py:45` |
+| `read_home_snapshot()` | Attention page, notices, review state, paged activity, derived events. | `backend/src/api/services/home.py:194` |
+| `derive_home_events()` | Current-state box-offline, member-idle, and new-machine facts. Registry overlay for box last-seen. Never stored. | `backend/src/api/services/home.py:101` |
 | `ORG_ADMIN_LOCK_NAMESPACE` / `lock_org_admins()` | Namespace `8818`; executes two-key `pg_advisory_xact_lock(namespace, hashtext(org_id))`, released automatically on commit or rollback. | `backend/src/api/services/org_lock.py:8` |
 | `_fields()` | The single builder behind both agent shapes: `agent_id`/`display_name` from the row, `online` from `agent_connections.is_online`, `last_seen_at` from `agent_connections.last_seen_at(id) or row.last_seen_at`, `target_subnet` from the row, `active_command_id` from `active_command_for`. `list_agents` and `_detail` both spread it, so list and detail cannot drift. | `backend/src/api/services/agents.py:17` |
 | `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:29` |

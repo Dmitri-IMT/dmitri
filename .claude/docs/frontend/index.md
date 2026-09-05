@@ -31,7 +31,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 
 ## Domain & screens
 
-* [review](./review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes four reads into one discriminated union.
+* [review](./review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [directory](./directory.md) — DirectoryRow — the merged member/invite display union — and useOrgDirectory(), which folds two list reads into one state union where error outranks loading.
 * [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.

@@ -30,6 +30,7 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
+| `read_home()` | `GET /api/v1/home` behind `require_user`. Three `Query(1, ge=1)` page integers, no `per_page`. Returns `HomeSnapshot`. Viewers are allowed. | `backend/src/api/routers/home.py:15` |
 | `read_current_user()` | `GET /api/v1/users/me` → caller profile, with role loaded from the DB row by `require_user_row`. | `backend/src/api/routers/users.py:29` |
 | `delete_current_user_route()` | `DELETE /api/v1/users/me` (`204`) for either role; maps `LastAdminError` to `409 last_admin`. | `backend/src/api/routers/users.py:36` |
 | `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |

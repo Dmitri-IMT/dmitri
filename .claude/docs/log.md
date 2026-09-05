@@ -3,6 +3,15 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-05
+
+* **Update**: spec 044 Home snapshot. Replaced `useHomeReview` / `lib/review.ts` with `GET /home`
+  + `useHome`. Documented `activity` table, `append_activity`, `derive_home_events`, required
+  `Pagination` `label`, and Events/Activity panels. Touched: `frontend/review.md`,
+  `frontend/screens.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/tables.md`,
+  `frontend/directory.md`, `frontend/index.md`, `backend/routers.md`, `backend/services.md`,
+  `backend/models.md`, `backend/schemas.md`, `backend/migrations.md`, root `index.md`.
+
 ## 2026-09-04
 
 * **Update**: nuke optionals after spec 042 restyle. Deleted orphaned `HomeFooter` and the unused

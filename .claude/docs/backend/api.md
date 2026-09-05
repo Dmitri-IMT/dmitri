@@ -20,7 +20,7 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `app` | The `FastAPI` instance with generated OpenAPI/Swagger/ReDoc disabled; the published hand-authored contract is authoritative. Mounts read, auth, users, invites, command, and ingest routers plus global errors and middleware. | `backend/src/api/main.py:46` |
+| `app` | The `FastAPI` instance with generated OpenAPI/Swagger/ReDoc disabled; the published hand-authored contract is authoritative. Mounts read, home, auth, users, invites, command, and ingest routers plus global errors and middleware. | `backend/src/api/main.py:46` |
 | `app.add_middleware(NoContentCorsMiddleware / RequestIdMiddleware)` | Registers the 204-preflight CORS middleware (built from `CORS_ALLOWED_ORIGINS`) and the `X-Request-Id` middleware — see [auth](/backend/auth.md). | `backend/src/api/main.py:32` |
 | `options_health()` | `OPTIONS /api/v1/health` → 204, so a real browser preflight is answered by the CORS middleware. | `backend/src/api/main.py:54` |
 | `http_exception_handler()` | `@app.exception_handler(StarletteHTTPException)` — wraps every `HTTPException`/`ApiError` into `{"error": {code, message, details:{}}}`; forwards `exc.headers` so the router's `405` keeps its `Allow`. | `backend/src/api/main.py:46` |
