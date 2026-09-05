@@ -45,18 +45,14 @@ function EventsPanel({ data, total, page, onPageChange }: EventsPanelProps) {
           ))}
         </ul>
       )}
-      {total > HOME_EVENTS_PER_PAGE ? (
-        <div className="flex justify-end">
-          <Pagination
-            page={page}
-            perPage={HOME_EVENTS_PER_PAGE}
-            total={total}
-            onPageChange={onPageChange}
-            testId="home-events"
-            label="Events pages"
-          />
-        </div>
-      ) : null}
+      <Pagination
+        page={page}
+        perPage={HOME_EVENTS_PER_PAGE}
+        total={total}
+        onPageChange={onPageChange}
+        testId="home-events"
+        label="Events pages"
+      />
     </section>
   )
 }

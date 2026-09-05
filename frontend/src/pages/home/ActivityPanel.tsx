@@ -64,18 +64,14 @@ function ActivityPanel({
           ))}
         </ul>
       )}
-      {total > HOME_ACTIVITY_PER_PAGE ? (
-        <div className="flex justify-end">
-          <Pagination
-            page={page}
-            perPage={HOME_ACTIVITY_PER_PAGE}
-            total={total}
-            onPageChange={onPageChange}
-            testId="home-activity"
-            label="Activity pages"
-          />
-        </div>
-      ) : null}
+      <Pagination
+        page={page}
+        perPage={HOME_ACTIVITY_PER_PAGE}
+        total={total}
+        onPageChange={onPageChange}
+        testId="home-activity"
+        label="Activity pages"
+      />
     </section>
   )
 }
