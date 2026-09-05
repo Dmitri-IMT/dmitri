@@ -79,12 +79,17 @@ def update_user_role_route(
             "You cannot change your own role.",
             code="self_target",
         )
+    actor = session.get(User, caller.sub)
+    if actor is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         member = change_member_role(
             session,
             user_id=user_id,
             org_id=caller.org_id,
             role=body.role,
+            actor_user_id=caller.sub,
+            actor_email=actor.email,
         )
     except LastAdminError as exc:
         raise ApiError(
@@ -109,5 +114,14 @@ def delete_user_route(
             "Remove your account from Settings instead.",
             code="self_target",
         )
-    if not delete_member(session, user_id=user_id, org_id=caller.org_id):
+    actor = session.get(User, caller.sub)
+    if actor is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not delete_member(
+        session,
+        user_id=user_id,
+        org_id=caller.org_id,
+        actor_user_id=caller.sub,
+        actor_email=actor.email,
+    ):
         raise HTTPException(status_code=404, detail="User not found")

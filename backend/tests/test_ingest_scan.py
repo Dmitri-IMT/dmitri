@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from api.dependencies.agent_auth import AgentIdentity
+from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import (
@@ -24,6 +25,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas import HostPayload, PortPayload, ScanIngestRequest
+from api.services import commands as commands_module
 from api.services import persistence as persistence_module
 from api.services import worker
 from api.services.epss import EpssClient
@@ -43,6 +45,15 @@ EXAMPLE_PATH = (
     / "examples"
     / "scan_result.example.json"
 )
+
+
+def _activity_rows(
+    session: Session, org_id, kind: str | None = None
+) -> list[ActivityRecord]:
+    statement = select(ActivityRecord).where(ActivityRecord.org_id == org_id)
+    if kind is not None:
+        statement = statement.where(ActivityRecord.kind == kind)
+    return list(session.exec(statement).all())
 
 
 def _example_scan() -> tuple[dict[str, object], ScanIngestRequest]:
@@ -763,3 +774,122 @@ def test_ingest_scan_case_a_rolls_back_completely_on_mid_ingest_failure(
             ).first()
             is None
         )
+
+
+def test_persist_scan_writes_scan_finished(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, scan = _example_scan()
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
+
+    finished = _activity_rows(
+        runtime_session, seeded_org.id, kind="scan_finished"
+    )
+    assert len(finished) == 1
+    assert finished[0].subject_id == scan.scan_id
+    assert finished[0].actor_user_id is None
+    assert finished[0].payload == {"scan_mode": scan.scan_mode}
+
+
+def test_first_completed_ingest_writes_no_machine_first_seen(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, scan = _example_scan()
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    ingest_scan(
+        runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
+    )
+
+    assert len(_activity_rows(runtime_session, seeded_org.id, "scan_finished")) == 1
+    assert _activity_rows(runtime_session, seeded_org.id, "machine_first_seen") == []
+
+
+def test_clock_skew_finished_sorts_above_started(
+    monkeypatch,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+) -> None:
+    from api.models.persistence import utc_now as real_utc_now
+
+    started_at = datetime(2026, 6, 2, 6, 0, 0, tzinfo=timezone.utc)
+    finished_at = datetime(2026, 6, 2, 6, 12, 0, tzinfo=timezone.utc)
+    box_timestamp = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
+    clock = iter([started_at, finished_at])
+
+    def fake_utc_now():
+        try:
+            return next(clock)
+        except StopIteration:
+            return real_utc_now()
+
+    monkeypatch.setattr(commands_module, "utc_now", fake_utc_now)
+    monkeypatch.setattr(persistence_module, "utc_now", fake_utc_now)
+
+    command = Command(
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_mode="standard",
+        subnet="192.168.1.0/24",
+        status="queued",
+    )
+    administrative_session.add(command)
+    administrative_session.commit()
+    administrative_session.refresh(command)
+
+    scan_id = uuid4()
+    commands_module._record_delivery(
+        administrative_session,
+        command=command,
+        scan_id=scan_id,
+        now=started_at,
+    )
+
+    host = HostPayload(
+        ip="10.0.0.50",
+        mac="AA:BB:CC:DD:EE:01",
+        hostname="skew-host",
+        vendor="vendor",
+        ports=[],
+    )
+    scan = ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=box_timestamp,
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        hosts=[host],
+        findings=[],
+    )
+    command = administrative_session.exec(
+        select(Command).where(Command.scan_id == scan_id)
+    ).one()
+    persist_scan(
+        administrative_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=command,
+        now=finished_at,
+        existing=administrative_session.get(ScanRecord, scan_id),
+    )
+
+    rows = list(
+        administrative_session.exec(
+            select(ActivityRecord)
+            .where(ActivityRecord.org_id == seeded_org.id)
+            .order_by(ActivityRecord.occurred_at.desc(), ActivityRecord.id.desc())
+        ).all()
+    )
+    kinds = [row.kind for row in rows]
+    assert kinds.index("scan_finished") < kinds.index("scan_started")
+    assert rows[0].kind == "scan_finished"
+    assert rows[0].occurred_at == finished_at
+    assert rows[1].occurred_at == started_at

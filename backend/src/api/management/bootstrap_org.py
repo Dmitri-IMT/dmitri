@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
             email=args.email,
             role="admin",
             mailer=_SilentMailer(),
+            actor_user_id=None,
+            actor_email="bootstrap",
         )
 
         print(f"org_id={org.id}")

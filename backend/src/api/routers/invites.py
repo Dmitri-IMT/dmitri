@@ -8,6 +8,7 @@ from sqlmodel import Session
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_admin
 from api.errors import ApiError
+from api.models.identity import User
 from api.schemas.auth import LoginResponse
 from api.schemas.invites import (
     AcceptInviteRequest,
@@ -45,6 +46,9 @@ def create_invite_route(
     caller: CallerIdentity = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> InviteCreatedResponse:
+    actor = session.get(User, caller.sub)
+    if actor is None:
+        raise ApiError(401, "Not authenticated", code="unauthenticated")
     try:
         invite_token, expires_at = create_invite(
             session,
@@ -52,6 +56,8 @@ def create_invite_route(
             email=body.email,
             role=body.role,
             mailer=get_mailer(background),
+            actor_user_id=caller.sub,
+            actor_email=actor.email,
         )
     except AlreadyMemberError as exc:
         raise ApiError(400, str(exc), code="email_already_member") from exc
@@ -118,10 +124,15 @@ def revoke_invite_route(
     caller: CallerIdentity = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> None:
+    actor = session.get(User, caller.sub)
+    if actor is None:
+        raise ApiError(401, "Not authenticated", code="unauthenticated")
     if not revoke_invite(
         session,
         invite_id=invite_id,
         org_id=caller.org_id,
+        actor_user_id=caller.sub,
+        actor_email=actor.email,
     ):
         raise ApiError(404, "Invite not found", code="not_found")
 

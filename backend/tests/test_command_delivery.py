@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from api.models.command import Command
+from api.models.activity import ActivityRecord
+from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
 from api.services import agent_connections, agent_presence, commands
@@ -14,6 +15,16 @@ from sqlmodel import Session, select
 from starlette.websockets import WebSocketState
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
+STALE = T0 - timedelta(minutes=20)
+
+
+def _activity_rows(
+    session: Session, org_id, kind: str | None = None
+) -> list[ActivityRecord]:
+    statement = select(ActivityRecord).where(ActivityRecord.org_id == org_id)
+    if kind is not None:
+        statement = statement.where(ActivityRecord.kind == kind)
+    return list(session.exec(statement).all())
 
 
 def _seed_queued_command(
@@ -70,6 +81,14 @@ def test_deliver_success_sets_delivered_at_and_stub_scan(
     assert scan.scan_mode == "standard"
     assert scan.status == "pending"
     assert scan.agent_id == provisioned_agent.id
+
+    started = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_started"
+    )
+    assert len(started) == 1
+    assert started[0].subject_id == delivered.scan_id
+    assert started[0].actor_user_id is None
+    assert started[0].payload == {"scan_mode": "standard"}
 
 
 def test_deliver_send_failure_expires_without_scan(
@@ -129,6 +148,123 @@ def test_deliver_no_socket_raises_offline_without_awaiting_send(
     assert command.error_code == "device_offline"
     assert command.scan_id is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
+    assert _activity_rows(administrative_session, seeded_org.id) == []
+
+
+def test_sweep_expired_queued_writes_no_activity(
+    administrative_session: Session, seeded_org
+):
+    agent = Agent(
+        org_id=seeded_org.id,
+        display_name="stale-agent",
+        public_key=b"\x01" * 32,
+        last_seen_at=STALE,
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+    )
+
+    swept = commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    assert swept == 1
+    assert _activity_rows(administrative_session, seeded_org.id) == []
+
+
+def test_apply_status_failed_writes_scan_failed_once(
+    administrative_session: Session, provisioned_agent, seeded_org
+):
+    scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        timestamp=T0,
+        subnet="192.168.1.0/24",
+        scan_mode="quick",
+        status="pending",
+    )
+    administrative_session.add(scan)
+    administrative_session.commit()
+    command = Command(
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan.scan_id,
+        scan_mode="quick",
+        subnet="192.168.1.0/24",
+        status="running",
+    )
+    administrative_session.add(command)
+    administrative_session.commit()
+
+    applied = commands.apply_status(
+        administrative_session,
+        agent_id=provisioned_agent.id,
+        command_id=command.id,
+        status="failed",
+        now=T0,
+        error_code="agent_disconnected",
+    )
+
+    assert applied is True
+    failed = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_failed"
+    )
+    assert len(failed) == 1
+    assert failed[0].subject_id == scan.scan_id
+    assert failed[0].payload == {"scan_mode": "quick"}
+
+
+def test_sweep_stale_failed_scan_activity_is_idempotent(
+    administrative_session: Session, seeded_org
+):
+    agent = Agent(
+        org_id=seeded_org.id,
+        display_name="stale-agent",
+        public_key=b"\x01" * 32,
+        last_seen_at=STALE,
+    )
+    administrative_session.add(agent)
+    administrative_session.commit()
+    administrative_session.refresh(agent)
+    scan = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        timestamp=T0,
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        status="pending",
+    )
+    administrative_session.add(scan)
+    administrative_session.commit()
+    command = Command(
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        scan_id=scan.scan_id,
+        scan_mode="standard",
+        subnet="192.168.1.0/24",
+        status="delivered",
+    )
+    administrative_session.add(command)
+    administrative_session.commit()
+
+    commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+    commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    failed = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_failed"
+    )
+    assert len(failed) == 1
 
 
 def test_deliver_leaves_no_scan_when_command_expired_during_send(
@@ -170,6 +306,7 @@ def test_deliver_leaves_no_scan_when_command_expired_during_send(
     assert command.scan_id is None
     assert command.delivered_at is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
+    assert _activity_rows(administrative_session, seeded_org.id) == []
 
 
 def test_deliver_to_revoked_agent_closes_socket_without_sending(

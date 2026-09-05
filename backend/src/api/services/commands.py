@@ -11,10 +11,11 @@ from starlette.concurrency import run_in_threadpool
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
 from api.models.command import Agent, Command
-from api.models.persistence import ScanRecord
+from api.models.persistence import ScanRecord, utc_now
 from api.schemas.agent_frames import AgentCommandFrame
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
+from api.services.activity import ActivityAppend, append_activity
 from api.services.command_lifecycle import (
     NON_TERMINAL,
     PI_OWNED,
@@ -154,6 +155,20 @@ def apply_status(
             .where(ScanRecord.scan_id == scan_id)
             .values(status=scan_status_for(status))
         )
+        if status == "failed":
+            scan_record = session.get(ScanRecord, scan_id)
+            if scan_record is not None:
+                append_activity(
+                    session,
+                    ActivityAppend(
+                        org_id=scan_record.org_id,
+                        kind="scan_failed",
+                        occurred_at=utc_now(),
+                        actor_user_id=None,
+                        subject_id=scan_id,
+                        payload={"scan_mode": scan_record.scan_mode},
+                    ),
+                )
     session.commit()
     return True
 
@@ -212,6 +227,20 @@ def sweep_stale_commands(
                 .where(ScanRecord.scan_id == scan_id)
                 .values(status=scan_status_for(command_status))
             )
+            if command_status == "failed":
+                scan_record = session.get(ScanRecord, scan_id)
+                if scan_record is not None:
+                    append_activity(
+                        session,
+                        ActivityAppend(
+                            org_id=scan_record.org_id,
+                            kind="scan_failed",
+                            occurred_at=utc_now(),
+                            actor_user_id=None,
+                            subject_id=scan_id,
+                            payload={"scan_mode": scan_record.scan_mode},
+                        ),
+                    )
     if rows:
         session.commit()
     return len(rows)
@@ -251,6 +280,17 @@ def _record_delivery(
         )
     )
     session.flush()
+    append_activity(
+        session,
+        ActivityAppend(
+            org_id=command.org_id,
+            kind="scan_started",
+            occurred_at=utc_now(),
+            actor_user_id=None,
+            subject_id=scan_id,
+            payload={"scan_mode": command.scan_mode},
+        ),
+    )
     result = session.execute(
         update(Command)
         .where(Command.id == command.id, Command.status == "queued")
