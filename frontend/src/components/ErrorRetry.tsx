@@ -4,15 +4,9 @@ type ErrorRetryProps = {
   message: string
   testId: string
   onRetry: () => void
-  actionLabel?: string
 }
 
-function ErrorRetry({
-  message,
-  testId,
-  onRetry,
-  actionLabel = 'Retry',
-}: ErrorRetryProps) {
+function ErrorRetry({ message, testId, onRetry }: ErrorRetryProps) {
   return (
     <div className="flex flex-col items-center gap-6 py-16 text-center">
       <p data-testid={testId} className="text-title-sm">
@@ -24,7 +18,7 @@ function ErrorRetry({
         data-testid={`${testId}-retry`}
         onClick={onRetry}
       >
-        {actionLabel}
+        Retry
       </Button>
     </div>
   )
