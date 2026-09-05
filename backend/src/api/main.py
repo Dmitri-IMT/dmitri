@@ -26,7 +26,17 @@ from api.middleware import (
     RequestIdMiddleware,
     build_cors_middleware_kwargs,
 )
-from api.routers import agents, auth, commands, findings, hosts, invites, scans, users
+from api.routers import (
+    agents,
+    auth,
+    commands,
+    findings,
+    home,
+    hosts,
+    invites,
+    scans,
+    users,
+)
 from api.services.agent_presence import reconcile_all
 
 APP_VERSION = importlib.metadata.version("backend-api")
@@ -154,4 +164,5 @@ app.include_router(users.router)
 app.include_router(hosts.router)
 app.include_router(scans.router)
 app.include_router(findings.router)
+app.include_router(home.router)
 app.include_router(invites.router)

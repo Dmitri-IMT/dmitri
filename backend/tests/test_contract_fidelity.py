@@ -55,6 +55,13 @@ SCHEMA_NAMES = (
     "AgentDetail",
     "AgentListResponse",
     "UpdateAgentTargetSubnetRequest",
+    "HomeEvent",
+    "HomeActivityItem",
+    "HomeNotice",
+    "HomeAttentionPage",
+    "HomeEventsPage",
+    "HomeActivityPage",
+    "HomeSnapshot",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 

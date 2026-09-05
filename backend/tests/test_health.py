@@ -38,6 +38,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/scans", "POST"),
     ("/api/v1/scans/{scan_id}", "GET"),
     ("/api/v1/findings", "GET"),
+    ("/api/v1/home", "GET"),
 } | {
     (f"/api/v1/auth/{name}", method)
     for name in (
