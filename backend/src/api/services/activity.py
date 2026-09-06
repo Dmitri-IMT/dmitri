@@ -42,6 +42,33 @@ def append_activity(session: Session, row: ActivityAppend) -> None:
     )
 
 
+def append_scan_activity(
+    session: Session,
+    *,
+    org_id: UUID,
+    scan_id: UUID,
+    kind: ActivityKind,
+    scan_mode: str,
+    occurred_at: datetime,
+) -> None:
+    """Record one scan lifecycle row.
+
+    `occurred_at` is the API clock the caller already holds — never the Pi's
+    `scan.timestamp`.
+    """
+    append_activity(
+        session,
+        ActivityAppend(
+            org_id=org_id,
+            kind=kind,
+            occurred_at=occurred_at,
+            actor_user_id=None,
+            subject_id=scan_id,
+            payload={"scan_mode": scan_mode},
+        ),
+    )
+
+
 def activity_text(kind: str, role: str, payload: dict[str, str]) -> str:
     actor = payload.get("actor_email", "")
     admin = role == "admin"

@@ -813,26 +813,15 @@ def test_first_completed_ingest_writes_no_machine_first_seen(
 
 
 def test_clock_skew_finished_sorts_above_started(
-    monkeypatch,
     administrative_session: Session,
     provisioned_agent: Agent,
     seeded_org: Org,
 ) -> None:
-    from api.models.persistence import utc_now as real_utc_now
-
+    # Both writers stamp `occurred_at` from the API clock handed to them as
+    # `now`, so the box's own timestamp cannot leak into the activity order.
     started_at = datetime(2026, 6, 2, 6, 0, 0, tzinfo=timezone.utc)
     finished_at = datetime(2026, 6, 2, 6, 12, 0, tzinfo=timezone.utc)
     box_timestamp = datetime(2026, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
-    clock = iter([started_at, finished_at])
-
-    def fake_utc_now():
-        try:
-            return next(clock)
-        except StopIteration:
-            return real_utc_now()
-
-    monkeypatch.setattr(commands_module, "utc_now", fake_utc_now)
-    monkeypatch.setattr(persistence_module, "utc_now", fake_utc_now)
 
     command = Command(
         org_id=seeded_org.id,

@@ -12,11 +12,11 @@ from starlette.websockets import WebSocketDisconnect
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
 from api.models.command import Agent, Command
-from api.models.persistence import ScanRecord, utc_now
+from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
-from api.services.activity import ActivityAppend, append_activity
+from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import (
     NON_TERMINAL,
     PI_OWNED,
@@ -107,23 +107,6 @@ def command_for_scan(session: Session, scan_id: UUID) -> Command | None:
     return session.exec(select(Command).where(Command.scan_id == scan_id)).first()
 
 
-def _append_scan_failed(session: Session, scan_id: UUID) -> None:
-    scan_record = session.get(ScanRecord, scan_id)
-    if scan_record is None:
-        return
-    append_activity(
-        session,
-        ActivityAppend(
-            org_id=scan_record.org_id,
-            kind="scan_failed",
-            occurred_at=utc_now(),
-            actor_user_id=None,
-            subject_id=scan_id,
-            payload={"scan_mode": scan_record.scan_mode},
-        ),
-    )
-
-
 def apply_status(
     session: Session,
     *,
@@ -159,14 +142,14 @@ def apply_status(
             Command.scan_id.is_not(None),
         )
         .values(**values)
-        .returning(Command.scan_id)
+        .returning(Command.scan_id, Command.org_id, Command.scan_mode)
     )
     row = result.first()
     if row is None:
         session.rollback()
         return False
 
-    scan_id = row[0]
+    scan_id, org_id, scan_mode = row[0], row[1], row[2]
     if scan_id is not None:
         session.execute(
             update(ScanRecord)
@@ -174,7 +157,14 @@ def apply_status(
             .values(status=scan_status_for(status))
         )
         if status == "failed":
-            _append_scan_failed(session, scan_id)
+            append_scan_activity(
+                session,
+                org_id=org_id,
+                scan_id=scan_id,
+                kind="scan_failed",
+                scan_mode=scan_mode,
+                occurred_at=now,
+            )
     session.commit()
     return True
 
@@ -223,10 +213,15 @@ def sweep_stale_commands(
                     else_="agent_disconnected",
                 ),
             )
-            .returning(Command.scan_id, Command.status)
+            .returning(
+                Command.scan_id,
+                Command.status,
+                Command.org_id,
+                Command.scan_mode,
+            )
         )
     )
-    for scan_id, command_status in rows:
+    for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
             session.execute(
                 update(ScanRecord)
@@ -234,7 +229,14 @@ def sweep_stale_commands(
                 .values(status=scan_status_for(command_status))
             )
             if command_status == "failed":
-                _append_scan_failed(session, scan_id)
+                append_scan_activity(
+                    session,
+                    org_id=command_org_id,
+                    scan_id=scan_id,
+                    kind="scan_failed",
+                    scan_mode=command_scan_mode,
+                    occurred_at=now,
+                )
     if rows:
         session.commit()
     return len(rows)
@@ -274,16 +276,13 @@ def _record_delivery(
         )
     )
     session.flush()
-    append_activity(
+    append_scan_activity(
         session,
-        ActivityAppend(
-            org_id=command.org_id,
-            kind="scan_started",
-            occurred_at=utc_now(),
-            actor_user_id=None,
-            subject_id=scan_id,
-            payload={"scan_mode": command.scan_mode},
-        ),
+        org_id=command.org_id,
+        scan_id=scan_id,
+        kind="scan_started",
+        scan_mode=command.scan_mode,
+        occurred_at=now,
     )
     result = session.execute(
         update(Command)
