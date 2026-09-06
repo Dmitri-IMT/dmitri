@@ -1054,9 +1054,11 @@ names were not commented in the DMI-131 review, so this one is unchanged.
 
 **Route:** `/settings` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B5
 
-> **Restyle only — DMI-110 owns this screen's content.** The look comes from
-> [`FOUNDATIONS.md`](FOUNDATIONS.md); what the screen contains is parked for its own revamp
-> (decided 2026-09-02, DMI-131).
+> **Rebuilt by DMI-110, 2026-09-06.** Arrangement, hierarchy, grouping and density come from
+> [`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §9 (owner decisions D1–D7); the look comes from
+> [`FOUNDATIONS.md`](FOUNDATIONS.md). *Amended 2026-09-06 (DMI-110); this note previously read
+> "Restyle only — DMI-110 owns this screen's content", parking the content for its own revamp
+> (decided 2026-09-02, DMI-131). That hold is discharged.*
 
 **Epicenter** — **who you are signed in as, and what you can do about it.** The screen opens on
 your email and your role, read without interaction, and then offers the two things you can do to
@@ -1065,37 +1067,64 @@ password*, always — a screen that opens with the cursor in a current-password 
 names the account has asked for a secret before saying whose it is. *Amended 2026-08-18
 (DMI-107); it previously read "change your own password".*
 
+**Two groups on one scrolling page, separated by a hairline rule** — `Your account` first, then
+`Leave this organisation` — and no card chrome around either: Settings is mostly text, and the
+`Card` container earns its place on the dense data screens, not here. Both group titles are real
+`<h2>`s. Density is `gap-8` between the groups, `gap-4` inside a group, `gap-2` from a label to its
+value — three vertical steps, the rhythm rule's ceiling. The single page holds while Settings is
+about the account and the way out of it; the two-level restructure waits for a second populated
+section ([`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §10). *Added 2026-09-06 (DMI-110, D1/D5);
+the screen was four bare sections at `gap-12`.*
+
 Changing the password is still the most common reason anyone comes here, and it is still the
 **only** change-password screen in the product — there is no forced rotation and no 403-triggered
 flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
-NIST-misaligned). It is now reached through a `[Change password]` trigger that opens a modal, so
-the page's regular state is four short sections with air between them rather than three password
-fields and a wall of labels.
+NIST-misaligned). It is reached through a `[Change password]` trigger that opens a modal, and the
+trigger is a property row of the account group: the label `Password`, the button, and **nothing
+between them**. No masked dots — there is no length to disclose and no "last changed" fact to show,
+and the row takes one without a layout change if `password_last_changed_at` is ever added.
+*Amended 2026-09-06 (DMI-110, D6); the page's regular state was "four short sections with air
+between them" and the password section had its own `h2`.*
 
-**The details block is read-only** — email and role, no display name and no `[Save]`. Open
-question **C3** stays open: there is no self-profile update operation, and an input the user can
-type into but not submit is worse than text.
+**The account group is read-only above its button** — email and role as text, no display name and
+no `[Save]`. Open question **C3** stays open: there is no self-profile update operation, and an
+input the user can type into but not submit is worse than text. The email is on the screen even
+though the top bar also carries it: it is the screen's subject, and
+[`ADR-017`](../adr/ADR-017-account-removal.md)'s typed confirmation asks the reader for that exact
+string, which is worse to hunt for in the chrome. *Amended 2026-09-06 (DMI-110, D3/D7); `Your
+details` and `Password` were two sections and are now one group titled `Your account`.*
 
 **Leaving the organization also lives here** ([`ADR-017`](../adr/ADR-017-account-removal.md), added
 2026-08-08), for **both roles**. A viewer never sees the USERS screen, so this is the only place
 they can remove their own account — and an account nobody can leave is the wrong default for a
 product holding this data. It sits at the bottom, visually separated, and is the last thing on the
-page: it is not what anyone came here to do.
+page: it is not what anyone came here to do. Its title is an `<h2>`, like the account group's.
+*Corrected 2026-09-06 (DMI-110); it shipped as a `<span className="text-title-sm">`, which left the
+one section a screen-reader user most needs to find deliberately out of heading navigation.*
 
 The copy does **not** name the organization. A signed-in member cannot read it — `UserProfileResponse` carries `user_id`, `email` and `role` only, and `org_name` exists solely on the
 pre-session invite lookup. The wording is org-neutral rather than adding a request to discover a name
 the heading has already supplied (spec 033).
 
-**Activity disclosure is built for both roles** (spec 030). The `Activity` heading sits on **its
-own line**, and a disclosure row — a caret and the accent-coloured label `What's recorded?` —
-sits beneath it; activating that row expands a persistent note and rotates the caret. It was
-originally specced *beside* the heading, which made a section title and a control read as one
-label and left the control with no affordance at all; that arrangement is withdrawn. The row is
+**Activity is a privacy note inside the account group, not a section of its own** (spec 030). It
+carries no control and no state, so it does not belong at the same level as the password and the
+way out. It keeps its `Disclosure` — a caret and the label `What's recorded about me?` — and sits
+under the account rows; activating it expands a persistent note and rotates the caret. The row is
 the shared button primitive in its `link` variant and carries all five interactive states
-([`FOUNDATIONS.md`](FOUNDATIONS.md) §Interaction states) — it is the worked example that section is written for. *Corrected
-2026-08-18 (DMI-107).* It names last use and last sign-in, says org admins can see the activity
-time, and states that no viewed/action detail is recorded. It is information, not a toggle, and
-must work by keyboard and assistive technology.
+([`FOUNDATIONS.md`](FOUNDATIONS.md) §Interaction states) — it is the worked example that section is written for. It names what
+the organization can see, and states that no viewed/action detail is recorded. It is information,
+not a toggle, and must work by keyboard and assistive technology: the trigger keeps focus when it
+expands and stays linked to the note it reveals. *Amended 2026-09-06 (DMI-110, D2); it previously
+had its own `Activity` heading and the label `What's recorded?`. The 2026-08-18 correction
+(DMI-107), which moved the row off the heading's line, is superseded by the heading's removal.*
+
+**Every password field carries a reveal toggle** — a real `<button type="button">` inside the
+field and in the tab order, drawn as a hand-drawn inline SVG eye (no icon set, no glyph), whose
+accessible name flips `Show password` ↔ `Hide password`. Fields start hidden, each toggles
+independently, and the state never persists: closing the dialog resets it. The browsers' own
+reveal controls are suppressed so no field shows two eyes. The same primitive carries the password
+fields on LOGIN, RESET PASSWORD and ACCEPT INVITE — typing a new password blind, twice, is the
+worst moment on those screens too. *Added 2026-09-06 (DMI-110, D4).*
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
 pointed at one network, identical for every admin in the org. It lives on DEVICES (B4).
@@ -1122,8 +1151,14 @@ pointed at one network, identical for every admin in the org. It lives on DEVICE
 minimum 12 characters; no common or breached passwords; no obvious patterns (repeated characters,
 simple suffixes); no names or birth dates.
 
-**Three states:**
-- **Regular:** the form. Both sections stacked in the 720px prose column.
+**States:**
+- **Regular:** the two groups, stacked, with the rule between them.
+- **Loading:** the session profile has not arrived yet. The whole screen renders — both headings,
+  the password row, the disclosure, the leaving copy — with the email and role values as skeleton
+  bars and the `[Delete my account]` trigger disabled until the account it would delete is known,
+  so the shape never changes under the reader. *Added 2026-09-06 (DMI-110); the screen previously
+  rendered a half page while the profile loaded, because the details section returned nothing while
+  the sections around it drew in full.*
 - **Blank:** **not applicable, deliberately.** A settings form is never empty — it always has its
   own fields. Recording this so nobody invents an empty state to satisfy the three-states rule.
 - **Error:** field-level inline errors (wrong current password, policy rejection). No toast for form
@@ -1149,14 +1184,13 @@ simple suffixes); no names or birth dates.
 | Error — wrong current | "That's not your current password." |
 | Error — policy | "That password isn't strong enough. Try a longer one that isn't based on a name or a date." |
 | Error — mismatch (client-side) | "Those two passwords don't match." |
-| Section — activity | "Activity" |
-| Activity control | "What's recorded?" |
-| Activity disclosure | "Your organization's admins can see when you last used Dmitri and when you last signed in. We record only these times — not what you viewed or did." |
-| Section — profile | "Your details" |
-| Profile fields | "Display name" / "Email" |
-| Profile button | "Save" |
-| Section — leaving | "Leave this organization" |
-| Leaving — body | "Your account is deleted and you lose access to this organization's scans and network straight away. This can't be undone — an admin would have to invite you again." |
+| Activity control | "What's recorded about me?" |
+| Activity disclosure | "Everyone in your organization can see when you last signed in, and a log of changes to the organization: scans, machines that join the network, invitations, role changes, and members joining or leaving. We don't record what you viewed." *(the shipped string; the table carried the pre-spec-030 wording until 2026-09-06, DMI-110.)* |
+| Section — account | "Your account" |
+| Account rows | "Email" / "Role" / "Password" |
+| Reveal toggle | "Show password" ↔ "Hide password" |
+| Section — leaving | "Leave this organisation" |
+| Leaving — body | "Your account is deleted and you lose access to this organisation's scans, network and vulnerabilities straight away. This can't be undone — an admin would have to invite you again." *(the shipped string; the table was one revision behind until 2026-09-06, DMI-110.)* |
 | Leaving — trigger | "Delete my account" |
 | Confirm — heading | "Delete your account?" |
 | Confirm — prompt | "Type **you@example.com** to confirm." |
@@ -1174,36 +1208,23 @@ simple suffixes); no names or birth dates.
 |   SETTINGS                                                                   |
 |   ------------------------------------------------------------------        |
 |                                                                              |
-|   CHANGE YOUR PASSWORD                                                       |
-|   At least 12 characters. Avoid names, dates, and passwords you've           |
-|   used elsewhere.                                               (muted)      |
+|   YOUR ACCOUNT                                                               |
+|   Email  you@example.com                                                     |
+|   Role  Admin                                                                |
+|   Password  [ Change password ]                                              |
 |                                                                              |
-|   Current password       [____________________________]                      |
-|   New password           [____________________________]                      |
-|   Confirm new password   [____________________________]                      |
+|   > What's recorded about me?                                                |
+|   (expanded) Everyone in your organization can see when you last signed in,  |
+|   and a log of changes to the organization: scans, machines that join the    |
+|   network, invitations, role changes, and members joining or leaving. We     |
+|   don't record what you viewed.                                 (muted)      |
 |                                                                              |
-|                          [ Change password ]                                 |
+|   ------------------------------------------------------------------        |
 |                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   ACTIVITY                         [What's recorded?]                          |
-|   (expanded) Your organization's admins can see when you last used Dmitri    |
-|   and when you last signed in. We record only these times — not what you     |
-|   viewed or did.                                                (muted)      |
-|                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|                                                                              |
-|                                                                              |
-|   YOUR DETAILS                                        ⚠️ blocked — C3         |
-|   Display name           [____________________________]                      |
-|   Email                  [____________________________]                      |
-|                          [ Save ]                                            |
-|                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|                                                                              |
-|   LEAVE THIS ORGANIZATION                                                    |
-|   Your account is deleted and you lose access to this organization's         |
-|   scans and network straight away. This can't be undone — an                 |
-|   admin would have to invite you again.                         (muted)      |
+|   LEAVE THIS ORGANISATION                                                    |
+|   Your account is deleted and you lose access to this organisation's         |
+|   scans, network and vulnerabilities straight away. This can't be            |
+|   undone — an admin would have to invite you again.              (muted)     |
 |                                                                              |
 |   [ Delete my account ]                                                      |
 +------------------------------------------------------------------------------+
