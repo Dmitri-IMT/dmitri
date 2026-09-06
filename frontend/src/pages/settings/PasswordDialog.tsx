@@ -4,8 +4,8 @@ import { readApiError } from '@/api/apiError'
 import { changePassword } from '@/api/passwords'
 import DialogShell from '@/components/DialogShell'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import {
   PASSWORD_HINT,
   PASSWORD_MISMATCH_ERROR,
@@ -98,10 +98,9 @@ function PasswordDialog({
         </Dialog.Title>
         <div className="flex flex-col gap-1">
           <Label htmlFor="settings-current">Current password</Label>
-          <Input
+          <PasswordInput
             id="settings-current"
             ref={currentRef}
-            type="password"
             autoComplete="current-password"
             aria-invalid={currentError !== null}
             aria-describedby="settings-current-error"
@@ -120,10 +119,9 @@ function PasswordDialog({
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="settings-new">New password</Label>
-          <Input
+          <PasswordInput
             id="settings-new"
             ref={newRef}
-            type="password"
             autoComplete="new-password"
             aria-invalid={newError !== null}
             aria-describedby="settings-new-hint settings-new-error"
@@ -149,10 +147,9 @@ function PasswordDialog({
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="settings-confirm">Confirm new password</Label>
-          <Input
+          <PasswordInput
             id="settings-confirm"
             ref={confirmRef}
-            type="password"
             autoComplete="new-password"
             aria-invalid={confirmError !== null}
             aria-describedby="settings-confirm-error"

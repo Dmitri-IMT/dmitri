@@ -5,12 +5,17 @@ import ConfirmByTyping from '@/components/ConfirmByTyping'
 import Disclosure from '@/components/Disclosure'
 import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import AccountDetails from '@/pages/settings/AccountDetails'
 import PasswordDialog from '@/pages/settings/PasswordDialog'
 
 const LAST_ADMIN_ERROR =
   "You're the only admin. Make someone else an admin first, then you can leave."
 const LEAVE_ERROR = "Couldn't delete your account."
+
+// The profile arrives with the session query, so the two values are the only part of the
+// screen that has to wait. A bar holds their place: the shape never changes under the reader.
+function ValuePlaceholder() {
+  return <span className="block h-3 w-32 bg-border" />
+}
 
 function Settings() {
   const { user, deleteAccount } = useSession()
@@ -18,6 +23,8 @@ function Settings() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
   const [isLeaveOpen, setIsLeaveOpen] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
+
+  const roleLabel = user ? (user.role === 'admin' ? 'Admin' : 'Viewer') : null
 
   async function handleLeave() {
     setLeaveError(null)
@@ -34,41 +41,52 @@ function Settings() {
   }
 
   return (
-    <div data-testid="settings-idle" className="flex flex-col gap-12">
+    <div data-testid="settings-idle" className="flex flex-col gap-8">
       <PageHeader title="Settings" />
-      <div className="flex flex-col gap-12">
-        <AccountDetails />
-        <section className="flex flex-col gap-4">
-          <h2 className="text-title-sm">Password</h2>
-          <div className="flex flex-col items-start gap-2">
-            <Button
-              type="button"
-              onClick={() => {
-                setPasswordSuccess(null)
-                setIsPasswordOpen(true)
-              }}
-              data-testid="settings-password-trigger"
+      <section data-testid="settings-details" className="flex flex-col gap-4">
+        <h2 className="text-title-sm">Your account</h2>
+        <dl className="flex flex-col gap-2 text-body-md">
+          <div className="flex min-w-0 gap-2">
+            <dt className="shrink-0 text-muted-foreground">Email</dt>
+            <dd
+              data-testid="settings-details-email"
+              className="min-w-0 break-words"
             >
-              Change password
-            </Button>
-            <p
-              role="status"
-              data-testid="settings-success"
-              className="text-body-md text-muted-foreground"
-            >
-              {passwordSuccess}
-            </p>
+              {user ? user.email : <ValuePlaceholder />}
+            </dd>
           </div>
-        </section>
-        <section
-          data-testid="settings-activity"
-          className="flex flex-col gap-2"
-        >
-          <h2 data-testid="settings-activity-label" className="text-title-sm">
-            Activity
-          </h2>
+          <div className="flex min-w-0 gap-2">
+            <dt className="shrink-0 text-muted-foreground">Role</dt>
+            <dd data-testid="settings-details-role" className="min-w-0">
+              {roleLabel ?? <ValuePlaceholder />}
+            </dd>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <dt className="shrink-0 text-muted-foreground">Password</dt>
+            <dd className="flex min-w-0 flex-col items-start gap-2">
+              <Button
+                type="button"
+                onClick={() => {
+                  setPasswordSuccess(null)
+                  setIsPasswordOpen(true)
+                }}
+                data-testid="settings-password-trigger"
+              >
+                Change password
+              </Button>
+              <p
+                role="status"
+                data-testid="settings-success"
+                className="text-body-md text-muted-foreground"
+              >
+                {passwordSuccess}
+              </p>
+            </dd>
+          </div>
+        </dl>
+        <div data-testid="settings-activity">
           <Disclosure
-            label="What's recorded?"
+            label="What's recorded about me?"
             testId="settings-activity-disclosure"
             caretTestId="settings-activity-caret"
           >
@@ -82,33 +100,33 @@ function Settings() {
               leaving. We don&apos;t record what you viewed.
             </p>
           </Disclosure>
-        </section>
-        {user && (
-          <section data-testid="settings-leave" className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-title-sm">Leave this organisation</span>
-              <p
-                data-testid="settings-leave-body"
-                className="max-w-prose text-body-md text-muted-foreground"
-              >
-                Your account is deleted and you lose access to this
-                organisation&apos;s scans, network and vulnerabilities straight
-                away. This can&apos;t be undone — an admin would have to invite
-                you again.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start"
-              onClick={() => setIsLeaveOpen(true)}
-              data-testid="settings-leave-trigger"
-            >
-              Delete my account
-            </Button>
-          </section>
-        )}
-      </div>
+        </div>
+      </section>
+      <hr className="border-border" />
+      <section data-testid="settings-leave" className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-title-sm">Leave this organisation</h2>
+          <p
+            data-testid="settings-leave-body"
+            className="max-w-prose text-body-md text-muted-foreground"
+          >
+            Your account is deleted and you lose access to this
+            organisation&apos;s scans, network and vulnerabilities straight
+            away. This can&apos;t be undone — an admin would have to invite you
+            again.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="self-start"
+          disabled={!user}
+          onClick={() => setIsLeaveOpen(true)}
+          data-testid="settings-leave-trigger"
+        >
+          Delete my account
+        </Button>
+      </section>
       <PasswordDialog
         open={isPasswordOpen}
         onOpenChange={setIsPasswordOpen}

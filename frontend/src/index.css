@@ -127,6 +127,16 @@ body {
   html {
     @apply font-sans;
   }
+  /* PasswordInput draws the only reveal control. Edge draws its own eye inside a password
+     field, and Safari and Chrome draw a credentials button in the same slot; both would sit
+     on top of ours. Separate rules on purpose — one selector a browser does not know would
+     otherwise invalidate the other. */
+  input::-ms-reveal {
+    display: none;
+  }
+  input::-webkit-credentials-auto-fill-button {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

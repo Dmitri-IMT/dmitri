@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { resetPassword } from '@/api/auth'
 import { readApiError } from '@/api/apiError'
@@ -101,10 +101,9 @@ function ResetPassword() {
           <span className="text-title-sm">Set a new password</span>
           <div className="flex flex-col gap-2">
             <Label htmlFor="reset-password">New password</Label>
-            <Input
+            <PasswordInput
               id="reset-password"
               ref={passwordRef}
-              type="password"
               autoComplete="new-password"
               autoFocus
               aria-invalid={passwordError !== null}
@@ -131,10 +130,9 @@ function ResetPassword() {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="reset-confirm">Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="reset-confirm"
               ref={confirmRef}
-              type="password"
               autoComplete="new-password"
               aria-invalid={confirmError !== null}
               aria-describedby="reset-confirm-error"

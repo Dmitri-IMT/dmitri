@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { useSession } from '@/auth/useSession'
 import { SERVICE_ERROR } from '@/lib/copy'
@@ -99,9 +100,8 @@ function Login() {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="login-password">Password</Label>
-            <Input
+            <PasswordInput
               id="login-password"
-              type="password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
