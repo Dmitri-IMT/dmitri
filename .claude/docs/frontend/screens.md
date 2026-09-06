@@ -4,7 +4,7 @@ title: frontend screens, shells and shared components
 description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-06T00:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -39,7 +39,7 @@ the no-device Devices blank is the one blank state with no action.
 | `matchesExpected` | Module-local, `trim()` + `toLowerCase()` on both sides: the account identity in this system is `lower(email)` (ADR-017 §1), so case and stray whitespace do not defeat a correct address. | `frontend/src/components/ConfirmByTyping.tsx:19` |
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
 | `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
-| `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Pending: `Verdict` + `AttentionNotices` (scan/coverage sentences) + `AttentionTable` (findings table with links to scan detail). | `frontend/src/pages/Home.tsx:8` |
+| `Home` | Three page `useState`s and one `useHome()` call. Loading and error return early; the other three states share **one** shell and one `HomeSidePanels` mount, switching only the attention column: blank (first-run), clear (title, no table), pending (title, notices, paged attention table). No `showAttentionBlock` guard — `AttentionTable` omits the table when empty and `Pagination` returns null on a single page. | `frontend/src/pages/Home.tsx:34` |
 | `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state carries `FirstScanCta` + `FirstScanNote`. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
 | `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:13` |
 | `scanFindingColumns(hosts)` / `hostFindingColumns()` / `portColumns` | Shared column builders behind both findings tables and both ports tables. Scan-detail tables include a Machine column and omit Severity (grouped by card); host-detail tables include Severity and omit Machine. | `frontend/src/pages/scans/findingColumns.tsx:11`, `frontend/src/pages/hosts/portColumns.tsx:11` |
@@ -65,17 +65,20 @@ the no-device Devices blank is the one blank state with no action.
 | `PageHeader` | A title, optional `subtitle`, and a rule. Presentational only. | `frontend/src/components/PageHeader.tsx:9` |
 | `ui/select.tsx` | The shadcn-shaped wrapper over Radix `Select` — `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, and nothing more. Its first and only caller is the role cell. | `frontend/src/components/ui/select.tsx:1` |
 | `NotFound` | `That page doesn't exist.` plus a real `Go to Home` **link**, inside the shell. | `frontend/src/pages/NotFound.tsx:3` |
-| `Verdict` | The verdict + context sentence, shared by all-clear (centred) and items-pending (left-aligned), including the `1 thing needs your review.` singular split. Context names when the last scan finished. | `frontend/src/pages/home/Verdict.tsx:12` |
-| `AttentionNotices` | Plain sentences for a failed latest scan and for stale coverage — no cards. | `frontend/src/pages/home/AttentionNotices.tsx:3` |
-| `AttentionTable` | Findings table over `deckFindings`; each row links to `/scans/:scanId?finding=`. Renders nothing when the array is empty. | `frontend/src/pages/home/AttentionTable.tsx:50` |
-| `HomeBlank` / `HomeError` | First-run copy (`No scans yet` + body sentence), `FirstScanCta` + `FirstScanNote`; error copy + `[Retry]`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
+| `Verdict` | Title from `review_count` plus last-scan `Timestamp`. Clear and pending are both left-aligned. | `frontend/src/pages/home/Verdict.tsx:11` |
+| `AttentionNotices` | Prints `notices[].text` verbatim. `failed_scan` → `home-item-scan`; `stale_coverage` → `home-item-coverage`. | `frontend/src/pages/home/AttentionNotices.tsx:18` |
+| `AttentionTable` | Findings table plus `Pagination` labelled `Attention pages`. `Pagination` itself is `null` when `total <= perPage`. | `frontend/src/pages/home/AttentionTable.tsx:65` |
+| `HomeFeedPanel` | The one feed-panel chrome: card `section`, heading, blank `<p>`, `<ul>`, `Pagination`. Derives the panel DOM `id` and every test id from `testId`, so `#home-events-panel` / `#home-activity-panel` — which `Home.test.tsx` selects on — keep working. Exports `HOME_PANEL_CHROME`, which Home's loading skeleton reuses so the card class cannot drift. | `frontend/src/pages/home/HomeFeedPanel.tsx:21` |
+| `EventsPanel` / `ActivityPanel` | Row rendering only, inside `HomeFeedPanel`: verbatim `text` rows, Activity adding a `Timestamp` cell. Labels `Events pages` / `Activity pages`. | `frontend/src/pages/home/EventsPanel.tsx:14`, `frontend/src/pages/home/ActivityPanel.tsx:16` |
+| `HomeSidePanels` | Two-column Events and Activity cards. | `frontend/src/pages/home/HomeSidePanels.tsx:16` |
+| `HomeBlank` / `HomeError` | First-run copy (`No scans yet` + body sentence), `FirstScanCta` + `FirstScanNote`; error copy + `[Try again]`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
 | `Timestamp` / `formatTimestamp` | Relative inside 7 days, absolute beyond, exact value in `title`. | `frontend/src/components/Timestamp.tsx:21` |
 | `SeverityWord` | Severity as semibold text (`Critical`, `High`, …). Null renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
 | `isQuietHost()` / `weeksSinceLastSeen()` | Pure helpers for machines not seen in 14+ days. Drive Network's quiet group and muted row tone. | `frontend/src/lib/hostLastSeen.ts:10` |
 
 ## How it connects
 
-- `Home` consumes [review](./review.md)'s `useHomeReview()`; device list and detail consume
+- `Home` consumes [review](./review.md)'s `useHome()`; device list and detail consume
   [devices-screen](./devices-screen.md)'s `useScanCommand()`. `Users`
   consumes [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
   Scan/network screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
@@ -91,9 +94,9 @@ the no-device Devices blank is the one blank state with no action.
 
 ## Notes / gotchas
 
-- **Home still renders nothing below the top bar while loading** — no skeleton, no spinner, no
-  placeholder sentence in the verdict's position. Scan and host **tables** do show
-  [tables](./tables.md)'s `LoadingSkeleton` under live headings.
+- **Home loading is a skeleton**, `data-testid="home-loading"`: attention-shaped bars plus two
+  panel cards. Scan and host **tables** still use [tables](./tables.md)'s `LoadingSkeleton`
+  under live headings.
 - **Blank and all-clear are distinct states** and are never collapsed.
 - **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
   named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and Log out widths cannot
@@ -102,8 +105,9 @@ the no-device Devices blank is the one blank state with no action.
   `<button>` (changed from v3), so without it every button in the app shows an arrow. The class is
   a local addition to the vendored shadcn `buttonVariants` base and would be lost if the shadcn CLI
   re-adds the component; a comment in `ui/button.tsx` records why it is there.
-- **The attention table links out; it does not paginate locally.** It renders the already-fetched
-  `deckFindings` array as a full `DataTable` with stretched-link rows to scan detail.
+- **Attention paging is server-side.** `AttentionTable` renders the current snapshot page and
+  `Pagination`; changing page refetches `GET /home` with a new `attention_page`. Rows still
+  link out to scan detail.
 - **Error regions are rendered always, empty when clean.** An `aria-live`/`role="alert"` region must
   pre-exist in the DOM to be announced; a conditionally-mounted error is silent to a screen reader.
   Every auth form follows this. On Login the 401 and network messages are distinct and name neither

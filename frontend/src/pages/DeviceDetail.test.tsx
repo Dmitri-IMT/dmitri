@@ -234,4 +234,24 @@ describe('DeviceDetail', () => {
     )
     expect(within(failedRow).getAllByRole('cell')[3]).toHaveTextContent('—')
   })
+
+  it('names the scan history pagination for its own surface', async () => {
+    server.use(
+      http.get(`${baseURL}/scans`, () =>
+        HttpResponse.json({
+          data: [latestSuccessfulScan],
+          total: 25,
+          page: 1,
+        } satisfies ScanListResponse),
+      ),
+    )
+    renderDeviceDetail()
+
+    expect(
+      await screen.findByRole('navigation', { name: 'Scan pages' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('navigation', { name: 'Pagination' }),
+    ).not.toBeInTheDocument()
+  })
 })

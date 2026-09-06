@@ -18,6 +18,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import FindingPayload, HostPayload, PortPayload, ScanIngestRequest
+from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import is_terminal
 from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
@@ -146,6 +147,15 @@ def persist_scan(
         )
 
     upsert_hosts_for_scan(session, scan_record, scan)
+
+    append_scan_activity(
+        session,
+        org_id=org_id,
+        scan_id=scan.scan_id,
+        kind="scan_finished",
+        scan_mode=scan_record.scan_mode,
+        occurred_at=now,
+    )
 
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
 

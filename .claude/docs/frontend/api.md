@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-05T00:00:00Z
 ---
 
 # frontend API layer
@@ -45,11 +45,12 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort params (`HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` gives each sortable column its starting order — `desc` for `last_seen_at`, `asc` for `hostname`/`vendor`/`ip`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts:30` |
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
-| `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Order is load-bearing — the deck shows critical before high — and `useHomeReview` maps it through `useQueries` rather than hand-writing one `useQuery` per severity. | `frontend/src/api/findings.ts:19` |
+| `getHome(pages)` | `GET /home` with the three page integers. Page sizes are server constants mirrored as `HOME_*_PER_PAGE`. | `frontend/src/api/home.ts:16` |
+| `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Host-detail findings still load one severity at a time; Home no longer uses this list. | `frontend/src/api/findings.ts:19` |
 | `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list for the devices table and Home's first-agent read; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with caller-chosen `scan_mode` and the agent's `target_subnet`. | `frontend/src/api/agents.ts:10` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
-| `queryKeys` | Prefix-shaped TanStack keys: `scans`, `hosts`, `findings`, `agents`, and `commands`. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, and `commands`. `home.snapshot(pages)` includes the three page integers. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |
 
 ## How it connects
 
@@ -65,7 +66,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
   the Bearer and refresh-retry interceptors.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
-- The three Home reads are consumed by [review](./review.md)'s `useHomeReview()`; scan/host list
+- Home consumes [review](./review.md)'s `useHome()` / `getHome`. Scan/host list
   and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` / `listFindings`
   directly. [devices-screen](./devices-screen.md) calls `agents.ts` and `commands.ts`. The six org
   calls in `users.ts`/`invites.ts` are consumed by [directory](./directory.md)'s

@@ -143,6 +143,20 @@ def test_read_route_depends_on_require_user(path: str, method: str) -> None:
     assert require_user in calls
 
 
+def _dependency_calls(dependant) -> set:
+    """Every dependency a route resolves, including nested ones.
+
+    `require_admin_row` pairs the admin gate with the caller's row, so the gate
+    is one level down from the route. Walking the tree keeps this a test of what
+    guards the route rather than of how the dependency is spelled.
+    """
+    calls = set()
+    for dep in dependant.dependencies:
+        calls.add(dep.call)
+        calls |= _dependency_calls(dep)
+    return calls
+
+
 DELETE_ROUTES = (
     ("/api/v1/users/me", require_user_row),
     ("/api/v1/users/{user_id}", require_admin),
@@ -156,7 +170,7 @@ def test_user_delete_route_is_registered_with_its_dependency(path, dependency) -
         for r in _flatten_routes(app.routes)
         if getattr(r, "path", None) == path and "DELETE" in getattr(r, "methods", set())
     )
-    calls = {dep.call for dep in route.dependant.dependencies}
+    calls = _dependency_calls(route.dependant)
 
     assert dependency in calls
 
@@ -178,7 +192,7 @@ def test_admin_route_is_registered_with_unconditional_admin_dependency(
         for r in _flatten_routes(app.routes)
         if getattr(r, "path", None) == path and method in getattr(r, "methods", set())
     )
-    calls = {dep.call for dep in route.dependant.dependencies}
+    calls = _dependency_calls(route.dependant)
 
     assert require_admin in calls
 

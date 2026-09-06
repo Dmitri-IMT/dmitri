@@ -43,6 +43,7 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
     perPage: number
     total: number
     onPageChange: (page: number) => void
+    label: string
   }
 }
 
@@ -124,6 +125,7 @@ function ListSurface<Row, SortKey extends string = never>({
           total={pagination.total}
           onPageChange={pagination.onPageChange}
           testId={testId}
+          label={pagination.label}
         />
       )}
     </div>

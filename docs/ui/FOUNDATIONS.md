@@ -247,6 +247,7 @@ hand-rolled.
 | Previous / next | **Icon-only**: a Lucide `chevron-left` / `chevron-right` ghost button. |
 | Accessible names | **"Previous page"** / **"Next page"**. |
 | Words | **No "Previous" / "Next" text.** |
+| Nav name | The `nav` root is named for its surface — **`{Thing} pages`** (`Scan pages`, `Machine pages`). Two paginations on one screen never share a name. |
 
 ## Copy rules & vocabulary
 

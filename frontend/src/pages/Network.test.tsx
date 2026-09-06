@@ -374,6 +374,9 @@ describe('Network', () => {
       await screen.findByTestId(`network-table-row-${firstPage[0].host_id}`),
     ).toBeInTheDocument()
     expect(screen.getByTestId('network-pagination')).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Machine pages' }),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByTestId('network-next'))
 

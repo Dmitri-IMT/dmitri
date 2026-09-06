@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate hold list- and detail-page state machines; Pagination, EmptyState, SeverityWord, and LoadingSkeleton.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-05T00:00:00Z
 ---
 
 # frontend shared tables
@@ -31,7 +31,7 @@ directory table.
 | `NotFoundNotice` | The shared 404 block for a detail route: the sentence at `${testId}-not-found` and a real Back link at `${testId}-back`. Rendered by `ReadDetailGate`, never by a screen. | `frontend/src/components/NotFoundNotice.tsx:11` |
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>`, `backTo`, and `backLabel`; owns notFound → error → loading with a placeholder `PageHeader` in non-ready states. Calls `children(data)` only when ready. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it. | `frontend/src/components/EmptyMark.tsx:2` |
-| `Pagination` | Range line plus Previous/Next. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:11` |
+| `Pagination` | Required `label` becomes the nav `aria-label` (for example `Scan pages`, `Attention pages`). Previous/Next stay icon-only. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:20` |
 | `EmptyState` | Centred heading, body, optional `action` and `note` slots — no ornament. Devices blank is the one list blank with `note` only and no `action`. | `frontend/src/components/EmptyState.tsx:11` |
 | `SeverityWord` | Severity as semibold text (`Critical` / `High` / …). Null severity renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
 | `LoadingSkeleton` | `rows × columns` bars using `bg-border`. Used only inside a pending `DataTable`. | `frontend/src/components/LoadingSkeleton.tsx:10` |

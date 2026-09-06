@@ -14,6 +14,7 @@ type PaginationProps = {
   total: number
   onPageChange: (page: number) => void
   testId: string
+  label: string
 }
 
 function Pagination({
@@ -22,6 +23,7 @@ function Pagination({
   total,
   onPageChange,
   testId,
+  label,
 }: PaginationProps) {
   if (total <= perPage) return null
 
@@ -30,10 +32,7 @@ function Pagination({
   const atLastPage = page >= pageCount
 
   return (
-    <PaginationRoot
-      aria-label="Pagination"
-      data-testid={`${testId}-pagination`}
-    >
+    <PaginationRoot aria-label={label} data-testid={`${testId}-pagination`}>
       <PaginationContent>
         <PaginationItem>
           <Button

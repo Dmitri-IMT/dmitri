@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 import yaml
+from api.core import home_constants
 from api.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +56,13 @@ SCHEMA_NAMES = (
     "AgentDetail",
     "AgentListResponse",
     "UpdateAgentTargetSubnetRequest",
+    "HomeEvent",
+    "HomeActivityItem",
+    "HomeNotice",
+    "HomeAttentionPage",
+    "HomeEventsPage",
+    "HomeActivityPage",
+    "HomeSnapshot",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -486,6 +494,16 @@ def test_error_code_fidelity(response_name: str):
         status, set()
     )
     assert route_codes == contract_codes
+
+
+def test_home_page_sizes_match_frontend_exports():
+    source = (REPO_ROOT / "frontend" / "src" / "api" / "home.ts").read_text()
+    for name in (
+        "HOME_ATTENTION_PER_PAGE",
+        "HOME_EVENTS_PER_PAGE",
+        "HOME_ACTIVITY_PER_PAGE",
+    ):
+        assert f"export const {name} = {getattr(home_constants, name)}" in source
 
 
 def test_agent_websocket_close_code_table_publishes_revoked():

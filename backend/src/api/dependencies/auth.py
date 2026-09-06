@@ -56,3 +56,13 @@ def require_admin(
     if caller.role != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin role required")
     return caller
+
+
+def require_admin_row(
+    caller: CallerIdentity = Depends(require_admin),
+    user: User = Depends(require_user_row),
+) -> User:
+    # Admin mutations denormalise the actor's email into the activity log, so
+    # they need the row, not just the claims. FastAPI caches `require_user`, so
+    # pairing the two dependencies costs no extra decode or query.
+    return user

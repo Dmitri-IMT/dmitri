@@ -76,9 +76,10 @@ function Settings() {
               data-testid="settings-activity-note"
               className="max-w-prose text-body-md text-muted-foreground"
             >
-              Your organization&apos;s admins can see when you last used Dmitri
-              and when you last signed in. We record only these times — not what
-              you viewed or did.
+              Everyone in your organization can see when you last signed in, and
+              a log of changes to the organization: scans, machines that join
+              the network, invitations, role changes, and members joining or
+              leaving. We don&apos;t record what you viewed.
             </p>
           </Disclosure>
         </section>

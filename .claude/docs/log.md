@@ -3,6 +3,33 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-06
+
+* **Update**: Home feed review pass — six structural duplications deleted, no behaviour change.
+  `require_admin_row` replaces four hand-rolled `session.get(User, caller.sub)` blocks and the
+  `actor_user_id` + `actor_email` kwarg pairs (services now take `actor: User`);
+  `append_scan_activity` replaces `_append_scan_failed` and the two inline `ActivityAppend`
+  builders, fed from the command UPDATE's `RETURNING` and the caller's `now`; member-idle is one
+  SQL predicate instead of a load-all-then-skip loop; `HomeListPage` is the base the three page
+  models subclass; `HomeFeedPanel` is the one Events/Activity chrome; `Home` renders one shell for
+  blank/clear/pending and drops `showAttentionBlock`. Touched: `backend/auth.md`,
+  `backend/routers.md`, `backend/services.md`, `backend/schemas.md`, `frontend/screens.md`.
+
+## 2026-09-05
+
+* **Update**: Home feed tidy. `_append_scan_failed` is the one write for failed scans;
+  `deliver()` treats only `WebSocketDisconnect` / `OSError` / `RuntimeError` as offline;
+  Events/Activity always mount `Pagination` (it hides itself); page-size constants are
+  gated against `frontend/src/api/home.ts`. Touched: `backend/services.md`,
+  `frontend/screens.md`, `frontend/review.md`.
+
+* **Update**: spec 044 Home snapshot. Replaced `useHomeReview` / `lib/review.ts` with `GET /home`
+  + `useHome`. Documented `activity` table, `append_activity`, `derive_home_events`, required
+  `Pagination` `label`, and Events/Activity panels. Touched: `frontend/review.md`,
+  `frontend/screens.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/tables.md`,
+  `frontend/directory.md`, `frontend/index.md`, `backend/routers.md`, `backend/services.md`,
+  `backend/models.md`, `backend/schemas.md`, `backend/migrations.md`, root `index.md`.
+
 ## 2026-09-04
 
 * **Update**: nuke optionals after spec 042 restyle. Deleted orphaned `HomeFooter` and the unused

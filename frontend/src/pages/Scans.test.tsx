@@ -235,6 +235,9 @@ describe('Scans', () => {
       await screen.findByTestId(`scans-table-row-${firstPage[0].scan_id}`),
     ).toBeInTheDocument()
     expect(screen.getByTestId('scans-pagination')).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Scan pages' }),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByTestId('scans-next'))
 

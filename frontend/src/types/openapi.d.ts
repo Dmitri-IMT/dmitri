@@ -133,6 +133,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the Home snapshot
+         * @description Attention page, derived events, and the organisation activity log in one read. Page sizes are server constants and cannot be overridden.
+         */
+        get: operations["readHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        /** CORS preflight for the Home snapshot */
+        options: operations["optionsHome"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -908,6 +929,54 @@ export interface components {
             total: number;
             page: number;
         };
+        /** @enum {string} */
+        HomeEventKind: "box_offline" | "member_idle" | "machine_first_seen";
+        /** @enum {string} */
+        HomeNoticeKind: "failed_scan" | "stale_coverage";
+        /** @enum {string} */
+        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
+        HomeEvent: {
+            kind: components["schemas"]["HomeEventKind"];
+            text: string;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        HomeActivityItem: {
+            kind: components["schemas"]["ActivityKind"];
+            /** Format: date-time */
+            occurred_at: string;
+            text: string;
+        };
+        HomeNotice: {
+            kind: components["schemas"]["HomeNoticeKind"];
+            text: string;
+            days?: number | null;
+        };
+        HomeAttentionPage: {
+            data: components["schemas"]["FindingRecord"][];
+            total: number;
+            page: number;
+        };
+        HomeEventsPage: {
+            data: components["schemas"]["HomeEvent"][];
+            total: number;
+            page: number;
+        };
+        HomeActivityPage: {
+            data: components["schemas"]["HomeActivityItem"][];
+            total: number;
+            page: number;
+        };
+        HomeSnapshot: {
+            /** @enum {string} */
+            review_state: "blank" | "clear" | "pending";
+            review_count: number;
+            latest_successful_scan: components["schemas"]["ScanSummary"] | null;
+            notices: components["schemas"]["HomeNotice"][];
+            attention: components["schemas"]["HomeAttentionPage"];
+            events: components["schemas"]["HomeEventsPage"];
+            activity: components["schemas"]["HomeActivityPage"];
+        };
         HealthResponse: {
             /** @enum {string} */
             status: "ok";
@@ -1308,6 +1377,12 @@ export interface components {
         Page: number;
         /** @description Number of records returned per page. */
         PerPage: number;
+        /** @description Attention page number starting at 1. */
+        HomeAttentionPageFilter: number;
+        /** @description Events page number starting at 1. */
+        HomeEventsPageFilter: number;
+        /** @description Activity page number starting at 1. */
+        HomeActivityPageFilter: number;
         SortOrder: "asc" | "desc";
         /** @description Filter scans by lifecycle status. */
         ScanStatusFilter: components["schemas"]["ScanStatus"];
@@ -1677,6 +1752,52 @@ export interface operations {
         };
     };
     optionsFindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    readHome: {
+        parameters: {
+            query?: {
+                /** @description Attention page number starting at 1. */
+                attention_page?: components["parameters"]["HomeAttentionPageFilter"];
+                /** @description Events page number starting at 1. */
+                events_page?: components["parameters"]["HomeEventsPageFilter"];
+                /** @description Activity page number starting at 1. */
+                activity_page?: components["parameters"]["HomeActivityPageFilter"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Home snapshot for the caller's org. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    optionsHome: {
         parameters: {
             query?: never;
             header?: never;

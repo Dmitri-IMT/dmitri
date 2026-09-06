@@ -36,9 +36,11 @@ SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 # 20260724_09_agent_nonces.py). `users` adds DELETE for account removal (see
 # 20260808_15_user_delete_cascade.py), and `invites` adds DELETE for revocation
 # (see 20260810_16_user_activity_and_invite_revoke.py). Every other table keeps
-# the default grant set.
+# the default grant set. `activity` is append-only: it is never updated or deleted
+# by the runtime (see 20260905_19_home_activity_feed.py).
 DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
 RUNTIME_GRANTS_BY_TABLE = {
+    "activity": frozenset({"SELECT", "INSERT"}),
     "agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"}),
     "invites": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),
     "users": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),

@@ -4,7 +4,7 @@ title: Backend auth — sessions, tokens, passwords, routes
 description: The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 resource: backend/src/api/services/auth.py
 tags: [backend, auth, jwt, sessions, passwords, invites, roles, middleware, cors]
-timestamp: 2026-08-23T00:00:00Z
+timestamp: 2026-09-06T00:00:00Z
 ---
 
 # Backend auth — sessions, tokens, passwords, routes
@@ -67,15 +67,16 @@ stamp both `users.last_login_at` and `users.last_seen_at`; refresh advances only
 | `NullMailer` | Used when `RESEND_API_KEY` is unset: logs a warning that the mail was **not** sent (never the token), so invites and resets still work off the returned link. | `backend/src/api/services/mailer.py:71` |
 | `BackgroundMailer` | Wraps a `Mailer` and defers each send onto FastAPI `BackgroundTasks`, so the provider call happens after the response — see the note below. | `backend/src/api/services/mailer.py:151` |
 | `get_mailer(tasks)` | The seam both routes call: `NullMailer` when the key is missing or blank, otherwise `BackgroundMailer(tasks, ResendMailer())`. | `backend/src/api/services/mailer.py:172` |
-| `create_invite()` | Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org, refuses an address with an unconsumed unexpired invite, then stores only `sha256(raw)` and returns the raw token once. | `backend/src/api/services/invites.py:40` |
+| `create_invite()` | Takes `actor: User \| None` — `None` only for [`backend-bootstrap-org`](/backend/management.md), which has no signed-in caller and is logged as `bootstrap`. Admin-side, in order: takes a transaction-scoped `pg_advisory_xact_lock(INVITE_LOCK_NAMESPACE, hashtext(org_id‖lower(email)))`, refuses an email already a user in **this** org, refuses an address with an unconsumed unexpired invite, then stores only `sha256(raw)` and returns the raw token once. | `backend/src/api/services/invites.py:40` |
 | `INVITE_LOCK_NAMESPACE` | `8817` — separates the per-org/email invite lock from the org-admin lock namespace in [`org_lock.py`](/backend/services.md). | `backend/src/api/services/invites.py:37` |
 | `accept_invite()` | Consumes a live invite and creates the user in one commit, then delegates to `issue_session`, which stamps both user activity times. The address, role, and org all come from the invite row. | `backend/src/api/services/invites.py:95` |
 | `read_invite()` | Public lookup half: resolves a live token to `(email, role, org_name)` without consuming it or issuing a session. Unknown, expired, and consumed all raise the same `InviteTokenError`. | `backend/src/api/services/invites.py:136` |
 | `list_pending_invites()` | Returns only the caller org's unconsumed, unexpired invites, ordered by `expires_at` then `id`; token material is never projected. | `backend/src/api/services/invites.py:154` |
-| `revoke_invite()` | Org-scoped, pending-only hard delete. Unknown, expired, consumed, and foreign-org identifiers all return `False`, which the router maps to 404. | `backend/src/api/services/invites.py:165` |
+| `revoke_invite()` | Takes `actor: User`. Org-scoped, pending-only hard delete. Unknown, expired, consumed, and foreign-org identifiers all return `False`, which the router maps to 404. | `backend/src/api/services/invites.py:179` |
 | `require_user()` / `CallerIdentity` | FastAPI dependency validating the `Authorization: Bearer` JWT → caller identity (sub/org_id/role); missing/invalid/expired → 401. | `backend/src/api/dependencies/auth.py:25` |
 | `require_user_row()` | Depends on `require_user`, then loads the caller's `User` row; a signed token whose subject no longer exists → **401**. Used by `GET /users/me`, `DELETE /users/me`, and change-password — the routes that need the row itself. | `backend/src/api/dependencies/auth.py:42` |
 | `require_admin()` / `ROLE_ADMIN` / `ROLE_VIEWER` | Depends on `require_user` (never re-decodes the token) and raises 403 unless the role is exactly `admin` — an allowlist, so an unknown role is denied rather than waved through. | `backend/src/api/dependencies/auth.py:54` |
+| `require_admin_row()` | Pairs `require_admin` with `require_user_row` and returns the caller's `User`. Admin mutations denormalise the actor's email into the activity log, so they need the row, not just the claims; FastAPI caches `require_user`, so the pair costs no extra decode or query. Used by the four admin mutations (role change, member removal, invite create, invite revoke). A token whose subject has no row is a dead session → **401**, the same answer `require_user_row` gives everywhere else. | `backend/src/api/dependencies/auth.py:61` |
 | auth routes | 6 POST routes (`login`/`refresh`/`logout`/`change-password`/`forgot-password`/`reset-password`) + OPTIONS preflights; set/clear the `dmitri_refresh` cookie. | `backend/src/api/routers/auth.py:62` |
 | invite routes | Admin create/list/revoke (`POST`/`GET /api/v1/invites`, `DELETE /api/v1/invites/{invite_id}`), public accept/lookup (`POST /accept`, `POST /lookup`). Listing returns no token; revocation is pending-only and answers 204. | `backend/src/api/routers/invites.py:39` |
 | `lookup_invite_route()` | Public, non-consuming `POST /api/v1/invites/lookup`; possession of the body token is the only authorisation. Returns `{email, role, org_name}` or 410 `invalid_invite_token`. | `backend/src/api/routers/invites.py:82` |
