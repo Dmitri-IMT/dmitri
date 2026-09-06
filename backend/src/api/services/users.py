@@ -38,8 +38,7 @@ def change_member_role(
     user_id: UUID,
     org_id: UUID,
     role: Literal["admin", "viewer"],
-    actor_user_id: UUID,
-    actor_email: str,
+    actor: User,
 ) -> User | None:
     lock_org_admins(session, org_id=org_id)
     target = session.exec(
@@ -61,10 +60,10 @@ def change_member_role(
             org_id=org_id,
             kind="role_changed",
             occurred_at=utc_now(),
-            actor_user_id=actor_user_id,
+            actor_user_id=actor.id,
             subject_id=target.id,
             payload={
-                "actor_email": actor_email,
+                "actor_email": actor.email,
                 "target_email": target.email,
                 "new_role": role,
             },
@@ -97,8 +96,7 @@ def delete_member(
     *,
     user_id: UUID,
     org_id: UUID,
-    actor_user_id: UUID,
-    actor_email: str,
+    actor: User,
 ) -> bool:
     user = session.exec(
         select(User).where(User.id == user_id, User.org_id == org_id)
@@ -111,10 +109,10 @@ def delete_member(
             org_id=org_id,
             kind="member_removed",
             occurred_at=utc_now(),
-            actor_user_id=actor_user_id,
+            actor_user_id=actor.id,
             subject_id=user.id,
             payload={
-                "actor_email": actor_email,
+                "actor_email": actor.email,
                 "target_email": user.email,
             },
         ),

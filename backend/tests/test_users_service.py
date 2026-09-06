@@ -14,8 +14,8 @@ VALID_PASSWORD = "Xk9$mQvL2pTz"
 ACTOR_EMAIL = "actor@corp.com"
 
 
-def _actor(user: User) -> dict[str, UUID | str]:
-    return {"actor_user_id": user.id, "actor_email": user.email}
+def _actor(user: User) -> dict[str, User]:
+    return {"actor": user}
 
 
 def _activity_rows(

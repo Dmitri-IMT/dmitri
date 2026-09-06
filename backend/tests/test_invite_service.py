@@ -19,8 +19,10 @@ ACTOR_ID = uuid4()
 ACTOR_EMAIL = "admin@corp.com"
 
 
-def _actor() -> dict[str, UUID | str]:
-    return {"actor_user_id": ACTOR_ID, "actor_email": ACTOR_EMAIL}
+def _actor() -> dict[str, User]:
+    # `actor_user_id` carries no FK, so the services only ever read id and email
+    # off this row — it does not need to be persisted.
+    return {"actor": User(id=ACTOR_ID, email=ACTOR_EMAIL, org_id=uuid4(), role="admin")}
 
 
 def _activity_rows(

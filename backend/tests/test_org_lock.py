@@ -72,14 +72,17 @@ def _change_role(
 ) -> None:
     with Session(engine) as session:
         _set_lock_timeout(session)
+        # The actor row belongs to this thread's session, so load it here rather
+        # than handing a User across threads.
+        actor = session.get(User, actor_user_id)
+        assert actor is not None and actor.email == actor_email
         barrier.wait(timeout=CONCURRENCY_TIMEOUT)
         changed = change_member_role(
             session,
             user_id=user_id,
             org_id=org_id,
             role=role,
-            actor_user_id=actor_user_id,
-            actor_email=actor_email,
+            actor=actor,
         )
         assert changed is not None
 

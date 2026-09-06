@@ -68,12 +68,12 @@ def _seed_invite(
 
 
 def test_admin_creates_invite_returns_201_exact_shape(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 201
@@ -84,7 +84,7 @@ def test_admin_creates_invite_emails_a_working_invite_link(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
     sent_emails,
 ) -> None:
     captured = sent_emails()
@@ -92,7 +92,7 @@ def test_admin_creates_invite_emails_a_working_invite_link(
     response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 201
@@ -115,7 +115,7 @@ def test_create_invite_survives_a_downed_provider(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
     sent_emails,
 ) -> None:
     sent_emails(fail=True)
@@ -123,7 +123,7 @@ def test_create_invite_survives_a_downed_provider(
     response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 201
@@ -134,12 +134,12 @@ def test_create_invite_survives_a_downed_provider(
 
 
 def test_viewer_cannot_create_invite_and_no_invite_persists(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "viewer"),
+        headers=actor_headers(seeded_org.id, "viewer"),
     )
 
     assert response.status_code == 403
@@ -155,7 +155,7 @@ def test_create_invite_without_bearer_returns_401(client: TestClient) -> None:
 
 
 def test_create_invite_for_existing_member_returns_400(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     user = User(
         org_id=seeded_org.id,
@@ -169,7 +169,7 @@ def test_create_invite_for_existing_member_returns_400(
     response = client.post(
         "/api/v1/invites",
         json={"email": "already@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 400
@@ -178,19 +178,19 @@ def test_create_invite_for_existing_member_returns_400(
 
 
 def test_create_invite_for_live_address_returns_409_invite_already_pending(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     first = client.post(
         "/api/v1/invites",
         json={"email": "pending@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
     assert first.status_code == 201
 
     second = client.post(
         "/api/v1/invites",
         json={"email": "pending@corp.com", "role": "admin"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert second.status_code == 409
@@ -200,7 +200,7 @@ def test_create_invite_for_live_address_returns_409_invite_already_pending(
 
 
 def test_create_invite_member_and_pending_precedence_returns_400_member(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     user = User(
         org_id=seeded_org.id,
@@ -215,7 +215,7 @@ def test_create_invite_member_and_pending_precedence_returns_400_member(
     response = client.post(
         "/api/v1/invites",
         json={"email": "both@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 400
@@ -223,7 +223,7 @@ def test_create_invite_member_and_pending_precedence_returns_400_member(
 
 
 def test_create_invite_for_another_orgs_user_returns_201_like_fresh_address(
-    client: TestClient, administrative_session: Session, seeded_org: Org, bearer_headers
+    client: TestClient, administrative_session: Session, seeded_org: Org, actor_headers
 ) -> None:
     other_org = Org(name="Other Org")
     administrative_session.add(other_org)
@@ -241,7 +241,7 @@ def test_create_invite_for_another_orgs_user_returns_201_like_fresh_address(
     response = client.post(
         "/api/v1/invites",
         json={"email": "elsewhere@corp.com", "role": "viewer"},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 201
@@ -249,12 +249,12 @@ def test_create_invite_for_another_orgs_user_returns_201_like_fresh_address(
 
 
 def test_create_invite_org_id_in_body_returns_422(
-    client: TestClient, seeded_org: Org, bearer_headers
+    client: TestClient, seeded_org: Org, actor_headers
 ) -> None:
     response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer", "org_id": str(uuid4())},
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 422

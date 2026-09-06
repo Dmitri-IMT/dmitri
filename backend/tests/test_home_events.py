@@ -20,7 +20,7 @@ from read_factories import make_org, make_scan
 from sqlmodel import Session
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
-VALID_PASSWORD = "correct-horse-battery-staple"
+VALID_PASSWORD = "correct-horse-battery-staple"  # pragma: allowlist secret
 
 
 def _derive(session: Session, org_id, *, now: datetime = NOW):

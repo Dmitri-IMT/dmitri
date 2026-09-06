@@ -44,8 +44,7 @@ def create_invite(
     email: str,
     role: str,
     mailer: Mailer,
-    actor_user_id: UUID | None,
-    actor_email: str,
+    actor: User | None,
 ) -> tuple[str, datetime]:
     session.execute(
         text(
@@ -96,10 +95,12 @@ def create_invite(
             org_id=org_id,
             kind="member_invited",
             occurred_at=utc_now(),
-            actor_user_id=actor_user_id,
+            actor_user_id=actor.id if actor else None,
             subject_id=invite.id,
             payload={
-                "actor_email": actor_email,
+                # `bootstrap_org` creates the first admin invite with no signed-in
+                # actor, so the log names the tool instead of a person.
+                "actor_email": actor.email if actor else "bootstrap",
                 "invite_email": email,
                 "role": role,
             },
@@ -180,8 +181,7 @@ def revoke_invite(
     *,
     invite_id: UUID,
     org_id: UUID,
-    actor_user_id: UUID,
-    actor_email: str,
+    actor: User,
 ) -> bool:
     invite = session.exec(
         select(Invite).where(
@@ -199,10 +199,10 @@ def revoke_invite(
             org_id=org_id,
             kind="invite_revoked",
             occurred_at=utc_now(),
-            actor_user_id=actor_user_id,
+            actor_user_id=actor.id,
             subject_id=invite.id,
             payload={
-                "actor_email": actor_email,
+                "actor_email": actor.email,
                 "invite_email": invite.email,
             },
         ),

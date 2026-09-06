@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from api.db.session import get_session
-from api.dependencies.auth import CallerIdentity, require_admin, require_user_row
+from api.dependencies.auth import (
+    CallerIdentity,
+    require_admin,
+    require_admin_row,
+    require_user_row,
+)
 from api.errors import ApiError
 from api.models.identity import User
 from api.schemas.users import (
@@ -70,26 +75,22 @@ def list_org_users_route(
 def update_user_role_route(
     user_id: UUID,
     body: UpdateUserRoleRequest,
-    caller: CallerIdentity = Depends(require_admin),
+    actor: User = Depends(require_admin_row),
     session: Session = Depends(get_session),
 ) -> OrgMember:
-    if user_id == caller.sub:
+    if user_id == actor.id:
         raise ApiError(
             409,
             "You cannot change your own role.",
             code="self_target",
         )
-    actor = session.get(User, caller.sub)
-    if actor is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         member = change_member_role(
             session,
             user_id=user_id,
-            org_id=caller.org_id,
+            org_id=actor.org_id,
             role=body.role,
-            actor_user_id=caller.sub,
-            actor_email=actor.email,
+            actor=actor,
         )
     except LastAdminError as exc:
         raise ApiError(
@@ -105,23 +106,19 @@ def update_user_role_route(
 @router.delete("/api/v1/users/{user_id}", status_code=204)
 def delete_user_route(
     user_id: UUID,
-    caller: CallerIdentity = Depends(require_admin),
+    actor: User = Depends(require_admin_row),
     session: Session = Depends(get_session),
 ) -> None:
-    if user_id == caller.sub:
+    if user_id == actor.id:
         raise ApiError(
             409,
             "Remove your account from Settings instead.",
             code="self_target",
         )
-    actor = session.get(User, caller.sub)
-    if actor is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     if not delete_member(
         session,
         user_id=user_id,
-        org_id=caller.org_id,
-        actor_user_id=caller.sub,
-        actor_email=actor.email,
+        org_id=actor.org_id,
+        actor=actor,
     ):
         raise HTTPException(status_code=404, detail="User not found")

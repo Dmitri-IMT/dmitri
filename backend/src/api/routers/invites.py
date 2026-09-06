@@ -6,7 +6,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Response
 from sqlmodel import Session
 
 from api.db.session import get_session
-from api.dependencies.auth import CallerIdentity, require_admin
+from api.dependencies.auth import (
+    CallerIdentity,
+    require_admin,
+    require_admin_row,
+)
 from api.errors import ApiError
 from api.models.identity import User
 from api.schemas.auth import LoginResponse
@@ -43,21 +47,17 @@ router = APIRouter()
 def create_invite_route(
     body: CreateInviteRequest,
     background: BackgroundTasks,
-    caller: CallerIdentity = Depends(require_admin),
+    actor: User = Depends(require_admin_row),
     session: Session = Depends(get_session),
 ) -> InviteCreatedResponse:
-    actor = session.get(User, caller.sub)
-    if actor is None:
-        raise ApiError(401, "Not authenticated", code="unauthenticated")
     try:
         invite_token, expires_at = create_invite(
             session,
-            org_id=caller.org_id,
+            org_id=actor.org_id,
             email=body.email,
             role=body.role,
             mailer=get_mailer(background),
-            actor_user_id=caller.sub,
-            actor_email=actor.email,
+            actor=actor,
         )
     except AlreadyMemberError as exc:
         raise ApiError(400, str(exc), code="email_already_member") from exc
@@ -121,18 +121,14 @@ def list_invites_route(
 @router.delete("/api/v1/invites/{invite_id}", status_code=204)
 def revoke_invite_route(
     invite_id: UUID,
-    caller: CallerIdentity = Depends(require_admin),
+    actor: User = Depends(require_admin_row),
     session: Session = Depends(get_session),
 ) -> None:
-    actor = session.get(User, caller.sub)
-    if actor is None:
-        raise ApiError(401, "Not authenticated", code="unauthenticated")
     if not revoke_invite(
         session,
         invite_id=invite_id,
-        org_id=caller.org_id,
-        actor_user_id=caller.sub,
-        actor_email=actor.email,
+        org_id=actor.org_id,
+        actor=actor,
     ):
         raise ApiError(404, "Invite not found", code="not_found")
 
