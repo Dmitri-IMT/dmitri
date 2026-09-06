@@ -393,10 +393,14 @@ not by `Card` containers. §8.1's card recommendation (F9) is overturned: Settin
 and card chrome earns its place on HostDetail and ScanDetail because those carry dense data, not
 here.
 
-**D6 — the password row is label + button, nothing between.** No masked dots. There is no
-"last changed" fact to show, and dots would imply a length we are not disclosing. The parked
-`password_last_changed_at` field ([`IDEAS.md`](IDEAS.md) §Settings) fills the slot later with no
-layout change.
+**D6 — the change-password button stands alone.** No `Password` label, no masked dots, no row of
+its own: the button sits below the Email/Role list and carries its own meaning. **Reversed by the
+owner later on 2026-09-06** — D6 first read "label + button, nothing between them", on the argument
+that the row should keep the property rhythm of Email and Role. The owner's call went the other
+way, and the reasoning is sound: changing a password is an *action*, and §8.1's own F3 (GNOME's
+action row) is about a property that carries a control, not about a control with a label bolted on.
+The parked `password_last_changed_at` field ([`IDEAS.md`](IDEAS.md) §Settings) would reopen this —
+once there is a fact to show, `Password  <date>  [Change password]` becomes a real property row.
 
 **D7 — the email stays on the screen** as well as in the top bar. It is the screen's subject, and
 [`ADR-017`](../adr/ADR-017-account-removal.md)'s typed confirmation asks for that exact string;

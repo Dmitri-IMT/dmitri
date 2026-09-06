@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-06
 
+* **Update**: Settings restructure (DMI-110) and password reveal. Settings is two headed groups
+  (`Your account` / `Leave this organisation`) with a solid rule between them; read-only identity
+  is inline (`AccountDetails` deleted) with skeleton placeholders while the session loads; activity
+  disclosure moves inside the account group (`What's recorded about me?`). New `PasswordInput`
+  with show/hide toggle on Login, AcceptInvite, ResetPassword and `PasswordDialog`; browser reveal
+  controls suppressed in `index.css`. Touched: `frontend/screens.md`.
+
 * **Update**: Home feed review pass — six structural duplications deleted, no behaviour change.
   `require_admin_row` replaces four hand-rolled `session.get(User, caller.sub)` blocks and the
   `actor_user_id` + `actor_email` kwarg pairs (services now take `actor: User`);

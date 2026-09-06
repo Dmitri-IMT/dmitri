@@ -73,7 +73,6 @@ describe('Settings', () => {
       details,
       leave,
     ])
-    // The password row and the activity note live inside the account group, not beside it.
     expect(details).toContainElement(
       screen.getByTestId('settings-password-trigger'),
     )
@@ -82,13 +81,17 @@ describe('Settings', () => {
     expect(screen.queryByRole('heading', { name: 'Activity' })).toBeNull()
   })
 
-  it('labels the password row and puts nothing between the label and the button', async () => {
+  it('carries the change-password button alone, with no Password label and outside the value list', async () => {
     renderSettings()
 
-    const trigger = await screen.findByTestId('settings-password-trigger')
-    const row = trigger.closest('dd')?.parentElement
-    expect(row?.firstElementChild?.textContent).toBe('Password')
-    expect(row?.textContent).toBe('PasswordChange password')
+    await screen.findByText(adminProfile.email)
+    expect(
+      screen.getByTestId('settings-password-trigger').closest('dl'),
+    ).toBeNull()
+    expect(
+      screen.getByTestId('settings-details').querySelector('dl')?.textContent,
+    ).toBe(`Email${adminProfile.email}RoleAdmin`)
+    expect(screen.queryByText('Password')).toBeNull()
   })
 
   it('renders the whole screen, not half of it, while the profile is still loading', async () => {
@@ -110,7 +113,6 @@ describe('Settings', () => {
     expect(screen.getByTestId('settings-activity-disclosure')).toBeVisible()
     expect(screen.getByTestId('settings-leave-body')).toBeVisible()
     expect(screen.getByTestId('settings-details-email')).toHaveTextContent('')
-    // Nothing to delete until the account is known.
     expect(screen.getByTestId('settings-leave-trigger')).toBeDisabled()
 
     await waitFor(() =>

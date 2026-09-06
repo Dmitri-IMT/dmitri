@@ -91,7 +91,6 @@ describe('Settings password dialog', () => {
     renderSettings()
 
     await screen.findByTestId('settings-password-trigger')
-    // The leaving trigger waits for the account it would delete; everything else is live at once.
     await waitFor(() =>
       expect(screen.getByTestId('settings-leave-trigger')).toBeEnabled(),
     )
@@ -125,7 +124,6 @@ describe('Settings password dialog', () => {
 
     expect(current).toHaveAttribute('type', 'text')
     expect(current).toHaveValue(CURRENT)
-    // One field at a time: the other two are untouched.
     expect(
       dialog.getAllByRole('button', { name: 'Show password' }),
     ).toHaveLength(2)
@@ -146,8 +144,6 @@ describe('Settings password dialog', () => {
     renderSettings()
 
     await openPassword()
-    // The browsers' own controls are suppressed in index.css; jsdom draws none of them, so
-    // what this can hold is that Dmitri adds exactly one control per field.
     for (const id of ['settings-current', 'settings-new', 'settings-confirm']) {
       const field = screen.getByTestId(id)
       const controls = within(field.parentElement as HTMLElement).getAllByRole(

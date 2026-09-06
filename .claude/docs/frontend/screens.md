@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend screens, shells and shared components
-description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
+description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-06T18:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -26,19 +26,20 @@ the no-device Devices blank is the one blank state with no action.
 | `TopBar` | Wordmark left, the nav centred on the 70rem frame, signed-in email + `[Log out]` right through a `1fr auto 1fr` grid. Home uses `end`; Scans, Network and Devices omit `end` so a detail route keeps the parent item active. Nav order: Home · Scans · Network · Devices · Users (admin) · Settings. Test ids: `nav-network`, `nav-devices`. | `frontend/src/components/TopBar.tsx:13` |
 | `AdminOnly` | Renders `children` for an admin and `null` for anyone else. Props are `{ children }` — no `fallback`, no `disabled`; the missing props are what make "absent, not disabled" unbypassable. Pairs with [auth](./auth.md)'s `RequireAdmin`, which closes the route the hidden link would have led to. | `frontend/src/components/AdminOnly.tsx:4` |
 | `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination; the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:7` |
-| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
+| `Login` | Real `<form>` in `AuthShell`; labelled email plus `PasswordInput`, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
 | `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:19` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:10` |
-| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
-| `Settings` | Details-first guarded surface with four short sections separated by dashed rules: read-only account identity, a password-dialog trigger and inline success, the shared activity disclosure, then self-service account deletion. | `frontend/src/pages/Settings.tsx:14` |
-| `Settings` — leaving section | The **last** section on the page, rendered `{user && …}` for both roles alike: the explanation, a destructive `settings-leave-trigger`, and a `ConfirmByTyping` gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:90` |
-| `AccountDetails` | Reads the session user and renders their email and normalized `Admin`/`Viewer` role in a read-only `<dl>`; an absent user renders nothing. | `frontend/src/pages/settings/AccountDetails.tsx:3` |
-| `PasswordDialog` | Owns the change-password form and its client/server error routing inside the shared small `DialogShell`. Success clears the three secrets, closes the modal and leaves an inline confirmation on Settings; submitting locks dismissal and removes Cancel. | `frontend/src/pages/settings/PasswordDialog.tsx:22` |
+| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Both password fields are `PasswordInput`. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
+| `Settings` | Guarded surface with two headed groups separated by a solid `<hr>`: **Your account** (read-only email/role, change-password trigger with inline success, activity disclosure) and **Leave this organisation** (destructive copy and delete trigger). | `frontend/src/pages/Settings.tsx:18` |
+| `Settings` — account group | Inline read-only identity in a `<dl>` — `AccountDetails` was folded in. Email and role render `ValuePlaceholder` skeleton bars until `user` arrives so the finished page shape draws immediately and never shifts as the profile loads. | `frontend/src/pages/Settings.tsx:44` |
+| `Settings` — leaving section | The second group is always mounted: explanation, a `settings-leave-trigger` that stays `disabled` until `user` is known, and a `ConfirmByTyping` rendered only when `user` is non-null, gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:101` |
+| `PasswordDialog` | Owns the change-password form — three `PasswordInput` fields — and its client/server error routing inside the shared small `DialogShell`. Success clears the three secrets, closes the modal and leaves an inline confirmation on Settings; submitting locks dismissal and removes Cancel. | `frontend/src/pages/settings/PasswordDialog.tsx:22` |
+| `PasswordInput` | Shared password field: `Input` plus a ghost icon button whose `EyeMark` SVG toggles `type` between `password` and `text`. Accessible name flips `Show password` ↔ `Hide password`; each field toggles independently and reveal state resets when a dialog remounts. Used on Login, AcceptInvite, ResetPassword and `PasswordDialog`. | `frontend/src/components/ui/password-input.tsx:24` |
 | `Disclosure` | Shared controlled Radix `Collapsible` for expandable information: link-styled button, rotating caret, generated content id and force-mounted content hidden while closed. Settings Activity is its first caller. | `frontend/src/components/Disclosure.tsx:13` |
 | `ConfirmByTyping` | The shared type-to-confirm modal, rendered inside `DialogShell` (which owns the portal, overlay, panel and focus restore) so this file holds only the gate. `expectedValue` is both the gate and the prompt that serves as the input's `<label htmlFor>`. The confirming button's greyed state is owned by the component — derived from the typed value and its own in-flight flag, never a caller-supplied variant — so both call sites behave identically. Everything else in the dialog stays live; Cancel is *absent* while submitting. The typed value is cleared explicitly when `open` goes true — the component outlives the dialog Radix unmounts, so the gate would otherwise hold only on the first open. The Users screen is now the second caller and passes the **target's** address as `expectedValue` — the only difference from Settings, which passes the caller's own. | `frontend/src/components/ConfirmByTyping.tsx:23` |
 | `matchesExpected` | Module-local, `trim()` + `toLowerCase()` on both sides: the account identity in this system is `lower(email)` (ADR-017 §1), so case and stray whitespace do not defeat a correct address. | `frontend/src/components/ConfirmByTyping.tsx:19` |
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
-| `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
+| `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Both password fields are `PasswordInput`. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
 | `Home` | Three page `useState`s and one `useHome()` call. Loading and error return early; the other three states share **one** shell and one `HomeSidePanels` mount, switching only the attention column: blank (first-run), clear (title, no table), pending (title, notices, paged attention table). No `showAttentionBlock` guard — `AttentionTable` omits the table when empty and `Pagination` returns null on a single page. | `frontend/src/pages/Home.tsx:34` |
 | `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state carries `FirstScanCta` + `FirstScanNote`. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
 | `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:13` |
@@ -83,9 +84,8 @@ the no-device Devices blank is the one blank state with no action.
   consumes [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
   Scan/network screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
   `HostDetail` consumes [host-detail](./host-detail.md).
-  `Login`, `TopBar`, `AcceptInvite`, `Settings` and `AccountDetails` consume
-  [auth](./auth.md)'s `useSession()` — `Settings` for `user` and `deleteAccount`, `AccountDetails`
-  for the read-only identity, and `TopBar` by way of `AdminOnly`.
+  `Login`, `TopBar`, `AcceptInvite` and `Settings` consume [auth](./auth.md)'s `useSession()` —
+  `Settings` for `user` and `deleteAccount`, and `TopBar` by way of `AdminOnly`.
   `ForgotPassword` and `ResetPassword` call [api](./api.md) directly and touch the session layer not
   at all; `PasswordDialog` owns Settings' direct `changePassword()` call.
 - Both shells are mounted from [app](./app.md)'s route table.
@@ -130,9 +130,15 @@ the no-device Devices blank is the one blank state with no action.
   lookup and zero accept requests — leaving the invitation untouched — and offers `signOut`.
 - **Wrong current password never ends the session.** On Settings it is contractually a `400`, so it
   renders as a field error with no refresh, no logout and no navigation.
-- **Activity disclosure is information, not a preference.** Settings gives `Activity` its own
-  heading, then uses the shared `Disclosure` trigger and persistent force-mounted content. The
-  note explains the two recorded timestamps; there is no opt-out or pointer-hover dependency.
+- **Activity disclosure is information, not a preference.** Settings nests the shared `Disclosure`
+  inside the account group — label `What's recorded about me?`, no section heading of its own —
+  with persistent force-mounted content. There is no opt-out or pointer-hover dependency.
+- **Password reveal is local and ephemeral.** `PasswordInput` owns per-field reveal state; closing
+  `PasswordDialog` remounts the fields hidden. `index.css` suppresses the browser's own reveal
+  controls (`::-ms-reveal`, `::-webkit-credentials-auto-fill-button`) so no field shows two eyes.
+- **Settings loads as a whole shape.** Skeleton bars stand in for email and role until `user`
+  arrives; the delete trigger stays `disabled` until then. The leave section and headings always
+  render — only the confirm dialog waits on a non-null `user`.
 - The role-invariance sweep (`TopBar.test.tsx`, repeated across every Home state) asserts
   `queryAllByRole(...)` elements are `toBeEnabled()` with no `aria-disabled` — never a
   `container.querySelectorAll('[disabled]')` sweep, which misses `fieldset[disabled]` inheritance

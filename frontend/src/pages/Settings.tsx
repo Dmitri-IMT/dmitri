@@ -11,8 +11,6 @@ const LAST_ADMIN_ERROR =
   "You're the only admin. Make someone else an admin first, then you can leave."
 const LEAVE_ERROR = "Couldn't delete your account."
 
-// The profile arrives with the session query, so the two values are the only part of the
-// screen that has to wait. A bar holds their place: the shape never changes under the reader.
 function ValuePlaceholder() {
   return <span className="block h-3 w-32 bg-border" />
 }
@@ -61,29 +59,26 @@ function Settings() {
               {roleLabel ?? <ValuePlaceholder />}
             </dd>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <dt className="shrink-0 text-muted-foreground">Password</dt>
-            <dd className="flex min-w-0 flex-col items-start gap-2">
-              <Button
-                type="button"
-                onClick={() => {
-                  setPasswordSuccess(null)
-                  setIsPasswordOpen(true)
-                }}
-                data-testid="settings-password-trigger"
-              >
-                Change password
-              </Button>
-              <p
-                role="status"
-                data-testid="settings-success"
-                className="text-body-md text-muted-foreground"
-              >
-                {passwordSuccess}
-              </p>
-            </dd>
-          </div>
         </dl>
+        <div className="flex flex-col items-start gap-2">
+          <Button
+            type="button"
+            onClick={() => {
+              setPasswordSuccess(null)
+              setIsPasswordOpen(true)
+            }}
+            data-testid="settings-password-trigger"
+          >
+            Change password
+          </Button>
+          <p
+            role="status"
+            data-testid="settings-success"
+            className="text-body-md text-muted-foreground"
+          >
+            {passwordSuccess}
+          </p>
+        </div>
         <div data-testid="settings-activity">
           <Disclosure
             label="What's recorded about me?"

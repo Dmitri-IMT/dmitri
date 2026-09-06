@@ -1080,11 +1080,13 @@ Changing the password is still the most common reason anyone comes here, and it 
 **only** change-password screen in the product — there is no forced rotation and no 403-triggered
 flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
 NIST-misaligned). It is reached through a `[Change password]` trigger that opens a modal, and the
-trigger is a property row of the account group: the label `Password`, the button, and **nothing
-between them**. No masked dots — there is no length to disclose and no "last changed" fact to show,
-and the row takes one without a layout change if `password_last_changed_at` is ever added.
-*Amended 2026-09-06 (DMI-110, D6); the page's regular state was "four short sections with air
-between them" and the password section had its own `h2`.*
+trigger is a `[Change password]` button standing alone below the value list — **no `Password`
+label, no masked dots, and no row of its own**. Changing a password is an action, not a property of
+the account, so it sits after the list rather than inside it, and the button's own words already
+name its subject. *Amended 2026-09-06 (DMI-110, D6 reversed the same day); the row briefly read
+"the label `Password`, the button, and nothing between them", and before D6 the page's regular
+state was "four short sections with air between them" with the password section under its own
+`h2`.*
 
 **The account group is read-only above its button** — email and role as text, no display name and
 no `[Save]`. Open question **C3** stays open: there is no self-profile update operation, and an
@@ -1154,7 +1156,7 @@ simple suffixes); no names or birth dates.
 **States:**
 - **Regular:** the two groups, stacked, with the rule between them.
 - **Loading:** the session profile has not arrived yet. The whole screen renders — both headings,
-  the password row, the disclosure, the leaving copy — with the email and role values as skeleton
+  the change-password button, the disclosure, the leaving copy — with the email and role values as skeleton
   bars and the `[Delete my account]` trigger disabled until the account it would delete is known,
   so the shape never changes under the reader. *Added 2026-09-06 (DMI-110); the screen previously
   rendered a half page while the profile loaded, because the details section returned nothing while
@@ -1187,7 +1189,7 @@ simple suffixes); no names or birth dates.
 | Activity control | "What's recorded about me?" |
 | Activity disclosure | "Everyone in your organization can see when you last signed in, and a log of changes to the organization: scans, machines that join the network, invitations, role changes, and members joining or leaving. We don't record what you viewed." *(the shipped string; the table carried the pre-spec-030 wording until 2026-09-06, DMI-110.)* |
 | Section — account | "Your account" |
-| Account rows | "Email" / "Role" / "Password" |
+| Account rows | "Email" / "Role" *(no `Password` row — amended 2026-09-06, DMI-110)* |
 | Reveal toggle | "Show password" ↔ "Hide password" |
 | Section — leaving | "Leave this organisation" |
 | Leaving — body | "Your account is deleted and you lose access to this organisation's scans, network and vulnerabilities straight away. This can't be undone — an admin would have to invite you again." *(the shipped string; the table was one revision behind until 2026-09-06, DMI-110.)* |
@@ -1211,7 +1213,8 @@ simple suffixes); no names or birth dates.
 |   YOUR ACCOUNT                                                               |
 |   Email  you@example.com                                                     |
 |   Role  Admin                                                                |
-|   Password  [ Change password ]                                              |
+|                                                                              |
+|   [ Change password ]                                                        |
 |                                                                              |
 |   > What's recorded about me?                                                |
 |   (expanded) Everyone in your organization can see when you last signed in,  |

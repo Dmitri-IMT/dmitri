@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-// Hand drawn, not an icon-set import: DMI-110 forbids a new icon set, and DMI-107 settled
-// inline SVG over a Unicode glyph (the eye glyphs render in colour or not at all).
 function EyeMark({ revealed }: { revealed: boolean }) {
   return (
     <svg
@@ -23,8 +21,6 @@ function EyeMark({ revealed }: { revealed: boolean }) {
   )
 }
 
-// A password field with its own reveal toggle. State is per field and per mount: nothing is
-// stored, and unmounting the field (closing a dialog) hides it again.
 function PasswordInput({
   className,
   ...props
