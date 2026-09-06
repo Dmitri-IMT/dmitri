@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import { HOME_ATTENTION_PER_PAGE } from '@/api/home'
 import { useHome } from '@/hooks/useHome'
@@ -7,6 +8,7 @@ import AttentionTable from '@/pages/home/AttentionTable'
 import Verdict from '@/pages/home/Verdict'
 import HomeBlank from '@/pages/home/HomeBlank'
 import HomeError from '@/pages/home/HomeError'
+import { HOME_PANEL_CHROME } from '@/pages/home/HomeFeedPanel'
 import HomeSidePanels from '@/pages/home/HomeSidePanels'
 
 function HomeLoading() {
@@ -17,10 +19,7 @@ function HomeLoading() {
       </table>
       <div className="grid grid-cols-2 gap-8">
         {Array.from({ length: 2 }, (_, index) => (
-          <div
-            key={index}
-            className="flex flex-col gap-4 rounded-lg border border-rule bg-card p-6"
-          >
+          <div key={index} className={HOME_PANEL_CHROME}>
             <span className="block h-4 w-1/4 bg-border" />
             {Array.from({ length: 3 }, (_, row) => (
               <span key={row} className="block h-3 w-3/4 bg-border" />
@@ -39,89 +38,68 @@ function Home() {
 
   const home = useHome({ attentionPage, eventsPage, activityPage })
 
-  switch (home.state) {
-    case 'loading':
-      return (
-        <div data-testid="home-page" className="flex flex-col gap-12">
-          <HomeLoading />
-        </div>
-      )
-    case 'error':
-      return (
-        <div data-testid="home-page" className="flex flex-col py-16">
-          <HomeError onRetry={home.retry} />
-        </div>
-      )
-    case 'blank': {
-      const { snapshot } = home
-      return (
-        <div data-testid="home-page" className="flex flex-col gap-12">
-          <HomeBlank />
-          <HomeSidePanels
-            events={snapshot.events}
-            activity={snapshot.activity}
-            onEventsPageChange={setEventsPage}
-            onActivityPageChange={setActivityPage}
-          />
-        </div>
-      )
-    }
-    case 'clear': {
-      const { snapshot } = home
-      return (
-        <div data-testid="home-page" className="flex flex-col gap-12">
-          <Verdict
-            reviewCount={snapshot.review_count}
-            latestSuccessfulScan={snapshot.latest_successful_scan}
-          />
-          <HomeSidePanels
-            events={snapshot.events}
-            activity={snapshot.activity}
-            onEventsPageChange={setEventsPage}
-            onActivityPageChange={setActivityPage}
-          />
-        </div>
-      )
-    }
-    case 'pending': {
-      const { snapshot } = home
-      const showAttentionBlock =
-        snapshot.attention.data.length > 0 ||
-        snapshot.attention.total > HOME_ATTENTION_PER_PAGE
+  if (home.state === 'loading') {
+    return (
+      <div data-testid="home-page" className="flex flex-col gap-12">
+        <HomeLoading />
+      </div>
+    )
+  }
 
-      return (
-        <div data-testid="home-page" className="flex flex-col gap-12">
+  if (home.state === 'error') {
+    return (
+      <div data-testid="home-page" className="flex flex-col py-16">
+        <HomeError onRetry={home.retry} />
+      </div>
+    )
+  }
+
+  const { snapshot } = home
+
+  // Only the attention column differs between the three snapshot states. The
+  // shell and the feed panels below it are the same page in all three.
+  let attention: ReactNode
+  if (home.state === 'blank') {
+    attention = <HomeBlank />
+  } else {
+    const verdict = (
+      <Verdict
+        reviewCount={snapshot.review_count}
+        latestSuccessfulScan={snapshot.latest_successful_scan}
+      />
+    )
+    attention =
+      home.state === 'clear' ? (
+        verdict
+      ) : (
+        <>
           <div className="flex flex-col gap-2">
-            <Verdict
-              reviewCount={snapshot.review_count}
-              latestSuccessfulScan={snapshot.latest_successful_scan}
-            />
+            {verdict}
             <AttentionNotices notices={snapshot.notices} />
           </div>
-          {showAttentionBlock && (
-            <div className="flex flex-col gap-4">
-              <AttentionTable
-                findings={snapshot.attention.data}
-                total={snapshot.attention.total}
-                page={snapshot.attention.page}
-                onPageChange={setAttentionPage}
-              />
-            </div>
-          )}
-          <HomeSidePanels
-            events={snapshot.events}
-            activity={snapshot.activity}
-            onEventsPageChange={setEventsPage}
-            onActivityPageChange={setActivityPage}
+          {/* AttentionTable omits the table when empty and Pagination hides
+              itself on one page, so this needs no guard of its own. */}
+          <AttentionTable
+            findings={snapshot.attention.data}
+            total={snapshot.attention.total}
+            page={snapshot.attention.page}
+            onPageChange={setAttentionPage}
           />
-        </div>
+        </>
       )
-    }
-    default: {
-      const _exhaustive: never = home
-      return _exhaustive
-    }
   }
+
+  return (
+    <div data-testid="home-page" className="flex flex-col gap-12">
+      {attention}
+      <HomeSidePanels
+        events={snapshot.events}
+        activity={snapshot.activity}
+        onEventsPageChange={setEventsPage}
+        onActivityPageChange={setActivityPage}
+      />
+    </div>
+  )
 }
 
 export default Home
