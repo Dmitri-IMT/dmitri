@@ -145,13 +145,15 @@ describe('Settings password dialog', () => {
 
     await openPassword()
     for (const id of ['settings-current', 'settings-new', 'settings-confirm']) {
-      const field = screen.getByTestId(id)
-      const controls = within(field.parentElement as HTMLElement).getAllByRole(
-        'button',
-      )
-      expect(controls).toHaveLength(1)
-      expect(controls[0]).toHaveAccessibleName('Show password')
-      expect(controls[0]).not.toHaveAttribute('tabindex', '-1')
+      const shell = screen
+        .getByTestId(id)
+        .closest('[data-slot="password-input"]')
+      expect(shell).not.toBeNull()
+      const toggle = within(shell as HTMLElement).getByRole('button', {
+        name: 'Show password',
+      })
+      expect(toggle).toHaveAttribute('data-slot', 'password-input-toggle')
+      expect(toggle).not.toHaveAttribute('tabindex', '-1')
     }
   })
 

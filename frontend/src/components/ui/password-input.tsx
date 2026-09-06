@@ -28,7 +28,7 @@ function PasswordInput({
   const [revealed, setRevealed] = React.useState(false)
 
   return (
-    <div className="relative">
+    <div data-slot="password-input" className="relative">
       <Input
         {...props}
         type={revealed ? 'text' : 'password'}
@@ -36,6 +36,7 @@ function PasswordInput({
       />
       <Button
         type="button"
+        data-slot="password-input-toggle"
         variant="ghost"
         size="icon-sm"
         aria-label={revealed ? 'Hide password' : 'Show password'}

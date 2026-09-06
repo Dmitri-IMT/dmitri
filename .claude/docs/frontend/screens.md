@@ -134,8 +134,9 @@ the no-device Devices blank is the one blank state with no action.
   inside the account group — label `What's recorded about me?`, no section heading of its own —
   with persistent force-mounted content. There is no opt-out or pointer-hover dependency.
 - **Password reveal is local and ephemeral.** `PasswordInput` owns per-field reveal state; closing
-  `PasswordDialog` remounts the fields hidden. `index.css` suppresses the browser's own reveal
-  controls (`::-ms-reveal`, `::-webkit-credentials-auto-fill-button`) so no field shows two eyes.
+  `PasswordDialog` remounts the fields hidden. The composite's `data-slot="password-input"` wrapper
+  scopes browser reveal suppression (`::-ms-reveal`, `::-webkit-credentials-auto-fill-button`) so
+  only these fields hide the native control — plain `Input` fields are untouched.
 - **Settings loads as a whole shape.** Skeleton bars stand in for email and role until `user`
   arrives; the delete trigger stays `disabled` until then. The leave section and headings always
   render — only the confirm dialog waits on a non-null `user`.

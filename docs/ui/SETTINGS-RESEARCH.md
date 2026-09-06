@@ -425,8 +425,8 @@ and no dependency.
   ruling on `Ornament`: inline SVG, never a Unicode glyph (`👁` renders in colour; the outline
   glyphs have poor font coverage).
 - Chromium and Edge draw their own reveal control inside `input[type=password]`. Without
-  `::-ms-reveal { display: none }` and `::-webkit-credentials-auto-fill-button` suppressed in
-  `index.css`, the field shows two eyes.
+  `::-ms-reveal { display: none }` and `::-webkit-credentials-auto-fill-button` suppressed on the
+  `data-slot="password-input"` wrapper, the field shows two eyes.
 
 **Behaviour.**
 

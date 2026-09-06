@@ -127,10 +127,13 @@ body {
   html {
     @apply font-sans;
   }
-  input::-ms-reveal {
+}
+
+@layer components {
+  [data-slot='password-input'] input::-ms-reveal {
     display: none;
   }
-  input::-webkit-credentials-auto-fill-button {
+  [data-slot='password-input'] input::-webkit-credentials-auto-fill-button {
     display: none;
   }
 }
