@@ -31,11 +31,11 @@ function HomeFeedPanel({
   children,
 }: HomeFeedPanelProps) {
   return (
-    <section
-      id={`${testId}-panel`}
-      className={HOME_PANEL_CHROME}
-    >
-      <h2 data-testid={`${testId}-heading`} className="text-title-xs font-semibold">
+    <section id={`${testId}-panel`} className={HOME_PANEL_CHROME}>
+      <h2
+        data-testid={`${testId}-heading`}
+        className="text-title-xs font-semibold"
+      >
         {title}
       </h2>
       {isBlank ? (
