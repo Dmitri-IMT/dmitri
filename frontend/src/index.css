@@ -129,6 +129,15 @@ body {
   }
 }
 
+@layer components {
+  [data-slot='password-input'] input::-ms-reveal {
+    display: none;
+  }
+  [data-slot='password-input'] input::-webkit-credentials-auto-fill-button {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

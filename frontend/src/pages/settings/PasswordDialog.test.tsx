@@ -87,10 +87,13 @@ describe('Settings password dialog', () => {
     )
   })
 
-  it('renders nothing disabled at idle', async () => {
+  it('renders nothing disabled once the screen has settled', async () => {
     renderSettings()
 
     await screen.findByTestId('settings-password-trigger')
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-leave-trigger')).toBeEnabled(),
+    )
     const interactive = [
       ...screen.queryAllByRole('button'),
       ...screen.queryAllByRole('link'),
@@ -101,6 +104,87 @@ describe('Settings password dialog', () => {
       expect(el).toBeEnabled()
       expect(el).not.toHaveAttribute('aria-disabled', 'true')
     }
+  })
+
+  it('flips each field between hidden and revealed, and flips the control name with it', async () => {
+    renderSettings()
+
+    const user = await openPassword()
+    const dialog = within(screen.getByTestId('settings-password-dialog'))
+    const current = screen.getByTestId('settings-current')
+    await user.type(current, CURRENT)
+    expect(current).toHaveAttribute('type', 'password')
+    expect(
+      dialog.getAllByRole('button', { name: 'Show password' }),
+    ).toHaveLength(3)
+
+    await user.click(
+      dialog.getAllByRole('button', { name: 'Show password' })[0],
+    )
+
+    expect(current).toHaveAttribute('type', 'text')
+    expect(current).toHaveValue(CURRENT)
+    expect(
+      dialog.getAllByRole('button', { name: 'Show password' }),
+    ).toHaveLength(2)
+    expect(screen.getByTestId('settings-new')).toHaveAttribute(
+      'type',
+      'password',
+    )
+
+    const hide = dialog.getByRole('button', { name: 'Hide password' })
+    expect(hide).toHaveAttribute('type', 'button')
+    await user.click(hide)
+
+    expect(current).toHaveAttribute('type', 'password')
+    expect(dialog.queryByRole('button', { name: 'Hide password' })).toBeNull()
+  })
+
+  it('renders exactly one reveal control on each password field', async () => {
+    renderSettings()
+
+    await openPassword()
+    for (const id of ['settings-current', 'settings-new', 'settings-confirm']) {
+      const shell = screen
+        .getByTestId(id)
+        .closest('[data-slot="password-input"]')
+      expect(shell).not.toBeNull()
+      const toggle = within(shell as HTMLElement).getByRole('button', {
+        name: 'Show password',
+      })
+      expect(toggle).toHaveAttribute('data-slot', 'password-input-toggle')
+      expect(toggle).not.toHaveAttribute('tabindex', '-1')
+    }
+  })
+
+  it('hides every field again when the dialog is closed and reopened', async () => {
+    renderSettings()
+
+    const user = await openPassword()
+    for (const toggle of screen.getAllByRole('button', {
+      name: 'Show password',
+    })) {
+      await user.click(toggle)
+    }
+    expect(
+      screen.getAllByRole('button', { name: 'Hide password' }),
+    ).toHaveLength(3)
+
+    await user.click(screen.getByTestId('settings-password-cancel'))
+    await waitFor(() =>
+      expect(screen.queryByTestId('settings-password-dialog')).toBeNull(),
+    )
+    await user.click(screen.getByTestId('settings-password-trigger'))
+    await screen.findByTestId('settings-password-dialog')
+
+    expect(
+      screen.getAllByRole('button', { name: 'Show password' }),
+    ).toHaveLength(3)
+    expect(screen.queryByRole('button', { name: 'Hide password' })).toBeNull()
+    expect(screen.getByTestId('settings-current')).toHaveAttribute(
+      'type',
+      'password',
+    )
   })
 
   it('sends exactly current_password and new_password', async () => {

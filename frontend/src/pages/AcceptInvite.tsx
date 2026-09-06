@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { lookupInvite } from '@/api/auth'
 import { readApiError } from '@/api/apiError'
@@ -198,10 +198,9 @@ function AcceptInvite() {
           </p>
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite-password">Password</Label>
-            <Input
+            <PasswordInput
               id="invite-password"
               ref={passwordRef}
-              type="password"
               autoComplete="new-password"
               autoFocus
               aria-invalid={passwordError !== null}
@@ -228,10 +227,9 @@ function AcceptInvite() {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite-confirm">Confirm password</Label>
-            <Input
+            <PasswordInput
               id="invite-confirm"
               ref={confirmRef}
-              type="password"
               autoComplete="new-password"
               aria-invalid={confirmError !== null}
               aria-describedby="invite-confirm-error"

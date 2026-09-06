@@ -14,6 +14,7 @@ March-era `wireframes.md` (2026-07-10).
 - [Hosts](#hosts)
 - [Agents & Scan now](#agents--scan-now)
 - [Auth & admin](#auth--admin)
+- [Settings](#settings)
 - [Copy & tone](#copy--tone)
 - [States: blank, loading, error](#states-blank-loading-error)
 - [Visual direction](#visual-direction)
@@ -66,6 +67,58 @@ March-era `wireframes.md` (2026-07-10).
 - ~~Audit hint on user rows: last login~~ — **promoted 2026-08-08**, ships as the *Last seen* column
   (activity, counting silent refresh — see [`AUTH.md` § Member activity](../roadmap/AUTH.md) and
   [`ADR-017`](../adr/ADR-017-account-removal.md)). **Invited-by is still parked** — nothing records it.
+
+## Settings
+
+Gaps found while researching [`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) (DMI-110, 2026-09-06).
+None of them are DMI-110 scope — that issue rearranges what is already there. Each graduates
+through the create-issue gate. Ordered by how conspicuous the gap is for a security product.
+
+**Confirmed by the owner on 2026-09-06 — these three are wanted, and need issues through the
+create-issue gate. They are no longer speculative; only their sequencing is open.**
+
+- **Active sessions, and sign out everywhere.** Logout ends one session;
+  [`ADR-017`](../adr/ADR-017-account-removal.md) names the residual risk itself — a refresh token
+  keeps rotating for up to seven days. Nothing lists a member's live sessions or revokes them.
+  The owner's case: a member who loses a phone cannot cut that device off, and the device still
+  reads the whole organisation's network, scans and vulnerabilities.
+  *Needs: a backend list + revoke endpoint.*
+- **Notification preferences.** The product finds vulnerabilities on a schedule and tells nobody.
+  Transactional email already works for invites and password reset. The obvious wants: critical
+  finding found, scan failed, new device on the network. *Needs: backend, and a prior decision —
+  per-user, per-org, or both.*
+- **Two-factor (TOTP).** [`ADR-016`](../adr/ADR-016-password-policy.md) chose a strong policy plus
+  breach screening over forced rotation; 2FA is the next step that decision implies. Pairs with
+  active sessions: the lost-phone case is also the lost-authenticator case, so recovery codes are
+  part of the same decision. *Needs: backend, plus recovery codes and their own copy.*
+- **Organisation settings.** Spec 033 made the copy org-neutral, but nothing names or renames the
+  org. Admin-only, and absent rather than disabled for viewers. *Needs: a backend org resource.*
+- **Deleting the organisation.** [`ADR-017`](../adr/ADR-017-account-removal.md)'s last-admin
+  invariant means the last admin can never leave, so an org cannot be wound down at all.
+  *Needs: backend, and a decision on what happens to scan history.*
+- **Password last changed.** `UserProfileResponse` carries no such fact, which is why the password
+  row has a label and a control and nothing between them
+  ([`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §9). *Needs: one backend field.*
+- **Display name.** Open question C3, still closed. Nothing records a human name, so every list of
+  people shows email addresses. *Needs: backend, and C3 reopened.*
+- **Changing your email.** Email is both the login identifier and the string
+  [`ADR-017`](../adr/ADR-017-account-removal.md)'s typed confirmation asks for. Either we build a
+  verify-the-new-address flow, or we decide email is immutable and say so on the screen.
+  *Needs: a product decision before any build.*
+- **Caps Lock warning on password fields.** The neighbour of the reveal toggle
+  ([`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §9 D4) and the other half of "why did my
+  password fail". Deliberately not built with it — one change at a time.
+- **Dropping "Confirm new password".** Once a password can be revealed, the second field is
+  arguably redundant; GOV.UK removed theirs on exactly that reasoning. It changes the form shape
+  and its test cases, so it is not part of the reveal work.
+- **The two-level Settings restructure.** Sub-nav or tabs, triggered by the first of Notifications,
+  Sessions or Organisation to ship — see [`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §10. Parked
+  deliberately, so the one-page decision is a choice on record rather than debt.
+
+Still "no", and why: a theme toggle ([`FOUNDATIONS.md`](FOUNDATIONS.md) is light-only and
+[`REFERENCE.md`](REFERENCE.md) §8 prefers a point of view to a preference); API tokens and webhooks
+(no consumer exists); scan configuration (it lives on the Scans page by
+[`DESIGN-SYSTEM-RESEARCH.md`](DESIGN-SYSTEM-RESEARCH.md) §4.15).
 
 ## Copy & tone
 
