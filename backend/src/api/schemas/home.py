@@ -45,28 +45,26 @@ class HomeNotice(BaseModel):
     days: Annotated[int | None, Field(ge=0)] = None
 
 
-class HomeAttentionPage(BaseModel):
+class HomeListPage(BaseModel):
+    """One page of a Home panel. Subclasses narrow `data` to their row type."""
+
     model_config = ConfigDict(extra="forbid")
 
+    data: list
+    total: Annotated[int, Field(ge=0)]
+    page: Annotated[int, Field(ge=1)]
+
+
+class HomeAttentionPage(HomeListPage):
     data: list[FindingRead]
-    total: Annotated[int, Field(ge=0)]
-    page: Annotated[int, Field(ge=1)]
 
 
-class HomeEventsPage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class HomeEventsPage(HomeListPage):
     data: list[HomeEvent]
-    total: Annotated[int, Field(ge=0)]
-    page: Annotated[int, Field(ge=1)]
 
 
-class HomeActivityPage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class HomeActivityPage(HomeListPage):
     data: list[HomeActivityItem]
-    total: Annotated[int, Field(ge=0)]
-    page: Annotated[int, Field(ge=1)]
 
 
 class HomeSnapshot(BaseModel):
