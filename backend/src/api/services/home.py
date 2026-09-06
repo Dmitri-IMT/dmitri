@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import case
+from sqlalchemy import case, or_
 from sqlmodel import Session, func, select
 
 from api.core.home_constants import (
@@ -121,23 +121,29 @@ def derive_home_events(
     box_offline.sort(key=lambda event: event.occurred_at)
 
     idle_cutoff = now - timedelta(days=MEMBER_IDLE_DAYS)
-    member_idle: list[HomeEvent] = []
-    for user in session.exec(select(User).where(User.org_id == org_id)).all():
-        if user.last_login_at is not None and user.last_login_at >= idle_cutoff:
-            continue
-        if user.last_login_at is not None:
-            reference = user.last_login_at
-        else:
-            reference = user.created_at
-        days = (now - reference).days
-        member_idle.append(
-            HomeEvent(
-                kind=HomeEventKind.member_idle,
-                text=f"{user.email} has not signed in for {days} days",
-                occurred_at=reference,
-            )
+    # Idle is a SQL predicate over `users`; a member who has never signed in is
+    # idle from the day the account was made. Longest idle first, so the
+    # reference date doubles as the sort key.
+    idle_reference = func.coalesce(User.last_login_at, User.created_at)
+    member_idle = [
+        HomeEvent(
+            kind=HomeEventKind.member_idle,
+            text=f"{user.email} has not signed in for "
+            f"{(now - (user.last_login_at or user.created_at)).days} days",
+            occurred_at=user.last_login_at or user.created_at,
         )
-    member_idle.sort(key=lambda event: event.occurred_at)
+        for user in session.exec(
+            select(User)
+            .where(User.org_id == org_id)
+            .where(
+                or_(
+                    User.last_login_at.is_(None),
+                    User.last_login_at < idle_cutoff,
+                )
+            )
+            .order_by(idle_reference.asc())
+        ).all()
+    ]
 
     baseline_at = session.exec(
         select(func.min(ScanRecord.timestamp))
