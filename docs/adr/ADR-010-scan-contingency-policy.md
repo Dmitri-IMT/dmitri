@@ -68,6 +68,12 @@ canal de gravação falhar.
 - Finalização de resultado parcial (`partial_result=True`, `interrupted_stage`) acessível pelos
   caminhos de cancelamento, timeout e fatal pós-descoberta.
 
+No estágio de portas, a unidade usada pelo circuit breaker é sempre o **host**, mesmo quando o
+Nmap executa vários hosts no mesmo lote. Se qualquer host for pulado e o pipeline ainda conseguir
+terminar, o resultado final usa `partial_result=True` com `terminated_by="completed"`; não há
+`interrupted_stage`, pois nenhum estágio foi interrompido. Limites internos do Nmap podem encerrar
+um script ou host antes do timeout do subprocesso, preservando as evidências das demais unidades.
+
 Os estados terminais já previstos no schema (`TerminatedBy` inclui `"timeout"` e `"user_cancel"`)
 e os campos `partial_result` / `interrupted_stage` já aceitos por `build_metadata` são reutilizados
 — nenhum estado terminal novo é inventado.

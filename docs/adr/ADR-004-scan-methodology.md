@@ -313,3 +313,22 @@ Especificação da correção: `specs/011-nspi-port-stage-fix/`. As correções 
 (feedback de progresso por tempo decorrido no estágio de portas, cancelamento responsivo com guarda
 antes de novo subprocesso, e retenção de logs que preserva a última execução parcial/falha) seguem a
 política de contingência do **ADR-010** e não alteram esta metodologia.
+
+## Emenda — Limites internos do NSPi (2026-09-08)
+
+**Contexto.** Mesmo em `-T4`, a passagem ampla ainda acumulava detecção de versão e de sistema
+operacional para até oito hosts no mesmo processo. Um único alvo lento podia consumir o limite do
+processo e fazer o estágio descartar o lote inteiro.
+
+**Decisão.** A passagem 1 do NSPi fica restrita à enumeração top-1000
+(`-Pn -T4 -n --host-timeout 300s`), sem `-sV` e sem `-O`. A passagem 2 mantém a enumeração gentil
+das portas OT com `-T2 -sV` e recebe o mesmo limite de 300 s por host. Detecção de versão, scripts
+NSE e detecção de SO são consolidados na inspeção profunda, executada individualmente por host,
+com `--script-timeout 60s`, `--host-timeout 300s` e `-O`. Assim, o JSON continua recebendo a melhor
+evidência disponível de sistema operacional sem prender a passagem ampla.
+
+O timeout do subprocesso NSPi é 600 s nos estágios de portas e de inspeção profunda e permanece a
+última barreira. Um host omitido pelo Nmap após `--host-timeout` é registrado como pulado, mas suas
+evidências obtidas por outra passagem são preservadas. O circuit breaker do estágio de portas usa
+a razão entre hosts pulados e hosts totais, não a razão entre lotes. Esta emenda substitui, para o
+comportamento vigente, a decisão anterior de manter `-sV -O` na passagem 1.
