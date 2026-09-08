@@ -13,6 +13,7 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
+    OperatingSystemDetection,
     PortPayload,
     ScanPayload,
 )
@@ -87,6 +88,148 @@ def test_render_contains_device_info():
     assert "192.168.1.1" in rendered
     assert "router.local" in rendered
     assert "Netgear" in rendered
+
+
+def test_render_contains_full_operating_system_detection_in_fixed_order():
+    payload = _make_payload()
+    payload.hosts[0].operating_system = OperatingSystemDetection(
+        name="Linux 5.10 - 5.15",
+        accuracy=98,
+        vendor="Linux",
+        family="Linux",
+        generation="5.X",
+        device_type="specialized",
+        cpes=[
+            "cpe:/o:linux:linux_kernel:5",
+            "cpe:/o:linux:linux_kernel:5.15",
+        ],
+    )
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    expected_block = "\n".join(
+        [
+            "  Operating system:",
+            "    Detected: Linux 5.10 - 5.15 (98% confidence)",
+            "    Vendor: Linux",
+            "    Family: Linux",
+            "    Generation: 5.X",
+            "    Device type: specialized",
+            "    Platform IDs:",
+            "      - cpe:/o:linux:linux_kernel:5",
+            "      - cpe:/o:linux:linux_kernel:5.15",
+            "  Ports:",
+        ]
+    )
+    assert expected_block in rendered
+    assert rendered.count("    Platform IDs:") == 1
+
+
+def test_render_minimal_operating_system_omits_optional_labels():
+    payload = _make_payload()
+    payload.hosts[0].operating_system = OperatingSystemDetection(
+        name="FreeBSD 13.2",
+        accuracy=87,
+    )
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert (
+        "  Operating system:\n"
+        "    Detected: FreeBSD 13.2 (87% confidence)\n"
+        "  Ports:" in rendered
+    )
+    assert "    Vendor:" not in rendered
+    assert "    Family:" not in rendered
+    assert "    Generation:" not in rendered
+    assert "    Device type:" not in rendered
+    assert "    Platform IDs:" not in rendered
+
+
+def test_render_absent_and_legacy_operating_system_as_not_detected():
+    payload = _make_payload()
+    legacy_data = payload.model_dump(mode="json")
+    legacy_data["hosts"][0].pop("operating_system")
+    legacy_payload = ScanPayload.model_validate(legacy_data)
+
+    current_rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+    legacy_rendered = ScanViewScreen(payload=legacy_payload)._render_payload(
+        legacy_payload
+    )
+
+    assert current_rendered.count("  Operating system: Not detected") == 1
+    assert legacy_rendered.count("  Operating system: Not detected") == 1
+    assert "  Operating system: Not detected\n  Ports:" in current_rendered
+    assert "  Operating system: Not detected\n  Ports:" in legacy_rendered
+
+
+def test_render_keeps_mixed_host_operating_systems_associated():
+    payload = _make_payload()
+    payload.hosts[0].operating_system = OperatingSystemDetection(
+        name="RouterOS 7",
+        accuracy=95,
+    )
+    payload.hosts.append(
+        HostPayload(
+            ip="192.168.1.2",
+            hostname="printer.local",
+            vendor="HP",
+            ports=[],
+        )
+    )
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+    router_start = rendered.index("192.168.1.1")
+    printer_start = rendered.index("192.168.1.2")
+    router_section = rendered[router_start:printer_start]
+    printer_section = rendered[printer_start:]
+
+    assert "Detected: RouterOS 7 (95% confidence)" in router_section
+    assert "Operating system: Not detected" not in router_section
+    assert "Operating system: Not detected" in printer_section
+    assert "Detected: RouterOS 7" not in printer_section
+    assert rendered.count("  Operating system:") == 2
+
+
+def test_render_partial_payload_shows_available_operating_system_evidence():
+    payload = _make_payload()
+    payload.metadata = {
+        "partial_result": True,
+        "terminated_by": "timeout",
+        "interrupted_stage": "deep_inspection",
+    }
+    payload.hosts[0].operating_system = OperatingSystemDetection(
+        name="Linux 6.1",
+        accuracy=92,
+    )
+    payload.hosts.append(
+        HostPayload(
+            ip="192.168.1.2",
+            hostname="legacy-plc.local",
+            vendor="Schneider Electric",
+            ports=[
+                PortPayload(
+                    port=502,
+                    protocol="tcp",
+                    state="open",
+                    service="modbus",
+                )
+            ],
+        )
+    )
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+    detected_start = rendered.index("192.168.1.1")
+    absent_start = rendered.index("192.168.1.2")
+    detected_section = rendered[detected_start:absent_start]
+    absent_section = rendered[absent_start:]
+
+    assert "Detected: Linux 6.1 (92% confidence)" in detected_section
+    assert "Operating system: Not detected" not in detected_section
+    assert "Operating system: Not detected\n  Ports:" in absent_section
+    assert "502/tcp" in absent_section
+    assert "Detected: Linux 6.1" not in absent_section
+    assert "timeout" not in rendered
 
 
 def test_render_contains_ports():
@@ -173,6 +316,11 @@ def test_render_no_raw_json():
 
 def test_load_from_file(tmp_path):
     payload = _make_payload()
+    payload.hosts[0].operating_system = OperatingSystemDetection(
+        name="Linux 5.10 - 5.15",
+        accuracy=98,
+        cpes=["cpe:/o:linux:linux_kernel:5"],
+    )
     file_path = tmp_path / "scan.json"
     file_path.write_text(
         json.dumps(payload.model_dump(mode="json"), indent=2), encoding="utf-8"
@@ -182,6 +330,14 @@ def test_load_from_file(tmp_path):
     assert loaded is not None
     assert loaded.subnet == "192.168.1.0/24"
     assert len(loaded.hosts) == 1
+    assert loaded.hosts[0].operating_system == payload.hosts[0].operating_system
+    assert (
+        "  Operating system:\n"
+        "    Detected: Linux 5.10 - 5.15 (98% confidence)\n"
+        "    Platform IDs:\n"
+        "      - cpe:/o:linux:linux_kernel:5\n"
+        "  Ports:" in screen._render_payload(loaded)
+    )
 
 
 def test_load_prefers_payload_over_file(tmp_path):

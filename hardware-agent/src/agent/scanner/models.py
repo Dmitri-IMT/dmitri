@@ -9,6 +9,19 @@ from agent.ot.modbus.models import ModbusService
 
 
 @dataclass(slots=True)
+class OperatingSystemInfo:
+    """Best operating-system fingerprint reported for a host."""
+
+    name: str
+    accuracy: int
+    vendor: str | None = None
+    family: str | None = None
+    generation: str | None = None
+    device_type: str | None = None
+    cpes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class ScriptResult:
     """Structured representation of an NSE script execution."""
 
@@ -49,6 +62,14 @@ class PortInfo:
 
 
 @dataclass(slots=True)
+class PortScanResult:
+    """Port inventory and OS evidence parsed from one Nmap host node."""
+
+    ports: list[PortInfo] = field(default_factory=list)
+    operating_system: OperatingSystemInfo | None = None
+
+
+@dataclass(slots=True)
 class HostInfo:
     """Discovered host enriched across the full scan pipeline."""
 
@@ -58,6 +79,7 @@ class HostInfo:
     vendor: str = "unknown"
     state: str = "up"
     ports: list[PortInfo] = field(default_factory=list)
+    operating_system: OperatingSystemInfo | None = None
     host_scripts: list[ScriptResult] = field(default_factory=list)
     industrial_services: list[ModbusService] = field(default_factory=list)
 

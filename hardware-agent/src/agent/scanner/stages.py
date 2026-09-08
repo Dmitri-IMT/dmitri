@@ -22,6 +22,7 @@ from agent.normalize.contracts import (
     ModbusTcpServicePayload,
     ModbusUnitPayload,
     ModbusValidationPayload,
+    OperatingSystemDetection,
     PortPayload,
 )
 from agent.ot.modbus.fingerprints import correlate_fc43_fingerprints
@@ -142,10 +143,12 @@ def run_port_stage(
             else:
                 for ip in batch:
                     host = host_map[ip]
+                    result = results[ip]
                     host.ports = sorted(
-                        results.get(ip, []),
+                        result.ports,
                         key=lambda port: (port.port, port.protocol),
                     )
+                    host.operating_system = result.operating_system
                     LOGGER.info(
                         "Port scan finished for %s with %s ports.",
                         host.ip,
@@ -372,6 +375,19 @@ def build_host_payload(host: HostInfo) -> HostPayload:
         mac=host.mac,
         hostname=host.hostname or host.ip,
         vendor=host.vendor or "unknown",
+        operating_system=(
+            OperatingSystemDetection(
+                name=host.operating_system.name,
+                accuracy=host.operating_system.accuracy,
+                vendor=host.operating_system.vendor,
+                family=host.operating_system.family,
+                generation=host.operating_system.generation,
+                device_type=host.operating_system.device_type,
+                cpes=host.operating_system.cpes,
+            )
+            if host.operating_system is not None
+            else None
+        ),
         ports=[
             PortPayload(
                 port=port.port,

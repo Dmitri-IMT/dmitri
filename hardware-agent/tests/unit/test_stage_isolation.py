@@ -4,7 +4,7 @@ import threading
 
 from agent.config import AgentSettings, subprocess_timeout_for
 from agent.scanner.errors import BudgetExceeded, TransientScanError, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.scanner.models import HostInfo, PortInfo, PortScanResult, ScriptResult
 from agent.scanner.progress import STAGE_WEIGHTS, ScanEvent, target_pct
 from agent.scanner.stages import (
     build_metadata,
@@ -67,7 +67,10 @@ def _make_ports_fake(
             exc = failures.get(ip)
             if exc is not None:
                 raise exc
-        return {ip: ports_by_ip.get(ip, []) for ip in ips}
+        return {
+            ip: PortScanResult(ports=ports_by_ip.get(ip, []))
+            for ip in ips
+        }
 
     return fake
 

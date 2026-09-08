@@ -125,6 +125,28 @@ class ScanViewScreen(DmitriScreen):
             vendor_str = f" — {device.vendor}" if device.vendor else ""
             lines.append(f"[bold]▶ {ip_str}[/bold] ({device.hostname}){vendor_str}")
 
+            operating_system = device.operating_system
+            if operating_system is None:
+                lines.append("  Operating system: Not detected")
+            else:
+                lines.append("  Operating system:")
+                lines.append(
+                    f"    Detected: {operating_system.name} "
+                    f"({operating_system.accuracy}% confidence)"
+                )
+                if operating_system.vendor is not None:
+                    lines.append(f"    Vendor: {operating_system.vendor}")
+                if operating_system.family is not None:
+                    lines.append(f"    Family: {operating_system.family}")
+                if operating_system.generation is not None:
+                    lines.append(f"    Generation: {operating_system.generation}")
+                if operating_system.device_type is not None:
+                    lines.append(f"    Device type: {operating_system.device_type}")
+                if operating_system.cpes:
+                    lines.append("    Platform IDs:")
+                    for platform_id in operating_system.cpes:
+                        lines.append(f"      - {platform_id}")
+
             if device.ports:
                 lines.append("  Ports:")
                 for p in device.ports:

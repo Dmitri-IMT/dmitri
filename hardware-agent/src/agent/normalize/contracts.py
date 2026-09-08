@@ -7,7 +7,7 @@ from ipaddress import IPv4Address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, ConfigDict, Field, constr
 
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
@@ -21,6 +21,18 @@ class PortPayload(BaseModel):
     state: Literal["open", "closed", "filtered"]
     service: constr(min_length=1)
     version: str | None = None
+    cpes: list[constr(min_length=1)] = Field(default_factory=list)
+
+
+class OperatingSystemDetection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: constr(min_length=1)
+    accuracy: Annotated[int, Field(ge=0, le=100, strict=True)]
+    vendor: str | None = None
+    family: str | None = None
+    generation: str | None = None
+    device_type: str | None = None
     cpes: list[constr(min_length=1)] = Field(default_factory=list)
 
 
@@ -101,6 +113,7 @@ class HostPayload(BaseModel):
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
+    operating_system: OperatingSystemDetection | None = None
     ports: list[PortPayload] = Field(default_factory=list)
     industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
 

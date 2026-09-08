@@ -6,6 +6,7 @@ from .contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
+    OperatingSystemDetection,
     PortPayload,
     ScanPayload,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "ModbusDeviceIdentificationPayload",
     "ModbusTcpServicePayload",
     "ModbusUnitPayload",
+    "OperatingSystemDetection",
     "PortPayload",
     "ScanPayload",
     "extract_findings",

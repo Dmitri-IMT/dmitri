@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
 from agent.config import NSPI_PORTS, port_stage_scripts
-from agent.scanner.models import PortInfo
+from agent.scanner.models import PortInfo, PortScanResult
 from agent.scanner.nmap import NmapRunner
-from agent.utils.nmap_xml import extract_ipv4, parse_ports
+from agent.utils.nmap_xml import extract_ipv4, parse_operating_system, parse_ports
 
 NSPI_PASS1_ARGS = ["-Pn", "-T4", "-n", "-sV", "-O"]
 NSPI_PASS2_ARGS = ["-Pn", "-T2", "-n", "-p", NSPI_PORTS, "-sV"]
@@ -36,6 +38,32 @@ def merge_ports(
     return sorted(merged.values(), key=lambda port: (port.port, port.protocol))
 
 
+def merge_port_scan_results(
+    existing: PortScanResult,
+    incoming: PortScanResult,
+) -> PortScanResult:
+    """Merge port evidence while retaining the strongest OS detection."""
+
+    operating_system = existing.operating_system
+    if operating_system is None or (
+        incoming.operating_system is not None
+        and incoming.operating_system.accuracy > operating_system.accuracy
+    ):
+        operating_system = incoming.operating_system
+
+    return PortScanResult(
+        ports=merge_ports(existing.ports, incoming.ports),
+        operating_system=operating_system,
+    )
+
+
+def _parse_port_scan_result(host_element: ET.Element) -> PortScanResult:
+    return PortScanResult(
+        ports=parse_ports(host_element),
+        operating_system=parse_operating_system(host_element),
+    )
+
+
 def discovery_arguments(scan_mode: str) -> list[str]:
     if scan_mode == "max":
         return ["-sV", "-O", "-p-", "--min-rate", "1000"]
@@ -44,7 +72,7 @@ def discovery_arguments(scan_mode: str) -> list[str]:
     return ["-sV", "-O", "--script", port_stage_scripts(scan_mode)]
 
 
-def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
+def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> PortScanResult:
     """Enumerate open and filtered ports for a single host."""
 
     arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), ip]
@@ -52,8 +80,8 @@ def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> list[PortInfo]:
     root = runner.run_xml(arguments)
     host_element = root.find("host")
     if host_element is None:
-        return []
-    return parse_ports(host_element)
+        return PortScanResult()
+    return _parse_port_scan_result(host_element)
 
 
 def scan_ports_batch(
@@ -61,7 +89,7 @@ def scan_ports_batch(
     ips: list[str],
     scan_mode: str,
     timeout: float | None = None,
-) -> dict[str, list[PortInfo]]:
+) -> dict[str, PortScanResult]:
     """Enumerate ports for a batch of hosts in one Nmap process."""
 
     if not ips:
@@ -73,12 +101,12 @@ def scan_ports_batch(
     arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), *ips]
 
     root = runner.run_xml(arguments, timeout=timeout)
-    results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}
+    results = {ip: PortScanResult() for ip in ips}
     for host_element in root.findall("host"):
         ip = extract_ipv4(host_element)
         if not ip:
             continue
-        results[ip] = parse_ports(host_element)
+        results[ip] = _parse_port_scan_result(host_element)
     return results
 
 
@@ -86,10 +114,10 @@ def _scan_ports_batch_nspi(
     runner: NmapRunner,
     ips: list[str],
     timeout: float | None = None,
-) -> dict[str, list[PortInfo]]:
+) -> dict[str, PortScanResult]:
     """NSPi two-pass port scan: top-1000 + OT-specific ports, merged."""
 
-    results: dict[str, list[PortInfo]] = {ip: [] for ip in ips}
+    results = {ip: PortScanResult() for ip in ips}
 
     # Pass 1: top-1000 (no -p flag)
     pass1_args = [*NSPI_PASS1_ARGS, *ips]
@@ -97,7 +125,7 @@ def _scan_ports_batch_nspi(
     for host_element in root1.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:
-            results[ip] = parse_ports(host_element)
+            results[ip] = _parse_port_scan_result(host_element)
 
     # Pass 2: OT-specific ports
     pass2_args = [*NSPI_PASS2_ARGS, *ips]
@@ -105,6 +133,9 @@ def _scan_ports_batch_nspi(
     for host_element in root2.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:
-            results[ip] = merge_ports(results.get(ip, []), parse_ports(host_element))
+            results[ip] = merge_port_scan_results(
+                results.get(ip, PortScanResult()),
+                _parse_port_scan_result(host_element),
+            )
 
     return results

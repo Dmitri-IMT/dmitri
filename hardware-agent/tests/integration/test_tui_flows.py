@@ -12,6 +12,7 @@ import pytest
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
+    OperatingSystemDetection,
     PortPayload,
     ScanPayload,
 )
@@ -19,8 +20,15 @@ from agent.paths import DmitriConfig, save_config
 from agent.tui.app import DmitriApp
 from agent.tui.screens.home import HomeScreen
 from agent.tui.screens.past_scans import PastScansScreen
+from agent.tui.screens.scan_view import ScanViewScreen
 from agent.tui.screens.settings import SettingsScreen
 from agent.tui.screens.setup import SetupScreen
+from textual.widgets import Static
+
+EXPECTED_OS_BLOCK = (
+    "Operating system:\n"
+    "    Detected: Linux 5.10 - 5.15 (98% confidence)"
+)
 
 
 def _make_config(tmp_path: Path) -> tuple[Path, Path]:
@@ -46,6 +54,10 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
                 ip="192.168.1.1",
                 hostname="router.local",
                 vendor="Netgear",
+                operating_system=OperatingSystemDetection(
+                    name="Linux 5.10 - 5.15",
+                    accuracy=98,
+                ),
                 ports=[
                     PortPayload(
                         port=22,
@@ -157,6 +169,33 @@ async def test_past_scans_with_files(tmp_path):
             assert isinstance(pilot.app.screen, PastScansScreen)
             empty = pilot.app.screen.query_one("#past-scans-empty")
             assert empty.display is False
+            pilot.app.screen.query_one("#past-scans-list").highlighted = 0
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(pilot.app.screen, ScanViewScreen)
+            content = pilot.app.screen.query_one("#scan-view-content", Static)
+            assert EXPECTED_OS_BLOCK in str(content.render())
+
+
+@pytest.mark.asyncio
+async def test_completed_scan_payload_shows_operating_system(tmp_path):
+    """A freshly completed payload reaches the same scan result renderer."""
+    config_path, results_dir = _make_config(tmp_path)
+    config = DmitriConfig(results_dir=str(results_dir))
+    payload = _make_payload()
+    with (
+        patch("agent.tui.app.load_config", return_value=config),
+        patch("agent.tui.screens.home.load_config", return_value=config),
+    ):
+        async with DmitriApp().run_test() as pilot:
+            await pilot.pause()
+            home = pilot.app.screen
+            assert isinstance(home, HomeScreen)
+            home._on_scan_complete((payload, True))
+            await pilot.pause()
+            assert isinstance(pilot.app.screen, ScanViewScreen)
+            content = pilot.app.screen.query_one("#scan-view-content", Static)
+            assert EXPECTED_OS_BLOCK in str(content.render())
 
 
 @pytest.mark.asyncio

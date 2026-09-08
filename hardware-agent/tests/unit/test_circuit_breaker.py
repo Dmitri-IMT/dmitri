@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from agent.config import AgentSettings
 from agent.scanner.errors import BudgetExceeded, CircuitBreakerError, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.scanner.models import HostInfo, PortInfo, PortScanResult, ScriptResult
 from agent.scanner.progress import ScanEvent
 from agent.scanner.stages import run_deep_inspection_stage, run_port_stage
 
@@ -46,7 +46,7 @@ def _ports_fake(failures: dict[str, Exception]):
             exc = failures.get(ip)
             if exc is not None:
                 raise exc
-        return {ip: [PortInfo(port=22)] for ip in ips}
+        return {ip: PortScanResult(ports=[PortInfo(port=22)]) for ip in ips}
 
     return fake
 

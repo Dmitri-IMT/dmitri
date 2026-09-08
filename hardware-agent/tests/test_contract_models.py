@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import get_args
 from uuid import uuid4
 
+import pytest
 import yaml
 from agent.normalize.contracts import (
     FindingPayload,
@@ -13,19 +14,24 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
+    OperatingSystemDetection,
     PortPayload,
     ScanPayload,
 )
+from agent.scanner.models import HostInfo, OperatingSystemInfo
+from agent.scanner.stages import build_host_payload
 from agent.transport.command_channel import (
     AgentCommand,
     AgentHello,
     AgentStatus,
     AvailableSubnet,
 )
+from pydantic import ValidationError
 
 CONTRACT_MODELS = (
     ("ScanIngestRequest", ScanPayload),
     ("HostPayload", HostPayload),
+    ("OperatingSystemDetection", OperatingSystemDetection),
     ("ModbusTcpServicePayload", ModbusTcpServicePayload),
     ("ModbusUnitPayload", ModbusUnitPayload),
     ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
@@ -125,6 +131,190 @@ def test_scan_payload_accepts_modbus_inventory() -> None:
     assert dumped["industrial_services"][0]["units"][0][
         "device_identification"
     ]["product_code"] == "BMX P34"
+
+
+@pytest.mark.parametrize("accuracy", [0, 100])
+def test_operating_system_detection_accepts_accuracy_boundaries(
+    accuracy: int,
+) -> None:
+    detection = OperatingSystemDetection(name="Linux", accuracy=accuracy)
+
+    assert detection.accuracy == accuracy
+    assert detection.vendor is None
+    assert detection.family is None
+    assert detection.generation is None
+    assert detection.device_type is None
+    assert detection.cpes == []
+
+
+def test_operating_system_detection_accepts_explicit_null_optional_fields() -> None:
+    detection = OperatingSystemDetection.model_validate(
+        {
+            "name": "Linux",
+            "accuracy": 96,
+            "vendor": None,
+            "family": None,
+            "generation": None,
+            "device_type": None,
+            "cpes": [],
+        }
+    )
+
+    assert detection.model_dump(mode="json") == {
+        "name": "Linux",
+        "accuracy": 96,
+        "vendor": None,
+        "family": None,
+        "generation": None,
+        "device_type": None,
+        "cpes": [],
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", ""),
+        ("name", None),
+        ("accuracy", -1),
+        ("accuracy", 101),
+        ("accuracy", 96.0),
+        ("accuracy", 96.5),
+        ("accuracy", "96"),
+        ("accuracy", True),
+        ("cpes", [""]),
+        ("cpes", None),
+        ("vendor", 1),
+        ("unexpected", True),
+    ],
+)
+def test_operating_system_detection_rejects_invalid_values(field, value) -> None:
+    values = {"name": "Linux", "accuracy": 96, "cpes": ["cpe:/o:linux:linux_kernel"]}
+    values[field] = value
+
+    with pytest.raises(ValidationError):
+        OperatingSystemDetection.model_validate(values)
+
+
+@pytest.mark.parametrize("missing_field", ["name", "accuracy"])
+def test_operating_system_detection_requires_core_fields(missing_field: str) -> None:
+    values = {"name": "Linux", "accuracy": 96}
+    del values[missing_field]
+
+    with pytest.raises(ValidationError):
+        OperatingSystemDetection.model_validate(values)
+
+
+def test_operating_system_detection_is_exported_from_normalize() -> None:
+    from agent.normalize import OperatingSystemDetection as ExportedDetection
+
+    assert ExportedDetection is OperatingSystemDetection
+
+
+@pytest.mark.parametrize(
+    "host_values",
+    [
+        pytest.param({}, id="omitted"),
+        pytest.param({"operating_system": None}, id="explicit-null"),
+    ],
+)
+def test_host_payload_operating_system_defaults_to_none(host_values: dict) -> None:
+    host = HostPayload.model_validate(
+        {
+            "ip": "192.168.0.20",
+            "hostname": "host",
+            "vendor": "unknown",
+            **host_values,
+        }
+    )
+
+    assert host.operating_system is None
+
+
+def test_build_host_payload_maps_operating_system_losslessly() -> None:
+    host = HostInfo(
+        ip="192.168.0.20",
+        hostname="controller.local",
+        operating_system=OperatingSystemInfo(
+            name="Linux 5.4 - 5.10",
+            accuracy=96,
+            vendor="Linux",
+            family="Linux",
+            generation="5.X",
+            device_type="general purpose",
+            cpes=[
+                "cpe:/o:linux:linux_kernel:5",
+                "cpe:/o:linux:linux_kernel:6",
+            ],
+        ),
+    )
+
+    payload = build_host_payload(host)
+
+    assert payload.operating_system is not None
+    assert payload.operating_system.model_dump(mode="json") == {
+        "name": "Linux 5.4 - 5.10",
+        "accuracy": 96,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": [
+            "cpe:/o:linux:linux_kernel:5",
+            "cpe:/o:linux:linux_kernel:6",
+        ],
+    }
+
+
+def test_build_host_payload_preserves_missing_operating_system() -> None:
+    payload = build_host_payload(HostInfo(ip="192.168.0.20", hostname=None))
+
+    assert payload.operating_system is None
+
+
+def test_agent_operating_system_schema_matches_published_contract() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    contract_schema = spec["components"]["schemas"]["OperatingSystemDetection"]
+    model_schema = OperatingSystemDetection.model_json_schema()
+
+    assert contract_schema["additionalProperties"] is False
+    assert model_schema["additionalProperties"] is False
+    assert set(contract_schema["required"]) == set(model_schema["required"]) == {
+        "name",
+        "accuracy",
+    }
+    assert set(contract_schema["properties"]) == set(model_schema["properties"])
+
+    for schema in (contract_schema, model_schema):
+        properties = schema["properties"]
+        assert properties["name"]["type"] == "string"
+        assert properties["name"]["minLength"] == 1
+        assert properties["accuracy"]["type"] == "integer"
+        assert properties["accuracy"]["minimum"] == 0
+        assert properties["accuracy"]["maximum"] == 100
+        assert properties["cpes"]["type"] == "array"
+        assert properties["cpes"]["items"]["type"] == "string"
+        assert properties["cpes"]["items"]["minLength"] == 1
+
+    for field in ("vendor", "family", "generation", "device_type"):
+        contract_types = contract_schema["properties"][field]["type"]
+        model_types = {
+            candidate["type"]
+            for candidate in model_schema["properties"][field]["anyOf"]
+        }
+        assert set(contract_types) == model_types == {"string", "null"}
+
+
+def test_published_host_operating_system_is_optional_and_nullable() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    host_schema = spec["components"]["schemas"]["HostPayload"]
+    operating_system = host_schema["properties"]["operating_system"]
+
+    assert "operating_system" not in host_schema["required"]
+    assert operating_system["anyOf"] == [
+        {"$ref": "#/components/schemas/OperatingSystemDetection"},
+        {"type": "null"},
+    ]
 
 
 def test_scan_payload_accepts_extensive_nspi_and_max() -> None:

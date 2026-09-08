@@ -6,12 +6,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
 from agent.discovery.port_discovery import (
     discovery_arguments,
     scan_ports,
     scan_ports_batch,
 )
 from agent.normalize.contracts import ScanPayload
+from agent.scanner.models import PortScanResult
 from agent.scanner.nmap import NmapRunner
 
 EMPTY_NMAP_XML = ET.fromstring(
@@ -33,6 +35,68 @@ def _make_capturing_runner() -> tuple[NmapRunner, list[list[str]]]:
 
     runner.run_xml = _capture  # type: ignore[assignment]
     return runner, captured
+
+
+@pytest.mark.parametrize("scan_mode", ["quick", "standard", "extensive", "max"])
+def test_single_host_scan_modes_return_port_scan_result(scan_mode: str) -> None:
+    runner, _ = _make_capturing_runner()
+
+    result = scan_ports(runner, "10.0.0.1", scan_mode)
+
+    assert isinstance(result, PortScanResult)
+
+
+@pytest.mark.parametrize(
+    "scan_mode", ["quick", "standard", "extensive", "max", "nspi"]
+)
+def test_batch_scan_modes_return_port_scan_results(scan_mode: str) -> None:
+    runner, _ = _make_capturing_runner()
+
+    result = scan_ports_batch(runner, ["10.0.0.1"], scan_mode)
+
+    assert isinstance(result["10.0.0.1"], PortScanResult)
+
+
+@pytest.mark.parametrize(
+    ("scan_mode", "expected_discovery_arguments"),
+    [
+        ("quick", ["-sV", "-O", "--script", "vulners"]),
+        (
+            "standard",
+            [
+                "-sV",
+                "-O",
+                "--script",
+                "vulners,smb-protocols,smb2-security-mode,"
+                "ssh-auth-methods,http-title,http-server-header",
+            ],
+        ),
+        ("extensive", ["-sV", "-O", "--top-ports", "10000"]),
+        ("max", ["-sV", "-O", "-p-", "--min-rate", "1000"]),
+    ],
+)
+def test_single_and_batch_argv_remain_exact(
+    scan_mode: str,
+    expected_discovery_arguments: list[str],
+) -> None:
+    single_runner, single_calls = _make_capturing_runner()
+    batch_runner, batch_calls = _make_capturing_runner()
+
+    scan_ports(single_runner, "10.0.0.1", scan_mode)
+    scan_ports_batch(batch_runner, ["10.0.0.1", "10.0.0.2"], scan_mode)
+
+    assert single_calls == [
+        ["-Pn", "-T4", *expected_discovery_arguments, "10.0.0.1"]
+    ]
+    assert batch_calls == [
+        [
+            "-Pn",
+            "-T4",
+            *expected_discovery_arguments,
+            "10.0.0.1",
+            "10.0.0.2",
+        ]
+    ]
 
 
 class TestQuickModeArgv:
