@@ -91,14 +91,12 @@ def _normalise_version(value: str | None) -> str | None:
 
 def _schneider_family(products: set[str]) -> str | None:
     if any(
-        value in {"m340", "modiconm340", "bmxp34"}
-        or value.startswith("bmxp34")
+        value in {"m340", "modiconm340", "bmxp34"} or value.startswith("bmxp34")
         for value in products
     ):
         return "m340"
     if any(
-        value in {"m580", "modiconm580"}
-        or value.startswith(("bmep58", "bmeh58"))
+        value in {"m580", "modiconm580"} or value.startswith(("bmep58", "bmeh58"))
         for value in products
     ):
         return "m580"

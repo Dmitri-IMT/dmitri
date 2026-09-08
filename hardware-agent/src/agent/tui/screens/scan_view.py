@@ -177,19 +177,13 @@ class ScanViewScreen(DmitriScreen):
                             if detail.product_code:
                                 fields.append(f"product {detail.product_code}")
                             if detail.major_minor_revision:
-                                fields.append(
-                                    f"firmware {detail.major_minor_revision}"
-                                )
+                                fields.append(f"firmware {detail.major_minor_revision}")
                         suffix = f"; {', '.join(fields)}" if fields else ""
                         lines.append(
                             f"      Unit ID {unit.unit_id}: {unit.status}{suffix}"
                         )
                         for address_range in unit.address_ranges:
-                            end = (
-                                address_range.start_address
-                                + address_range.count
-                                - 1
-                            )
+                            end = address_range.start_address + address_range.count - 1
                             summary_parts = []
                             if address_range.nonzero_count is not None:
                                 summary_parts.append(

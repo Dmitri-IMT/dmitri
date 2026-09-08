@@ -356,9 +356,7 @@ class ScanProgressScreen(DmitriScreen):
             return
         if kind == "modbus_host_inspected":
             action = (
-                "Mapped"
-                if self.nspi_submode == "read_only_mapping"
-                else "Inventoried"
+                "Mapped" if self.nspi_submode == "read_only_mapping" else "Inventoried"
             )
             log.write(
                 f"[dim]  -> {action} {event.ip} "

@@ -560,6 +560,16 @@ export interface components {
             /** @default [] */
             cpes: string[];
         };
+        OperatingSystemDetection: {
+            name: string;
+            accuracy: number;
+            vendor?: string | null;
+            family?: string | null;
+            generation?: string | null;
+            device_type?: string | null;
+            /** @default [] */
+            cpes: string[];
+        };
         ModbusDeviceIdentificationPayload: {
             vendor_name?: string | null;
             product_code?: string | null;
@@ -647,6 +657,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** @default [] */
             ports: components["schemas"]["PortPayload"][];
             /** @default [] */
@@ -660,6 +671,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             ports: components["schemas"]["Port"][];
         };
         FindingPayload: {
@@ -755,6 +767,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -768,6 +781,7 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             scan_mode: components["schemas"]["ScanMode"];
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             open_ports_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
         };
@@ -779,6 +793,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */

@@ -359,9 +359,7 @@ def run_ot_inspection_stage(
         if settings.nspi_submode == "read_only_mapping":
             budget = MappingBudget(
                 maximum=effective_policy.max_mapping_requests_per_host,
-                used=sum(
-                    service.requests_sent for service in host.industrial_services
-                ),
+                used=sum(service.requests_sent for service in host.industrial_services),
             )
             for service in host.industrial_services:
                 map_modbus_service(
@@ -585,9 +583,7 @@ def build_metadata(
         metadata["terminated_by"] = terminated_by
     if settings.scan_mode == "nspi":
         modbus_services = [
-            service
-            for host in hosts or []
-            for service in host.industrial_services
+            service for host in hosts or [] for service in host.industrial_services
         ]
         metadata.update(
             {
@@ -597,15 +593,11 @@ def build_metadata(
                 "modbus_confirmed": sum(
                     service.confidence == "confirmed" for service in modbus_services
                 ),
-                "modbus_units": sum(
-                    len(service.units) for service in modbus_services
-                ),
+                "modbus_units": sum(len(service.units) for service in modbus_services),
                 "modbus_requests_sent": sum(
                     service.requests_sent for service in modbus_services
                 ),
-                "modbus_timeouts": sum(
-                    service.timeouts for service in modbus_services
-                ),
+                "modbus_timeouts": sum(service.timeouts for service in modbus_services),
                 "modbus_mapping_requests_sent": sum(
                     service.mapping_requests_sent for service in modbus_services
                 ),

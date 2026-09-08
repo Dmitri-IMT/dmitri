@@ -152,9 +152,11 @@ class ModbusReadSession:
                 else getattr(response, "registers", [])[:count]
             )
             values = [
-                bool(value)
-                if address_space in {"coil", "discrete_input"}
-                else int(value)
+                (
+                    bool(value)
+                    if address_space in {"coil", "discrete_input"}
+                    else int(value)
+                )
                 for value in raw_values
             ]
             if len(values) != count:
@@ -163,9 +165,7 @@ class ModbusReadSession:
                     error=f"Expected {count} values, received {len(values)}",
                     request_sent=True,
                 )
-            return ModbusReadResult(
-                status="readable", values=values, request_sent=True
-            )
+            return ModbusReadResult(status="readable", values=values, request_sent=True)
         except (TimeoutError, ModbusIOException) as exc:
             return ModbusReadResult(
                 status="timeout", error=str(exc) or None, request_sent=True

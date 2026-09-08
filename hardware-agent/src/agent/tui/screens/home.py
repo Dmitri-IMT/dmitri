@@ -66,9 +66,7 @@ class HomeScreen(DmitriScreen):
             option = menu.get_option_at_index(menu.highlighted)
             self._activate_item(option.id)
 
-    def _on_network_result(
-        self, result: tuple[str, str, str | None] | None
-    ) -> None:
+    def _on_network_result(self, result: tuple[str, str, str | None] | None) -> None:
         if result is None:
             return
         subnet, mode, nspi_submode = result

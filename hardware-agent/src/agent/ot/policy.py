@@ -9,9 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-AddressSpace = Literal[
-    "coil", "discrete_input", "holding_register", "input_register"
-]
+AddressSpace = Literal["coil", "discrete_input", "holding_register", "input_register"]
 CaptureValues = Literal["none", "summary", "raw"]
 
 MAX_MAPPING_RANGES_PER_PROFILE = 16

@@ -55,6 +55,10 @@ def _run_agent(args: list[str]) -> None:
         _print_agent_usage()
         raise SystemExit(2)
 
+    if len(args) == 3 and args[0] != "nspi":
+        _print_agent_usage()
+        raise SystemExit(2)
+
     if not _check_nmap():
         print("Error: nmap is not installed or not on PATH.", file=sys.stderr)
         print("Install nmap: https://nmap.org/download.html", file=sys.stderr)
@@ -71,9 +75,6 @@ def _run_agent(args: list[str]) -> None:
     nspi_submode = None
     if len(args) == 3:
         mode, nspi_submode, subnet = args
-        if mode != "nspi":
-            _print_agent_usage()
-            raise SystemExit(2)
     else:
         mode, subnet = args
     try:

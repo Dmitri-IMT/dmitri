@@ -70,8 +70,7 @@ def resolve_mapping_plan(
     discovered_ids = tuple(
         unit.unit_id
         for unit in sorted(service.units, key=lambda item: item.unit_id)
-        if 1 <= unit.unit_id <= 247
-        and unit.status in {"responding", "exception"}
+        if 1 <= unit.unit_id <= 247 and unit.status in {"responding", "exception"}
     )[:4]
     vendors, products = _fingerprint_values(service)
     matching = [
