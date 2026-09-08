@@ -57,6 +57,8 @@ EXTENSIVE_NSE_SCRIPTS = (
 )
 
 NSPI_PORTS = "502,4840,44818,445,139,3389,5985"
+NSPI_SCRIPT_TIMEOUT = "200s"
+NSPI_HOST_TIMEOUT = "600s"
 
 NSPI_NSE_SCRIPTS = (
     "modbus-discover",
@@ -125,7 +127,7 @@ TIMEOUTS: dict[str, dict[str, float]] = {
         "quick": 900.0,
         "standard": 1200.0,
         "extensive": 2400.0,
-        "nspi": 1200.0,
+        "nspi": 600.0,
         "max": 3600.0,
     },
 }

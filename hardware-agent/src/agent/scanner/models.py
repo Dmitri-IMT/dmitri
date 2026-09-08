@@ -67,6 +67,7 @@ class PortScanResult:
 
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None
+    skipped: bool = False
 
 
 @dataclass(slots=True)

@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from agent.config import NSPI_PORTS, port_stage_scripts
+from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS, port_stage_scripts
 from agent.scanner.models import PortInfo, PortScanResult
 from agent.scanner.nmap import NmapRunner
 from agent.utils.nmap_xml import extract_ipv4, parse_operating_system, parse_ports
 
-NSPI_PASS1_ARGS = ["-Pn", "-T4", "-n", "-sV", "-O"]
-NSPI_PASS2_ARGS = ["-Pn", "-T2", "-n", "-p", NSPI_PORTS, "-sV"]
+NSPI_PASS1_ARGS = ["-Pn", "-T4", "-n", "--host-timeout", NSPI_HOST_TIMEOUT]
+NSPI_PASS2_ARGS = [
+    "-Pn",
+    "-T2",
+    "-n",
+    "-p",
+    NSPI_PORTS,
+    "-sV",
+    "--host-timeout",
+    NSPI_HOST_TIMEOUT,
+]
 
 
 def merge_ports(
@@ -54,6 +63,7 @@ def merge_port_scan_results(
     return PortScanResult(
         ports=merge_ports(existing.ports, incoming.ports),
         operating_system=operating_system,
+        skipped=existing.skipped or incoming.skipped,
     )
 
 
@@ -118,6 +128,8 @@ def _scan_ports_batch_nspi(
     """NSPi two-pass port scan: top-1000 + OT-specific ports, merged."""
 
     results = {ip: PortScanResult() for ip in ips}
+    pass1_hosts: set[str] = set()
+    pass2_hosts: set[str] = set()
 
     # Pass 1: top-1000 (no -p flag)
     pass1_args = [*NSPI_PASS1_ARGS, *ips]
@@ -125,6 +137,7 @@ def _scan_ports_batch_nspi(
     for host_element in root1.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:
+            pass1_hosts.add(ip)
             results[ip] = _parse_port_scan_result(host_element)
 
     # Pass 2: OT-specific ports
@@ -133,9 +146,13 @@ def _scan_ports_batch_nspi(
     for host_element in root2.findall("host"):
         ip = extract_ipv4(host_element)
         if ip:
+            pass2_hosts.add(ip)
             results[ip] = merge_port_scan_results(
                 results.get(ip, PortScanResult()),
                 _parse_port_scan_result(host_element),
             )
+
+    for ip in ips:
+        results[ip].skipped = ip not in pass1_hosts or ip not in pass2_hosts
 
     return results

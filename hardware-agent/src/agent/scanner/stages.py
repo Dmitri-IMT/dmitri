@@ -6,7 +6,12 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, TypeVar
 
-from agent.config import deep_stage_scripts, subprocess_timeout_for
+from agent.config import (
+    NSPI_HOST_TIMEOUT,
+    NSPI_SCRIPT_TIMEOUT,
+    deep_stage_scripts,
+    subprocess_timeout_for,
+)
 from agent.discovery.port_discovery import (
     NSPI_PASS1_ARGS,
     NSPI_PASS2_ARGS,
@@ -88,7 +93,7 @@ def run_port_stage(
     hosts: list[HostInfo],
     reporter: ScanReporter | None = None,
     cancel_event: threading.Event | None = None,
-) -> None:
+) -> int:
     set_runner_stage(runner, "ports")
     LOGGER.info(
         "Starting port scan stage for %s hosts using batches of %s.",
@@ -105,7 +110,6 @@ def run_port_stage(
     _emit(reporter, ScanEvent(kind="port_stage_started", message=started_message))
     batches_total = len(batches)
     batches_done = 0
-    batches_failed = 0
     hosts_skipped = 0
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
@@ -129,13 +133,11 @@ def run_port_stage(
             except CircuitBreakerError:
                 raise
             except BudgetExceeded:
-                batches_failed += 1
                 hosts_skipped += len(batch)
                 for ip in batch:
                     _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
                 LOGGER.warning("Port scan timed out for batch %s.", batch)
             except UnitScanError:
-                batches_failed += 1
                 hosts_skipped += len(batch)
                 for ip in batch:
                     _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
@@ -149,6 +151,14 @@ def run_port_stage(
                         key=lambda port: (port.port, port.protocol),
                     )
                     host.operating_system = result.operating_system
+                    if result.skipped:
+                        hosts_skipped += 1
+                        _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
+                        LOGGER.warning(
+                            "Port scan hit the host timeout for %s; "
+                            "partial evidence kept.",
+                            ip,
+                        )
                     LOGGER.info(
                         "Port scan finished for %s with %s ports.",
                         host.ip,
@@ -163,12 +173,9 @@ def run_port_stage(
                     batches_total=batches_total,
                 ),
             )
-            if (
-                batches_total
-                and batches_failed / batches_total > settings.unit_failure_threshold
-            ):
+            if hosts and hosts_skipped / len(hosts) > settings.unit_failure_threshold:
                 raise CircuitBreakerError(
-                    f"Port stage aborted: {batches_failed}/{batches_total} units failed"
+                    f"Port stage aborted: {hosts_skipped}/{len(hosts)} units failed"
                 )
     ports_open = sum(len(host.ports) for host in hosts)
     _emit(
@@ -181,6 +188,7 @@ def run_port_stage(
             units_total=len(hosts),
         ),
     )
+    return hosts_skipped
 
 
 def run_deep_inspection_stage(
@@ -189,7 +197,7 @@ def run_deep_inspection_stage(
     hosts: list[HostInfo],
     reporter: ScanReporter | None = None,
     cancel_event: threading.Event | None = None,
-) -> None:
+) -> int:
     set_runner_stage(runner, "nse")
     eligible_hosts = [host for host in hosts if host.open_ports]
     LOGGER.info(
@@ -210,6 +218,15 @@ def run_deep_inspection_stage(
     )
     hosts_done = 0
     hosts_skipped = 0
+    nspi_options = (
+        {
+            "script_timeout": NSPI_SCRIPT_TIMEOUT,
+            "host_timeout": NSPI_HOST_TIMEOUT,
+            "detect_os": True,
+        }
+        if settings.scan_mode == "nspi"
+        else {}
+    )
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         futures = {
             executor.submit(
@@ -223,6 +240,7 @@ def run_deep_inspection_stage(
                 scripts=deep_stage_scripts(settings.scan_mode),
                 min_cvss=settings.min_cvss,
                 timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
+                **nspi_options,
             ): host
             for host in eligible_hosts
         }
@@ -243,9 +261,25 @@ def run_deep_inspection_stage(
                 _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
                 LOGGER.warning("Deep inspection failed for %s.", host.ip)
             else:
-                if result is not None:
+                if result is None and settings.scan_mode == "nspi":
+                    hosts_skipped += 1
+                    _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
+                    LOGGER.warning(
+                        "Deep inspection hit the host timeout for %s.", host.ip
+                    )
+                elif result is not None:
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
+                    if (
+                        settings.scan_mode == "nspi"
+                        and result.operating_system is not None
+                        and (
+                            host.operating_system is None
+                            or result.operating_system.accuracy
+                            > host.operating_system.accuracy
+                        )
+                    ):
+                        host.operating_system = result.operating_system
                     LOGGER.info(
                         "Deep inspection finished for %s with %s open ports "
                         "and %s host scripts.",
@@ -281,6 +315,7 @@ def run_deep_inspection_stage(
             units_total=hosts_total,
         ),
     )
+    return hosts_skipped
 
 
 def run_ot_inspection_stage(
@@ -494,10 +529,15 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
     ot_inspection = (
         settings.nspi_submode if settings.scan_mode == "nspi" else "disabled"
     )
+    deep_inspection = f"-sV --version-intensity {settings.version_intensity}"
+    if settings.scan_mode == "nspi":
+        deep_inspection += (
+            f" -O --script-timeout {NSPI_SCRIPT_TIMEOUT}"
+            f" --host-timeout {NSPI_HOST_TIMEOUT}"
+        )
     return (
         f"discovery=-sn -PE -T4; ports={port_stage}; "
-        "deep_inspection="
-        f"-sV --version-intensity {settings.version_intensity}; "
+        f"deep_inspection={deep_inspection}; "
         "scripts="
         f"{','.join(deep_scripts)}; "
         f"min_cvss={settings.min_cvss}; "

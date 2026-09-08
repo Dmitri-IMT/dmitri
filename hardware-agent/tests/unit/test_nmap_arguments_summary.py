@@ -25,7 +25,10 @@ class TestNmapArgumentsSummary:
     def test_nspi_port_stage_describes_both_passes(self) -> None:
         summary = nmap_arguments_summary(AgentSettings(scan_mode="nspi"))
         assert "pass1:-Pn -T4" in summary
+        assert "pass2:-Pn -T2 -n -p 502,4840,44818,445,139,3389,5985 -sV" in summary
+        port_summary = summary.split("ports=", 1)[1].split("; deep_inspection=", 1)[0]
+        assert "--script" not in port_summary
         assert (
-            "pass2:-Pn -T2 -n -p 502,4840,44818,445,139,3389,5985 -sV" in summary
-        )
-        assert "--script" not in summary
+            "deep_inspection=-sV --version-intensity 5 -O "
+            "--script-timeout 60s --host-timeout 300s"
+        ) in summary

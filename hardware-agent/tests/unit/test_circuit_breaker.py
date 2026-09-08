@@ -134,3 +134,26 @@ class TestPortStageCircuitBreaker:
         done = _kinds(reporter.events, "port_stage_done")
         assert len(done) == 1
         assert done[0].units_skipped == 1
+
+    def test_uses_failed_hosts_not_failed_batches(self, monkeypatch) -> None:
+        hosts = [
+            HostInfo(ip=f"10.0.0.{index}", hostname=f"10.0.0.{index}")
+            for index in range(1, 6)
+        ]
+        monkeypatch.setattr(
+            "agent.scanner.stages.scan_ports_batch",
+            _ports_fake({"10.0.0.5": UnitScanError("boom")}),
+        )
+        settings = AgentSettings(
+            scan_mode="standard",
+            max_workers=1,
+            host_batch_size=4,
+            unit_failure_threshold=0.3,
+        )
+        reporter = _FakeReporter()
+
+        skipped = run_port_stage(_DummyRunner(), settings, hosts, reporter=reporter)
+
+        assert skipped == 1
+        done = _kinds(reporter.events, "port_stage_done")
+        assert done[0].units_skipped == 1

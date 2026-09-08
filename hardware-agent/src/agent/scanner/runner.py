@@ -239,27 +239,34 @@ class ScanRunner:
             )
 
             interrupted_stage = None
+            hosts_skipped = 0
             if hosts:
                 interrupted_stage = "ports"
                 self._check_cancel()
                 self._check_deadline(deadline)
-                stages.run_port_stage(
-                    runner,
-                    settings,
-                    hosts,
-                    reporter=self._reporter,
-                    cancel_event=self._cancel_event,
+                hosts_skipped += (
+                    stages.run_port_stage(
+                        runner,
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                    )
+                    or 0
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
 
                 interrupted_stage = "deep_inspection"
-                stages.run_deep_inspection_stage(
-                    runner,
-                    settings,
-                    hosts,
-                    reporter=self._reporter,
-                    cancel_event=self._cancel_event,
+                hosts_skipped += (
+                    stages.run_deep_inspection_stage(
+                        runner,
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                    )
+                    or 0
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
@@ -298,7 +305,7 @@ class ScanRunner:
                 runner=runner,
                 started_counter=started_counter,
                 hosts=hosts,
-                partial_result=False,
+                partial_result=hosts_skipped > 0,
                 interrupted_stage=None,
                 terminated_by="completed",
             )

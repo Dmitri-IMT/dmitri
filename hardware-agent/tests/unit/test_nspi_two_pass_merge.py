@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from agent.config import NSPI_PORTS
+from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
 from agent.discovery.port_discovery import scan_ports_batch
-from agent.scanner.models import OperatingSystemInfo
 from agent.scanner.nmap import NmapRunner
 
 
-def _nmap_xml(
-    ip: str,
-    ports: list[int],
-    operating_system: tuple[str, int] | None = None,
-) -> ET.Element:
+def _nmap_xml(ip: str, ports: list[int]) -> ET.Element:
     """Build minimal nmap XML with open TCP ports for a single host."""
     root = ET.Element("nmaprun")
     host = ET.SubElement(root, "host")
@@ -32,14 +27,6 @@ def _nmap_xml(
         state.set("state", "open")
         service = ET.SubElement(port, "service")
         service.set("name", "unknown")
-    if operating_system is not None:
-        os_element = ET.SubElement(host, "os")
-        ET.SubElement(
-            os_element,
-            "osmatch",
-            name=operating_system[0],
-            accuracy=str(operating_system[1]),
-        )
     return root
 
 
@@ -47,8 +34,8 @@ def _make_nspi_runner(
     pass1_ports: list[int],
     pass2_ports: list[int],
     ip: str = "10.0.0.1",
-    pass1_os: tuple[str, int] | None = None,
-    pass2_os: tuple[str, int] | None = None,
+    pass1_present: bool = True,
+    pass2_present: bool = True,
 ) -> tuple[NmapRunner, list[list[str]]]:
     runner = NmapRunner.__new__(NmapRunner)
     runner.nmap_path = "nmap"
@@ -60,9 +47,11 @@ def _make_nspi_runner(
         captured.append(list(arguments))
         first_pass = call_count == 0
         ports = pass1_ports if first_pass else pass2_ports
-        operating_system = pass1_os if first_pass else pass2_os
         call_count += 1
-        return _nmap_xml(ip, ports, operating_system)
+        present = pass1_present if first_pass else pass2_present
+        if not present:
+            return ET.Element("nmaprun")
+        return _nmap_xml(ip, ports)
 
     runner.run_xml = _capture  # type: ignore[assignment]
     return runner, captured
@@ -125,56 +114,59 @@ class TestNspiTwoPassMerge:
         for argv in captured:
             assert "-n" in argv
 
-    def test_pass2_without_os_retains_pass1_detection(self) -> None:
+    def test_pass1_only_enumerates_ports(self) -> None:
+        runner, captured = _make_nspi_runner(
+            pass1_ports=[22],
+            pass2_ports=[502],
+        )
+
+        scan_ports_batch(runner, ["10.0.0.1"], "nspi")
+
+        assert "-sV" not in captured[0]
+        assert "-O" not in captured[0]
+
+    def test_both_passes_have_per_host_timeout(self) -> None:
+        runner, captured = _make_nspi_runner(
+            pass1_ports=[22],
+            pass2_ports=[502],
+        )
+
+        scan_ports_batch(runner, ["10.0.0.1"], "nspi")
+
+        for arguments in captured:
+            timeout_index = arguments.index("--host-timeout")
+            assert arguments[timeout_index + 1] == NSPI_HOST_TIMEOUT
+
+    def test_completed_host_is_not_marked_skipped(self) -> None:
         runner, _ = _make_nspi_runner(
             pass1_ports=[22],
             pass2_ports=[502],
-            pass1_os=("Linux", 96),
         )
 
         result = scan_ports_batch(runner, ["10.0.0.1"], "nspi")["10.0.0.1"]
 
-        assert result.operating_system == OperatingSystemInfo(
-            name="Linux", accuracy=96
-        )
+        assert result.skipped is False
 
-    def test_pass2_detection_is_used_when_pass1_has_none(self) -> None:
+    def test_host_missing_from_first_pass_is_marked_skipped(self) -> None:
         runner, _ = _make_nspi_runner(
             pass1_ports=[22],
             pass2_ports=[502],
-            pass2_os=("Embedded Linux", 87),
+            pass1_present=False,
         )
 
         result = scan_ports_batch(runner, ["10.0.0.1"], "nspi")["10.0.0.1"]
 
-        assert result.operating_system == OperatingSystemInfo(
-            name="Embedded Linux", accuracy=87
-        )
+        assert result.skipped is True
+        assert [port.port for port in result.ports] == [502]
 
-    def test_stronger_pass2_detection_replaces_pass1(self) -> None:
+    def test_host_missing_from_second_pass_is_marked_skipped(self) -> None:
         runner, _ = _make_nspi_runner(
             pass1_ports=[22],
             pass2_ports=[502],
-            pass1_os=("Linux", 85),
-            pass2_os=("Embedded Linux", 97),
+            pass2_present=False,
         )
 
         result = scan_ports_batch(runner, ["10.0.0.1"], "nspi")["10.0.0.1"]
 
-        assert result.operating_system == OperatingSystemInfo(
-            name="Embedded Linux", accuracy=97
-        )
-
-    def test_equal_pass2_detection_retains_existing_detection(self) -> None:
-        runner, _ = _make_nspi_runner(
-            pass1_ports=[22],
-            pass2_ports=[502],
-            pass1_os=("First", 90),
-            pass2_os=("Second", 90),
-        )
-
-        result = scan_ports_batch(runner, ["10.0.0.1"], "nspi")["10.0.0.1"]
-
-        assert result.operating_system == OperatingSystemInfo(
-            name="First", accuracy=90
-        )
+        assert result.skipped is True
+        assert [port.port for port in result.ports] == [22]

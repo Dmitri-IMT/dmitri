@@ -228,3 +228,23 @@ class TestZeroHosts:
         runner._run()
 
         assert completed[0].hosts == []
+
+
+class TestCompletedWithSkippedHosts:
+    def test_marks_payload_partial_when_port_stage_skips_host(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch,
+            hosts=_one_host(),
+            port_stage=lambda *args, **kwargs: 1,
+        )
+
+        runner._run()
+
+        assert len(completed) == 1
+        assert errors == []
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is True
+        assert metadata["terminated_by"] == "completed"
+        assert "interrupted_stage" not in metadata

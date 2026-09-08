@@ -94,7 +94,7 @@ def test_port_stage_attaches_missing_evidence_as_none() -> None:
     assert host.operating_system is None
 
 
-def test_deep_inspection_does_not_replace_port_stage_os(
+def test_standard_deep_inspection_does_not_replace_port_stage_os(
     monkeypatch,
 ) -> None:
     port_stage_os = OperatingSystemInfo(name="Linux", accuracy=96)
@@ -126,3 +126,39 @@ def test_deep_inspection_does_not_replace_port_stage_os(
     )
 
     assert host.operating_system is port_stage_os
+
+
+def test_nspi_deep_inspection_attaches_operating_system(monkeypatch) -> None:
+    detected_os = OperatingSystemInfo(name="Embedded Linux", accuracy=94)
+    host = HostInfo(
+        ip="10.0.0.5",
+        hostname="host-five",
+        ports=[PortInfo(port=502)],
+    )
+    captured_kwargs: dict = {}
+
+    def _deep_scan(*args, **kwargs) -> HostInfo:
+        del args
+        captured_kwargs.update(kwargs)
+        return HostInfo(
+            ip="10.0.0.5",
+            hostname="host-five",
+            ports=[PortInfo(port=502)],
+            operating_system=detected_os,
+        )
+
+    monkeypatch.setattr(
+        "agent.scanner.stages.run_nse_vulnerability_scan",
+        _deep_scan,
+    )
+
+    run_deep_inspection_stage(
+        _ReversedHostRunner(),
+        AgentSettings(scan_mode="nspi", max_workers=1),
+        [host],
+    )
+
+    assert captured_kwargs["detect_os"] is True
+    assert captured_kwargs["script_timeout"] == "60s"
+    assert captured_kwargs["host_timeout"] == "300s"
+    assert host.operating_system is detected_os
