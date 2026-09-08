@@ -216,7 +216,7 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
 - **Autenticação**: assinatura Ed25519 (chave privada no dispositivo; backend verifica com a chave pública, sem guardar segredo)
 - **Payload**: JSON contendo:
   - Metadados do scan (timestamp, `scan_id`, rede escaneada e modo)
-  - Resultados normalizados de Nmap + NSE
+  - Resultados normalizados de Nmap + NSE, incluindo a melhor detecção de sistema operacional e sua precisão quando disponíveis
   - Hosts, portas, serviços, versões e CVEs encontrados
 - **Formato de autenticação**: Header customizado + assinatura do body (método + path + timestamp + body hash)
 - **Resposta esperada**: `202 Accepted` com ID do scan registrado
