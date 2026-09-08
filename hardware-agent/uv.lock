@@ -139,6 +139,7 @@ dependencies = [
     { name = "httpx" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "pymodbus" },
     { name = "textual" },
     { name = "websockets" },
 ]
@@ -157,6 +158,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.6.0" },
+    { name = "pymodbus", specifier = "==3.13.1" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pyyaml", marker = "extra == 'dev'" },
@@ -393,6 +395,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+]
+
+[[package]]
+name = "pymodbus"
+version = "3.13.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/e4/68aa328d8c07583b1fe382f231d614bc1ebf3a86aa09db1a9c045c33c1df/pymodbus-3.13.1.tar.gz", hash = "sha256:7a74ea0a4eb4895f518b34de32915ba4fde216576e09deaf735a279a9281af4f", size = 166178, upload-time = "2026-06-13T17:02:09.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/84/cdd3f6af834dac9e3bfaeca1f37c4dbfd305943305670c48499950e4e1cd/pymodbus-3.13.1-py3-none-any.whl", hash = "sha256:820167a9c6a13d698d7ff49e8420f8fbbdd8fec3f75aacd46a35f4ab9a000144", size = 166529, upload-time = "2026-06-13T17:02:08.374Z" },
 ]
 
 [[package]]

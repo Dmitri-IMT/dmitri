@@ -91,6 +91,33 @@ def test_deliver_success_sets_delivered_at_and_stub_scan(
     assert started[0].payload == {"scan_mode": "standard"}
 
 
+def test_deliver_preserves_nspi_options_in_frame(
+    administrative_session: Session, provisioned_agent, seeded_org
+):
+    command = Command(
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_mode="nspi",
+        subnet="192.168.1.0/24",
+        nspi_options={"version": 1, "submode": "read_only_mapping"},
+        status="queued",
+    )
+    administrative_session.add(command)
+    administrative_session.commit()
+    administrative_session.refresh(command)
+    ws = AsyncMock()
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        await commands.deliver(administrative_session, command=command, now=T0)
+
+    asyncio.run(run())
+
+    frame = AgentCommandFrame.model_validate_json(ws.send_text.await_args.args[0])
+    assert frame.nspi_options is not None
+    assert frame.nspi_options.submode == "read_only_mapping"
+
+
 @pytest.mark.parametrize(
     "send_error",
     [

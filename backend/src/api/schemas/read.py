@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, constr
 from api.core.error_codes import ScanErrorCode
 from api.core.severity import Severity
 
+from .operating_system import OperatingSystemDetection
+
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
@@ -35,6 +37,7 @@ class ScanHostView(BaseModel):
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
+    operating_system: OperatingSystemDetection | None = None
     ports: list[Port]
 
 
@@ -69,6 +72,7 @@ class HostSummary(BaseModel):
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: str
     vendor: str
+    operating_system: OperatingSystemDetection | None = None
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
@@ -81,6 +85,7 @@ class HostScanHistoryEntry(BaseModel):
     scan_id: UUID
     timestamp: datetime
     scan_mode: ScanMode
+    operating_system: OperatingSystemDetection | None = None
     open_ports_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
 
@@ -93,6 +98,7 @@ class HostDetailResponse(BaseModel):
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: str
     vendor: str
+    operating_system: OperatingSystemDetection | None = None
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]

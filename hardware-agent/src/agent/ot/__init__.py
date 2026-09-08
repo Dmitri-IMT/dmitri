@@ -1,0 +1,1 @@
+"""Industrial protocol inventory support."""

@@ -80,6 +80,48 @@ describe('DeviceDetail command lifecycle', () => {
       ).toHaveLength(1)
     })
 
+    it('sends the selected NSPi read-only mapping submode', async () => {
+      const user = userEvent.setup()
+      let body: unknown
+      server.use(
+        http.post(
+          `${baseURL}/agents/:agentId/commands`,
+          async ({ request }) => {
+            body = await request.json()
+            return HttpResponse.json(
+              {
+                command_id: defaultCommand.command_id,
+                scan_id: defaultCommand.scan_id,
+                agent_id: defaultAgent.agent_id,
+                status: 'queued' as const,
+              },
+              { status: 201 },
+            )
+          },
+        ),
+      )
+      renderDeviceDetail()
+
+      await user.click(await screen.findByTestId('scan-type-tab-nspi'))
+      await user.click(screen.getByRole('combobox', { name: 'NSPi submode' }))
+      await user.click(
+        screen.getByRole('option', { name: 'Read-only mapping' }),
+      )
+      await user.click(screen.getByTestId('agents-scan-now'))
+
+      await waitFor(() =>
+        expect(body).toEqual({
+          scan_mode: 'nspi',
+          subnet: '192.168.0.0/24',
+          nspi_options: {
+            version: 1,
+            submode: 'read_only_mapping',
+            active_risk_acknowledged: false,
+          },
+        }),
+      )
+    })
+
     it('polls through all running states and stops at done', async () => {
       vi.useFakeTimers()
       const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus')

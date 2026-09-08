@@ -4,7 +4,7 @@ import threading
 
 from agent.config import AgentSettings, subprocess_timeout_for
 from agent.scanner.errors import BudgetExceeded, TransientScanError, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.scanner.models import HostInfo, PortInfo, PortScanResult, ScriptResult
 from agent.scanner.progress import STAGE_WEIGHTS, ScanEvent, target_pct
 from agent.scanner.stages import (
     build_metadata,
@@ -67,7 +67,10 @@ def _make_ports_fake(
             exc = failures.get(ip)
             if exc is not None:
                 raise exc
-        return {ip: ports_by_ip.get(ip, []) for ip in ips}
+        return {
+            ip: PortScanResult(ports=ports_by_ip.get(ip, []))
+            for ip in ips
+        }
 
     return fake
 
@@ -263,6 +266,43 @@ class TestPortStageUnitFailureIsolated:
         assert sorted(event.ip for event in timed_out) == ["10.0.0.1", "10.0.0.2"]
         by_ip = {host.ip: host for host in hosts}
         assert len(by_ip["10.0.0.3"].ports) == 1
+
+    def test_nmap_host_timeout_keeps_evidence_and_counts_skip(
+        self, monkeypatch
+    ) -> None:
+        hosts = self._hosts()
+
+        def _partial_batch(runner, ips, scan_mode, timeout=None):
+            del runner, scan_mode, timeout
+            return {
+                ip: PortScanResult(
+                    ports=[PortInfo(port=502)] if ip == "10.0.0.2" else [],
+                    skipped=ip == "10.0.0.2",
+                )
+                for ip in ips
+            }
+
+        monkeypatch.setattr(
+            "agent.scanner.stages.scan_ports_batch",
+            _partial_batch,
+        )
+        reporter = _FakeReporter()
+
+        skipped = run_port_stage(
+            _DummyRunner(),
+            AgentSettings(
+                scan_mode="nspi",
+                max_workers=1,
+                host_batch_size=4,
+            ),
+            hosts,
+            reporter=reporter,
+        )
+
+        assert skipped == 1
+        assert [port.port for port in hosts[1].ports] == [502]
+        timed_out = _kinds(reporter.events, "unit_timed_out")
+        assert [event.ip for event in timed_out] == ["10.0.0.2"]
 
 
 class TestCancelStopsReadingFutures:

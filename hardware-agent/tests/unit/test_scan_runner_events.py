@@ -3,6 +3,8 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 import pytest
+from agent.ot.modbus.models import ModbusService, ModbusUnit
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.scanner.runner import ScanRunner
@@ -41,6 +43,64 @@ def _kinds(events: list[ScanEvent]) -> list[str]:
 
 
 class TestScanRunnerSuccess:
+    def test_nspi_runs_ot_inventory_after_existing_deep_stage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.check_network_connectivity", lambda: None
+        )
+        host = HostInfo(ip="192.168.10.30", hostname="plc-lab")
+        monkeypatch.setattr(
+            "agent.scanner.runner.discover_hosts",
+            lambda runner, subnet, timeout=None: [host],
+        )
+        order = []
+
+        def port_stage(runner, settings, hosts, **kwargs):
+            order.append("ports")
+            hosts[0].ports = [
+                PortInfo(port=502, service=ServiceInfo(name="modbus"))
+            ]
+
+        def deep_stage(runner, settings, hosts, **kwargs):
+            order.append("deep")
+
+        def ot_stage(settings, hosts, **kwargs):
+            order.append("ot")
+            hosts[0].industrial_services = [
+                ModbusService(
+                    port=502,
+                    confidence="confirmed",
+                    units=[ModbusUnit(unit_id=1, status="responding")],
+                    requests_sent=1,
+                )
+            ]
+
+        monkeypatch.setattr("agent.scanner.stages.run_port_stage", port_stage)
+        monkeypatch.setattr(
+            "agent.scanner.stages.run_deep_inspection_stage",
+            deep_stage,
+        )
+        monkeypatch.setattr(
+            "agent.scanner.stages.run_ot_inspection_stage",
+            ot_stage,
+        )
+        completed = []
+        scan_runner = ScanRunner(
+            subnet="192.168.10.0/24",
+            scan_mode="nspi",
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        )
+
+        scan_runner.run_blocking()
+
+        assert order == ["ports", "deep", "ot"]
+        assert len(completed) == 1
+        assert completed[0].metadata["nspi_submode"] == "inventory"
+        assert completed[0].metadata["modbus_confirmed"] == 1
+        assert completed[0].hosts[0].industrial_services[0].units[0].unit_id == 1
+
     def test_emits_discovery_normalize_completed_in_order(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

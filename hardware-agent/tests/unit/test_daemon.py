@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from agent.daemon import AgentDaemon
 from agent.headless import HeadlessScanResult
-from agent.transport.command_channel import AgentCommand, AgentStatus
+from agent.transport.command_channel import AgentCommand, AgentStatus, NspiOptions
 from agent.transport.ingest import SubmissionResult
 
 TIMEOUT = 5.0
@@ -47,14 +47,16 @@ def scan_result(
 
 class FakeScan:
     def __init__(self, *results: Any, gate: threading.Event | None = None) -> None:
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, str | None]] = []
         self.threads: list[int] = []
         self.started = threading.Event()
         self._results = list(results) or [scan_result()]
         self._gate = gate
 
-    def __call__(self, mode: str, subnet: str) -> HeadlessScanResult:
-        self.calls.append((mode, subnet))
+    def __call__(
+        self, mode: str, subnet: str, *, nspi_submode: str | None = None
+    ) -> HeadlessScanResult:
+        self.calls.append((mode, subnet, nspi_submode))
         self.threads.append(threading.get_ident())
         self.started.set()
         if self._gate is not None:
@@ -245,8 +247,26 @@ class TestFrameOrder:
 
         await dispatch(daemon, subject)
 
-        assert scan.calls == [(subject.scan_mode, subject.subnet)]
+        assert scan.calls == [(subject.scan_mode, subject.subnet, None)]
         assert ingest.calls == [(PAYLOAD, subject.scan_id)]
+
+    @pytest.mark.asyncio
+    async def test_nspi_submode_is_forwarded_to_headless_runner(self) -> None:
+        daemon, _, scan, _ = build()
+        subject = AgentCommand(
+            type="command",
+            command_id=uuid4(),
+            scan_id=uuid4(),
+            scan_mode="nspi",
+            subnet="192.168.1.0/24",
+            nspi_options=NspiOptions(submode="read_only_mapping"),
+        )
+
+        await dispatch(daemon, subject)
+
+        assert scan.calls == [
+            ("nspi", "192.168.1.0/24", "read_only_mapping")
+        ]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -301,7 +321,7 @@ class TestResponsiveness:
         await drain()
 
         assert client.frames(active)[-1] == ("done", None)
-        assert scan.calls == [(active.scan_mode, active.subnet)]
+        assert scan.calls == [(active.scan_mode, active.subnet, None)]
         assert len(ingest.calls) == 1
 
 

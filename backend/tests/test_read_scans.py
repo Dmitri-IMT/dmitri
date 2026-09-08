@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import pydantic
 import pytest
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
+from api.services.read import get_scan_detail
 from read_factories import seed_read_graph
 from sqlmodel import Session
 from starlette.testclient import TestClient
@@ -70,6 +72,64 @@ def test_get_scan_by_id_happy_path(
     for finding in body["findings"]:
         assert finding["host_id"] == expected_finding_host_ids[finding["finding_id"]]
     assert body["error_code"] is None
+
+
+def test_get_scan_by_id_returns_scan_host_operating_system_snapshot(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    snapshot = {
+        "name": "Linux 5",
+        "accuracy": 91,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": ["cpe:/o:linux:linux_kernel:5"],
+    }
+    seeded["scan_host"].operating_system_json = snapshot
+    seeded["host"].operating_system_json = {
+        "name": "Linux 6",
+        "accuracy": 98,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "6.X",
+        "device_type": "general purpose",
+        "cpes": ["cpe:/o:linux:linux_kernel:6"],
+    }
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    row = next(
+        host
+        for host in response.json()["hosts"]
+        if host["host_id"] == str(seeded["host"].id)
+    )
+    assert row["operating_system"] == snapshot
+
+
+def test_scan_read_rejects_malformed_persisted_operating_system_snapshot(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["scan_host"].operating_system_json = {
+        "name": "Linux",
+        "accuracy": 101,
+        "cpes": [],
+    }
+    administrative_session.commit()
+
+    with pytest.raises(pydantic.ValidationError):
+        get_scan_detail(
+            administrative_session,
+            seeded["scan"].scan_id,
+            org_id=seeded["org"].id,
+        )
 
 
 def test_get_scan_by_id_failed_body_has_error_code_and_command_id(

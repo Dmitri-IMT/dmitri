@@ -18,6 +18,7 @@ from api.models.persistence import (
     ScanRecord,
     ServiceRecord,
 )
+from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
     FindingListResponse,
     FindingRead,
@@ -120,6 +121,7 @@ def get_host_detail(
             scan_id=scan.scan_id,
             timestamp=scan.timestamp,
             scan_mode=scan.scan_mode,
+            operating_system=_to_operating_system(scan_host.operating_system_json),
             open_ports_count=open_ports_count(session, scan_host.id),
             highest_severity=highest_severity(session, scan_host.id),
         )
@@ -132,6 +134,7 @@ def get_host_detail(
         mac=host.mac,
         hostname=host.hostname,
         vendor=host.vendor,
+        operating_system=_to_operating_system(host.operating_system_json),
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
@@ -162,6 +165,9 @@ def get_scan_detail(
             mac=scan_host.mac,
             hostname=scan_host.hostname,
             vendor=scan_host.vendor,
+            operating_system=_to_operating_system(
+                scan_host.operating_system_json
+            ),
             ports=_ports_for_scan_host(session, scan_host.id),
         )
         for scan_host in scan_hosts
@@ -372,11 +378,20 @@ def _to_host_summary(host: HostRecord) -> HostSummary:
         mac=host.mac,
         hostname=host.hostname,
         vendor=host.vendor,
+        operating_system=_to_operating_system(host.operating_system_json),
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
         highest_severity=host.highest_severity,
     )
+
+
+def _to_operating_system(
+    value: dict[str, object] | None,
+) -> OperatingSystemDetection | None:
+    if value is None:
+        return None
+    return OperatingSystemDetection.model_validate(value)
 
 
 def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:

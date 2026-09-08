@@ -17,6 +17,12 @@ Python-based service intended to run on a Raspberry Pi with Raspberry Pi OS Lite
   - vulnerability correlation with `vulners` plus SMB, SSH, HTTP, and TLS context scripts
 - XML output is parsed into normalized devices, ports, and findings.
 - The TUI entrypoint writes a JSON payload compatible with the shared contracts.
+- `nspi` adds a sequential Modbus stage after the existing 14 NSE scripts.
+  `inventory` reuses `modbus-discover` and a bounded FC43/MEI 14 fallback.
+  `read_only_mapping` additionally performs bounded FC01-FC04 reads from a
+  local profile or the conservative built-in baseline. Neither submode sends
+  writes. Exact FC43 Schneider M340/M580 fingerprints can enter the existing
+  CPE/NVD enrichment path.
 
 ## Running the Agent
 
@@ -39,10 +45,20 @@ Headless scans (no TUI):
 
 ```bash
 uv run dmitri agent quick 192.168.1.0/24
+uv run dmitri agent nspi 192.168.1.0/24
+uv run dmitri agent nspi read_only_mapping 192.168.1.0/24
 ```
 
+The headless command prints the exact result-file path to stdout. Modbus data is
+stored under each host's `industrial_services` property. See the
+[inventory](../docs/tests/nspi-modbus-inventory.md) and
+[read-only mapping](../docs/tests/nspi-modbus-read-only-mapping.md) laboratory
+checklists. An optional mapping policy is loaded from
+`~/.config/dmitri/ot-policy.json` or `DMITRI_OT_POLICY_PATH`.
+
 ## Integration Points
-- Scan mode and subnet are chosen in the TUI or passed to `dmitri agent <mode> <subnet>`.
+- Scan mode and subnet are chosen in the TUI or passed to
+  `dmitri agent <mode> [<nspi-submode>] <subnet>`.
 - Produces JSON payloads compatible with the shared contracts in `../contracts/`.
 - Writes the normalized payload to `hardware-agent/artifacts/` for later analysis.
 

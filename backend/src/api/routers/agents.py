@@ -118,6 +118,11 @@ async def create_agent_command(
             agent_id=agent_id,
             scan_mode=body.scan_mode,
             subnet=body.subnet,
+            nspi_options=(
+                body.nspi_options.model_dump()
+                if body.nspi_options is not None
+                else None
+            ),
             now=utc_now(),
         )
     except commands.AgentNotFoundError as exc:

@@ -10,10 +10,17 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
-from agent.config import AgentSettings, min_cvss_for_mode, subprocess_timeout_for
+from agent.config import (
+    AgentSettings,
+    NspiSubmode,
+    min_cvss_for_mode,
+    subprocess_timeout_for,
+)
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
+from agent.ot.modbus.client import ModbusClientController
+from agent.ot.policy import OtAutomationPolicy, load_ot_policy
 from agent.scanner import stages
 from agent.scanner.errors import (
     BudgetExceeded,
@@ -38,6 +45,8 @@ class ScanRunner:
         on_error: Callable[[Exception], None] | None = None,
         workspace_root: Path | None = None,
         runner: NmapRunner | None = None,
+        nspi_submode: NspiSubmode = "inventory",
+        ot_policy: OtAutomationPolicy | None = None,
     ) -> None:
         self.subnet = subnet
         self.scan_mode = scan_mode
@@ -46,10 +55,13 @@ class ScanRunner:
         self._on_error = on_error
         self._workspace_root = workspace_root
         self._runner = runner
+        self.nspi_submode = nspi_submode
+        self._ot_policy = ot_policy
         self._cancel_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._runner_lock = threading.Lock()
         self._active_runner: NmapRunner | None = None
+        self._modbus_controller = ModbusClientController()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -64,6 +76,7 @@ class ScanRunner:
             runner = self._active_runner
         if runner is not None:
             runner.terminate_active()
+        self._modbus_controller.cancel()
 
     @property
     def is_cancelled(self) -> bool:
@@ -111,6 +124,7 @@ class ScanRunner:
                 elapsed_seconds=elapsed_seconds,
                 hosts_discovered=len(hosts),
                 findings_count=len(findings),
+                hosts=hosts,
                 partial_result=partial_result,
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
@@ -175,6 +189,7 @@ class ScanRunner:
                 scan_subnet=self.subnet,
                 scan_mode=self.scan_mode,
                 min_cvss=min_cvss_for_mode(self.scan_mode),
+                nspi_submode=self.nspi_submode,
             )
             network_info = LocalNetworkInfo(
                 ip="0.0.0.0",
@@ -224,30 +239,59 @@ class ScanRunner:
             )
 
             interrupted_stage = None
+            hosts_skipped = 0
             if hosts:
                 interrupted_stage = "ports"
                 self._check_cancel()
                 self._check_deadline(deadline)
-                stages.run_port_stage(
-                    runner,
-                    settings,
-                    hosts,
-                    reporter=self._reporter,
-                    cancel_event=self._cancel_event,
+                hosts_skipped += (
+                    stages.run_port_stage(
+                        runner,
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                    )
+                    or 0
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
 
                 interrupted_stage = "deep_inspection"
-                stages.run_deep_inspection_stage(
-                    runner,
-                    settings,
-                    hosts,
-                    reporter=self._reporter,
-                    cancel_event=self._cancel_event,
+                hosts_skipped += (
+                    stages.run_deep_inspection_stage(
+                        runner,
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                    )
+                    or 0
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
+
+                if self.scan_mode == "nspi":
+                    interrupted_stage = "ot_inspection"
+                    stages.run_ot_inspection_stage(
+                        settings,
+                        hosts,
+                        reporter=self._reporter,
+                        cancel_event=self._cancel_event,
+                        modbus_controller=self._modbus_controller,
+                        policy=(
+                            self._ot_policy
+                            if self._ot_policy is not None
+                            else (
+                                load_ot_policy()
+                                if self.nspi_submode == "read_only_mapping"
+                                else OtAutomationPolicy()
+                            )
+                        ),
+                        deadline=deadline,
+                    )
+                    self._check_cancel()
+                    self._check_deadline(deadline)
 
             interrupted_stage = "normalize"
             self._emit(
@@ -261,7 +305,7 @@ class ScanRunner:
                 runner=runner,
                 started_counter=started_counter,
                 hosts=hosts,
-                partial_result=False,
+                partial_result=hosts_skipped > 0,
                 interrupted_stage=None,
                 terminated_by="completed",
             )

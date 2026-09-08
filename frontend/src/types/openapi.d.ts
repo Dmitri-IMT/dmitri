@@ -521,6 +521,20 @@ export interface components {
         /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
+        NspiSubmode: "inventory" | "read_only_mapping" | "active_validation";
+        NspiOptions: {
+            /**
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** @default inventory */
+            submode: components["schemas"]["NspiSubmode"];
+            /** @default false */
+            active_risk_acknowledged: boolean;
+            change_ticket?: string | null;
+        };
+        /** @enum {string} */
         CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
         /** @enum {string} */
         ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
@@ -546,14 +560,108 @@ export interface components {
             /** @default [] */
             cpes: string[];
         };
+        OperatingSystemDetection: {
+            name: string;
+            accuracy: number;
+            vendor?: string | null;
+            family?: string | null;
+            generation?: string | null;
+            device_type?: string | null;
+            /** @default [] */
+            cpes: string[];
+        };
+        ModbusDeviceIdentificationPayload: {
+            vendor_name?: string | null;
+            product_code?: string | null;
+            major_minor_revision?: string | null;
+            vendor_url?: string | null;
+            product_name?: string | null;
+            model_name?: string | null;
+            user_application_name?: string | null;
+            /** @default {} */
+            objects: {
+                [key: string]: string;
+            };
+        };
+        ModbusAddressRangePayload: {
+            /** @enum {string} */
+            address_space: "coil" | "discrete_input" | "holding_register" | "input_register";
+            start_address: number;
+            count: number;
+            /** @enum {string} */
+            status: "readable" | "illegal_address" | "illegal_function" | "timeout" | "error" | "skipped";
+            exception_code?: number | null;
+            label?: string | null;
+            nonzero_count?: number | null;
+            value_min?: number | null;
+            value_max?: number | null;
+            values?: (number | boolean)[] | null;
+            value_sha256?: string | null;
+            /** Format: date-time */
+            observed_at: string;
+        };
+        ModbusValidationPayload: {
+            /** @enum {string} */
+            address_space: "coil" | "holding_register";
+            address: number;
+            label: string;
+            /** @enum {integer} */
+            function_code: 5 | 6;
+            original_value?: number | boolean | null;
+            expected_current_value: number | boolean;
+            test_value: number | boolean;
+            /** @enum {string} */
+            write_status: "accepted" | "rejected" | "timeout" | "error" | "skipped";
+            read_back_value?: number | boolean | null;
+            /** @enum {string} */
+            restoration_status: "not_required" | "verified" | "unverified" | "failed";
+            final_value?: number | boolean | null;
+            change_ticket: string;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            completed_at: string;
+        };
+        ModbusUnitPayload: {
+            unit_id: number;
+            /** @enum {string} */
+            status: "responding" | "exception" | "timeout" | "error" | "skipped";
+            exception_code?: number | null;
+            error?: string | null;
+            device_identification?: components["schemas"]["ModbusDeviceIdentificationPayload"] | null;
+            /** @default [] */
+            identification_sources: string[];
+            /** @default [] */
+            address_ranges: components["schemas"]["ModbusAddressRangePayload"][];
+            /** @default [] */
+            validations: components["schemas"]["ModbusValidationPayload"][];
+        };
+        ModbusTcpServicePayload: {
+            /**
+             * @default modbus_tcp
+             * @constant
+             */
+            protocol: "modbus_tcp";
+            port: number;
+            /** @enum {string} */
+            confidence: "suspected" | "confirmed";
+            /** @default [] */
+            evidence_sources: string[];
+            mapping_source?: string | null;
+            /** @default [] */
+            units: components["schemas"]["ModbusUnitPayload"][];
+        };
         HostPayload: {
             /** Format: ipv4 */
             ip: string;
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** @default [] */
             ports: components["schemas"]["PortPayload"][];
+            /** @default [] */
+            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
         };
         ScanHostView: {
             /** Format: uuid */
@@ -563,6 +671,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             ports: components["schemas"]["Port"][];
         };
         FindingPayload: {
@@ -658,6 +767,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -671,6 +781,7 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             scan_mode: components["schemas"]["ScanMode"];
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             open_ports_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
         };
@@ -682,6 +793,7 @@ export interface components {
             mac: string | null;
             hostname: string;
             vendor: string;
+            operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -699,6 +811,7 @@ export interface components {
         CreateCommandRequest: {
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         CommandSummary: {
             /** Format: uuid */
@@ -716,6 +829,7 @@ export interface components {
             agent_id: string;
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
             status: components["schemas"]["CommandStatus"];
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             /** Format: date-time */
@@ -790,6 +904,7 @@ export interface components {
             scan_id: string;
             scan_mode: components["schemas"]["ScanMode"];
             subnet: string;
+            nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         /**
          * @description **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to

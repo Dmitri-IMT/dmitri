@@ -286,6 +286,11 @@ def _persist_scan_host(
         mac=host.mac,
         hostname=host.hostname,
         vendor=host.vendor,
+        operating_system_json=(
+            host.operating_system.model_dump(mode="json", exclude_none=True)
+            if host.operating_system is not None
+            else None
+        ),
     )
     session.add(record)
     session.flush()

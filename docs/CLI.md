@@ -34,6 +34,11 @@ uv run dmitri agent nspi 10.0.0.0/24
 - **`<mode>`** — one of: `quick`, `standard`, `extensive`, `nspi`, `max`
 - **`<subnet>`** — IPv4 CIDR (e.g. `192.168.1.0/24`); host addresses without a prefix are rejected
 
+`nspi` currently selects the `inventory` submode automatically. It keeps the
+existing NSE coverage and adds bounded Modbus identification after NSE. The
+result includes `metadata.nspi_submode = "inventory"` and each detected
+endpoint under `hosts[].industrial_services`.
+
 On success, prints one JSON line to **stdout**:
 
 ```json
