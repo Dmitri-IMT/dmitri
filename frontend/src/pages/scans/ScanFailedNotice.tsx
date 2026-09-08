@@ -1,4 +1,3 @@
-import StatusPill from '@/components/StatusPill'
 import { scanFailureReason } from '@/lib/scanFailureReasons'
 
 function ScanFailedNotice({
@@ -10,10 +9,10 @@ function ScanFailedNotice({
   return (
     <div
       data-testid="scan-failed"
-      className="flex flex-col items-center gap-6 py-16 text-center"
+      className="flex flex-col items-center gap-2 py-16 text-center"
     >
-      <StatusPill tone="failed" label="Failed" />
-      <p className="font-title text-title-sm">This scan didn&apos;t finish.</p>
+      <p className="text-body-md">Failed</p>
+      <p className="text-title-sm">This scan didn&apos;t finish.</p>
       <p
         data-testid="scan-failed-reason"
         className="max-w-prose text-body-md text-muted-foreground"

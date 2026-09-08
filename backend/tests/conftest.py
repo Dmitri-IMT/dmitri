@@ -36,9 +36,10 @@ from api.db.session import get_engine, get_session, reset_db_state  # noqa: E402
 from api.main import app  # noqa: E402
 from api.models import persistence  # noqa: E402, F401
 from api.models.command import Agent  # noqa: E402
-from api.models.identity import Org  # noqa: E402
+from api.models.identity import Org, User  # noqa: E402
 from api.models.persistence import utc_now  # noqa: E402
 from api.services import agent_connections, device_sig  # noqa: E402
+from api.services.passwords import hash_password  # noqa: E402
 from api.services.tokens import create_access_token  # noqa: E402
 
 # A developer's local backend/.env must not leak into the suite. CI has no such file, so
@@ -210,6 +211,34 @@ def client(administrative_session: Session) -> Generator[TestClient, None, None]
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture
+def actor_headers(
+    administrative_session: Session,
+) -> Callable[[UUID, str], dict[str, str]]:
+    """Bearer headers whose subject is a real `User` row.
+
+    Admin mutations denormalise the actor's email into the activity log, so the
+    caller has to exist. A token for a subject with no row is a dead session and
+    `require_user_row` answers 401 — use this instead of `bearer_headers`
+    wherever the route reads the caller's own record.
+    """
+
+    def _actor_headers(org_id: UUID, role: str) -> dict[str, str]:
+        actor = User(
+            org_id=org_id,
+            email=f"actor-{uuid4().hex[:12]}@corp.com",
+            password_hash=hash_password("Xk9$mQvL2pTz"),
+            role=role,
+        )
+        administrative_session.add(actor)
+        administrative_session.commit()
+        administrative_session.refresh(actor)
+        token = create_access_token(user_id=actor.id, org_id=org_id, role=role)
+        return {"Authorization": f"Bearer {token}"}
+
+    return _actor_headers
 
 
 @pytest.fixture

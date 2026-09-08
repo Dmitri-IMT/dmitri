@@ -1,423 +1,29 @@
 # UI Screens — Specs
 
-> **Status:** draft (2026-07-13) — **Foundations written**; the severity hexes are the only value
-> still open. Home is drafted; remaining screens are templates.
+> **Status:** the look is decided (2026-09-02, DMI-131) and lives in
+> [`FOUNDATIONS.md`](FOUNDATIONS.md); DMI-132 implements it. The screens re-decided by that
+> research — Home, Scans, Scan detail, Network, Network detail, Users — are re-specced below
+> against [`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html). Settings waits on
+> DMI-110.
 >
-> **This document is the source of truth for the UI.** Where it disagrees with an ADR or a roadmap
-> doc, it wins and they get reconciled to it — [`ADR-008`](../adr/ADR-008-frontend-stack.md) owns
-> the *stack*, this owns the *screens*. Bottom layer of the UI docs ladder:
-> [`REFERENCE.md`](REFERENCE.md) (principles) → [`FLOWS.md`](FLOWS.md) (breadboards) →
-> **SCREENS.md** (foundations, layouts, states, copy). A screen section may only be written after its
-> flow is locked in FLOWS.md, and each section is filled **top to bottom** — the template order is the
-> method: epicenter first, chrome last ([`REFERENCE.md`](REFERENCE.md) §2, §5, §6, §7).
+> **This document is the source of truth for the *screens*.** Where it disagrees with an ADR or a
+> roadmap doc, it wins and they get reconciled to it — [`ADR-008`](../adr/ADR-008-frontend-stack.md)
+> owns the *stack*, [`FOUNDATIONS.md`](FOUNDATIONS.md) owns the *look*, this owns the *screens*.
+> Bottom layer of the UI docs ladder: [`REFERENCE.md`](REFERENCE.md) (principles) →
+> [`FLOWS.md`](FLOWS.md) (breadboards) → **SCREENS.md** (layouts, states, copy). A screen section
+> may only be written after its flow is locked in FLOWS.md, and each section is filled **top to
+> bottom** — the template order is the method: epicenter first, chrome last
+> ([`REFERENCE.md`](REFERENCE.md) §2, §5, §6, §7).
 
 ## Foundations
 
-Shared decisions every screen inherits. A screen spec may not re-decide any of these; if a screen
-needs an exception, it changes the rule here or it doesn't ship.
-
-### App shell
-
-**Top bar, no sidebar.** One horizontal bar above every inside-shell screen: wordmark left, nav
-items (Home · Scans · Hosts · Agents · Users · Settings) centred, `[Log out]` right. **Users** is
-omitted for viewers, not disabled.
-
-**The nav is centred, and stays centred.** The wordmark holds the frame's left edge, `[Log out]`
-holds its right, and the navigation sits on the frame's centre line — growing symmetrically from
-it as destinations are added, never drifting toward either side. *Centred 2026-07-31; reverted
-to left-adjacent 2026-08-07; centred again and made permanent 2026-08-21 (DMI-107).*
-
-The 2026-08-07 reversal treated centring as a workaround for a **lone** link — an orphaned
-control needing somewhere to sit — and so undid it the moment a second item arrived. That framing
-is what changed. The nav is centred **because it is the product's spine**, not because of how
-many items it currently holds, so the count is no longer an argument either way: it is centred at
-three items and it will be centred at eight. Treating the count as the reason is what made this
-decision reversible twice, and naming the real reason is what stops it happening a third time.
-
-**Centred on the bar, not in the leftover space.** The bar is a three-column grid — `1fr auto
-1fr` — so the nav's centre is the *frame's* centre regardless of the wordmark's or the button's
-width. A viewer, who has no `Users` item, sees their items centred on the same axis an admin
-does. Centring it inside a flex row instead would let it drift every time something beside it
-changed width, which is the failure this spelling exists to prevent.
-
-**Consequence, recorded:** there is no specified wordmark→nav gap any more. It is whatever the
-frame leaves over, and it changes with the viewport. Any rule or test asserting a fixed gap there
-is asserting something the layout no longer promises.
-
-**The bar and the page share one frame.** The bar's contents and the content beneath it are both
-`--container-frame`, so the wordmark and the page title start on the same vertical. The bar's
-bottom hairline is full-bleed across the window, so the bar still reads as a band belonging to
-the window rather than as a floating object. *Decided 2026-08-21 (DMI-107).*
-
-**The nav names domains, not actions.** *Users* is the place user-related things live, and it keeps
-that name even in v1, when the only thing in it is the invite form. Nav is muscle memory — an item
-that renames itself between releases costs more than the thin page it was protecting the operator
-from. New user-related surfaces are added *inside* Users rather than beside it.
-
-A handful of destinations with no sub-levels do not earn a persistent vertical rail, and Home — a
-mostly empty page whose epicenter is one centered sentence — is actively harmed by a heavy chrome
-column beside it (§2 epicenter, §9 context over consistency). Nothing in the MVP has the
-section/subsection depth a sidebar exists to express.
-
-> [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Roteamento previously described the `AppShell` as
-> *"sidebar/navbar persistente"*; it was narrowed to **top bar, no sidebar** on 2026-07-13 to match
-> this section.
-
-### Theme
-
-**Light only.** The MVP ships one theme: paper-white surface, body text near-black with a slight
-grey cast (never pure `#000`), deep purple accent. There is no theme toggle and no
-`prefers-color-scheme` branch — dark mode is not built, not detected, not stubbed.
-
-The anchor references are light ([`nous-home.png`](nous-research/nous-home.png),
-[`psyche-header.png`](nous-research/psyche-header.png)), and the paper/engraving/print direction is
-native to a light surface. Shipping one theme halves the palette work and removes an entire class of
-contrast bug — and a product with a point of view picks a look rather than exporting it to a toggle
-(§8). Dark mode stays parked in [`IDEAS.md`](IDEAS.md) → Theming.
-
-**Dark mode is planned, not abandoned** — it is deliberately a later, separate pass
-([`IDEAS.md`](IDEAS.md) → Theming).
-
-**Consequence for tokens:** every color below is validated against the light surface only. Do not
-author `dark:` variants in Tailwind as you go — a half-built dark mode is the worst outcome, since
-it costs dual tokens on every component and still ships a surface nobody validated. When dark mode
-is scoped it re-derives its palette from scratch rather than inheriting inversions of the light one.
-
-### Typography
-
-**Two faces. Titles are set; everything else is typed.**
-
-| Face | Covers | Rationale |
-| --- | --- | --- |
-| **[IM Fell English](https://fonts.google.com/specimen/IM+Fell+English)** (regular + italic) | **Titles at every level** — the Home verdict, page titles, section and card titles, table captions, blank-slate headings | The brand face. 17th-century letterforms carry the engraving direction natively ([`IDEAS.md`](IDEAS.md) → Visual direction) |
-| **[IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono)** | **All non-title text** — body copy, form labels and values, buttons, table cells, badges, and all technical data (IP, MAC, CVE, UUID, port) | Vintage-computer feel with real lineage (IBM Selectric / mainframe era) but legible at 13px in dense tables, which retro faces generally are not |
-
-**No third face.** Prose and data share IBM Plex Mono, which is what
-[`nous-home.png`](nous-research/nous-home.png) does — mono for section titles, body, *and* the
-`OUTPUT / SEED` data. It works here because Dmitri has almost no long prose: the longest sentences
-on any screen are the verdict and the blank-slate copy, and those are IM Fell.
-
-**Escape hatch, if mono prose ever proves tiring:** [IBM Plex
-Sans](https://fonts.google.com/specimen/IBM+Plex+Sans) — same superfamily, shared metrics, so it
-drops in for body copy without re-tuning anything. Adopting it is a change to *this section*, not a
-per-screen decision.
-
-**Size floor:** IM Fell is **never set below 16px** — its inked, irregular letterforms degrade
-below that. Any label small enough to need 13–14px is by definition not a title, and is therefore
-Plex Mono. This rule is what keeps the split honest.
-
-> **Note on the references:** [`hermes.png`](nous-research/hermes.png) — Nous's *product* UI — uses
-> a neutral sans and reserves character for small letterspaced accent labels; the expressive
-> typography lives on their *marketing* site. Dmitri deliberately goes further than Hermes. If a
-> dense screen (Host inventory, Scan detail) later proves hostile to read, the size floor and the
-> Plex Sans escape hatch are the two levers — not a per-screen exception.
-
-**Type sizes come from the named scale.** These tokens are the complete type-size set:
-
-| Token | Value | Utility | Used for |
-| --- | --- | --- | --- |
-| `--text-title-lg` | `2rem` (32px) | `text-title-lg` | page titles |
-| `--text-title-md` | `1.5rem` (24px) | `text-title-md` | prominent titles and the auth wordmark |
-| `--text-title-sm` | `1.25rem` (20px) | `text-title-sm` | section and card titles |
-| `--text-title-xs` | `1rem` (16px) | `text-title-xs` | the smallest title and inside-shell wordmark |
-| `--text-body-md` | `0.875rem` (14px) | `text-body-md` | default body copy, labels, values and controls |
-| `--text-body-sm` | `0.8125rem` (13px) | `text-body-sm` | compact helper and error copy |
-| `--text-caption-md` | `0.75rem` (12px) | `text-caption-md` | captions and dense metadata |
-| `--text-nav` | `0.6875rem` (11px) | `text-nav` | top-bar navigation only |
-
-The framework's raw size utilities (`text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl` and
-`text-2xl` through `text-9xl`) are **not part of the scale**. Using one is a violation even when
-it renders the same pixels as a named token: the token is the product decision and the raw utility
-silently opts out of it.
-
-### Color
-
-#### Neutrals — locked
-
-The whole product is these six values plus one accent. Ratios are WCAG, measured against the
-surface each token actually sits on; there is no dark variant to validate (§Theme).
-
-| Token | Hex | Role | Contrast |
-| --- | --- | --- | --- |
-| `--paper` | `#FAF8F4` | page surface — warm off-white, the "sheet of paper" | — |
-| `--card` | `#FFFFFF` | raised surface: cards, table headers | 1.06 vs paper (separation by warmth, not by grey) |
-| `--ink` | `#1A1917` | primary text. Near-black with a warm grey cast, **never** `#000` | **16.6** on paper (AAA) |
-| `--ink-muted` | `#6B6862` | secondary text: the Home footer, timestamps, helper copy | **5.2** on paper (AA) |
-| `--rule` | `#E5E0D8` | decorative separators — table row lines, the dashed rules | non-text |
-| `--edge` | `#8C8880` | real UI-component boundaries: input and button borders | **3.3** on paper (meets the 3:1 floor for controls) |
-
-Two borders, deliberately: `--rule` is decoration and may be as faint as it likes, but the outline
-of an *input* is a control boundary and owes 3:1 (WCAG 1.4.11). Using the faint one for both is the
-common way a paper-white UI ends up with invisible form fields.
-
-#### Accent and severity
-
-The deep purple and the four severity hexes were auditioned against real screens during the
-build and are now locked, measured against `--paper` `#FAF8F4`, the only surface they appear on.
-
-| Token | Hex | Contrast on `--paper` | White text on it | Role |
-| --- | --- | --- | --- | --- |
-| `--accent` | `#7C3AED` | **5.37:1** (AA) | **5.70:1** (AA) | active nav item, primary buttons, the review-item label. Nothing else. |
-
-The **hues are assigned** and the rules are locked.
-
-- **Purple is the brand accent, and nothing else.** It marks focal points — the active nav item,
-  primary buttons, the review-item label on Home — the role the muted blue plays in
-  [`hermes.png`](nous-research/hermes.png): small, saturated, the only loud thing on a quiet
-  surface. **Purple never carries severity.** It was briefly considered for `critical` and
-  rejected: a color that means both "act here" and "you are in danger" means neither, and on Home
-  the critical badge would collide with the `[View finding]` button beside it.
-- **Severity owns its own hues, and never borrows the accent.** The ramp is conventional on
-  purpose — the org admin is non-technical (§10 zero training) and red already means *bad* to them
-  without being taught.
-- **Every value clears AA on `--paper`** before it ships. Severity badges are text, so they owe
-  **4.5:1**, not the 3:1 control floor — the usual trap when picking a red that "looks right".
-
-| Severity | Hue | Hex | Contrast on `--paper` | Usage |
-| --- | --- | --- | --- | --- |
-| Critical | **red** | `#B91C1C` | **6.1:1** (AA) | the loudest thing in the product; surfaces on Home |
-| High | **orange** | `#C2410C` | **4.9:1** (AA) | surfaces on Home |
-| Medium | **amber** | `#A16207` | **4.6:1** (AA) | never surfaces on Home |
-| Low | **blue** | `#1D4ED8` | **6.3:1** (AA) | never surfaces on Home |
-| Informational | **ink-muted** | `#6B6862` | **5.2:1** (AA) | visual token only — not a contract severity |
-
-Blue appears here and nowhere else. The old "no blue anywhere" rule existed to protect the accent,
-and it still does in that form: **no blue as a brand color** — but as a low-severity semantic token
-it is doing a different job, exactly as red does at critical.
-
-**These were the only unfilled values in Foundations**, now resolved.
-
-### Interaction states
-
-**Every interactive element declares all five of its states.** Rest, hover, focus-visible, active
-and disabled are each a designed property, specified beside colour and type. Cursor treatment is
-explicit too. An element the user can act on and which looks identical under the pointer is a
-**defect**, not a style preference — the user has no way to learn it is a control except by
-clicking things at random to find out. *Decided 2026-08-18 (DMI-107).*
-
-| State | Owes |
-| --- | --- |
-| **Rest** | It looks like a control: a colour, a border, a caret or an underline that a paragraph beside it does not have. Accent purple, a hairline `--edge` boundary, or a caret — one of the three, at least. |
-| **Hover** | `cursor: pointer`, always, including text-shaped controls, plus one visible change: an underline, a background wash or a colour shift. Tailwind v4's preflight sets `cursor: default` on `<button>`, so the pointer is added, never inherited. |
-| **Focus-visible** | A ring at `--ring`, never `outline: none` and never a ring so faint it needs looking for. Keyboard users get the same affordance the pointer gets, so a control that underlines on hover also underlines on focus. |
-| **Active** | A pressed acknowledgement — the 1px downward nudge the button primitive already carries. |
-| **Disabled** | Reduced opacity, `pointer-events: none`, and out of the tab order. This is only for the progress carve-out of Consistency rule 3. A permission the user does not hold is absent, and has no disabled state to design. |
-
-**Only shared components may be interactive.** Application screens compose shared primitives and
-components; they do not hand-roll native controls or one-off click targets. Vendored shadcn
-primitives live in `frontend/src/components/ui/`; Dmitri-owned shared interactive components live
-in `frontend/src/components/`. Keeping interactivity shared makes the state table enforceable in
-one place instead of at every call site.
-
-**Motion is a transform, and it is small.** Carets rotate and buttons nudge. No fades on layout,
-no easing curves worth naming, nothing that outlasts a key press.
-
-### Spacing and rhythm
-
-Building rule 1 says spacing comes from the token set. This is that set. **Whitespace is the
-loudest thing on these screens** — on a normal day Home is one sentence in a lot of paper, and
-that emptiness is the design, not an unfinished layout. Spacing is therefore specified as
-deliberately as color.
-
-**The base unit is 4px** — Tailwind v4's `--spacing` default, so the `p-*` / `gap-*` / `space-y-*`
-utilities already resolve to it and no custom token layer is needed.
-
-**Use these steps and no others:**
-
-| Step | Value | Used for |
-| --- | --- | --- |
-| `1` | 4px | icon-to-text, badge internals |
-| `2` | 8px | label-to-value, items inside one group |
-| `3` | 12px | tight stack — table cell padding |
-| `4` | 16px | default gap between related elements |
-| `6` | 24px | card internal padding; and between sections of a short-section screen |
-| `8` | 32px | between cards in a list |
-| `12` | 48px | between sections of a table-led or long-section screen |
-| `16` | 64px | around the epicenter — the verdict's breathing room |
-| `24` | 96px | top offset for a vertically-centred, near-empty screen |
-
-Anything else — `p-5`, `gap-7`, `mt-[13px]` — is a bug by Building rule 1. An arbitrary-value
-utility (`p-[13px]`) is the same bug wearing brackets: if a value is worth using it is worth
-being a step.
-
-**Four rhythm rules, binding:**
-
-1. **The parent owns the space between children.** Components ship with **no outer margin** —
-   they render flush to their own bounding box, and the layout that places them supplies the
-   gap. A component with `mb-4` baked in dictates its own spacing everywhere it is ever reused,
-   and the second use site always fights it. This is the single rule that keeps a component
-   library composable.
-2. **Gap, not margins between siblings.** Use flex/grid `gap-*` on the container. Sibling margins
-   collapse unpredictably, leave orphaned space when an item is conditionally absent, and make
-   "what is the space here" a question with two answers.
-3. **Space groups things; it does not decorate.** Related elements sit closer than unrelated ones
-   — proximity is how the eye parses the page. Where a rule and whitespace would both separate
-   two regions, the choice is **per screen and stated once**, not left to the component.
-   Prose-led screens with long sections prefer whitespace — the near-monochrome surface earns its
-   calm by having fewer lines on it. **A screen of short, unlike sections prefers the rule**:
-   when sections are two or three rows each, the space between them is too small to do the
-   separating on its own, and a hairline does the work that 48px of paper used to. `/settings` is
-   the first of these. *Decided 2026-08-21 (DMI-107).*
-
-   When a screen takes the rule, it takes it at **every** boundary, including sections added
-   later. A rule that appears at one boundary and not the others stops reading as structure and
-   starts reading as emphasis on whatever it happens to sit above.
-4. **Vertical rhythm is consistent; horizontal is generous.** A screen uses at most three vertical
-   step sizes (intra-group, inter-group, inter-section). Horizontal padding inside the content
-   column never drops below step `6`, so text never runs to the edge of its card.
-
-   **The inter-section step is chosen per screen, from `6`, `8` or `12` — and only those.** A
-   screen whose sections are two or three short rows (Settings: a label/value pair, a button, a
-   disclosure) uses `6`; a screen whose sections are tables or long prose uses `12`; `8` is the
-   middle case. What stays binding is the *shape*: three vertical steps, each visibly larger than
-   the last, and the inter-section step never smaller than the inter-group step. *Decided
-   2026-08-21 (DMI-107).*
-
-   The trade is explicit. At `6` the inter-section step is 1.5× the inter-group step rather than
-   3×, so **space alone stops carrying the grouping** and the section heading has to help. That
-   works on Settings because its headings are IM Fell at 20px against Plex Mono body — a face
-   change, not just a size change. A screen without that contrast picks `8` or `12` instead.
-
-**One screen, one spacing owner.** A screen's page-level layout sets its section rhythm in one
-place. A nested component never reaches out to adjust the space around itself.
-
-### Viewport
-
-**Desktop-only, but fluid within it.** Target **1440px**, minimum **1280px**. No tablet or mobile
-layouts are designed: no stacked columns, no collapsed nav, no card-per-row fallback for tables.
-
-The users are an org admin and a viewer at a desk; nobody triages a network scan on a phone. A
-mobile layout is a problem when it's a problem (§12) — until real usage demands it, it is scope
-paid for out of the quality of the desktop screens (§3).
-
-**"Not designed for" is not "breaks".** Every layout is fluid, so the app degrades gracefully at
-any width instead of shattering:
-
-- **Content column:** the widths are the named containers and only the named containers — see
-  §Proportion and containers. **Every inside-shell screen holds `--container-frame`**, prose-led
-  and table-led alike, and so does the top bar above it: one frame, one left edge. A standalone
-  short form — the auth card above all — holds `--container-form`. Both are *maximums*, not
-  fixed widths: below them the column shrinks with the viewport.
-- **Reading measure is separate from column width.** A paragraph is held to about 65 characters
-  wherever it sits. Widening a column never lengthens a line.
-- **No fixed pixel widths on layout containers.** Widths are `max-w-*` + fluid, or grid/flex
-  fractions. A container never has a width it can't give back.
-- **The page body never scrolls horizontally.** Wide content — tables above all — scrolls inside
-  its own `overflow-x: auto` container, so the chrome and the verdict stay put.
-
-### Proportion and containers
-
-**Containers have names, and the names are the only layout widths.** A layout width is one of the
-two named containers below or it is a bug. `max-w-[45rem]` is the same bug as `p-[13px]`: a
-number that was right once, copied where nobody re-asked whether it was still right. That copy is
-how the login card became a 720px letterbox band around 336px of form. *Decided 2026-08-18
-(DMI-107).*
-
-| Token | Value | Is the width of |
-| --- | --- | --- |
-| `--container-frame` | `70rem` (1120px) | The frame — the top bar's contents and the page content beneath it. One width for the whole shell. |
-| `--container-form` | `24rem` (384px) | The form column — a short form standing on its own, above all the auth card. |
-
-Both are maxima and fluid below themselves (§Viewport). Nothing else is a layout width. A separate
-720px prose column was specified and then removed: once the bar and content share one frame there
-is nothing left for it to measure.
-
-**A card sizes to its content, never to its column.** A short form in a wide column is a narrow
-card centred in that column, not a wide card with a lake of padding around its inputs. The column
-and the card are different measurements; only one is about the viewport.
-
-**The frame and the content share one width.** The top bar's contents and the page beneath it both
-span `--container-frame`, so the wordmark and the page title start on the same vertical. The shell
-reads as one column of paper rather than chrome floating over a narrower sheet. *Decided
-2026-08-21 (DMI-107).*
-
-**Column width and reading measure are different problems.** Widening the column does not widen
-the prose in it: a paragraph is still held to about 65 characters by `max-w-prose`. The column
-decides where the page structure sits; the reading measure decides how long a line may get.
-
-### Building rules
-
-How the above is enforced in code. These are binding on implementation, not suggestions.
-
-1. **No magic numbers.** Spacing, type sizes, colors, radii and border widths come from the token
-   set (Tailwind theme + CSS variables), defined once. A raw `padding: 13px` or `#6B21A8` in a
-   component is a bug, not a shortcut — if a value is worth using it is worth being a token.
-2. **Components size to their container, not to the viewport.** No component hardcodes a width
-   because of what it happens to sit next to today.
-3. **Relative units and intrinsic layout.** Flex and grid over absolute positioning; `min-w-0` on
-   flex children so long values (UUIDs, hostnames) shrink instead of blowing out the row.
-4. **Long values never break the layout.** Truncate with ellipsis, wrap, or scroll the container —
-   a 64-character hostname must not widen the page (see Consistency rule 6, IDs truncate).
-5. **Text sizes are tokens too.** The 16px floor on IM Fell (§Typography) is enforced by the scale,
-   not by remembering it.
-6. **The mechanical rules are lint rules, not reminders.** `local/no-arbitrary-utility`,
-   `local/no-raw-type-size`, `local/spacing-scale` and `local/no-bare-interactive` enforce
-   arbitrary values, the closed type scale, the spacing scale and shared interactive controls.
-
-### Shared components
-
-Only components that **two or more screens actually use**. Everything else is written inline in the
-screen that needs it.
-
-| Component | Used by |
-| --- | --- |
-| `TopBar` | every inside-shell screen |
-| `PageHeader` | Scans, Hosts, Agents, Users — **not Home** (the verdict is the header) |
-| `DataTable` | Scan list, host inventory, scan detail findings and hosts, host detail findings, ports and history. Users & invites is **not** retrofitted (tracked follow-up). |
-| `Pagination` | Scan list, host inventory |
-| `SeverityBadge` | Home (critical item), Scan detail, Host detail |
-| `StatusPill` | Agents (command lifecycle), Scan list/detail (scan status). Shared `h-8` height; `failed` and `expired` share a tone, separated by copy. |
-| `Timestamp` | everywhere a time is rendered — owns the relative/absolute rule below |
-| `EmptyState` | table-led screen blanks + `AgentsBlank` (optional `action` and `note` slots) |
-| `FirstScanCta` | blank Home, Scans and Hosts — admin link to `/agents`; viewer line via `FirstScanNote` |
-| `LoadingSkeleton` | every table-led screen |
-| `Toast` | Users & invites — role change, remove, revoke **succeeding**; Agents — scan trigger refusals (`503 device_offline`, `409 device_busy`, subnet stale) and subnet PATCH refusals |
-| `Ornament` | Home, auth screens — the engraving detail: a filled lozenge on a full-width hairline, broken either side. **Inline SVG, never a Unicode glyph** — a glyph cannot be given a stroke weight, a size or a rule to sit on, and it renders differently wherever the face is missing. Sizes to its container with no props. |
-
-**Cut from the candidate list:** `Sidebar` (top bar chosen above) · `MetricCard` (the MVP has no
-metric cards, by decision) · `Breadcrumbs` (nothing is deeper than list → detail; parked in
-[`IDEAS.md`](IDEAS.md)).
-
-### Consistency rules
-
-Cross-screen rules. A screen spec may cite these instead of restating them.
-
-1. **Three states, no exceptions.** Every screen and every table ships a designed regular, blank
-   and error state. A table never renders bare with no rows (§7).
-2. **Errors have a next step.** Page-level failure = plain copy + `[Retry]`. Action failure =
-   toast naming the thing that failed. Never a spinner that never resolves, never a skeleton
-   standing in for a verdict (§7 get defensive).
-3. **Absent, not disabled.** Actions a role cannot perform are omitted from the DOM, not greyed
-   out. The viewer never learns what they're missing (§9). **This rule is about permission, not
-   progress.** *Carve-out:* an action the person **is** permitted to take but hasn't yet supplied
-   the required input for is a different case — the confirm-by-typing button on SETTINGS and on
-   USERS & INVITES is greyed out, unclickable and out of the tab order until the typed address
-   matches ([`ADR-017`](../adr/ADR-017-account-removal.md) §5). A test of this rule asserts that a
-   viewer's admin affordances are **absent**; it does not sweep the tree for `[disabled]`.
-4. **Whole rows are links.** In every table the entire row navigates; no trailing "View" button
-   column.
-5. **If it isn't a title, it's IBM Plex Mono.** There is no third face and no per-screen
-   exception. IM Fell never appears below 16px (§Typography).
-6. **IDs truncate, hover reveals.** UUIDs render as the first 8 characters; the full value is in
-   the `title`. Never wrap a UUID.
-7. **Timestamps:** relative inside 7 days (`yesterday 21:40`, `2 min ago`), absolute beyond it;
-   the exact value always available on hover. One `Timestamp` component owns this.
-8. **Buttons say what they do.** `Scan now`, `Invite user`, `Set password` — never `Submit`,
-   `Execute`, `OK` (§6).
-9. **Real content only.** Specs and mocks use real hostnames, real CVE ids, real IPs. No lorem
-   ipsum, no `foo` (§6 use real words).
-10. **Columns align by content, except the first.** Text left-aligns. Numbers right-align in
-   tabular figures so the digits stack — a port under a port, a count under a count. **The first
-   column always starts flush left whatever it holds**: a right-aligned leading column pushes the
-   table's visible start into the middle of the frame while every neighbouring table begins at the
-   edge, and the reader sees a broken grid rather than a tidy number. So findings `Port` and the
-   `Open ports` counts right-align; the ports tables' leading `Port` does not. **A heading carries
-   its column's alignment** — a label stranded over empty space while its values sit at the far
-   side of the column is the defect this rule exists to prevent. *Decided 2026-08-27.*
-11. **Severity reads down the right edge.** No table opens with the severity badge. It closes the
-   row on scan list, scan detail findings, host detail findings and host scan history, and on host
-   inventory it is second to last, with `Last seen` closing. A reader scanning for the worst thing
-   follows one edge instead of hunting for the column per screen. *Decided 2026-08-27.*
+**Moved to [`FOUNDATIONS.md`](FOUNDATIONS.md)** (binding, 2026-09-02). Theme, type, colour,
+spacing, radius, containers, interaction states, motion, icons, chrome and navigation, table
+rules, cards, pagination and the copy rules all live there; the retired values and the reasoning
+behind them live in [`FOUNDATIONS-DECISIONS.md`](FOUNDATIONS-DECISIONS.md).
+
+A screen spec may not re-decide any of it. **Where this document disagrees with
+`FOUNDATIONS.md`, `FOUNDATIONS.md` wins**, and this document gets corrected.
 
 ## Screen index
 
@@ -431,11 +37,11 @@ Status: `☐` not specced · `◐` draft · `✅` locked. Routes and roles per
 | Forgot password | `/forgot-password` | outside | public | B1 | ◐ |
 | Reset password | `/reset-password?token=…` | outside | public | B1 | ✅ (C15 resolved) |
 | Home | `/` | inside | admin, viewer | B2, B3 | ◐ |
-| Scan list | `/scans` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
+| Scans | `/scans` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
 | Scan detail | `/scans/:scanId` | inside | admin, viewer | B3, B4 | ◐ built (DMI-88; C10 resolved) |
-| Host inventory | `/hosts` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
-| Host detail | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ built (DMI-88; C11 resolved — `?host_id=`) |
-| Agents | `/agents` | inside | admin, viewer (ro) | B4 | ✅ built (DMI-89) — scan trigger, subnet chooser, command poll |
+| Network (was Host inventory) | `/hosts` | inside | admin, viewer | B3 | ◐ built (DMI-88) |
+| Network detail (was Host detail) | `/hosts/:hostId` | inside | admin, viewer | B3 | ◐ built (DMI-88; C11 resolved — `?host_id=`) |
+| Devices (was Agents) | `/agents` | inside | admin, viewer (ro) | B4 | ✅ built (DMI-89) — scan trigger, subnet chooser, command poll |
 | Users & invites | `/users` | inside | admin | B2 | ◐ API ready (C4 closed); frontend screen not built |
 | Settings | `/settings` | inside | admin, viewer | B5 | ◐ details (read-only), password modal, activity disclosure and removal built; profile **editing** pending on C3 |
 
@@ -487,12 +93,12 @@ to bottom; do not start the ASCII layout until everything above it is written.
 The five outside-shell screens share one frame, specced once here rather than four times below.
 No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log out]`.
 
-- **Frame:** wordmark, `Ornament`, then a single centered card in the **`--container-form` column
-  (384px)** (§Proportion and containers). The card is the page; there is no other content — and
+- **Frame:** wordmark, then a single centered card in the **`--container-form` column
+  (384px)** ([`FOUNDATIONS.md`](FOUNDATIONS.md) §Containers). The card is the page; there is no other content — and
   because there is no other content, the card sizes to the form rather than to the viewport. It
   is a portrait card, taller than it is wide, and it stays 384px on the longer screens (Accept
   invite, Reset password), which simply grow downward. It was briefly 720px, which read as a
-  letterbox band around 336px of inputs; that is the defect §Proportion and containers exists to
+  letterbox band around 336px of inputs; that is the defect [`FOUNDATIONS.md`](FOUNDATIONS.md) §Containers exists to
   prevent. *Corrected 2026-08-18 (DMI-107).*
 - **Never reveal whether an account exists.** Login's `401` and Forgot's `204` are both deliberately
   uninformative. This is why Forgot always shows the same confirmation, and why login's error names
@@ -526,7 +132,7 @@ No top bar (there is no session yet, and nowhere to navigate), no nav, no `[Log 
   is no expired-password 403 to route anywhere).
 
 **Where the role comes from — 🔓 C16.** `LoginResponse` carries **only a token**. Every "absent, not
-disabled" decision in this product (rule 3) — the `Users` nav item, `[Scan now]`, the invite form —
+disabled" decision in this product — the `Users` nav item, `[Scan now]`, the invite form —
 depends on knowing whether this user is an `admin` or a `viewer`.
 [`ADR-008`](../adr/ADR-008-frontend-stack.md) §Papéis says the role arrives **in the JWT claims**,
 but the contract documents no claims at all. The frontend would be decoding an undocumented payload
@@ -535,7 +141,7 @@ to decide what to render.
 **Three states:**
 - **Regular:** the form.
 - **Blank:** **not applicable.** A login form is never empty — it is its own content. Recorded so
-  nobody invents an empty state to satisfy rule 1.
+  nobody invents an empty state to satisfy the three-states rule.
 - **Error:** inline, above the button. Wrong credentials name neither field. A `5xx`/network failure
   is a *different* error and says so — telling someone their password is wrong when the server is
   down is the §7 sin.
@@ -562,7 +168,6 @@ disclosure.
 ```text
 +------------------------------------------------------------------------------+
 |                                                                              |
-|                        ~ small engraving ornament ~                          |
 |                              D M I T R I                                     |
 |                                                                              |
 |              +------------------------------------------+                    |
@@ -644,7 +249,6 @@ this screen is still `◐`.
 **Layout:**
 ```text
 +------------------------------------------------------------------------------+
-|                        ~ small engraving ornament ~                          |
 |                              D M I T R I                                     |
 |                                                                              |
 |              +------------------------------------------+                    |
@@ -839,205 +443,128 @@ submit. It shows the dead-link state directly.
 **Route:** `/` · **Shell:** inside · **Roles:** admin, viewer ·
 **Flow:** B2 (blank slate), B3
 
-Home is not a metrics dashboard. Its job is a review: the product interprets and the operator
-reads a judgment, not numbers (REFERENCE.md §6, §8, §10). On a normal day the page is mostly
-empty on purpose.
+**Home is the work board.** Not a metrics dashboard and not a scan launcher: what needs review,
+what changed, what happened. *Re-specced 2026-09-02 against
+[`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html); the earlier verdict-line
+screen is withdrawn.*
 
-**Epicenter** — the one thing this screen cannot live without, designed first, chrome last:
-the verdict line — one plain sentence stating whether anything needs the operator's
-attention since they last looked.
+**Epicenter** — the **attention table**: the vulnerabilities waiting to be reviewed, worst first,
+each row clicking through to where it is dealt with.
 
 **Data** — endpoints and fields consumed (contract names):
-- `GET /api/v1/scans?per_page=1` (default sort `timestamp` desc) — latest scan feeds the
-  verdict, the scan-failed item (`status: failed`), and the context footer (`timestamp`,
-  `host_count`, `finding_count`, `highest_severity`, `scan_mode`)
-- `GET /api/v1/findings?scan_id={latest}&severity=critical` (and `severity=high`) — finding
-  review items (`title`, `cve_id`, `ip`, `severity`)
+- `GET /api/v1/scans?per_page=1` (default sort `timestamp` desc) — the latest scan feeds the
+  scan-failed event and the last-scan facts (`timestamp`, `host_count`, `finding_count`,
+  `highest_severity`, `scan_mode`)
+- `GET /api/v1/findings?scan_id={latest}` — the attention table's rows (`title`, `cve_id`, `ip`,
+  `severity`)
 - `GET /api/v1/agents/{agent_id}` — `online`, `last_seen_at`, `display_name` feed the
-  coverage-stale item and the footer Pi status
-- New-device item: `HostSummary` carries `first_seen_at` (**C6** resolved), so the item is no
-  longer contract-blocked; it is still not built, and shipping it in v1 is a product call
+  device-silent event
 
-**Three states** — each deliberately designed, none inherited by accident:
-- **Regular, all clear (the common case):** verdict + context sentence, centered, generous
-  whitespace; small engraving ornament; muted footer with Pi status. No review items, no
-  empty-table scaffolding — the near-empty page *is* the design (positive framing).
-- **Regular, items pending:** verdict states the count; below it, one square-edged card per
-  review item in plain language, each linking where the operator deals with it (finding →
-  scan detail, failure → scan detail, stale coverage → Agents). Deep purple marks the item
-  label; red appears only inside a critical-severity badge. Medium/low findings and routine
-  successful scans never appear here.
-- **Blank:** first-run onboarding per B2 — explains what a scan is, admin gets
-  [Run first scan] → AGENTS; viewer gets the explainer with "Ask your admin to run the
-  first scan." instead of a CTA (affordance omitted, not disabled).
-- **Error:** page-level failure copy + [Retry]; no partial skeletons pretending to be a verdict.
+**Layout — three regions, top to bottom:**
 
-**Copy** — real words, buttons say what they do:
+1. **Page title.** It carries the state of the board; there is **no "To review" heading**.
+2. **The attention board** — a `DataTable` of vulnerabilities, fixed 56px rows, whole row
+   navigates to the vulnerability's scan detail. The board has a **fixed height**, so its empty
+   state does not shift what is below it.
+3. **Step 12 (48px)**, then a **half/half split**: on the left an **event board** (paginated) of
+   small-scoped events; on the right a **minimal log panel** with a title. Neither panel renders a
+   trailing empty row.
+
+**Three states:**
+- **Regular:** the attention table with rows, the event board, the logs.
+- **Blank (nothing needs review):** **nothing is rendered in the attention board at all** — no
+  text, no empty card. The canvas shows through and the **page title carries the message**. This
+  overrides the usual one-sentence-plus-button empty state, for this surface only.
+- **First run (no scan has ever happened):** the onboarding case of B2 — one sentence and one
+  button for an admin; a viewer gets the sentence and no button (absent, not disabled).
+- **Error:** page-level copy + `[Retry]`. Never a skeleton standing in for the board.
+
+**Copy:**
 | Element | Copy |
 | --- | --- |
-| Verdict — all clear | "Nothing needs your attention." |
-| Context — all clear | "Last scan finished yesterday at 21:40 — 12 hosts, no critical findings." |
-| Verdict — items pending | "2 things need your review." |
-| Review item — finding | "Critical: CVE-2024-4577 on synology-nas (192.168.1.42). Found in last night's scan." · [View finding] |
-| Review item — scan failed | "Last night's scan didn't finish." · [See why] |
-| Review item — coverage stale | "The Pi hasn't been seen since Tuesday." · [Check the Pi] |
-| Blank — heading | "No scans yet." |
-| Blank — body | "Dmitri scans your network for devices and known vulnerabilities, then reports anything worth your attention here." |
-| Blank — CTA (admin only) | "Run first scan" |
-| Blank — viewer line | "Ask your admin to run the first scan." |
+| Page title — nothing to review | "Nothing needs your attention." |
+| Page title — items pending | "2 things need your review." |
+| Attention columns | "Vulnerability · Device · Port · CVE · Severity" |
+| Event — device silent | "The Pi hasn't been seen since Tuesday. It's likely dead — check on it." |
+| Event — scan failed | "Last night's scan didn't finish." |
+| Event board title | "Events" |
+| Log panel title | "Activity" |
+| First run — heading | "No scans yet." |
+| First run — CTA (admin only) | "Run first scan" |
+| First run — viewer line | "Ask your admin to run the first scan." |
 | Error | "Couldn't load the review." · [Retry] |
-| Footer | "Last scan: yesterday 21:40 · 12 hosts · quick mode" / "Pi status: online · last seen 2 min ago" |
 
-**Layout** — fat-marker fidelity; paddings and exact columns not fixed here:
-
-Regular — items pending:
-```text
-+------------------------------------------------------------------------------+
-| DMITRI          Home    Scans  Hosts  Agents  Users              [Log out]   |
-+==============================================================================+
-|                                                                              |
-|   ~ small engraving ornament ~                                               |
-|                                                                              |
-|   2 THINGS NEED YOUR REVIEW.                                                 |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   +----------------------------------------------------------------+        |
-|   | ▓ CRITICAL FINDING                                              |        |
-|   |   CVE-2024-4577 on synology-nas (192.168.1.42)                  |        |
-|   |   Found in last night's scan.                                   |        |
-|   |                                              [View finding] →   |        |
-|   +----------------------------------------------------------------+        |
-|                                                                              |
-|   +----------------------------------------------------------------+        |
-|   | ▓ THE PI HASN'T BEEN SEEN SINCE TUESDAY                         |        |
-|   |                                               [Check the Pi] →  |        |
-|   +----------------------------------------------------------------+        |
-|                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   Last scan: yesterday 21:40 · 12 hosts · quick mode         (muted)         |
-|   Pi status: online · last seen 2 min ago                                    |
-+------------------------------------------------------------------------------+
-```
-
-Regular — all clear:
-```text
-+------------------------------------------------------------------------------+
-| DMITRI          Home    Scans  Hosts  Agents  Users              [Log out]   |
-+==============================================================================+
-|                                                                              |
-|                        ~ small engraving ornament ~                          |
-|                                                                              |
-|                     NOTHING NEEDS YOUR ATTENTION.                            |
-|                                                                              |
-|          Last scan finished yesterday at 21:40 — 12 hosts,                   |
-|          no critical findings.                                               |
-|                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   Pi status: online · last seen 2 min ago                                    |
-+------------------------------------------------------------------------------+
-```
-
-Blank — first run (admin):
-```text
-+------------------------------------------------------------------------------+
-| DMITRI          Home    Scans  Hosts  Agents  Users              [Log out]   |
-+==============================================================================+
-|                                                                              |
-|                        ~ small engraving ornament ~                          |
-|                                                                              |
-|                              NO SCANS YET.                                   |
-|                                                                              |
-|          Dmitri scans your network for devices and known                     |
-|          vulnerabilities, then reports anything worth your                   |
-|          attention here.                                                     |
-|                                                                              |
-|                        +---------------------+                              |
-|                        | ▓  Run first scan   |   → Agents                   |
-|                        +---------------------+                              |
-+------------------------------------------------------------------------------+
-```
+**Never certify safety.** The all-clear title is *"Nothing needs your attention."* — never *"Your
+network is safe."*
 
 **Open questions:**
-1. ~~New-device review item — blocked on contract (`first_seen_at` on `HostSummary` — **C6**).~~
-   **✅ RESOLVED — `first_seen_at` is a required property on `HostSummary`.** The item is
-   unblocked but still unbuilt; whether it ships in v1 is a product call, not a contract gap.
-2. Coverage-stale thresholds: Pi `online: false` is immediate, but "no completed scan in
-   N days" needs an N.
-3. "Not seen before" phrasing needs a backend finding-delta (IDEAS.md backend note); v1
-   copy claims only "found in last night's scan".
+1. The event board's use cases are still being collected. Owned by **DMI-117 / DMI-123**; noted
+   for **DMI-127**.
+2. Coverage-stale threshold: the Pi's `online: false` is immediate, but "no completed scan in N
+   days" still needs an N.
 
 ---
 
-### SCAN LIST
+### SCANS
 
 **Route:** `/scans` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B3
 
-**Epicenter** — the run log: every scan, newest first, each answering *did it work, and did it find
-anything*. This is the one screen in the product that is honestly a table, and it should look like
-one.
+**Epicenter** — the run log: every scan, newest first, each answering *did it work, and did it
+find anything*. This is honestly a table and it looks like one. *Re-specced 2026-09-02 against
+[`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html).*
 
 **Data:**
 - `GET /api/v1/scans?page&per_page=20&sort_by=timestamp&sort_order=desc` → `ScanListResponse`
-  (`data: ScanSummary[]`, `total`, `page`). Server-driven sorting and pagination already exist in
-  the contract; **no client-side sorting.**
+  (`data: ScanSummary[]`, `total`, `page`). Server-driven sorting and pagination; **no
+  client-side sorting.**
 - `ScanSummary`: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `status`, `host_count`,
   `finding_count`, `highest_severity` (nullable).
+- `POST /api/v1/agents/{agent_id}/commands` — `[Scan now]`, admin only, with the currently
+  selected scan type.
 
-`ScanStatus` is `pending | accepted | processing | completed | failed` — **not** the command
-lifecycle. A scan triggered from Agents appears here as `pending` **immediately** (the stub row is
-created at enqueue, [`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)), so this list
-is live during a scan and must not look broken while a row is unfinished.
+`ScanStatus` is `pending | accepted | processing | completed | failed`. A scan triggered here
+appears as `pending` **immediately** (the stub row is created at enqueue,
+[`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)), so this list is live during a
+scan and must not look broken while a row is unfinished.
 
-**Filters are cut from v1** ([`IDEAS.md`](IDEAS.md) → Scans). The contract supports a `status`
-filter; the screen does not use it. One Pi scanning one subnet does not produce a list that needs
-filtering yet (§12).
+**Mode is a column, not a control.** The mode switcher above the table is cut. Filters stay cut
+from v1 ([`IDEAS.md`](IDEAS.md) → Scans).
+
+**Two regions:**
+
+1. **The scans table.** Fixed 56px rows, whole row navigates. Pagination below it.
+2. **The Scan settings section**, below the table — the tabs-and-description pattern in
+   [`FOUNDATIONS.md`](FOUNDATIONS.md) §Scan settings pattern, with `[Use this scan type]` and
+   `[Scan now]` beside it. `[Scan now]` is **admin only** and is absent for a viewer.
 
 **Three states:**
-- **Regular:** one row per scan. Whole row navigates (rule 4). An unfinished scan shows a
-  `StatusPill` instead of counts — it has no counts yet.
-- **Blank:** no scans ever. Same first-run CTA as blank Home — admin `[Run first scan]` → Agents;
-  viewer "Ask your admin to run the first scan."
-- **Error:** page-level copy + [Retry]. `LoadingSkeleton` for the table body on first load only —
-  never on background refetch, which would make a live list flicker.
+- **Regular:** one row per scan. An unfinished scan shows its status instead of counts.
+- **Blank:** no scans ever. One sentence and, for an admin, `[Scan now]`; a viewer gets the
+  sentence alone. Scan settings still renders — it explains what a scan is.
+- **Error:** page-level copy + `[Retry]`. `LoadingSkeleton` for the table body on first load only.
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
 | Page title | "Scans" |
-| Columns | "When · Mode · Status · Hosts · Findings · Highest severity" |
-| Status — completed | "Completed" (neutral `StatusPill`; **not** a success color — green would be a new Foundations token competing with the severity badge on the same row. An em dash here would mean "looked, nothing there", which is the wrong sentence about a scan that succeeded.) |
+| Columns | "When · Type · Status · Devices · Vulnerabilities · Highest severity" |
+| Status — completed | "Completed" |
 | Status — pending/accepted/processing | "Running…" |
 | Status — failed | "Failed" |
-| Findings cell — zero | "None" |
+| Vulnerabilities cell — zero | "None" |
 | Highest severity — null on a completed scan | "—" |
-| Pagination | "Showing 1–20 of 47" · [Previous] [Next] |
+| Scan settings — section title | "Scan settings" |
+| Scan settings — tabs | "Quick · Standard · Extensive · Max · NSPi" |
+| Scan settings — descriptions | the five lines in [`FOUNDATIONS.md`](FOUNDATIONS.md), verbatim |
+| Scan settings — set default | "Use this scan type" |
+| Scan settings — confirm | "Make Max your daily scan? Every morning's scan will take 45 minutes or more instead of about 8 minutes." |
+| Run once (admin only) | "Scan now" |
 | Blank — heading | "No scans yet." |
-| Blank — body | "Dmitri scans your network for devices and known vulnerabilities. Every scan you run shows up here." |
-| Blank — CTA (admin only) | "Run first scan" |
 | Blank — viewer line | "Ask your admin to run the first scan." |
 | Error | "Couldn't load the scans." · [Retry] |
 
-**Layout:**
-```text
-+------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
-+==============================================================================+
-|                                                                              |
-|   SCANS                                                                      |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   WHEN            MODE    STATUS     HOSTS  FINDINGS  HIGHEST                |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   2 min ago       quick   Running…      -         -   -                      |
-|   yesterday 21:40 quick   Completed    12         3   ▓ CRITICAL             |
-|   Jul 11  21:40   quick   Completed    12         0   —                      |
-|   Jul 10  21:40   quick   Failed        -         -   -                      |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   Showing 1–20 of 47                          [Previous]  [Next]             |
-+------------------------------------------------------------------------------+
-```
-
-**Open questions:** none.
+**Open questions:** none. Scan-type switching and per-device scans are **DMI-127** and future
+work respectively.
 
 ---
 
@@ -1046,259 +573,198 @@ filtering yet (§12).
 **Route:** `/scans/:scanId` · optional `?finding=:findingId` (deep link from Home, B3) ·
 **Shell:** inside · **Roles:** admin, viewer · **Flow:** B3, B4
 
-**Epicenter** — the findings list ([`REFERENCE.md`](REFERENCE.md) §2). Hosts are context; the
-findings are why anyone opened this page. Design the findings table first, the host table second,
-the header last.
+**Epicenter** — the vulnerabilities ([`REFERENCE.md`](REFERENCE.md) §2). Devices are context.
+*Re-specced 2026-09-02 against
+[`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html).*
 
 **Data:**
 - `GET /api/v1/scans/{scan_id}` → `ScanDetailResponse` — **one request, everything embedded**:
   `findings: FindingRecord[]`, `hosts: ScanHostView[]`, `timestamp`, `subnet`, `scan_mode`,
-  `status`, `host_count`, `finding_count`, `command_id` (nullable), `error_code` (`ScanErrorCode | null`).
-- **No `GET /findings` call here, and no `GET /findings/{id}`.** `FindingRecord` arrives complete —
-  `severity`, `title`, `description`, `recommendation`, `evidence`, `references`, `cve_id`,
-  `cvss_score`, `host_ip`, `port`, `protocol`, `service`. Opening a finding is **local state**.
-- **Failure reason:** on `status: failed`, `error_code` is on this same body (never null). Map it
-  through `scanFailureReason()` in `frontend/src/lib/scanFailureReasons.ts` — **C10 resolved
-  (DMI-75)**; rendering it is DMI-88. Do not fetch `GET /commands/{id}` for the sentence.
+  `status`, `host_count`, `finding_count`, `command_id` (nullable), `error_code`
+  (`ScanErrorCode | null`).
+- **No `GET /findings` call here.** `FindingRecord` arrives complete — `severity`, `title`,
+  `description`, `recommendation`, `evidence`, `references`, `cve_id`, `cvss_score`, `host_ip`,
+  `port`, `protocol`, `service`. Opening one is **local state**.
+- **Failure reason:** on `status: failed`, `error_code` is on this same body. Map it through
+  `scanFailureReason()` in `frontend/src/lib/scanFailureReasons.ts`. Do not fetch
+  `GET /commands/{id}` for the sentence.
+
+**Layout — top to bottom:**
+
+1. **Back link**, then the page title.
+2. **Summary strip** — the key/value facts (when · type · subnet · devices · vulnerabilities),
+   **aligned to the width of the table below it**.
+3. **Vulnerabilities, grouped by severity.** Each group — `Critical`, `High`, `Medium`, `Low` —
+   is **one white card on the canvas with its plain heading inside the card**. The card never
+   varies with severity. A row expands its panel **in place**; it does not navigate.
+4. **The devices-seen table.**
 
 **Three states:**
-- **Regular:** header (when · mode · subnet · counts), then findings sorted critical→low, then the
-  host table. Clicking a finding row expands its panel **in place**; clicking a host row expands its
-  ports **in place**. Neither navigates.
-- **Regular, no findings (the good day):** the findings section says so in words and the host table
-  carries the page. Positive framing, not an empty table (§7).
-- **Regular, unfinished:** `status` is `pending`/`accepted`/`processing` — the scan is running right
-  now. The page says so and does **not** poll; the run log refreshes when a command completes on
-  Agents (cache invalidation). It does not render an empty findings table as though the answer were
-  "nothing".
-- **Regular, failed:** the failure **is** the content. Show the reason from `error_code` and what to
-  do; suppress the empty findings and host tables entirely.
-- **Error:** page-level copy + [Retry]. 404 gets its own line.
+- **Regular:** as above, groups ordered critical → low; empty groups are not rendered.
+- **Regular, no vulnerabilities (the good day):** the section says so in words and the devices
+  table carries the page.
+- **Regular, unfinished:** `pending`/`accepted`/`processing`. The page says the scan is running
+  and does **not** poll; the cache is invalidated when the command completes. It never renders an
+  empty vulnerabilities section as though the answer were "nothing".
+- **Regular, failed:** the failure **is** the content. Show the reason and the next step; suppress
+  the empty tables entirely.
+- **Error:** page-level copy + `[Retry]`. 404 gets its own line.
 
-**Deep link:** `?finding=:findingId` — match the id in the already-loaded `findings`, scroll to that
-row, open its panel. Absent or unmatched → render normally. No extra fetch (B3).
+**Deep link:** `?finding=:findingId` — match the id in the already-loaded `findings`, scroll to
+that row, open its panel. Absent or unmatched → render normally. No extra fetch (B3).
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
+| Back link | "Back" (Lucide `arrow-left`) |
 | Page title | "Scan — yesterday 21:40" |
-| Header line | "quick mode · 192.168.0.0/24 · 12 hosts · 3 findings" |
-| Findings section title | "Findings" |
-| Findings columns | "Finding · Host · Port · CVE · Severity" |
-| No findings | "No findings. Every host in this scan came back clean." |
-| Finding panel — labels | "What it is" / "What to do" / "Evidence" / "References" |
-| Finding panel — CVSS | "CVSS 9.8" |
-| Hosts section title | "Hosts" |
-| Hosts columns | "Host · IP · MAC · Vendor · Open ports" |
-| Unfinished | "This scan is still running." · "Findings appear here when it finishes." |
-| Failed | "This scan didn't finish." · "The Pi reported: `<error_code>`." · [Try another scan] → AGENTS (admin only) |
+| Summary strip | "quick · 192.168.0.0/24 · 12 devices · 3 vulnerabilities" |
+| Group headings | "Critical" / "High" / "Medium" / "Low" — bold ink, no colour |
+| Vulnerability columns | "Vulnerability · Device · Port · CVE · Severity" |
+| No vulnerabilities | "No vulnerabilities. Every device in this scan came back clean." |
+| Panel — labels | "What it is" / "What to do" / "Evidence" / "References" |
+| Panel — CVSS | "CVSS 9.8" |
+| Devices section title | "Devices in this scan" |
+| Devices columns | "Device · IP · MAC · Vendor · Services" |
+| Unfinished | "This scan is still running." · "Vulnerabilities appear here when it finishes." |
+| Failed | "This scan didn't finish." · the plain-language reason · [Try another scan] (admin only) |
 | Failed, no `command_id` | "This scan didn't finish. No reason was recorded." |
 | Error | "Couldn't load this scan." · [Retry] |
 | 404 | "That scan doesn't exist." · [Back to scans] |
 
-**Layout:**
-```text
-+------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
-+==============================================================================+
-|                                                                              |
-|   SCAN — YESTERDAY 21:40                                                     |
-|   quick mode · 192.168.0.0/24 · 12 hosts · 3 findings           (muted)      |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   FINDINGS                                                                   |
-|   FINDING                      HOST          PORT   CVE            SEVERITY  |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   PHP CGI argument injection   synology-nas   443   CVE-2024-4577  ▓ CRITICAL|
-|   +----------------------------------------------------------------+        |
-|   |  WHAT IT IS    <description>                                    |  ← open|
-|   |  WHAT TO DO    <recommendation>                                 |        |
-|   |  EVIDENCE      <evidence>                (mono)                 |        |
-|   |  REFERENCES    <links>                        CVSS 9.8          |        |
-|   +----------------------------------------------------------------+        |
-|   Outdated OpenSSH             pi-lab          22   CVE-2023-…     ▓ HIGH    |
-|   Telnet port open             printer-hp      23   —              ▓ LOW     |
-|                                                                              |
-|   HOSTS                                                                      |
-|   HOST          IP             MAC                VENDOR      OPEN PORTS     |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   synology-nas  192.168.0.42   00:11:32:AA:BB:CC  Synology    4              |
-|   pi-lab        192.168.0.17   DC:A6:32:11:22:33  Raspberry   2              |
-+------------------------------------------------------------------------------+
-```
+**`Port` and `CVE` sit no closer than step 6 (24px)**, from fixed column widths.
 
-**Open questions:**
-1. ~~**C9** — `DevicePayload` (the `devices` array) carries **no `host_id`**, so a host row here
-   cannot link to HOST DETAIL.~~ **✅ RESOLVED 2026-08-02 (DMI-85) — the array is `hosts:
-   ScanHostView[]` and `host_id` is required on it.** A host row can link to `/hosts/:hostId`;
-   the affordance is available whenever this screen is built.
-2. ~~**C10** — `error_code` is a *code*, not a sentence. It needs a copy mapping
-   (code → plain-language reason) before the failed state has real words.~~ **✅ RESOLVED
-   2026-08-13 (DMI-75)** — `frontend/src/lib/scanFailureReasons.ts` is the mapping. This screen
-   still needs to import it (DMI-88).
+**Open questions:** none.
 
 ---
 
-### HOST INVENTORY
+### NETWORK
 
 **Route:** `/hosts` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B3
 
-**Epicenter** — the machines on the network: what is out there, and does any of it need attention.
-This answers "what do I own", which is the second question every operator asks after "is anything
-wrong".
+The nav item and the page title are **Network** — the screen shows the client's network. The
+route is unchanged. *Re-specced 2026-09-02 against
+[`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html), approved as drawn.*
+
+**Epicenter** — the table of devices on the network: what is out there, and does any of it need
+attention.
 
 **Data:**
-- `GET /api/v1/hosts?page&per_page=20&sort_by=last_seen_at&sort_order=desc` → `HostListResponse`
-  (`data: HostSummary[]`, `total`, `page`).
+- `GET /api/v1/hosts?page&per_page=20` → `HostListResponse` (`data: HostSummary[]`, `total`,
+  `page`).
 - `HostSummary`: `host_id`, `ip`, `mac` (nullable), `hostname`, `vendor`, `first_seen_at`,
   `last_seen_at`, `open_ports_count`, `highest_severity` (nullable).
 
-**Search is cut from v1** ([`IDEAS.md`](IDEAS.md) → Hosts). The contract does define a free-text `q`
-parameter on this endpoint, but v1 does not send it and the backend does not implement it — one
-subnet does not produce a list you cannot read (§12). Sorting is server-driven; the contract allows
-`last_seen_at | hostname | vendor | ip`.
+**Sorted by severity, then name.** Silent devices sort last regardless (see below). Sorting is
+server-driven.
 
-**Hosts are cumulative, not per-scan** — this is the inventory of everything ever discovered, which
-is why `last_seen_at` is the default sort and why a machine that has gone away still appears.
+**Above the table:** a **search input** and a **ghost filter select**. These are approved on the
+mockup; the contract's free-text `q` parameter is what search consumes when it is implemented.
 
-**`mac` can be null** — a host discovered across a router has no ARP entry, so there is no MAC to
-show. The column renders "—" rather than being hidden; the machine is real, one identifier is not
-observable from here.
+**Devices are cumulative, not per-scan** — this is everything ever discovered, which is why a
+machine that has gone away still appears.
+
+**`mac` can be null** — a device discovered across a router has no ARP entry. The cell renders
+"—" rather than being hidden.
+
+**Silent devices** follow the `DataTable` pattern in [`FOUNDATIONS.md`](FOUNDATIONS.md) §Tables: a
+muted row with a **"Not seen for N weeks"** second line, and those rows also collapse into a
+**"Not seen recently (N)"** group row at the bottom of the table.
 
 **Three states:**
-- **Regular:** one row per host, whole row navigates to `/hosts/:hostId`.
-- **Blank:** no scan has ever run, so nothing has been discovered. Same first-run CTA as blank Home.
-- **Error:** page-level copy + [Retry].
+- **Regular:** one row per device, fixed 56px rows, whole row navigates to `/hosts/:hostId`.
+- **Blank:** no scan has ever run. One sentence, and `[Scan now]` on Scans for an admin.
+- **Error:** page-level copy + `[Retry]`.
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
-| Page title | "Hosts" |
-| Subtitle | "Every device Dmitri has found on your network." |
-| Columns | "Host · IP · MAC · Vendor · Open ports · Highest severity · Last seen" |
+| Page title | "Network" |
+| Search placeholder | "Search devices" |
+| Columns | "Device · IP · MAC · Vendor · Services · Highest severity · Last seen" |
 | Hostname missing | "(unnamed)" |
 | MAC — null | "—" |
 | Highest severity — null | "—" |
-| Blank — heading | "No hosts yet." |
-| Blank — body | "Once a scan runs, every device Dmitri finds on your network shows up here." |
-| Blank — CTA (admin only) | "Run first scan" |
+| Silent device second line | "Not seen for 6 weeks" |
+| Silent device group row | "Not seen recently (3)" |
+| Blank — heading | "No devices yet." |
+| Blank — body | "Once a scan runs, every device on your network shows up here." |
 | Blank — viewer line | "Ask your admin to run the first scan." |
-| Error | "Couldn't load the hosts." · [Retry] |
+| Error | "Couldn't load your network." · [Retry] |
 
-**Layout:**
-```text
-+------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
-+==============================================================================+
-|                                                                              |
-|   HOSTS                                                                      |
-|   Every device Dmitri has found on your network.                (muted)      |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   HOST          IP            MAC               VENDOR     PORTS  SEV  SEEN  |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   synology-nas  192.168.0.42  00:11:32:AA:BB:CC Synology       4  ▓CRIT 2m   |
-|   pi-lab        192.168.0.17  DC:A6:32:11:22:33 Raspberry      2  ▓HIGH 2m   |
-|   printer-hp    192.168.0.31  3C:D9:2B:44:55:66 HP             3  ▓LOW  2m   |
-|   (unnamed)     192.168.0.88  A4:83:E7:77:88:99 Apple          1  —     Jul 9|
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   Showing 1–20 of 12                          [Previous]  [Next]             |
-+------------------------------------------------------------------------------+
-```
-
-**Open questions:** none. (A "new device" badge needs no contract work — **C6** is resolved and
-`first_seen_at` is a required property on `HostSummary` as well as `HostDetailResponse`.)
+**Open questions:**
+1. **Device naming fallback** when no name is found — hostname → vendor + address → address?
+   Open; belongs to this screen's issue.
 
 ---
 
-### HOST DETAIL
+### NETWORK DETAIL
 
 **Route:** `/hosts/:hostId` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B3
 
-**Epicenter** — what this machine exposes: its open ports. Identity is a header; history is a
-footnote; the attack surface is the page.
+**Epicenter** — what this device exposes and what is wrong with it. *Re-specced 2026-09-02
+against [`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html).*
 
 **Data:**
-- `GET /api/v1/hosts/{host_id}` → `HostDetailResponse`: `ip`, `mac` (nullable — see HOST
-  INVENTORY), `hostname`, `vendor`, `first_seen_at`, `last_seen_at`, `open_ports_count`,
-  `highest_severity`, `ports: Port[]`, `scan_history: HostScanHistoryEntry[]`.
+- `GET /api/v1/hosts/{host_id}` → `HostDetailResponse`: `ip`, `mac` (nullable), `hostname`,
+  `vendor`, `first_seen_at`, `last_seen_at`, `open_ports_count`, `highest_severity`,
+  `ports: Port[]`, `scan_history: HostScanHistoryEntry[]`.
 - `Port`: `port`, `protocol`, `state`, `service`, `version` (nullable).
 - `HostScanHistoryEntry`: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`,
   `highest_severity`.
-- **Findings are a second call:** `HostDetailResponse` carries **no findings array**, but
-  `highest_severity` is shown — so the page must explain that severity. Use
-  `GET /api/v1/findings?host_id={host_id}` → `FindingRecord[]`, rendered with the same row +
-  in-place panel as SCAN DETAIL.
+- **Vulnerabilities are a second call:** `GET /api/v1/findings?host_id={host_id}` →
+  `FindingRecord[]`, rendered with the same row + in-place panel as SCAN DETAIL.
+
+**Layout — header → vulnerabilities → services → scan history.** Vulnerabilities come **before**
+services; that ordering is decided, not a preference. The header shows the device name as the
+title, with address and vendor secondary; **when the device has no name, the address is the
+title**.
+
+Each section is a **white card on the canvas with its heading inside**.
 
 **Three states:**
-- **Regular:** identity header, findings (if any), ports table, scan history. Scan-history rows
-  navigate to `/scans/:scanId` (whole row, rule 4).
-- **Blank:** not reachable — a host exists only because a scan found it. A host with **zero open
-  ports** is the nearest thing, and it gets positive framing rather than an empty table.
-- **Error:** page-level copy + [Retry]; 404 its own line.
+- **Regular:** as above. Scan-history rows navigate to `/scans/:scanId`.
+- **Blank:** not reachable — a device exists only because a scan found it. A device with nothing
+  exposed is the nearest thing, and it gets positive framing rather than an empty table.
+- **Error:** page-level copy + `[Retry]`; 404 its own line.
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
-| Page title | "synology-nas" (or the IP when `hostname` is empty) |
+| Back link | "Back" (Lucide `arrow-left`) |
+| Page title | "synology-nas" — or the IP when `hostname` is empty |
 | Header line | "192.168.0.42 · 00:11:32:AA:BB:CC · Synology" |
 | Seen line | "First seen Jul 3 · last seen 2 min ago" |
-| Findings section title | "Findings" |
-| No findings | "No findings on this host." |
-| Ports section title | "Open ports" |
-| Ports columns | "Port · Protocol · Service · Version" |
-| No open ports | "No open ports. This host isn't exposing anything." |
+| Vulnerabilities section title | "Vulnerabilities" |
+| No vulnerabilities | "No vulnerabilities on this device." |
+| Services section title | 🔓 **open** — a plain phrase about the services running on this device. The word *ports* is retired; the exact wording is the one item still open in [`FOUNDATIONS.md`](FOUNDATIONS.md) §Copy rules & vocabulary |
+| Services columns | "Port · Protocol · Service · Version" |
+| Nothing exposed | "Nothing is exposed on this device." |
 | Version missing | "—" |
-| History section title | "Seen in these scans" |
-| History columns | "When · Mode · Open ports · Highest severity" |
-| Error | "Couldn't load this host." · [Retry] |
-| 404 | "That host doesn't exist." · [Back to hosts] |
-
-**Layout:**
-```text
-+------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
-+==============================================================================+
-|                                                                              |
-|   SYNOLOGY-NAS                                                               |
-|   192.168.0.42 · 00:11:32:AA:BB:CC · Synology                   (muted)      |
-|   First seen Jul 3 · last seen 2 min ago                        (muted)      |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   FINDINGS                                                                   |
-|   PHP CGI argument injection      443    CVE-2024-4577      ▓ CRITICAL       |
-|      (row expands in place — same panel as SCAN DETAIL)                      |
-|                                                                              |
-|   OPEN PORTS                                                                 |
-|   PORT   PROTOCOL   SERVICE     VERSION                                      |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   22     tcp        ssh         OpenSSH 8.4p1                                |
-|   443    tcp        https       nginx 1.18.0                                 |
-|   5000   tcp        http        Synology DSM                                 |
-|                                                                              |
-|   SEEN IN THESE SCANS                                                        |
-|   WHEN              MODE    OPEN PORTS   HIGHEST                             |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   yesterday 21:40   quick            4   ▓ CRITICAL                          |
-|   Jul 11  21:40     quick            4   ▓ CRITICAL                          |
-|   Jul 10  21:40     quick            3   —                                   |
-+------------------------------------------------------------------------------+
-```
+| Scan-history section title | 🔓 **open** — *"Seen in these scans"* is rejected and has no replacement yet (same open item) |
+| Scan-history columns | "When · Type · Services · Highest severity" |
+| Error | "Couldn't load this device." · [Retry] |
+| 404 | "That device doesn't exist." · [Back to Network] |
 
 **Open questions:**
-1. ~~Does `GET /findings?device_id=…` accept the **`host_id`** UUID?~~ **✅ RESOLVED (C11) — the
-   filter is `?host_id=`.** `read_findings()` takes `host_id: UUID | None`, and `FindingRecord`
-   carries `host_id`. The read model is `hosts` end to end; only the Pi ingest payload keeps
-   `devices[]` (ADR-011 §5). Host detail can show findings.
+1. The two section headings above. Blocked on the one open Foundations item, not on a contract.
 
 ---
 
-### AGENTS
+### DEVICES
 
 **Route:** `/agents` · **Shell:** inside · **Roles:** admin, viewer (read-only) ·
 **Flow:** B4, and the first-run step of B2
 
-**Epicenter** — *can I scan right now?* The agent's live state and the trigger, together
+> **Decided 2026-09-02 (DMI-131):** the nav item and page title are **Devices** — a device is the
+> Dmitri box running inside a network. The route is unchanged. The **manual scan trigger moved to
+> the Scans page as `[Scan now]`**, beside the scan settings, because that is where the type is
+> chosen; this screen keeps **device management only**. A **per-device start scan is future work**,
+> not part of the revamp. The `[Scan now]` references below are the built behaviour and are
+> superseded by SCANS on that point. Everything else here — provisioning states, the network
+> chooser, the command lifecycle — stands, restyled to [`FOUNDATIONS.md`](FOUNDATIONS.md).
+
+**Epicenter** — *can I scan right now?* The device's live state and the network it targets
 ([`REFERENCE.md`](REFERENCE.md) §2). Everything else on this page is caption.
 
 **Data:**
@@ -1343,13 +809,13 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
   offers `[Retry]` second.
 - **Offline.** `online: false`. `[Scan now]` **stays visible and enabled** — see Open questions.
 - **Viewer.** Sees the row, the status and the network. No `[Scan now]`, no network chooser —
-  omitted, not disabled (rule 3).
+  omitted, not disabled (absent, not disabled).
 - **Error.** Page-level copy + `[Retry]`.
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
-| Page title | "Agents" |
+| Page title | "Devices" |
 | Subtitle | "The Dmitri box on your network." |
 | Row — online | "Online · last seen 2 min ago" |
 | Row — offline | "Offline · last seen Tuesday 14:10" |
@@ -1380,10 +846,10 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 Ready — admin:
 ```text
 +------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
+| DMITRI    Home  Scans  Network  Devices  Users  Settings      [Log out]     |
 +==============================================================================+
 |                                                                              |
-|   AGENTS                                                                     |
+|   DEVICES                                                                    |
 |   The Dmitri box on your network.                               (muted)      |
 |   ------------------------------------------------------------------        |
 |                                                                              |
@@ -1430,132 +896,124 @@ Scanning:
    delivery attempt and does not retry ([`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)),
    which makes keeping the button live *more* important, not less: **the operator clicking again
    is the only retry the system has.** Hiding the button on a flag that might be wrong denies a
-   scan that would have worked; the `503` toast is the designed, honest failure. **This is not rule 3** — that rule is about what a *role*
+   scan that would have worked; the `503` toast is the designed, honest failure. **This is not the absent-not-disabled rule** — that rule is about what a *role*
    may do, not what is momentarily unavailable.
 2. ~~**C12 — does a dead Pi produce `failed` or `expired`?**~~ **✅ RESOLVED 2026-07-13 — the split is
    `delivered_at`.** Never delivered → `expired`; delivered then broke → `failed`. The screen knows
    which it gets: **a Pi that dies mid-scan is `failed`** (it took the job), and `expired` is only
    *never picked up*. Pill copy updated accordingly.
 3. Pill vs stepper for the five lifecycle states — pill chosen; stepper parked
-   ([`IDEAS.md`](IDEAS.md) → Agents).
+   ([`IDEAS.md`](IDEAS.md) → Agents & Scan now).
 4. ~~Blocked on **C1** and **C2**.~~ **✅ Unblocked and built** — DMI-78 (contract) + DMI-89 (SPA).
 
 ---
 
-### USERS & INVITES
+### USERS
 
 **Route:** `/users` · **Shell:** inside · **Roles:** admin only · **Flow:** B2
 
-**This screen ships as half a screen, on purpose (§3).** Of the four things B2 breadboarded here —
-list users, list pending invites, change a role, revoke an invite — **exactly one has an endpoint**:
-`POST /invites`. The other three are **C4**, and no amount of frontend work conjures them.
+*Re-specced 2026-09-02 against
+[`mockups/dmi-131-mockups-v4.html`](mockups/dmi-131-mockups-v4.html). Built 2026-08-21 (spec 034);
+what follows is the approved shape, not a build plan.*
 
-So v1 does not ship three dead sections and a table that says "coming soon". It ships **the one
-thing that works, finished**: inviting a person. The full screen is specced below it so C4 has a
-target to land against.
+**Epicenter** — **the table is the page**: everyone with access, members and pending invites in
+one list. Inviting is a function of the screen, not its focus.
 
-**The route and the nav item stay `Users` throughout.** *Users* names the domain, not today's single
-action, and the page grows new user-related surfaces inside it rather than being renamed around them
-(§App shell). In v1 the page is titled *Users* and its whole content is the invite form; when C4
-lands, the user table appears **above** the invite action and nothing in the shell moves.
+**No count line and no helper copy.** The old *"Create a link that lets someone join your
+organization."* subtitle and the per-role explanations under the role control are **deleted, not
+reworded**.
 
-**Epicenter** — the invite form, and the link it produces. The link *is* the deliverable; the form
-is how you ask for it.
-
-**A viewer reaching `/users` directly gets the not-found page. ✅ Decided 2026-08-18.** Two
-primitives, because hiding a nav item and refusing a route are different jobs and DMI-90 requires
-both to be absent: `AdminOnly` wraps children and renders `null` for viewers (it hides the nav
-item), and `RequireAdmin` is an outlet guard mirroring `RequireSession` that renders the existing
-`NotFound` page. Not-found rather than a redirect or an access-denied message, for the same reason
-the backend answers `404` and never `403` for another org's resources — an unauthorised person
-should not be able to map what exists. Neither primitive takes a `fallback` or `disabled` prop, so
-there is no API through which a greyed-out admin control could be produced (rule 3).
+**A viewer reaching `/users` directly gets the not-found page.** Two primitives, because hiding a
+nav item and refusing a route are different jobs: `AdminOnly` renders `null` for viewers (it hides
+the nav item), and `RequireAdmin` is an outlet guard that renders the existing `NotFound` page.
+Not-found rather than access-denied, for the same reason the backend answers `404` and never `403`
+for another org's resources. Neither primitive takes a `fallback` or `disabled` prop, so a
+greyed-out admin control cannot be produced.
 
 **Data:**
-- `POST /api/v1/invites` — body `{ email, role: "admin" | "viewer" }` → **`201`
-  `InviteCreatedResponse`: `{ invite_token, expires_at }`.**
-- **The backend emails the invite, *and* the screen shows the link. ✅ Decided 2026-07-13** —
-  transactional email is in scope (provider TBD, [C17](#users--invites)); the backend sends
-  `https://<app>/invite?token=<invite_token>` to the invitee.
-- **🔓 C4** — listing users, listing pending invites, changing a role, revoking an invite and
-  **removing a member** have **no endpoints**. When it lands the screen consumes `GET /api/v1/users`
-  and `GET /api/v1/invites` as **two separate calls, merged here into one table** — they have
-  different lifecycles and different row actions, so they stay separate resources.
-- **Removal ✅ decided 2026-08-08** ([`ADR-017`](../adr/ADR-017-account-removal.md)) —
-  `DELETE /api/v1/users/{user_id}`, admin-only, **hard delete**. It **refuses to target the caller**
-  (`/users/me` is the self-service path, and it lives in SETTINGS, not here), which is why an
-  admin's own row carries no Remove action. Changing a role likewise refuses to target the caller:
-  **self-demotion is not possible**. Between them, an org can never reach zero admins.
-- **There is no `status` field on the wire.** `OrgMember` carries `user_id`, `email`, `role` and
-  `last_seen_at` only. The Status column is **derived from which endpoint the row came from** —
-  members read "Active", invites read "Invited — expires in 2d". Nobody should go looking for a
-  field that does not exist.
-- **Mutations refetch; they do not patch the cache by hand.** Role change, remove and revoke each
-  invalidate the two list queries on success, which is what "updates without a full reload" means
-  here. No optimistic update: all three are admin writes on a small table where a wrong guess
-  briefly shows a false membership fact.
-- **`last_seen_at`** is served on the user row — when the person was last active, including silent
-  refresh, rendered as relative time. Pending invites have none and render `—`.
-- **🔓 C18** — `POST /invites` documents **only a `201`**. Inviting an email that already has an
-  account, or that already has a live invite, has **undefined behavior** — and re-inviting someone
-  is the single most likely thing an admin does twice.
+- `GET /api/v1/users` → `OrgMember[]` (`user_id`, `email`, `role`, `last_seen_at`) and
+  `GET /api/v1/invites` → pending invites. **Two calls, one table.** Members first in the order
+  the endpoint returns them (`last_seen_at` desc, nulls last), then pending invites,
+  soonest-to-expire first. They are not interleaved: a pending row has no `last_seen_at` to sort
+  by. **If either call fails the whole table shows its error state** — this table means *everyone
+  with access*, and a member list silently missing its invites is a wrong answer, not a partial
+  one.
+- **There is no `status` field on the wire.** Status is derived from which endpoint the row came
+  from.
+- `POST /api/v1/invites` — body `{ email, role }` → `201 InviteCreatedResponse`
+  `{ invite_token, expires_at }`. The backend emails the link; the screen also shows it.
+- `PATCH /api/v1/users/{user_id}` — role change. Refuses to target the caller: **self-demotion is
+  not possible.**
+- `DELETE /api/v1/users/{user_id}` — admin-only **hard delete**
+  ([`ADR-017`](../adr/ADR-017-account-removal.md)). It refuses to target the caller; `/users/me` is
+  the self-service path and lives in SETTINGS. Between the two refusals an org can never reach
+  zero admins.
+- **Mutations refetch; they do not patch the cache by hand.** No optimistic update — these are
+  admin writes on a small table where a wrong guess briefly shows a false membership fact.
 
-**Email is the convenience; the link is the guarantee.** The screen shows the copyable URL *even
-though* the invite was emailed, and that is not redundancy:
+**Layout:**
 
-- **A security product's one-time login link is structurally indistinguishable from phishing.** It
-  will sometimes land in spam no matter how clean the DNS is, and the admin needs a recovery that
-  doesn't depend on the thing that just failed.
-- Plenty of admins would rather send it over Slack or Teams anyway.
-- It keeps the screen working while deliverability is still being tuned.
+1. **Page title**, then the table. Fixed 56px rows.
+2. **The role cell is an inline select** — shadcn `Select` with a **ghost, borderless trigger**,
+   the text plus a small chevron close to it, **aligned with the column header**. It appears on
+   other members' rows only; your own row and pending invite rows render the role as plain text.
+3. **Every row carries a `Remove` action** — a **text link in the row plus a confirm dialog**,
+   never a bare icon button. Admins may remove viewers **and other admins**; your own row carries
+   none (leaving is done in Settings). Pending rows carry `Revoke` instead.
+4. **`[Invite a user]` sits under the table at the right edge**, ~5% taller than the default
+   control. It opens a dialog: the email + role form, replaced in place by the confirmation
+   carrying the link and `[Copy link]`. A modal is the only layout the once-only link cannot
+   scroll out of.
 
-**The link is still shown once, and the screen still says so.** With no `GET /invites` (C4), a token
-that scrolls off the page is **gone** — email softens this (the invitee has their own copy) but does
-not fix it: the *admin* cannot retrieve the link again, and their only recovery is issuing a second
-invite. So the warning stays, worded as a nudge rather than an alarm (§7).
+**Two weights of confirmation.** Removal makes the admin type the target's address
+([`ADR-017`](../adr/ADR-017-account-removal.md) §5, `ConfirmByTyping`); a role change and a revoke
+ask a plain question with a single confirm button. **Typing is reserved for what cannot be
+undone** — a role set wrong is corrected in two clicks; an invite revoked is reissued in one.
+
+**Three row actions raise a toast; the invite does not.** Role change, remove and revoke each take
+effect in a table the admin is already looking at, and a row quietly changing is easy to miss. The
+invite's dialog already *is* its confirmation.
+
+**Email is the convenience; the link is the guarantee.** A security product's one-time login link
+is structurally indistinguishable from phishing and will sometimes land in spam, so the admin gets
+a recovery that does not depend on the thing that just failed. With no way to re-read a token, the
+once-only nudge stays.
 
 **Three states:**
-- **Regular:** the invite form. Email, role, `[Send invite]`.
-- **Blank:** **not applicable in v1** — a form is its own content. (When C4 lands, the *user table*
-  gets a blank state, and it is never truly empty: the admin reading it is in it.)
-- **Created (the state that matters):** the form is replaced by a confirmation that the invite was
-  **emailed**, plus the link, a `[Copy link]` button, when it dies, and the once-only nudge.
-  `[Invite someone else]` returns to the form.
-- **Error:** inline under the field. A duplicate invite (C18) has no defined status, so the copy
-  below is provisional.
+- **Regular:** the table.
+- **Blank:** never truly empty — the admin reading it is in it.
+- **Error:** the table's own error state, both calls treated as one unit; the same goes for its
+  loading skeleton.
 
 **Copy:**
 | Element | Copy |
 | --- | --- |
 | Page title | "Users" |
-| Section title (v1) | "Invite a user" |
-| Subtitle (v1) | "Create a link that lets someone join your organization." |
-| Fields | "Email" / "Role" |
-| Role — viewer | "Viewer — can see scans, hosts and findings." |
-| Role — admin | "Admin — can also run scans and invite people." |
-| Button | "Create invite link" · in flight: "Creating…" |
+| Table columns | "Person · Role · Status · Last seen" |
+| Active row | "Active" · "2 hours ago" · [Remove] |
+| Active row, no last-seen value | "Not recorded yet" — **not** "Never", and not the pending row's `—` |
+| Pending row | "Invited — expires in 2 days" · "—" · [Revoke] |
+| Own row | No "you" marker, no Remove, no role control. The absent controls identify the row |
+| Blank table | "You're the only person here." |
+| Table — load error | "Couldn't load your organisation." · [Try again] |
+| Role control | "Viewer" / "Admin" |
+| Screen action | "Invite a user" |
+| Invite fields | "Email" / "Role" |
+| Invite button | "Create invite link" · in flight: "Creating…" |
 | Created — heading | "Invite sent." |
 | Created — body | "We emailed an invite to **name@example.com**. It works once, and expires **in 48 hours**." |
 | Created — link label | "Or send them this link yourself:" |
 | Created — nudge | "This is the only time you'll see this link. If they never get the email, copy it now." |
 | Created — copy button | "Copy link" · after click: "Copied" |
 | Created — again | "Invite someone else" |
-| Created — dismiss (post-C4) | "Done" — closes the dialog and refetches the table |
+| Created — dismiss | "Done" — closes the dialog and refetches the table |
 | Error — bad email | "That doesn't look like an email address." |
 | Error — already a member (`400 email_already_member`) | "That person is already in your organization." |
 | Error — already invited (`409 invite_already_pending`) | "That address already has an invite waiting. Revoke it first if you need to send a new one." |
 | Error — server | "Couldn't create the invite." · [Try again] |
-| Table columns (post-C4) | "Person · Role · Status · Last seen" |
-| Active row (post-C4) | "Active" · "2 hours ago" · [Remove] |
-| Active row, no last-seen value | "Not recorded yet" — **not** "Never", and not the pending row's `—` |
-| Pending row (post-C4) | "Invited — expires in 2 days" · "—" · [Revoke] |
-| Own row (post-C4) | No "you" marker — **no Remove, no role control.** The absent controls are what identify the row; a label repeating it was noise in the Person column. Leaving is done in Settings |
-| Blank table (post-C4) | "You're the only person here." |
-| Table — load error (post-C4) | "Couldn't load your organisation." · [Try again] |
-| Role control (post-C4) | a dropdown on **other members'** rows — "Viewer" / "Admin". Your own row and **pending invite rows** render the role as plain text, no control |
 | Role change — confirm heading | "Make **name@example.com** an admin?" · demoting: "Make **name@example.com** a viewer?" |
 | Role change — confirm body (to admin) | "They'll be able to run scans and invite people." |
-| Role change — confirm body (to viewer) | "They'll only be able to see scans, hosts and findings." |
+| Role change — confirm body (to viewer) | "They'll only be able to see scans and your network." |
 | Role change — confirm button | "Change role" · in flight: "Changing…" |
 | Role change — error | "Couldn't change that role." · [Try again] |
 | Remove — confirm heading | "Remove name@example.com?" |
@@ -1571,153 +1029,36 @@ invite. So the warning stays, worded as a nudge rather than an alarm (§7).
 | Remove — success toast | "**sam@acme.com** was removed." |
 | Revoke — success toast | "The invite to **new@acme.com** was revoked." |
 
-**Revoke confirms with a single click, like a role change — not by typing. ✅ Decided 2026-08-18.**
-DMI-90 asks for a confirmation on both role change and revoke, and revoking sits on the reversible
-side of the line drawn below: the invitee has no account yet, nothing is deleted but an unused
-token, and the admin can issue a new invite immediately. Typing stays reserved for removal.
+**"Added" was dropped, deliberately.** `last_seen_at` replaces it rather than joining it: accepting
+an invite issues a session immediately, so a user's first activity timestamp *is* their join date.
+For a pending row, "expires in 2 days" carries the only time fact worth having. Four columns, not
+five.
 
-**The three row actions confirm with a toast; the invite does not. ✅ Decided 2026-08-18.** Role
-change, remove and revoke each take effect in a table the admin is already looking at, and the row
-alone is a weak signal — a role cell changing from Viewer to Admin, or a row quietly vanishing, is
-easy to miss and indistinguishable from a mis-click. Each therefore raises a toast naming the
-person and what happened. **A successful invite raises none**: its modal already *is* the
-confirmation, carries the link, and must be dismissed deliberately, so a toast on top would repeat
-it. **`Toast` itself is built here, not split out (✅ decided 2026-08-18):** this screen is its
-first call site and brings three real uses with it, so the component lands with consumers rather
-than ahead of them (`.claude/CLAUDE.md` §2). Scan now's errors join as a fourth when Agents
-unblocks.
-
-**Two calls, one table — ordering and failure. ✅ Decided 2026-08-18.** Members render first, in the
-order `GET /users` already returns them (`last_seen_at` descending, nulls last), then pending
-invites below, soonest-to-expire first. The two groups are not interleaved: a pending row has no
-`last_seen_at` to sort by, so mixing them would order rows on a value half of them lack. **If
-either call fails, the whole table shows its error state** — "Couldn't load your organisation."
-with `[Try again]`, and no rows at all. A member list silently missing its pending invites is not
-an incomplete answer but a wrong one: this table means *everyone with access*, and an admin
-auditing it would read the short version as complete. Rule 1 treats it as one unit; the same goes
-for its loading skeleton and its blank state.
-
-**The table's two `409`s are unreachable from this screen, and get no copy. ✅ Decided 2026-08-18.**
-`PATCH /users/{user_id}` documents `self_target` and `last_admin`. Neither can be produced here.
-`self_target` needs the admin to target their own row, and their own row draws no role control;
-`last_admin` needs the target to be the org's *only* admin while not being the caller, which cannot
-happen, because the caller is an admin in that same org and so the count is at least two — the
-backend checks self-targeting first
-([`users.py`](../../backend/src/api/routers/users.py) `update_user_role_route`). They stay as
-backend guards against direct API calls. Each row action therefore carries **one** failure line and
-a `[Try again]`, and no branch is written for a state this UI cannot reach (`.claude/CLAUDE.md` §2).
-
-**Two row actions, two weights of confirmation. ✅ Decided 2026-08-18.** Removal makes the admin
-type the target's address ([`ADR-017`](../adr/ADR-017-account-removal.md) §5); a role change asks a
-plain "Make **sam@acme.com** an admin?" with a single confirm button. The difference is
-proportionality, and it is the same reasoning ADR-017 used to justify typing in the first place:
-removal is irreversible and ends a live session, while a role set wrong is corrected in two clicks
-from the same dropdown. Making both feel identical would either make removal feel routine or make
-role changes feel dangerous. **Typing is reserved for the actions that cannot be undone.**
-
-**"Added" was dropped, deliberately.** The earlier column deck carried *Person · Role · Status ·
-Added*. `last_seen_at` replaces it rather than joining it: the one case where Added earns its place
-— telling a brand-new member apart from a long-dormant one, both reading "Never" — cannot arise,
-because accepting an invite issues a session immediately, so a user's first activity timestamp *is*
-their join date. For a pending row, "expires in 2 days" already carries the only time fact worth
-having. Four columns, not five.
-
-**One null case does arise, and it is not the one above. ✅ Decided 2026-08-18.** The migration that
-added the column
+**One null case does arise.** The migration that added `last_seen_at`
 ([`20260810_16`](../../backend/alembic/versions/20260810_16_user_activity_and_invite_revoke.py))
-adds it nullable **with no backfill**, so every account that existed before 2026-08-10 reads `NULL`
-until that person next signs in or their session refreshes. Those rows say **"Not recorded yet"** —
-not "Never", which would assert a falsehood about someone who may have logged in this morning, and
-not the pending row's `—`, which is the cell doing the work of telling a member from an invite. The
-state is self-healing and disappears within days of normal use; `GET /users` already sorts these
-rows last (`nulls_last`), so they sit at the bottom rather than at the top of a "most recently
-active" reading.
+adds it nullable **with no backfill**, so accounts predating 2026-08-10 read `NULL` until that
+person next signs in. Those rows say **"Not recorded yet"** — not "Never", which would assert a
+falsehood, and not the pending row's `—`, which is what tells a member from an invite. `GET /users`
+sorts these rows last.
 
-**Layout — v1 (the buildable screen):**
-```text
-+------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
-+==============================================================================+
-|                                                                              |
-|   USERS                                                                      |
-|   ------------------------------------------------------------------        |
-|                                                                              |
-|   INVITE A USER                                                              |
-|   Create a link that lets someone join your organization.       (muted)      |
-|                                                                              |
-|   Email                                                                      |
-|   [__________________________________________]                               |
-|                                                                              |
-|   Role                                                                       |
-|     (•) Viewer — can see scans, hosts and findings.                          |
-|     ( ) Admin  — can also run scans and invite people.                       |
-|                                                                              |
-|   [ ▓  Create invite link  ]                                                 |
-+------------------------------------------------------------------------------+
-```
-
-Created — the form is replaced by the confirmation:
-```text
-|   INVITE SENT.                                                               |
-|                                                                              |
-|   We emailed an invite to name@example.com. It works once, and expires       |
-|   in 48 hours.                                                  (muted)      |
-|                                                                              |
-|   Or send them this link yourself:                                           |
-|   +----------------------------------------------------------------+        |
-|   | https://app.dmitri.io/invite?token=8f3c9a1e-…      [ Copy link ]|        |
-|   +----------------------------------------------------------------+        |
-|   This is the only time you'll see this link. If they never get the          |
-|   email, copy it now.                                           (muted)      |
-|                                                                              |
-|   Invite someone else                                                        |
-```
-
-**Post-C4, the invite form moves into a modal. ✅ Decided 2026-08-18.** In v1 the form *was* the
-page, so it rendered inline. Once the member table is the page's content, the form becomes an
-action, and `[Invite a user]` opens a dialog: the email + role form, replaced in place by the
-"Invite sent" confirmation carrying the link and `[Copy link]`. The reason is the once-only nudge
-already in this spec — the link is shown exactly once, and a modal is the only layout that cannot
-scroll out of view or be missed behind a long table. Dismissing it refetches the table so the new
-pending row is present. `Dialog` already exists in the app via `ConfirmByTyping`, so this is a new
-call site, not new machinery. The created state keeps **both** `[Done]` (closes and refetches) and
-"Invite someone else" (resets the dialog to an empty form) — inviting two people in a row is a real
-sequence, and losing it would cost a full reopen each time.
-
-**Layout — post-C4 (the table lands above the invite action; the shell does not move):**
-```text
-|   USERS                                                                      |
-|   ------------------------------------------------------------------        |
-|   PERSON                  ROLE     STATUS                  LAST SEEN         |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   anna@acme.com (you)     Admin     Active                 2 hours ago       |
-|   sam@acme.com          [Viewer v]  Active                 3 days ago [Remove]|
-|   new@acme.com            Viewer    Invited — expires 2d   —          [Revoke]|
-|                                                                              |
-|   Dropdown only on other members' rows. Your own row and pending             |
-|   invite rows render the role as plain text.                                 |
-|                                                                              |
-|                                            [ ▓  Invite a user  ]             |
-```
+**The route and the nav item stay `Users`.** *Users* names the domain, not today's actions. Nav
+names were not commented in the DMI-131 review, so this one is unchanged.
 
 **Open questions:**
-1. ~~**C4** — no member/invite administration endpoints.~~ **✅ Resolved 2026-08-11** — the
-   published contract and backend now provide the separate resources; the SPA screen remains.
-2. ~~**C17** — no email delivery exists anywhere in the product.~~ **✅ Resolved in code** —
-   Resend sends invite and reset links; production delivery still needs a verified sending domain
-   with SPF/DKIM/DMARC.
-3. ~~**C18** — re-inviting existing users or pending invitees is undefined.~~ **✅ Resolved** —
-   an existing member returns `400 email_already_member`; a live pending invite returns
-   `409 invite_already_pending`.
-4. ~~Rename the nav item to "Invite" for v1?~~ **✅ Decided 2026-07-13 — no.** It stays **Users**,
-   at `/users`, and grows more user-related surfaces inside it. Nav names domains, not the one
-   action that happens to be buildable this month.
+1. Who may remove whom is a Users-issue question. The design system only fixes *destructive row
+   action = text link + confirm dialog*.
 
 ---
 
 ### SETTINGS
 
 **Route:** `/settings` · **Shell:** inside · **Roles:** admin, viewer · **Flow:** B5
+
+> **Rebuilt by DMI-110, 2026-09-06.** Arrangement, hierarchy, grouping and density come from
+> [`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §9 (owner decisions D1–D7); the look comes from
+> [`FOUNDATIONS.md`](FOUNDATIONS.md). *Amended 2026-09-06 (DMI-110); this note previously read
+> "Restyle only — DMI-110 owns this screen's content", parking the content for its own revamp
+> (decided 2026-09-02, DMI-131). That hold is discharged.*
 
 **Epicenter** — **who you are signed in as, and what you can do about it.** The screen opens on
 your email and your role, read without interaction, and then offers the two things you can do to
@@ -1726,40 +1067,69 @@ password*, always — a screen that opens with the cursor in a current-password 
 names the account has asked for a secret before saying whose it is. *Amended 2026-08-18
 (DMI-107); it previously read "change your own password".*
 
+**Two groups on one scrolling page, separated by a hairline rule** — `Your account` first, then
+`Leave this organisation` — and no card chrome around either: Settings is mostly text, and the
+`Card` container earns its place on the dense data screens, not here. Both group titles are real
+`<h2>`s. Density is `gap-8` between the groups, `gap-4` inside a group, `gap-2` from a label to its
+value — three vertical steps, the rhythm rule's ceiling. The single page holds while Settings is
+about the account and the way out of it; the two-level restructure waits for a second populated
+section ([`SETTINGS-RESEARCH.md`](SETTINGS-RESEARCH.md) §10). *Added 2026-09-06 (DMI-110, D1/D5);
+the screen was four bare sections at `gap-12`.*
+
 Changing the password is still the most common reason anyone comes here, and it is still the
 **only** change-password screen in the product — there is no forced rotation and no 403-triggered
 flow ([`ADR-016`](../adr/ADR-016-password-policy.md) — forced periodic rotation is rejected as
-NIST-misaligned). It is now reached through a `[Change password]` trigger that opens a modal, so
-the page's regular state is four short sections with air between them rather than three password
-fields and a wall of labels.
+NIST-misaligned). It is reached through a `[Change password]` trigger that opens a modal, and the
+trigger is a `[Change password]` button standing alone below the value list — **no `Password`
+label, no masked dots, and no row of its own**. Changing a password is an action, not a property of
+the account, so it sits after the list rather than inside it, and the button's own words already
+name its subject. *Amended 2026-09-06 (DMI-110, D6 reversed the same day); the row briefly read
+"the label `Password`, the button, and nothing between them", and before D6 the page's regular
+state was "four short sections with air between them" with the password section under its own
+`h2`.*
 
-**The details block is read-only** — email and role, no display name and no `[Save]`. Open
-question **C3** stays open: there is no self-profile update operation, and an input the user can
-type into but not submit is worse than text.
+**The account group is read-only above its button** — email and role as text, no display name and
+no `[Save]`. Open question **C3** stays open: there is no self-profile update operation, and an
+input the user can type into but not submit is worse than text. The email is on the screen even
+though the top bar also carries it: it is the screen's subject, and
+[`ADR-017`](../adr/ADR-017-account-removal.md)'s typed confirmation asks the reader for that exact
+string, which is worse to hunt for in the chrome. *Amended 2026-09-06 (DMI-110, D3/D7); `Your
+details` and `Password` were two sections and are now one group titled `Your account`.*
 
 **Leaving the organization also lives here** ([`ADR-017`](../adr/ADR-017-account-removal.md), added
 2026-08-08), for **both roles**. A viewer never sees the USERS screen, so this is the only place
 they can remove their own account — and an account nobody can leave is the wrong default for a
 product holding this data. It sits at the bottom, visually separated, and is the last thing on the
-page: it is not what anyone came here to do.
+page: it is not what anyone came here to do. Its title is an `<h2>`, like the account group's.
+*Corrected 2026-09-06 (DMI-110); it shipped as a `<span className="text-title-sm">`, which left the
+one section a screen-reader user most needs to find deliberately out of heading navigation.*
 
 The copy does **not** name the organization. A signed-in member cannot read it — `UserProfileResponse` carries `user_id`, `email` and `role` only, and `org_name` exists solely on the
 pre-session invite lookup. The wording is org-neutral rather than adding a request to discover a name
 the heading has already supplied (spec 033).
 
-**Activity disclosure is built for both roles** (spec 030). The `Activity` heading sits on **its
-own line**, and a disclosure row — a caret and the accent-coloured label `What's recorded?` —
-sits beneath it; activating that row expands a persistent note and rotates the caret. It was
-originally specced *beside* the heading, which made a section title and a control read as one
-label and left the control with no affordance at all; that arrangement is withdrawn. The row is
+**Activity is a privacy note inside the account group, not a section of its own** (spec 030). It
+carries no control and no state, so it does not belong at the same level as the password and the
+way out. It keeps its `Disclosure` — a caret and the label `What's recorded about me?` — and sits
+under the account rows; activating it expands a persistent note and rotates the caret. The row is
 the shared button primitive in its `link` variant and carries all five interactive states
-(§Interaction states) — it is the worked example that section is written for. *Corrected
-2026-08-18 (DMI-107).* It names last use and last sign-in, says org admins can see the activity
-time, and states that no viewed/action detail is recorded. It is information, not a toggle, and
-must work by keyboard and assistive technology.
+([`FOUNDATIONS.md`](FOUNDATIONS.md) §Interaction states) — it is the worked example that section is written for. It names what
+the organization can see, and states that no viewed/action detail is recorded. It is information,
+not a toggle, and must work by keyboard and assistive technology: the trigger keeps focus when it
+expands and stays linked to the note it reveals. *Amended 2026-09-06 (DMI-110, D2); it previously
+had its own `Activity` heading and the label `What's recorded?`. The 2026-08-18 correction
+(DMI-107), which moved the row off the heading's line, is superseded by the heading's removal.*
+
+**Every password field carries a reveal toggle** — a real `<button type="button">` inside the
+field and in the tab order, drawn as a hand-drawn inline SVG eye (no icon set, no glyph), whose
+accessible name flips `Show password` ↔ `Hide password`. Fields start hidden, each toggles
+independently, and the state never persists: closing the dialog resets it. The browsers' own
+reveal controls are suppressed so no field shows two eyes. The same primitive carries the password
+fields on LOGIN, RESET PASSWORD and ACCEPT INVITE — typing a new password blind, twice, is the
+worst moment on those screens too. *Added 2026-09-06 (DMI-110, D4).*
 
 **The scan target network is not here.** It is a property of the Pi, not of the user — one box
-pointed at one network, identical for every admin in the org. It lives on AGENTS (B4).
+pointed at one network, identical for every admin in the org. It lives on DEVICES (B4).
 
 **Data:**
 - `POST /api/v1/auth/change-password` → **`204`**. Body: `{ current_password, new_password }`;
@@ -1783,10 +1153,16 @@ pointed at one network, identical for every admin in the org. It lives on AGENTS
 minimum 12 characters; no common or breached passwords; no obvious patterns (repeated characters,
 simple suffixes); no names or birth dates.
 
-**Three states:**
-- **Regular:** the form. Both sections stacked in the 720px prose column.
+**States:**
+- **Regular:** the two groups, stacked, with the rule between them.
+- **Loading:** the session profile has not arrived yet. The whole screen renders — both headings,
+  the change-password button, the disclosure, the leaving copy — with the email and role values as skeleton
+  bars and the `[Delete my account]` trigger disabled until the account it would delete is known,
+  so the shape never changes under the reader. *Added 2026-09-06 (DMI-110); the screen previously
+  rendered a half page while the profile loaded, because the details section returned nothing while
+  the sections around it drew in full.*
 - **Blank:** **not applicable, deliberately.** A settings form is never empty — it always has its
-  own fields. Recording this so nobody invents an empty state to satisfy rule 1.
+  own fields. Recording this so nobody invents an empty state to satisfy the three-states rule.
 - **Error:** field-level inline errors (wrong current password, policy rejection). No toast for form
   validation — the error belongs next to the field that caused it.
 - **Success:** inline confirmation, not a redirect. The user stays where they are.
@@ -1810,14 +1186,13 @@ simple suffixes); no names or birth dates.
 | Error — wrong current | "That's not your current password." |
 | Error — policy | "That password isn't strong enough. Try a longer one that isn't based on a name or a date." |
 | Error — mismatch (client-side) | "Those two passwords don't match." |
-| Section — activity | "Activity" |
-| Activity control | "What's recorded?" |
-| Activity disclosure | "Your organization's admins can see when you last used Dmitri and when you last signed in. We record only these times — not what you viewed or did." |
-| Section — profile | "Your details" |
-| Profile fields | "Display name" / "Email" |
-| Profile button | "Save" |
-| Section — leaving | "Leave this organization" |
-| Leaving — body | "Your account is deleted and you lose access to this organization's scans, hosts and findings straight away. This can't be undone — an admin would have to invite you again." |
+| Activity control | "What's recorded about me?" |
+| Activity disclosure | "Everyone in your organization can see when you last signed in, and a log of changes to the organization: scans, machines that join the network, invitations, role changes, and members joining or leaving. We don't record what you viewed." *(the shipped string; the table carried the pre-spec-030 wording until 2026-09-06, DMI-110.)* |
+| Section — account | "Your account" |
+| Account rows | "Email" / "Role" *(no `Password` row — amended 2026-09-06, DMI-110)* |
+| Reveal toggle | "Show password" ↔ "Hide password" |
+| Section — leaving | "Leave this organisation" |
+| Leaving — body | "Your account is deleted and you lose access to this organisation's scans, network and vulnerabilities straight away. This can't be undone — an admin would have to invite you again." *(the shipped string; the table was one revision behind until 2026-09-06, DMI-110.)* |
 | Leaving — trigger | "Delete my account" |
 | Confirm — heading | "Delete your account?" |
 | Confirm — prompt | "Type **you@example.com** to confirm." |
@@ -1829,42 +1204,30 @@ simple suffixes); no names or birth dates.
 **Layout:**
 ```text
 +------------------------------------------------------------------------------+
-| DMITRI    Home  Scans  Hosts  Agents  Users  Settings          [Log out]     |
+| DMITRI    Home  Scans  Network  Devices  Users  Settings      [Log out]     |
 +==============================================================================+
 |                                                                              |
 |   SETTINGS                                                                   |
 |   ------------------------------------------------------------------        |
 |                                                                              |
-|   CHANGE YOUR PASSWORD                                                       |
-|   At least 12 characters. Avoid names, dates, and passwords you've           |
-|   used elsewhere.                                               (muted)      |
+|   YOUR ACCOUNT                                                               |
+|   Email  you@example.com                                                     |
+|   Role  Admin                                                                |
 |                                                                              |
-|   Current password       [____________________________]                      |
-|   New password           [____________________________]                      |
-|   Confirm new password   [____________________________]                      |
+|   [ Change password ]                                                        |
 |                                                                              |
-|                          [ Change password ]                                 |
+|   > What's recorded about me?                                                |
+|   (expanded) Everyone in your organization can see when you last signed in,  |
+|   and a log of changes to the organization: scans, machines that join the    |
+|   network, invitations, role changes, and members joining or leaving. We     |
+|   don't record what you viewed.                                 (muted)      |
 |                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|   ACTIVITY                         [What's recorded?]                          |
-|   (expanded) Your organization's admins can see when you last used Dmitri    |
-|   and when you last signed in. We record only these times — not what you     |
-|   viewed or did.                                                (muted)      |
+|   ------------------------------------------------------------------        |
 |                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|                                                                              |
-|                                                                              |
-|   YOUR DETAILS                                        ⚠️ blocked — C3         |
-|   Display name           [____________________________]                      |
-|   Email                  [____________________________]                      |
-|                          [ Save ]                                            |
-|                                                                              |
-|   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -          |
-|                                                                              |
-|   LEAVE THIS ORGANIZATION                                                    |
-|   Your account is deleted and you lose access to this organization's         |
-|   scans, hosts and findings straight away. This can't be undone — an         |
-|   admin would have to invite you again.                         (muted)      |
+|   LEAVE THIS ORGANISATION                                                    |
+|   Your account is deleted and you lose access to this organisation's         |
+|   scans, network and vulnerabilities straight away. This can't be            |
+|   undone — an admin would have to invite you again.              (muted)     |
 |                                                                              |
 |   [ Delete my account ]                                                      |
 +------------------------------------------------------------------------------+

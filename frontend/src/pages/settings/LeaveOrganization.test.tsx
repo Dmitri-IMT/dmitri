@@ -29,9 +29,9 @@ describe('Settings leave organization', () => {
       renderSettings()
 
       const section = within(await screen.findByTestId('settings-leave'))
-      expect(section.getByText('Leave this organization')).toBeVisible()
+      expect(section.getByText('Leave this organisation')).toBeVisible()
       expect(screen.getByTestId('settings-leave-body')).toHaveTextContent(
-        "Your account is deleted and you lose access to this organization's scans, hosts and findings straight away. This can't be undone — an admin would have to invite you again.",
+        "Your account is deleted and you lose access to this organisation's scans, network and vulnerabilities straight away. This can't be undone — an admin would have to invite you again.",
       )
       expect(section.getByRole('button', { name: 'Delete my account' })).toBe(
         screen.getByTestId('settings-leave-trigger'),

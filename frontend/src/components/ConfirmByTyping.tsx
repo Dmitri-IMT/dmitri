@@ -77,9 +77,7 @@ function ConfirmByTyping({
       testId="confirm-by-typing-dialog"
       locked={isSubmitting}
     >
-      <Dialog.Title className="font-title text-title-sm">
-        {heading}
-      </Dialog.Title>
+      <Dialog.Title className="text-title-sm">{heading}</Dialog.Title>
       <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
         {body}
       </Dialog.Description>
@@ -109,7 +107,7 @@ function ConfirmByTyping({
             role="alert"
             tabIndex={-1}
             data-testid="confirm-by-typing-error"
-            className="text-body-sm text-destructive"
+            className="text-body-sm text-ink"
           >
             {error}
           </p>
@@ -128,7 +126,6 @@ function ConfirmByTyping({
           )}
           <Button
             type="submit"
-            variant="destructive"
             aria-describedby={promptId}
             disabled={!matchesExpected(typed, expectedValue) || isSubmitting}
             data-testid="confirm-by-typing-submit"

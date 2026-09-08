@@ -109,7 +109,7 @@ describe('Users role change', () => {
     ).toBeInTheDocument()
     expect(
       within(dialog).getByText(
-        "They'll only be able to see scans, hosts and findings.",
+        "They'll only be able to see scans, hosts and vulnerabilities.",
       ),
     ).toBeInTheDocument()
 

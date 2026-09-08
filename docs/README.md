@@ -61,10 +61,14 @@
 
 | File | Read it when you need to… |
 |------|---------------------------|
+| [`ui/FOUNDATIONS.md`](ui/FOUNDATIONS.md) | Look up any token, colour, type size, spacing step or component pattern for the web UI |
+| [`ui/FOUNDATIONS-DECISIONS.md`](ui/FOUNDATIONS-DECISIONS.md) | Understand why a UI value was chosen or retired |
 | [`ui/REFERENCE.md`](ui/REFERENCE.md) | Apply the 37signals design principles to any web UI work |
 | [`ui/FLOWS.md`](ui/FLOWS.md) | Add or change a web SPA user flow (breadboards) |
 | [`ui/SCREENS.md`](ui/SCREENS.md) | Spec a web screen (epicenter, three states, copy, layout) |
 | [`ui/IDEAS.md`](ui/IDEAS.md) | Park an unvalidated UI idea |
+| [`ui/DESIGN-SYSTEM-RESEARCH.md`](ui/DESIGN-SYSTEM-RESEARCH.md) | Read the DMI-131 research record behind Foundations v2 |
+| [`ui/mockups/`](ui/mockups/) | See the approved screen mockups; v4 is the exemplar |
 | [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent, database, backend or frontend locally |
 
 ## Global conventions (apply everywhere)

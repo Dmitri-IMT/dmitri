@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend screens, shells and shared components
-description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
+description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-08-29T00:00:00Z
+timestamp: 2026-09-06T18:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -12,46 +12,47 @@ timestamp: 2026-08-29T00:00:00Z
 ## Purpose
 
 The visible surface of the app: two frames (signed-out and signed-in), the public auth routes, the
-guarded reads (Home, scans, hosts, agents, Settings, Users), and the small set of components they
+guarded reads (Home, scans, network, devices, Settings, Users), and the small set of components they
 share. The governing principle throughout is **absent, not disabled** — an operator never meets a
-control that looks live and isn't. Scan/host/Home blank states carry `FirstScanCta` for admins
-(DMI-89); the no-device Agents blank is the one blank state with no action.
+control that looks live and isn't. Scan/network/Home blank states carry `FirstScanCta` for admins;
+the no-device Devices blank is the one blank state with no action.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `AuthShell` | Outside-shell frame: wordmark + full-width `Ornament` + one centred card in the named 24rem `max-w-form` column. No top bar. | `frontend/src/components/AuthShell.tsx:4` |
+| `AuthShell` | Outside-shell frame: wordmark + one centred card in the named 24rem `max-w-form` column. No top bar, no ornament. | `frontend/src/components/AuthShell.tsx:3` |
 | `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` in the fluid named 70rem `max-w-frame` column. **No sidebar.** | `frontend/src/components/AppShell.tsx:5` |
-| `TopBar` | Wordmark left, the nav centred on the 70rem frame, and `[Log out]` right through a `1fr auto 1fr` grid. Home uses `end`; Scans and Hosts omit `end` so a detail route keeps the parent item active; Agents, Settings likewise omit `end`. Users stays wrapped in `AdminOnly`. Viewer and admin both see `nav-scans` / `nav-hosts` / `nav-agents`. | `frontend/src/components/TopBar.tsx:13` |
+| `TopBar` | Wordmark left, the nav centred on the 70rem frame, signed-in email + `[Log out]` right through a `1fr auto 1fr` grid. Home uses `end`; Scans, Network and Devices omit `end` so a detail route keeps the parent item active. Nav order: Home · Scans · Network · Devices · Users (admin) · Settings. Test ids: `nav-network`, `nav-devices`. | `frontend/src/components/TopBar.tsx:13` |
 | `AdminOnly` | Renders `children` for an admin and `null` for anyone else. Props are `{ children }` — no `fallback`, no `disabled`; the missing props are what make "absent, not disabled" unbypassable. Pairs with [auth](./auth.md)'s `RequireAdmin`, which closes the route the hidden link would have led to. | `frontend/src/components/AdminOnly.tsx:4` |
 | `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination; the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:7` |
-| `Login` | Real `<form>` in `AuthShell`; labelled email/password, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
+| `Login` | Real `<form>` in `AuthShell`; labelled email plus `PasswordInput`, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
 | `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:19` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:10` |
-| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
-| `Settings` | Details-first guarded surface with four short sections separated by dashed rules: read-only account identity, a password-dialog trigger and inline success, the shared activity disclosure, then self-service account deletion. | `frontend/src/pages/Settings.tsx:14` |
-| `Settings` — leaving section | The **last** section on the page, rendered `{user && …}` for both roles alike: the explanation, a destructive `settings-leave-trigger`, and a `ConfirmByTyping` gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:90` |
-| `AccountDetails` | Reads the session user and renders their email and normalized `Admin`/`Viewer` role in a read-only `<dl>`; an absent user renders nothing. | `frontend/src/pages/settings/AccountDetails.tsx:3` |
-| `PasswordDialog` | Owns the change-password form and its client/server error routing inside the shared small `DialogShell`. Success clears the three secrets, closes the modal and leaves an inline confirmation on Settings; submitting locks dismissal and removes Cancel. | `frontend/src/pages/settings/PasswordDialog.tsx:22` |
+| `ResetPassword` | Reads `token` from the query string with `useSearchParams` and never renders it. Both password fields are `PasswordInput`. Posts `{ token, new_password }` — the confirmation value stays client-side. On `204` it creates **no session** and navigates to `/login` with `replace` plus a `{ passwordReset: true }` marker. | `frontend/src/pages/ResetPassword.tsx:16` |
+| `Settings` | Guarded surface with two headed groups separated by a solid `<hr>`: **Your account** (read-only email/role, change-password trigger with inline success, activity disclosure) and **Leave this organisation** (destructive copy and delete trigger). | `frontend/src/pages/Settings.tsx:18` |
+| `Settings` — account group | Inline read-only identity in a `<dl>` — `AccountDetails` was folded in. Email and role render `ValuePlaceholder` skeleton bars until `user` arrives so the finished page shape draws immediately and never shifts as the profile loads. | `frontend/src/pages/Settings.tsx:44` |
+| `Settings` — leaving section | The second group is always mounted: explanation, a `settings-leave-trigger` that stays `disabled` until `user` is known, and a `ConfirmByTyping` rendered only when `user` is non-null, gated on `user.email`. `handleLeave()` reads `readApiError(err)` and shows the last-admin refusal only on `409` + `last_admin`, a generic retry message otherwise; the dialog stays open on both, so the still-live confirm button *is* the retry. | `frontend/src/pages/Settings.tsx:101` |
+| `PasswordDialog` | Owns the change-password form — three `PasswordInput` fields — and its client/server error routing inside the shared small `DialogShell`. Success clears the three secrets, closes the modal and leaves an inline confirmation on Settings; submitting locks dismissal and removes Cancel. | `frontend/src/pages/settings/PasswordDialog.tsx:22` |
+| `PasswordInput` | Shared password field: `Input` plus a ghost icon button whose `EyeMark` SVG toggles `type` between `password` and `text`. Accessible name flips `Show password` ↔ `Hide password`; each field toggles independently and reveal state resets when a dialog remounts. Used on Login, AcceptInvite, ResetPassword and `PasswordDialog`. | `frontend/src/components/ui/password-input.tsx:24` |
 | `Disclosure` | Shared controlled Radix `Collapsible` for expandable information: link-styled button, rotating caret, generated content id and force-mounted content hidden while closed. Settings Activity is its first caller. | `frontend/src/components/Disclosure.tsx:13` |
 | `ConfirmByTyping` | The shared type-to-confirm modal, rendered inside `DialogShell` (which owns the portal, overlay, panel and focus restore) so this file holds only the gate. `expectedValue` is both the gate and the prompt that serves as the input's `<label htmlFor>`. The confirming button's greyed state is owned by the component — derived from the typed value and its own in-flight flag, never a caller-supplied variant — so both call sites behave identically. Everything else in the dialog stays live; Cancel is *absent* while submitting. The typed value is cleared explicitly when `open` goes true — the component outlives the dialog Radix unmounts, so the gate would otherwise hold only on the first open. The Users screen is now the second caller and passes the **target's** address as `expectedValue` — the only difference from Settings, which passes the caller's own. | `frontend/src/components/ConfirmByTyping.tsx:23` |
 | `matchesExpected` | Module-local, `trim()` + `toLowerCase()` on both sides: the account identity in this system is `lower(email)` (ADR-017 §1), so case and stray whitespace do not defeat a correct address. | `frontend/src/components/ConfirmByTyping.tsx:19` |
 | `DialogShell` | The chrome every modal shares: `Dialog.Root`/`Portal`/`Overlay`/`Content`, the panel class string with a `size` of `sm` (`max-w-sm`) or `md` (`max-w-md`, default), the `locked` guard that blocks overlay/Escape/Cancel dismissal while a request is in flight, and the focus save/restore. `testId` names the content node so each caller keeps its own `data-testid`; the optional `initialFocusRef` moves opening focus to a confirm button. All four modals — `ConfirmByTyping`, `RoleChangeDialog`, `RevokeDialog`, `InviteDialog` — render through it, so the dismissal and focus rules cannot drift per dialog. Bodies and footers stay with the caller: the confirm buttons differ in type, variant and disabled condition. | `frontend/src/components/DialogShell.tsx:18` |
-| `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
-| `Home` | Switches over `useHomeReview()` and renders **exactly one** of loading / blank / clear / pending / error. Items-pending order: deck → failed-scan card → stale-coverage card. | `frontend/src/pages/Home.tsx:10` |
+| `AcceptInvite` | One TanStack Query keyed `['invite','lookup',token]`, `retry: false`, enabled only when the token is non-empty **and** status is `anonymous`. A single derived `view` ladder picks among dead / signed-in / loading / lookup-error / ready. Both password fields are `PasswordInput`. Accepts with `{ token, password }` and lands on Home via `acceptInvitation`. | `frontend/src/pages/AcceptInvite.tsx:23` |
+| `Home` | Three page `useState`s and one `useHome()` call. Loading and error return early; the other three states share **one** shell and one `HomeSidePanels` mount, switching only the attention column: blank (first-run), clear (title, no table), pending (title, notices, paged attention table). No `showAttentionBlock` guard — `AttentionTable` omits the table when empty and `Pagination` returns null on a single page. | `frontend/src/pages/Home.tsx:34` |
 | `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state carries `FirstScanCta` + `FirstScanNote`. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
 | `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:13` |
-| `findingColumns(hostColumn?)` / `portColumns` | Shared column builders behind both findings tables and both ports tables. `findingColumns` inserts the caller's optional Host column and widens title/CVE when it is absent. | `frontend/src/pages/scans/findingColumns.tsx:11`, `frontend/src/pages/hosts/portColumns.tsx:11` |
+| `scanFindingColumns(hosts)` / `hostFindingColumns()` / `portColumns` | Shared column builders behind both findings tables and both ports tables. Scan-detail tables include a Machine column and omit Severity (grouped by card); host-detail tables include Severity and omit Machine. | `frontend/src/pages/scans/findingColumns.tsx:11`, `frontend/src/pages/hosts/portColumns.tsx:11` |
 | `ScanDetail` | One `getScan` read through `readDetailState` (see [host-detail](./host-detail.md)) handed straight to `ReadDetailGate`, which owns notFound / error / loading. The screen's own body starts at `ready` and branches failed (operator sentence, no tables) → unfinished (`Check again` refetch, no `refetchInterval`) → completed empty findings (sentence, hosts table still) → findings worst-first plus hosts. `?finding=` seeds the open row. | `frontend/src/pages/ScanDetail.tsx:15` |
-| `FindingsTable` | The **one** findings surface. `hosts` present adds the Host column (scan detail); `isPending` renders the skeleton body ahead of the empty check, so a pending section never claims "No findings"; `testId` / `caption` / `emptyTestId` / `emptyCopy` carry the per-screen strings. Sorts worst-first and opens `FindingPanel` in an expand row. | `frontend/src/pages/scans/FindingsTable.tsx:40` |
+| `FindingsTable` | The **one** findings surface. Discriminated on `variant`: `'scan'` requires `hosts` (Machine column, no Severity); `'host'` forbids `hosts` (Severity column, no Machine). `isPending` renders the skeleton body ahead of the empty check, so a pending section never claims "No findings"; `testId` / `caption` carry the per-screen strings. Sorts worst-first and opens `FindingPanel` in an expand row. | `frontend/src/pages/scans/FindingsTable.tsx:13` |
 | `FindingPanel` | In-place finding body (description, recommendation, evidence, references, CVSS). Default export reused verbatim by host detail. | `frontend/src/pages/scans/FindingPanel.tsx:135` |
-| `Hosts` | HOST INVENTORY, through the same `ListSurface`. Owns `page`/`sortBy`/`sortOrder`; `handleSort(key: HostSortBy)` flips the order on the active column and otherwise takes the new column's `HOST_SORT_DEFAULT_ORDER` entry (`last_seen_at` desc, the three text columns asc), then resets page. The key is typed, so no runtime guard is needed and no column name is branched on. Renders server order. Empty hostname → `(unnamed)`; null MAC → `—`; seven cells always. Blank state carries `FirstScanCta` + `FirstScanNote`. | `frontend/src/pages/Hosts.tsx:16` |
-| `HostDetail` | One `getHost` read through `readDetailState` into `ReadDetailGate` ([host-detail](./host-detail.md)); the screen renders only the ready view. Title falls back to IP. Empty ports: sentence, no table (inert when present). History rows link to `/scans/:scanId`. | `frontend/src/pages/HostDetail.tsx:12` |
+| `Network` | NETWORK INVENTORY at `/network`. Owns `page`/`sortBy`/`sortOrder` inline. Uses `ListSurface` with `partitionRows` to split recent vs quiet hosts (`isQuietHost` — not seen in 14 days); quiet rows collapse behind a disclosure via `DataTable`'s `collapsedGroup`. Subtitle shows machine count and last successful scan timestamp. Blank state carries `FirstScanCta` + `FirstScanNote`. Row links go to `/network/:hostId`. | `frontend/src/pages/Network.tsx:26` |
+| `HostDetail` | One `getHost` read through `readDetailState` into `ReadDetailGate` at `/network/:hostId` ([host-detail](./host-detail.md)); ready view wraps findings, ports and history in `Card` sections. `backTo="/network"`. History rows link to `/scans/:scanId`. | `frontend/src/pages/HostDetail.tsx:13` |
 | `HostFindings` | The findings section's own query and own three states, so a failed or pending findings read leaves identity, ports and history standing. Shares `FindingsTable` with scan detail. | `frontend/src/pages/hosts/HostFindings.tsx:11` |
-| `Agents` | Fetches the single MVP agent, shows online/target network, admin-only subnet chooser and `[Scan now]`, and follows the command lifecycle with a 5s poll. Both roles read; controls are `AdminOnly`. Permanent Pi note survives at the foot. See [agents-screen](./agents-screen.md). | `frontend/src/pages/Agents.tsx:10` |
-| `FirstScanCta` / `FirstScanNote` | Admin link to `/agents` (`first-scan-cta`) and viewer line (`first-scan-note`) for Home, Scans and Hosts blank states. `FirstScanNote` reads `useSession()` for the inverse guard. | `frontend/src/components/FirstScanCta.tsx:6` |
-| `DataTable` / `ListSurface` / `ReadDetailGate` / `Pagination` / `EmptyState` / `NotFoundNotice` / `EmptyMark` / `StatusPill` / `LoadingSkeleton` | Shared table and page-state set — see [tables](./tables.md). | `frontend/src/components/DataTable.tsx:64` |
+| `Devices` / `DeviceDetail` | Device list at `/devices` and scan trigger at `/devices/:agentId`. See [devices-screen](./devices-screen.md). | `frontend/src/pages/Devices.tsx:13` |
+| `FirstScanCta` / `FirstScanNote` | Admin link to `/devices` (`first-scan-cta`) and viewer line (`first-scan-note`) for Home, Scans and Network blank states. `FirstScanNote` reads `useSession()` for the inverse guard. | `frontend/src/components/FirstScanCta.tsx:6` |
+| `DataTable` / `ListSurface` / `ReadDetailGate` / `Pagination` / `EmptyState` / `NotFoundNotice` / `EmptyMark` / `SeverityWord` / `LoadingSkeleton` | Shared table and page-state set — see [tables](./tables.md). | `frontend/src/components/DataTable.tsx:82` |
 | `Users` | The admin org directory at `/users`, nested under `RequireAdmin`. Switches over [directory](./directory.md)'s `useOrgDirectory()` and renders exactly one of loading / blank / error / ready, holds the pending state for all four dialogs, and raises the toast on each row action's success. | `frontend/src/pages/Users.tsx:24` |
 | `DirectoryTable` | Five columns, **four** headings — Person · Role · Status · Last seen — with the fifth header carrying `sr-only` text for the actions cell. One `<tr>` per person; members before invites, never interleaved. No row navigates anywhere: there is no per-person detail screen to navigate to. | `frontend/src/pages/users/DirectoryTable.tsx:179` |
 | `RoleCell` | Single early return: an invite row or the caller's own row renders `row-role-text-{id}` as plain text, everyone else gets the Radix `Select` at `row-role-{id}`. The two testids are mutually exclusive by construction. The trigger is stripped to `h-auto rounded-none border-0 px-0 py-0`, leaving only the chevron: a bordered trigger indented its value relative to the plain-text rows, so the Role column read as two different left edges. | `frontend/src/pages/users/DirectoryTable.tsx:35` |
@@ -62,59 +63,51 @@ control that looks live and isn't. Scan/host/Home blank states carry `FirstScanC
 | `InviteDialog` | The invite form (Viewer preselected) at `size="sm"`, then the created state carrying the one-time link. The role options read plainly — `Viewer`, `Admin` — with what each one can do moved into `invite-role-note` above the control, at `text-caption-md` and wired as its `aria-describedby`. Sentence-long option labels made the listbox the widest thing in the dialog and put the explanation somewhere it could only be read one line at a time. Owns its own `createInvite` call because it needs the response to build that link. Branches on `status` **and** `code` via `readApiError`, so `400 email_already_member` and `409 invite_already_pending` read differently. | `frontend/src/pages/users/InviteDialog.tsx:40` |
 | `inviteLink()` / `expiryPhrase()` | The link is assembled **client-side** as `${window.location.origin}/invite?token=${token}` — `InviteCreatedResponse` carries `{ invite_token, expires_at }` and no URL. The expiry sentence is computed from `expires_at`, never a hardcoded TTL. | `frontend/src/pages/users/InviteDialog.tsx:232` |
 | `ToastProvider` / `useToast` | The app's one transient-confirmation channel: `show(message)` renders a single `data-testid="toast"`, a second `show()` **replaces** rather than queues, it self-dismisses after 5s, and a "Dismiss" control closes it early. Mounted once in `AppShell`, so the public auth screens raise none. The context lives in its own module for Fast Refresh, exactly as `SessionContext.ts` does. | `frontend/src/components/Toast.tsx:11` |
-| `PageHeader` | A title and a rule. Presentational only, `{ title }` and nothing else. | `frontend/src/components/PageHeader.tsx:1` |
+| `PageHeader` | A title, optional `subtitle`, and a rule. Presentational only. | `frontend/src/components/PageHeader.tsx:9` |
 | `ui/select.tsx` | The shadcn-shaped wrapper over Radix `Select` — `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, and nothing more. Its first and only caller is the role cell. | `frontend/src/components/ui/select.tsx:1` |
 | `NotFound` | `That page doesn't exist.` plus a real `Go to Home` **link**, inside the shell. | `frontend/src/pages/NotFound.tsx:3` |
-| `Verdict` | The verdict + context sentence, shared by all-clear (centred) and items-pending (left-aligned), including the `1 thing needs your review.` singular split. Context comes from the **latest successful** scan and its own `host_count`. | `frontend/src/pages/home/Verdict.tsx:12` |
-| `ReviewItemCard` | Square-edged card: `FINDING`/`SCAN`/`COVERAGE` label (the only place `--accent` appears on Home), severity badge top-right for findings. **Takes no `href` and no `onAction`.** | `frontend/src/pages/home/ReviewItemCard.tsx:18` |
-| `FindingDeck` | One finding at a time with `←`/`→` and a `{i} of {n}` line, over the already-fetched array. | `frontend/src/pages/home/FindingDeck.tsx:8` |
-| `HomeBlank` / `HomeError` / `HomeFooter` | First-run copy (`No scans yet.` + short body sentence from `SCREENS.md`), `FirstScanCta` + `FirstScanNote`; error copy + `[Retry]`; footer last-scan + Pi-status lines. | `frontend/src/pages/home/HomeBlank.tsx:4` |
+| `Verdict` | Title from `review_count` plus last-scan `Timestamp`. Clear and pending are both left-aligned. | `frontend/src/pages/home/Verdict.tsx:11` |
+| `AttentionNotices` | Prints `notices[].text` verbatim. `failed_scan` → `home-item-scan`; `stale_coverage` → `home-item-coverage`. | `frontend/src/pages/home/AttentionNotices.tsx:18` |
+| `AttentionTable` | Findings table plus `Pagination` labelled `Attention pages`. `Pagination` itself is `null` when `total <= perPage`. | `frontend/src/pages/home/AttentionTable.tsx:65` |
+| `HomeFeedPanel` | The one feed-panel chrome: card `section`, heading, blank `<p>`, `<ul>`, `Pagination`. Derives the panel DOM `id` and every test id from `testId`, so `#home-events-panel` / `#home-activity-panel` — which `Home.test.tsx` selects on — keep working. Exports `HOME_PANEL_CHROME`, which Home's loading skeleton reuses so the card class cannot drift. | `frontend/src/pages/home/HomeFeedPanel.tsx:21` |
+| `EventsPanel` / `ActivityPanel` | Row rendering only, inside `HomeFeedPanel`: verbatim `text` rows, Activity adding a `Timestamp` cell. Labels `Events pages` / `Activity pages`. | `frontend/src/pages/home/EventsPanel.tsx:14`, `frontend/src/pages/home/ActivityPanel.tsx:16` |
+| `HomeSidePanels` | Two-column Events and Activity cards. | `frontend/src/pages/home/HomeSidePanels.tsx:16` |
+| `HomeBlank` / `HomeError` | First-run copy (`No scans yet` + body sentence), `FirstScanCta` + `FirstScanNote`; error copy + `[Try again]`. | `frontend/src/pages/home/HomeBlank.tsx:3` |
 | `Timestamp` / `formatTimestamp` | Relative inside 7 days, absolute beyond, exact value in `title`. | `frontend/src/components/Timestamp.tsx:21` |
-| `SeverityBadge` | Severity-coloured text on a 10% tint of the same hue with a 1px full-colour border — never white-on-solid. Severity type aliases the generated schema. | `frontend/src/components/SeverityBadge.tsx:20` |
-| `Ornament` | Full-width inline SVG rule with a filled vector lozenge centred between two hairline segments; fills its container with no props. | `frontend/src/components/Ornament.tsx:1` |
+| `SeverityWord` | Severity as semibold text (`Critical`, `High`, …). Null renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
+| `isQuietHost()` / `weeksSinceLastSeen()` | Pure helpers for machines not seen in 14+ days. Drive Network's quiet group and muted row tone. | `frontend/src/lib/hostLastSeen.ts:10` |
 
 ## How it connects
 
-- `Home` consumes [review](./review.md)'s `useHomeReview()`; `Agents` consumes
-  [agents-screen](./agents-screen.md)'s `useAgentScreen()` and `useScanCommand()`. `Users`
+- `Home` consumes [review](./review.md)'s `useHome()`; device list and detail consume
+  [devices-screen](./devices-screen.md)'s `useScanCommand()`. `Users`
   consumes [directory](./directory.md)'s `useOrgDirectory()` and the six org calls in [api](./api.md).
-  Scan/host screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
+  Scan/network screens consume [api](./api.md), [tables](./tables.md) and [scan-status](./scan-status.md);
   `HostDetail` consumes [host-detail](./host-detail.md).
-  `Login`, `TopBar`, `AcceptInvite`, `Settings` and `AccountDetails` consume
-  [auth](./auth.md)'s `useSession()` — `Settings` for `user` and `deleteAccount`, `AccountDetails`
-  for the read-only identity, and `TopBar` by way of `AdminOnly`.
+  `Login`, `TopBar`, `AcceptInvite` and `Settings` consume [auth](./auth.md)'s `useSession()` —
+  `Settings` for `user` and `deleteAccount`, and `TopBar` by way of `AdminOnly`.
   `ForgotPassword` and `ResetPassword` call [api](./api.md) directly and touch the session layer not
   at all; `PasswordDialog` owns Settings' direct `changePassword()` call.
 - Both shells are mounted from [app](./app.md)'s route table.
 - Visual tokens come from `src/index.css`, and authored source is checked by
-  [linting](./linting.md); both follow [docs/ui/SCREENS.md](../../../docs/ui/SCREENS.md).
+  [linting](./linting.md); both follow [docs/ui/FOUNDATIONS.md](../../../docs/ui/FOUNDATIONS.md).
 
 ## Notes / gotchas
 
-- **Home still renders nothing below the top bar while loading** — no skeleton, no spinner, no
-  placeholder sentence in the verdict's position. Scan and host **tables** do show
-  [tables](./tables.md)'s `LoadingSkeleton` under live headings.
-- **Blank and all-clear are distinct states** and are never collapsed; the footer is omitted
-  entirely in the blank state.
+- **Home loading is a skeleton**, `data-testid="home-loading"`: attention-shaped bars plus two
+  panel cards. Scan and host **tables** still use [tables](./tables.md)'s `LoadingSkeleton`
+  under live headings.
+- **Blank and all-clear are distinct states** and are never collapsed.
 - **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
   named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and Log out widths cannot
-  move the nav off the frame's centre line. Removing the admin-only Users link also does not move
-  the remaining viewer links. Destination count is not a layout branch.
+  move the nav off the frame's centre line.
 - **Buttons carry an explicit `cursor-pointer`.** Tailwind v4's preflight sets `cursor: default` on
   `<button>` (changed from v3), so without it every button in the app shows an arrow. The class is
   a local addition to the vendored shadcn `buttonVariants` base and would be lost if the shadcn CLI
   re-adds the component; a comment in `ui/button.tsx` records why it is there.
-- **The deck steps without fetching.** It owns the index into the already-fetched array; no
-  `useQuery` is keyed on the index. Keyboard handling is a single tab stop with `onKeyDown` on the
-  deck's own root — **never a `document`-level listener** — so arrows act only while it holds focus.
-  The card region is `aria-live="polite"`, and the index resets when the underlying data changes.
-- **End-stop arrows are absent, not disabled.** At each end the unavailable arrow unmounts and an
-  `aria-hidden` placeholder of the same size holds the slot, so the row does not reflow while
-  stepping. Stopping never wraps.
-- **The finding sentence renders `{cve_id ?? title} on {host_ip}.`** — `FindingRecord` carries no
-  `hostname`, only `host_id` (a UUID, which the design forbids on screen) and `host_ip`.
-- **Home's Pi-status footer line is not built** — `GET /agents/{agent_id}` is unimplemented
-  (DMI-78). `HomeFooter` reads no agent data.
+- **Attention paging is server-side.** `AttentionTable` renders the current snapshot page and
+  `Pagination`; changing page refetches `GET /home` with a new `attention_page`. Rows still
+  link out to scan detail.
 - **Error regions are rendered always, empty when clean.** An `aria-live`/`role="alert"` region must
   pre-exist in the DOM to be announced; a conditionally-mounted error is silent to a screen reader.
   Every auth form follows this. On Login the 401 and network messages are distinct and name neither
@@ -137,9 +130,16 @@ control that looks live and isn't. Scan/host/Home blank states carry `FirstScanC
   lookup and zero accept requests — leaving the invitation untouched — and offers `signOut`.
 - **Wrong current password never ends the session.** On Settings it is contractually a `400`, so it
   renders as a field error with no refresh, no logout and no navigation.
-- **Activity disclosure is information, not a preference.** Settings gives `Activity` its own
-  heading, then uses the shared `Disclosure` trigger and persistent force-mounted content. The
-  note explains the two recorded timestamps; there is no opt-out or pointer-hover dependency.
+- **Activity disclosure is information, not a preference.** Settings nests the shared `Disclosure`
+  inside the account group — label `What's recorded about me?`, no section heading of its own —
+  with persistent force-mounted content. There is no opt-out or pointer-hover dependency.
+- **Password reveal is local and ephemeral.** `PasswordInput` owns per-field reveal state; closing
+  `PasswordDialog` remounts the fields hidden. The composite's `data-slot="password-input"` wrapper
+  scopes browser reveal suppression (`::-ms-reveal`, `::-webkit-credentials-auto-fill-button`) so
+  only these fields hide the native control — plain `Input` fields are untouched.
+- **Settings loads as a whole shape.** Skeleton bars stand in for email and role until `user`
+  arrives; the delete trigger stays `disabled` until then. The leave section and headings always
+  render — only the confirm dialog waits on a non-null `user`.
 - The role-invariance sweep (`TopBar.test.tsx`, repeated across every Home state) asserts
   `queryAllByRole(...)` elements are `toBeEnabled()` with no `aria-disabled` — never a
   `container.querySelectorAll('[disabled]')` sweep, which misses `fieldset[disabled]` inheritance
@@ -181,7 +181,7 @@ control that looks live and isn't. Scan/host/Home blank states carry `FirstScanC
 [7] [specs/033-settings-leave-organization](../../../specs/033-settings-leave-organization/TRUTH.md)
 [8] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
 [9] [specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md](../../../specs/039-frontend-scans-hosts-read-surfaces/TRUTH.md)
-[10] [specs/040-agents-scan-trigger/TRUTH.md](../../../specs/040-agents-scan-trigger/TRUTH.md)
+[10] [specs/042-design-system/TRUTH.md](../../../specs/042-design-system/TRUTH.md)
 - **Column widths are declared as shares, never as pixels.** A `<colgroup>` assigns percentages
   summing to 100 — below `sm` 30·15·20·25·10, at `sm` and up 35·15·20·20·10 — so every column is a
   fraction of whatever the table currently is and the row scales with the shell. Person yields

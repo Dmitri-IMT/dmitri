@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { delay, http, HttpResponse } from 'msw'
+import { server } from '@/test/setup'
 import { adminProfile, viewerProfile } from '@/test/mswHandlers'
 import {
   ACTIVITY_NOTE,
+  baseURL,
+  captureDeleteRequests,
+  openLeave,
   openPassword,
   renderSettings,
   signedInAs,
@@ -20,38 +25,103 @@ describe('Settings', () => {
       renderSettings()
 
       const details = within(await screen.findByTestId('settings-details'))
-      expect(details.getByTestId('settings-details-email')).toHaveTextContent(
-        profile.email,
-      )
-      expect(details.getByTestId('settings-details-email')).toBeVisible()
+      const email = details.getByTestId('settings-details-email')
+      await waitFor(() => expect(email).toHaveTextContent(profile.email))
+      expect(email).toBeVisible()
       expect(details.getByTestId('settings-details-role')).toHaveTextContent(
         roleLabel,
       )
       expect(details.getByTestId('settings-details-role')).toBeVisible()
       expect(details.queryByRole('textbox')).toBeNull()
       expect(screen.queryByLabelText('Display name')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
       expect(document.activeElement).toBe(document.body)
     },
   )
 
-  it('orders the four sections as details, password, activity, then leave', async () => {
+  it('requires typing your own email before the delete-account action proceeds', async () => {
+    const deletes = captureDeleteRequests()
+    renderSettings()
+
+    const user = await openLeave()
+    const input = screen.getByTestId('confirm-by-typing-input')
+    expect(screen.getByTestId('confirm-by-typing-submit')).toBeDisabled()
+
+    await user.type(input, 'wrong@dmitri.dev')
+    expect(screen.getByTestId('confirm-by-typing-submit')).toBeDisabled()
+    await user.click(screen.getByTestId('confirm-by-typing-submit'))
+
+    expect(deletes).toEqual([])
+    expect(screen.getByTestId('confirm-by-typing-dialog')).toBeInTheDocument()
+  })
+
+  it('carries two headed groups: Your account, then Leave this organisation', async () => {
     renderSettings()
 
     const details = await screen.findByTestId('settings-details')
     const page = screen.getByTestId('settings-idle')
-    const password = screen
-      .getByRole('heading', { name: 'Password' })
-      .closest('section')
-    const activity = screen.getByTestId('settings-activity')
     const leave = screen.getByTestId('settings-leave')
 
-    expect(password).not.toBeNull()
+    const headings = screen.getAllByRole('heading', { level: 2 })
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      'Your account',
+      'Leave this organisation',
+    ])
+    expect(details).toContainElement(headings[0])
+    expect(leave).toContainElement(headings[1])
     expect(Array.from(page.querySelectorAll('section'))).toEqual([
       details,
-      password,
-      activity,
       leave,
     ])
+    expect(details).toContainElement(
+      screen.getByTestId('settings-password-trigger'),
+    )
+    expect(details).toContainElement(screen.getByTestId('settings-activity'))
+    expect(screen.queryByRole('heading', { name: 'Password' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Activity' })).toBeNull()
+  })
+
+  it('carries the change-password button alone, with no Password label and outside the value list', async () => {
+    renderSettings()
+
+    await screen.findByText(adminProfile.email)
+    expect(
+      screen.getByTestId('settings-password-trigger').closest('dl'),
+    ).toBeNull()
+    expect(
+      screen.getByTestId('settings-details').querySelector('dl')?.textContent,
+    ).toBe(`Email${adminProfile.email}RoleAdmin`)
+    expect(screen.queryByText('Password')).toBeNull()
+  })
+
+  it('renders the whole screen, not half of it, while the profile is still loading', async () => {
+    server.use(
+      http.get(`${baseURL}/users/me`, async () => {
+        await delay(50)
+        return HttpResponse.json(adminProfile)
+      }),
+    )
+    renderSettings()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Your account' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Leave this organisation' }),
+    ).toBeVisible()
+    expect(screen.getByTestId('settings-password-trigger')).toBeEnabled()
+    expect(screen.getByTestId('settings-activity-disclosure')).toBeVisible()
+    expect(screen.getByTestId('settings-leave-body')).toBeVisible()
+    expect(screen.getByTestId('settings-details-email')).toHaveTextContent('')
+    expect(screen.getByTestId('settings-leave-trigger')).toBeDisabled()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('settings-details-email')).toHaveTextContent(
+        adminProfile.email,
+      ),
+    )
+    expect(screen.getByTestId('settings-leave-trigger')).toBeEnabled()
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2)
   })
 
   it.each([
@@ -89,30 +159,24 @@ describe('Settings', () => {
     ['admin', adminProfile],
     ['viewer', viewerProfile],
   ])(
-    'shows the same collapsed activity disclosure to a %s',
+    'shows the same collapsed activity note to a %s, inside the account group',
     async (_role, profile) => {
       signedInAs(profile)
       renderSettings()
 
-      const activity = await screen.findByTestId('settings-activity')
-      const disclosure = within(activity)
-      const label = disclosure.getByTestId('settings-activity-label')
-      const trigger = disclosure.getByTestId('settings-activity-disclosure')
-      const button = disclosure.getByRole('button', {
-        name: "What's recorded?",
+      const activity = within(await screen.findByTestId('settings-activity'))
+      const trigger = activity.getByTestId('settings-activity-disclosure')
+      const button = activity.getByRole('button', {
+        name: "What's recorded about me?",
       })
-      const note = disclosure.getByTestId('settings-activity-note')
-      const caret = disclosure.getByTestId('settings-activity-caret')
+      const note = activity.getByTestId('settings-activity-note')
+      const caret = activity.getByTestId('settings-activity-caret')
 
-      expect(label).toBeVisible()
-      expect(label.textContent).toBe('Activity')
       expect(button).toBeVisible()
       expect(trigger).toBe(button)
       expect(caret).toHaveAttribute('aria-hidden', 'true')
       expect(button).not.toHaveAttribute('aria-label')
-      expect(button.textContent).toBe("What's recorded?")
-      expect(activity.firstElementChild).toBe(label)
-      expect(label.nextElementSibling).toContainElement(trigger)
+      expect(button.textContent).toBe("What's recorded about me?")
       expect(button).toHaveAttribute('type', 'button')
       expect(button).toHaveAttribute('aria-expanded', 'false')
       expect(button).toHaveAttribute('aria-controls', note.id)
@@ -121,11 +185,15 @@ describe('Settings', () => {
       expect(note).not.toBeVisible()
       expect(note).toHaveAttribute('hidden')
       expect(note.textContent).toBe(ACTIVITY_NOTE)
-      expect(disclosure.queryByRole('switch', { hidden: true })).toBeNull()
-      expect(disclosure.queryByRole('checkbox', { hidden: true })).toBeNull()
-      expect(activity.querySelector('time, [datetime]')).toBeNull()
-      expect(activity.textContent).toBe(
-        `ActivityWhat's recorded?${ACTIVITY_NOTE}`,
+      expect(activity.queryByRole('switch', { hidden: true })).toBeNull()
+      expect(activity.queryByRole('checkbox', { hidden: true })).toBeNull()
+      expect(
+        screen
+          .getByTestId('settings-activity')
+          .querySelector('time, [datetime]'),
+      ).toBeNull()
+      expect(screen.getByTestId('settings-activity').textContent).toBe(
+        `What's recorded about me?${ACTIVITY_NOTE}`,
       )
     },
   )
@@ -136,7 +204,7 @@ describe('Settings', () => {
     const user = userEvent.setup()
 
     const button = await screen.findByRole('button', {
-      name: "What's recorded?",
+      name: "What's recorded about me?",
     })
     const note = screen.getByTestId('settings-activity-note')
 
@@ -171,7 +239,7 @@ describe('Settings', () => {
     await user.tab()
 
     const button = screen.getByRole('button', {
-      name: "What's recorded?",
+      name: "What's recorded about me?",
     })
     const note = screen.getByTestId('settings-activity-note')
     expect(button).toHaveFocus()

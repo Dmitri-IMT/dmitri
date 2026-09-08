@@ -1,79 +1,46 @@
-import DataTable, { type DataTableColumn } from '@/components/DataTable'
-import EmptyMark from '@/components/EmptyMark'
+import DataTable from '@/components/DataTable'
 import FindingPanel from '@/pages/scans/FindingPanel'
-import { findingColumns } from '@/pages/scans/findingColumns'
+import {
+  hostFindingColumns,
+  scanFindingColumns,
+} from '@/pages/scans/findingColumns'
 import { bySeverityDesc } from '@/lib/severity'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 type ScanHostView = components['schemas']['ScanHostView']
 
-function hostLabel(
-  finding: FindingRecord,
-  hostsById: Map<string, ScanHostView>,
-): string {
-  const host = finding.host_id ? hostsById.get(finding.host_id) : undefined
-  if (host && host.hostname !== '') return host.hostname
-  if (host) return host.ip
-  return finding.host_ip ?? ''
-}
-
-function hostColumnFor(hosts: ScanHostView[]): DataTableColumn<FindingRecord> {
-  const hostsById = new Map(hosts.map((host) => [host.host_id, host]))
-
-  return {
-    key: 'host',
-    label: 'Host',
-    width: 'w-1/5',
-    render: (finding) => {
-      const label = hostLabel(finding, hostsById)
-      if (label === '') return <EmptyMark />
-      return (
-        <span className="block truncate" title={label}>
-          {label}
-        </span>
-      )
-    },
-  }
-}
-
-function FindingsTable({
-  findings,
-  hosts,
-  isPending = false,
-  testId,
-  caption,
-  emptyTestId,
-  emptyCopy,
-  openFindingId,
-  onOpenFindingChange,
-}: {
+type FindingsTableProps = {
   findings: FindingRecord[]
-  hosts?: ScanHostView[]
   isPending?: boolean
   testId: string
   caption: string
-  emptyTestId: string
-  emptyCopy: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
-}) {
+} & ({ variant: 'scan'; hosts: ScanHostView[] } | { variant: 'host' })
+
+function FindingsTable({
+  findings,
+  isPending = false,
+  testId,
+  caption,
+  openFindingId,
+  onOpenFindingChange,
+  ...rest
+}: FindingsTableProps) {
+  const columns =
+    rest.variant === 'scan'
+      ? scanFindingColumns(rest.hosts)
+      : hostFindingColumns()
+
   const table = {
-    columns: findingColumns(hosts && hostColumnFor(hosts)),
+    columns,
     rowId: (finding: FindingRecord) => finding.finding_id,
     testId,
     caption,
   }
 
   if (isPending) return <DataTable {...table} rows={[]} isPending />
-
-  if (findings.length === 0) {
-    return (
-      <p data-testid={emptyTestId} className="text-body-md">
-        {emptyCopy}
-      </p>
-    )
-  }
 
   return (
     <DataTable

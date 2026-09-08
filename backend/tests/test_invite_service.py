@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from api.models.activity import ActivityRecord
 from api.models.identity import Invite, Org, User
 from api.models.persistence import utc_now
 from api.services import auth as auth_module
@@ -14,6 +15,26 @@ from api.services.passwords import PasswordPolicyError, hash_password
 from sqlmodel import Session, select
 
 VALID_PASSWORD = "Xk9$mQvL2pTz"
+ACTOR_ID = uuid4()
+ACTOR_EMAIL = "admin@corp.com"
+
+
+def _actor() -> dict[str, User]:
+    # `actor_user_id` carries no FK, so the services only ever read id and email
+    # off this row — it does not need to be persisted.
+    return {"actor": User(id=ACTOR_ID, email=ACTOR_EMAIL, org_id=uuid4(), role="admin")}
+
+
+def _activity_rows(
+    session: Session, org_id: UUID, kind: str
+) -> list[ActivityRecord]:
+    return list(
+        session.exec(
+            select(ActivityRecord).where(
+                ActivityRecord.org_id == org_id, ActivityRecord.kind == kind
+            )
+        ).all()
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -70,6 +91,7 @@ def test_create_invite_returns_raw_token_and_stores_only_hash(
         email="new@corp.com",
         role="viewer",
         mailer=mailer,
+        **_actor(),
     )
 
     row = administrative_session.exec(select(Invite)).one()
@@ -98,6 +120,7 @@ def test_create_invite_expiry_derives_from_setting(
         email="new@corp.com",
         role="viewer",
         mailer=FakeMailer(),
+        **_actor(),
     )
 
     delta = expires_at - utc_now()
@@ -124,6 +147,7 @@ def test_create_invite_same_org_member_raises_already_member(
             email="existing@corp.com",
             role="viewer",
             mailer=FakeMailer(),
+            **_actor(),
         )
 
     assert administrative_session.exec(select(Invite)).all() == []
@@ -140,6 +164,7 @@ def test_create_invite_live_invite_raises_pending_invite_error_and_mints_none(
         email="new@corp.com",
         role="viewer",
         mailer=mailer,
+        **_actor(),
     )
 
     with pytest.raises(invites.PendingInviteError):
@@ -149,6 +174,7 @@ def test_create_invite_live_invite_raises_pending_invite_error_and_mints_none(
             email="new@corp.com",
             role="admin",
             mailer=mailer,
+            **_actor(),
         )
 
     rows = administrative_session.exec(select(Invite)).all()
@@ -167,6 +193,7 @@ def test_create_invite_pending_check_is_case_insensitive(
         email="bob@corp.com",
         role="viewer",
         mailer=mailer,
+        **_actor(),
     )
 
     with pytest.raises(invites.PendingInviteError):
@@ -176,6 +203,7 @@ def test_create_invite_pending_check_is_case_insensitive(
             email="Bob@corp.com",
             role="admin",
             mailer=mailer,
+            **_actor(),
         )
 
     rows = administrative_session.exec(select(Invite)).all()
@@ -195,6 +223,7 @@ def test_create_invite_consumed_invite_can_be_reissued(
         email=invite.email,
         role="viewer",
         mailer=FakeMailer(),
+        **_actor(),
     )
 
     assert raw_token
@@ -216,6 +245,7 @@ def test_create_invite_expired_invite_can_be_reissued(
         email=invite.email,
         role="viewer",
         mailer=FakeMailer(),
+        **_actor(),
     )
 
     assert raw_token
@@ -236,6 +266,7 @@ def test_create_invite_other_org_member_still_creates_invite(
         email="shared@corp.com",
         role="viewer",
         mailer=FakeMailer(),
+        **_actor(),
     )
 
     assert raw_token
@@ -662,7 +693,10 @@ def test_revoke_invite_returns_true_and_hard_deletes_pending_row(
     )
 
     result = invites.revoke_invite(
-        administrative_session, invite_id=invite.id, org_id=org.id
+        administrative_session,
+        invite_id=invite.id,
+        org_id=org.id,
+        **_actor(),
     )
 
     assert result is True
@@ -687,7 +721,10 @@ def test_revoke_invite_returns_false_for_non_pending_row_and_preserves_it(
     )
 
     result = invites.revoke_invite(
-        administrative_session, invite_id=invite.id, org_id=org.id
+        administrative_session,
+        invite_id=invite.id,
+        org_id=org.id,
+        **_actor(),
     )
 
     assert result is False
@@ -707,13 +744,95 @@ def test_revoke_invite_returns_false_for_foreign_or_unknown_id_without_deleting(
     )
 
     foreign_result = invites.revoke_invite(
-        administrative_session, invite_id=foreign.id, org_id=org.id
+        administrative_session,
+        invite_id=foreign.id,
+        org_id=org.id,
+        **_actor(),
     )
     unknown_result = invites.revoke_invite(
-        administrative_session, invite_id=uuid4(), org_id=org.id
+        administrative_session,
+        invite_id=uuid4(),
+        org_id=org.id,
+        **_actor(),
     )
 
     assert foreign_result is False
     assert unknown_result is False
     administrative_session.expire_all()
     assert administrative_session.get(Invite, foreign.id) is not None
+
+
+def test_create_invite_writes_member_invited_activity(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+
+    invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email="new@corp.com",
+        role="viewer",
+        mailer=FakeMailer(),
+        **_actor(),
+    )
+
+    invite = administrative_session.exec(select(Invite)).one()
+    rows = _activity_rows(administrative_session, org.id, "member_invited")
+    assert len(rows) == 1
+    assert rows[0].subject_id == invite.id
+    assert rows[0].actor_user_id == ACTOR_ID
+    assert rows[0].payload == {
+        "actor_email": ACTOR_EMAIL,
+        "invite_email": "new@corp.com",
+        "role": "viewer",
+    }
+
+
+def test_revoke_invite_leaves_invite_revoked_after_invite_is_gone(
+    administrative_session: Session,
+) -> None:
+    org = _seed_org(administrative_session)
+    invite, _ = _seed_invite(
+        administrative_session,
+        org_id=org.id,
+        email="gone@corp.com",
+        raw_token="revoke-activity-token",
+    )
+    invite_id = invite.id
+
+    invites.revoke_invite(
+        administrative_session,
+        invite_id=invite_id,
+        org_id=org.id,
+        **_actor(),
+    )
+
+    assert administrative_session.get(Invite, invite_id) is None
+    rows = _activity_rows(administrative_session, org.id, "invite_revoked")
+    assert len(rows) == 1
+    assert rows[0].subject_id == invite_id
+    assert rows[0].payload == {
+        "actor_email": ACTOR_EMAIL,
+        "invite_email": "gone@corp.com",
+    }
+
+
+def test_actor_caused_invite_activity_occurred_at_uses_api_clock(
+    administrative_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    org = _seed_org(administrative_session)
+    stamp = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(invites, "utc_now", lambda: stamp)
+
+    invites.create_invite(
+        administrative_session,
+        org_id=org.id,
+        email="new@corp.com",
+        role="viewer",
+        mailer=FakeMailer(),
+        **_actor(),
+    )
+
+    row = _activity_rows(administrative_session, org.id, "member_invited")[0]
+    assert row.occurred_at == stamp
+    assert row.occurred_at.tzinfo is not None

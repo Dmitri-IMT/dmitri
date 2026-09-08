@@ -9,8 +9,10 @@ from api.models.persistence import (
     PortRecord,
     ScanHostRecord,
     ScanRecord,
+    utc_now,
 )
 from api.schemas.scan import ScanIngestRequest
+from api.services.activity import ActivityAppend, append_activity
 
 
 def identity_key(mac: str | None, ip: str) -> str:
@@ -26,6 +28,20 @@ def upsert_hosts_for_scan(
     scan_host_records = session.exec(
         select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_record.scan_id)
     ).all()
+
+    org_has_prior_completed = (
+        session.exec(
+            select(ScanRecord.scan_id)
+            .where(
+                ScanRecord.org_id == scan_record.org_id,
+                ScanRecord.status == "completed",
+                ScanRecord.scan_id != scan_record.scan_id,
+                ScanRecord.timestamp < scan_record.timestamp,
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
 
     for sh in scan_host_records:
         key = identity_key(sh.mac, sh.ip)
@@ -52,6 +68,18 @@ def upsert_hosts_for_scan(
             )
             session.add(host)
             session.flush()
+            if org_has_prior_completed:
+                append_activity(
+                    session,
+                    ActivityAppend(
+                        org_id=scan_record.org_id,
+                        kind="machine_first_seen",
+                        occurred_at=utc_now(),
+                        actor_user_id=None,
+                        subject_id=host.id,
+                        payload={"hostname": sh.hostname},
+                    ),
+                )
         else:
             host.first_seen_at = min(host.first_seen_at, scan_record.timestamp)
             if scan_record.timestamp >= host.last_seen_at:

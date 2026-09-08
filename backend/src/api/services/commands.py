@@ -7,6 +7,7 @@ from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
+from starlette.websockets import WebSocketDisconnect
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
@@ -15,6 +16,7 @@ from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
+from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import (
     NON_TERMINAL,
     PI_OWNED,
@@ -143,20 +145,29 @@ def apply_status(
             Command.scan_id.is_not(None),
         )
         .values(**values)
-        .returning(Command.scan_id)
+        .returning(Command.scan_id, Command.org_id, Command.scan_mode)
     )
     row = result.first()
     if row is None:
         session.rollback()
         return False
 
-    scan_id = row[0]
+    scan_id, org_id, scan_mode = row[0], row[1], row[2]
     if scan_id is not None:
         session.execute(
             update(ScanRecord)
             .where(ScanRecord.scan_id == scan_id)
             .values(status=scan_status_for(status))
         )
+        if status == "failed":
+            append_scan_activity(
+                session,
+                org_id=org_id,
+                scan_id=scan_id,
+                kind="scan_failed",
+                scan_mode=scan_mode,
+                occurred_at=now,
+            )
     session.commit()
     return True
 
@@ -205,16 +216,30 @@ def sweep_stale_commands(
                     else_="agent_disconnected",
                 ),
             )
-            .returning(Command.scan_id, Command.status)
+            .returning(
+                Command.scan_id,
+                Command.status,
+                Command.org_id,
+                Command.scan_mode,
+            )
         )
     )
-    for scan_id, command_status in rows:
+    for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
             session.execute(
                 update(ScanRecord)
                 .where(ScanRecord.scan_id == scan_id)
                 .values(status=scan_status_for(command_status))
             )
+            if command_status == "failed":
+                append_scan_activity(
+                    session,
+                    org_id=command_org_id,
+                    scan_id=scan_id,
+                    kind="scan_failed",
+                    scan_mode=command_scan_mode,
+                    occurred_at=now,
+                )
     if rows:
         session.commit()
     return len(rows)
@@ -246,6 +271,7 @@ def _record_delivery(
         ScanRecord(
             scan_id=scan_id,
             org_id=command.org_id,
+            agent_id=command.agent_id,
             timestamp=now,
             subnet=command.subnet,
             scan_mode=command.scan_mode,
@@ -253,6 +279,14 @@ def _record_delivery(
         )
     )
     session.flush()
+    append_scan_activity(
+        session,
+        org_id=command.org_id,
+        scan_id=scan_id,
+        kind="scan_started",
+        scan_mode=command.scan_mode,
+        occurred_at=now,
+    )
     result = session.execute(
         update(Command)
         .where(Command.id == command.id, Command.status == "queued")
@@ -300,9 +334,10 @@ async def deliver(
 
     try:
         await socket.send_text(frame.model_dump_json())
-    except Exception:
-        # A WebSocket that raised on send is already closed — there is nothing
-        # left to retry against, so give up and let the operator re-trigger.
+    except (WebSocketDisconnect, OSError, RuntimeError):
+        # Starlette maps a dead transport OSError to WebSocketDisconnect(1006);
+        # a socket already marked DISCONNECTED raises RuntimeError instead
+        # (same as the receive loop in agent_ws). Nothing left to retry.
         await run_in_threadpool(_expire_queued_command, session, command.id)
         raise DeviceOfflineError from None
 

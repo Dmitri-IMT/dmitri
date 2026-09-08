@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router'
@@ -129,7 +129,7 @@ function completedScan(
   }
 }
 
-function renderPage(route: string) {
+function renderPage(route: string, state?: unknown) {
   return renderWithProviders(
     <>
       <Routes>
@@ -137,32 +137,138 @@ function renderPage(route: string) {
       </Routes>
       <LocationProbe />
     </>,
-    { route },
+    { route, state },
   )
 }
 
 function expectNoScanTables() {
-  expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+  for (const severity of ['critical', 'high', 'medium', 'low']) {
+    expect(screen.queryByTestId(`findings-${severity}`)).not.toBeInTheDocument()
+  }
   expect(screen.queryByTestId('scan-hosts-table')).not.toBeInTheDocument()
 }
 
 describe('ScanDetail', () => {
-  it('renders findings worst-first from a shuffled payload', async () => {
+  it('splits a shuffled payload into one table per severity, worst card first', async () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)
 
-    await screen.findByTestId(`findings-table-row-${phpCgiFinding.finding_id}`)
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    for (const [severity, findingId] of [
+      ['critical', phpCgiFinding.finding_id],
+      ['high', '33333333-aaaa-4aaa-8aaa-333333333333'],
+      ['medium', '22222222-aaaa-4aaa-8aaa-222222222222'],
+      ['low', '11111111-aaaa-4aaa-8aaa-111111111111'],
+    ]) {
+      const table = screen.getByTestId(`findings-${severity}`)
+      expect(
+        within(table)
+          .getAllByRole('row')
+          .slice(1)
+          .map((row) => row.getAttribute('data-testid')),
+      ).toEqual([`findings-${severity}-row-${findingId}`])
+    }
 
     expect(
       screen
-        .getAllByTestId(/^findings-table-row-/)
-        .map((row) => row.getAttribute('data-testid')),
-    ).toEqual([
-      `findings-table-row-${phpCgiFinding.finding_id}`,
-      'findings-table-row-33333333-aaaa-4aaa-8aaa-333333333333',
-      'findings-table-row-22222222-aaaa-4aaa-8aaa-222222222222',
-      'findings-table-row-11111111-aaaa-4aaa-8aaa-111111111111',
-    ])
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Critical', 'High', 'Medium', 'Low', 'Machines seen'])
+    expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+  })
+
+  it('renders the summary strip, and drops the counts a failed scan cannot know', async () => {
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const strip = await screen.findByTestId('scan-summary-strip')
+    expect(strip).toHaveTextContent('Mode')
+    expect(strip).toHaveTextContent('Standard')
+    expect(strip).toHaveTextContent('Network')
+    expect(strip).toHaveTextContent(latestSuccessfulScan.subnet)
+    expect(strip).toHaveTextContent('Machines seen')
+    expect(strip).toHaveTextContent('Vulnerabilities')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent(
+      '8 min',
+    )
+  })
+
+  it('drops the unknowable counts from the strip on a failed scan', async () => {
+    scanDetail(
+      completedScan({
+        status: 'failed',
+        error_code: 'device_offline',
+        findings: [],
+        hosts: [],
+        finding_count: 0,
+        host_count: 0,
+        duration: null,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const strip = await screen.findByTestId('scan-summary-strip')
+    expect(strip).toHaveTextContent('Mode')
+    expect(strip).toHaveTextContent('Network')
+    expect(strip).not.toHaveTextContent('Machines seen')
+    expect(strip).not.toHaveTextContent('Vulnerabilities')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent('—')
+  })
+
+  it('keeps Duration in the strip on a running scan, as an em dash', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        findings: [],
+        hosts: [],
+        finding_count: 0,
+        host_count: 0,
+        duration: null,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const strip = await screen.findByTestId('scan-summary-strip')
+    expect(strip).not.toHaveTextContent('Machines seen')
+    expect(strip).toHaveTextContent('Duration')
+    expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent('—')
+  })
+
+  it('adopts the vulnerability vocabulary, with no reader-facing "finding"', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Critical' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('columnheader', { name: 'Vulnerability' }),
+    ).toHaveLength(4)
+    expect(
+      screen.getByRole('table', {
+        name: 'critical vulnerabilities in this scan',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryAllByText(/finding/i)).toHaveLength(0)
+
+    await user.click(
+      screen.getByRole('button', {
+        name: `Show details for ${phpCgiFinding.title}`,
+      }),
+    )
+
+    await screen.findByTestId(`finding-panel-${phpCgiFinding.finding_id}`)
+    expect(screen.queryAllByText(/finding/i)).toHaveLength(0)
   })
 
   it('opens a finding in place without changing the route', async () => {
@@ -170,13 +276,17 @@ describe('ScanDetail', () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)
 
-    await screen.findByTestId(`findings-table-row-${phpCgiFinding.finding_id}`)
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
     expect(
       screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
     ).not.toBeInTheDocument()
 
     await user.click(
-      screen.getByTestId(`findings-table-row-${phpCgiFinding.finding_id}`),
+      screen.getByRole('button', {
+        name: `Show details for ${phpCgiFinding.title}`,
+      }),
     )
 
     const panel = screen.getByTestId(
@@ -212,7 +322,9 @@ describe('ScanDetail', () => {
     scanDetail(completedScan({ findings: [phpCgiFinding], finding_count: 1 }))
     renderPage(`/scans/${SCAN_ID}?finding=${UNKNOWN_FINDING_ID}`)
 
-    await screen.findByTestId(`findings-table-row-${phpCgiFinding.finding_id}`)
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
     expect(
       screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
     ).not.toBeInTheDocument()
@@ -234,12 +346,13 @@ describe('ScanDetail', () => {
     )
     renderPage(`/scans/${SCAN_ID}`)
 
-    expect(await screen.findByTestId('scan-failed')).toHaveTextContent(
-      "This scan didn't finish.",
-    )
+    const failed = await screen.findByTestId('scan-failed')
+    expect(within(failed).getByText('Failed').tagName).toBe('P')
+    expect(failed).toHaveTextContent("This scan didn't finish.")
     expect(screen.getByTestId('scan-failed-reason')).toHaveTextContent(
       SCAN_FAILURE_REASONS.device_offline,
     )
+    expect(screen.queryByTestId(/pill/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('scan-detail')).not.toHaveTextContent(
       'device_offline',
     )
@@ -278,9 +391,9 @@ describe('ScanDetail', () => {
     renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
-      'No findings. Every host in this scan came back clean.',
+      'No vulnerabilities. Every machine in this scan came back clean.',
     )
-    expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('findings-critical')).not.toBeInTheDocument()
     expect(screen.getByTestId('scan-hosts-table')).toBeInTheDocument()
     expect(
       screen.getByTestId(`scan-hosts-table-row-${NAS_HOST_ID}`),
@@ -308,7 +421,7 @@ describe('ScanDetail', () => {
       'This scan is still running.',
     )
     expect(screen.getByTestId('scan-unfinished')).toHaveTextContent(
-      "Findings appear here when it finishes. This page doesn't update on its own.",
+      "Vulnerabilities appear here when it finishes. This page doesn't update on its own.",
     )
     expectNoScanTables()
 
@@ -317,35 +430,76 @@ describe('ScanDetail', () => {
 
     expect(
       await screen.findByTestId(
-        `findings-table-row-${phpCgiFinding.finding_id}`,
+        `findings-critical-row-${phpCgiFinding.finding_id}`,
       ),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('scan-unfinished')).not.toBeInTheDocument()
   })
 
-  it('opens host ports in place and the host link navigates to that host', async () => {
+  it('sends a machines-seen row to that machine instead of expanding it', async () => {
     const user = userEvent.setup()
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)
 
-    await screen.findByTestId(`scan-hosts-table-row-${NAS_HOST_ID}`)
-    await user.click(screen.getByTestId(`scan-hosts-table-row-${NAS_HOST_ID}`))
-
-    const ports = screen.getByTestId(`host-ports-panel-${NAS_HOST_ID}`)
-    expect(ports).toHaveTextContent('443')
-    expect(ports).toHaveTextContent('https')
+    const machineRow = await screen.findByTestId(
+      `scan-hosts-table-row-${NAS_HOST_ID}`,
+    )
     expect(
-      screen.getByRole('link', { name: 'Open synology-nas' }),
-    ).toHaveAttribute('href', `/hosts/${NAS_HOST_ID}`)
-    expect(screen.getByTestId('location-probe')).toHaveTextContent(
-      `/scans/${SCAN_ID}`,
+      screen.queryByTestId(`host-ports-panel-${NAS_HOST_ID}`),
+    ).not.toBeInTheDocument()
+    expect(machineRow).toHaveTextContent('1')
+
+    await user.click(
+      within(machineRow).getByRole('link', { name: 'Open synology-nas' }),
     )
 
-    await user.click(screen.getByTestId(`scan-hosts-open-${NAS_HOST_ID}`))
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/network/${NAS_HOST_ID}`,
+    )
+    expect(screen.getByTestId('location-state')).toHaveTextContent(
+      `{"from":"/scans/${SCAN_ID}"}`,
+    )
+  })
+
+  it('opens the machine when its name in a vulnerability row is activated', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const row = await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(row).toHaveAttribute('data-row-action', 'expand')
+    await user.click(within(row).getByRole('link', { name: nas.hostname }))
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
-      `/hosts/${NAS_HOST_ID}`,
+      `/network/${NAS_HOST_ID}`,
     )
+    expect(
+      screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
+    ).not.toBeInTheDocument()
+  })
+
+  it('carries a Back link to the scans log', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId('scan-detail-header')
+    await user.click(screen.getByRole('link', { name: 'Back' }))
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/scans')
+  })
+
+  it('sends Back to the screen that opened the scan', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`, { from: '/' })
+
+    await screen.findByTestId('scan-detail-header')
+    await user.click(screen.getByRole('link', { name: 'Back' }))
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/')
   })
 
   it('renders the not-found line and Back to scans', async () => {

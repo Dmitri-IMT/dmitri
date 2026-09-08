@@ -11,6 +11,10 @@ export function readDetailState<T>(
   id: string,
   query: UseQueryResult<T>,
 ): DetailState<T> {
+  if (query.data) {
+    return { state: 'ready', data: query.data }
+  }
+
   if (
     id === '' ||
     (query.isError && readApiError(query.error).status === 404)
@@ -29,5 +33,5 @@ export function readDetailState<T>(
 
   if (query.isPending) return { state: 'loading' }
 
-  return { state: 'ready', data: query.data }
+  return { state: 'loading' }
 }

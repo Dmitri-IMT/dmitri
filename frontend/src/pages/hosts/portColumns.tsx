@@ -6,26 +6,25 @@ type Port = components['schemas']['Port']
 
 export const portColumns: DataTableColumn<Port>[] = [
   {
-    key: 'port',
-    label: 'Port',
-    width: 'w-1/5',
-    render: (port) => <span className="block tabular-nums">{port.port}</span>,
+    key: 'service',
+    label: 'Service',
+    width: 'w-2/5',
+    render: (port) => (
+      <>
+        <span className="block truncate" title={port.service}>
+          {port.service}
+        </span>
+        <span className="block truncate font-mono text-muted-foreground">
+          {port.port}
+        </span>
+      </>
+    ),
   },
   {
     key: 'protocol',
     label: 'Protocol',
     width: 'w-1/5',
     render: (port) => port.protocol,
-  },
-  {
-    key: 'service',
-    label: 'Service',
-    width: 'w-1/5',
-    render: (port) => (
-      <span className="block truncate" title={port.service}>
-        {port.service}
-      </span>
-    ),
   },
   {
     key: 'version',

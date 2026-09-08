@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-06T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -30,11 +30,12 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
+| `read_home()` | `GET /api/v1/home` behind `require_user`. Three `Query(1, ge=1)` page integers, no `per_page`. Returns `HomeSnapshot`. Viewers are allowed. | `backend/src/api/routers/home.py:15` |
 | `read_current_user()` | `GET /api/v1/users/me` → caller profile, with role loaded from the DB row by `require_user_row`. | `backend/src/api/routers/users.py:29` |
 | `delete_current_user_route()` | `DELETE /api/v1/users/me` (`204`) for either role; maps `LastAdminError` to `409 last_admin`. | `backend/src/api/routers/users.py:36` |
 | `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |
-| `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:70` |
-| `delete_user_route()` | Admin-only `DELETE /api/v1/users/{user_id}` (`204`). Self-targeting → `409 self_target`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:106` |
+| `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`, gated by `require_admin_row` so the actor's row is on hand for the activity log. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:75` |
+| `delete_user_route()` | Admin-only `DELETE /api/v1/users/{user_id}` (`204`), gated by `require_admin_row`. Self-targeting → `409 self_target`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:107` |
 | `list_agents_route()` | `GET /api/v1/agents` (`listAgents`) behind `require_user` → `{data: AgentSummary[]}`, org-scoped in SQL. Viewers may read; an org with no agents gets an empty list, never a 404. | `backend/src/api/routers/agents.py:47` |
 | `read_agent_route()` | `GET /api/v1/agents/{agent_id}` behind `require_user` → `AgentDetail`, which adds the Pi's currently reported `available_subnets`. Unknown **and** foreign ids both → `404` with the same body. | `backend/src/api/routers/agents.py:60` |
 | `update_agent_target_subnet_route()` | Admin-only `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) → the full `AgentDetail`, so the SPA needs no refetch. Resolution order is fixed: missing/foreign row → `404`, no `hello` report → `409 device_offline`, value the Pi did not report → `422 subnet_not_reported`, then commit. | `backend/src/api/routers/agents.py:72` |
@@ -89,7 +90,10 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
   some other tenant.
 - **Business reads and identity-admin reads use different gates.** Scan/host/finding reads and
   `/users/me` accept viewers; `GET /users`, role changes, invite listing/revocation, and invite
-  creation require `require_admin`.
+  creation require `require_admin`. The four admin **mutations** (role change, member removal,
+  invite create, invite revoke) use `require_admin_row` instead, which adds the caller's `User`
+  row — see [auth](/backend/auth.md). `test_auth_wiring.py` walks nested dependencies, so it
+  still sees the admin gate through that pairing.
 - **`read_findings`'s `host_id` is not a tenant escape.** The org predicate is applied in
   `list_findings` independently of the `host_id` branch, so asking for a foreign host's id returns
   empty rather than another org's findings.

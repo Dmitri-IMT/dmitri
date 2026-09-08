@@ -33,6 +33,8 @@ tags:
     description: User profiles and organisation member administration.
   - name: findings
     description: Finding query endpoints for the frontend.
+  - name: home
+    description: Home snapshot - attention, derived events, and the activity log.
   - name: health
     description: Liveness and readiness endpoint.
 servers:
@@ -174,6 +176,7 @@ paths:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/ScanStatusFilter'
+        - $ref: '#/components/parameters/ScanAgentIdFilter'
         - $ref: '#/components/parameters/ScanSortBy'
         - $ref: '#/components/parameters/SortOrder'
       responses:
@@ -421,6 +424,52 @@ paths:
         - findings
       summary: CORS preflight for findings collection
       operationId: optionsFindings
+      security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/home:
+    get:
+      tags:
+        - home
+      summary: Read the Home snapshot
+      description: Attention page, derived events, and the organisation activity log
+        in one read. Page sizes are server constants and cannot be overridden.
+      operationId: readHome
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HomeAttentionPageFilter'
+        - $ref: '#/components/parameters/HomeEventsPageFilter'
+        - $ref: '#/components/parameters/HomeActivityPageFilter'
+      responses:
+        '200':
+          description: Home snapshot for the caller's org.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - home
+      summary: CORS preflight for the Home snapshot
+      operationId: optionsHome
       security: []
       responses:
         '204':
@@ -1227,6 +1276,33 @@ components:
         minimum: 1
         maximum: 100
         default: 20
+    HomeAttentionPageFilter:
+      name: attention_page
+      in: query
+      required: false
+      description: Attention page number starting at 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    HomeEventsPageFilter:
+      name: events_page
+      in: query
+      required: false
+      description: Events page number starting at 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    HomeActivityPageFilter:
+      name: activity_page
+      in: query
+      required: false
+      description: Activity page number starting at 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
     SortOrder:
       name: sort_order
       in: query
@@ -1244,6 +1320,14 @@ components:
       description: Filter scans by lifecycle status.
       schema:
         $ref: '#/components/schemas/ScanStatus'
+    ScanAgentIdFilter:
+      name: agent_id
+      in: query
+      required: false
+      description: Limit scans to those produced by this box.
+      schema:
+        type: string
+        format: uuid
     ScanSortBy:
       name: sort_by
       in: query
@@ -2722,6 +2806,20 @@ components:
           anyOf:
             - $ref: '#/components/schemas/Severity'
             - type: 'null'
+        agent_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        box_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+        duration:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
     ScanDetailResponse:
       type: object
       additionalProperties: false
@@ -2784,6 +2882,20 @@ components:
         finding_count:
           type: integer
           minimum: 0
+        agent_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        box_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+        duration:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
     ScanListResponse:
       type: object
       additionalProperties: false
@@ -3578,6 +3690,164 @@ components:
         page:
           type: integer
           minimum: 1
+    HomeEventKind:
+      type: string
+      enum:
+        - box_offline
+        - member_idle
+        - machine_first_seen
+    HomeNoticeKind:
+      type: string
+      enum:
+        - failed_scan
+        - stale_coverage
+    ActivityKind:
+      type: string
+      enum:
+        - scan_started
+        - scan_finished
+        - scan_failed
+        - machine_first_seen
+        - role_changed
+        - member_invited
+        - invite_revoked
+        - member_removed
+        - account_deleted
+    HomeEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - text
+        - occurred_at
+      properties:
+        kind:
+          $ref: '#/components/schemas/HomeEventKind'
+        text:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+    HomeActivityItem:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - occurred_at
+        - text
+      properties:
+        kind:
+          $ref: '#/components/schemas/ActivityKind'
+        occurred_at:
+          type: string
+          format: date-time
+        text:
+          type: string
+    HomeNotice:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - text
+      properties:
+        kind:
+          $ref: '#/components/schemas/HomeNoticeKind'
+        text:
+          type: string
+        days:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+    HomeAttentionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - total
+        - page
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindingRecord'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+    HomeEventsPage:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - total
+        - page
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HomeEvent'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+    HomeActivityPage:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - total
+        - page
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HomeActivityItem'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+    HomeSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - review_state
+        - review_count
+        - latest_successful_scan
+        - notices
+        - attention
+        - events
+        - activity
+      properties:
+        review_state:
+          type: string
+          enum:
+            - blank
+            - clear
+            - pending
+        review_count:
+          type: integer
+          minimum: 0
+        latest_successful_scan:
+          anyOf:
+            - $ref: '#/components/schemas/ScanSummary'
+            - type: 'null'
+        notices:
+          type: array
+          items:
+            $ref: '#/components/schemas/HomeNotice'
+        attention:
+          $ref: '#/components/schemas/HomeAttentionPage'
+        events:
+          $ref: '#/components/schemas/HomeEventsPage'
+        activity:
+          $ref: '#/components/schemas/HomeActivityPage'
     HealthResponse:
       type: object
       additionalProperties: false

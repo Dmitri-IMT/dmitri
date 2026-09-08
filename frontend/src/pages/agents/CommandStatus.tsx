@@ -1,10 +1,10 @@
 import type { Ref } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import AdminOnly from '@/components/AdminOnly'
-import StatusPill from '@/components/StatusPill'
 import Timestamp from '@/components/Timestamp'
 import { Button } from '@/components/ui/button'
-import { commandStatusPill } from '@/lib/commandStatus'
+import { commandStatusLabel } from '@/lib/commandStatus'
+import { fromHere } from '@/lib/navFrom'
 import { scanFailureReason } from '@/lib/scanFailureReasons'
 import type { components } from '@/types/openapi'
 
@@ -21,7 +21,7 @@ function CommandStatus({
   onRetry: () => void
   ref?: Ref<HTMLDivElement>
 }) {
-  const pill = command && commandStatusPill(command.status)
+  const location = useLocation()
   const done = command?.status === 'done'
   const retryable =
     command?.status === 'failed' || command?.status === 'expired'
@@ -39,18 +39,19 @@ function CommandStatus({
           : 'text-body-sm text-muted-foreground'
       }
     >
-      {!command || !pill ? (
+      {!command ? (
         'Starting…'
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <span data-testid="agents-pill">
-              <StatusPill tone={pill.tone} label={pill.label} />
+            <span data-testid="agents-status" className="text-body-md">
+              {commandStatusLabel(command.status)}
             </span>
             {done && command.scan_id && (
               <Button asChild>
                 <Link
                   to={`/scans/${command.scan_id}`}
+                  state={fromHere(location)}
                   data-testid="agents-view-scan"
                 >
                   View scan

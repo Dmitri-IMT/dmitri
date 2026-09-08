@@ -56,6 +56,7 @@ def read_scans(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     status: ScanStatus | None = Query(None),
+    agent_id: UUID | None = Query(None),
     sort_by: ScanSortBy = Query("timestamp"),
     sort_order: SortOrder = Query("desc"),
     session: Session = Depends(get_session),
@@ -67,6 +68,7 @@ def read_scans(
         page=page,
         per_page=per_page,
         status=status,
+        agent_id=agent_id,
         sort_by=sort_by,
         sort_order=sort_order,
     )

@@ -1,90 +1,79 @@
 import { describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router'
 import { delay, http, HttpResponse } from 'msw'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import {
   adminProfile,
   viewerProfile,
-  latestScan,
-  latestSuccessfulScan,
   criticalFinding,
+  highFinding,
+  homeSnapshot,
+  latestSuccessfulScan,
 } from '@/test/mswHandlers'
 import type { components } from '@/types/openapi'
 import Home from './Home'
 
-type ScanSummary = components['schemas']['ScanSummary']
-type FindingRecord = components['schemas']['FindingRecord']
+type HomeSnapshot = components['schemas']['HomeSnapshot']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
-function overrideScans(
-  unfiltered: ScanSummary | null,
-  completed: ScanSummary | null,
+function eventsPanel() {
+  return document.getElementById('home-events-panel')
+}
+
+function activityPanel() {
+  return document.getElementById('home-activity-panel')
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <div data-testid="location-probe">
+      {location.pathname}
+      {location.search}
+    </div>
+  )
+}
+
+function overrideHome(
+  resolve: (url: URL) => HomeSnapshot | Promise<HomeSnapshot>,
 ) {
   server.use(
-    http.get(`${baseURL}/scans`, ({ request }) => {
-      const status = new URL(request.url).searchParams.get('status')
-      if (status === 'completed') {
-        return HttpResponse.json(
-          completed
-            ? { data: [completed], total: 1, page: 1 }
-            : { data: [], total: 0, page: 1 },
-        )
-      }
-      return HttpResponse.json(
-        unfiltered
-          ? { data: [unfiltered], total: 1, page: 1 }
-          : { data: [], total: 0, page: 1 },
+    http.get(`${baseURL}/home`, async ({ request }) => {
+      const url = new URL(request.url)
+      return HttpResponse.json(await resolve(url))
+    }),
+  )
+}
+
+function trackRequests() {
+  const homeUrls: string[] = []
+  const scansUrls: string[] = []
+  const findingsUrls: string[] = []
+
+  server.use(
+    http.get(`${baseURL}/home`, ({ request }) => {
+      homeUrls.push(request.url)
+      const url = new URL(request.url)
+      const attentionPage = Number(
+        url.searchParams.get('attention_page') ?? '1',
       )
+      return HttpResponse.json(homeSnapshot({}, attentionPage))
     }),
-  )
-}
-
-function overrideFindings(
-  overrides: {
-    criticalData?: FindingRecord[]
-    criticalTotal?: number
-    highData?: FindingRecord[]
-    highTotal?: number
-  } = {},
-) {
-  const {
-    criticalData = [],
-    criticalTotal = criticalData.length,
-    highData = [],
-    highTotal = highData.length,
-  } = overrides
-  server.use(
-    http.get(`${baseURL}/findings`, ({ request }) => {
-      const severity = new URL(request.url).searchParams.get('severity')
-      if (severity === 'critical') {
-        return HttpResponse.json({
-          data: criticalData,
-          total: criticalTotal,
-          page: 1,
-        })
-      }
-      return HttpResponse.json({ data: highData, total: highTotal, page: 1 })
-    }),
-  )
-}
-
-function overrideScansUnfilteredError() {
-  server.use(
     http.get(`${baseURL}/scans`, ({ request }) => {
-      const status = new URL(request.url).searchParams.get('status')
-      if (!status) {
-        return new HttpResponse(null, { status: 500 })
-      }
-      return HttpResponse.json({
-        data: [latestSuccessfulScan],
-        total: 1,
-        page: 1,
-      })
+      scansUrls.push(request.url)
+      return HttpResponse.json({ data: [], total: 0, page: 1 })
+    }),
+    http.get(`${baseURL}/findings`, ({ request }) => {
+      findingsUrls.push(request.url)
+      return HttpResponse.json({ data: [], total: 0, page: 1 })
     }),
   )
+
+  return { homeUrls, scansUrls, findingsUrls }
 }
 
 function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
@@ -107,132 +96,224 @@ function expectNoDisabledControls() {
 }
 
 const nineDaysAgo = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString()
-const staleSuccessfulScan: ScanSummary = {
+const staleSuccessfulScan = {
   ...latestSuccessfulScan,
   timestamp: nineDaysAgo,
 }
-const failedScan: ScanSummary = { ...latestScan, status: 'failed' }
 
 describe('Home', () => {
-  it('AC 9 — all-clear shows the verdict and context sentence, and no review item', async () => {
-    overrideFindings()
+  it('issues one GET /home request and never calls scans or findings', async () => {
+    const tracked = trackRequests()
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-verdict')
+    expect(tracked.homeUrls).toHaveLength(1)
+    expect(tracked.scansUrls).toHaveLength(0)
+    expect(tracked.findingsUrls).toHaveLength(0)
+  })
+
+  it('with attention, the title states the count and each row navigates', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <>
+        <LocationProbe />
+        <Home />
+      </>,
+    )
+
+    await screen.findByTestId('home-verdict')
+    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
+      '2 things need your attention',
+    )
+    expect(screen.getByTestId('home-table')).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`home-table-row-${criticalFinding.finding_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`home-table-row-${highFinding.finding_id}`),
+    ).toBeInTheDocument()
+
+    const criticalLink = screen.getByRole('link', {
+      name: `${criticalFinding.title} on ${criticalFinding.host_ip}`,
+    })
+    await user.click(criticalLink)
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/scans/${criticalFinding.scan_id}?finding=${criticalFinding.finding_id}`,
+    )
+
+    const highLink = screen.getByRole('link', {
+      name: `${highFinding.title} on ${highFinding.host_ip}`,
+    })
+    await user.click(highLink)
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/scans/${highFinding.scan_id}?finding=${highFinding.finding_id}`,
+    )
+  })
+
+  it('opens the machine when the Machine cell is activated', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <>
+        <LocationProbe />
+        <Home />
+      </>,
+    )
+
+    const row = await screen.findByTestId(
+      `home-table-row-${criticalFinding.finding_id}`,
+    )
+    await user.click(
+      within(row).getByRole('link', { name: criticalFinding.host_ip ?? '' }),
+    )
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/network/${criticalFinding.host_id}`,
+    )
+  })
+
+  it('with none, the title reads Nothing needs your attention and no table is in the DOM', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_state: 'clear',
+        review_count: 0,
+        attention: { data: [], total: 0, page: 1 },
+      }),
+    )
     renderWithProviders(<Home />)
 
     await screen.findByTestId('home-verdict')
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      'Nothing needs your attention.',
+      'Nothing needs your attention',
     )
-    expect(screen.getByTestId('home-context')).toHaveTextContent(
-      /Last scan finished .+ — 12 hosts, no critical findings\./,
-    )
-    expect(screen.queryByTestId('home-deck')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('home-item-scan')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('home-item-coverage')).not.toBeInTheDocument()
-    expect(screen.getByTestId('home-footer')).toBeInTheDocument()
-    expect(screen.getByTestId('home-footer-scan')).toHaveTextContent(
-      /Last scan: .+ · 12 hosts · standard mode/,
-    )
-    expect(screen.getByTestId('home-footer-pi')).toHaveTextContent(
-      /Pi status: online · last seen .+/,
-    )
+    expect(screen.queryByTestId('home-table')).toBeNull()
+    expect(eventsPanel()).toBeInTheDocument()
+    expect(activityPanel()).toBeInTheDocument()
   })
 
-  it('AC 11 — medium/low-only findings yield the all-clear verdict with no finding card', async () => {
-    overrideFindings()
-    renderWithProviders(<Home />)
-
-    await screen.findByTestId('home-verdict')
-    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      'Nothing needs your attention.',
+  it('a failed latest scan renders its one-line notice', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 1,
+        notices: [
+          {
+            kind: 'failed_scan',
+            text: "Last night's scan didn't finish.",
+          },
+        ],
+        attention: { data: [], total: 0, page: 1 },
+      }),
     )
-    expect(screen.queryByTestId('home-item-severity')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('home-deck-card')).not.toBeInTheDocument()
-  })
-
-  it("AC 10 — items-pending shows the deck's first card naming the CVE and the host IP", async () => {
-    renderWithProviders(<Home />)
-
-    await screen.findByTestId('home-deck-card')
-    expect(screen.getByTestId('home-deck-card')).toHaveTextContent(
-      /CVE-2023-38408 on 192\.168\.1\.42\./,
-    )
-    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      '2 things need your review.',
-    )
-    expect(screen.getByTestId('home-footer-pi')).toHaveTextContent(
-      /Pi status: online · last seen .+/,
-    )
-    expect(screen.queryByTestId('home-footer-scan')).not.toBeInTheDocument()
-  })
-
-  it('items-pending order is finding deck → failed-scan card → stale-coverage card', async () => {
-    overrideScans(failedScan, staleSuccessfulScan)
-    renderWithProviders(<Home />)
-
-    await screen.findByTestId('home-deck-card')
-    const deck = screen.getByTestId('home-deck')
-    const scanCard = screen.getByTestId('home-item-scan')
-    const coverageCard = screen.getByTestId('home-item-coverage')
-
-    expect(
-      deck.compareDocumentPosition(scanCard) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(
-      scanCard.compareDocumentPosition(coverageCard) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      '4 things need your review.',
-    )
-  })
-
-  it('AC 12 — the failed-scan card renders outside the deck, with the singular verdict copy', async () => {
-    overrideFindings()
-    overrideScans(failedScan, latestSuccessfulScan)
     renderWithProviders(<Home />)
 
     await screen.findByTestId('home-item-scan')
     expect(screen.getByTestId('home-item-scan')).toHaveTextContent(
       "Last night's scan didn't finish.",
     )
-    expect(screen.queryByTestId('home-deck')).not.toBeInTheDocument()
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      '1 thing needs your review.',
+      '1 thing needs your attention',
     )
+    expect(screen.queryByTestId('home-table')).toBeNull()
   })
 
-  it('AC 13 — the stale-coverage card renders outside the deck', async () => {
-    overrideFindings()
-    overrideScans(latestScan, staleSuccessfulScan)
+  it('a stale coverage window renders its one-line notice', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 1,
+        latest_successful_scan: staleSuccessfulScan,
+        notices: [
+          {
+            kind: 'stale_coverage',
+            text: 'No successful scan in 9 days.',
+            days: 9,
+          },
+        ],
+        attention: { data: [], total: 0, page: 1 },
+      }),
+    )
     renderWithProviders(<Home />)
 
     await screen.findByTestId('home-item-coverage')
     expect(screen.getByTestId('home-item-coverage')).toHaveTextContent(
       'No successful scan in 9 days.',
     )
-    expect(screen.queryByTestId('home-deck')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('home-table')).toBeNull()
   })
 
-  it('AC 14 — admin blank links to the first scan and retires the Pi sentence', async () => {
+  it('failed-scan and stale-coverage notices sit below the last-scan line', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 4,
+        latest_successful_scan: staleSuccessfulScan,
+        notices: [
+          {
+            kind: 'failed_scan',
+            text: "Last night's scan didn't finish.",
+          },
+          {
+            kind: 'stale_coverage',
+            text: 'No successful scan in 9 days.',
+            days: 9,
+          },
+        ],
+        attention: {
+          data: [criticalFinding, highFinding],
+          total: 2,
+          page: 1,
+        },
+      }),
+    )
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-item-scan')
+    const context = screen.getByTestId('home-context')
+    const scanNotice = screen.getByTestId('home-item-scan')
+    const coverageNotice = screen.getByTestId('home-item-coverage')
+
+    expect(
+      context.compareDocumentPosition(scanNotice) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      scanNotice.compareDocumentPosition(coverageNotice) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
+      '4 things need your attention',
+    )
+  })
+
+  it('admin blank links to the first scan and shows feed panels', async () => {
     overrideUser(adminProfile)
-    overrideScans(null, null)
+    overrideHome(() =>
+      homeSnapshot({
+        review_state: 'blank',
+        review_count: 0,
+        latest_successful_scan: null,
+        attention: { data: [], total: 0, page: 1 },
+      }),
+    )
     renderWithProviders(<Home />)
 
     expect(await screen.findByTestId('home-blank-body')).toHaveTextContent(
-      'Dmitri scans your network for devices and known vulnerabilities, then reports anything worth your attention here.',
+      'Your first scan finds the machines on your network and what needs fixing.',
     )
     const cta = screen.getByTestId('first-scan-cta')
-    expect(cta).toHaveAttribute('href', '/agents')
+    expect(cta).toHaveAttribute('href', '/devices')
     expect(screen.queryByTestId('first-scan-note')).not.toBeInTheDocument()
-    expect(
-      screen.queryByText('Scanning is set up on the Pi itself.'),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByTestId('home-footer')).not.toBeInTheDocument()
+    expect(eventsPanel()).toBeInTheDocument()
+    expect(activityPanel()).toBeInTheDocument()
+    expect(screen.queryByTestId('home-table')).toBeNull()
   })
 
-  it('AC 14 — viewer blank shows only the admin-direction note', async () => {
+  it('viewer blank shows only the admin-direction note', async () => {
     overrideUser(viewerProfile)
-    overrideScans(null, null)
+    overrideHome(() =>
+      homeSnapshot({
+        review_state: 'blank',
+        review_count: 0,
+        latest_successful_scan: null,
+        attention: { data: [], total: 0, page: 1 },
+      }),
+    )
     renderWithProviders(<Home />)
 
     expect(await screen.findByTestId('first-scan-note')).toHaveTextContent(
@@ -241,75 +322,264 @@ describe('Home', () => {
     expect(screen.queryByTestId('first-scan-cta')).not.toBeInTheDocument()
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.queryAllByRole('link')).toHaveLength(0)
-    expect(screen.queryByTestId('home-footer')).not.toBeInTheDocument()
   })
 
-  it('AC 15 — error renders the copy and Retry, with no verdict text present', async () => {
-    overrideScansUnfilteredError()
+  it('error renders the copy and Try again, with no verdict text present', async () => {
+    server.use(
+      http.get(
+        `${baseURL}/home`,
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    )
     renderWithProviders(<Home />)
 
     await screen.findByTestId('home-error')
     expect(screen.getByTestId('home-error')).toHaveTextContent(
-      "Couldn't load your network's status.",
+      "Couldn't load what needs your attention.",
     )
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
     expect(screen.queryByTestId('home-verdict')).not.toBeInTheDocument()
   })
 
-  it('AC 16 — retry recovers to the right state after a transient failure', async () => {
+  it('Try again recovers to the clear state after a transient failure', async () => {
     const user = userEvent.setup()
-    let scanCalls = 0
-    overrideFindings()
+    let calls = 0
     server.use(
-      http.get(`${baseURL}/scans`, ({ request }) => {
-        const status = new URL(request.url).searchParams.get('status')
-        if (!status) {
-          scanCalls += 1
-          if (scanCalls === 1) {
-            return new HttpResponse(null, { status: 500 })
-          }
-          return HttpResponse.json({ data: [latestScan], total: 1, page: 1 })
-        }
-        return HttpResponse.json({
-          data: [latestSuccessfulScan],
-          total: 1,
-          page: 1,
-        })
+      http.get(`${baseURL}/home`, () => {
+        calls += 1
+        if (calls === 1) return new HttpResponse(null, { status: 500 })
+        return HttpResponse.json(
+          homeSnapshot({
+            review_state: 'clear',
+            review_count: 0,
+            attention: { data: [], total: 0, page: 1 },
+          }),
+        )
       }),
     )
 
     renderWithProviders(<Home />)
     await screen.findByTestId('home-error')
 
-    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
 
     await screen.findByTestId('home-verdict')
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      'Nothing needs your attention.',
+      'Nothing needs your attention',
     )
   })
 
-  it('AC 17 — the verdict states the total-derived number when it exceeds the rows shown', async () => {
-    overrideFindings({ criticalData: [criticalFinding], criticalTotal: 37 })
+  it('the verdict states review_count when it exceeds the rows shown', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 37,
+        attention: {
+          data: [criticalFinding],
+          total: 37,
+          page: 1,
+        },
+      }),
+    )
     renderWithProviders(<Home />)
 
     await screen.findByTestId('home-verdict')
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      '37 things need your review.',
+      '37 things need your attention',
     )
   })
 
-  it("loading renders no element in the verdict's position — no skeleton, spinner or placeholder", () => {
+  it('review_count stays correct on attention page 2', async () => {
+    const user = userEvent.setup()
+    overrideHome((url) => {
+      const attentionPage = Number(
+        url.searchParams.get('attention_page') ?? '1',
+      )
+      return homeSnapshot(
+        {
+          review_count: 14,
+          attention: {
+            data: attentionPage === 1 ? [criticalFinding] : [highFinding],
+            total: 14,
+            page: attentionPage,
+          },
+        },
+        attentionPage,
+      )
+    })
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-verdict')
+    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
+      '14 things need your attention',
+    )
+
+    await user.click(screen.getByTestId('home-attention-page-2'))
+
+    await screen.findByTestId(`home-table-row-${highFinding.finding_id}`)
+    expect(screen.getByTestId('home-verdict')).toHaveTextContent(
+      '14 things need your attention',
+    )
+  })
+
+  it('hides attention pagination when total is at most 8', async () => {
+    overrideHome(() => homeSnapshot())
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-verdict')
+    expect(
+      screen.queryByRole('navigation', { name: 'Attention pages' }),
+    ).toBeNull()
+  })
+
+  it('shows attention pagination named Attention pages when total exceeds 8', async () => {
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 9,
+        attention: {
+          data: [criticalFinding],
+          total: 9,
+          page: 1,
+        },
+      }),
+    )
+    renderWithProviders(<Home />)
+
+    await screen.findByRole('navigation', { name: 'Attention pages' })
+  })
+
+  it('changing attention page keeps both feed panels on screen', async () => {
+    const user = userEvent.setup()
+    overrideHome((url) => {
+      const attentionPage = Number(
+        url.searchParams.get('attention_page') ?? '1',
+      )
+      return homeSnapshot(
+        {
+          review_count: 14,
+          attention: {
+            data: attentionPage === 1 ? [criticalFinding] : [highFinding],
+            total: 14,
+            page: attentionPage,
+          },
+          events: {
+            data: [
+              {
+                kind: 'box_offline',
+                text: 'pi-office-01 has not reported for 4 days.',
+                occurred_at: '2026-09-01T10:00:00Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+          },
+          activity: {
+            data: [
+              {
+                kind: 'scan_finished',
+                text: 'Scan of 192.168.1.0/24 finished.',
+                occurred_at: '2026-09-01T09:00:00Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+          },
+        },
+        attentionPage,
+      )
+    })
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-verdict')
+    expect(eventsPanel()).toBeInTheDocument()
+    expect(activityPanel()).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('home-attention-page-2'))
+
+    await screen.findByTestId(`home-table-row-${highFinding.finding_id}`)
+    expect(eventsPanel()).toBeInTheDocument()
+    expect(activityPanel()).toBeInTheDocument()
+  })
+
+  it('a viewer sees invite and role-change activity with server-neutral copy', async () => {
+    overrideUser(viewerProfile)
+    overrideHome(() =>
+      homeSnapshot({
+        activity: {
+          data: [
+            {
+              kind: 'member_invited',
+              text: 'ana@northwind.example was invited as a viewer.',
+              occurred_at: '2026-09-01T08:00:00Z',
+            },
+            {
+              kind: 'role_changed',
+              text: 'sam@northwind.example is now an admin.',
+              occurred_at: '2026-09-01T07:00:00Z',
+            },
+          ],
+          total: 2,
+          page: 1,
+        },
+      }),
+    )
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-activity-row-0-text')
+    expect(screen.getByTestId('home-activity-row-0-text')).toHaveTextContent(
+      'ana@northwind.example was invited as a viewer.',
+    )
+    expect(screen.getByTestId('home-activity-row-1-text')).toHaveTextContent(
+      'sam@northwind.example is now an admin.',
+    )
+  })
+
+  it('first load renders the home-loading skeleton', async () => {
     server.use(
-      http.get(`${baseURL}/scans`, async () => {
+      http.get(`${baseURL}/home`, async () => {
         await delay('infinite')
-        return HttpResponse.json({ data: [], total: 0, page: 1 })
+        return HttpResponse.json(homeSnapshot())
       }),
     )
 
-    const { container } = renderWithProviders(<Home />)
+    renderWithProviders(<Home />)
 
-    expect(container).toBeEmptyDOMElement()
+    expect(await screen.findByTestId('home-loading')).toBeInTheDocument()
+    expect(screen.getByTestId('home-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-verdict')).not.toBeInTheDocument()
+  })
+
+  it('a page change does not return to home-loading', async () => {
+    const user = userEvent.setup()
+    let calls = 0
+    overrideHome(async (url) => {
+      calls += 1
+      if (calls > 1) await delay(20)
+      const attentionPage = Number(
+        url.searchParams.get('attention_page') ?? '1',
+      )
+      return homeSnapshot(
+        {
+          review_count: 14,
+          attention: {
+            data: attentionPage === 1 ? [criticalFinding] : [highFinding],
+            total: 14,
+            page: attentionPage,
+          },
+        },
+        attentionPage,
+      )
+    })
+    renderWithProviders(<Home />)
+
+    await screen.findByTestId('home-verdict')
+    expect(screen.queryByTestId('home-loading')).toBeNull()
+
+    await user.click(screen.getByTestId('home-attention-page-2'))
+
+    expect(screen.queryByTestId('home-loading')).toBeNull()
+    expect(screen.getByTestId('home-verdict')).toBeInTheDocument()
+
+    await screen.findByTestId(`home-table-row-${highFinding.finding_id}`)
   })
 
   it.each([
@@ -322,15 +592,33 @@ describe('Home', () => {
     ['admin', adminProfile, 'error' as const],
     ['viewer', viewerProfile, 'error' as const],
   ])(
-    'AC 7 — every rendered control is enabled with no aria-disabled, %s / %s',
+    'every rendered control is enabled with no aria-disabled, %s / %s',
     async (_label, profile, state) => {
       overrideUser(profile)
       if (state === 'blank') {
-        overrideScans(null, null)
+        overrideHome(() =>
+          homeSnapshot({
+            review_state: 'blank',
+            review_count: 0,
+            latest_successful_scan: null,
+            attention: { data: [], total: 0, page: 1 },
+          }),
+        )
       } else if (state === 'clear') {
-        overrideFindings()
+        overrideHome(() =>
+          homeSnapshot({
+            review_state: 'clear',
+            review_count: 0,
+            attention: { data: [], total: 0, page: 1 },
+          }),
+        )
       } else if (state === 'error') {
-        overrideScansUnfilteredError()
+        server.use(
+          http.get(
+            `${baseURL}/home`,
+            () => new HttpResponse(null, { status: 500 }),
+          ),
+        )
       }
       renderWithProviders(<Home />)
 

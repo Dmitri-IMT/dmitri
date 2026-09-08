@@ -58,7 +58,7 @@ only pasted requirements.
 6. **Spawn a design agent** to write **`DESIGN.md`** — pick by which UI the feature touches:
    - `subagent_type: tui-design-agent` for Textual screens (`hardware-agent/src/agent/tui/screens/`).
    - `subagent_type: frontend-design-agent` for React web screens (`frontend/src/`); it works
-     from `docs/ui/` and inherits `SCREENS.md` §Foundations.
+     from `docs/ui/` and inherits `FOUNDATIONS.md`.
    - Both, if a feature genuinely changes both UIs. Neither, for pure pipeline/config features.
 
    Either way it must include a **visual mockup** (ASCII / box-drawing render) of each screen and

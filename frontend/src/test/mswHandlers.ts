@@ -18,13 +18,18 @@ type PendingInvite = components['schemas']['PendingInvite']
 type UpdateUserRoleRequest = components['schemas']['UpdateUserRoleRequest']
 type InviteCreatedResponse = components['schemas']['InviteCreatedResponse']
 type AgentDetail = components['schemas']['AgentDetail']
+type AgentSummary = components['schemas']['AgentSummary']
 type CommandDetail = components['schemas']['CommandDetail']
+type HomeSnapshot = components['schemas']['HomeSnapshot']
 
 const baseURL = 'http://localhost:8000/api/v1'
 
 const NOW_MS = Date.now()
 function minutesAgo(minutes: number): string {
   return new Date(NOW_MS - minutes * 60 * 1000).toISOString()
+}
+function weeksAgo(weeks: number): string {
+  return new Date(NOW_MS - weeks * 7 * 24 * 60 * 60 * 1000).toISOString()
 }
 
 export const validLoginResponse = {
@@ -58,6 +63,67 @@ export const defaultAgent: AgentDetail = {
   active_command_id: null,
 }
 export const agentFixture = defaultAgent
+
+const secondAgentDetail: AgentDetail = {
+  agent_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  display_name: 'Reception spare',
+  online: true,
+  last_seen_at: minutesAgo(10),
+  available_subnets: [
+    { interface: 'eth0', cidr: '192.168.0.0/24', is_default_route: true },
+  ],
+  target_subnet: null,
+  active_command_id: null,
+}
+
+const thirdAgentDetail: AgentDetail = {
+  agent_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  display_name: 'Old office',
+  online: false,
+  last_seen_at: weeksAgo(4),
+  available_subnets: [
+    { interface: 'eth0', cidr: '172.16.0.0/24', is_default_route: true },
+  ],
+  target_subnet: '172.16.0.0/24',
+  active_command_id: null,
+}
+
+export const agentSummaries: AgentSummary[] = [
+  {
+    agent_id: defaultAgent.agent_id,
+    display_name: defaultAgent.display_name,
+    online: defaultAgent.online,
+    last_seen_at: defaultAgent.last_seen_at,
+    target_subnet: defaultAgent.target_subnet,
+    active_command_id: defaultAgent.active_command_id,
+  },
+  {
+    agent_id: secondAgentDetail.agent_id,
+    display_name: secondAgentDetail.display_name,
+    online: secondAgentDetail.online,
+    last_seen_at: secondAgentDetail.last_seen_at,
+    target_subnet: secondAgentDetail.target_subnet,
+    active_command_id: secondAgentDetail.active_command_id,
+  },
+  {
+    agent_id: thirdAgentDetail.agent_id,
+    display_name: thirdAgentDetail.display_name,
+    online: thirdAgentDetail.online,
+    last_seen_at: thirdAgentDetail.last_seen_at,
+    target_subnet: thirdAgentDetail.target_subnet,
+    active_command_id: thirdAgentDetail.active_command_id,
+  },
+]
+
+export const agentDetails: Record<string, AgentDetail> = {
+  [defaultAgent.agent_id]: defaultAgent,
+  [secondAgentDetail.agent_id]: secondAgentDetail,
+  [thirdAgentDetail.agent_id]: thirdAgentDetail,
+}
+
+function agentById(agentId: string): AgentDetail | undefined {
+  return agentDetails[agentId]
+}
 
 export const defaultCommand: CommandDetail = {
   command_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -122,6 +188,9 @@ export const latestScan: ScanSummary = {
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
+  agent_id: defaultAgent.agent_id,
+  box_name: defaultAgent.display_name,
+  duration: null,
 }
 
 export const latestSuccessfulScan: ScanSummary = {
@@ -133,6 +202,9 @@ export const latestSuccessfulScan: ScanSummary = {
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
+  agent_id: defaultAgent.agent_id,
+  box_name: defaultAgent.display_name,
+  duration: 500,
 }
 
 export const criticalFinding: FindingRecord = {
@@ -213,6 +285,9 @@ export const scanFixtures: ScanSummary[] = [
       finding_count: finished ? index % 4 : 0,
       highest_severity:
         finished && index % 4 > 0 ? (index % 2 === 0 ? 'high' : 'low') : null,
+      agent_id: defaultAgent.agent_id,
+      box_name: defaultAgent.display_name,
+      duration: finished ? 45 : null,
     }
   }),
 ]
@@ -305,6 +380,26 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
   }),
 )
 
+export function homeSnapshot(
+  overrides: Partial<HomeSnapshot> = {},
+  attentionPage = 1,
+): HomeSnapshot {
+  return {
+    review_state: 'pending',
+    review_count: 2,
+    latest_successful_scan: latestSuccessfulScan,
+    notices: [],
+    attention: {
+      data: [criticalFinding, highFinding],
+      total: 2,
+      page: attentionPage,
+    },
+    events: { data: [], total: 0, page: 1 },
+    activity: { data: [], total: 0, page: 1 },
+    ...overrides,
+  }
+}
+
 export function paginate<T>(rows: T[], url: string) {
   const params = new URL(url).searchParams
   const page = Number(params.get('page') ?? 1)
@@ -388,14 +483,20 @@ export const handlers = [
   }),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
   http.get(`${baseURL}/agents`, () =>
-    HttpResponse.json({ data: [defaultAgent] }),
+    HttpResponse.json({ data: agentSummaries }),
   ),
-  http.get(`${baseURL}/agents/:agentId`, () => HttpResponse.json(defaultAgent)),
-  http.patch(`${baseURL}/agents/:agentId`, async ({ request }) => {
+  http.get(`${baseURL}/agents/:agentId`, ({ params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json(agent)
+  }),
+  http.patch(`${baseURL}/agents/:agentId`, async ({ request, params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
     const body =
       (await request.json()) as components['schemas']['UpdateAgentTargetSubnetRequest']
     return HttpResponse.json({
-      ...defaultAgent,
+      ...agent,
       target_subnet: body.target_subnet,
     })
   }),
@@ -433,10 +534,14 @@ export const handlers = [
     () => new HttpResponse(null, { status: 204 }),
   ),
   http.get(`${baseURL}/scans`, ({ request }) => {
-    const status = new URL(request.url).searchParams.get('status')
-    const rows = status
-      ? scanFixtures.filter((scan) => scan.status === status)
-      : scanFixtures
+    const params = new URL(request.url).searchParams
+    const status = params.get('status')
+    const agentId = params.get('agent_id')
+    const rows = scanFixtures.filter((scan) => {
+      if (status && scan.status !== status) return false
+      if (agentId && scan.agent_id !== agentId) return false
+      return true
+    })
     return HttpResponse.json(
       paginate(rows, request.url) satisfies ScanListResponse,
     )
@@ -471,5 +576,17 @@ export const handlers = [
     return HttpResponse.json(
       paginate(rows, request.url) satisfies FindingListResponse,
     )
+  }),
+  http.get(`${baseURL}/home`, ({ request }) => {
+    const url = new URL(request.url)
+    const attentionPage = Number(url.searchParams.get('attention_page') ?? '1')
+    const eventsPage = Number(url.searchParams.get('events_page') ?? '1')
+    const activityPage = Number(url.searchParams.get('activity_page') ?? '1')
+    const snapshot = homeSnapshot({}, attentionPage)
+    return HttpResponse.json({
+      ...snapshot,
+      events: { ...snapshot.events, page: eventsPage },
+      activity: { ...snapshot.activity, page: activityPage },
+    })
   }),
 ]

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { lookupInvite } from '@/api/auth'
 import { readApiError } from '@/api/apiError'
@@ -107,11 +107,7 @@ function AcceptInvite() {
     return (
       <AuthShell>
         <div data-testid="invite-dead" className="flex flex-col gap-4">
-          <p
-            ref={headingRef}
-            tabIndex={-1}
-            className="font-title text-title-sm"
-          >
+          <p ref={headingRef} tabIndex={-1} className="text-title-sm">
             This invite has expired.
           </p>
           <p className="text-body-md text-muted-foreground">
@@ -127,11 +123,7 @@ function AcceptInvite() {
     return (
       <AuthShell>
         <div data-testid="invite-signed-in" className="flex flex-col gap-4">
-          <p
-            ref={headingRef}
-            tabIndex={-1}
-            className="font-title text-title-sm"
-          >
+          <p ref={headingRef} tabIndex={-1} className="text-title-sm">
             You&apos;re already signed in.
           </p>
           <p className="text-body-md text-muted-foreground">
@@ -158,7 +150,7 @@ function AcceptInvite() {
             tabIndex={-1}
             role="alert"
             data-testid="invite-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {SERVICE_ERROR}
           </p>
@@ -182,7 +174,7 @@ function AcceptInvite() {
           aria-busy="true"
           className="flex flex-col gap-4"
         >
-          <span className="font-title text-title-sm">Create your account</span>
+          <span className="text-title-sm">Create your account</span>
           <p className="text-body-md text-muted-foreground">
             Checking your invite…
           </p>
@@ -199,17 +191,16 @@ function AcceptInvite() {
           data-testid="invite-form"
           className="flex flex-col gap-4"
         >
-          <span className="font-title text-title-sm">Create your account</span>
+          <span className="text-title-sm">Create your account</span>
           <p className="text-body-md text-muted-foreground">
             You&apos;ve been invited to {lookup.data.org_name} with the{' '}
             {lookup.data.role} role. Pick a password and you&apos;re in.
           </p>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="invite-password">Password</Label>
-            <Input
+            <PasswordInput
               id="invite-password"
               ref={passwordRef}
-              type="password"
               autoComplete="new-password"
               autoFocus
               aria-invalid={passwordError !== null}
@@ -229,17 +220,16 @@ function AcceptInvite() {
               id="invite-password-error"
               role="alert"
               data-testid="invite-password-error"
-              className="text-body-md text-destructive"
+              className="text-body-md text-ink"
             >
               {passwordError}
             </p>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="invite-confirm">Confirm password</Label>
-            <Input
+            <PasswordInput
               id="invite-confirm"
               ref={confirmRef}
-              type="password"
               autoComplete="new-password"
               aria-invalid={confirmError !== null}
               aria-describedby="invite-confirm-error"
@@ -251,7 +241,7 @@ function AcceptInvite() {
               id="invite-confirm-error"
               role="alert"
               data-testid="invite-confirm-error"
-              className="text-body-md text-destructive"
+              className="text-body-md text-ink"
             >
               {confirmError}
             </p>
@@ -261,7 +251,7 @@ function AcceptInvite() {
             tabIndex={-1}
             role="alert"
             data-testid="invite-account-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {accountError ? (
               <>
@@ -269,7 +259,7 @@ function AcceptInvite() {
                 <Link
                   to="/login"
                   data-testid="invite-sign-in"
-                  className="underline"
+                  className="cursor-pointer underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   Sign in instead.
                 </Link>
@@ -279,7 +269,7 @@ function AcceptInvite() {
           <p
             role="alert"
             data-testid="invite-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {formError}
           </p>

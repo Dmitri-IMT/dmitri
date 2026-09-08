@@ -12,25 +12,28 @@ import CommandStatus from './CommandStatus'
 import type { ScanCommand, ScanSelection } from '@/hooks/useScanCommand'
 import type { components } from '@/types/openapi'
 
+type AgentDetail = components['schemas']['AgentDetail']
 type ScanMode = components['schemas']['ScanMode']
 type NspiSubmode = components['schemas']['NspiSubmode']
 
 function ScanControl({
+  agent,
   scanCommand,
+  selectedMode,
   hasTarget,
   autoFocus,
   onSubnetStale,
 }: {
+  agent: AgentDetail
   scanCommand: ScanCommand
+  selectedMode: ScanMode
   hasTarget: boolean
   autoFocus: boolean
   onSubnetStale: () => void
 }) {
   const statusRef = useRef<HTMLDivElement>(null)
   const [focusEpoch, setFocusEpoch] = useState(0)
-  const [scanMode, setScanMode] = useState<ScanMode>('quick')
-  const [nspiSubmode, setNspiSubmode] =
-    useState<NspiSubmode>('inventory')
+  const [nspiSubmode, setNspiSubmode] = useState<NspiSubmode>('inventory')
 
   useLayoutEffect(() => {
     if (focusEpoch === 0) return
@@ -39,8 +42,8 @@ function ScanControl({
 
   async function triggerScan() {
     const selection: ScanSelection = {
-      scanMode,
-      ...(scanMode === 'nspi' ? { nspiSubmode } : {}),
+      scanMode: selectedMode,
+      ...(selectedMode === 'nspi' ? { nspiSubmode } : {}),
     }
     const outcome = await scanCommand.trigger(selection)
     if (outcome === 'followed') {
@@ -52,14 +55,12 @@ function ScanControl({
 
   if (scanCommand.following) {
     return (
-      <div className="flex justify-end">
-        <CommandStatus
-          ref={statusRef}
-          command={scanCommand.command}
-          triggering={scanCommand.triggering}
-          onRetry={() => void triggerScan()}
-        />
-      </div>
+      <CommandStatus
+        ref={statusRef}
+        command={scanCommand.command}
+        triggering={scanCommand.triggering}
+        onRetry={() => void triggerScan()}
+      />
     )
   }
 
@@ -67,33 +68,13 @@ function ScanControl({
 
   return (
     <AdminOnly>
-      <div className="flex flex-wrap items-end justify-end gap-3">
-        <label className="flex flex-col gap-1 text-caption-md">
-          Scan mode
-          <Select
-            value={scanMode}
-            onValueChange={(value) => setScanMode(value as ScanMode)}
-          >
-            <SelectTrigger aria-label="Scan mode" className="min-w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="quick">Quick</SelectItem>
-              <SelectItem value="standard">Standard</SelectItem>
-              <SelectItem value="extensive">Extensive</SelectItem>
-              <SelectItem value="max">MAX</SelectItem>
-              <SelectItem value="nspi">NSPi</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-        {scanMode === 'nspi' && (
+      <div className="flex flex-col items-start gap-2">
+        {selectedMode === 'nspi' && (
           <label className="flex flex-col gap-1 text-caption-md">
             NSPi submode
             <Select
               value={nspiSubmode}
-              onValueChange={(value) =>
-                setNspiSubmode(value as NspiSubmode)
-              }
+              onValueChange={(value) => setNspiSubmode(value as NspiSubmode)}
             >
               <SelectTrigger aria-label="NSPi submode" className="min-w-52">
                 <SelectValue />
@@ -102,9 +83,6 @@ function ScanControl({
                 <SelectItem value="inventory">Inventory</SelectItem>
                 <SelectItem value="read_only_mapping">
                   Read-only mapping
-                </SelectItem>
-                <SelectItem value="active_validation" disabled>
-                  Active validation (unavailable)
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -119,6 +97,11 @@ function ScanControl({
         >
           {scanCommand.triggering ? 'Starting…' : 'Scan now'}
         </Button>
+        {!agent.online && (
+          <p className="text-body-md text-muted-foreground">
+            This box is offline. A scan will start when it reconnects.
+          </p>
+        )}
       </div>
     </AdminOnly>
   )

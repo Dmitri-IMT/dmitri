@@ -19,7 +19,7 @@ function nativeControlMessage(name) {
     `\`<${name}>\` is a native control. Application screens compose the shared primitives — ` +
     '`Button` / `Input` / `Label` / `Select` from `@/components/ui/`, or a shared component ' +
     'under `@/components/` — so interactive state is specified in one place ' +
-    '(`SCREENS.md` §Foundations, business rule 2).'
+    '(`docs/ui/FOUNDATIONS.md` §Interaction states).'
   )
 }
 

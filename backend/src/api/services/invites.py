@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from api.core.config import get_settings
 from api.models.identity import Invite, Org, User
 from api.models.persistence import utc_now
+from api.services.activity import ActivityAppend, append_activity
 from api.services.auth import issue_session
 from api.services.mailer import Mailer
 from api.services.passwords import hash_password, validate_policy
@@ -43,6 +44,7 @@ def create_invite(
     email: str,
     role: str,
     mailer: Mailer,
+    actor: User | None,
 ) -> tuple[str, datetime]:
     session.execute(
         text(
@@ -86,6 +88,24 @@ def create_invite(
         expires_at=expires_at,
     )
     session.add(invite)
+    session.flush()
+    append_activity(
+        session,
+        ActivityAppend(
+            org_id=org_id,
+            kind="member_invited",
+            occurred_at=utc_now(),
+            actor_user_id=actor.id if actor else None,
+            subject_id=invite.id,
+            payload={
+                # `bootstrap_org` creates the first admin invite with no signed-in
+                # actor, so the log names the tool instead of a person.
+                "actor_email": actor.email if actor else "bootstrap",
+                "invite_email": email,
+                "role": role,
+            },
+        ),
+    )
     session.commit()
     mailer.send_invite_link(email, raw)
     return raw, expires_at
@@ -156,7 +176,13 @@ def list_pending_invites(session: Session, *, org_id: UUID) -> list[Invite]:
     ).all()
 
 
-def revoke_invite(session: Session, *, invite_id: UUID, org_id: UUID) -> bool:
+def revoke_invite(
+    session: Session,
+    *,
+    invite_id: UUID,
+    org_id: UUID,
+    actor: User,
+) -> bool:
     invite = session.exec(
         select(Invite).where(
             Invite.id == invite_id,
@@ -167,6 +193,20 @@ def revoke_invite(session: Session, *, invite_id: UUID, org_id: UUID) -> bool:
     ).first()
     if invite is None:
         return False
+    append_activity(
+        session,
+        ActivityAppend(
+            org_id=org_id,
+            kind="invite_revoked",
+            occurred_at=utc_now(),
+            actor_user_id=actor.id,
+            subject_id=invite.id,
+            payload={
+                "actor_email": actor.email,
+                "invite_email": invite.email,
+            },
+        ),
+    )
     session.delete(invite)
     session.commit()
     return True

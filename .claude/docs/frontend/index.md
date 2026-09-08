@@ -8,8 +8,9 @@ added the self-service exit from the organization, confirmed by typing your own 
 added the admin users-and-invites surface — the product's first role-gated route and its first
 table. Spec 035 added executable UI-foundation lint rules and aligned the shells, navigation and
 Settings structure with the named design tokens. Spec 039 (DMI-88) added the scan and host read
-surfaces, the shared `DataTable`, and the Agents scan trigger (DMI-89). App source
-lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/`.
+surfaces, the shared `DataTable`, and the Agents scan trigger (DMI-89). Spec 042 (DMI-131) restyled
+the SPA — design-system v2, `/network` and `/devices` IA, six ESLint rules, and the Home attention
+table. App source lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/`.
 
 ## Overview
 
@@ -21,21 +22,21 @@ lives at `frontend/src/`; the local lint plugin lives at `frontend/eslint-rules/
 
 ## Engineering guardrails
 
-* [frontend authored-source guardrails](./linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
+* [frontend authored-source guardrails](./linting.md) — The local ESLint plugin that enforces named Tailwind tokens, spacing scale, shared interactive primitives, and bans raw hex and dark variants in authored application source.
 
 ## Session & routing
 
 * [auth](./auth.md) — The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, account deletion, the useSession accessor, and the RequireSession and RequireAdmin route guards.
-* [app](./app.md) — The React root's provider nest and App's route table — the four public auth routes, the guarded shell (Home, scans, hosts, agents, Settings), nested admin-only Users, and a catch-all that renders rather than redirects.
+* [app](./app.md) — The React root's provider nest and App's route table — the four public auth routes, the guarded shell (Home, scans, network, devices, Settings), nested admin-only Users, and a catch-all that renders rather than redirects.
 
 ## Domain & screens
 
-* [review](./review.md) — deriveReview() — the pure rule table behind Home's one-sentence verdict — and useHomeReview(), which composes the four reads into one discriminated union.
+* [review](./review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [directory](./directory.md) — DirectoryRow — the merged member/invite display union — and useOrgDirectory(), which folds two list reads into one state union where error outranks loading.
 * [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
-* [scan-status](./scan-status.md) — scanStatusPill maps every ScanStatus to tone and label; isUnfinished hides counts; bySeverityDesc is the only guaranteed worst-first order.
-* [command-status](./command-status.md) — commandStatusPill maps every CommandStatus to tone and label; isTerminalCommandStatus stops the Agents poll.
-* [agents-screen](./agents-screen.md) — usePrimaryAgent reads list+detail and useAgentScreen folds them into AgentScreen; useScanCommand latches the followed command, polls GET /commands/{id}, and invalidates read caches on done.
-* [tables](./tables.md) — DataTable with a discriminated rowAction, stretched-link rows and compile-time sort keys, ListSurface and ReadDetailGate holding the list- and detail-page state machines, Pagination that greys edge controls, EmptyState with optional action and note slots, taller outline StatusPill, and LoadingSkeleton bars on --border.
-* [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
-* [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, details-first Settings surface, and shared presentation and interaction components.
+* [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
+* [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
+* [devices-screen](./devices-screen.md) — Devices lists every box; DeviceDetail owns subnet choice, scan-type tabs and useScanCommand; trigger() posts the selected ScanMode and invalidates read caches on done.
+* [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
+* [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
+* [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.

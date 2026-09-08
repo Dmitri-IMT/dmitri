@@ -5,16 +5,30 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SessionProvider } from '@/auth/SessionProvider'
 import ToastProvider from '@/components/Toast'
 
+function initialEntry(
+  route: string,
+  state: unknown,
+): string | { pathname: string; search: string; state: unknown } {
+  if (state === undefined) return route
+  const q = route.indexOf('?')
+  if (q === -1) return { pathname: route, search: '', state }
+  return {
+    pathname: route.slice(0, q),
+    search: route.slice(q),
+    state,
+  }
+}
+
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/' }: { route?: string } = {},
+  { route = '/', state }: { route?: string; state?: unknown } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
 
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter initialEntries={[initialEntry(route, state)]}>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <ToastProvider>{ui}</ToastProvider>

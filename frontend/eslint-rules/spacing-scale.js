@@ -28,7 +28,7 @@ export default {
     schema: [],
     messages: {
       offScale:
-        '`{{token}}` is off the spacing scale. `SCREENS.md` §Spacing permits only ' +
+        '`{{token}}` is off the spacing scale. `docs/ui/FOUNDATIONS.md` §Spacing permits only ' +
         "`1 2 3 4 6 8 12 16 24` on Tailwind's 4px base.",
     },
   },

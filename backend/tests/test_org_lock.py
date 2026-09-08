@@ -12,7 +12,7 @@ from api.services.org_lock import ORG_ADMIN_LOCK_NAMESPACE, lock_org_admins
 from api.services.users import LastAdminError, change_member_role, count_org_admins
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 # delete_self/delete_member stay unlocked; DMI-105 owns adoption and
 # mixed-race coverage.
@@ -67,12 +67,22 @@ def _change_role(
     user_id: UUID,
     org_id: UUID,
     role: str,
+    actor_user_id: UUID,
+    actor_email: str,
 ) -> None:
     with Session(engine) as session:
         _set_lock_timeout(session)
+        # The actor row belongs to this thread's session, so load it here rather
+        # than handing a User across threads.
+        actor = session.get(User, actor_user_id)
+        assert actor is not None and actor.email == actor_email
         barrier.wait(timeout=CONCURRENCY_TIMEOUT)
         changed = change_member_role(
-            session, user_id=user_id, org_id=org_id, role=role
+            session,
+            user_id=user_id,
+            org_id=org_id,
+            role=role,
+            actor=actor,
         )
         assert changed is not None
 
@@ -208,6 +218,9 @@ def test_concurrent_promotions_both_succeed(migrated_database: Engine) -> None:
         seed.commit()
         org_id = org.id
         viewer_ids = (first_viewer.id, second_viewer.id)
+        admin_id = seed.exec(
+            select(User).where(User.org_id == org.id, User.email == "admin@example.com")
+        ).one().id
 
     barrier = Barrier(2)
     executor = ThreadPoolExecutor(max_workers=2)
@@ -220,6 +233,8 @@ def test_concurrent_promotions_both_succeed(migrated_database: Engine) -> None:
                 user_id=user_id,
                 org_id=org_id,
                 role="admin",
+                actor_user_id=admin_id,
+                actor_email="admin@example.com",
             )
             for user_id in viewer_ids
         ]
@@ -250,8 +265,8 @@ def test_concurrent_mutual_demotion_leaves_exactly_one_admin(
         seed.commit()
         org_id = org.id
         demotions = (
-            (first_admin.id, second_admin.id),
-            (second_admin.id, first_admin.id),
+            (first_admin.id, second_admin.id, first_admin.email),
+            (second_admin.id, first_admin.id, second_admin.email),
         )
 
     barrier = Barrier(2)
@@ -265,8 +280,10 @@ def test_concurrent_mutual_demotion_leaves_exactly_one_admin(
                 user_id=target_id,
                 org_id=org_id,
                 role="viewer",
+                actor_user_id=actor_id,
+                actor_email=actor_email,
             )
-            for _, target_id in demotions
+            for actor_id, target_id, actor_email in demotions
         ]
         outcomes: list[str] = []
         for future in futures:

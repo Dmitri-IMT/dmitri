@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import Scans from '@/pages/Scans'
+import { SCAN_MODE_LABEL } from '@/lib/scanModes'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import LocationProbe from '@/test/LocationProbe'
@@ -79,7 +80,7 @@ function row(scanId: string) {
 
 function countCells(scanId: string) {
   const cells = within(row(scanId)).getAllByRole('cell')
-  return { hosts: cells[3], findings: cells[4], highest: cells[5] }
+  return { hosts: cells[5], findings: cells[6], highest: cells[7] }
 }
 
 function expectHiddenCounts(scanId: string) {
@@ -110,10 +111,12 @@ describe('Scans', () => {
         .map((header) => header.textContent),
     ).toEqual([
       'When',
+      'Box',
       'Mode',
       'Status',
-      'Hosts',
-      'Findings',
+      'Duration',
+      'Machines',
+      'Vulnerabilities',
       'Highest severity',
     ])
     expect(
@@ -130,11 +133,13 @@ describe('Scans', () => {
     renderWithProviders(<Scans />, { route: '/scans' })
 
     const blank = await screen.findByTestId('scans-blank')
-    expect(blank).toHaveTextContent('No scans yet.')
-    expect(blank).not.toHaveTextContent('Scanning is set up on the Pi itself.')
+    expect(blank).toHaveTextContent('No scans yet')
+    expect(blank).toHaveTextContent(
+      'Your first scan finds the machines on your network and what needs fixing.',
+    )
     expect(within(blank).getByTestId('first-scan-cta')).toHaveAttribute(
       'href',
-      '/agents',
+      '/devices',
     )
     expect(
       within(blank).queryByTestId('first-scan-note'),
@@ -190,7 +195,7 @@ describe('Scans', () => {
     ).toBeInTheDocument()
   })
 
-  it('hides unfinished and failed counts, shows a Completed pill, and requests newest-first order', async () => {
+  it('hides unfinished and failed counts, shows Completed as text, and requests newest-first order', async () => {
     scanList(rowKinds, { requireNewestFirst: true })
     renderWithProviders(<Scans />, { route: '/scans' })
 
@@ -207,9 +212,6 @@ describe('Scans', () => {
     ).getByTestId(`scans-status-${latestSuccessfulScan.scan_id}`)
     expect(completedStatus).toHaveTextContent('Completed')
     expect(completedStatus).not.toHaveTextContent('—')
-    expect(within(completedStatus).getByText('Completed')).toHaveClass(
-      'border-border',
-    )
 
     const failed = row(failedScan.scan_id)
     expect(
@@ -233,18 +235,15 @@ describe('Scans', () => {
       await screen.findByTestId(`scans-table-row-${firstPage[0].scan_id}`),
     ).toBeInTheDocument()
     expect(screen.getByTestId('scans-pagination')).toBeInTheDocument()
-    expect(screen.getByTestId('scans-range')).toHaveTextContent(
-      `Showing 1–20 of ${scanFixtures.length}`,
-    )
+    expect(
+      screen.getByRole('navigation', { name: 'Scan pages' }),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByTestId('scans-next'))
 
     expect(
       await screen.findByTestId(`scans-table-row-${secondPage[0].scan_id}`),
     ).toBeInTheDocument()
-    expect(screen.getByTestId('scans-range')).toHaveTextContent(
-      `Showing 21–25 of ${scanFixtures.length}`,
-    )
     for (const scan of secondPage) {
       expect(row(scan.scan_id)).toBeInTheDocument()
     }
@@ -253,6 +252,26 @@ describe('Scans', () => {
         screen.queryByTestId(`scans-table-row-${scan.scan_id}`),
       ).not.toBeInTheDocument()
     }
+  })
+
+  it('renders the mode label, Duration column, and no Result column', async () => {
+    scanList([latestSuccessfulScan])
+    renderWithProviders(<Scans />, { route: '/scans' })
+
+    await screen.findByTestId(`scans-table-row-${latestSuccessfulScan.scan_id}`)
+
+    const headers = within(screen.getByTestId('scans-table'))
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent)
+    expect(headers).toContain('Duration')
+    expect(headers).not.toContain('Result')
+    expect(screen.getByTestId('scans-page')).not.toHaveTextContent(
+      /scan type|scan settings|Use this scan type/i,
+    )
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(
+      within(row(latestSuccessfulScan.scan_id)).getAllByRole('cell')[2],
+    ).toHaveTextContent(SCAN_MODE_LABEL[latestSuccessfulScan.scan_mode])
   })
 
   it('navigates to the scan when a row is activated', async () => {

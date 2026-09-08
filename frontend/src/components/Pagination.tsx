@@ -1,4 +1,12 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Pagination as PaginationRoot,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+} from '@/components/ui/pagination'
+import { pageWindow } from '@/lib/pageWindow'
 
 type PaginationProps = {
   page: number
@@ -6,6 +14,7 @@ type PaginationProps = {
   total: number
   onPageChange: (page: number) => void
   testId: string
+  label: string
 }
 
 function Pagination({
@@ -14,51 +23,68 @@ function Pagination({
   total,
   onPageChange,
   testId,
+  label,
 }: PaginationProps) {
   if (total <= perPage) return null
 
-  const first = (page - 1) * perPage + 1
-  const last = Math.min(page * perPage, total)
+  const pageCount = Math.ceil(total / perPage)
   const atFirstPage = page === 1
-  const atLastPage = page * perPage >= total
+  const atLastPage = page >= pageCount
 
   return (
-    <nav
-      aria-label="Pagination"
-      data-testid={`${testId}-pagination`}
-      className="flex items-center justify-between gap-4"
-    >
-      <p
-        data-testid={`${testId}-range`}
-        className="text-caption-md text-muted-foreground"
-      >
-        Showing {first}–{last} of {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={atFirstPage}
-          tabIndex={atFirstPage ? -1 : undefined}
-          data-testid={`${testId}-previous`}
-          className="border-input text-body-sm"
-          onClick={() => onPageChange(page - 1)}
-        >
-          Previous
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={atLastPage}
-          tabIndex={atLastPage ? -1 : undefined}
-          data-testid={`${testId}-next`}
-          className="border-input text-body-sm"
-          onClick={() => onPageChange(page + 1)}
-        >
-          Next
-        </Button>
-      </div>
-    </nav>
+    <PaginationRoot aria-label={label} data-testid={`${testId}-pagination`}>
+      <PaginationContent>
+        <PaginationItem>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Previous page"
+            disabled={atFirstPage}
+            tabIndex={atFirstPage ? -1 : undefined}
+            data-testid={`${testId}-previous`}
+            onClick={() => onPageChange(page - 1)}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+        </PaginationItem>
+        {pageWindow(page, pageCount).map((item, index) =>
+          item === 'ellipsis' ? (
+            <PaginationItem key={`ellipsis-${index}`}>
+              <PaginationEllipsis />
+            </PaginationItem>
+          ) : (
+            <PaginationItem key={item}>
+              <Button
+                type="button"
+                variant={item === page ? 'outline' : 'ghost'}
+                size="icon"
+                aria-current={item === page ? 'page' : undefined}
+                data-testid={`${testId}-page-${item}`}
+                className="text-body-sm"
+                onClick={() => onPageChange(item)}
+              >
+                {item}
+              </Button>
+            </PaginationItem>
+          ),
+        )}
+        <PaginationItem>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Next page"
+            disabled={atLastPage}
+            tabIndex={atLastPage ? -1 : undefined}
+            data-testid={`${testId}-next`}
+            onClick={() => onPageChange(page + 1)}
+          >
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </PaginationItem>
+      </PaginationContent>
+    </PaginationRoot>
   )
 }
 

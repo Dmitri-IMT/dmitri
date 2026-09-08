@@ -36,7 +36,7 @@ never renders half a table or a spinner over a known failure.
 - Consumes [api](./api.md)'s `listOrgMembers()` and `listPendingInvites()`, and [auth](./auth.md)'s
   `useSession()` for the caller's `user_id`.
 - Consumed by [screens](./screens.md)'s `Users` page, which switches over the union exactly as
-  `Home` switches over [review](./review.md)'s `useHomeReview()`.
+  `Home` switches over [review](./review.md)'s `useHome()`.
 - Row rendering (Status text, Last seen cell) is done by `DirectoryTable` calling `statusLabel` and
   `lastSeenCell`; the `time` case is handed to the shared `Timestamp` component.
 

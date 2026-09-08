@@ -4,13 +4,24 @@ import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queryKeys'
 import { getScan } from '@/api/scans'
 import ReadDetailGate from '@/components/ReadDetailGate'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
+import { SEVERITY_ORDER } from '@/lib/severity'
 import FindingsTable from '@/pages/scans/FindingsTable'
-import ScanDetailHeader from '@/pages/scans/ScanDetailHeader'
+import ScanDetailHeader, {
+  ScanSummaryStrip,
+} from '@/pages/scans/ScanDetailHeader'
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
+import SeverityWord from '@/components/SeverityWord'
+import type { components } from '@/types/openapi'
+
+type FindingRecord = components['schemas']['FindingRecord']
+type Severity = components['schemas']['Severity']
+
+const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
 
 function ScanDetail() {
   const { scanId = '' } = useParams()
@@ -18,7 +29,6 @@ function ScanDetail() {
   const [openFindingId, setOpenFindingId] = useState<string | null>(() =>
     searchParams.get('finding'),
   )
-  const [openHostId, setOpenHostId] = useState<string | null>(null)
 
   const query = useQuery({
     queryKey: queryKeys.scans.detail(scanId),
@@ -36,45 +46,71 @@ function ScanDetail() {
       backLabel="Back to scans"
       detail={readDetailState(scanId, query)}
     >
-      {(scan) => (
-        <>
-          <ScanDetailHeader scan={scan} />
-          {scan.status === 'failed' ? (
-            <ScanFailedNotice errorCode={scan.error_code} />
-          ) : isUnfinished(scan.status) ? (
-            <ScanUnfinishedNotice
-              onCheck={() => {
-                void query.refetch()
-              }}
-              isChecking={query.isFetching}
-            />
-          ) : (
-            <div className="flex flex-col gap-12">
-              <section className="flex flex-col gap-4">
-                <h2 className="font-title text-title-sm">Findings</h2>
-                <FindingsTable
-                  findings={scan.findings}
-                  hosts={scan.hosts}
-                  testId="findings-table"
-                  caption="Findings for this scan"
-                  emptyTestId="scan-no-findings"
-                  emptyCopy="No findings. Every host in this scan came back clean."
-                  openFindingId={openFindingId}
-                  onOpenFindingChange={setOpenFindingId}
-                />
-              </section>
-              <section className="flex flex-col gap-4">
-                <h2 className="font-title text-title-sm">Hosts</h2>
-                <ScanHostsTable
-                  hosts={scan.hosts}
-                  openHostId={openHostId}
-                  onOpenHostChange={setOpenHostId}
-                />
-              </section>
-            </div>
-          )}
-        </>
-      )}
+      {(scan) => {
+        const groups = SEVERITIES.map((severity) => ({
+          severity,
+          findings: scan.findings.filter(
+            (finding: FindingRecord) => finding.severity === severity,
+          ),
+        })).filter((group) => group.findings.length > 0)
+
+        return (
+          <>
+            <ScanDetailHeader scan={scan} />
+            <ScanSummaryStrip scan={scan} />
+            {scan.status === 'failed' ? (
+              <ScanFailedNotice errorCode={scan.error_code} />
+            ) : isUnfinished(scan.status) ? (
+              <ScanUnfinishedNotice
+                onCheck={() => {
+                  void query.refetch()
+                }}
+                isChecking={query.isFetching}
+              />
+            ) : (
+              <>
+                {groups.length === 0 ? (
+                  <p data-testid="scan-no-findings" className="text-body-md">
+                    No vulnerabilities. Every machine in this scan came back
+                    clean.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-8">
+                    {groups.map((group) => (
+                      <Card key={group.severity}>
+                        <CardHeader>
+                          <h2 className="text-title-sm">
+                            <SeverityWord severity={group.severity} />
+                          </h2>
+                        </CardHeader>
+                        <CardContent>
+                          <FindingsTable
+                            findings={group.findings}
+                            variant="scan"
+                            hosts={scan.hosts}
+                            testId={`findings-${group.severity}`}
+                            caption={`${group.severity} vulnerabilities in this scan`}
+                            openFindingId={openFindingId}
+                            onOpenFindingChange={setOpenFindingId}
+                          />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-title-sm">Machines seen</h2>
+                  </CardHeader>
+                  <CardContent>
+                    <ScanHostsTable hosts={scan.hosts} />
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </>
+        )
+      }}
     </ReadDetailGate>
   )
 }

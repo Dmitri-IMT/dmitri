@@ -16,7 +16,7 @@ const ruleTester = new RuleTester({
 
 function offScaleMessage(token) {
   return (
-    `\`${token}\` is off the spacing scale. \`SCREENS.md\` §Spacing permits only ` +
+    `\`${token}\` is off the spacing scale. \`docs/ui/FOUNDATIONS.md\` §Spacing permits only ` +
     "`1 2 3 4 6 8 12 16 24` on Tailwind's 4px base."
   )
 }
@@ -27,6 +27,9 @@ ruleTester.run('spacing-scale', rule, {
     "cn('gap-4')",
     "cva('mx-auto')",
     '<div className="p-px" />',
+    '<div className="p-0" />',
+    "cn('-mt-4')",
+    "cn('space-y-3')",
     '<div className="p-[13px]" />',
     '<div aria-describedby="gap-7" />',
     'const copy = "p-5"',
@@ -43,6 +46,14 @@ ruleTester.run('spacing-scale', rule, {
     {
       code: "cva('mt-2.5')",
       errors: [{ message: offScaleMessage('mt-2.5') }],
+    },
+    {
+      code: "cn('space-y-5')",
+      errors: [{ message: offScaleMessage('space-y-5') }],
+    },
+    {
+      code: "cn('-mx-5')",
+      errors: [{ message: offScaleMessage('mx-5') }],
     },
     {
       code: '<div className="has-data-[icon=inline-end]:pr-5" />',

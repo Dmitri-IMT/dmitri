@@ -8,7 +8,7 @@ function HostPortsTable({ ports }: { ports: Port[] }) {
   if (ports.length === 0) {
     return (
       <p data-testid="host-no-ports" className="text-body-md">
-        No open ports. This host isn&apos;t exposing anything.
+        No services are running on this machine.
       </p>
     )
   }
@@ -19,8 +19,7 @@ function HostPortsTable({ ports }: { ports: Port[] }) {
       rows={ports}
       rowId={(port) => `${port.port}/${port.protocol}`}
       testId="host-ports-table"
-      caption="Open ports on this host"
-      rowAction={undefined}
+      caption="Services running on this machine"
     />
   )
 }

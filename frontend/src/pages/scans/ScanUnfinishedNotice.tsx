@@ -1,4 +1,3 @@
-import StatusPill from '@/components/StatusPill'
 import { Button } from '@/components/ui/button'
 
 function ScanUnfinishedNotice({
@@ -11,14 +10,16 @@ function ScanUnfinishedNotice({
   return (
     <div
       data-testid="scan-unfinished"
-      className="flex flex-col items-center gap-6 py-16 text-center"
+      className="flex flex-col items-center gap-8 py-16 text-center"
     >
-      <StatusPill tone="running" label="Running…" />
-      <p className="font-title text-title-sm">This scan is still running.</p>
-      <p className="max-w-prose text-body-md text-muted-foreground">
-        Findings appear here when it finishes. This page doesn&apos;t update on
-        its own.
-      </p>
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-body-md">Running…</p>
+        <p className="text-title-sm">This scan is still running.</p>
+        <p className="max-w-prose text-body-md text-muted-foreground">
+          Vulnerabilities appear here when it finishes. This page doesn&apos;t
+          update on its own.
+        </p>
+      </div>
       <Button
         type="button"
         variant="outline"

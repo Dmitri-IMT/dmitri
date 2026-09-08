@@ -5,9 +5,9 @@ from uuid import UUID, uuid4
 
 import pytest
 from api.db.session import get_session
-from api.dependencies.auth import CallerIdentity, require_admin
 from api.main import app
 from api.models.identity import Org, User
+from api.routers import users as users_router
 from api.services import users
 from api.services.passwords import hash_password
 from api.services.tokens import create_access_token
@@ -316,26 +316,37 @@ def test_self_target_returns_exact_409_envelope_and_preserves_role(
 
 
 def test_last_admin_service_error_maps_to_durable_409_envelope(
-    client: TestClient, administrative_session: Session, seeded_org: Org
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The route now needs a real admin caller, so the org cannot be one demotion
+    # away from having no admin. Raise the service error directly: this test owns
+    # the envelope mapping, not the last-admin rule (test_users_service.py has it).
+    admin = _seed_user(
+        administrative_session,
+        org_id=seeded_org.id,
+        email="admin@corp.com",
+        role="admin",
+    )
     target = _seed_user(
         administrative_session,
         org_id=seeded_org.id,
         email="last-admin@corp.com",
         role="admin",
     )
-    caller = CallerIdentity(sub=uuid4(), org_id=seeded_org.id, role="admin")
 
-    def _override_require_admin() -> CallerIdentity:
-        return caller
+    def _raise_last_admin(*args, **kwargs):
+        raise users.LastAdminError("org would be left without an admin")
 
-    app.dependency_overrides[require_admin] = _override_require_admin
-    try:
-        response = client.patch(
-            f"/api/v1/users/{target.id}", json={"role": "viewer"}
-        )
-    finally:
-        app.dependency_overrides.pop(require_admin, None)
+    monkeypatch.setattr(users_router, "change_member_role", _raise_last_admin)
+
+    response = client.patch(
+        f"/api/v1/users/{target.id}",
+        headers=_headers(admin),
+        json={"role": "viewer"},
+    )
 
     _assert_error_envelope(
         response,
@@ -348,7 +359,6 @@ def test_last_admin_service_error_maps_to_durable_409_envelope(
     persisted = administrative_session.get(User, target.id)
     assert persisted is not None
     assert persisted.role == "admin"
-    assert users.count_org_admins(administrative_session, org_id=seeded_org.id) == 1
 
 
 def test_foreign_org_target_returns_404_not_403_and_is_untouched(

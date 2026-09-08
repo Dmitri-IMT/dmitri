@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/ui/password-input'
 import AuthShell from '@/components/AuthShell'
 import { useSession } from '@/auth/useSession'
 import { SERVICE_ERROR } from '@/lib/copy'
@@ -72,7 +73,7 @@ function Login() {
             data-testid="login-success"
             ref={successRef}
             tabIndex={-1}
-            className="text-body-md text-accent"
+            className="text-body-md text-ink"
           >
             {arrival === 'accountDeleted'
               ? 'Your account has been deleted.'
@@ -84,8 +85,8 @@ function Login() {
           data-testid="login-form"
           className="flex flex-col gap-4"
         >
-          <span className="font-title text-title-sm">Sign in</span>
-          <div className="flex flex-col gap-1">
+          <span className="text-title-sm">Sign in</span>
+          <div className="flex flex-col gap-2">
             <Label htmlFor="login-email">Email</Label>
             <Input
               id="login-email"
@@ -97,11 +98,10 @@ function Login() {
               data-testid="login-email"
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="login-password">Password</Label>
-            <Input
+            <PasswordInput
               id="login-password"
-              type="password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -111,7 +111,7 @@ function Login() {
           <p
             role="alert"
             data-testid="login-error"
-            className="text-body-md text-destructive"
+            className="text-body-md text-ink"
           >
             {error}
           </p>
@@ -125,7 +125,7 @@ function Login() {
         </form>
         <Link
           to="/forgot-password"
-          className="self-center text-body-md text-accent underline"
+          className="cursor-pointer self-center text-body-md text-accent underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           Forgot password?
         </Link>

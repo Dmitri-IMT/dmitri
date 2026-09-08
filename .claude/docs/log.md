@@ -3,6 +3,62 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-06
+
+* **Update**: Settings restructure (DMI-110) and password reveal. Settings is two headed groups
+  (`Your account` / `Leave this organisation`) with a solid rule between them; read-only identity
+  is inline (`AccountDetails` deleted) with skeleton placeholders while the session loads; activity
+  disclosure moves inside the account group (`What's recorded about me?`). New `PasswordInput`
+  with show/hide toggle on Login, AcceptInvite, ResetPassword and `PasswordDialog`; browser reveal
+  controls suppressed in `index.css`. Touched: `frontend/screens.md`.
+
+* **Update**: Home feed review pass — six structural duplications deleted, no behaviour change.
+  `require_admin_row` replaces four hand-rolled `session.get(User, caller.sub)` blocks and the
+  `actor_user_id` + `actor_email` kwarg pairs (services now take `actor: User`);
+  `append_scan_activity` replaces `_append_scan_failed` and the two inline `ActivityAppend`
+  builders, fed from the command UPDATE's `RETURNING` and the caller's `now`; member-idle is one
+  SQL predicate instead of a load-all-then-skip loop; `HomeListPage` is the base the three page
+  models subclass; `HomeFeedPanel` is the one Events/Activity chrome; `Home` renders one shell for
+  blank/clear/pending and drops `showAttentionBlock`. Touched: `backend/auth.md`,
+  `backend/routers.md`, `backend/services.md`, `backend/schemas.md`, `frontend/screens.md`.
+
+## 2026-09-05
+
+* **Update**: Home feed tidy. `_append_scan_failed` is the one write for failed scans;
+  `deliver()` treats only `WebSocketDisconnect` / `OSError` / `RuntimeError` as offline;
+  Events/Activity always mount `Pagination` (it hides itself); page-size constants are
+  gated against `frontend/src/api/home.ts`. Touched: `backend/services.md`,
+  `frontend/screens.md`, `frontend/review.md`.
+
+* **Update**: spec 044 Home snapshot. Replaced `useHomeReview` / `lib/review.ts` with `GET /home`
+  + `useHome`. Documented `activity` table, `append_activity`, `derive_home_events`, required
+  `Pagination` `label`, and Events/Activity panels. Touched: `frontend/review.md`,
+  `frontend/screens.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/tables.md`,
+  `frontend/directory.md`, `frontend/index.md`, `backend/routers.md`, `backend/services.md`,
+  `backend/models.md`, `backend/schemas.md`, `backend/migrations.md`, root `index.md`.
+
+## 2026-09-04
+
+* **Update**: nuke optionals after spec 042 restyle. Deleted orphaned `HomeFooter` and the unused
+  `listAgents` read in `useHomeReview` (four Home reads, not five). Flattened `commandStatusLabel`
+  / `scanStatusLabel` to strings. `/devices` imports `Devices` directly; `Agents.tsx` re-export and
+  husk `Agents*.test.tsx` files removed. Touched: `review.md`, `overview.md`, `screens.md`,
+  `app.md`, `devices-screen.md`, `command-status.md`, `scan-status.md`, `frontend/index.md`,
+  root `index.md`.
+
+* **Update**: spec 042 / DMI-131 design-system v2 — frontend code-map sweep. Routes renamed
+  (`/network`, `/devices`, `/devices/:agentId`; `/hosts` and `/agents` gone). `agents-screen.md`
+  replaced by `devices-screen.md` (`Devices` list + `DeviceDetail` scan trigger; `usePrimaryAgent`
+  and `useAgentScreen` deleted). Home pending state: `AttentionTable` + `AttentionNotices` replace
+  `FindingDeck`/`ReviewItemCard`. `SeverityWord` replaces `SeverityBadge`; `StatusPill` and pill
+  mappers deleted (`scanStatusLabel`, `commandStatusLabel` are text-only). Six ESLint rules
+  (`no-raw-hex`, `no-dark-variant` added). `DataTable` gains `rowTone` and `collapsedGroup`
+  (Network quiet machines). `ReadDetailGate` gains required `backTo`/`backLabel`. `PageHeader`
+  gains `subtitle`. Auth authority moved from `SCREENS.md` to `FOUNDATIONS.md` in cross-links.
+  Touched: `app.md`, `screens.md`, `overview.md`, `tables.md`, `linting.md`, `review.md`,
+  `scan-status.md`, `command-status.md`, `host-detail.md`, `api.md`, `frontend/index.md`,
+  root `index.md`.
+
 ## 2026-09-01
 
 * **Update**: `backend/services.md` — DMI-97 / spec 041, revocation now takes effect on a live

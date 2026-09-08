@@ -41,7 +41,7 @@ function RevokeDialog({
       locked={isSubmitting}
       initialFocusRef={confirmRef}
     >
-      <Dialog.Title className="font-title text-title-sm">
+      <Dialog.Title className="text-title-sm">
         Revoke the invite to {email}?
       </Dialog.Title>
       <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
@@ -50,7 +50,7 @@ function RevokeDialog({
       <p
         role="alert"
         data-testid="revoke-error"
-        className="text-body-sm text-destructive"
+        className="text-body-sm text-ink"
       >
         {error}
       </p>

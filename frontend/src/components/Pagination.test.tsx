@@ -13,6 +13,7 @@ function renderPagination(page: number, total = 47) {
       total={total}
       onPageChange={onPageChange}
       testId="scans"
+      label="Scan pages"
     />,
   )
 
@@ -20,15 +21,56 @@ function renderPagination(page: number, total = 47) {
 }
 
 describe('Pagination', () => {
-  it('shows the range for a middle page', () => {
+  it('names the nav root for the surface the caller passed', () => {
     renderPagination(2)
 
-    expect(screen.getByTestId('scans-range')).toHaveTextContent(
-      'Showing 21–40 of 47',
+    expect(
+      screen.getByRole('navigation', { name: 'Scan pages' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('navigation', { name: 'Pagination' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('names the previous and next controls without writing the words', () => {
+    renderPagination(2)
+
+    expect(
+      screen.getByRole('button', { name: 'Previous page' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Next page' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('scans-pagination')).not.toHaveTextContent(
+      /Previous|Next|Showing/,
     )
   })
 
-  it('keeps Previous rendered, greyed, inert, and out of the tab order on the first page', async () => {
+  it('lists every page and marks the current one', async () => {
+    const user = userEvent.setup()
+    const onPageChange = renderPagination(2)
+
+    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(screen.getByRole('button', { name: '1' })).not.toHaveAttribute(
+      'aria-current',
+    )
+
+    await user.click(screen.getByRole('button', { name: '3' }))
+    expect(onPageChange).toHaveBeenCalledWith(3)
+  })
+
+  it('elides the middle of a long run of pages', () => {
+    renderPagination(1, 400)
+
+    expect(screen.getByRole('button', { name: '20' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '10' })).not.toBeInTheDocument()
+    expect(screen.getByText('More pages')).toBeInTheDocument()
+  })
+
+  it('keeps the previous control rendered, inert, and out of the tab order on the first page', async () => {
     const user = userEvent.setup()
     const onPageChange = renderPagination(1)
 
@@ -36,16 +78,12 @@ describe('Pagination', () => {
 
     expect(previous).toBeDisabled()
     expect(previous).toHaveAttribute('tabindex', '-1')
-    expect(previous).toHaveClass(
-      'disabled:pointer-events-none',
-      'disabled:opacity-50',
-    )
     expect(screen.getByTestId('scans-next')).toBeEnabled()
     await user.click(previous)
     expect(onPageChange).not.toHaveBeenCalled()
   })
 
-  it('keeps Next rendered, greyed, inert, and out of the tab order on the last page', async () => {
+  it('keeps the next control rendered, inert, and out of the tab order on the last page', async () => {
     const user = userEvent.setup()
     const onPageChange = renderPagination(3)
 
@@ -53,10 +91,6 @@ describe('Pagination', () => {
 
     expect(next).toBeDisabled()
     expect(next).toHaveAttribute('tabindex', '-1')
-    expect(next).toHaveClass(
-      'disabled:pointer-events-none',
-      'disabled:opacity-50',
-    )
     expect(screen.getByTestId('scans-previous')).toBeEnabled()
     await user.click(next)
     expect(onPageChange).not.toHaveBeenCalled()

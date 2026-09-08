@@ -10,7 +10,7 @@ function PageHeader({ title, subtitle, testId }: PageHeaderProps) {
   return (
     <div data-testid={testId} className="flex flex-col gap-4">
       <div className="flex flex-col gap-3">
-        <h1 className="font-title text-title-md">{title}</h1>
+        <h1 className="text-title-md">{title}</h1>
         {subtitle !== undefined && (
           <p className="text-body-md text-muted-foreground">{subtitle}</p>
         )}

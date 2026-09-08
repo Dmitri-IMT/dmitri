@@ -84,7 +84,7 @@ function Users() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-12">
       <PageHeader title="Users" />
       <DirectoryTable
         directory={directory}
@@ -98,6 +98,7 @@ function Users() {
         <div className="flex justify-end">
           <Button
             type="button"
+            size="lg"
             onClick={() => setInviteOpen(true)}
             data-testid="invite-open"
           >

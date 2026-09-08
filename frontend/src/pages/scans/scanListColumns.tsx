@@ -1,76 +1,94 @@
 import type { ReactNode } from 'react'
 import EmptyMark from '@/components/EmptyMark'
 import type { DataTableColumn } from '@/components/DataTable'
-import SeverityBadge from '@/components/SeverityBadge'
-import StatusPill from '@/components/StatusPill'
-import Timestamp from '@/components/Timestamp'
-import { hidesCounts, scanStatusPill } from '@/lib/scanStatus'
+import SeverityWord from '@/components/SeverityWord'
+import {
+  scanDurationCell,
+  scanModeCell,
+  scanWhenCell,
+} from '@/pages/scans/scanCells'
+import { hidesCounts, scanStatusLabel } from '@/lib/scanStatus'
 import type { components } from '@/types/openapi'
 
 type ScanSummary = components['schemas']['ScanSummary']
 
 function statusCell(scan: ScanSummary): ReactNode {
-  const pill = scanStatusPill(scan.status)
   return (
     <span data-testid={`scans-status-${scan.scan_id}`}>
-      <StatusPill tone={pill.tone} label={pill.label} />
+      {scanStatusLabel(scan.status)}
     </span>
   )
 }
 
-function hostsCell(scan: ScanSummary): ReactNode {
+function countCell(scan: ScanSummary, value: ReactNode): ReactNode {
   if (hidesCounts(scan.status)) return <EmptyMark />
-  return scan.host_count
-}
-
-function findingsCell(scan: ScanSummary): ReactNode {
-  if (hidesCounts(scan.status)) return <EmptyMark />
-  if (scan.finding_count === 0) return 'None'
-  return scan.finding_count
+  return <span className="block tabular-nums">{value}</span>
 }
 
 function highestCell(scan: ScanSummary): ReactNode {
-  if (hidesCounts(scan.status) || scan.highest_severity == null) {
-    return <EmptyMark />
-  }
-  return <SeverityBadge severity={scan.highest_severity} />
+  if (hidesCounts(scan.status)) return <EmptyMark />
+  return <SeverityWord severity={scan.highest_severity} />
+}
+
+function boxCell(scan: ScanSummary): ReactNode {
+  return (
+    <span data-testid={`scans-box-${scan.scan_id}`}>
+      {scan.box_name ?? <EmptyMark />}
+    </span>
+  )
 }
 
 export const scanListColumns: DataTableColumn<ScanSummary>[] = [
   {
     key: 'timestamp',
     label: 'When',
-    width: 'w-1/4',
-    render: (scan) => <Timestamp value={scan.timestamp} />,
+    width: 'w-9/50',
+    render: scanWhenCell,
+  },
+  {
+    key: 'box_name',
+    label: 'Box',
+    width: 'w-7/50',
+    render: boxCell,
   },
   {
     key: 'scan_mode',
     label: 'Mode',
-    width: 'w-1/8',
-    render: (scan) => scan.scan_mode,
+    width: 'w-1/10',
+    render: scanModeCell,
   },
   {
     key: 'status',
     label: 'Status',
-    width: 'w-1/8',
+    width: 'w-1/10',
     render: statusCell,
   },
   {
+    key: 'duration',
+    label: 'Duration',
+    width: 'w-1/12',
+    align: 'right',
+    render: (scan) => scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
+  },
+  {
     key: 'host_count',
-    label: 'Hosts',
-    width: 'w-1/8',
-    render: hostsCell,
+    label: 'Machines',
+    width: 'w-1/10',
+    align: 'right',
+    render: (scan) => countCell(scan, scan.host_count),
   },
   {
     key: 'finding_count',
-    label: 'Findings',
-    width: 'w-1/8',
-    render: findingsCell,
+    label: 'Vulnerabilities',
+    width: 'w-3/25',
+    align: 'right',
+    render: (scan) =>
+      countCell(scan, scan.finding_count === 0 ? 'None' : scan.finding_count),
   },
   {
     key: 'highest_severity',
     label: 'Highest severity',
-    width: 'w-1/4',
+    width: 'w-9/50',
     render: highestCell,
   },
 ]

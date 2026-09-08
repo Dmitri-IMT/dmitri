@@ -93,7 +93,7 @@ def test_admin_lists_only_live_org_invites_with_exact_public_shape_and_no_tokens
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     live_raw = "live-secret-token"
     live = _seed_invite(
@@ -126,7 +126,7 @@ def test_admin_lists_only_live_org_invites_with_exact_public_shape_and_no_tokens
     )
 
     response = client.get(
-        "/api/v1/invites", headers=bearer_headers(seeded_org.id, "admin")
+        "/api/v1/invites", headers=actor_headers(seeded_org.id, "admin")
     )
 
     assert response.status_code == 200
@@ -160,7 +160,7 @@ def test_pending_invites_are_ordered_by_expiry_then_id_across_repeated_calls(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     soon = _seed_invite(
         administrative_session,
@@ -203,7 +203,7 @@ def test_pending_invites_are_ordered_by_expiry_then_id_across_repeated_calls(
         str(tied_later_id.id),
         str(later.id),
     ]
-    headers = bearer_headers(seeded_org.id, "admin")
+    headers = actor_headers(seeded_org.id, "admin")
 
     first = client.get("/api/v1/invites", headers=headers)
     second = client.get("/api/v1/invites", headers=headers)
@@ -214,10 +214,10 @@ def test_pending_invites_are_ordered_by_expiry_then_id_across_repeated_calls(
 
 
 def test_viewer_cannot_list_invites(
-    client: TestClient, seeded_org: Org, bearer_headers
+    client: TestClient, seeded_org: Org, actor_headers
 ) -> None:
     response = client.get(
-        "/api/v1/invites", headers=bearer_headers(seeded_org.id, "viewer")
+        "/api/v1/invites", headers=actor_headers(seeded_org.id, "viewer")
     )
 
     _assert_error_envelope(response, 403, "forbidden", "Admin role required")
@@ -227,7 +227,7 @@ def test_revoke_returns_204_hard_deletes_and_invalidates_lookup_and_accept(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     raw_token = "revoked-real-route-token"
     invite = _seed_invite(
@@ -238,7 +238,7 @@ def test_revoke_returns_204_hard_deletes_and_invalidates_lookup_and_accept(
 
     revoked = client.delete(
         f"/api/v1/invites/{invite.id}",
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert revoked.status_code == 204
@@ -266,7 +266,7 @@ def test_reinvite_after_revoke_succeeds(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
     sent_emails,
 ) -> None:
     sent_emails()
@@ -276,7 +276,7 @@ def test_reinvite_after_revoke_succeeds(
         raw_token="old-token",
         email="retry@corp.com",
     )
-    headers = bearer_headers(seeded_org.id, "admin")
+    headers = actor_headers(seeded_org.id, "admin")
     revoked = client.delete(f"/api/v1/invites/{invite.id}", headers=headers)
 
     response = client.post(
@@ -303,7 +303,7 @@ def test_revoke_non_pending_or_inaccessible_invite_returns_exact_404_and_preserv
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     invite: Invite | None
     if case == "unknown":
@@ -326,7 +326,7 @@ def test_revoke_non_pending_or_inaccessible_invite_returns_exact_404_and_preserv
 
     response = client.delete(
         f"/api/v1/invites/{invite_id}",
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     if case == "foreign":
@@ -341,7 +341,7 @@ def test_viewer_cannot_revoke_and_invite_survives(
     client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     invite = _seed_invite(
         administrative_session,
@@ -351,7 +351,7 @@ def test_viewer_cannot_revoke_and_invite_survives(
 
     response = client.delete(
         f"/api/v1/invites/{invite.id}",
-        headers=bearer_headers(seeded_org.id, "viewer"),
+        headers=actor_headers(seeded_org.id, "viewer"),
     )
 
     _assert_error_envelope(response, 403, "forbidden", "Admin role required")
@@ -386,7 +386,7 @@ def test_runtime_role_can_revoke_and_commit(
     runtime_client: TestClient,
     administrative_session: Session,
     seeded_org: Org,
-    bearer_headers,
+    actor_headers,
 ) -> None:
     invite = _seed_invite(
         administrative_session,
@@ -397,7 +397,7 @@ def test_runtime_role_can_revoke_and_commit(
 
     response = runtime_client.delete(
         f"/api/v1/invites/{invite_id}",
-        headers=bearer_headers(seeded_org.id, "admin"),
+        headers=actor_headers(seeded_org.id, "admin"),
     )
 
     assert response.status_code == 204

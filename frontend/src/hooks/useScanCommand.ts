@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createScanCommand, getAgent, QUICK_SCAN_MODE } from '@/api/agents'
+import { createScanCommand, getAgent } from '@/api/agents'
 import { readApiError } from '@/api/apiError'
 import { COMMAND_POLL_INTERVAL_MS, getCommand } from '@/api/commands'
 import { queryKeys } from '@/api/queryKeys'
@@ -24,7 +24,7 @@ export type ScanCommand = {
   command: CommandDetail | null
   following: boolean
   triggering: boolean
-  trigger: (selection?: ScanSelection) => Promise<TriggerOutcome>
+  trigger: (selection: ScanSelection) => Promise<TriggerOutcome>
 }
 
 export function useScanCommand(agent: AgentDetail): ScanCommand {
@@ -72,12 +72,12 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     })
   }, [agent.agent_id, commandQuery.data, queryClient])
 
-  async function trigger(selection?: ScanSelection): Promise<TriggerOutcome> {
+  async function trigger(selection: ScanSelection): Promise<TriggerOutcome> {
     if (!agent.target_subnet || triggeringRef.current) return 'refused'
     triggeringRef.current = true
     setTriggering(true)
     try {
-      const scanMode = selection?.scanMode ?? QUICK_SCAN_MODE
+      const scanMode = selection.scanMode
       const command = await createScanCommand(
         agent.agent_id,
         scanMode === 'nspi'
@@ -86,7 +86,7 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
               subnet: agent.target_subnet,
               nspi_options: {
                 version: 1,
-                submode: selection?.nspiSubmode ?? 'inventory',
+                submode: selection.nspiSubmode ?? 'inventory',
                 active_risk_acknowledged: false,
               },
             }
