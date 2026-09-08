@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
+from .operating_system import OperatingSystemDetection
+
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
     strip_whitespace=True,
@@ -116,6 +118,7 @@ class HostPayload(BaseModel):
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
+    operating_system: OperatingSystemDetection | None = None
     ports: list[PortPayload]
     industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
 

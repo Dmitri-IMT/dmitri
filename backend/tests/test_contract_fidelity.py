@@ -36,6 +36,7 @@ SCHEMA_NAMES = (
     "NspiOptions",
     "HostSummary",
     "ScanHostView",
+    "HostScanHistoryEntry",
     "HostDetailResponse",
     "HostListResponse",
     "ScanDetailResponse",
@@ -43,6 +44,7 @@ SCHEMA_NAMES = (
     "ScanIngestRequest",
     "ScanIngestAcceptedResponse",
     "HostPayload",
+    "OperatingSystemDetection",
     "PortPayload",
     "FindingPayload",
     "InviteLookupRequest",
@@ -290,6 +292,70 @@ def test_schema_matches_contract(schema_name: str):
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
     )
+
+
+def _operating_system_schema_shape(
+    spec: dict[str, Any], schema: dict[str, Any]
+) -> dict[str, Any]:
+    schema = _resolve_ref(spec, schema)
+    properties = schema["properties"]
+    return {
+        "additionalProperties": schema.get("additionalProperties"),
+        "required": sorted(schema.get("required", [])),
+        "property_names": sorted(properties),
+        "name": {
+            "type": properties["name"].get("type"),
+            "minLength": properties["name"].get("minLength"),
+        },
+        "accuracy": {
+            "type": properties["accuracy"].get("type"),
+            "minimum": properties["accuracy"].get("minimum"),
+            "maximum": properties["accuracy"].get("maximum"),
+        },
+        "optional_strings": {
+            field: _property_shape(spec, properties[field])
+            for field in ("vendor", "family", "generation", "device_type")
+        },
+        "cpes": {
+            "type": properties["cpes"].get("type"),
+            "item_type": properties["cpes"]["items"].get("type"),
+            "item_minLength": properties["cpes"]["items"].get("minLength"),
+            "default": properties["cpes"].get("default"),
+        },
+    }
+
+
+def test_operating_system_constraints_match_published_contract() -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    assert _operating_system_schema_shape(
+        contract,
+        contract["components"]["schemas"]["OperatingSystemDetection"],
+    ) == _operating_system_schema_shape(
+        app_spec,
+        app_spec["components"]["schemas"]["OperatingSystemDetection"],
+    )
+
+
+def test_host_operating_system_is_optional_and_nullable_in_both_contracts() -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    host_schemas = (
+        "HostPayload",
+        "ScanHostView",
+        "HostSummary",
+        "HostDetailResponse",
+        "HostScanHistoryEntry",
+    )
+    for spec in (contract, app_spec):
+        for schema_name in host_schemas:
+            host_schema = spec["components"]["schemas"][schema_name]
+            assert "operating_system" not in host_schema["required"]
+            assert _property_shape(
+                spec, host_schema["properties"]["operating_system"]
+            ) == {"nullable": True, "type": "object"}
 
 
 def test_ingest_scan_endpoint_exists():

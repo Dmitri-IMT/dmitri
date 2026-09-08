@@ -312,6 +312,7 @@ def seed_read_graph(session: Session) -> dict:
         "other_org": other_org,
         "scan": scan,
         "host": host,
+        "scan_host": scan_host,
         "finding": finding,
         "other_host": other_host,
         "other_finding": other_finding,

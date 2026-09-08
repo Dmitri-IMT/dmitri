@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import pydantic
 import pytest
 from api.models.persistence import HostRecord
+from api.services.read import get_host_detail
 from read_factories import seed_read_graph
 from sqlmodel import Session
 from starlette.testclient import TestClient
@@ -269,6 +271,86 @@ def test_get_host_by_id_happy_path(
     assert body["hostname"] == "host-a"
     assert len(body["scan_history"]) == 1
     assert body["scan_history"][0]["scan_id"] == str(seeded["scan"].scan_id)
+
+
+def test_host_reads_return_inventory_value_and_history_snapshot(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    inventory = {
+        "name": "Linux 6",
+        "accuracy": 98,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "6.X",
+        "device_type": "general purpose",
+        "cpes": ["cpe:/o:linux:linux_kernel:6"],
+    }
+    snapshot = {
+        "name": "Linux 5",
+        "accuracy": 91,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": ["cpe:/o:linux:linux_kernel:5"],
+    }
+    seeded["host"].operating_system_json = inventory
+    seeded["scan_host"].operating_system_json = snapshot
+    administrative_session.commit()
+    headers = bearer_headers(seeded["org"].id, "viewer")
+
+    listed = client.get("/api/v1/hosts", headers=headers)
+    assert listed.status_code == 200
+    list_row = next(
+        host
+        for host in listed.json()["data"]
+        if host["host_id"] == str(seeded["host"].id)
+    )
+    assert list_row["operating_system"] == inventory
+
+    detail = client.get(f"/api/v1/hosts/{seeded['host'].id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["operating_system"] == inventory
+    assert detail.json()["scan_history"][0]["operating_system"] == snapshot
+
+
+def test_host_read_rejects_malformed_persisted_operating_system(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["host"].operating_system_json = {
+        "name": "Linux",
+        "accuracy": 101,
+        "cpes": [],
+    }
+    administrative_session.commit()
+
+    with pytest.raises(pydantic.ValidationError):
+        get_host_detail(
+            administrative_session,
+            seeded["host"].id,
+            org_id=seeded["org"].id,
+        )
+
+
+def test_host_history_rejects_malformed_persisted_operating_system_snapshot(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["scan_host"].operating_system_json = {
+        "name": "Linux",
+        "accuracy": "high",
+        "cpes": [],
+    }
+    administrative_session.commit()
+
+    with pytest.raises(pydantic.ValidationError):
+        get_host_detail(
+            administrative_session,
+            seeded["host"].id,
+            org_id=seeded["org"].id,
+        )
 
 
 def test_mac_less_host_is_listed_and_readable(

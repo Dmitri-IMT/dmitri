@@ -2239,6 +2239,34 @@ components:
             type: string
             minLength: 1
           default: []
+    OperatingSystemDetection:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - accuracy
+      properties:
+        name:
+          type: string
+          minLength: 1
+        accuracy:
+          type: integer
+          minimum: 0
+          maximum: 100
+        vendor:
+          type: [string, 'null']
+        family:
+          type: [string, 'null']
+        generation:
+          type: [string, 'null']
+        device_type:
+          type: [string, 'null']
+        cpes:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
     ModbusDeviceIdentificationPayload:
       type: object
       additionalProperties: false
@@ -2474,6 +2502,10 @@ components:
         vendor:
           type: string
           minLength: 1
+        operating_system:
+          anyOf:
+            - $ref: '#/components/schemas/OperatingSystemDetection'
+            - type: 'null'
         ports:
           type: array
           items:
@@ -2512,6 +2544,10 @@ components:
         vendor:
           type: string
           minLength: 1
+        operating_system:
+          anyOf:
+            - $ref: '#/components/schemas/OperatingSystemDetection'
+            - type: 'null'
         ports:
           type: array
           items:
@@ -2794,6 +2830,10 @@ components:
           type: string
         vendor:
           type: string
+        operating_system:
+          anyOf:
+            - $ref: '#/components/schemas/OperatingSystemDetection'
+            - type: 'null'
         first_seen_at:
           type: string
           format: date-time
@@ -2824,6 +2864,10 @@ components:
           format: date-time
         scan_mode:
           $ref: '#/components/schemas/ScanMode'
+        operating_system:
+          anyOf:
+            - $ref: '#/components/schemas/OperatingSystemDetection'
+            - type: 'null'
         open_ports_count:
           type: integer
           minimum: 0
@@ -2861,6 +2905,10 @@ components:
           type: string
         vendor:
           type: string
+        operating_system:
+          anyOf:
+            - $ref: '#/components/schemas/OperatingSystemDetection'
+            - type: 'null'
         first_seen_at:
           type: string
           format: date-time

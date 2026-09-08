@@ -1,5 +1,6 @@
 """Pydantic schemas used by the public API."""
 
+from .operating_system import OperatingSystemDetection
 from .persistence import (
     PersistedFinding,
     PersistedScanDetail,
@@ -23,6 +24,7 @@ __all__ = [
     "ModbusDeviceIdentificationPayload",
     "ModbusTcpServicePayload",
     "ModbusUnitPayload",
+    "OperatingSystemDetection",
     "PortPayload",
     "PersistedFinding",
     "PersistedScanDetail",
