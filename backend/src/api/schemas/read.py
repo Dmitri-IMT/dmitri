@@ -172,3 +172,30 @@ class FindingListResponse(BaseModel):
     data: list[FindingRead]
     total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
+
+
+class SeverityBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    critical: Annotated[int, Field(ge=0)] = 0
+    high: Annotated[int, Field(ge=0)] = 0
+    medium: Annotated[int, Field(ge=0)] = 0
+    low: Annotated[int, Field(ge=0)] = 0
+
+
+class ScanRiskSummaryResponse(BaseModel):
+    """Bounded, evidence-bearing scan context for UI and future LLM tools."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    total_findings: Annotated[int, Field(ge=0)]
+    scored_findings: Annotated[int, Field(ge=0)]
+    confirmed_findings: Annotated[int, Field(ge=0)]
+    kev_findings: Annotated[int, Field(ge=0)]
+    average_risk_score: Annotated[
+        float | None, Field(default=None, ge=0, le=100)
+    ]
+    max_risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    severity: SeverityBreakdown
+    top_findings: list[FindingRead]

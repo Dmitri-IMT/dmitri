@@ -91,6 +91,9 @@ As rotas registradas cobrem:
 - health check em `GET /api/v1/health`
 - ingest autenticado do agente em `POST /api/v1/scans`
 - leitura de scans, hosts, findings e home
+- detalhe de finding em `GET /api/v1/findings/{finding_id}`
+- resumo de risco limitado e rastreavel em
+  `GET /api/v1/scans/{scan_id}/risk-summary`
 - autenticacao, usuarios e convites
 - cadastro/leitura dos agentes, criacao e acompanhamento de comandos
 - canal WebSocket do agente em `/api/v1/agents/{agent_id}/commands`
@@ -119,6 +122,11 @@ O resultado persistido em `risk_snapshots` inclui:
 - `exploitability`
 - `risk_score`
 - `rationale`
+
+As duas consultas detalhadas acima formam a primeira superficie somente leitura
+para a futura integracao LLM. Ambas aplicam o escopo da organizacao autenticada;
+o resumo retorna no maximo dez findings, sempre com seus IDs e evidencias, para
+limitar contexto e permitir rastreabilidade.
 
 Roadmap tecnico da proxima fase:
 

@@ -2,16 +2,32 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from api.core.severity import Severity
 from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
-from api.schemas.read import FindingListResponse
-from api.services.read import list_findings
+from api.schemas.read import FindingListResponse, FindingRead
+from api.services.read import get_finding_detail, list_findings
 
 router = APIRouter()
+
+
+@router.get(
+    "/api/v1/findings/{finding_id}",
+    response_model=FindingRead,
+    operation_id="getFindingById",
+)
+def read_finding(
+    finding_id: UUID,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+) -> FindingRead:
+    finding = get_finding_detail(session, finding_id, org_id=caller.org_id)
+    if finding is None:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return finding
 
 
 @router.get("/api/v1/findings", response_model=FindingListResponse)

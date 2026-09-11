@@ -13,6 +13,7 @@ from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
+    KevRecord,
     PortRecord,
     RiskSnapshotRecord,
     ScanHostRecord,
@@ -32,9 +33,11 @@ from api.schemas.read import (
     ScanDetailResponse,
     ScanHostView,
     ScanListResponse,
+    ScanRiskSummaryResponse,
     ScanSortBy,
     ScanStatus,
     ScanSummary,
+    SeverityBreakdown,
     SortOrder,
 )
 from api.schemas.scan import ModbusTcpServicePayload
@@ -326,6 +329,97 @@ def list_findings(
         data=findings_with_risk(session, rows),
         total=total,
         page=page,
+    )
+
+
+def get_finding_detail(
+    session: Session, finding_id: UUID, *, org_id: UUID
+) -> FindingRead | None:
+    row = session.exec(
+        select(FindingRecord, ScanHostRecord.host_id)
+        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
+        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .where(
+            FindingRecord.finding_id == finding_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if row is None:
+        return None
+    return findings_with_risk(session, [row])[0]
+
+
+def get_scan_risk_summary(
+    session: Session, scan_id: UUID, *, org_id: UUID, top_limit: int = 10
+) -> ScanRiskSummaryResponse | None:
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if scan is None:
+        return None
+
+    rows = session.exec(
+        select(FindingRecord, ScanHostRecord.host_id)
+        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .where(FindingRecord.scan_id == scan_id)
+    ).all()
+    ids = [finding.id for finding, _host_id in rows]
+    snapshots = {
+        snapshot.finding_id: snapshot
+        for snapshot in session.exec(
+            select(RiskSnapshotRecord).where(RiskSnapshotRecord.finding_id.in_(ids))
+        ).all()
+    } if ids else {}
+
+    cve_ids = {
+        finding.cve_id.upper()
+        for finding, _host_id in rows
+        if finding.cve_id is not None
+    }
+    kev_ids: set[str] = set()
+    if cve_ids:
+        kev_ids = set(
+            session.exec(
+                select(KevRecord.cve_id).where(KevRecord.cve_id.in_(cve_ids))
+            ).all()
+        )
+
+    severity_counts = {label: 0 for label in SEVERITY_ORDER}
+    for finding, _host_id in rows:
+        severity_counts[finding.severity] += 1
+
+    ranked = sorted(
+        rows,
+        key=lambda row: (
+            snapshots[row[0].id].risk_score if row[0].id in snapshots else -1,
+            SEVERITY_ORDER.get(row[0].severity, 0),
+            -int(row[0].id or 0),
+        ),
+        reverse=True,
+    )[:top_limit]
+    scores = [snapshot.risk_score for snapshot in snapshots.values()]
+
+    return ScanRiskSummaryResponse(
+        scan_id=scan_id,
+        total_findings=len(rows),
+        scored_findings=len(scores),
+        confirmed_findings=sum(
+            finding.confidence == "confirmed" for finding, _host_id in rows
+        ),
+        kev_findings=sum(
+            finding.cve_id is not None and finding.cve_id.upper() in kev_ids
+            for finding, _host_id in rows
+        ),
+        average_risk_score=(round(sum(scores) / len(scores), 2) if scores else None),
+        max_risk_score=max(scores) if scores else None,
+        severity=SeverityBreakdown(**severity_counts),
+        top_findings=[
+            _to_finding_read(finding, host_id, snapshots.get(finding.id))
+            for finding, host_id in ranked
+        ],
     )
 
 
