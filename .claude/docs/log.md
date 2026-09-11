@@ -3,6 +3,15 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-11
+
+* **Update**: `hardware-agent/cli.md`, `hardware-agent/discovery.md`,
+  `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/overview.md`, and `overview.md` — spec 045 removes port-stage `-sV`/NSE from all
+  five modes and makes deep inspection the single service/script authority. NSPi preserves its
+  bounded T4/T2 port passes, per-host OS probe, and subsequent Modbus stage. Version intensity is
+  floored at 7; isolated port/deep skips retain evidence and now produce truthful partial metadata.
+
 ## 2026-09-06
 
 * **Update**: Settings restructure (DMI-110) and password reveal. Settings is two headed groups

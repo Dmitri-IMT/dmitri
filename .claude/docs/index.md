@@ -36,7 +36,7 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 Full listing in [hardware-agent/scanner/index.md](./hardware-agent/scanner/index.md).
 
 * [scanner/runner](./hardware-agent/scanner/runner.md) — ScanRunner — worker thread, cancellation, deadline guards, and the `_run()` pipeline body.
-* [scanner/stages](./hardware-agent/scanner/stages.md) — The threaded port and deep-inspection stages, with retry, circuit breaker, and payload builder.
+* [scanner/stages](./hardware-agent/scanner/stages.md) — Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and payload normalization.
 * [scanner/nmap](./hardware-agent/scanner/nmap.md) — NmapRunner / LoggedNmapRunner — execute Nmap, log argv and failed stderr, parse XML, and retain per-run artifacts.
 * [scanner/models](./hardware-agent/scanner/models.md) — The in-memory scan dataclasses that carry state across stages.
 * [scanner/errors](./hardware-agent/scanner/errors.md) — The scan exception hierarchy that encodes the contingency policy.

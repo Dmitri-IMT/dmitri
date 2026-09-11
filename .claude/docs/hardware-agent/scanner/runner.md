@@ -4,7 +4,7 @@ title: scanner/runner — ScanRunner
 description: ScanRunner — the worker thread, cancellation, deadline guards, and the _run() pipeline body that drives the whole scan.
 resource: hardware-agent/src/agent/scanner/runner.py
 tags: [hardware-agent, scanner, pipeline, threading]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # scanner/runner — ScanRunner
@@ -20,16 +20,14 @@ every failure mode into either a completed payload, a partial payload, or an err
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanRunner` | Session object; holds subnet, mode, reporter, callbacks, `workspace_root`, cancel event, and the active runner handle. | `runner.py:29` |
-| `ScanRunner.__init__` | Params: `subnet`, `scan_mode`, `reporter`, `on_complete`, `on_error`, `workspace_root`, `runner`. | `runner.py:32` |
-| `start()` | Spawns `_run()` on a daemon thread (TUI path). | `runner.py:54` |
-| `run_blocking()` | Runs `_run()` inline on the caller's thread (headless path). | `runner.py:58` |
-| `request_cancel()` | Sets the cancel event and calls `terminate_active()` on the live Nmap runner. | `runner.py:61` |
-| `_check_cancel()` | Raises `ScanCancelled` if the event is set. | `runner.py:72` |
-| `_check_deadline()` | Raises `BudgetExceeded` once the wall-clock deadline passes. | `runner.py:76` |
-| `_build_payload()` | Assembles hosts + findings + metadata into a `ScanPayload`. | `runner.py:84` |
-| `_finalize_partial()` | Builds a partial payload tagged with `terminated_by`, or emits `failed` if nothing usable exists. | `runner.py:120` |
-| `_run()` | The pipeline body: connectivity check → settings/network/runner build → discovery → ports → deep inspection → normalize, with per-stage guards and a layered `except` ladder. | `runner.py:163` |
+| `ScanRunner` | Session object; holds scan inputs/callbacks, Nmap and Modbus cancellation handles, NSPi submode/policy, and workspace root. | `runner.py:36` |
+| `ScanRunner.__init__` | Accepts both general scan inputs and current NSPi submode/policy options. | `runner.py:39` |
+| `start()` / `run_blocking()` | Run `_run()` on a daemon thread or inline, respectively. | `runner.py:66`, `runner.py:70` |
+| `request_cancel()` | Cancels active Nmap and Modbus work. | `runner.py:73` |
+| `_check_cancel()` / `_check_deadline()` | Raise the existing cancellation/budget signals. | `runner.py:85`, `runner.py:89` |
+| `_build_payload()` | Assembles hosts, OS/industrial data, findings, and metadata into a `ScanPayload`. | `runner.py:97` |
+| `_finalize_partial()` | Builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:134` |
+| `_run()` | Drives discovery → port-only enumeration → sole deep enrichment → NSPi OT inspection → normalization; carries port/deep skip counts into final partial metadata. | `runner.py:177` |
 
 ## How it connects
 
@@ -54,6 +52,10 @@ every failure mode into either a completed payload, a partial payload, or an err
   `FatalScanError` before discovery → hard `failed`; after discovery → partial `error`;
   `CircuitBreakerError` → `error`; other `BudgetExceeded` → `timeout`; `ScanCancelled` →
   `user_cancel`; any other exception with hosts in hand → partial `error`.
+- A locally skipped port batch or eligible deep-inspection host also produces a normalized partial
+  payload even when the pipeline reaches the end: `terminated_by="error"`; `interrupted_stage` is
+  `ports` if any port unit was skipped, otherwise `deep_inspection`. Zero skips remains a
+  completed payload. Cancellation and timeout keep their original cause/stage instead.
 - The network info passed into metadata is a placeholder (`ip="0.0.0.0"`, `interface="tui"`);
   subnet selection happens in the front door, not here.
 

@@ -332,3 +332,31 @@ O timeout do subprocesso NSPi é 600 s nos estágios de portas e de inspeção p
 evidências obtidas por outra passagem são preservadas. O circuit breaker do estágio de portas usa
 a razão entre hosts pulados e hosts totais, não a razão entre lotes. Esta emenda substitui, para o
 comportamento vigente, a decisão anterior de manter `-sV -O` na passagem 1.
+
+---
+
+## Emenda — Deduplicação de enriquecimento Nmap (spec 045, 2026-09-11)
+
+**Contexto.** Quick, Standard, Extensive e MAX repetiam detecção de serviço entre o estágio de
+portas e a inspeção profunda; Quick e Standard também repetiam scripts NSE. Após a emenda de
+limites internos do NSPi, a passagem ampla já era apenas enumeração, mas a passagem OT ainda
+executava `-sV` antes da inspeção profunda. Esse custo duplicado pesa especialmente no Raspberry
+Pi e não amplia o escopo de portas do resultado final.
+
+**Decisão.** O estágio de portas deixa de executar `-sV` e NSE em todos os modos. Quick e Standard
+mantêm o top-1000 padrão e `-O`; Extensive mantém `-O --top-ports 10000`; MAX mantém
+`-O -p- --min-rate 1000`. O NSPi mantém exatamente suas duas passagens limitadas e o merge:
+top-1000 em `-Pn -T4 -n --host-timeout 300s`, depois as sete portas OT em
+`-Pn -T2 -n -p <portas> --host-timeout 300s`. Nenhuma passagem NSPi executa `-sV` ou NSE.
+
+A inspeção profunda é a única autoridade de serviço/versão e scripts: uma execução por host com
+portas abertas, sobre a união encontrada. Ela usa o catálogo completo e o `vulners.mincvss` do
+modo. A intensidade efetiva é `max(configurada, 7)`, preservando a profundidade implícita do
+`-sV` removido. No NSPi, `-O`, `--script-timeout 60s` e `--host-timeout 300s` permanecem nessa
+inspeção individual, conforme a emenda de 2026-09-08; a etapa Modbus posterior não muda.
+
+**Contingência.** Evidência aceita nunca é apagada por outra unidade com falha. Um lote/host de
+portas pulado ou um host elegível sem resultado profundo torna o payload parcial. Após
+normalização, `terminated_by` é `error` e `interrupted_stage` é `ports` com prioridade, ou
+`deep_inspection` quando só a inspeção profunda ficou incompleta. Cancelamento, timeout global,
+circuit breaker, cobertura, pacing OT e seus motivos originais permanecem regidos pelo ADR-010.
