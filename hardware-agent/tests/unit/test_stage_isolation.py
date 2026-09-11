@@ -186,6 +186,36 @@ class TestDeepStageUnitFailureIsolated:
         assert done[0].units_skipped == 1
         assert done[0].units_total == 3
 
+    def test_no_result_counts_as_skipped_without_erasing_ports(
+        self, monkeypatch
+    ) -> None:
+        hosts = _eligible_hosts()
+
+        def no_result(runner, ip, ports, **kwargs):
+            del runner, ports, kwargs
+            if ip == "10.0.0.2":
+                return None
+            return HostInfo(ip=ip, hostname=ip)
+
+        monkeypatch.setattr(
+            "agent.scanner.stages.run_nse_vulnerability_scan",
+            no_result,
+        )
+        reporter = _FakeReporter()
+
+        skipped = run_deep_inspection_stage(
+            _DummyRunner(),
+            AgentSettings(scan_mode="standard", max_workers=1),
+            hosts,
+            reporter=reporter,
+        )
+
+        assert skipped == 1
+        assert [port.port for port in hosts[1].ports] == [80]
+        assert [event.ip for event in _kinds(reporter.events, "unit_failed")] == [
+            "10.0.0.2"
+        ]
+
 
 class TestDeepStageTimeoutSkip:
     def test_timeout_event_carries_ip(self, monkeypatch) -> None:

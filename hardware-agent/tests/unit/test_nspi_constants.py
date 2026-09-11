@@ -8,6 +8,7 @@ from agent.config import (
     NSPI_PORTS,
     NSPI_SCRIPT_TIMEOUT,
 )
+from agent.discovery.port_discovery import NSPI_PASS1_ARGS, NSPI_PASS2_ARGS
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.scanner.models import PortInfo
 
@@ -115,3 +116,13 @@ class TestNspiPorts:
 
     def test_s7_port_excluded(self) -> None:
         assert "102" not in NSPI_PORTS.split(",")
+
+    def test_both_port_passes_defer_service_and_script_enrichment(self) -> None:
+        for arguments in (NSPI_PASS1_ARGS, NSPI_PASS2_ARGS):
+            assert "-sV" not in arguments
+            assert "--script" not in arguments
+
+    def test_internal_host_timeout_is_preserved(self) -> None:
+        for arguments in (NSPI_PASS1_ARGS, NSPI_PASS2_ARGS):
+            timeout_index = arguments.index("--host-timeout")
+            assert arguments[timeout_index + 1] == NSPI_HOST_TIMEOUT

@@ -10,6 +10,7 @@ from agent.config import (
     NSPI_HOST_TIMEOUT,
     NSPI_SCRIPT_TIMEOUT,
     deep_stage_scripts,
+    effective_version_intensity,
     subprocess_timeout_for,
 )
 from agent.discovery.port_discovery import (
@@ -236,7 +237,9 @@ def run_deep_inspection_stage(
                 runner,
                 host.ip,
                 host.ports,
-                version_intensity=settings.version_intensity,
+                version_intensity=effective_version_intensity(
+                    settings.version_intensity
+                ),
                 scripts=deep_stage_scripts(settings.scan_mode),
                 min_cvss=settings.min_cvss,
                 timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
@@ -261,13 +264,22 @@ def run_deep_inspection_stage(
                 _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
                 LOGGER.warning("Deep inspection failed for %s.", host.ip)
             else:
-                if result is None and settings.scan_mode == "nspi":
+                if result is None:
                     hosts_skipped += 1
-                    _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
-                    LOGGER.warning(
-                        "Deep inspection hit the host timeout for %s.", host.ip
-                    )
-                elif result is not None:
+                    if settings.scan_mode == "nspi":
+                        _emit(
+                            reporter,
+                            ScanEvent(kind="unit_timed_out", ip=host.ip),
+                        )
+                        LOGGER.warning(
+                            "Deep inspection hit the host timeout for %s.", host.ip
+                        )
+                    else:
+                        _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
+                        LOGGER.warning(
+                            "Deep inspection returned no result for %s.", host.ip
+                        )
+                else:
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
                     if (
@@ -522,12 +534,15 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
             f"pass2:{' '.join(NSPI_PASS2_ARGS)}"
         )
     else:
-        port_stage = f"{' '.join(discovery_arguments(settings.scan_mode))} -Pn -T4"
+        port_stage = (
+            f"-Pn -n -T4 {' '.join(discovery_arguments(settings.scan_mode))}"
+        )
     deep_scripts = deep_stage_scripts(settings.scan_mode)
     ot_inspection = (
         settings.nspi_submode if settings.scan_mode == "nspi" else "disabled"
     )
-    deep_inspection = f"-sV --version-intensity {settings.version_intensity}"
+    version_intensity = effective_version_intensity(settings.version_intensity)
+    deep_inspection = f"-Pn -n -T4 -sV --version-intensity {version_intensity}"
     if settings.scan_mode == "nspi":
         deep_inspection += (
             f" -O --script-timeout {NSPI_SCRIPT_TIMEOUT}"

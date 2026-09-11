@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS, port_stage_scripts
+from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
 from agent.scanner.models import PortInfo, PortScanResult
 from agent.scanner.nmap import NmapRunner
 from agent.utils.nmap_xml import extract_ipv4, parse_operating_system, parse_ports
@@ -16,7 +16,6 @@ NSPI_PASS2_ARGS = [
     "-n",
     "-p",
     NSPI_PORTS,
-    "-sV",
     "--host-timeout",
     NSPI_HOST_TIMEOUT,
 ]
@@ -76,16 +75,16 @@ def _parse_port_scan_result(host_element: ET.Element) -> PortScanResult:
 
 def discovery_arguments(scan_mode: str) -> list[str]:
     if scan_mode == "max":
-        return ["-sV", "-O", "-p-", "--min-rate", "1000"]
+        return ["-O", "-p-", "--min-rate", "1000"]
     if scan_mode == "extensive":
-        return ["-sV", "-O", "--top-ports", "10000"]
-    return ["-sV", "-O", "--script", port_stage_scripts(scan_mode)]
+        return ["-O", "--top-ports", "10000"]
+    return ["-O"]
 
 
 def scan_ports(runner: NmapRunner, ip: str, scan_mode: str) -> PortScanResult:
     """Enumerate open and filtered ports for a single host."""
 
-    arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), ip]
+    arguments = ["-Pn", "-n", "-T4", *discovery_arguments(scan_mode), ip]
 
     root = runner.run_xml(arguments)
     host_element = root.find("host")
@@ -108,7 +107,7 @@ def scan_ports_batch(
     if scan_mode == "nspi":
         return _scan_ports_batch_nspi(runner, ips, timeout=timeout)
 
-    arguments = ["-Pn", "-T4", *discovery_arguments(scan_mode), *ips]
+    arguments = ["-Pn", "-n", "-T4", *discovery_arguments(scan_mode), *ips]
 
     root = runner.run_xml(arguments, timeout=timeout)
     results = {ip: PortScanResult() for ip in ips}

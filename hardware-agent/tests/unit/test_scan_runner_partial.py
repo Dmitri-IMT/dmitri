@@ -42,6 +42,7 @@ def _build_runner(
     *,
     hosts: list[HostInfo],
     port_stage=None,
+    deep_stage=None,
 ) -> tuple[ScanRunner, list[ScanPayload], list[Exception], _FakeReporter]:
     monkeypatch.setattr("agent.scanner.runner.check_network_connectivity", lambda: None)
     monkeypatch.setattr(
@@ -50,6 +51,8 @@ def _build_runner(
     )
     if port_stage is not None:
         monkeypatch.setattr(stages, "run_port_stage", port_stage)
+    if deep_stage is not None:
+        monkeypatch.setattr(stages, "run_deep_inspection_stage", deep_stage)
     completed: list[ScanPayload] = []
     errors: list[Exception] = []
     reporter = _FakeReporter()
@@ -246,5 +249,54 @@ class TestCompletedWithSkippedHosts:
         assert errors == []
         metadata = completed[0].metadata
         assert metadata["partial_result"] is True
+        assert metadata["terminated_by"] == "error"
+        assert metadata["interrupted_stage"] == "ports"
+
+    def test_marks_payload_partial_when_deep_stage_skips_host(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch,
+            hosts=_one_host(),
+            port_stage=lambda *args, **kwargs: 0,
+            deep_stage=lambda *args, **kwargs: 1,
+        )
+
+        runner._run()
+
+        assert errors == []
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is True
+        assert metadata["terminated_by"] == "error"
+        assert metadata["interrupted_stage"] == "deep_inspection"
+
+    def test_port_skip_has_priority_when_both_stages_skip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, completed, _, _ = _build_runner(
+            monkeypatch,
+            hosts=_one_host(),
+            port_stage=lambda *args, **kwargs: 1,
+            deep_stage=lambda *args, **kwargs: 1,
+        )
+
+        runner._run()
+
+        assert completed[0].metadata["interrupted_stage"] == "ports"
+
+    def test_zero_skips_finishes_complete(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, completed, _, _ = _build_runner(
+            monkeypatch,
+            hosts=_one_host(),
+            port_stage=lambda *args, **kwargs: 0,
+            deep_stage=lambda *args, **kwargs: 0,
+        )
+
+        runner._run()
+
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is False
         assert metadata["terminated_by"] == "completed"
         assert "interrupted_stage" not in metadata

@@ -183,6 +183,8 @@ class ScanRunner:
         hosts: list = []
         interrupted_stage: str | None = "discovery"
         discovery_done = False
+        port_units_skipped = 0
+        deep_units_skipped = 0
         try:
             check_network_connectivity()
             settings = AgentSettings(
@@ -239,34 +241,27 @@ class ScanRunner:
             )
 
             interrupted_stage = None
-            hosts_skipped = 0
             if hosts:
                 interrupted_stage = "ports"
                 self._check_cancel()
                 self._check_deadline(deadline)
-                hosts_skipped += (
-                    stages.run_port_stage(
-                        runner,
-                        settings,
-                        hosts,
-                        reporter=self._reporter,
-                        cancel_event=self._cancel_event,
-                    )
-                    or 0
+                port_units_skipped = stages.run_port_stage(
+                    runner,
+                    settings,
+                    hosts,
+                    reporter=self._reporter,
+                    cancel_event=self._cancel_event,
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
 
                 interrupted_stage = "deep_inspection"
-                hosts_skipped += (
-                    stages.run_deep_inspection_stage(
-                        runner,
-                        settings,
-                        hosts,
-                        reporter=self._reporter,
-                        cancel_event=self._cancel_event,
-                    )
-                    or 0
+                deep_units_skipped = stages.run_deep_inspection_stage(
+                    runner,
+                    settings,
+                    hosts,
+                    reporter=self._reporter,
+                    cancel_event=self._cancel_event,
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)
@@ -298,6 +293,12 @@ class ScanRunner:
                 ScanEvent(kind="normalize_started", message="Generating results…")
             )
             self._check_cancel()
+            partial_result = bool(port_units_skipped or deep_units_skipped)
+            partial_stage = (
+                "ports"
+                if port_units_skipped
+                else "deep_inspection" if deep_units_skipped else None
+            )
             payload = self._build_payload(
                 scan_id=scan_id,
                 settings=settings,
@@ -305,9 +306,9 @@ class ScanRunner:
                 runner=runner,
                 started_counter=started_counter,
                 hosts=hosts,
-                partial_result=hosts_skipped > 0,
-                interrupted_stage=None,
-                terminated_by="completed",
+                partial_result=partial_result,
+                interrupted_stage=partial_stage,
+                terminated_by="error" if partial_result else "completed",
             )
 
             self._check_cancel()

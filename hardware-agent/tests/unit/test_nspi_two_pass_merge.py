@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
+from agent.config import NSPI_HOST_TIMEOUT, NSPI_NSE_SCRIPTS, NSPI_PORTS, AgentSettings
 from agent.discovery.port_discovery import scan_ports_batch
+from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
+from agent.scanner.stages import run_deep_inspection_stage
 
 
 def _nmap_xml(ip: str, ports: list[int]) -> ET.Element:
@@ -125,6 +127,18 @@ class TestNspiTwoPassMerge:
         assert "-sV" not in captured[0]
         assert "-O" not in captured[0]
 
+    def test_pass2_only_enumerates_ot_ports(self) -> None:
+        runner, captured = _make_nspi_runner(
+            pass1_ports=[22],
+            pass2_ports=[502],
+        )
+
+        scan_ports_batch(runner, ["10.0.0.1"], "nspi")
+
+        assert "-sV" not in captured[1]
+        assert "--script" not in captured[1]
+        assert "-O" not in captured[1]
+
     def test_both_passes_have_per_host_timeout(self) -> None:
         runner, captured = _make_nspi_runner(
             pass1_ports=[22],
@@ -170,3 +184,27 @@ class TestNspiTwoPassMerge:
 
         assert result.skipped is True
         assert [port.port for port in result.ports] == [22]
+
+    def test_merged_union_receives_one_authoritative_deep_enrichment(self) -> None:
+        runner, captured = _make_nspi_runner(
+            pass1_ports=[22, 445],
+            pass2_ports=[445, 502],
+        )
+        result = scan_ports_batch(runner, ["10.0.0.1"], "nspi")["10.0.0.1"]
+        host = HostInfo(ip="10.0.0.1", hostname="host-one", ports=result.ports)
+
+        run_deep_inspection_stage(
+            runner,
+            AgentSettings(scan_mode="nspi", max_workers=1),
+            [host],
+        )
+
+        assert len(captured) == 3
+        assert all("-sV" not in arguments for arguments in captured[:2])
+        deep_arguments = captured[2]
+        assert deep_arguments.count("-sV") == 1
+        assert deep_arguments[deep_arguments.index("-p") + 1] == "22,445,502"
+        assert deep_arguments[deep_arguments.index("--script") + 1] == ",".join(
+            NSPI_NSE_SCRIPTS
+        )
+        assert "-O" in deep_arguments

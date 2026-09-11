@@ -4,10 +4,15 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
 from agent.scanner.models import HostInfo
-from agent.scanner.stages import build_host_payload
+from agent.scanner.stages import (
+    build_host_payload,
+    run_deep_inspection_stage,
+    run_port_stage,
+)
 from agent.tui.screens.scan_view import ScanViewScreen
 from agent.utils.nmap_xml import parse_ports
 
@@ -66,3 +71,201 @@ def test_extensive_scan_surfaces_tls_and_ftp_findings_in_view() -> None:
     assert "Extensive" in rendered
     assert "TLS certificate expired" in rendered
     assert "Anonymous FTP login allowed" in rendered
+
+
+def test_extensive_responsibility_split_preserves_deterministic_evidence() -> None:
+    ip = "192.168.1.30"
+    port_xml = ET.fromstring(f"""
+        <nmaprun>
+          <host>
+            <address addr="{ip}" addrtype="ipv4" />
+            <ports>
+              <port protocol="tcp" portid="21"><state state="open" /></port>
+              <port protocol="tcp" portid="443"><state state="open" /></port>
+              <port protocol="udp" portid="161">
+                <state state="filtered" />
+              </port>
+            </ports>
+          </host>
+        </nmaprun>
+        """)
+    deep_xml = ET.fromstring("""
+        <nmaprun>
+          <host>
+            <ports>
+              <port protocol="tcp" portid="21">
+                <state state="open" />
+                <service
+                  name="ftp"
+                  product="vsftpd"
+                  version="3.0.3"
+                  extrainfo="secure mode"
+                >
+                  <cpe>cpe:/a:vsftpd:vsftpd:3.0.3</cpe>
+                </service>
+                <script
+                  id="ftp-anon"
+                  output="Anonymous FTP login allowed (FTP code 230)"
+                />
+              </port>
+              <port protocol="tcp" portid="443">
+                <state state="open" />
+                <service
+                  name="https"
+                  product="nginx"
+                  version="1.24.0"
+                  extrainfo="Ubuntu"
+                >
+                  <cpe>cpe:/a:nginx:nginx:1.24.0</cpe>
+                </service>
+                <script id="vulners" output="Known vulnerabilities found">
+                  <table key="cpe:/a:nginx:nginx:1.24.0">
+                    <table>
+                      <elem key="cvss">8.8</elem>
+                      <elem key="id">CVE-2024-23456</elem>
+                    </table>
+                  </table>
+                </script>
+              </port>
+            </ports>
+            <hostscript>
+              <script
+                id="smb2-security-mode"
+                output="Message signing enabled but not required"
+              />
+            </hostscript>
+          </host>
+        </nmaprun>
+        """)
+    calls: list[list[str]] = []
+
+    class DeterministicRunner:
+        nmap_path = "nmap"
+
+        def run_xml(
+            self, arguments: list[str], timeout: float | None = None
+        ) -> ET.Element:
+            calls.append(list(arguments))
+            return port_xml if len(calls) == 1 else deep_xml
+
+    host = HostInfo(
+        ip=ip,
+        hostname="edge-gateway.lab",
+        mac="02:00:00:00:01:30",
+        vendor="Lab Hardware Ltd",
+    )
+    settings = AgentSettings(
+        scan_mode="extensive",
+        min_cvss=3.0,
+        max_workers=1,
+        host_batch_size=1,
+    )
+    runner = DeterministicRunner()
+
+    run_port_stage(runner, settings, [host])  # type: ignore[arg-type]
+    run_deep_inspection_stage(runner, settings, [host])  # type: ignore[arg-type]
+    findings = extract_findings([host])
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.1.0/24",
+        scan_mode="extensive",
+        hosts=[build_host_payload(host)],
+        findings=findings,
+        metadata={"elapsed_seconds": 42},
+    )
+
+    assert len(calls) == 2
+    assert "-sV" not in calls[0]
+    assert "--script" not in calls[0]
+    assert calls[1].count("-sV") == 1
+    assert calls[1][-3:] == ["-p", "21,443", ip]
+
+    assert (host.hostname, host.mac, host.vendor) == (
+        "edge-gateway.lab",
+        "02:00:00:00:01:30",
+        "Lab Hardware Ltd",
+    )
+    assert [(port.port, port.protocol, port.state) for port in host.ports] == [
+        (21, "tcp", "open"),
+        (161, "udp", "filtered"),
+        (443, "tcp", "open"),
+    ]
+    ftp, _, https = host.ports
+    assert (
+        ftp.service.name,
+        ftp.service.product,
+        ftp.service.version,
+        ftp.service.extra_info,
+        ftp.service.banner,
+        ftp.service.cpes,
+    ) == (
+        "ftp",
+        "vsftpd",
+        "3.0.3",
+        "secure mode",
+        "vsftpd 3.0.3 secure mode",
+        ["cpe:/a:vsftpd:vsftpd:3.0.3"],
+    )
+    assert https.service.banner == "nginx 1.24.0 Ubuntu"
+    assert https.service.cpes == ["cpe:/a:nginx:nginx:1.24.0"]
+    assert [script.script_id for script in ftp.scripts] == ["ftp-anon"]
+    assert [script.script_id for script in https.scripts] == ["vulners"]
+    assert [script.script_id for script in host.host_scripts] == [
+        "smb2-security-mode"
+    ]
+
+    serialized_host = payload.hosts[0]
+    assert (
+        str(serialized_host.ip),
+        serialized_host.hostname,
+        serialized_host.mac,
+        serialized_host.vendor,
+    ) == (
+        ip,
+        "edge-gateway.lab",
+        "02:00:00:00:01:30",
+        "Lab Hardware Ltd",
+    )
+    assert {
+        (port.port, port.protocol, port.state, port.service, port.version)
+        for port in serialized_host.ports
+    } == {
+        (21, "tcp", "open", "ftp", "vsftpd 3.0.3 secure mode"),
+        (161, "udp", "filtered", "unknown", None),
+        (443, "tcp", "open", "https", "nginx 1.24.0 Ubuntu"),
+    }
+    assert {
+        (
+            finding.port,
+            finding.source_script,
+            finding.cve_id,
+            finding.severity,
+            finding.evidence,
+        )
+        for finding in payload.findings
+    } == {
+        (
+            21,
+            "ftp-anon",
+            None,
+            "high",
+            "Anonymous FTP login allowed (FTP code 230)",
+        ),
+        (
+            443,
+            "vulners",
+            "CVE-2024-23456",
+            "high",
+            "vulners matched nginx 1.24.0 Ubuntu (TCP/443) on "
+            "192.168.1.30:443 to CVE-2024-23456 via "
+            "cpe:/a:nginx:nginx:1.24.0.",
+        ),
+        (
+            None,
+            "smb2-security-mode",
+            None,
+            "medium",
+            "Message signing enabled but not required",
+        ),
+    }

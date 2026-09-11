@@ -78,15 +78,6 @@ NSPI_NSE_SCRIPTS = (
 )
 
 
-def port_stage_scripts(scan_mode: str) -> str:
-    """Return the --script CSV for the port-scan stage (quick/standard only)."""
-    if scan_mode == "nspi":
-        return ",".join(NSPI_NSE_SCRIPTS)
-    if scan_mode == "standard":
-        return ",".join(STANDARD_NSE_SCRIPTS)
-    return "vulners"
-
-
 def deep_stage_scripts(scan_mode: str) -> tuple[str, ...]:
     """Return the script tuple for the deep-inspection stage."""
     if scan_mode == "nspi":
@@ -98,6 +89,11 @@ def deep_stage_scripts(scan_mode: str) -> tuple[str, ...]:
     if scan_mode == "max":
         return EXTENSIVE_NSE_SCRIPTS
     return QUICK_NSE_SCRIPTS
+
+
+def effective_version_intensity(configured: int) -> int:
+    """Keep the authoritative service probe at least as deep as Nmap's default."""
+    return max(configured, 7)
 
 
 def min_cvss_for_mode(scan_mode: str) -> float:
