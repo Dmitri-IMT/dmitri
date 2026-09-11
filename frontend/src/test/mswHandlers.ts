@@ -338,6 +338,7 @@ export const findingFixtures: FindingRecord[] = [
 export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
   (host, index) => ({
     ...host,
+    industrial_services: [],
     ports:
       index % 5 === 0
         ? []
@@ -371,6 +372,7 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
       mac: host.mac,
       hostname: host.hostname,
       vendor: host.vendor,
+      industrial_services: host.industrial_services,
       ports: host.ports,
     })),
     findings: findingFixtures.filter(

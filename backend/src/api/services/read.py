@@ -36,6 +36,7 @@ from api.schemas.read import (
     ScanSummary,
     SortOrder,
 )
+from api.schemas.scan import ModbusTcpServicePayload
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 
@@ -135,6 +136,9 @@ def get_host_detail(
         hostname=host.hostname,
         vendor=host.vendor,
         operating_system=_to_operating_system(host.operating_system_json),
+        industrial_services=_to_industrial_services(
+            host.industrial_services_json
+        ),
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
@@ -167,6 +171,9 @@ def get_scan_detail(
             vendor=scan_host.vendor,
             operating_system=_to_operating_system(
                 scan_host.operating_system_json
+            ),
+            industrial_services=_to_industrial_services(
+                scan_host.industrial_services_json
             ),
             ports=_ports_for_scan_host(session, scan_host.id),
         )
@@ -392,6 +399,12 @@ def _to_operating_system(
     if value is None:
         return None
     return OperatingSystemDetection.model_validate(value)
+
+
+def _to_industrial_services(
+    values: list[dict[str, object]],
+) -> list[ModbusTcpServicePayload]:
+    return [ModbusTcpServicePayload.model_validate(value) for value in values]
 
 
 def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:

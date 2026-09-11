@@ -10,8 +10,8 @@ O enrichment atual cruza `cve_id` com:
 
 Com isso, cada finding pode expor `kev`, `epss` e um `risk_score` inicial explicavel.
 
-Este README cobre apenas o shell atual (boot, config, migracao, health). Rotas de negocio
-(`/scans`, `/findings`, etc.) ainda nao existem neste shell — chegam em issues futuras.
+O ingest tambem preserva os snapshots de sistema operacional e dos servicos industriais
+Modbus produzidos pelo `hardware-agent`.
 
 ## Requisitos
 
@@ -84,15 +84,19 @@ uv run python -m api.worker_main
 
 O worker faz polling na tabela `enrichment_jobs`, faz claim dos jobs `pending`, marca `running` durante a execucao e finaliza em `completed` ou `failed`. E um processo separado da API.
 
-## Endpoint
+## Endpoints
 
-Esta versao do shell expoe apenas o health check contratado:
+As rotas registradas cobrem:
 
-- `GET /api/v1/health` -> `{"status": "ok", "version": "<versao instalada de backend-api>"}` somente apos um round-trip real ao banco (`SELECT 1`); `503` com um envelope de erro estatico se o banco estiver inacessivel.
+- health check em `GET /api/v1/health`
+- ingest autenticado do agente em `POST /api/v1/scans`
+- leitura de scans, hosts, findings e home
+- autenticacao, usuarios e convites
+- cadastro/leitura dos agentes, criacao e acompanhamento de comandos
+- canal WebSocket do agente em `/api/v1/agents/{agent_id}/commands`
 
-`/docs`, `/redoc` e `/openapi.json` estao desabilitados; o contrato publicado e
-`../contracts/openapi/openapi.yaml`. Nenhuma outra rota (incluindo as antigas rotas de
-negocio de scans/findings) esta registrada neste shell.
+`/docs`, `/redoc` e `/openapi.json` estao desabilitados. O contrato publicado e
+`../contracts/openapi/openapi.yaml`.
 
 ## Regra inicial de risco (engine mantido, sem mudanca de comportamento)
 

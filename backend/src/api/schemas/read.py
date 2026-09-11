@@ -11,6 +11,7 @@ from api.core.error_codes import ScanErrorCode
 from api.core.severity import Severity
 
 from .operating_system import OperatingSystemDetection
+from .scan import ModbusTcpServicePayload
 
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
@@ -38,6 +39,7 @@ class ScanHostView(BaseModel):
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
+    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
     ports: list[Port]
 
 
@@ -99,6 +101,7 @@ class HostDetailResponse(BaseModel):
     hostname: str
     vendor: str
     operating_system: OperatingSystemDetection | None = None
+    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]

@@ -672,6 +672,8 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
+            /** @default [] */
+            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             ports: components["schemas"]["Port"][];
         };
         FindingPayload: {
@@ -794,6 +796,8 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
+            /** @default [] */
+            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */

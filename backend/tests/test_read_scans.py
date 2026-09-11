@@ -132,6 +132,56 @@ def test_scan_read_rejects_malformed_persisted_operating_system_snapshot(
         )
 
 
+def test_get_scan_by_id_returns_industrial_service_snapshot(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    snapshot = [
+        {
+            "protocol": "modbus_tcp",
+            "port": 502,
+            "confidence": "confirmed",
+            "evidence_sources": ["modbus-discover", "pymodbus"],
+            "mapping_source": "generic_baseline",
+            "units": [
+                {
+                    "unit_id": 1,
+                    "status": "responding",
+                    "device_identification": {
+                        "vendor_name": "Schneider Electric",
+                        "product_code": "TM221CE16T",
+                    },
+                }
+            ],
+        }
+    ]
+    seeded["scan_host"].industrial_services_json = snapshot
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    row = next(
+        host
+        for host in response.json()["hosts"]
+        if host["host_id"] == str(seeded["host"].id)
+    )
+    assert row["industrial_services"][0]["port"] == 502
+    assert row["industrial_services"][0]["units"][0]["device_identification"] == {
+        "vendor_name": "Schneider Electric",
+        "product_code": "TM221CE16T",
+        "major_minor_revision": None,
+        "vendor_url": None,
+        "product_name": None,
+        "model_name": None,
+        "user_application_name": None,
+        "objects": {},
+    }
+
+
 def test_get_scan_by_id_failed_body_has_error_code_and_command_id(
     client: TestClient, administrative_session: Session, bearer_headers
 ) -> None:
