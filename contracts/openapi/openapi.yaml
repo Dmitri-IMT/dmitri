@@ -3607,6 +3607,19 @@ components:
         - evidence
         - detected_at
       properties:
+        risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        exploitability:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        confidence:
+          type: [string, 'null']
+          enum: [tentative, probable, confirmed, null]
+        risk_rationale:
+          type: [string, 'null']
         finding_id:
           type: string
           format: uuid

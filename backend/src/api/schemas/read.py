@@ -64,6 +64,10 @@ class FindingRead(BaseModel):
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
     detected_at: datetime
+    risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    exploitability: Annotated[float | None, Field(default=None, ge=0, le=1)]
+    confidence: Literal["tentative", "probable", "confirmed"] | None = None
+    risk_rationale: str | None = None
 
 
 class HostSummary(BaseModel):

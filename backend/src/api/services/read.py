@@ -14,6 +14,7 @@ from api.models.persistence import (
     FindingRecord,
     HostRecord,
     PortRecord,
+    RiskSnapshotRecord,
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
@@ -185,7 +186,7 @@ def get_scan_detail(
         .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
         .where(FindingRecord.scan_id == scan_id)
     ).all()
-    findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
+    findings = findings_with_risk(session, finding_rows)
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -322,7 +323,7 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[_to_finding_read(finding, resolved) for finding, resolved in rows],
+        data=findings_with_risk(session, rows),
         total=total,
         page=page,
     )
@@ -407,7 +408,25 @@ def _to_industrial_services(
     return [ModbusTcpServicePayload.model_validate(value) for value in values]
 
 
-def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:
+def findings_with_risk(session: Session, rows) -> list[FindingRead]:
+    ids = [finding.id for finding, _host_id in rows]
+    snapshots = {
+        snapshot.finding_id: snapshot
+        for snapshot in session.exec(
+            select(RiskSnapshotRecord).where(RiskSnapshotRecord.finding_id.in_(ids))
+        ).all()
+    } if ids else {}
+    return [
+        _to_finding_read(finding, host_id, snapshots.get(finding.id))
+        for finding, host_id in rows
+    ]
+
+
+def _to_finding_read(
+    finding: FindingRecord,
+    host_id: UUID | None,
+    risk: RiskSnapshotRecord | None = None,
+) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -427,4 +446,8 @@ def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRea
         evidence=finding.evidence,
         references=finding.references_json,
         detected_at=finding.created_at,
+        risk_score=risk.risk_score if risk else None,
+        exploitability=risk.exploitability if risk else None,
+        confidence=risk.confidence if risk else None,
+        risk_rationale=risk.rationale if risk else None,
     )

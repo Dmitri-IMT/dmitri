@@ -1020,6 +1020,11 @@ export interface components {
             org_name: string;
         };
         FindingRecord: {
+            risk_score?: number | null;
+            exploitability?: number | null;
+            /** @enum {string|null} */
+            confidence?: "tentative" | "probable" | "confirmed" | null;
+            risk_rationale?: string | null;
             /** Format: uuid */
             finding_id: string;
             /** Format: uuid */

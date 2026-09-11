@@ -40,6 +40,19 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
       className="flex gap-8 p-4"
     >
       <dl className="flex min-w-0 flex-1 flex-col gap-6">
+        <div className="flex gap-4">
+          <Label>Risk score</Label>
+          <dd className="min-w-0 max-w-prose text-body-md">
+            {finding.risk_score == null
+              ? 'Not calculated'
+              : `${finding.risk_score.toFixed(2)} / 100`}
+            {finding.confidence && <p>Confidence: {finding.confidence}</p>}
+            {finding.exploitability != null && (
+              <p>Exploitability index: {finding.exploitability.toFixed(2)} / 1</p>
+            )}
+            {finding.risk_rationale && <p>{finding.risk_rationale}</p>}
+          </dd>
+        </div>
         {hasText(finding.description) && (
           <div className="flex gap-4">
             <Label>What it is</Label>

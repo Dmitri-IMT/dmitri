@@ -100,6 +100,12 @@ As rotas registradas cobrem:
 
 ## Regra inicial de risco (engine mantido, sem mudanca de comportamento)
 
+Os findings retornados pela lista, pelo detalhe de scan e pela home incluem
+`risk_score` (0-100), `exploitability` (0-1), `confidence` e `risk_rationale`.
+Esses campos refletem o snapshot persistido; ficam nulos quando ele nao existe.
+As leituras nao recalculam risco nem consultam fontes externas. O painel de detalhe
+do finding no frontend mostra o score e sua justificativa.
+
 O `risk_score` atual e intencionalmente simples e deterministico:
 
 - usa `severity` como base principal
