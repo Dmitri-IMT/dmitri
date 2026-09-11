@@ -48,7 +48,9 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
               : `${finding.risk_score.toFixed(2)} / 100`}
             {finding.confidence && <p>Confidence: {finding.confidence}</p>}
             {finding.exploitability != null && (
-              <p>Exploitability index: {finding.exploitability.toFixed(2)} / 1</p>
+              <p>
+                Exploitability index: {finding.exploitability.toFixed(2)} / 1
+              </p>
             )}
             {finding.risk_rationale && <p>{finding.risk_rationale}</p>}
           </dd>

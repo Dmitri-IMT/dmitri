@@ -19,9 +19,7 @@ describe('IndustrialServices', () => {
     expect(service).toHaveTextContent('confirmed')
     expect(service).toHaveTextContent('tcp-port, pymodbus')
     expect(service).toHaveTextContent('generic baseline')
-    expect(service).toHaveTextContent(
-      'Schneider Electric · TM221CE16T · V1.0',
-    )
+    expect(service).toHaveTextContent('Schneider Electric · TM221CE16T · V1.0')
 
     const table = within(service).getByRole('table', {
       name: 'Address ranges mapped for Modbus unit 1',

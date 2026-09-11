@@ -12,15 +12,19 @@ function identification(unit: ModbusUnit): string | null {
   const identity = unit.device_identification
   if (!identity) return null
 
-  return [
-    identity.vendor_name,
-    identity.product_name,
-    identity.model_name,
-    identity.product_code,
-    identity.major_minor_revision,
-  ]
-    .filter((value, index, values) => value && values.indexOf(value) === index)
-    .join(' · ') || null
+  return (
+    [
+      identity.vendor_name,
+      identity.product_name,
+      identity.model_name,
+      identity.product_code,
+      identity.major_minor_revision,
+    ]
+      .filter(
+        (value, index, values) => value && values.indexOf(value) === index,
+      )
+      .join(' · ') || null
+  )
 }
 
 function rangeSummary(range: AddressRange): string {
@@ -85,7 +89,8 @@ function Unit({ unit }: { unit: ModbusUnit }) {
                 >
                   <td className="pr-4">{words(range.address_space)}</td>
                   <td className="pr-4 font-mono">
-                    {range.start_address}–{range.start_address + range.count - 1}
+                    {range.start_address}–
+                    {range.start_address + range.count - 1}
                   </td>
                   <td>{rangeSummary(range)}</td>
                 </tr>
