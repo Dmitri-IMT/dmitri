@@ -11,6 +11,8 @@ from api.services.ai.groq import GroqProvider
 from api.services.ai.provider import AIProviderError
 from api.services.ai.schemas import ScanAIAnalysis, ScanAIContext
 
+TEST_TOKEN = "test-token"
+
 
 def _context() -> ScanAIContext:
     return ScanAIContext(
@@ -44,7 +46,7 @@ def _analysis() -> ScanAIAnalysis:
 
 def _provider(handler) -> GroqProvider:
     return GroqProvider(
-        api_key="test-token",
+        api_key=TEST_TOKEN,
         model="openai/gpt-oss-120b",
         base_url="https://api.groq.test/openai/v1/",
         timeout_seconds=3,
@@ -79,7 +81,7 @@ def test_groq_provider_requests_strict_structured_output():
     result = _provider(handler).analyze_scan(context)
 
     assert result == _analysis()
-    assert captured["authorization"] == "Bearer test-token"
+    assert captured["authorization"] == f"Bearer {TEST_TOKEN}"
     payload = captured["payload"]
     assert payload["model"] == "openai/gpt-oss-120b"
     assert payload["max_completion_tokens"] == 1024
@@ -87,7 +89,7 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["include_reasoning"] is False
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
-    assert "test-token" not in json.dumps(payload)
+    assert TEST_TOKEN not in json.dumps(payload)
     assert str(context.scan_id) in payload["messages"][1]["content"]
 
 
