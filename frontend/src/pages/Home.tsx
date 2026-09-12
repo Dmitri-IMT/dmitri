@@ -9,6 +9,7 @@ import Verdict from '@/pages/home/Verdict'
 import HomeBlank from '@/pages/home/HomeBlank'
 import HomeError from '@/pages/home/HomeError'
 import { HOME_PANEL_CHROME } from '@/pages/home/HomeFeedPanel'
+import HomeAIOverview from '@/pages/home/HomeAIOverview'
 import HomeSidePanels from '@/pages/home/HomeSidePanels'
 
 function HomeLoading() {
@@ -92,6 +93,9 @@ function Home() {
   return (
     <div data-testid="home-page" className="flex flex-col gap-12">
       {attention}
+      {snapshot.latest_successful_scan && (
+        <HomeAIOverview scanId={snapshot.latest_successful_scan.scan_id} />
+      )}
       <HomeSidePanels
         events={snapshot.events}
         activity={snapshot.activity}

@@ -53,6 +53,7 @@ function trackRequests() {
   const homeUrls: string[] = []
   const scansUrls: string[] = []
   const findingsUrls: string[] = []
+  const analysisUrls: string[] = []
 
   server.use(
     http.get(`${baseURL}/home`, ({ request }) => {
@@ -71,9 +72,25 @@ function trackRequests() {
       findingsUrls.push(request.url)
       return HttpResponse.json({ data: [], total: 0, page: 1 })
     }),
+    http.get(`${baseURL}/scans/:scanId/analysis`, ({ request }) => {
+      analysisUrls.push(request.url)
+      return HttpResponse.json({
+        scan_id: latestSuccessfulScan.scan_id,
+        analysis_id: null,
+        status: 'unavailable',
+        analysis: null,
+        provider: null,
+        model: null,
+        context_version: null,
+        prompt_version: null,
+        created_at: null,
+        updated_at: null,
+        completed_at: null,
+      })
+    }),
   )
 
-  return { homeUrls, scansUrls, findingsUrls }
+  return { homeUrls, scansUrls, findingsUrls, analysisUrls }
 }
 
 function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
@@ -102,7 +119,7 @@ const staleSuccessfulScan = {
 }
 
 describe('Home', () => {
-  it('issues one GET /home request and never calls scans or findings', async () => {
+  it('loads the Home snapshot and its persisted latest-scan AI overview', async () => {
     const tracked = trackRequests()
     renderWithProviders(<Home />)
 
@@ -110,6 +127,7 @@ describe('Home', () => {
     expect(tracked.homeUrls).toHaveLength(1)
     expect(tracked.scansUrls).toHaveLength(0)
     expect(tracked.findingsUrls).toHaveLength(0)
+    expect(tracked.analysisUrls).toHaveLength(1)
   })
 
   it('with attention, the title states the count and each row navigates', async () => {
