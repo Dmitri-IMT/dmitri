@@ -1,0 +1,33 @@
+[Unit]
+Description=Dmitri scanner agent
+Documentation=https://github.com/Dmitri-IMT/vulnerability-scanner-device
+After=network-online.target
+Wants=network-online.target
+# The daemon reconnects on its own; never give up restarting it.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# nmap needs root for TCP/IP fingerprinting (OS detection); without it a scan
+# finishes "partial" (exit 10) instead of "completed".
+User=root
+Group=root
+WorkingDirectory=/opt/dmitri-agent
+EnvironmentFile=/etc/dmitri/agent.env
+# Keep scan results out of /root, which ProtectHome hides from the service.
+Environment=XDG_DATA_HOME=/var/lib/dmitri
+ExecStart=/opt/dmitri-agent/.venv/bin/dmitri agent
+Restart=always
+RestartSec=10s
+
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/dmitri
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dmitri-agent
+
+[Install]
+WantedBy=multi-user.target
