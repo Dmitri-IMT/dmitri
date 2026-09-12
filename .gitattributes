@@ -1,0 +1,2 @@
+# These scripts run inside Linux containers, including from Windows checkouts.
+docker/pi-simulator/*.sh text eol=lf

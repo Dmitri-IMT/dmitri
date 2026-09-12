@@ -9,6 +9,7 @@ import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import LocationProbe from '@/test/LocationProbe'
 import { scanDetail, scanNotFound } from '@/test/scansHarness'
+import { confirmedModbusService } from '@/test/industrialFixtures'
 import {
   criticalFinding,
   hostFixtures,
@@ -30,6 +31,7 @@ const nas: ScanHostView = {
   mac: '00:11:32:AA:BB:CC',
   hostname: 'synology-nas',
   vendor: 'Synology',
+  industrial_services: [],
   ports: [
     {
       port: 443,
@@ -47,6 +49,7 @@ const piLab: ScanHostView = {
   mac: 'DC:A6:32:11:22:33',
   hostname: 'pi-lab',
   vendor: 'Raspberry Pi',
+  industrial_services: [],
   ports: [
     {
       port: 22,
@@ -195,6 +198,27 @@ describe('ScanDetail', () => {
     expect(screen.getByTestId('scan-summary-duration')).toHaveTextContent(
       '8 min',
     )
+  })
+
+  it('shows confirmed industrial services without calling them vulnerabilities', async () => {
+    scanDetail(
+      completedScan({
+        hosts: [
+          nas,
+          { ...piLab, industrial_services: [confirmedModbusService] },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const industrial = await screen.findByTestId('scan-industrial-services')
+    expect(industrial).toHaveTextContent(piLab.hostname)
+    expect(industrial).toHaveTextContent(piLab.ip)
+    expect(industrial).toHaveTextContent('Modbus TCP · port 502')
+    expect(industrial).toHaveTextContent('Schneider Electric')
+    expect(
+      screen.getByRole('heading', { name: 'Industrial services' }),
+    ).toBeInTheDocument()
   })
 
   it('drops the unknowable counts from the strip on a failed scan', async () => {

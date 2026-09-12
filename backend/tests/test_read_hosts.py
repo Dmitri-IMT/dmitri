@@ -315,6 +315,38 @@ def test_host_reads_return_inventory_value_and_history_snapshot(
     assert detail.json()["scan_history"][0]["operating_system"] == snapshot
 
 
+def test_host_detail_returns_industrial_inventory(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["host"].industrial_services_json = [
+        {
+            "port": 502,
+            "confidence": "confirmed",
+            "units": [
+                {
+                    "unit_id": 1,
+                    "status": "responding",
+                    "device_identification": {"product_code": "TM221CE16T"},
+                }
+            ],
+        }
+    ]
+    administrative_session.commit()
+
+    detail = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert detail.status_code == 200
+    service = detail.json()["industrial_services"][0]
+    assert service["protocol"] == "modbus_tcp"
+    assert service["units"][0]["device_identification"]["product_code"] == (
+        "TM221CE16T"
+    )
+
+
 def test_host_read_rejects_malformed_persisted_operating_system(
     administrative_session: Session,
 ) -> None:

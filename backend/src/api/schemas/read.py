@@ -11,6 +11,7 @@ from api.core.error_codes import ScanErrorCode
 from api.core.severity import Severity
 
 from .operating_system import OperatingSystemDetection
+from .scan import ModbusTcpServicePayload
 
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
@@ -38,6 +39,7 @@ class ScanHostView(BaseModel):
     hostname: constr(min_length=1)
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
+    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
     ports: list[Port]
 
 
@@ -62,6 +64,10 @@ class FindingRead(BaseModel):
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
     detected_at: datetime
+    risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    exploitability: Annotated[float | None, Field(default=None, ge=0, le=1)]
+    confidence: Literal["tentative", "probable", "confirmed"] | None = None
+    risk_rationale: str | None = None
 
 
 class HostSummary(BaseModel):
@@ -99,6 +105,7 @@ class HostDetailResponse(BaseModel):
     hostname: str
     vendor: str
     operating_system: OperatingSystemDetection | None = None
+    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
@@ -165,3 +172,30 @@ class FindingListResponse(BaseModel):
     data: list[FindingRead]
     total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
+
+
+class SeverityBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    critical: Annotated[int, Field(ge=0)] = 0
+    high: Annotated[int, Field(ge=0)] = 0
+    medium: Annotated[int, Field(ge=0)] = 0
+    low: Annotated[int, Field(ge=0)] = 0
+
+
+class ScanRiskSummaryResponse(BaseModel):
+    """Bounded, evidence-bearing scan context for UI and future LLM tools."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    total_findings: Annotated[int, Field(ge=0)]
+    scored_findings: Annotated[int, Field(ge=0)]
+    confirmed_findings: Annotated[int, Field(ge=0)]
+    kev_findings: Annotated[int, Field(ge=0)]
+    average_risk_score: Annotated[
+        float | None, Field(default=None, ge=0, le=100)
+    ]
+    max_risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    severity: SeverityBreakdown
+    top_findings: list[FindingRead]

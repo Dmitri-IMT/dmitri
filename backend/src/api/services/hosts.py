@@ -61,6 +61,7 @@ def upsert_hosts_for_scan(
                 hostname=sh.hostname,
                 vendor=sh.vendor,
                 operating_system_json=sh.operating_system_json,
+                industrial_services_json=sh.industrial_services_json,
                 open_ports_count=open_ports_count(session, sh.id),
                 highest_severity=highest_severity(session, sh.id),
                 first_seen_at=scan_record.timestamp,
@@ -90,6 +91,8 @@ def upsert_hosts_for_scan(
                 host.vendor = sh.vendor
                 if sh.operating_system_json is not None:
                     host.operating_system_json = sh.operating_system_json
+                if sh.industrial_services_json:
+                    host.industrial_services_json = sh.industrial_services_json
                 host.open_ports_count = open_ports_count(session, sh.id)
                 host.highest_severity = highest_severity(session, sh.id)
 
