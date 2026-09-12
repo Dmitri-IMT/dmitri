@@ -374,6 +374,36 @@ def test_ingest_accepted_response_rejects_non_accepted_status():
         ScanIngestAcceptedResponse.model_validate(payload)
 
 
+def test_ingest_rejects_removed_modbus_process_fields() -> None:
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["industrial_services"] = [
+        {
+            "protocol": "modbus_tcp",
+            "port": 502,
+            "confidence": "confirmed",
+            "units": [
+                {
+                    "unit_id": 1,
+                    "status": "responding",
+                    "address_ranges": [
+                        {
+                            "address_space": "coil",
+                            "start_address": 0,
+                            "count": 4,
+                            "status": "readable",
+                            "observed_at": "2026-09-12T14:03:11Z",
+                            "values": [False, True, False, True],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
 def test_example_payload_validates_against_tightened_model():
     payload = json.loads(EXAMPLE_PATH.read_text())
 

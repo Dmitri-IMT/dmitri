@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: Backend management commands — org bootstrap, agent provisioning
-description: The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
+description: The two operator CLIs — backend-bootstrap-org (first org + admin invite) and backend-provision-agent (device public key + org OT digest key).
 resource: backend/src/api/management/bootstrap_org.py
 tags: [backend, cli, operations, provisioning, invites, agents]
-timestamp: 2026-08-02T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # Backend management commands — org bootstrap, agent provisioning
@@ -22,7 +22,7 @@ run out of band, and expose **no HTTP routes**.
 |------|--------------|-----|
 | `bootstrap_org.main()` | Refuses a duplicate org name case- and whitespace-insensitively **before any insert**, then adds the `Org`, commits, then calls `create_invite(..., role="admin")`. Prints `invite_token=…` to stdout once. | `backend/src/api/management/bootstrap_org.py:29` |
 | `_SilentMailer` | A local no-op satisfying the `Mailer` protocol, passed to `create_invite` so the bootstrap path emails nothing at all and the raw admin token never reaches a `logger` call. The command prints the token itself. | `backend/src/api/management/bootstrap_org.py:14` |
-| `provision_agent.main()` | Validates the org and a 64-hex/32-byte public key, inserts the `Agent`, prints its `agent_id`. Returns `1` on a bad key length or unknown `--org-id` without raising. | `backend/src/api/management/provision_agent.py:32` |
+| `provision_agent.main()` | Validates the org and device public key, inserts the `Agent`, creates an org OT digest key if absent, and prints `agent_id` and `ot_digest_key` to stdout. Reuses the same key for later agents in that org. | `backend/src/api/management/provision_agent.py:33` |
 | `_decode_public_key()` | Hex→32 raw bytes, or `None` for anything malformed. | `backend/src/api/management/provision_agent.py:22` |
 
 ## How it connects
@@ -38,8 +38,9 @@ run out of band, and expose **no HTTP routes**.
 
 ## Notes / gotchas
 
-- **Secrets go to stdout exactly once and never through `logging`.** This is not stylistic — a
-  logger would put the raw admin invite token into Railway's log stream. The original implementation
+- **Secrets go to stdout, never through `logging`.** The admin invite token is printed once; the
+  org OT digest key is printed again when a later agent is provisioned into the same org. A logger
+  would put the raw admin invite token into Railway's log stream. The original implementation
   passed the then-current `LogMailer` (whose `send_invite_link` logged the token) and was rejected in
   review for exactly that; a `caplog`-based test now pins the behavior, since a source-level "no
   logging import" check cannot catch a secret leaking through a collaborator.

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
 import threading
 
+import pytest
+
+from agent.ot.digest import DIGEST_PREFIX
 from agent.ot.modbus.client import ModbusReadResult
 from agent.ot.modbus.mapper import map_modbus_service, resolve_mapping_plan
 from agent.ot.modbus.models import (
@@ -117,11 +121,7 @@ def test_mapper_calls_all_four_read_functions_and_records_summary() -> None:
     ]
     ranges = service.units[0].address_ranges
     assert [item.status for item in ranges] == ["readable"] * 4
-    assert ranges[2].nonzero_count == 3
-    assert ranges[2].value_min == 0
-    assert ranges[2].value_max == 3
-    assert ranges[2].values is None
-    assert ranges[2].value_sha256.startswith("sha256:")
+    assert ranges[2].value_digest is None
     assert service.mapping_source == "generic_baseline"
     assert service.requests_sent == 4
 
@@ -254,8 +254,77 @@ def test_capture_none_records_only_range_status() -> None:
 
     observed = service.units[0].address_ranges[0]
     assert observed.status == "readable"
-    assert observed.values is None
-    assert observed.value_sha256 is None
-    assert observed.nonzero_count is None
-    assert observed.value_min is None
-    assert observed.value_max is None
+    assert observed.value_digest is None
+
+
+def test_empty_numeric_list_does_not_report_min_or_max_zero() -> None:
+    service = _identified_service()
+    session = _Session(
+        [ModbusReadResult(status="readable", values=[], request_sent=True)]
+    )
+    profile = MappingProfile(
+        name="lab",
+        selector={"cidrs": ["192.168.10.0/24"]},
+        ranges=[
+            {
+                "address_space": "holding_register",
+                "start_address": 0,
+                "count": 1,
+                "block_size": 1,
+            }
+        ],
+    )
+
+    map_modbus_service(
+        HostInfo(ip="192.168.10.30", hostname="plc"),
+        service,
+        policy=OtAutomationPolicy(mapping_profiles=[profile]),
+        session_factory=lambda *args, **kwargs: session,
+        sleep=lambda _: None,
+    )
+
+    observed = service.units[0].address_ranges[0]
+    assert observed.value_digest is None
+
+
+def test_mapper_records_keyed_digest_when_key_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = bytes.fromhex("b" * 64)
+    host = HostInfo(ip="192.168.10.30", hostname="plc")
+    service = _identified_service()
+    session = _Session()
+
+    map_modbus_service(
+        host,
+        service,
+        policy=OtAutomationPolicy(),
+        session_factory=lambda *args, **kwargs: session,
+        sleep=lambda _: None,
+        digest_key=key,
+    )
+
+    digest = service.units[0].address_ranges[2].value_digest
+    assert digest is not None
+    assert digest.startswith(DIGEST_PREFIX)
+
+
+def test_mapper_does_not_log_process_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    host = HostInfo(ip="192.168.10.30", hostname="plc")
+    service = _identified_service()
+    session = _Session()
+
+    with caplog.at_level(logging.DEBUG):
+        map_modbus_service(
+            host,
+            service,
+            policy=OtAutomationPolicy(),
+            session_factory=lambda *args, **kwargs: session,
+            sleep=lambda _: None,
+        )
+
+    for record in caplog.records:
+        assert "0, 1, 2, 3" not in record.getMessage()
+        assert "[0, 1, 2, 3]" not in record.getMessage()

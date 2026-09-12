@@ -43,6 +43,78 @@
       ]
     },
     {
+      "ip": "192.168.1.50",
+      "mac": "00:80:F4:11:22:33",
+      "hostname": "plc-line-2.plant.local",
+      "vendor": "Schneider Electric",
+      "ports": [
+        {
+          "port": 502,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "mbap",
+          "version": null,
+          "cpes": []
+        }
+      ],
+      "industrial_services": [
+        {
+          "protocol": "modbus_tcp",
+          "port": 502,
+          "confidence": "confirmed",
+          "evidence_sources": ["tcp-port", "nmap-service", "modbus-discover", "pymodbus"],
+          "mapping_source": "generic_baseline",
+          "write_requests_sent": 0,
+          "units": [
+            {
+              "unit_id": 1,
+              "status": "responding",
+              "exception_code": null,
+              "error": null,
+              "device_identification": {
+                "vendor_name": "Schneider Electric",
+                "product_code": "BMEP582040",
+                "major_minor_revision": "2.70",
+                "vendor_url": null,
+                "product_name": "Modicon M580",
+                "model_name": null,
+                "user_application_name": null,
+                "objects": {
+                  "0": "Schneider Electric",
+                  "1": "BMEP582040",
+                  "2": "2.70"
+                },
+                "truncated": false
+              },
+              "identification_sources": ["modbus-discover", "fc43"],
+              "address_ranges": [
+                {
+                  "address_space": "coil",
+                  "start_address": 0,
+                  "count": 4,
+                  "status": "readable",
+                  "exception_code": null,
+                  "label": "generic baseline sample",
+                  "observed_at": "2026-09-12T14:03:11Z",
+                  "value_digest": "hmac-sha256:3f1c8d2a9b0e4f5678901234567890abcdef1234567890abcdef1234567890ab"
+                },
+                {
+                  "address_space": "holding_register",
+                  "start_address": 0,
+                  "count": 4,
+                  "status": "illegal_address",
+                  "exception_code": 2,
+                  "label": "generic baseline sample",
+                  "observed_at": "2026-09-12T14:03:12Z",
+                  "value_digest": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "ip": "192.168.1.40",
       "mac": "00:1C:B3:AA:BB:CC",
       "hostname": "office-nas",

@@ -45,8 +45,12 @@ def _no_real_scan(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _make_screen(scan_mode: str = "max", subnet: str = "192.168.1.0/24"):
-    return ScanProgressScreen(subnet, scan_mode)
+def _make_screen(
+    scan_mode: str = "max",
+    subnet: str = "192.168.1.0/24",
+    nspi_submode: str | None = None,
+):
+    return ScanProgressScreen(subnet, scan_mode, nspi_submode=nspi_submode)
 
 
 def _log_text(screen: ScanProgressScreen) -> str:
@@ -108,18 +112,23 @@ def _make_partial_payload(
     n_devices: int,
     n_findings: int,
     terminated_by: str,
-    interrupted_stage: str,
+    interrupted_stage: str | None,
+    **metadata_extra,
 ) -> ScanPayload:
     base = _make_payload(n_devices, n_findings)
-    return base.model_copy(
-        update={
-            "metadata": {
-                "partial_result": True,
-                "terminated_by": terminated_by,
-                "interrupted_stage": interrupted_stage,
-            }
-        }
-    )
+    metadata = {
+        "partial_result": True,
+        "terminated_by": terminated_by,
+        **metadata_extra,
+    }
+    if interrupted_stage is not None:
+        metadata["interrupted_stage"] = interrupted_stage
+    return base.model_copy(update={"metadata": metadata})
+
+
+def _badge_classes(screen: ScanProgressScreen) -> set[str]:
+    badge = screen.query_one("#scan-badge", Static)
+    return set(badge.classes)
 
 
 def _badge_text(screen: ScanProgressScreen) -> str:
@@ -369,7 +378,7 @@ class TestScanBadge:
             assert screen.query_one("#scan-badge", Static).display is False
 
     @pytest.mark.asyncio
-    async def test_badge_partial_string_for_timeout(self) -> None:
+    async def test_badge_stopped_string_for_timeout(self) -> None:
         screen = _make_screen()
         payload = _make_partial_payload(12, 7, "timeout", "deep_inspection")
         async with _Harness(screen).run_test() as pilot:
@@ -379,18 +388,21 @@ class TestScanBadge:
             badge = screen.query_one("#scan-badge", Static)
             assert badge.display is True
             text = _badge_text(screen)
-            assert "PARTIAL" in text
+            assert "STOPPED" in text
             assert "a step timed out; partial results kept" in text
+            assert "badge-stopped" in _badge_classes(screen)
 
     @pytest.mark.asyncio
-    async def test_badge_partial_string_for_user_cancel(self) -> None:
+    async def test_badge_stopped_string_for_user_cancel(self) -> None:
         screen = _make_screen()
         payload = _make_partial_payload(12, 7, "user_cancel", "deep_inspection")
         async with _Harness(screen).run_test() as pilot:
             await pilot.pause()
             screen._handle_complete(payload)
             await pilot.pause()
+            assert "STOPPED" in _badge_text(screen)
             assert "stopped by you; partial results kept" in _badge_text(screen)
+            assert "badge-stopped" in _badge_classes(screen)
 
     @pytest.mark.asyncio
     async def test_badge_fatal_string(self) -> None:
@@ -534,8 +546,113 @@ class TestCancelling:
             assert screen._state == "cancelling"
             screen._handle_complete(payload)
             await pilot.pause()
-            assert screen._state == "partial"
+            assert screen._state == "stopped"
             assert screen.query_one("#scan-badge", Static).display is True
+
+
+class TestIncompleteEvidence:
+    @pytest.mark.asyncio
+    async def test_completed_partial_shows_finished_not_stopped(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "completed", None)
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert screen._state == "incomplete"
+            text = _badge_text(screen)
+            assert "FINISHED" in text
+            assert "some hosts incomplete" in text
+            assert "badge-incomplete" in _badge_classes(screen)
+            assert "an earlier stage" not in _log_text(screen)
+
+    @pytest.mark.asyncio
+    async def test_stopped_without_stage_omits_stage_clause(self) -> None:
+        screen = _make_screen()
+        payload = _make_partial_payload(12, 7, "error", None)
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            log = _log_text(screen)
+            assert "Stopped —" in log
+            assert "an earlier stage" not in log
+            assert "Stopped during" not in log
+
+    @pytest.mark.asyncio
+    async def test_ot_ceiling_does_not_force_incomplete_badge(self) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        payload = _make_payload(6, 1)
+        payload = payload.model_copy(
+            update={
+                "scan_mode": "nspi",
+                "metadata": {
+                    "partial_result": False,
+                    "terminated_by": "completed",
+                    "modbus_stage_deadline_reached": True,
+                    "modbus_stage_deadline_seconds": 90,
+                },
+            }
+        )
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert "badge-incomplete" not in _badge_classes(screen)
+            assert screen.query_one("#scan-badge", Static).display is False
+
+
+class TestRefusedDepth:
+    @pytest.mark.asyncio
+    async def test_active_validation_refused_on_mount(self) -> None:
+        screen = _make_screen(
+            scan_mode="nspi",
+            nspi_submode="active_validation",
+        )
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            assert screen._state == "refused"
+            badge = screen.query_one("#scan-badge", Static)
+            assert badge.display is True
+            assert "badge-refused" in _badge_classes(screen)
+            assert "⛔ SCAN REFUSED — no request was sent" in _badge_text(screen)
+            detail = screen.query_one("#scan-refusal-detail", Static)
+            assert detail.display is True
+            assert (
+                "NSPi active validation is not available in this version."
+                in str(detail.render())
+            )
+            assert screen.query_one("#btn-view-scan", Button).display is False
+            assert screen.query_one("#btn-back-home", Button).has_focus is True
+            assert screen.query_one("#progress-bar", ProgressBar).progress == 0
+            assert len(screen.query_one("#activity-log", RichLog).lines) == 0
+
+
+class TestOtStageDeadline:
+    @pytest.mark.asyncio
+    async def test_ot_stage_deadline_live_line(self) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="ot_stage_started", hosts_total=3),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="ot_stage_deadline",
+                    message="Time limit reached during Modbus inventory",
+                    units_skipped=1,
+                    units_total=3,
+                    deadline_seconds=90,
+                ),
+            )
+            text = _log_text(screen)
+            assert "Time limit reached during Modbus inventory (90s)" in text
+            assert "⏱" in text
 
 
 class TestPortStageHeartbeat:

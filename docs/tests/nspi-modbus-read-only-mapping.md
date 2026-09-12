@@ -34,6 +34,12 @@ nem do comando remoto. Um JSON inválido interrompe a etapa em vez de ampliar a
 varredura silenciosamente. O caminho pode ser substituído explicitamente com
 `DMITRI_OT_POLICY_PATH`.
 
+Uma correspondência apenas por fabricante ou produto só pode selecionar faixas
+contidas nos endereços `0-3` da amostra genérica, com limites iguais ou menores.
+Faixas fora dessa amostra exigem correspondência por CIDR ou MAC. Se um host
+alcançar seu limite de tempo, o agente conserva o que coletou e tenta os hosts
+seguintes enquanto ainda houver tempo na etapa OT.
+
 ## 2. Executar pela CLI
 
 Confirme primeiro a interface e a rota do laboratório:
@@ -58,8 +64,8 @@ RESULT_PATH=$(jq -r '.result_path' nspi-mapping-run.json)
 ```
 
 Na TUI, o caminho equivalente é **Start scan → interface → NSPi → Read-only
-mapping**. Na web, selecione **NSPi** e depois **Read-only mapping** antes de
-iniciar. `Active validation` permanece desabilitado nesta entrega.
+mapping**. Active validation is disabled on the TUI mode list and is not offered
+in the web UI.
 
 ## 3. Conferir o resultado
 
@@ -115,13 +121,9 @@ Um trecho esperado é:
       "address_space": "holding_register",
       "start_address": 0,
       "count": 4,
-      "status": "readable",
-      "label": "generic baseline sample",
-      "nonzero_count": 2,
-      "value_min": 0,
-      "value_max": 120,
-      "values": null,
-      "value_sha256": "sha256:..."
+                      "status": "readable",
+                      "label": "generic baseline sample",
+                      "value_digest": "hmac-sha256:..."
     }
   ]
 }

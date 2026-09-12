@@ -20,7 +20,7 @@
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings, Users & Invites, DMI-88 scan/host reads, and DMI-89 Agents scan trigger built. Next: LLM explainer |
 | [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
-| [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
+| [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · T4.1 closed |
 
 ## Reference
 

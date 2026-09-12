@@ -299,8 +299,15 @@ uv run ruff check src tests
 DATABASE_URL_TEST=postgresql+psycopg://postgres:postgres@127.0.0.1:54322/dmitri_test uv run pytest
 ```
 
-Without `DATABASE_URL_TEST` the database-backed tests skip and the rest still run.
-`./database.sh --test` does both steps for you.
+Without `DATABASE_URL_TEST` collection aborts with pytest exit code 4. There is no skip
+and no opt-out. `./database.sh --test` starts Postgres, sets the URL, and runs the suite.
+
+Industrial observations are retained **180 days** from ingest (`INDUSTRIAL_OBSERVATION_RETENTION_DAYS`).
+No pruning job enforces that yet.
+
+On the Pi, OT policy is `DMITRI_OT_POLICY_PATH` or `~/.config/dmitri/ot-policy.json`.
+The org digest key is `DMITRI_OT_DIGEST_KEY` (64 hex) or `~/.config/dmitri/ot-digest-key`
+(mode 0600). `backend-provision-agent` prints `ot_digest_key=` once per org.
 
 **Never run `ruff format`** (or `black`, or `./lint.sh` from the root) over `backend/`.
 Formatters are scoped to `hardware-agent/`; `ruff check` is the backend's only gate. See

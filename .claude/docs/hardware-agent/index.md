@@ -28,3 +28,4 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 ## TUI
 
 * [tui](./tui.md) — The Textual application: app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.
+* [ot](./ot.md) — Modbus inspection: policy, keyed digest, read-only client, inventory, OT stage (`pymodbus`).

@@ -12,7 +12,7 @@ not a missing client or backend route.
 * [Backend — API + enrichment worker](./overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker.
 * [Backend entry points & config](./api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 * [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
-* [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
+* [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + admin invite) and backend-provision-agent (device public key + org OT digest key).
 
 ## Data model
 
@@ -32,4 +32,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through host inventory depth, with Supabase RLS and dmitri_runtime hardening.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through host inventory depth and industrial observations, with Supabase RLS and dmitri_runtime hardening.

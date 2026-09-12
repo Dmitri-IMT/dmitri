@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from agent.scanner.errors import UnsupportedScanDepth
+
 SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
 NSPI_SUBMODES: tuple[str, ...] = (
     "inventory",
@@ -132,3 +134,15 @@ TIMEOUTS: dict[str, dict[str, float]] = {
 def subprocess_timeout_for(scan_mode: str, stage: str) -> float:
     by_mode = TIMEOUTS.get(stage, TIMEOUTS["discovery"])
     return by_mode.get(scan_mode, by_mode["quick"])
+
+
+def validate_nspi_depth(scan_mode: str, nspi_submode: NspiSubmode) -> None:
+    """Refuse unpermitted NSPi depth before any active request."""
+    if scan_mode != "nspi":
+        if nspi_submode != "inventory":
+            raise UnsupportedScanDepth(nspi_submode)
+        return
+    if nspi_submode not in NSPI_SUBMODES:
+        raise UnsupportedScanDepth(nspi_submode)
+    if nspi_submode == "active_validation":
+        raise UnsupportedScanDepth("active_validation")

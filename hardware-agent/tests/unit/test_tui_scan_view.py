@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
+import agent.tui.app as _agent_app
+import pytest
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
@@ -17,7 +20,25 @@ from agent.normalize.contracts import (
     PortPayload,
     ScanPayload,
 )
-from agent.tui.screens.scan_view import ScanViewScreen
+from agent.tui.screens.scan_view import NOTICE_MANY, NOTICE_ONE, ScanViewScreen
+from textual.app import App
+from textual.widgets import Static
+
+
+class _Harness(App[None]):
+    CSS_PATH = Path(_agent_app.__file__).parent / "app.tcss"
+
+    def __init__(self, screen: ScanViewScreen) -> None:
+        super().__init__()
+        self._target_screen = screen
+
+    def on_mount(self) -> None:
+        self.push_screen(self._target_screen)
+
+
+@pytest.fixture(autouse=True)
+def _no_animations(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TEXTUAL_ANIMATIONS", "none")
 
 
 def _make_payload() -> ScanPayload:
@@ -280,10 +301,7 @@ def test_render_contains_plain_language_modbus_inventory():
                             start_address=0,
                             count=4,
                             status="readable",
-                            nonzero_count=3,
-                            value_min=0,
-                            value_max=1450,
-                            value_sha256="sha256:test",
+                            value_digest=("hmac-sha256:" + "a1b2c3d4" + "0" * 56),
                             observed_at=datetime.now(timezone.utc),
                         )
                     ],
@@ -302,7 +320,7 @@ def test_render_contains_plain_language_modbus_inventory():
     assert "product BMX P34" in rendered
     assert "firmware 2.60" in rendered
     assert "holding_register 0-3: readable" in rendered
-    assert "nonzero 3 · min 0 · max 1450" in rendered
+    assert "digest a1b2c3d4" in rendered
     assert "Modbus services:        1" in rendered
     assert "Modbus Unit IDs:        1" in rendered
     assert "Modbus mapped ranges:   1" in rendered
@@ -348,3 +366,180 @@ def test_load_prefers_payload_over_file(tmp_path):
     loaded = screen._load_payload()
     assert loaded is not None
     assert loaded.subnet == "192.168.1.0/24"
+
+
+def test_render_escapes_hostile_vendor_markup():
+    payload = _make_payload()
+    payload.hosts[0].vendor = "Acme [/nope] Ltd"
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "\\[/nope]" in rendered
+
+
+@pytest.mark.asyncio
+async def test_mount_renders_hostile_vendor_without_markup_error():
+    payload = _make_payload()
+    payload.hosts[0].vendor = "Acme [/nope] Ltd"
+    screen = ScanViewScreen(payload=payload)
+
+    async with _Harness(screen).run_test() as pilot:
+        await pilot.pause()
+        content = screen.query_one("#scan-view-content", Static)
+        assert "[/nope]" in str(content.render())
+
+
+def test_render_modbus_range_has_no_process_statistics():
+    payload = _make_payload()
+    payload.scan_mode = "nspi"
+    payload.hosts[0].industrial_services = [
+        ModbusTcpServicePayload(
+            port=502,
+            confidence="confirmed",
+            units=[
+                ModbusUnitPayload(
+                    unit_id=1,
+                    status="responding",
+                    address_ranges=[
+                        ModbusAddressRangePayload(
+                            address_space="holding_register",
+                            start_address=0,
+                            count=16,
+                            status="readable",
+                            value_digest=("hmac-sha256:" + "a1b2c3d4" + "0" * 56),
+                            observed_at=datetime.now(timezone.utc),
+                        )
+                    ],
+                )
+            ],
+        )
+    ]
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "digest a1b2c3d4" in rendered
+    assert "nonzero " not in rendered
+    assert "min " not in rendered
+    assert "max " not in rendered
+
+
+def test_render_readable_range_without_digest_shows_not_recorded():
+    payload = _make_payload()
+    payload.scan_mode = "nspi"
+    payload.hosts[0].industrial_services = [
+        ModbusTcpServicePayload(
+            port=502,
+            confidence="confirmed",
+            units=[
+                ModbusUnitPayload(
+                    unit_id=1,
+                    status="responding",
+                    address_ranges=[
+                        ModbusAddressRangePayload(
+                            address_space="holding_register",
+                            start_address=0,
+                            count=4,
+                            status="readable",
+                            observed_at=datetime.now(timezone.utc),
+                        )
+                    ],
+                )
+            ],
+        )
+    ]
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "digest not recorded" in rendered
+
+
+@pytest.mark.asyncio
+async def test_mount_shows_notice_when_values_shortened():
+    payload = _make_payload()
+    payload.hosts[0].vendor = "V" * 70
+    screen = ScanViewScreen(payload=payload)
+
+    async with _Harness(screen).run_test() as pilot:
+        await pilot.pause()
+        notice = screen.query_one("#scan-view-notice", Static)
+        assert notice.display is True
+        assert NOTICE_ONE in str(notice.render())
+
+
+@pytest.mark.asyncio
+async def test_mount_shows_plural_notice_when_multiple_values_shortened():
+    payload = _make_payload()
+    payload.hosts[0].vendor = "V" * 70
+    payload.hosts[0].hostname = "h" * 70
+    screen = ScanViewScreen(payload=payload)
+
+    async with _Harness(screen).run_test() as pilot:
+        await pilot.pause()
+        notice = screen.query_one("#scan-view-notice", Static)
+        assert notice.display is True
+        assert NOTICE_MANY.format(count=2) in str(notice.render())
+
+
+@pytest.mark.asyncio
+async def test_mount_hides_notice_when_nothing_shortened():
+    screen = ScanViewScreen(payload=_make_payload())
+
+    async with _Harness(screen).run_test() as pilot:
+        await pilot.pause()
+        notice = screen.query_one("#scan-view-notice", Static)
+        assert notice.display is False
+
+
+@pytest.mark.asyncio
+async def test_mount_shows_process_note_when_address_ranges_exist():
+    payload = _make_payload()
+    payload.scan_mode = "nspi"
+    payload.hosts[0].industrial_services = [
+        ModbusTcpServicePayload(
+            port=502,
+            confidence="confirmed",
+            units=[
+                ModbusUnitPayload(
+                    unit_id=1,
+                    status="responding",
+                    address_ranges=[
+                        ModbusAddressRangePayload(
+                            address_space="coil",
+                            start_address=0,
+                            count=1,
+                            status="readable",
+                            observed_at=datetime.now(timezone.utc),
+                        )
+                    ],
+                )
+            ],
+        )
+    ]
+    screen = ScanViewScreen(payload=payload)
+
+    async with _Harness(screen).run_test() as pilot:
+        await pilot.pause()
+        note = screen.query_one("#scan-view-process-note", Static)
+        assert note.display is True
+
+
+def test_render_limits_line_from_metadata_flag():
+    payload = _make_payload()
+    payload.metadata = {
+        "elapsed_seconds": 187,
+        "modbus_stage_deadline_reached": True,
+        "modbus_stage_deadline_seconds": 90,
+    }
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "Limits:   Time limit reached during Modbus inventory (90s)" in rendered
+
+
+def test_render_omits_limits_line_without_metadata_flag():
+    payload = _make_payload()
+    payload.metadata = {"elapsed_seconds": 12}
+
+    rendered = ScanViewScreen(payload=payload)._render_payload(payload)
+
+    assert "Limits:" not in rendered

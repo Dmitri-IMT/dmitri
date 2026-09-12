@@ -29,6 +29,8 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
   stub is returned before ingest completes). `GET /scans/{id}` (`ScanDetailResponse`) carries
   optional `error_code` (`ScanErrorCode | null`) since DMI-75; the list row (`ScanSummary`) does not.
+  Host and scan detail include `industrial_services` and `unreadable_fields`. Findings may include
+  `modbus_unit`. Process values are not on the contract.
 - `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
   `CommandSummary`, `409 device_busy`, `422 subnet_not_reported` (DMI-78, `ScanSubnetNotReported`),
   `503 device_offline`. **Wired** (DMI-64).

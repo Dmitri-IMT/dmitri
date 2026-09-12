@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, NamedTuple
 
+from agent.ot.modbus.merge import merge_unit
 from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
+from agent.ot.untrusted import bound_objects, bound_text
 from agent.scanner.models import ScriptResult
+
+LOGGER = logging.getLogger(__name__)
 
 _UNIT_KEY = re.compile(
     r"(?:^|\b)(?:sid|slave(?:\s+id)?|unit(?:\s+id)?)"
@@ -42,44 +48,79 @@ _IDENTIFICATION_FIELDS = {
 }
 
 
-def parse_modbus_discover(script: ScriptResult) -> list[ModbusUnit]:
+class ModbusDiscoverResult(NamedTuple):
+    units: list[ModbusUnit]
+    parse_failures: int
+
+
+@dataclass
+class _ParseFailures:
+    count: int = 0
+
+
+def parse_modbus_discover(script: ScriptResult) -> ModbusDiscoverResult:
     """Interpret one Nmap modbus-discover result without sending traffic."""
 
     if script.script_id != "modbus-discover":
-        return []
+        return ModbusDiscoverResult([], 0)
 
     units: dict[int, ModbusUnit] = {}
+    failures = _ParseFailures()
     try:
-        _parse_structured(script.data, units)
-        _parse_text(script.output, units)
+        _parse_structured(script.data, units, failures=failures)
+        _parse_text(script.output, units, failures=failures)
     except (AttributeError, TypeError, ValueError):
-        return sorted(units.values(), key=lambda unit: unit.unit_id)
-    return sorted(units.values(), key=lambda unit: unit.unit_id)
+        pass
+    return ModbusDiscoverResult(
+        sorted(units.values(), key=lambda unit: unit.unit_id),
+        failures.count,
+    )
 
 
-def _parse_structured(data: Any, units: dict[int, ModbusUnit]) -> None:
+def _record_unreadable_unit_id(
+    key: str,
+    raw_value: str,
+    failures: _ParseFailures,
+) -> None:
+    failures.count += 1
+    LOGGER.warning("Unreadable Modbus unit id in %s: %s", key, raw_value)
+
+
+def _parse_structured(
+    data: Any,
+    units: dict[int, ModbusUnit],
+    *,
+    failures: _ParseFailures,
+) -> None:
     if isinstance(data, Mapping):
         for key, value in data.items():
             match = _UNIT_KEY.search(str(key))
             if match is not None:
                 unit_id = _parse_unit_id(match.group(1))
                 if unit_id is not None:
-                    _merge_unit(units, _unit_from_details(unit_id, value))
+                    merge_unit(units, _unit_from_details(unit_id, value))
                     continue
-            _parse_structured(value, units)
+                _record_unreadable_unit_id(str(key), match.group(1), failures)
+            _parse_structured(value, units, failures=failures)
     elif isinstance(data, list):
         for value in data:
-            _parse_structured(value, units)
+            _parse_structured(value, units, failures=failures)
 
 
-def _parse_text(output: str, units: dict[int, ModbusUnit]) -> None:
+def _parse_text(
+    output: str,
+    units: dict[int, ModbusUnit],
+    *,
+    failures: _ParseFailures,
+) -> None:
     current_id: int | None = None
+    current_key: str | None = None
     details: dict[str, str] = {}
 
     def flush() -> None:
         nonlocal details
         if current_id is not None:
-            _merge_unit(units, _unit_from_details(current_id, details))
+            merge_unit(units, _unit_from_details(current_id, details))
         details = {}
 
     for raw_line in output.splitlines():
@@ -87,7 +128,14 @@ def _parse_text(output: str, units: dict[int, ModbusUnit]) -> None:
         unit_match = _UNIT_KEY.search(line)
         if unit_match is not None:
             flush()
+            current_key = line
             current_id = _parse_unit_id(unit_match.group(1))
+            if current_id is None:
+                _record_unreadable_unit_id(
+                    current_key or line,
+                    unit_match.group(1),
+                    failures,
+                )
             continue
         if current_id is None or ":" not in line:
             continue
@@ -101,6 +149,8 @@ def _unit_from_details(unit_id: int, details: Any) -> ModbusUnit:
     flattened = _flatten(details)
     exception_code = _find_exception_code(flattened)
     error = _find_error(flattened)
+    if error is not None:
+        error, _ = bound_text(error)
     identification = _identification_from(flattened)
     return ModbusUnit(
         unit_id=unit_id,
@@ -131,16 +181,23 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, str]:
 
 def _identification_from(details: dict[str, str]) -> ModbusDeviceIdentification | None:
     identification = ModbusDeviceIdentification()
+    truncated = False
+    raw_objects: dict[str, str] = {}
     for original_key, value in details.items():
         if _is_error_entry(original_key, value):
             continue
+        bounded_value, cut = bound_text(value)
+        truncated = truncated or cut
         leaf_key = original_key.rsplit(".", 1)[-1]
         normalized_key = re.sub(r"[^a-z0-9]", "", leaf_key.lower())
         field_name = _IDENTIFICATION_FIELDS.get(normalized_key)
         if field_name is not None:
-            setattr(identification, field_name, value)
-        else:
-            identification.objects[original_key] = value
+            setattr(identification, field_name, bounded_value)
+        elif bounded_value is not None:
+            raw_objects[original_key] = bounded_value
+    bounded_objs, dropped = bound_objects(raw_objects)
+    identification.objects = bounded_objs
+    identification.truncated = truncated or dropped
     if identification.has_structured_fields or identification.objects:
         return identification
     return None
@@ -172,39 +229,21 @@ def _find_error(details: dict[str, str]) -> str | None:
 
 def _is_error_entry(key: str, value: str) -> bool:
     normalized_key = key.rsplit(".", 1)[-1].lower()
-    return normalized_key in {"error", "exception"} or "exception" in value.lower()
+    return normalized_key in {"error", "exception"}
 
 
 def _parse_unit_id(value: str) -> int | None:
-    unit_id = int(value, 0)
+    stripped = value.strip()
+    lowered = stripped.lower()
+    try:
+        if lowered.startswith("0x"):
+            unit_id = int(stripped, 16)
+        elif lowered.startswith("0b"):
+            unit_id = int(stripped, 2)
+        elif lowered.startswith("0o"):
+            unit_id = int(stripped, 8)
+        else:
+            unit_id = int(stripped, 10)
+    except ValueError:
+        return None
     return unit_id if 0 <= unit_id <= 255 else None
-
-
-def _merge_unit(units: dict[int, ModbusUnit], candidate: ModbusUnit) -> None:
-    current = units.get(candidate.unit_id)
-    if current is None:
-        units[candidate.unit_id] = candidate
-        return
-    if current.status != "responding" and candidate.status == "responding":
-        current.status = "responding"
-        current.exception_code = None
-    if current.device_identification is None:
-        current.device_identification = candidate.device_identification
-    elif candidate.device_identification is not None:
-        _merge_identification(
-            current.device_identification,
-            candidate.device_identification,
-        )
-    for source in candidate.identification_sources:
-        if source not in current.identification_sources:
-            current.identification_sources.append(source)
-
-
-def _merge_identification(
-    current: ModbusDeviceIdentification,
-    candidate: ModbusDeviceIdentification,
-) -> None:
-    for field_name in _IDENTIFICATION_FIELDS.values():
-        if getattr(current, field_name) is None:
-            setattr(current, field_name, getattr(candidate, field_name))
-    current.objects.update(candidate.objects)

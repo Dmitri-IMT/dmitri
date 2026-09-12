@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from time import perf_counter
 
 import pytest
 from agent.ot.policy import (
@@ -9,6 +11,9 @@ from agent.ot.policy import (
     OtAutomationPolicy,
     OtPolicyError,
     load_ot_policy,
+    must_stop,
+    pace_or_stop,
+    stop_reason,
 )
 from pydantic import ValidationError
 
@@ -50,3 +55,62 @@ def test_invalid_policy_file_fails_closed(tmp_path) -> None:
 def test_local_policy_cannot_remove_minimum_inter_request_delay() -> None:
     with pytest.raises(ValidationError):
         OtAutomationPolicy(inter_request_delay_ms=0)
+
+
+@pytest.mark.parametrize("capture", ["summary", "raw"])
+def test_capture_values_rejects_legacy_modes(capture: str) -> None:
+    with pytest.raises(ValidationError):
+        MappingRangeRule(
+            address_space="holding_register",
+            start_address=0,
+            count=4,
+            capture_values=capture,
+        )
+
+
+def test_capture_values_accepts_digest() -> None:
+    rule = MappingRangeRule(
+        address_space="holding_register",
+        start_address=0,
+        count=4,
+        capture_values="digest",
+    )
+    assert rule.capture_values == "digest"
+
+
+def test_default_capture_values_is_digest() -> None:
+    rule = MappingRangeRule(address_space="coil", start_address=0, count=1)
+    assert rule.capture_values == "digest"
+
+
+def test_stop_reason_cancel_wins_over_deadline() -> None:
+    cancel = threading.Event()
+    cancel.set()
+    assert stop_reason(cancel, perf_counter() - 1) == "cancel"
+    assert must_stop(cancel, perf_counter() - 1)
+
+
+def test_stop_reason_deadline_when_not_cancelled() -> None:
+    assert stop_reason(None, perf_counter() - 1) == "deadline"
+    assert stop_reason(None, None) is None
+    assert not must_stop(None, None)
+
+
+def test_pace_or_stop_skips_sleep_when_already_stopped() -> None:
+    slept: list[float] = []
+    cancel = threading.Event()
+    cancel.set()
+    assert pace_or_stop(slept.append, 0.25, cancel, None) == "cancel"
+    assert slept == []
+
+
+def test_pace_or_stop_sleeps_then_rechecks() -> None:
+    slept: list[float] = []
+    cancel = threading.Event()
+
+    def sleep(delay: float) -> None:
+        slept.append(delay)
+        cancel.set()
+
+    assert pace_or_stop(sleep, 0.25, cancel, None) == "cancel"
+    assert slept == [0.25]

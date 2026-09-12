@@ -100,10 +100,9 @@ terminal state, not every intermediate row in command history.
   redials nothing and accepts nothing further.
 * There is no daemon-side ingest retry. The ingest client's existing three-attempt policy is
   authoritative and its outcome is final.
-* The `invalid_command` branch is currently unreachable — `AgentCommand.scan_mode` is a `Literal`
-  over `config.SCAN_MODES` and the CIDR is validated at the frame boundary, so `InvalidScanInput`
-  cannot escape `validate_inputs`. It is kept because spec 026 pins all five codes and the two mode
-  lists could drift.
+* The `invalid_command` branch is the live write-depth guard. `validate_nspi_depth` refuses
+  `active_validation` (and a submode on a non-NSPi mode) before any probe. Headless maps that to
+  `InvalidScanInput`.
 * Exit code `20` is overloaded on the bare-agent path: missing nmap and an invalid ingest
   configuration both exit `20`, distinguishable only by their stderr text.
 * Scan preemption, command/daemon generation leases, and late-work fencing are **out of scope** —

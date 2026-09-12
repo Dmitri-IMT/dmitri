@@ -14,6 +14,7 @@ from api.schemas.read import (
     HostPort,
     HostScanHistoryEntry,
     HostSummary,
+    IndustrialServiceView,
     Port,
     ScanDetailResponse,
     ScanHostView,
@@ -322,3 +323,14 @@ def test_host_read_models_reject_malformed_operating_system(
                 },
             }
         )
+
+
+def test_industrial_read_views_have_no_process_value_fields() -> None:
+    schema = IndustrialServiceView.model_json_schema()
+    assert "values" not in schema["properties"]
+    assert "value_min" not in schema["properties"]
+    assert "value_max" not in schema["properties"]
+    assert "nonzero_count" not in schema["properties"]
+    assert "validations" not in schema["properties"]
+    unit = ScanHostView.model_fields["industrial_services"]
+    assert unit is not None

@@ -347,6 +347,10 @@ isolated/maintenance state remain mandatory.
 
 ## 7. Backend persistence and reads
 
+> **Superseded by** [`specs/045-ot-agent-hardening/ARCHITECTURE.md`](../045-ot-agent-hardening/ARCHITECTURE.md) §2.4–2.5.
+> 045 stores `industrial_services` / `modbus_units` with JSON beneath the unit, keyed digests,
+> and no `modbus_validations` table until write depth exists. Do not implement this section.
+
 The complete product will add scan-scoped relational records:
 
 ```text

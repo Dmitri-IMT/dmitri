@@ -4,7 +4,7 @@ title: scanner/errors — scan exception hierarchy
 description: The scan exception hierarchy that encodes the contingency policy — fatal, unit, transient, cancelled, budget, and circuit-breaker failures.
 resource: hardware-agent/src/agent/scanner/errors.py
 tags: [hardware-agent, scanner, errors, contingency]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # scanner/errors — scan exception hierarchy
@@ -27,6 +27,7 @@ result's `terminated_by`.
 | `ScanCancelled` | Raised when the cancel event is set — maps to `user_cancel`. | `errors.py:20` |
 | `BudgetExceeded` | A timeout/deadline was hit — maps to `timeout`. | `errors.py:24` |
 | `CircuitBreakerError` | Subclass of `BudgetExceeded`; too many units failed — aborts the stage, maps to `error`. | `errors.py:28` |
+| `UnsupportedScanDepth` | Subclass of `FatalScanError`; refuses an unavailable NSPi depth before active scan work. | `errors.py:32` |
 
 ## How it connects
 

@@ -14,6 +14,7 @@ ScanEventKind = Literal[
     "deep_stage_done",
     "ot_stage_started",
     "modbus_host_inspected",
+    "ot_stage_deadline",
     "ot_stage_done",
     "unit_timed_out",
     "unit_failed",
@@ -35,6 +36,7 @@ class ScanEvent:
     ip: str | None = None
     units_skipped: int = 0
     units_total: int = 0
+    deadline_seconds: int = 0
 
 
 class ScanReporter(Protocol):

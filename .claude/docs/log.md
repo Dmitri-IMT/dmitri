@@ -5,6 +5,33 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `stop_reason` /
+  `pace_or_stop` for cancel vs deadline; OT stage ceiling checked at host start and once after the
+  loop.
+
+* **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `_stage_deadline_hit`,
+  inventory `must_stop(cancel_event, deadline)`, and `capture_values` `none`/`digest`.
+
+* **Update**: merged `main` (PR #143 machine inventory) into DMI-157. Host detail keeps durable
+  `HostPort` plus latest-scan `industrial_services`; `finding_read_query` also joins Modbus units.
+  Industrial Alembic moved to `20260912_22` so it does not collide with main's `20260912_21`;
+  `20260912_23` is the single head. Touched: `backend/migrations.md`, `backend/models.md`,
+  `backend/schemas.md`, `backend/services.md`.
+
+* **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/progress.md`,
+  `hardware-agent/scanner/stages.md`, `hardware-agent/normalize.md`,
+  `hardware-agent/tui.md`, and `backend/services.md` — shared Modbus `merge_unit`,
+  `ScanEvent.deadline_seconds`, digest-only ranges, per-unit finding `unit_id`, and
+  batched industrial persist/read.
+* **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/scanner/runner.md`, and `hardware-agent/discovery.md` — identity-only Modbus
+  profiles stay within baseline addresses; a host timeout leaves stage time for later hosts;
+  failed service recovery remains a host-level skip. Refreshed current call paths and line refs.
+* **Update**: `hardware-agent/cli.md`, `hardware-agent/scanner/errors.md`,
+  `hardware-agent/scanner/progress.md`, `hardware-agent/overview.md`,
+  `hardware-agent/normalize.md`, `backend/management.md`, and
+  `backend/migrations.md` — bounded industrial wire payloads, org digest-key provisioning, and
+  the current Alembic head. Refreshed the affected backend index descriptions.
 * **Update**: `HostDetailResponse` subclasses `HostSummary` and `get_host_detail` builds it from
   `_to_host_summary`; the inventory ingest/enrichment tests moved from `test_ingest_scan.py` to
   `test_inventory_reconcile.py`. Touched: `backend/schemas.md`, `backend/services.md`.
@@ -22,6 +49,7 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `host_ports` / `host_findings` once per machine. `scanFindingColumns()` takes no arguments and
   names the machine by `host_hostname`, then address; `FindingsTable` lost `hosts`. Touched:
   `frontend/tables.md`, `frontend/screens.md`, `backend/services.md`.
+
 
 ## 2026-09-11
 

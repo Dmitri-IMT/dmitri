@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import timedelta
 from uuid import UUID
 
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import Row, Select, and_, case, cast
 from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
@@ -17,6 +19,8 @@ from api.models.persistence import (
     HostFindingRecord,
     HostPortRecord,
     HostRecord,
+    IndustrialServiceRecord,
+    ModbusUnitRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
@@ -26,6 +30,7 @@ from api.models.persistence import (
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
     FindingListResponse,
+    FindingModbusUnitRef,
     FindingRead,
     HostDetailResponse,
     HostGroup,
@@ -34,6 +39,10 @@ from api.schemas.read import (
     HostScanHistoryEntry,
     HostSortBy,
     HostSummary,
+    IndustrialServiceView,
+    ModbusAddressRangeView,
+    ModbusDeviceIdentificationView,
+    ModbusUnitView,
     Port,
     ScanDetailResponse,
     ScanHostView,
@@ -45,6 +54,11 @@ from api.schemas.read import (
 )
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
+from api.services.industrial import industrial_services_for_scan_host
+
+logger = logging.getLogger(__name__)
+
+_ADDRESS_RANGES = TypeAdapter(list[ModbusAddressRangeView])
 
 DEFAULT_PAGE = 1
 DEFAULT_PER_PAGE = 20
@@ -117,6 +131,8 @@ def get_host_detail(
     if host is None:
         return None
 
+    summary = _to_host_summary(host)
+    unreadable = list(summary.unreadable_fields)
     ports = [
         HostPort(
             port=row.port,
@@ -132,6 +148,18 @@ def get_host_detail(
             .order_by(HostPortRecord.port.asc())
         ).all()
     ]
+    latest_scan_host = session.exec(
+        select(ScanHostRecord)
+        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
+        .where(ScanHostRecord.host_id == host_id)
+        .where(ScanRecord.org_id == org_id)
+        .order_by(ScanRecord.timestamp.desc())
+    ).first()
+    industrial_services = (
+        _industrial_service_views(session, latest_scan_host.id, unreadable)
+        if latest_scan_host
+        else []
+    )
 
     scan_history_rows = session.exec(
         select(ScanHostRecord, ScanRecord)
@@ -145,16 +173,25 @@ def get_host_detail(
             scan_id=scan.scan_id,
             timestamp=scan.timestamp,
             scan_mode=scan.scan_mode,
-            operating_system=_to_operating_system(scan_host.operating_system_json),
+            operating_system=_validate_or_degrade(
+                OperatingSystemDetection,
+                scan_host.operating_system_json,
+                field="operating_system",
+                unreadable=unreadable,
+                context=f"scan_host_id={scan_host.id}",
+            ),
             open_ports_count=open_ports_count(session, scan_host.id),
             highest_severity=highest_severity(session, scan_host.id),
         )
         for scan_host, scan in scan_history_rows
     ]
 
+    payload = summary.model_dump()
+    payload["unreadable_fields"] = unreadable
     return HostDetailResponse(
-        **dict(_to_host_summary(host)),
+        **payload,
         ports=ports,
+        industrial_services=industrial_services,
         scan_history=scan_history,
     )
 
@@ -173,20 +210,7 @@ def get_scan_detail(
     scan_hosts = session.exec(
         select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
     ).all()
-    hosts = [
-        ScanHostView(
-            host_id=scan_host.host_id,
-            ip=scan_host.ip,
-            mac=scan_host.mac,
-            hostname=scan_host.hostname,
-            vendor=scan_host.vendor,
-            operating_system=_to_operating_system(
-                scan_host.operating_system_json
-            ),
-            ports=_ports_for_scan_host(session, scan_host.id),
-        )
-        for scan_host in scan_hosts
-    ]
+    hosts = [_to_scan_host_view(session, scan_host) for scan_host in scan_hosts]
 
     findings = to_finding_reads(
         session.exec(
@@ -378,32 +402,132 @@ def _to_scan_summary(
 
 
 def _to_host_summary(host: HostRecord) -> HostSummary:
+    unreadable: list[str] = []
     return HostSummary(
         host_id=host.id,
         ip=host.ip,
         mac=host.mac,
         hostname=host.hostname,
         vendor=host.vendor,
-        operating_system=_to_operating_system(host.operating_system_json),
+        operating_system=_validate_or_degrade(
+            OperatingSystemDetection,
+            host.operating_system_json,
+            field="operating_system",
+            unreadable=unreadable,
+            context=f"host_id={host.id}",
+        ),
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
         machine_type=host.machine_type or "unknown",
         vulnerability_count=host.vulnerability_count,
         highest_severity=host.highest_severity,
+        unreadable_fields=unreadable,
     )
 
 
-def _to_operating_system(
-    value: dict[str, object] | None,
-) -> OperatingSystemDetection | None:
+def _to_scan_host_view(session: Session, scan_host: ScanHostRecord) -> ScanHostView:
+    unreadable: list[str] = []
+    return ScanHostView(
+        host_id=scan_host.host_id,
+        ip=scan_host.ip,
+        mac=scan_host.mac,
+        hostname=scan_host.hostname,
+        vendor=scan_host.vendor,
+        operating_system=_validate_or_degrade(
+            OperatingSystemDetection,
+            scan_host.operating_system_json,
+            field="operating_system",
+            unreadable=unreadable,
+            context=f"scan_host_id={scan_host.id}",
+        ),
+        ports=_ports_for_scan_host(session, scan_host.id),
+        industrial_services=_industrial_service_views(
+            session, scan_host.id, unreadable
+        ),
+        unreadable_fields=unreadable,
+    )
+
+
+def _validate_or_degrade(
+    model, value, *, field: str, unreadable: list[str], context: str
+):
     if value is None:
         return None
-    return OperatingSystemDetection.model_validate(value)
+    try:
+        if isinstance(model, TypeAdapter):
+            return model.validate_python(value)
+        return model.model_validate(value)
+    except ValidationError:
+        logger.warning("unreadable %s in %s", field, context)
+        if field not in unreadable:
+            unreadable.append(field)
+        return None
+
+
+def _industrial_service_views(
+    session: Session, scan_host_id: int, unreadable: list[str]
+) -> list[IndustrialServiceView]:
+    services = industrial_services_for_scan_host(session, scan_host_id)
+    if not services:
+        return []
+    service_ids = [service.id for service in services if service.id is not None]
+    units_by_service: dict[int, list[ModbusUnitRecord]] = {}
+    if service_ids:
+        for unit in session.exec(
+            select(ModbusUnitRecord)
+            .where(ModbusUnitRecord.industrial_service_id.in_(service_ids))
+            .order_by(ModbusUnitRecord.unit_id)
+        ).all():
+            units_by_service.setdefault(unit.industrial_service_id, []).append(unit)
+    return [
+        IndustrialServiceView(
+            protocol=service.protocol,
+            port=service.port,
+            confidence=service.confidence,
+            mapping_source=service.mapping_source,
+            evidence_sources=list(service.evidence_sources_json),
+            units=[
+                _to_modbus_unit_view(unit, unreadable)
+                for unit in units_by_service.get(service.id or -1, [])
+            ],
+        )
+        for service in services
+    ]
+
+
+def _to_modbus_unit_view(
+    unit: ModbusUnitRecord, unreadable: list[str]
+) -> ModbusUnitView:
+    context = f"modbus_unit_id={unit.id}"
+    identification = _validate_or_degrade(
+        ModbusDeviceIdentificationView,
+        unit.identification_json,
+        field="identification",
+        unreadable=unreadable,
+        context=context,
+    )
+    address_ranges = _validate_or_degrade(
+        _ADDRESS_RANGES,
+        unit.address_ranges_json,
+        field="address_ranges",
+        unreadable=unreadable,
+        context=context,
+    )
+    return ModbusUnitView(
+        id=unit.id,
+        unit_id=unit.unit_id,
+        status=unit.status,
+        exception_code=unit.exception_code,
+        error=unit.error,
+        identification=identification,
+        identification_sources=list(unit.identification_sources_json),
+        address_ranges=address_ranges or [],
+    )
 
 
 def finding_read_query() -> Select:
-    """Findings joined to their machine and its finding life.
+    """Findings joined to their machine, finding life, and Modbus unit.
 
     Callers add their own filters, sort and paging, then map the rows with
     `to_finding_reads`.
@@ -414,6 +538,8 @@ def finding_read_query() -> Select:
             ScanHostRecord.host_id,
             HostRecord.hostname,
             HostFindingRecord,
+            ModbusUnitRecord,
+            IndustrialServiceRecord,
         )
         .outerjoin(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
@@ -426,16 +552,42 @@ def finding_read_query() -> Select:
                 HostFindingRecord.dedupe_key == FindingRecord.dedupe_key,
             ),
         )
+        .outerjoin(
+            ModbusUnitRecord,
+            FindingRecord.modbus_unit_id == ModbusUnitRecord.id,
+        )
+        .outerjoin(
+            IndustrialServiceRecord,
+            ModbusUnitRecord.industrial_service_id == IndustrialServiceRecord.id,
+        )
     )
 
 
 def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
     return [
         _to_finding_read(
-            row.FindingRecord, row.host_id, row.hostname, row.HostFindingRecord
+            row.FindingRecord,
+            row.host_id,
+            row.hostname,
+            row.HostFindingRecord,
+            row.ModbusUnitRecord,
+            row.IndustrialServiceRecord,
         )
         for row in rows
     ]
+
+
+def _finding_modbus_unit_ref(
+    unit: ModbusUnitRecord | None,
+    service: IndustrialServiceRecord | None,
+) -> FindingModbusUnitRef | None:
+    if unit is None or service is None or unit.id is None:
+        return None
+    return FindingModbusUnitRef(
+        id=unit.id,
+        unit_id=unit.unit_id,
+        port=service.port,
+    )
 
 
 def _to_finding_read(
@@ -443,6 +595,8 @@ def _to_finding_read(
     host_id: UUID | None,
     hostname: str | None,
     life: HostFindingRecord | None,
+    unit: ModbusUnitRecord | None,
+    service: IndustrialServiceRecord | None,
 ) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
@@ -462,9 +616,11 @@ def _to_finding_read(
         recommendation=finding.recommendation,
         evidence=finding.evidence,
         references=finding.references_json,
+        modbus_unit=_finding_modbus_unit_ref(unit, service),
         detected_at=finding.created_at,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
         last_seen_at=life.last_seen_at if life else None,
         fixed_at=life.fixed_at if life else None,
     )
+

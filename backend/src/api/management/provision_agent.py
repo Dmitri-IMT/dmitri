@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import secrets
 import sys
 from uuid import UUID
 
@@ -65,11 +66,16 @@ def main(argv: list[str] | None = None) -> int:
             display_name=args.display_name,
             public_key=public_key,
         )
+        if org.ot_digest_key is None:
+            org.ot_digest_key = secrets.token_hex(32)
+            session.add(org)
+
         session.add(agent)
         session.commit()
         session.refresh(agent)
 
         print(f"agent_id={agent.id}")
+        print(f"ot_digest_key={org.ot_digest_key}")
         return 0
     return 1
 

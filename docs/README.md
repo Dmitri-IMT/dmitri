@@ -37,6 +37,8 @@
 | [`adr/ADR-010-scan-contingency-policy.md`](adr/ADR-010-scan-contingency-policy.md) | Decide when a scan stops vs. continues on errors (timeouts, partial results, taxonomy) |
 | [`adr/ADR-011-pi-command-channel.md`](adr/ADR-011-pi-command-channel.md) | Touch the Pi ↔ backend command channel (WebSocket, Ed25519-signed upgrade, command lifecycle) |
 | [`adr/ADR-012-headless-exit-code-contract.md`](adr/ADR-012-headless-exit-code-contract.md) | Change how a headless/CLI scan reports outcome (exit codes, `dmitri agent`) |
+| [`adr/ADR-018-nspi-active-modbus-safety.md`](adr/ADR-018-nspi-active-modbus-safety.md) | Active Modbus safety bounds and submodes |
+| [`adr/ADR-019-v2-active-scanning-and-agent-hardening.md`](adr/ADR-019-v2-active-scanning-and-agent-hardening.md) | Agent hardening, keyed digest, industrial persistence |
 
 ### Product roadmap (`roadmap/`)
 
@@ -71,6 +73,9 @@
 | [`ui/mockups/`](ui/mockups/) | See the approved screen mockups; v4 is the exemplar |
 | [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent, database, backend or frontend locally |
 | [`PI-INSTALLER.md`](PI-INSTALLER.md) | Deploy, provision and register a Raspberry Pi appliance on-site (vendor playbook) |
+| [`tests/nspi-modbus-inventory.md`](tests/nspi-modbus-inventory.md) | Laboratory checklist for NSPi inventory |
+| [`tests/nspi-modbus-read-only-mapping.md`](tests/nspi-modbus-read-only-mapping.md) | Laboratory checklist for read-only mapping |
+| [`examples/ot-policy.example.json`](examples/ot-policy.example.json) | Sample OT mapping policy |
 
 ## Global conventions (apply everywhere)
 

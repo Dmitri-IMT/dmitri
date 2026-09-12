@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-import pydantic
 import pytest
 from api.models.persistence import HostRecord
 from api.services.read import get_host_detail
@@ -324,7 +323,7 @@ def test_host_reads_return_inventory_value_and_history_snapshot(
     assert detail.json()["scan_history"][0]["operating_system"] == snapshot
 
 
-def test_host_read_rejects_malformed_persisted_operating_system(
+def test_host_read_degrades_malformed_persisted_operating_system(
     administrative_session: Session,
 ) -> None:
     seeded = seed_read_graph(administrative_session)
@@ -335,15 +334,17 @@ def test_host_read_rejects_malformed_persisted_operating_system(
     }
     administrative_session.commit()
 
-    with pytest.raises(pydantic.ValidationError):
-        get_host_detail(
-            administrative_session,
-            seeded["host"].id,
-            org_id=seeded["org"].id,
-        )
+    detail = get_host_detail(
+        administrative_session,
+        seeded["host"].id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.operating_system is None
+    assert "operating_system" in detail.unreadable_fields
 
 
-def test_host_history_rejects_malformed_persisted_operating_system_snapshot(
+def test_host_history_degrades_malformed_persisted_operating_system_snapshot(
     administrative_session: Session,
 ) -> None:
     seeded = seed_read_graph(administrative_session)
@@ -354,12 +355,14 @@ def test_host_history_rejects_malformed_persisted_operating_system_snapshot(
     }
     administrative_session.commit()
 
-    with pytest.raises(pydantic.ValidationError):
-        get_host_detail(
-            administrative_session,
-            seeded["host"].id,
-            org_id=seeded["org"].id,
-        )
+    detail = get_host_detail(
+        administrative_session,
+        seeded["host"].id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.scan_history[0].operating_system is None
+    assert "operating_system" in detail.unreadable_fields
 
 
 def test_mac_less_host_is_listed_and_readable(

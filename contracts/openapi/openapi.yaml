@@ -2417,23 +2417,33 @@ components:
       properties:
         vendor_name:
           type: [string, 'null']
+          maxLength: 128
         product_code:
           type: [string, 'null']
+          maxLength: 128
         major_minor_revision:
           type: [string, 'null']
+          maxLength: 128
         vendor_url:
           type: [string, 'null']
+          maxLength: 128
         product_name:
           type: [string, 'null']
+          maxLength: 128
         model_name:
           type: [string, 'null']
+          maxLength: 128
         user_application_name:
           type: [string, 'null']
+          maxLength: 128
         objects:
           type: object
           additionalProperties:
             type: string
           default: {}
+        truncated:
+          type: boolean
+          default: false
     ModbusAddressRangePayload:
       type: object
       additionalProperties: false
@@ -2464,91 +2474,11 @@ components:
           maximum: 255
         label:
           type: [string, 'null']
-        nonzero_count:
-          type: [integer, 'null']
-          minimum: 0
-        value_min:
-          type: [integer, 'null']
-        value_max:
-          type: [integer, 'null']
-        values:
-          anyOf:
-            - type: array
-              items:
-                anyOf:
-                  - type: integer
-                  - type: boolean
-            - type: 'null'
-        value_sha256:
+          maxLength: 128
+        value_digest:
           type: [string, 'null']
+          pattern: '^hmac-sha256:[0-9a-f]{64}$'
         observed_at:
-          type: string
-          format: date-time
-    ModbusValidationPayload:
-      type: object
-      additionalProperties: false
-      required:
-        - address_space
-        - address
-        - label
-        - function_code
-        - expected_current_value
-        - test_value
-        - write_status
-        - restoration_status
-        - change_ticket
-        - started_at
-        - completed_at
-      properties:
-        address_space:
-          type: string
-          enum: [coil, holding_register]
-        address:
-          type: integer
-          minimum: 0
-          maximum: 65535
-        label:
-          type: string
-          minLength: 1
-        function_code:
-          type: integer
-          enum: [5, 6]
-        original_value:
-          anyOf:
-            - type: integer
-            - type: boolean
-            - type: 'null'
-        expected_current_value:
-          anyOf:
-            - type: integer
-            - type: boolean
-        test_value:
-          anyOf:
-            - type: integer
-            - type: boolean
-        write_status:
-          type: string
-          enum: [accepted, rejected, timeout, error, skipped]
-        read_back_value:
-          anyOf:
-            - type: integer
-            - type: boolean
-            - type: 'null'
-        restoration_status:
-          type: string
-          enum: [not_required, verified, unverified, failed]
-        final_value:
-          anyOf:
-            - type: integer
-            - type: boolean
-            - type: 'null'
-        change_ticket:
-          type: string
-          minLength: 1
-        started_at:
-          type: string
-          format: date-time
-        completed_at:
           type: string
           format: date-time
     ModbusUnitPayload:
@@ -2571,6 +2501,7 @@ components:
           maximum: 255
         error:
           type: [string, 'null']
+          maxLength: 128
         device_identification:
           anyOf:
             - $ref: '#/components/schemas/ModbusDeviceIdentificationPayload'
@@ -2580,16 +2511,13 @@ components:
           items:
             type: string
             minLength: 1
+          maxItems: 8
           default: []
         address_ranges:
           type: array
           items:
             $ref: '#/components/schemas/ModbusAddressRangePayload'
-          default: []
-        validations:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModbusValidationPayload'
+          maxItems: 32
           default: []
     ModbusTcpServicePayload:
       type: object
@@ -2617,6 +2545,10 @@ components:
           default: []
         mapping_source:
           type: [string, 'null']
+        write_requests_sent:
+          type: integer
+          minimum: 0
+          default: 0
         units:
           type: array
           items:
@@ -2696,6 +2628,110 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Port'
+        industrial_services:
+          type: array
+          description: >
+            Industrial observations retained 180 days from scan ingestion.
+            No pruning job enforces that period yet.
+          items:
+            $ref: '#/components/schemas/IndustrialServiceView'
+          default: []
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
+    IndustrialServiceView:
+      type: object
+      additionalProperties: false
+      description: >
+        Industrial observations retained 180 days from scan ingestion.
+        No pruning job enforces that period yet.
+      required:
+        - protocol
+        - port
+        - confidence
+      properties:
+        protocol:
+          type: string
+          enum:
+            - modbus_tcp
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        confidence:
+          type: string
+          enum:
+            - suspected
+            - confirmed
+        mapping_source:
+          type:
+            - string
+            - 'null'
+        evidence_sources:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusUnitView'
+          default: []
+    ModbusUnitView:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - unit_id
+        - status
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        unit_id:
+          type: integer
+          minimum: 0
+          maximum: 255
+        status:
+          type: string
+          enum:
+            - responding
+            - exception
+            - timeout
+            - error
+            - skipped
+        exception_code:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 255
+        error:
+          type:
+            - string
+            - 'null'
+        identification:
+          anyOf:
+            - $ref: '#/components/schemas/ModbusDeviceIdentificationView'
+            - type: 'null'
+        identification_sources:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+        address_ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusAddressRangeView'
+          default: []
+    ModbusDeviceIdentificationView:
+      $ref: '#/components/schemas/ModbusDeviceIdentificationPayload'
+    ModbusAddressRangeView:
+      $ref: '#/components/schemas/ModbusAddressRangePayload'
     FindingPayload:
       type: object
       additionalProperties: false
@@ -2768,6 +2804,12 @@ components:
             type: string
             minLength: 1
           default: []
+        unit_id:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 255
     ScanIngestRequest:
       type: object
       additionalProperties: false
@@ -3026,6 +3068,11 @@ components:
           anyOf:
             - $ref: '#/components/schemas/Severity'
             - type: 'null'
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
     HostScanHistoryEntry:
       type: object
       additionalProperties: false
@@ -3112,6 +3159,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HostPort'
+        industrial_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndustrialServiceView'
+          default: []
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
         scan_history:
           type: array
           items:
@@ -3662,6 +3719,25 @@ components:
             - viewer
         org_name:
           type: string
+    FindingModbusUnitRef:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - unit_id
+        - port
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        unit_id:
+          type: integer
+          minimum: 0
+          maximum: 255
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
     FindingRecord:
       type: object
       additionalProperties: false
@@ -3747,6 +3823,10 @@ components:
             type: string
             minLength: 1
           default: []
+        modbus_unit:
+          anyOf:
+            - $ref: '#/components/schemas/FindingModbusUnitRef'
+            - type: 'null'
         detected_at:
           type: string
           format: date-time

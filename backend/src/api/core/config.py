@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     command_disconnect_grace_seconds: int = Field(
         default=900, alias="COMMAND_DISCONNECT_GRACE_SECONDS"
     )
+    industrial_observation_retention_days: int = Field(
+        default=180, alias="INDUSTRIAL_OBSERVATION_RETENTION_DAYS"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -456,9 +456,14 @@ def test_persist_scan_reconciles_machine_inventory_in_one_transaction(
             select(HostRecord).where(HostRecord.org_id == seeded_org.id)
         ).all()
     }
-    assert set(machines) == {"192.168.1.10", "192.168.1.40"}
+    assert set(machines) == {"192.168.1.10", "192.168.1.40", "192.168.1.50"}
 
-    for ip, expected_ports in (("192.168.1.10", 2), ("192.168.1.40", 1)):
+    expected = {
+        "192.168.1.10": (2, 1, "computer"),
+        "192.168.1.40": (1, 1, "computer"),
+        "192.168.1.50": (1, 0, "unknown"),
+    }
+    for ip, (expected_ports, expected_findings, machine_type) in expected.items():
         machine = machines[ip]
         ports = runtime_session.exec(
             select(HostPortRecord).where(HostPortRecord.host_id == machine.id)
@@ -469,11 +474,12 @@ def test_persist_scan_reconciles_machine_inventory_in_one_transaction(
             )
         ).all()
         assert len(ports) == expected_ports
-        assert len(host_findings) == 1
-        assert host_findings[0].first_seen_at == scan.timestamp
-        assert host_findings[0].fixed_at is None
-        assert machine.machine_type == "computer"
-        assert machine.vulnerability_count == 1
+        assert len(host_findings) == expected_findings
+        assert machine.machine_type == machine_type
+        assert machine.vulnerability_count == expected_findings
+        for host_finding in host_findings:
+            assert host_finding.first_seen_at == scan.timestamp
+            assert host_finding.fixed_at is None
 
 
 def test_cpe_enrichment_finding_reaches_machine_inventory(

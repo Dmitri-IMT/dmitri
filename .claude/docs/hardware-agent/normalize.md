@@ -4,7 +4,7 @@ title: normalize — contracts & findings extraction
 description: The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # normalize — contracts & findings
@@ -12,19 +12,23 @@ timestamp: 2026-08-25T00:00:00Z
 ## Purpose
 
 `normalize/` turns the agent's in-memory scan state into the shared wire contract. `contracts.py`
-holds the Pydantic models serialized to disk (and, in future, uploaded); `findings.py` walks parsed
+holds the Pydantic models serialized to disk and uploaded; `findings.py` walks parsed
 NSE output and emits structured `FindingPayload`s. The `ScanPayload` is the cross-component boundary
-object — the seam that binds the agent to the (planned) backend.
+object that binds the agent to the backend ingest route. Modbus process values remain on the Pi;
+only range status and an optional keyed digest cross this boundary.
 
 ## Key classes / functions
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `hosts`, `findings`, `metadata`. | `contracts.py:50` |
-| `HostPayload` | A host on the wire: `ip` (`IPv4Address`), `mac` (regex, nullable), `hostname`, `vendor`, `ports`. Formerly `DevicePayload`. | `contracts.py:26` |
-| `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`. | `contracts.py:17` |
-| `FindingPayload` | A vulnerability/observation: `ip` (`IPv4Address`, nullable)/port/service, `cve_id` (regex), `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, references. | `contracts.py:34` |
-| `extract_findings()` | Walks each host's host-scripts and port-scripts, dispatches per script id, dedups by `(ip, port, script, cve/title)`. | `findings.py:17` |
+| `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `hosts`, `findings`, `metadata`. | `contracts.py:145` |
+| `HostPayload` | A host on the wire: IP/MAC, hostname, vendor, OS, ports, and industrial services. Formerly `DevicePayload`. | `contracts.py:118` |
+| `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`, CPEs. | `contracts.py:31` |
+| `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:106`, `:90` |
+| `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:68` |
+| `FindingPayload` | A vulnerability/observation with optional `unit_id` for Modbus attribution. | `contracts.py:128` |
+| `extract_findings()` | Walks host scripts, port scripts, and per-unit Modbus read findings. Dedups by `(ip, port, unit_id, script, cve/title)`. | `findings.py:17` |
+| `_extract_modbus_read_findings()` | One finding per unit that has a readable range, with that `unit_id`. NSE findings omit `unit_id`. | `findings.py:39` |
 | `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:703` |
 | `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:104` |
 | `_extract_smb_signing_finding()` | Emits an SMB-signing finding from either a host script or a port script; the port fields remain null for host-scoped NSE output. | `findings.py:161` |
@@ -49,6 +53,8 @@ object — the seam that binds the agent to the (planned) backend.
   domain term **host** used everywhere else in the agent. See [glossary](/glossary.md).
 - `scan_mode` is `Literal["quick","standard","extensive","nspi","max"]` — no `full`; the legacy mode
   is being removed in favor of `max`.
+- The Modbus payloads reject extra fields, bound device-supplied strings and lists, and omit raw
+  values and summaries. A missing digest key leaves `value_digest=null` without stopping the scan.
 - `smb2-security-mode` and `smb-protocols` commonly arrive under Nmap's `<hostscript>`, where no
   port is attached. Their extractors therefore preserve `port=None` instead of dropping the
   finding; descriptions mention `TCP/<port>` only when the script was port-scoped.
@@ -56,13 +62,12 @@ object — the seam that binds the agent to the (planned) backend.
   is no longer the gap: DMI-63 mounted `POST /api/v1/scans` alongside the read path
   (`GET /hosts`, `/scans/{id}`, `/findings`) — see [contracts](/contracts.md).
 - **These models are gated against the shared contract.** `hardware-agent/tests/test_contract_models.py`
-  asserts that every field the four payload models emit is a property of the matching
+  asserts that payload fields emitted by the agent are properties of the matching
   `contracts/openapi/openapi.yaml` schema, and that every contract-`required` field is present. All
-  four schemas declare `additionalProperties: false`, so a field added here without updating the
+  relevant schemas declare `additionalProperties: false`, so a field added here without updating the
   contract is a **`422`** at ingest, not a silently ignored extra. Contract-*optional* fields the
-  agent omits are allowed — `PortPayload.cpes` is the one live case and has its own pinning test, so
-  the gap stays visible instead of drifting. This is the agent-side mirror of
-  `backend/tests/test_contract_fidelity.py`; before it, only the `scan_mode` enum was checked.
+  agent omits are allowed. This is the agent-side mirror of
+  `backend/tests/test_contract_fidelity.py`.
 
 # Citations
 

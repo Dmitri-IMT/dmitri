@@ -15,6 +15,7 @@ from agent.config import (
     NspiSubmode,
     min_cvss_for_mode,
     subprocess_timeout_for,
+    validate_nspi_depth,
 )
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
@@ -30,6 +31,7 @@ from agent.scanner.errors import (
 )
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
+from agent.scanner.stages import OtInspectionResult
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
@@ -48,6 +50,7 @@ class ScanRunner:
         nspi_submode: NspiSubmode = "inventory",
         ot_policy: OtAutomationPolicy | None = None,
     ) -> None:
+        validate_nspi_depth(scan_mode, nspi_submode)
         self.subnet = subnet
         self.scan_mode = scan_mode
         self._reporter = reporter
@@ -106,6 +109,7 @@ class ScanRunner:
         partial_result: bool,
         interrupted_stage: str | None,
         terminated_by: str,
+        ot_inspection: OtInspectionResult | None = None,
     ) -> ScanPayload:
         findings = extract_findings(hosts)
         elapsed_seconds = round(perf_counter() - started_counter, 2)
@@ -128,6 +132,7 @@ class ScanRunner:
                 partial_result=partial_result,
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
+                ot_inspection=ot_inspection,
             ),
         )
 
@@ -143,6 +148,7 @@ class ScanRunner:
         interrupted_stage: str | None,
         terminated_by: str,
         message: str,
+        ot_inspection: OtInspectionResult | None = None,
     ) -> None:
         if (
             runner is None
@@ -163,6 +169,7 @@ class ScanRunner:
                 partial_result=True,
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
+                ot_inspection=ot_inspection,
             )
         except Exception as exc:
             self._emit(ScanEvent(kind="failed", message=message))
@@ -185,6 +192,7 @@ class ScanRunner:
         discovery_done = False
         port_units_skipped = 0
         deep_units_skipped = 0
+        ot_inspection = OtInspectionResult()
         try:
             check_network_connectivity()
             settings = AgentSettings(
@@ -268,7 +276,7 @@ class ScanRunner:
 
                 if self.scan_mode == "nspi":
                     interrupted_stage = "ot_inspection"
-                    stages.run_ot_inspection_stage(
+                    ot_inspection = stages.run_ot_inspection_stage(
                         settings,
                         hosts,
                         reporter=self._reporter,
@@ -293,12 +301,7 @@ class ScanRunner:
                 ScanEvent(kind="normalize_started", message="Generating results…")
             )
             self._check_cancel()
-            partial_result = bool(port_units_skipped or deep_units_skipped)
-            partial_stage = (
-                "ports"
-                if port_units_skipped
-                else "deep_inspection" if deep_units_skipped else None
-            )
+            partial_result = port_units_skipped > 0 or deep_units_skipped > 0
             payload = self._build_payload(
                 scan_id=scan_id,
                 settings=settings,
@@ -307,8 +310,9 @@ class ScanRunner:
                 started_counter=started_counter,
                 hosts=hosts,
                 partial_result=partial_result,
-                interrupted_stage=partial_stage,
-                terminated_by="error" if partial_result else "completed",
+                interrupted_stage=None,
+                terminated_by="completed",
+                ot_inspection=ot_inspection,
             )
 
             self._check_cancel()
@@ -330,6 +334,7 @@ class ScanRunner:
                     started_counter=started_counter,
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
+                    ot_inspection=ot_inspection,
                     terminated_by="error",
                     message=f"Scan failed: {exc}",
                 )
@@ -343,6 +348,7 @@ class ScanRunner:
                     started_counter=started_counter,
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
+                    ot_inspection=ot_inspection,
                     terminated_by="error",
                     message="Scan stopped early",
                 )
@@ -355,6 +361,7 @@ class ScanRunner:
                     started_counter=started_counter,
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
+                    ot_inspection=ot_inspection,
                     terminated_by="timeout",
                     message="Scan timed out",
                 )
@@ -367,6 +374,7 @@ class ScanRunner:
                 started_counter=started_counter,
                 hosts=hosts,
                 interrupted_stage=interrupted_stage,
+                ot_inspection=ot_inspection,
                 terminated_by="user_cancel",
                 message="Scan aborted",
             )
@@ -380,6 +388,7 @@ class ScanRunner:
                     started_counter=started_counter,
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
+                    ot_inspection=ot_inspection,
                     terminated_by="error",
                     message=f"Scan failed: {exc}",
                 )

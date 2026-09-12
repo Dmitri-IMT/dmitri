@@ -3,20 +3,64 @@ from __future__ import annotations
 import json
 import os
 import platform
+import threading
+from collections.abc import Callable
 from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path, PureWindowsPath
+from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 AddressSpace = Literal["coil", "discrete_input", "holding_register", "input_register"]
-CaptureValues = Literal["none", "summary", "raw"]
+CaptureValues = Literal["none", "digest"]
+StopReason = Literal["cancel", "deadline"]
 
 MAX_MAPPING_RANGES_PER_PROFILE = 16
 MAX_MAPPING_RANGE_COUNT = 256
 MAX_MAPPING_BLOCK_SIZE = 64
 MAX_MAPPING_REQUESTS_PER_HOST = 32
 MAX_MAPPING_UNIT_IDS = 4
+MAX_OT_STAGE_SECONDS = 600
+MAX_OT_HOST_SECONDS = 90
+
+
+def min_not_none(*values: float | None) -> float | None:
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    return min(present)
+
+
+def stop_reason(
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> StopReason | None:
+    if cancel_event is not None and cancel_event.is_set():
+        return "cancel"
+    if deadline is not None and perf_counter() >= deadline:
+        return "deadline"
+    return None
+
+
+def must_stop(
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> bool:
+    return stop_reason(cancel_event, deadline) is not None
+
+
+def pace_or_stop(
+    sleep: Callable[[float], None],
+    delay: float,
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> StopReason | None:
+    reason = stop_reason(cancel_event, deadline)
+    if reason is not None:
+        return reason
+    sleep(delay)
+    return stop_reason(cancel_event, deadline)
 
 
 class OtPolicyError(ValueError):
@@ -30,7 +74,7 @@ class MappingRangeRule(BaseModel):
     start_address: int = Field(ge=0, le=65535)
     count: int = Field(ge=1, le=MAX_MAPPING_RANGE_COUNT)
     block_size: int = Field(default=8, ge=1, le=MAX_MAPPING_BLOCK_SIZE)
-    capture_values: CaptureValues = "summary"
+    capture_values: CaptureValues = "digest"
     bisect_on_illegal_address: bool = False
     minimum_block_size: int = Field(default=1, ge=1, le=MAX_MAPPING_BLOCK_SIZE)
     label: str | None = Field(default=None, min_length=1, max_length=160)
@@ -44,8 +88,6 @@ class MappingRangeRule(BaseModel):
         if self.address_space in {"holding_register", "input_register"}:
             if self.block_size > 32:
                 raise ValueError("register block_size cannot exceed 32")
-        if self.capture_values == "raw" and self.count > 128:
-            raise ValueError("raw capture cannot exceed 128 values per range")
         return self
 
 
@@ -99,6 +141,71 @@ class OtAutomationPolicy(BaseModel):
         le=MAX_MAPPING_REQUESTS_PER_HOST,
     )
     mapping_profiles: list[MappingProfile] = Field(default_factory=list, max_length=64)
+
+
+_CAPTURE_VALUES_ORDER: dict[CaptureValues, int] = {
+    "none": 0,
+    "digest": 1,
+}
+
+
+def profile_is_conservative(profile: MappingProfile) -> bool:
+    """True when the profile is no broader than GENERIC_BASELINE_RANGES."""
+
+    baseline = GENERIC_BASELINE_RANGES
+    if len(profile.ranges) > len(baseline):
+        return False
+    if profile.unit_ids is not None and len(profile.unit_ids) > MAX_MAPPING_UNIT_IDS:
+        return False
+
+    baseline_addresses: dict[AddressSpace, int] = {}
+    baseline_block_size: dict[AddressSpace, int] = {}
+    baseline_capture: dict[AddressSpace, int] = {}
+    for rule in baseline:
+        baseline_addresses[rule.address_space] = (
+            baseline_addresses.get(rule.address_space, 0) + rule.count
+        )
+        baseline_block_size[rule.address_space] = max(
+            baseline_block_size.get(rule.address_space, 0),
+            rule.block_size,
+        )
+        baseline_capture[rule.address_space] = max(
+            baseline_capture.get(rule.address_space, 0),
+            _CAPTURE_VALUES_ORDER[rule.capture_values],
+        )
+
+    profile_addresses: dict[AddressSpace, int] = {}
+    profile_block_size: dict[AddressSpace, int] = {}
+    profile_capture: dict[AddressSpace, int] = {}
+    for rule in profile.ranges:
+        if not any(
+            rule.address_space == baseline_rule.address_space
+            and rule.start_address >= baseline_rule.start_address
+            and rule.start_address + rule.count
+            <= baseline_rule.start_address + baseline_rule.count
+            for baseline_rule in baseline
+        ):
+            return False
+        profile_addresses[rule.address_space] = (
+            profile_addresses.get(rule.address_space, 0) + rule.count
+        )
+        profile_block_size[rule.address_space] = max(
+            profile_block_size.get(rule.address_space, 0),
+            rule.block_size,
+        )
+        profile_capture[rule.address_space] = max(
+            profile_capture.get(rule.address_space, 0),
+            _CAPTURE_VALUES_ORDER[rule.capture_values],
+        )
+
+    for space, count in profile_addresses.items():
+        if count > baseline_addresses.get(space, 0):
+            return False
+        if profile_block_size[space] > baseline_block_size.get(space, 0):
+            return False
+        if profile_capture[space] > baseline_capture.get(space, 0):
+            return False
+    return True
 
 
 GENERIC_BASELINE_RANGES = (
