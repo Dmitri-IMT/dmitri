@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Link } from 'react-router'
 import DataTable, {
   type DataTableColumn,
+  type DataTableGroupBody,
   type DataTableProps,
   type DataTableRowAction,
 } from '@/components/DataTable'
@@ -43,8 +44,14 @@ const quietRows: Row[] = [
   { id: 'four', name: 'Fourth row', detail: 'Fourth detail' },
 ]
 
+function groupContent(groupRows: Row[]) {
+  return (body: DataTableGroupBody<Row, 'name'>) => (
+    <tbody id={body.id}>{body.renderRows(groupRows, columns)}</tbody>
+  )
+}
+
 const collapsedGroup = {
-  rows: quietRows,
+  content: groupContent(quietRows),
   count: quietRows.length,
   label: (count: number) => `Not seen recently (${count})`,
   testId: 'example-quiet',
@@ -481,7 +488,7 @@ describe('DataTable', () => {
         <DataTable
           {...baseProps}
           collapsedGroup={{
-            rows: [quietRows[0]],
+            content: groupContent([quietRows[0]]),
             count: 99,
             label: (count) => `Not seen recently (${count})`,
             testId: 'example-quiet',

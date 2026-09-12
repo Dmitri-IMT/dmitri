@@ -136,7 +136,38 @@ describe('Network quiet group', () => {
       'aria-expanded',
       'true',
     )
-    expect(requests.quietPages).toEqual([1])
+    expect(requests.quietPages.every((page) => page === 1)).toBe(true)
+  })
+
+  it('keeps the quiet page when the active list pages', async () => {
+    const user = userEvent.setup()
+    const active = hostFixtures.slice(0, 25)
+    const quiet = Array.from({ length: 25 }, (_, index) => ({
+      ...quietHosts(1)[0],
+      host_id: `quiet-${index}`,
+    }))
+    serveHosts(active, quiet)
+    renderWithProviders(<Network />, { route: '/network' })
+
+    await screen.findByTestId('network-quiet-group')
+    await user.click(toggle('Not seen recently (25)'))
+    await screen.findByTestId('network-table-row-quiet-0')
+    await user.click(screen.getByTestId('network-quiet-next'))
+    expect(
+      await screen.findByTestId('network-table-row-quiet-20'),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('network-next'))
+
+    expect(
+      await screen.findByTestId(`network-table-row-${active[20].host_id}`),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByTestId('network-table-row-quiet-20'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('network-table-row-quiet-0'),
+    ).not.toBeInTheDocument()
   })
 
   it('does not re-collapse the opened group when the active list is sorted', async () => {

@@ -112,7 +112,9 @@ describe('ListSurface', () => {
       <ListHarness
         query={readyQuery({ data: [rows[0]] })}
         collapsedGroup={{
-          rows: [rows[1]],
+          content: (body) => (
+            <tbody id={body.id}>{body.renderRows([rows[1]], columns)}</tbody>
+          ),
           count: 1,
           label: (count) => `Grouped (${count})`,
           testId: 'example-group',
@@ -133,7 +135,9 @@ describe('ListSurface', () => {
         query={readyQuery({ data: [], total: 0 })}
         emptyRow={<span data-testid="example-no-rows">Nothing active.</span>}
         collapsedGroup={{
-          rows: [rows[1]],
+          content: (body) => (
+            <tbody id={body.id}>{body.renderRows([rows[1]], columns)}</tbody>
+          ),
           count: 1,
           label: (count) => `Grouped (${count})`,
           testId: 'example-group',

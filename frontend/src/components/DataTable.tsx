@@ -53,18 +53,24 @@ export type DataTableRowAction<Row> =
 
 export type DataTableRowTone = 'muted' | undefined
 
+export type DataTableGroupBody<Row, SortKey extends string = never> = {
+  id: string
+  columnCount: number
+  renderRows: (
+    rows: Row[],
+    columns: DataTableColumn<Row, SortKey>[],
+    tone?: DataTableRowTone,
+  ) => ReactNode
+  spanningRow: (content: ReactNode) => ReactNode
+}
+
 export type DataTableCollapsedGroup<Row, SortKey extends string = never> = {
-  rows: Row[]
-  columns?: DataTableColumn<Row, SortKey>[]
   count: number
   label: (count: number) => string
   testId: string
-  tone?: DataTableRowTone
   isOpen: boolean
-  isPending?: boolean
-  error?: ReactNode
-  footer?: ReactNode
   onOpenChange: (isOpen: boolean) => void
+  content: (body: DataTableGroupBody<Row, SortKey>) => ReactNode
 }
 
 export type DataTableProps<Row, SortKey extends string = never> = {
@@ -372,31 +378,16 @@ function DataTable<Row, SortKey extends string = never>({
                 </td>
               </tr>
             </tbody>
-            {collapsedGroup.isOpen && collapsedGroup.isPending ? (
-              <LoadingSkeleton
-                id={groupId}
-                testId={`${collapsedGroup.testId}-loading`}
-                rows={skeletonRows}
-                columns={columns.length}
-              />
+            {collapsedGroup.isOpen ? (
+              collapsedGroup.content({
+                id: groupId,
+                columnCount: columns.length,
+                renderRows: (groupRows, groupColumns, tone) =>
+                  groupRows.map((row) => renderRow(row, tone, groupColumns)),
+                spanningRow: groupSpanningRow,
+              })
             ) : (
-              <tbody id={groupId}>
-                {collapsedGroup.isOpen &&
-                  (collapsedGroup.error
-                    ? groupSpanningRow(collapsedGroup.error)
-                    : [
-                        ...collapsedGroup.rows.map((row) =>
-                          renderRow(
-                            row,
-                            collapsedGroup.tone,
-                            collapsedGroup.columns,
-                          ),
-                        ),
-                        collapsedGroup.footer
-                          ? groupSpanningRow(collapsedGroup.footer)
-                          : null,
-                      ])}
-              </tbody>
+              <tbody id={groupId} />
             )}
           </>
         )}

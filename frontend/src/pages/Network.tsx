@@ -13,10 +13,9 @@ import { getLatestSuccessfulScan } from '@/api/scans'
 import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
-import Pagination from '@/components/Pagination'
 import Timestamp from '@/components/Timestamp'
-import { Button } from '@/components/ui/button'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
+import QuietMachineGroup from '@/pages/hosts/QuietMachineGroup'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
@@ -50,19 +49,9 @@ function Network() {
     sort_order: sortOrder,
     group: 'active',
   }
-  const quietParams: HostListParams = {
-    ...params,
-    page: quietPage,
-    group: 'quiet',
-  }
   const query = useQuery({
     queryKey: queryKeys.hosts.list(params),
     queryFn: () => listHosts(params),
-  })
-  const quietQuery = useQuery({
-    queryKey: queryKeys.hosts.list(quietParams),
-    queryFn: () => listHosts(quietParams),
-    enabled: isQuietOpen,
   })
   const latestScanQuery = useQuery({
     queryKey: queryKeys.scans.latest('completed'),
@@ -114,49 +103,24 @@ function Network() {
           </span>
         }
         collapsedGroup={{
-          rows: quietQuery.data?.data ?? [],
           count: quietTotal,
           label: (count) => `Not seen recently (${count})`,
           testId: 'network-quiet',
-          tone: 'muted',
           isOpen: isQuietOpen,
-          columns: hostListColumns(now, true),
-          isPending: quietQuery.isPending,
-          error: quietQuery.isError ? (
-            <span className="flex items-center gap-4">
-              <span
-                data-testid="network-quiet-error"
-                className="text-muted-foreground"
-              >
-                Couldn&apos;t load the machines you haven&apos;t seen recently.
-              </span>
-              <Button
-                type="button"
-                variant="link"
-                data-testid="network-quiet-error-retry"
-                className="h-auto rounded-none px-0 py-0 text-caption-md font-normal"
-                onClick={() => {
-                  void quietQuery.refetch()
-                }}
-              >
-                Retry
-              </Button>
-            </span>
-          ) : undefined,
-          footer: (
-            <Pagination
-              page={quietPage}
-              perPage={HOSTS_PER_PAGE}
-              total={quietQuery.data?.total ?? 0}
-              onPageChange={setQuietPage}
-              testId="network-quiet"
-              label="Quiet machine pages"
-            />
-          ),
           onOpenChange: (isOpen) => {
             setIsQuietOpen(isOpen)
             if (!isOpen) setQuietPage(1)
           },
+          content: (body) => (
+            <QuietMachineGroup
+              body={body}
+              now={now}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              page={quietPage}
+              onPageChange={setQuietPage}
+            />
+          ),
         }}
         rowAction={{
           kind: 'link',
