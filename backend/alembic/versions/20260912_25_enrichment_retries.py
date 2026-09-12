@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260912_22"
-down_revision = "20260912_21"
+revision = "20260912_25"
+down_revision = "20260912_24"
 branch_labels = None
 depends_on = None
 
