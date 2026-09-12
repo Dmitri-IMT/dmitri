@@ -8,6 +8,7 @@ type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanMode = components['schemas']['ScanMode']
 type ScanStatus = components['schemas']['ScanStatus']
 type HostSummary = components['schemas']['HostSummary']
+type MachineType = components['schemas']['MachineType']
 type HostDetailResponse = components['schemas']['HostDetailResponse']
 type HostListResponse = components['schemas']['HostListResponse']
 type FindingRecord = components['schemas']['FindingRecord']
@@ -226,6 +227,10 @@ export const criticalFinding: FindingRecord = {
   evidence: 'SSH-2.0-OpenSSH_8.2',
   references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-38408'],
   detected_at: minutesAgo(60),
+  host_hostname: 'host-01',
+  first_seen_at: weeksAgo(3),
+  last_seen_at: minutesAgo(60),
+  fixed_at: null,
 }
 
 export const highFinding: FindingRecord = {
@@ -247,6 +252,10 @@ export const highFinding: FindingRecord = {
   evidence: 'Server: Apache-Coyote/1.1',
   references: ['https://nvd.nist.gov/vuln/detail/CVE-2017-5638'],
   detected_at: minutesAgo(59),
+  host_hostname: 'host-01',
+  first_seen_at: weeksAgo(2),
+  last_seen_at: minutesAgo(59),
+  fixed_at: null,
 }
 
 const scanModes = [
@@ -292,6 +301,14 @@ export const scanFixtures: ScanSummary[] = [
   }),
 ]
 
+const machineTypes = [
+  'computer',
+  'router',
+  'camera',
+  'printer',
+  'unknown',
+] as const satisfies readonly MachineType[]
+
 export const hostFixtures: HostSummary[] = Array.from(
   { length: 25 },
   (_, index): HostSummary => ({
@@ -307,6 +324,8 @@ export const hostFixtures: HostSummary[] = Array.from(
     first_seen_at: minutesAgo(10_000 + index * 60),
     last_seen_at: minutesAgo(10 + index * 10),
     open_ports_count: index % 5,
+    machine_type: machineTypes[index % machineTypes.length],
+    vulnerability_count: index % 4 === 3 ? 0 : (index % 7) + 1,
     unreadable_fields: [],
     highest_severity:
       index % 4 === 0
@@ -324,6 +343,10 @@ const otherHostFinding: FindingRecord = {
   finding_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   host_id: hostFixtures[1].host_id,
   host_ip: hostFixtures[1].ip,
+  host_hostname: null,
+  first_seen_at: weeksAgo(1),
+  last_seen_at: minutesAgo(59),
+  fixed_at: null,
   severity: 'medium',
   title: 'TLS certificate expired',
   cve_id: null,
@@ -346,9 +369,10 @@ export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
             {
               port: index % 2 === 0 ? 443 : 22,
               protocol: 'tcp',
-              state: 'open',
               service: index % 2 === 0 ? 'https' : 'ssh',
               version: index % 2 === 0 ? 'nginx 1.24' : 'OpenSSH 9.6',
+              first_seen_at: minutesAgo(10_000 + index * 60),
+              last_seen_at: minutesAgo(10 + index * 10),
             },
           ],
     scan_history: [
@@ -373,7 +397,13 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
       mac: host.mac,
       hostname: host.hostname,
       vendor: host.vendor,
-      ports: host.ports,
+      ports: host.ports.map((port) => ({
+        port: port.port,
+        protocol: port.protocol,
+        state: 'open' as const,
+        service: port.service,
+        version: port.version,
+      })),
       industrial_services: host.industrial_services,
       unreadable_fields: host.unreadable_fields,
     })),
@@ -417,7 +447,14 @@ const hostSortKeys = [
   'hostname',
   'vendor',
   'ip',
+  'vulnerability_count',
 ] as const satisfies readonly components['parameters']['HostSortBy'][]
+
+const QUIET_AFTER_MS = 7 * 24 * 60 * 60 * 1000
+
+function isQuietFixture(host: HostSummary): boolean {
+  return NOW_MS - new Date(host.last_seen_at).getTime() > QUIET_AFTER_MS
+}
 
 function compareHosts(
   left: HostSummary,
@@ -477,13 +514,18 @@ export const handlers = [
       return new HttpResponse(null, { status: 422 })
     }
     const sortOrder = params.get('sort_order') === 'asc' ? 'asc' : 'desc'
-    const sorted = [...hostFixtures].sort((left, right) => {
+    const quiet = params.get('group') === 'quiet'
+    const grouped = hostFixtures.filter(
+      (host) => isQuietFixture(host) === quiet,
+    )
+    const sorted = grouped.sort((left, right) => {
       const comparison = compareHosts(left, right, sortBy ?? 'last_seen_at')
       return sortOrder === 'asc' ? comparison : -comparison
     })
-    return HttpResponse.json(
-      paginate(sorted, request.url) satisfies HostListResponse,
-    )
+    return HttpResponse.json({
+      ...paginate(sorted, request.url),
+      quiet_total: hostFixtures.filter(isQuietFixture).length,
+    } satisfies HostListResponse)
   }),
   http.get(`${baseURL}/users/me`, () => HttpResponse.json(adminProfile)),
   http.get(`${baseURL}/agents`, () =>

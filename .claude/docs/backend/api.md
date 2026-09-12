@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-08-22T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # Backend entry points & config
@@ -41,6 +41,7 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:98` |
 | `Severity` / `SEVERITY_ORDER` | The severity domain and its `low→1 … critical→4` ranking, derived from the literal's declaration order. Dependency-free on purpose: it sits in `core/` so [models](/backend/models.md) can spell the `findings.severity` check constraint without importing the schema layer above them. Read by `services/hosts.py` (host ranking), `services/read.py` (scan-list rank), `routers/findings.py` (the `severity` query param) and `schemas/read.py`. Moved here from `schemas/read.py` on 2026-07-31. | `backend/src/api/core/severity.py:5` |
 | `ScanErrorCode` / `normalise_error_code` / `scan_error_code` | The closed eight-code failure vocabulary and the two pure read helpers. Same leaf reason as `Severity`: `schemas/read.py` and `schemas/commands.py` must not import each other. Full map in [error-codes](/backend/error-codes.md). | `backend/src/api/core/error_codes.py:5` |
+| `MachineType` / `MACHINE_TYPES` / `classify_machine_type()` | Closed nine-value machine-type vocabulary (`router`…`unknown`) and a pure classifier: service signals first (fixed priority), then vendor signals; `vendor == "unknown"` matches nothing. No I/O. Read by [inventory](/backend/services.md) and re-exported on the read schemas. | `backend/src/api/core/machine_type.py:5` |
 | `get_engine()` | `lru_cache`d engine from the normalized `DATABASE_URL`, with `pool_pre_ping=True` and `connect_args={"prepare_threshold": None, "connect_timeout": 10}` — required for the pgbouncer/Supabase pooler. | `backend/src/api/db/session.py:11` |
 | `get_session()` | Generator yielding a `Session` in a context manager; the FastAPI dependency and the worker's session source. | `backend/src/api/db/session.py:22` |
 | `reset_db_state()` | Test helper clearing the engine + settings caches. | `backend/src/api/db/session.py:27` |

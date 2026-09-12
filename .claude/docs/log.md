@@ -5,6 +5,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: merged `main` (PR #143 machine inventory) into DMI-157. Host detail keeps durable
+  `HostPort` plus latest-scan `industrial_services`; `finding_read_query` also joins Modbus units.
+  Industrial Alembic moved to `20260912_22` so it does not collide with main's `20260912_21`;
+  `20260912_23` is the single head. Touched: `backend/migrations.md`, `backend/models.md`,
+  `backend/schemas.md`, `backend/services.md`.
+
 * **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/progress.md`,
   `hardware-agent/scanner/stages.md`, `hardware-agent/normalize.md`,
   `hardware-agent/tui.md`, and `backend/services.md` — shared Modbus `merge_unit`,
@@ -19,8 +25,36 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `hardware-agent/normalize.md`, `backend/management.md`, and
   `backend/migrations.md` — bounded industrial wire payloads, org digest-key provisioning, and
   the current Alembic head. Refreshed the affected backend index descriptions.
+* **Update**: `HostDetailResponse` subclasses `HostSummary` and `get_host_detail` builds it from
+  `_to_host_summary`; the inventory ingest/enrichment tests moved from `test_ingest_scan.py` to
+  `test_inventory_reconcile.py`. Touched: `backend/schemas.md`, `backend/services.md`.
+
+* **Update**: merged `main` into DMI-135. Alembic had two heads (`20260907_20` and main's
+  `20260908_19`); added the empty merge revision `20260912_21`, and `tests/conftest.py::_migrate`
+  now reads every current head. Spec folder renumbered to `specs/046-machine-inventory-depth`
+  because main shipped `specs/045-nmap-enrichment-deduplication`. Touched: `backend/migrations.md`.
+
+* **Update**: PR #143 review fixes for spec 046. `DataTable`'s collapsed group is now a slot
+  (`count` / `label` / `isOpen` / `onOpenChange` / `content`, plus `DataTableGroupBody`); the new
+  `QuietMachineGroup` owns the quiet query, skeleton, error row and pager, while `Network` keeps
+  `quietPage`. `read.finding_read_query()` / `to_finding_reads()` replace the private finding-life
+  helpers for `list_findings`, `get_scan_detail` and `home.page_attention`. Inventory reconcile loads
+  `host_ports` / `host_findings` once per machine. `scanFindingColumns()` takes no arguments and
+  names the machine by `host_hostname`, then address; `FindingsTable` lost `hosts`. Touched:
+  `frontend/tables.md`, `frontend/screens.md`, `backend/services.md`.
+
 
 ## 2026-09-11
+
+* **Update**: spec 046 machine inventory depth (DMI-135). Documented `classify_machine_type`,
+  `host_ports` / `host_findings`, `reconcile_scan_inventory` on ingest and CPE enrichment,
+  `group`/`quiet_total`/`vulnerability_count` on the host read path, `HostPort` and finding life
+  fields on the contract, Network's server-side quiet group, host-detail type/service life, and
+  Home/finding `host_hostname` + `first_seen_at`. Touched: `backend/api.md`, `backend/models.md`,
+  `backend/schemas.md`, `backend/services.md`, `backend/routers.md`, `backend/migrations.md`,
+  `backend/index.md`, `contracts.md`, `frontend/api.md`, `frontend/tables.md`,
+  `frontend/screens.md`, `frontend/host-detail.md`, root `index.md`. `docs/ui/FOUNDATIONS.md`
+  §Tables left-align amendment landed in the feature.
 
 * **Update**: `hardware-agent/cli.md`, `hardware-agent/discovery.md`,
   `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/runner.md`,

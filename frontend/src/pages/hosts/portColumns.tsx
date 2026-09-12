@@ -1,14 +1,15 @@
 import type { DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
+import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
-type Port = components['schemas']['Port']
+type HostPort = components['schemas']['HostPort']
 
-export const portColumns: DataTableColumn<Port>[] = [
+export const portColumns: DataTableColumn<HostPort>[] = [
   {
     key: 'service',
     label: 'Service',
-    width: 'w-2/5',
+    width: 'w-17/50',
     render: (port) => (
       <>
         <span className="block truncate" title={port.service}>
@@ -23,13 +24,13 @@ export const portColumns: DataTableColumn<Port>[] = [
   {
     key: 'protocol',
     label: 'Protocol',
-    width: 'w-1/5',
+    width: 'w-7/50',
     render: (port) => port.protocol,
   },
   {
     key: 'version',
     label: 'Version',
-    width: 'w-2/5',
+    width: 'w-3/10',
     render: (port) =>
       port.version ? (
         <span className="block truncate" title={port.version}>
@@ -38,5 +39,11 @@ export const portColumns: DataTableColumn<Port>[] = [
       ) : (
         <EmptyMark />
       ),
+  },
+  {
+    key: 'last_seen_at',
+    label: 'Last seen',
+    width: 'w-11/50',
+    render: (port) => <Timestamp value={port.last_seen_at} />,
   },
 ]

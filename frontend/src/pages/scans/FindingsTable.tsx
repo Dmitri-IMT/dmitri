@@ -8,7 +8,6 @@ import { bySeverityDesc } from '@/lib/severity'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
-type ScanHostView = components['schemas']['ScanHostView']
 
 type FindingsTableProps = {
   findings: FindingRecord[]
@@ -17,7 +16,8 @@ type FindingsTableProps = {
   caption: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
-} & ({ variant: 'scan'; hosts: ScanHostView[] } | { variant: 'host' })
+  variant: 'scan' | 'host'
+}
 
 function FindingsTable({
   findings,
@@ -26,12 +26,10 @@ function FindingsTable({
   caption,
   openFindingId,
   onOpenFindingChange,
-  ...rest
+  variant,
 }: FindingsTableProps) {
   const columns =
-    rest.variant === 'scan'
-      ? scanFindingColumns(rest.hosts)
-      : hostFindingColumns()
+    variant === 'scan' ? scanFindingColumns() : hostFindingColumns()
 
   const table = {
     columns,

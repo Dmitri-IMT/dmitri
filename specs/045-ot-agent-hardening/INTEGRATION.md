@@ -232,7 +232,7 @@ adding them. Deployment order is therefore mandatory and tighter than 043's:
 
 1. **Alembic merge revision alone** (`20260912_20`). Until it lands, `alembic upgrade head` fails
    and nothing else can deploy or be tested. Tell the team: `main` cannot migrate until this ships.
-2. **The observations migration** (`20260912_21`) and the updated backend. It accepts old payloads
+2. **The observations migration** (`20260912_22`) and the updated backend. It accepts old payloads
    without `industrial_services` and new payloads with the new shape, and it **rejects** a payload
    still carrying `validations` or `values` — so the backend must not go out before the agent stops
    sending them, which is why step 3 pairs with it.

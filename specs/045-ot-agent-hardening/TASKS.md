@@ -112,9 +112,9 @@ Blast radius is `hardware-agent/` and `backend/`. Test agent: `test-engineer`. R
 - **Review Rejections**: 0
 
 ## Task 9: Persist industrial observations
-- **Description**: Migration `20260912_21`: `industrial_services`, `modbus_units`, `findings.modbus_unit_id`, `orgs.ot_digest_key`, RLS and grants. Persist on ingest, idempotent, unit-attributed findings. Provisioner issues or reuses the org digest key. Per ARCHITECTURE.md §2.4, §8 and INTEGRATION.md §3–4.
+- **Description**: Migration `20260912_22`: `industrial_services`, `modbus_units`, `findings.modbus_unit_id`, `orgs.ot_digest_key`, RLS and grants. Persist on ingest, idempotent, unit-attributed findings. Provisioner issues or reuses the org digest key. Per ARCHITECTURE.md §2.4, §8 and INTEGRATION.md §3–4.
 - **Dependencies**: Task 1, Task 5
-- **Target Files**: [`backend/alembic/versions/20260912_21_industrial_observations.py`, `backend/src/api/models/persistence.py`, `backend/src/api/models/identity.py`, `backend/src/api/services/industrial.py`, `backend/src/api/services/persistence.py`, `backend/src/api/management/provision_agent.py`, `backend/src/api/core/config.py`, `backend/tests/test_industrial_observations_migration.py`, `backend/tests/test_industrial_persistence.py`, `backend/tests/test_provision_agent.py`]
+- **Target Files**: [`backend/alembic/versions/20260912_22_industrial_observations.py`, `backend/src/api/models/persistence.py`, `backend/src/api/models/identity.py`, `backend/src/api/services/industrial.py`, `backend/src/api/services/persistence.py`, `backend/src/api/management/provision_agent.py`, `backend/src/api/core/config.py`, `backend/tests/test_industrial_observations_migration.py`, `backend/tests/test_industrial_persistence.py`, `backend/tests/test_provision_agent.py`]
 - **Tests**: `test_industrial_observations_migration.py` (empty, from `20260905_19`, reversible); `test_industrial_persistence.py` (lifecycle fields, idempotent ingest, `FindingRead.modbus_unit`); `test_provision_agent.py` (one key per org).
 - **Success Criteria**:
   - Upgrade from empty and from the last released state reaches head without rewriting old revisions.

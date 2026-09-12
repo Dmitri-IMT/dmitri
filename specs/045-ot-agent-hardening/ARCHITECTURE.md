@@ -538,8 +538,12 @@ Blocker 1: `20260903_18` (this work) and `20260904_18` (`main`, PR #135) both cl
 `20260811_17`; the chain forks into `20260905_19` and `20260908_19` and never rejoins.
 
 ```
-20260811_17 ─┬─ 20260903_18 ── 20260908_19 ─┐
-             └─ 20260904_18 ── 20260905_19 ─┴─ 20260912_20 (merge) ── 20260912_21
+20260811_17 ─┬─ 20260903_18 ── 20260908_19 ─┬─ 20260912_20 (merge OT+activity)
+             │                              └─ 20260912_21 (merge inventory+OS, on main)
+             └─ 20260904_18 ── 20260905_19 ─┘
+                                              20260912_20 ── 20260912_22 (industrial)
+                                              20260912_21 ──┘
+                                                            20260912_23 (merge)
 ```
 
 A **merge revision** resolves it. `20260903_18` is **not** repointed: it has been applied to
@@ -558,13 +562,18 @@ down_revision = ("20260905_19", "20260908_19")
 Empty `upgrade()` / `downgrade()`. Its only job is to make `alembic heads` report one revision so
 `alembic upgrade head` works from any earlier state. Lands first, alone, before every other task.
 
-`backend/alembic/versions/20260912_21_industrial_observations.py`
+`backend/alembic/versions/20260912_22_industrial_observations.py`
 
-`down_revision = "20260912_20"`. Creates `industrial_services` and `modbus_units` with the columns,
+`revision = "20260912_22"`. `down_revision = "20260912_20"`. Creates `industrial_services` and `modbus_units` with the columns,
 CHECK and UNIQUE constraints of §2.4; adds `findings.modbus_unit_id` with its FK and index; adds
 `orgs.ot_digest_key`; enables RLS on both new tables; revokes the Supabase roles; grants
 `SELECT, INSERT, UPDATE` plus sequence usage to `dmitri_runtime`. `downgrade()` reverses all of it
 in order, so a database at head returns to a consistent earlier state.
+
+`backend/alembic/versions/20260912_23_merge_industrial_and_inventory.py`
+
+Empty merge of `20260912_21` (inventory + OS, already on `main`) and `20260912_22`. Current head.
+Industrial was renumbered to `22` because `main` already used `20260912_21` for the inventory merge.
 
 ## 9. New files and naming (mandatory)
 
@@ -601,7 +610,7 @@ in order, so a database at head returns to a consistent earlier state.
 | | Path | Change |
 |---|---|---|
 | N | `backend/alembic/versions/20260912_20_merge_ot_and_activity_heads.py` | merge revision, `down_revision = ("20260905_19", "20260908_19")` |
-| N | `backend/alembic/versions/20260912_21_industrial_observations.py` | two tables, `findings.modbus_unit_id`, `orgs.ot_digest_key`, RLS + grants |
+| N | `backend/alembic/versions/20260912_22_industrial_observations.py` | two tables, `findings.modbus_unit_id`, `orgs.ot_digest_key`, RLS + grants |
 | N | `backend/src/api/schemas/industrial.py` | ingest models `ModbusDeviceIdentification`, `ModbusAddressRange`, `ModbusUnit`, `IndustrialService` |
 | N | `backend/src/api/services/industrial.py` | `persist_industrial_services()`, `industrial_services_for_scan_host()` |
 | T | `backend/src/api/models/persistence.py` | `IndustrialServiceRecord`, `ModbusUnitRecord`, `FindingRecord.modbus_unit_id` |

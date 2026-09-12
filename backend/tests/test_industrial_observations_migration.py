@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_migration():
-    path = ROOT / "alembic/versions/20260912_21_industrial_observations.py"
+    path = ROOT / "alembic/versions/20260912_22_industrial_observations.py"
     spec = importlib.util.spec_from_file_location(
         "industrial_observations_migration", path
     )
@@ -51,7 +51,7 @@ def test_revision_chain_is_empty_merge_from_prior_heads(monkeypatch) -> None:
     migration.upgrade()
     migration.downgrade()
 
-    assert migration.revision == "20260912_21"
+    assert migration.revision == "20260912_22"
     assert migration.down_revision == "20260912_20"
     assert created == ["industrial_services", "modbus_units"]
     assert dropped == ["modbus_units", "industrial_services"]
@@ -72,7 +72,7 @@ def test_real_upgrade_from_released_state_and_reversible(migrated_database) -> N
             column["name"] for column in before.get_columns("findings")
         }
 
-        command.upgrade(config, "20260912_21")
+        command.upgrade(config, "20260912_22")
         upgraded = sa.inspect(engine)
         assert "industrial_services" in upgraded.get_table_names()
         assert "modbus_units" in upgraded.get_table_names()

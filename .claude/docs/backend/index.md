@@ -32,4 +32,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through industrial observations, with Supabase RLS and dmitri_runtime hardening.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through host inventory depth and industrial observations, with Supabase RLS and dmitri_runtime hardening.

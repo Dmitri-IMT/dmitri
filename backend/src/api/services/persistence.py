@@ -23,6 +23,7 @@ from api.services.command_lifecycle import is_terminal
 from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
 from api.services.industrial import persist_industrial_services
+from api.services.inventory import reconcile_scan_inventory
 from api.services.risk import refresh_risk_snapshot
 
 
@@ -168,6 +169,8 @@ def persist_scan(
         )
 
     upsert_hosts_for_scan(session, scan_record, scan)
+
+    reconcile_scan_inventory(session, scan_record)
 
     append_scan_activity(
         session,

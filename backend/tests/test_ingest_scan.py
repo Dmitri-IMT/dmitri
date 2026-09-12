@@ -16,6 +16,8 @@ from api.models.persistence import (
     EpssCacheRecord,
     EpssRecord,
     FindingRecord,
+    HostFindingRecord,
+    HostPortRecord,
     HostRecord,
     KevCacheRecord,
     KevRecord,
@@ -786,6 +788,9 @@ def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
         assert fresh_session.exec(select(PortRecord)).first() is None
         assert fresh_session.exec(select(ServiceRecord)).first() is None
         assert fresh_session.exec(select(CPERecord)).first() is None
+        assert fresh_session.exec(select(HostRecord)).first() is None
+        assert fresh_session.exec(select(HostPortRecord)).first() is None
+        assert fresh_session.exec(select(HostFindingRecord)).first() is None
         assert (
             fresh_session.exec(
                 select(FindingRecord).where(FindingRecord.scan_id == scan_id)
@@ -849,6 +854,9 @@ def test_ingest_scan_case_a_rolls_back_completely_on_mid_ingest_failure(
         assert fresh_session.exec(select(PortRecord)).first() is None
         assert fresh_session.exec(select(ServiceRecord)).first() is None
         assert fresh_session.exec(select(CPERecord)).first() is None
+        assert fresh_session.exec(select(HostRecord)).first() is None
+        assert fresh_session.exec(select(HostPortRecord)).first() is None
+        assert fresh_session.exec(select(HostFindingRecord)).first() is None
         assert (
             fresh_session.exec(
                 select(EnrichmentJobRecord).where(

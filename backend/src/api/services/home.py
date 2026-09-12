@@ -18,7 +18,11 @@ from api.core.home_constants import (
 from api.models.activity import ActivityRecord
 from api.models.command import Agent
 from api.models.identity import User
-from api.models.persistence import FindingRecord, HostRecord, ScanRecord
+from api.models.persistence import (
+    FindingRecord,
+    HostRecord,
+    ScanRecord,
+)
 from api.schemas.home import (
     HomeActivityItem,
     HomeActivityPage,
@@ -47,7 +51,7 @@ def page_attention(
         return HomeAttentionPage(data=[], total=0, page=page)
 
     base = (
-        read._finding_select()
+        read.finding_read_query()
         .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
         .where(ScanRecord.org_id == org_id)
         .where(FindingRecord.scan_id == scan_id)
@@ -65,10 +69,7 @@ def page_attention(
     ).all()
 
     return HomeAttentionPage(
-        data=[
-            read._to_finding_read(finding, host_id, unit, service)
-            for finding, host_id, unit, service in rows
-        ],
+        data=read.to_finding_reads(rows),
         total=total,
         page=page,
     )

@@ -79,7 +79,7 @@ export interface paths {
         };
         /**
          * List hosts
-         * @description Returns discovered machines from scans. JWT Bearer required.
+         * @description Returns discovered machines from scans. The default page returns active machines; `group=quiet` pages the machines not seen recently. `quiet_total` counts the quiet machines across the whole inventory, not just this page. JWT Bearer required.
          */
         get: operations["listHosts"];
         put?: never;
@@ -540,6 +540,8 @@ export interface components {
         ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
         /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
+        /** @enum {string} */
+        MachineType: "router" | "computer" | "camera" | "storage" | "tv" | "phone" | "printer" | "sensor" | "unknown";
         Port: {
             port: number;
             /** @enum {string} */
@@ -548,6 +550,17 @@ export interface components {
             state: "open" | "closed" | "filtered";
             service: string;
             version?: string | null;
+        };
+        HostPort: {
+            port: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            service: string;
+            version?: string | null;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
         };
         PortPayload: {
             port: number;
@@ -785,6 +798,8 @@ export interface components {
             /** Format: date-time */
             last_seen_at: string;
             open_ports_count: number;
+            machine_type: components["schemas"]["MachineType"];
+            vulnerability_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
             /** @default [] */
             unreadable_fields: string[];
@@ -813,8 +828,10 @@ export interface components {
             /** Format: date-time */
             last_seen_at: string;
             open_ports_count: number;
+            machine_type: components["schemas"]["MachineType"];
+            vulnerability_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
-            ports: components["schemas"]["Port"][];
+            ports: components["schemas"]["HostPort"][];
             /** @default [] */
             industrial_services: components["schemas"]["IndustrialServiceView"][];
             /** @default [] */
@@ -824,6 +841,7 @@ export interface components {
         HostListResponse: {
             data: components["schemas"]["HostSummary"][];
             total: number;
+            quiet_total: number;
             page: number;
         };
         CreateCommandRequest: {
@@ -1062,6 +1080,10 @@ export interface components {
             modbus_unit?: components["schemas"]["FindingModbusUnitRef"] | null;
             /** Format: date-time */
             detected_at: string;
+            host_hostname?: string | null;
+            first_seen_at?: string | null;
+            last_seen_at?: string | null;
+            fixed_at?: string | null;
         };
         FindingListResponse: {
             data: components["schemas"]["FindingRecord"][];
@@ -1528,7 +1550,8 @@ export interface components {
         /** @description Limit scans to those produced by this box. */
         ScanAgentIdFilter: string;
         ScanSortBy: "timestamp" | "status" | "scan_mode";
-        HostSortBy: "last_seen_at" | "hostname" | "vendor" | "ip";
+        HostSortBy: "last_seen_at" | "hostname" | "vendor" | "ip" | "vulnerability_count";
+        HostGroup: "active" | "quiet";
         SeverityFilter: components["schemas"]["Severity"];
         /** @description Backend identifier of the scan. */
         ScanId: string;
@@ -1766,6 +1789,7 @@ export interface operations {
                 per_page?: components["parameters"]["PerPage"];
                 sort_by?: components["parameters"]["HostSortBy"];
                 sort_order?: components["parameters"]["SortOrder"];
+                group?: components["parameters"]["HostGroup"];
                 /** @description Free-text search by hostname, IP, MAC, or vendor. */
                 q?: string;
             };

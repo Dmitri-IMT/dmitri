@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # Shared contracts
@@ -94,7 +94,10 @@ The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestAccep
 `Device`/`devices`/`devices_received` from the wire — ingest is
 now `POST`ed as `hosts[]`, per contract asks C1–C5). Read responses add: `ScanHostView` — the
 `HostPayload` shape plus a **required** `host_id` (C9, resolved host identity per host observation
-in a scan); `HostSummary` — the `GET /hosts` list row, adding `first_seen_at`/`last_seen_at` (C6).
+in a scan); `HostSummary` / `HostDetailResponse` — list/detail rows with `machine_type` and
+`vulnerability_count`; `HostListResponse.quiet_total`; `HostPort` (durable services, no `state`);
+`FindingRead.host_hostname` plus life timestamps. `GET /hosts` takes `group=active|quiet` (default
+active). `HostSortBy` includes `vulnerability_count` and not `machine_type`.
 
 **Nullability and `required`, tightened 2026-08-02.** `mac` is nullable on `ScanHostView`,
 `HostSummary` and `HostDetailResponse` (a routed host has no MAC) but stays in each schema's
@@ -117,7 +120,7 @@ search is cut from v1, so the backend does not implement it and the contract kee
 Without the exemption, adding `/api/v1/hosts` to `OPERATION_PATHS` would fail on `q` alone. This is
 the intended final shape, not a stopgap — "the contract declares more of v1 than is built yet" is a
 standing condition here. Do not resolve it by implementing `q` or by deleting it from the contract.
-Drift on the other four host params (`page`, `per_page`, `sort_by`, `sort_order`) is still caught.
+Drift on the other host params (`page`, `per_page`, `sort_by`, `sort_order`, `group`) is still caught.
 
 Spec 032 added `ScanErrorCode` (eight-value string enum) and pointed both
 `ScanDetailResponse.error_code` and `CommandDetail.error_code` at it as optional nullable `$ref`s.

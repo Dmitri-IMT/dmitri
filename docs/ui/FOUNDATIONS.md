@@ -212,7 +212,7 @@ The nav names domains, not actions, and items do not get renamed between release
 | Row height | **Fixed and equal for every row — 56px.** Written into `DataTable`; rows never grow with their content. |
 | Column gaps | From the **spacing scale and fixed column widths**, never from content or ad-hoc padding. A numeric column followed by a code column (`Port` then `CVE`) sits **no closer than step 6 (24px)**. |
 | Whole rows are links | The entire row navigates. No trailing "View" column. |
-| Alignment | Text left-aligns; numbers right-align in tabular figures. **The first column always starts flush left** whatever it holds. A heading carries its column's alignment. |
+| Alignment | Every column left-aligns; numbers keep tabular figures. **The first column always starts flush left** whatever it holds. A heading carries its column's alignment. **Follow-up restyle:** Scans; Scan detail findings; Scan detail hosts; Device detail scan history. |
 | Severity column | **Reads down the right edge** — it closes the row, or is second to last where a `Last seen` column closes. The bold-word treatment applies (§Color). |
 | Highest-severity column | Kept on list tables: a row summarising several vulnerabilities shows its worst one as a word. |
 | IDs | Truncate to the first 8 characters; the full value is in the `title`. Never wrap a UUID. |

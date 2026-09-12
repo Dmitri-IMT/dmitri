@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from datetime import timedelta
 from uuid import UUID
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import case, cast
+from sqlalchemy import Row, Select, and_, case, cast
 from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
@@ -14,6 +16,8 @@ from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
+    HostFindingRecord,
+    HostPortRecord,
     HostRecord,
     IndustrialServiceRecord,
     ModbusUnitRecord,
@@ -21,6 +25,7 @@ from api.models.persistence import (
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
+    utc_now,
 )
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
@@ -28,7 +33,9 @@ from api.schemas.read import (
     FindingModbusUnitRef,
     FindingRead,
     HostDetailResponse,
+    HostGroup,
     HostListResponse,
+    HostPort,
     HostScanHistoryEntry,
     HostSortBy,
     HostSummary,
@@ -55,6 +62,7 @@ _ADDRESS_RANGES = TypeAdapter(list[ModbusAddressRangeView])
 
 DEFAULT_PAGE = 1
 DEFAULT_PER_PAGE = 20
+QUIET_AFTER_DAYS = 7
 
 _SCAN_SORT_COLUMNS = {
     "timestamp": ScanRecord.timestamp,
@@ -66,6 +74,7 @@ _HOST_SORT_COLUMNS = {
     "hostname": HostRecord.hostname,
     "vendor": HostRecord.vendor,
     "ip": cast(HostRecord.ip, INET),
+    "vulnerability_count": HostRecord.vulnerability_count,
 }
 _SEVERITY_RANK = case(SEVERITY_ORDER, value=FindingRecord.severity, else_=0)
 _SEVERITY_RANK_TO_LABEL = {rank: label for label, rank in SEVERITY_ORDER.items()}
@@ -79,17 +88,26 @@ def list_hosts(
     per_page: int = DEFAULT_PER_PAGE,
     sort_by: HostSortBy = "last_seen_at",
     sort_order: SortOrder = "desc",
+    group: HostGroup = "active",
 ) -> HostListResponse:
+    cutoff = utc_now() - timedelta(days=QUIET_AFTER_DAYS)
+    quiet_pred = HostRecord.last_seen_at < cutoff
+    group_pred = quiet_pred if group == "quiet" else HostRecord.last_seen_at >= cutoff
     total = session.exec(
         select(func.count())
         .select_from(HostRecord)
-        .where(HostRecord.org_id == org_id)
+        .where(HostRecord.org_id == org_id, group_pred)
+    ).one()
+    quiet_total = session.exec(
+        select(func.count())
+        .select_from(HostRecord)
+        .where(HostRecord.org_id == org_id, quiet_pred)
     ).one()
     column = _HOST_SORT_COLUMNS[sort_by]
     direction = column.desc() if sort_order == "desc" else column.asc()
     hosts = session.exec(
         select(HostRecord)
-        .where(HostRecord.org_id == org_id)
+        .where(HostRecord.org_id == org_id, group_pred)
         .order_by(direction, HostRecord.id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -97,6 +115,7 @@ def list_hosts(
     return HostListResponse(
         data=[_to_host_summary(host) for host in hosts],
         total=total,
+        quiet_total=quiet_total,
         page=page,
     )
 
@@ -112,6 +131,23 @@ def get_host_detail(
     if host is None:
         return None
 
+    summary = _to_host_summary(host)
+    unreadable = list(summary.unreadable_fields)
+    ports = [
+        HostPort(
+            port=row.port,
+            protocol=row.protocol,
+            service=row.service,
+            version=row.version,
+            first_seen_at=row.first_seen_at,
+            last_seen_at=row.last_seen_at,
+        )
+        for row in session.exec(
+            select(HostPortRecord)
+            .where(HostPortRecord.host_id == host_id)
+            .order_by(HostPortRecord.port.asc())
+        ).all()
+    ]
     latest_scan_host = session.exec(
         select(ScanHostRecord)
         .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
@@ -119,10 +155,6 @@ def get_host_detail(
         .where(ScanRecord.org_id == org_id)
         .order_by(ScanRecord.timestamp.desc())
     ).first()
-    unreadable: list[str] = []
-    ports = (
-        _ports_for_scan_host(session, latest_scan_host.id) if latest_scan_host else []
-    )
     industrial_services = (
         _industrial_service_views(session, latest_scan_host.id, unreadable)
         if latest_scan_host
@@ -154,26 +186,12 @@ def get_host_detail(
         for scan_host, scan in scan_history_rows
     ]
 
+    payload = summary.model_dump()
+    payload["unreadable_fields"] = unreadable
     return HostDetailResponse(
-        host_id=host.id,
-        ip=host.ip,
-        mac=host.mac,
-        hostname=host.hostname,
-        vendor=host.vendor,
-        operating_system=_validate_or_degrade(
-            OperatingSystemDetection,
-            host.operating_system_json,
-            field="operating_system",
-            unreadable=unreadable,
-            context=f"host_id={host.id}",
-        ),
-        first_seen_at=host.first_seen_at,
-        last_seen_at=host.last_seen_at,
-        open_ports_count=host.open_ports_count,
-        highest_severity=host.highest_severity,
+        **payload,
         ports=ports,
         industrial_services=industrial_services,
-        unreadable_fields=unreadable,
         scan_history=scan_history,
     )
 
@@ -194,13 +212,11 @@ def get_scan_detail(
     ).all()
     hosts = [_to_scan_host_view(session, scan_host) for scan_host in scan_hosts]
 
-    finding_rows = session.exec(
-        _finding_select().where(FindingRecord.scan_id == scan_id)
-    ).all()
-    findings = [
-        _to_finding_read(finding, host_id, unit, service)
-        for finding, host_id, unit, service in finding_rows
-    ]
+    findings = to_finding_reads(
+        session.exec(
+            finding_read_query().where(FindingRecord.scan_id == scan_id)
+        ).all()
+    )
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -309,11 +325,9 @@ def list_findings(
     page: int = 1,
     per_page: int = 20,
 ) -> FindingListResponse:
-    base = (
-        _finding_select()
-        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanRecord.org_id == org_id)
-    )
+    base = finding_read_query().join(
+        ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id
+    ).where(ScanRecord.org_id == org_id)
     if host_id is not None:
         base = base.where(ScanHostRecord.host_id == host_id)
     if severity is not None:
@@ -331,10 +345,7 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[
-            _to_finding_read(finding, host_id, unit, service)
-            for finding, host_id, unit, service in rows
-        ],
+        data=to_finding_reads(rows),
         total=total,
         page=page,
     )
@@ -408,6 +419,8 @@ def _to_host_summary(host: HostRecord) -> HostSummary:
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
+        machine_type=host.machine_type or "unknown",
+        vulnerability_count=host.vulnerability_count,
         highest_severity=host.highest_severity,
         unreadable_fields=unreadable,
     )
@@ -513,15 +526,32 @@ def _to_modbus_unit_view(
     )
 
 
-def _finding_select():
+def finding_read_query() -> Select:
+    """Findings joined to their machine, finding life, and Modbus unit.
+
+    Callers add their own filters, sort and paging, then map the rows with
+    `to_finding_reads`.
+    """
     return (
         select(
             FindingRecord,
             ScanHostRecord.host_id,
+            HostRecord.hostname,
+            HostFindingRecord,
             ModbusUnitRecord,
             IndustrialServiceRecord,
         )
-        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .outerjoin(
+            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
+        )
+        .outerjoin(HostRecord, ScanHostRecord.host_id == HostRecord.id)
+        .outerjoin(
+            HostFindingRecord,
+            and_(
+                HostFindingRecord.host_id == HostRecord.id,
+                HostFindingRecord.dedupe_key == FindingRecord.dedupe_key,
+            ),
+        )
         .outerjoin(
             ModbusUnitRecord,
             FindingRecord.modbus_unit_id == ModbusUnitRecord.id,
@@ -531,6 +561,20 @@ def _finding_select():
             ModbusUnitRecord.industrial_service_id == IndustrialServiceRecord.id,
         )
     )
+
+
+def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
+    return [
+        _to_finding_read(
+            row.FindingRecord,
+            row.host_id,
+            row.hostname,
+            row.HostFindingRecord,
+            row.ModbusUnitRecord,
+            row.IndustrialServiceRecord,
+        )
+        for row in rows
+    ]
 
 
 def _finding_modbus_unit_ref(
@@ -549,6 +593,8 @@ def _finding_modbus_unit_ref(
 def _to_finding_read(
     finding: FindingRecord,
     host_id: UUID | None,
+    hostname: str | None,
+    life: HostFindingRecord | None,
     unit: ModbusUnitRecord | None,
     service: IndustrialServiceRecord | None,
 ) -> FindingRead:
@@ -572,4 +618,9 @@ def _to_finding_read(
         references=finding.references_json,
         modbus_unit=_finding_modbus_unit_ref(unit, service),
         detected_at=finding.created_at,
+        host_hostname=hostname,
+        first_seen_at=life.first_seen_at if life else None,
+        last_seen_at=life.last_seen_at if life else None,
+        fixed_at=life.fixed_at if life else None,
     )
+

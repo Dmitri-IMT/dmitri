@@ -14,8 +14,8 @@ import { FirstScanCta, FirstScanNote } from '@/components/FirstScanCta'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
 import Timestamp from '@/components/Timestamp'
-import { isQuietHost, partitionQuietHosts } from '@/lib/hostLastSeen'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
+import QuietMachineGroup from '@/pages/hosts/QuietMachineGroup'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
@@ -23,6 +23,8 @@ type HostSummary = components['schemas']['HostSummary']
 function Network() {
   const now = new Date()
   const [page, setPage] = useState(1)
+  const [quietPage, setQuietPage] = useState(1)
+  const [isQuietOpen, setIsQuietOpen] = useState(false)
   const [sortBy, setSortBy] = useState<HostSortBy>(HOST_LIST_DEFAULT_SORT_BY)
   const [sortOrder, setSortOrder] = useState<HostListParams['sort_order']>(
     HOST_SORT_DEFAULT_ORDER[HOST_LIST_DEFAULT_SORT_BY],
@@ -40,11 +42,12 @@ function Network() {
     setPage(1)
   }
 
-  const params = {
+  const params: HostListParams = {
     page,
     per_page: HOSTS_PER_PAGE,
     sort_by: sortBy,
     sort_order: sortOrder,
+    group: 'active',
   }
   const query = useQuery({
     queryKey: queryKeys.hosts.list(params),
@@ -56,6 +59,7 @@ function Network() {
   })
 
   const total = query.data?.total
+  const quietTotal = query.data?.quiet_total ?? 0
   const latestScan = latestScanQuery.data
 
   return (
@@ -79,7 +83,7 @@ function Network() {
       <ListSurface<HostSummary, HostSortBy>
         testId="network"
         query={query}
-        columns={hostListColumns(now)}
+        columns={hostListColumns(now, false)}
         rowId={(host) => host.host_id}
         caption="Machines on your network"
         errorMessage="Couldn't load your network."
@@ -90,27 +94,39 @@ function Network() {
           note: <FirstScanNote />,
         }}
         sort={{ by: sortBy, order: sortOrder, onChange: handleSort }}
-        partitionRows={(hosts) => {
-          const { recent, quiet } = partitionQuietHosts(hosts, now)
-          return {
-            rows: recent,
-            collapsedGroup: quiet.length
-              ? {
-                  rows: quiet,
-                  label: (count) => `Not seen recently (${count})`,
-                  testId: 'network-quiet',
-                }
-              : undefined,
-          }
+        emptyRow={
+          <span
+            data-testid="network-no-active"
+            className="text-muted-foreground"
+          >
+            No machines seen in the last 7 days.
+          </span>
+        }
+        collapsedGroup={{
+          count: quietTotal,
+          label: (count) => `Not seen recently (${count})`,
+          testId: 'network-quiet',
+          isOpen: isQuietOpen,
+          onOpenChange: (isOpen) => {
+            setIsQuietOpen(isOpen)
+            if (!isOpen) setQuietPage(1)
+          },
+          content: (body) => (
+            <QuietMachineGroup
+              body={body}
+              now={now}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              page={quietPage}
+              onPageChange={setQuietPage}
+            />
+          ),
         }}
         rowAction={{
           kind: 'link',
           to: (host) => `/network/${host.host_id}`,
           label: (host) => `Open ${host.hostname || host.ip}`,
         }}
-        rowTone={(host) =>
-          isQuietHost(host.last_seen_at, now) ? 'muted' : undefined
-        }
         pagination={{
           page,
           perPage: HOSTS_PER_PAGE,
