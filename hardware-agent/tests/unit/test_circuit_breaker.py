@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from agent.config import AgentSettings
 from agent.scanner.errors import BudgetExceeded, CircuitBreakerError, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.scanner.models import HostInfo, PortInfo, PortScanResult, ScriptResult
 from agent.scanner.progress import ScanEvent
 from agent.scanner.stages import run_deep_inspection_stage, run_port_stage
 
@@ -46,7 +46,7 @@ def _ports_fake(failures: dict[str, Exception]):
             exc = failures.get(ip)
             if exc is not None:
                 raise exc
-        return {ip: [PortInfo(port=22)] for ip in ips}
+        return {ip: PortScanResult(ports=[PortInfo(port=22)]) for ip in ips}
 
     return fake
 
@@ -133,4 +133,27 @@ class TestPortStageCircuitBreaker:
         run_port_stage(_DummyRunner(), settings, hosts, reporter=reporter)
         done = _kinds(reporter.events, "port_stage_done")
         assert len(done) == 1
+        assert done[0].units_skipped == 1
+
+    def test_uses_failed_hosts_not_failed_batches(self, monkeypatch) -> None:
+        hosts = [
+            HostInfo(ip=f"10.0.0.{index}", hostname=f"10.0.0.{index}")
+            for index in range(1, 6)
+        ]
+        monkeypatch.setattr(
+            "agent.scanner.stages.scan_ports_batch",
+            _ports_fake({"10.0.0.5": UnitScanError("boom")}),
+        )
+        settings = AgentSettings(
+            scan_mode="standard",
+            max_workers=1,
+            host_batch_size=4,
+            unit_failure_threshold=0.3,
+        )
+        reporter = _FakeReporter()
+
+        skipped = run_port_stage(_DummyRunner(), settings, hosts, reporter=reporter)
+
+        assert skipped == 1
+        done = _kinds(reporter.events, "port_stage_done")
         assert done[0].units_skipped == 1

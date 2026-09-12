@@ -43,9 +43,11 @@ from api.services.nvd import NvdClient
 from api.services.persistence import (
     ScanClosedError,
     ScanOwnershipError,
+    _persist_scan_host,
     ingest_scan,
     persist_scan,
 )
+from sqlalchemy import JSON, text
 from sqlmodel import Session, select
 
 EXAMPLE_PATH = (
@@ -195,6 +197,86 @@ def test_ingest_scan_accepts_enriched_findings_example(
     assert record.scan_mode == scan.scan_mode
     assert record.status == "completed"
     assert record.agent_id == provisioned_agent.id
+
+
+def test_scan_hosts_persist_exact_operating_system_snapshots(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    payload, scan = _example_scan()
+
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
+
+    scan_hosts = runtime_session.exec(
+        select(ScanHostRecord).order_by(ScanHostRecord.ip)
+    ).all()
+    assert scan_hosts[0].operating_system_json == payload["hosts"][0][
+        "operating_system"
+    ]
+    assert scan_hosts[1].operating_system_json is None
+
+    scan_host_is_sql_null = runtime_session.execute(
+        text(
+            "SELECT operating_system_json IS NULL FROM scan_hosts WHERE ip = :ip"
+        ),
+        {"ip": "192.168.1.40"},
+    ).scalar_one()
+    inventory_host_is_sql_null = runtime_session.execute(
+        text("SELECT operating_system_json IS NULL FROM hosts WHERE ip = :ip"),
+        {"ip": "192.168.1.40"},
+    ).scalar_one()
+    assert scan_host_is_sql_null is True
+    assert inventory_host_is_sql_null is True
+
+
+def test_scan_host_snapshot_omits_null_operating_system_details() -> None:
+    operating_system = {
+        "name": "Linux 5",
+        "accuracy": 91,
+        "vendor": None,
+        "family": None,
+        "generation": None,
+        "device_type": None,
+        "cpes": [],
+    }
+    host = HostPayload(
+        ip="192.168.1.10",
+        mac=None,
+        hostname="host",
+        vendor="vendor",
+        operating_system=operating_system,
+        ports=[],
+    )
+
+    class RecordingSession:
+        def add(self, _record) -> None:
+            pass
+
+        def flush(self) -> None:
+            pass
+
+    record = _persist_scan_host(RecordingSession(), uuid4(), host)  # type: ignore[arg-type]
+
+    assert record.operating_system_json == {
+        "name": "Linux 5",
+        "accuracy": 91,
+        "cpes": [],
+    }
+
+
+@pytest.mark.parametrize("record_type", (ScanHostRecord, HostRecord))
+def test_operating_system_columns_store_python_none_as_sql_null(record_type) -> None:
+    column = record_type.__table__.c.operating_system_json
+
+    assert isinstance(column.type, JSON)
+    assert column.type.none_as_null is True
 
 
 def test_worker_processes_pending_jobs_separately(

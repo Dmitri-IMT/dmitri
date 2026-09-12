@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, constr
 
+from api.schemas.commands import NspiOptions
 from api.schemas.scan import ScanMode, SubnetCIDR
 
 AgentStatus = Literal["running", "uploading", "done", "failed"]
@@ -43,6 +44,7 @@ class AgentCommandFrame(BaseModel):
     scan_id: UUID
     scan_mode: ScanMode
     subnet: SubnetCIDR
+    nspi_options: NspiOptions | None = None
 
 
 class AgentErrorFrame(BaseModel):

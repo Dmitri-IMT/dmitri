@@ -15,6 +15,7 @@ from textual.message import Message
 from textual.strip import Strip
 from textual.widgets import Button, ProgressBar, RichLog, Static
 
+from agent.config import NspiSubmode
 from agent.paths import load_config
 from agent.scanner.progress import ProgressMapper, ScanEvent
 from agent.scanner.runner import ScanRunner
@@ -39,6 +40,7 @@ class ScanProgressScreen(DmitriScreen):
         "ports": "port scanning",
         "port_scan": "port scanning",
         "deep_inspection": "deep inspection",
+        "ot_inspection": "Modbus inventory",
         "normalize": "results generation",
     }
 
@@ -79,10 +81,12 @@ class ScanProgressScreen(DmitriScreen):
         self,
         subnet: str,
         scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"],
+        nspi_submode: NspiSubmode | None = None,
     ) -> None:
         super().__init__()
         self.subnet = subnet
         self.scan_mode = scan_mode
+        self.nspi_submode: NspiSubmode = nspi_submode or "inventory"
         self._runner: ScanRunner | None = None
         self._mapper = ProgressMapper(scan_mode)
         self._target_pct = 0.0
@@ -124,6 +128,13 @@ class ScanProgressScreen(DmitriScreen):
     def on_mount(self) -> None:
         self.query_one("#scan-done-actions").display = False
         mode_label = MODE_LABELS.get(self.scan_mode, self.scan_mode.capitalize())
+        if self.scan_mode == "nspi":
+            submode_label = {
+                "inventory": "Inventory",
+                "read_only_mapping": "Read-only mapping",
+                "active_validation": "Active validation",
+            }[self.nspi_submode]
+            mode_label = f"{mode_label} · {submode_label}"
         self.query_one("#scan-header", Static).update(
             f"Mode: {mode_label} · {self.subnet}"
         )
@@ -140,6 +151,7 @@ class ScanProgressScreen(DmitriScreen):
             on_complete=self._on_worker_complete,
             on_error=self._on_worker_error,
             workspace_root=workspace_root,
+            nspi_submode=self.nspi_submode,
         )
         self._runner.start()
 
@@ -328,6 +340,46 @@ class ScanProgressScreen(DmitriScreen):
             else:
                 line = f"[green]✓[/green] {total} hosts scanned"
             self._finish_stage("scripts", line)
+            return
+        if kind == "ot_stage_started":
+            if event.hosts_total == 0:
+                log.write("[dim]No Modbus candidates found[/dim]")
+            else:
+                self._start_stage(
+                    "ot",
+                    (
+                        "Mapping Modbus read-only ranges..."
+                        if self.nspi_submode == "read_only_mapping"
+                        else "Inventorying Modbus devices..."
+                    ),
+                )
+            return
+        if kind == "modbus_host_inspected":
+            action = (
+                "Mapped" if self.nspi_submode == "read_only_mapping" else "Inventoried"
+            )
+            log.write(
+                f"[dim]  -> {action} {event.ip} "
+                f"({event.hosts_done}/{event.hosts_total})[/dim]"
+            )
+            return
+        if kind == "ot_stage_done":
+            if "ot" not in self._stage_lines:
+                return
+            inspected = event.units_total - event.units_skipped
+            if event.units_skipped:
+                line = (
+                    f"[yellow]![/yellow] {inspected} Modbus hosts processed "
+                    f"({event.units_skipped} skipped)"
+                )
+            else:
+                action = (
+                    "mapped"
+                    if self.nspi_submode == "read_only_mapping"
+                    else "inventoried"
+                )
+                line = f"[green]OK[/green] {inspected} Modbus hosts {action}"
+            self._finish_stage("ot", line)
             return
         if kind == "normalize_started":
             if "scripts" in self._stage_lines:

@@ -7,6 +7,7 @@ import pydantic
 import pytest
 from api.schemas import (
     HostPayload,
+    OperatingSystemDetection,
     PortPayload,
     ScanIngestAcceptedResponse,
     ScanIngestRequest,
@@ -193,6 +194,109 @@ def test_ingest_host_entry_forbids_unknown_field():
         ScanIngestRequest.model_validate(payload)
 
 
+def test_ingest_accepts_and_exports_operating_system_detection() -> None:
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["operating_system"] = {
+        "name": "Linux 5.4 - 5.10",
+        "accuracy": 96,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": ["cpe:/o:linux:linux_kernel:5"],
+    }
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].operating_system == OperatingSystemDetection(
+        name="Linux 5.4 - 5.10",
+        accuracy=96,
+        vendor="Linux",
+        family="Linux",
+        generation="5.X",
+        device_type="general purpose",
+        cpes=["cpe:/o:linux:linux_kernel:5"],
+    )
+
+
+@pytest.mark.parametrize("accuracy", [0, 100])
+def test_ingest_accepts_operating_system_accuracy_boundaries(accuracy: int) -> None:
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["operating_system"] = {
+        "name": "Linux",
+        "accuracy": accuracy,
+    }
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].operating_system is not None
+    assert result.hosts[0].operating_system.accuracy == accuracy
+    assert result.hosts[0].operating_system.cpes == []
+
+
+def test_ingest_accepts_explicit_null_operating_system_details() -> None:
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["operating_system"] = {
+        "name": "Linux",
+        "accuracy": 96,
+        "vendor": None,
+        "family": None,
+        "generation": None,
+        "device_type": None,
+        "cpes": [],
+    }
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].operating_system is not None
+    assert result.hosts[0].operating_system.model_dump(mode="json") == payload[
+        "hosts"
+    ][0]["operating_system"]
+
+
+@pytest.mark.parametrize(
+    "include_null",
+    [pytest.param(False, id="omitted"), pytest.param(True, id="explicit-null")],
+)
+def test_ingest_accepts_missing_operating_system(include_null: bool) -> None:
+    payload = _base_payload(findings=[])
+    if include_null:
+        payload["hosts"][0]["operating_system"] = None
+
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert result.hosts[0].operating_system is None
+
+
+@pytest.mark.parametrize(
+    "operating_system",
+    [
+        {"name": "", "accuracy": 96},
+        {"name": None, "accuracy": 96},
+        {"name": "Linux", "accuracy": -1},
+        {"name": "Linux", "accuracy": 101},
+        {"name": "Linux", "accuracy": 96.0},
+        {"name": "Linux", "accuracy": 96.5},
+        {"name": "Linux", "accuracy": "96"},
+        {"name": "Linux", "accuracy": True},
+        {"name": "Linux", "accuracy": 96, "cpes": [""]},
+        {"name": "Linux", "accuracy": 96, "cpes": None},
+        {"name": "Linux", "accuracy": 96, "vendor": 1},
+        {"name": "Linux", "accuracy": 96, "unexpected": True},
+        {"accuracy": 96},
+        {"name": "Linux"},
+    ],
+)
+def test_ingest_rejects_invalid_operating_system_detection(
+    operating_system: dict,
+) -> None:
+    payload = _base_payload(findings=[])
+    payload["hosts"][0]["operating_system"] = operating_system
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
 def test_ingest_requires_hosts_key():
     payload = _base_payload()
     del payload["hosts"]
@@ -276,3 +380,12 @@ def test_example_payload_validates_against_tightened_model():
     result = ScanIngestRequest.model_validate(payload)
 
     assert result.hosts[0].ports[0].cpes == []
+    assert result.hosts[0].operating_system == OperatingSystemDetection(
+        name="Linux 5.4 - 5.10",
+        accuracy=96,
+        vendor="Linux",
+        family="Linux",
+        generation="5.X",
+        device_type="general purpose",
+        cpes=["cpe:/o:linux:linux_kernel:5"],
+    )

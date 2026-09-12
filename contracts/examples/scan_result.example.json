@@ -14,6 +14,17 @@
       "mac": "B8:27:EB:44:55:66",
       "hostname": "lab-camera",
       "vendor": "Raspberry Pi Trading Ltd",
+      "operating_system": {
+        "name": "Linux 5.4 - 5.10",
+        "accuracy": 96,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": [
+          "cpe:/o:linux:linux_kernel:5"
+        ]
+      },
       "ports": [
         {
           "port": 22,

@@ -4,7 +4,7 @@ title: hardware-agent — package overview
 description: What the hardware-agent package is, its scan pipeline, and the front doors that drive it — TUI, headless CLI, and the remote command daemon.
 resource: hardware-agent/src/agent/
 tags: [hardware-agent, scan-pipeline, overview]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # hardware-agent — package overview
@@ -25,15 +25,19 @@ There is no separate orchestrator class:
 
 1. **Host discovery** — `-sn -PE -T4` over the subnet → live [`HostInfo`](/hardware-agent/scanner/models.md).
    See [discovery](/hardware-agent/discovery.md).
-2. **Port discovery** — hosts chunked into batches, scanned across a thread pool (`-F` / top-ports /
-   `-p-` per mode). See [stages](/hardware-agent/scanner/stages.md).
-3. **Deep inspection** — per host, `-sV` + NSE scripts with `vulners` CVE correlation.
+2. **Port discovery** — hosts chunked into batches and scanned across a thread pool: default
+   top-1000, top-10000, all ports, or NSPi's two merged passes. It runs no `-sV` or NSE scripts;
+   regular modes retain `-O`, while NSPi's bounded OS probe remains in deep inspection. See
+   [stages](/hardware-agent/scanner/stages.md).
+3. **Deep inspection** — the single enrichment pass per eligible host: `-sV` + the mode's full NSE
+   set, including `vulners` CVE correlation.
 4. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → `HostPayload`s;
    assembled into a `ScanPayload` and written to `results/` by
    [workspace](/hardware-agent/scanner/workspace.md).
 
 Each stage runs under cancellation and deadline guards, with a per-unit retry + circuit-breaker
-contingency policy (ADR-010) so a partial result is preserved when a late stage fails.
+contingency policy (ADR-010). Successful evidence is preserved and the result is marked partial if
+any port batch or eligible deep-inspection host is skipped.
 
 ## Front doors
 

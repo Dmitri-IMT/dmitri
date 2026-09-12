@@ -23,7 +23,7 @@ EXPECTED_TIMEOUTS = [
     ("quick", "nse", 900.0),
     ("standard", "nse", 1200.0),
     ("extensive", "nse", 2400.0),
-    ("nspi", "nse", 1200.0),
+    ("nspi", "nse", 600.0),
     ("max", "nse", 3600.0),
 ]
 

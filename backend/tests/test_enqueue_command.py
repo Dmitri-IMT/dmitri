@@ -122,6 +122,59 @@ def test_enqueue_returns_201_with_command_summary(
     assert administrative_session.get(ScanRecord, command.scan_id) is not None
 
 
+def test_enqueue_persists_nspi_submode(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    ws = AsyncMock()
+
+    async def register() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+
+    asyncio.run(register())
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={
+            "scan_mode": "nspi",
+            "subnet": "192.168.1.0/24",
+            "nspi_options": {"version": 1, "submode": "read_only_mapping"},
+        },
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    command = administrative_session.get(Command, response.json()["command_id"])
+    assert command is not None
+    assert command.nspi_options == {
+        "version": 1,
+        "submode": "read_only_mapping",
+        "active_risk_acknowledged": False,
+        "change_ticket": None,
+    }
+
+
+def test_enqueue_rejects_nspi_options_for_general_scan(
+    client: TestClient,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={
+            "scan_mode": "quick",
+            "subnet": "192.168.1.0/24",
+            "nspi_options": {"version": 1, "submode": "inventory"},
+        },
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 422
+
+
 def test_viewer_cannot_enqueue_command(
     client: TestClient, provisioned_agent: Agent, seeded_org: Org, bearer_headers
 ) -> None:

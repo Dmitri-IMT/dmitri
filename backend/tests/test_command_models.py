@@ -44,6 +44,7 @@ def test_command_columns_match_expected_set():
         "scan_id",
         "scan_mode",
         "subnet",
+        "nspi_options",
         "status",
         "error_code",
         "created_at",

@@ -51,6 +51,32 @@ def test_cli_agent_completed_exits_0(capsys: pytest.CaptureFixture[str]) -> None
     assert out["result_path"] == result_path
 
 
+def test_cli_passes_read_only_mapping_to_headless() -> None:
+    result = _stub_result("completed", scan_id="abc-123", result_path="scan.json")
+    with (
+        patch.object(
+            sys,
+            "argv",
+            [
+                "dmitri",
+                "agent",
+                "nspi",
+                "read_only_mapping",
+                "192.168.1.0/24",
+            ],
+        ),
+        patch("agent.cli._check_nmap", return_value=True),
+        patch(
+            "agent.headless.run_headless_scan", return_value=result
+        ) as run_scan,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code == 0
+    assert run_scan.call_args.kwargs["nspi_submode"] == "read_only_mapping"
+
+
 def test_cli_agent_partial_exits_10(capsys: pytest.CaptureFixture[str]) -> None:
     result_path = str(Path("tmp") / "results" / "partial.json")
     result = _stub_result("partial", scan_id="def-456", result_path=result_path)
@@ -133,7 +159,7 @@ def test_cli_agent_bad_arity_exits_2(
         assert exc_info.value.code == 2
 
     err = capsys.readouterr().err
-    assert "Usage: dmitri agent [<mode> <subnet>]" in err
+    assert "Usage: dmitri agent [<mode> [<nspi-submode>] <subnet>]" in err
 
 
 def test_cli_agent_invalid_scan_input_exits_2(

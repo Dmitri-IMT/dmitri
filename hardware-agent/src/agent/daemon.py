@@ -41,7 +41,7 @@ class AgentDaemon:
         client: CommandChannelClient,
         ingest: ScanIngestClient,
         *,
-        run_scan: Callable[[str, str], HeadlessScanResult] = run_headless_scan,
+        run_scan: Callable[..., HeadlessScanResult] = run_headless_scan,
     ) -> None:
         self._client = client
         self._ingest = ingest
@@ -100,7 +100,14 @@ class AgentDaemon:
     async def _run_command(self, command: AgentCommand) -> None:
         try:
             result = await asyncio.to_thread(
-                self._run_scan, command.scan_mode, command.subnet
+                self._run_scan,
+                command.scan_mode,
+                command.subnet,
+                nspi_submode=(
+                    command.nspi_options.submode
+                    if command.nspi_options is not None
+                    else None
+                ),
             )
         except InvalidScanInput:
             await self._update(command.command_id, "failed", "invalid_command")

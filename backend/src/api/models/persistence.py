@@ -51,6 +51,9 @@ class ScanHostRecord(SQLModel, table=True):
     mac: str | None = None
     hostname: str
     vendor: str
+    operating_system_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
@@ -70,6 +73,9 @@ class HostRecord(SQLModel, table=True):
     hostname: str
     vendor: str
     machine_type: str | None = None
+    operating_system_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
     open_ports_count: int
     highest_severity: str | None = None
     vulnerability_count: int = Field(

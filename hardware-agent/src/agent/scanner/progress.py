@@ -12,6 +12,9 @@ ScanEventKind = Literal[
     "deep_stage_started",
     "host_inspected",
     "deep_stage_done",
+    "ot_stage_started",
+    "modbus_host_inspected",
+    "ot_stage_done",
     "unit_timed_out",
     "unit_failed",
     "normalize_started",
@@ -43,15 +46,16 @@ class StageWeights:
     discovery: int
     port_scan: int
     deep_inspection: int
+    ot_inspection: int
     normalize: int
 
 
 STAGE_WEIGHTS: dict[str, StageWeights] = {
-    "quick": StageWeights(15, 50, 30, 5),
-    "standard": StageWeights(10, 50, 35, 5),
-    "extensive": StageWeights(5, 55, 35, 5),
-    "nspi": StageWeights(10, 45, 40, 5),
-    "max": StageWeights(5, 55, 35, 5),
+    "quick": StageWeights(15, 50, 30, 0, 5),
+    "standard": StageWeights(10, 50, 35, 0, 5),
+    "extensive": StageWeights(5, 55, 35, 0, 5),
+    "nspi": StageWeights(10, 40, 35, 10, 5),
+    "max": StageWeights(5, 55, 35, 0, 5),
 }
 
 
@@ -59,6 +63,7 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
     d = float(weights.discovery)
     p = float(weights.port_scan)
     i = float(weights.deep_inspection)
+    o = float(weights.ot_inspection)
 
     kind = event.kind
     if kind == "discovery_started":
@@ -75,8 +80,13 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
     if kind == "host_inspected":
         fraction = event.hosts_done / event.hosts_total if event.hosts_total else 0.0
         return d + p + i * fraction
-    if kind in ("normalize_started", "deep_stage_done"):
+    if kind in ("deep_stage_done", "ot_stage_started"):
         return d + p + i
+    if kind == "modbus_host_inspected":
+        fraction = event.hosts_done / event.hosts_total if event.hosts_total else 0.0
+        return d + p + i + o * fraction
+    if kind in ("normalize_started", "ot_stage_done"):
+        return d + p + i + o
     if kind == "completed":
         return 100.0
     return None

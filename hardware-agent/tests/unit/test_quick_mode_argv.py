@@ -6,12 +6,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
 from agent.discovery.port_discovery import (
     discovery_arguments,
     scan_ports,
     scan_ports_batch,
 )
 from agent.normalize.contracts import ScanPayload
+from agent.scanner.models import PortScanResult
 from agent.scanner.nmap import NmapRunner
 
 EMPTY_NMAP_XML = ET.fromstring(
@@ -35,6 +37,60 @@ def _make_capturing_runner() -> tuple[NmapRunner, list[list[str]]]:
     return runner, captured
 
 
+@pytest.mark.parametrize("scan_mode", ["quick", "standard", "extensive", "max"])
+def test_single_host_scan_modes_return_port_scan_result(scan_mode: str) -> None:
+    runner, _ = _make_capturing_runner()
+
+    result = scan_ports(runner, "10.0.0.1", scan_mode)
+
+    assert isinstance(result, PortScanResult)
+
+
+@pytest.mark.parametrize(
+    "scan_mode", ["quick", "standard", "extensive", "max", "nspi"]
+)
+def test_batch_scan_modes_return_port_scan_results(scan_mode: str) -> None:
+    runner, _ = _make_capturing_runner()
+
+    result = scan_ports_batch(runner, ["10.0.0.1"], scan_mode)
+
+    assert isinstance(result["10.0.0.1"], PortScanResult)
+
+
+@pytest.mark.parametrize(
+    ("scan_mode", "expected_discovery_arguments"),
+    [
+        ("quick", ["-O"]),
+        ("standard", ["-O"]),
+        ("extensive", ["-O", "--top-ports", "10000"]),
+        ("max", ["-O", "-p-", "--min-rate", "1000"]),
+    ],
+)
+def test_single_and_batch_argv_remain_exact(
+    scan_mode: str,
+    expected_discovery_arguments: list[str],
+) -> None:
+    single_runner, single_calls = _make_capturing_runner()
+    batch_runner, batch_calls = _make_capturing_runner()
+
+    scan_ports(single_runner, "10.0.0.1", scan_mode)
+    scan_ports_batch(batch_runner, ["10.0.0.1", "10.0.0.2"], scan_mode)
+
+    assert single_calls == [
+        ["-Pn", "-n", "-T4", *expected_discovery_arguments, "10.0.0.1"]
+    ]
+    assert batch_calls == [
+        [
+            "-Pn",
+            "-n",
+            "-T4",
+            *expected_discovery_arguments,
+            "10.0.0.1",
+            "10.0.0.2",
+        ]
+    ]
+
+
 class TestQuickModeArgv:
     def test_scan_ports_includes_required_flags(self) -> None:
         runner, captured = _make_capturing_runner()
@@ -42,11 +98,9 @@ class TestQuickModeArgv:
 
         assert len(captured) == 1
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
-        assert "--script" in argv
-        script_idx = argv.index("--script")
-        assert argv[script_idx + 1] == "vulners"
+        assert "--script" not in argv
 
     def test_scan_ports_excludes_port_flags(self) -> None:
         runner, captured = _make_capturing_runner()
@@ -62,11 +116,9 @@ class TestQuickModeArgv:
 
         assert len(captured) == 1
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
-        assert "--script" in argv
-        script_idx = argv.index("--script")
-        assert argv[script_idx + 1] == "vulners"
+        assert "--script" not in argv
 
     def test_scan_ports_batch_excludes_port_flags(self) -> None:
         runner, captured = _make_capturing_runner()
@@ -77,36 +129,26 @@ class TestQuickModeArgv:
             assert flag not in argv, f"quick mode argv must not contain {flag}"
 
 
-STANDARD_SCRIPT_CSV = (
-    "vulners,smb-protocols,smb2-security-mode,"
-    "ssh-auth-methods,http-title,http-server-header"
-)
-
-
 class TestStandardModeArgv:
-    def test_scan_ports_includes_contract_scripts(self) -> None:
+    def test_scan_ports_defers_enrichment(self) -> None:
         runner, captured = _make_capturing_runner()
         scan_ports(runner, "10.0.0.1", "standard")
 
         assert len(captured) == 1
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
-        assert "--script" in argv
-        script_idx = argv.index("--script")
-        assert argv[script_idx + 1] == STANDARD_SCRIPT_CSV
+        assert "--script" not in argv
 
-    def test_scan_ports_batch_includes_contract_scripts(self) -> None:
+    def test_scan_ports_batch_defers_enrichment(self) -> None:
         runner, captured = _make_capturing_runner()
         scan_ports_batch(runner, ["10.0.0.1", "10.0.0.2"], "standard")
 
         assert len(captured) == 1
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
-        assert "--script" in argv
-        script_idx = argv.index("--script")
-        assert argv[script_idx + 1] == STANDARD_SCRIPT_CSV
+        assert "--script" not in argv
 
     def test_scan_ports_excludes_port_flags(self) -> None:
         runner, captured = _make_capturing_runner()
@@ -120,21 +162,20 @@ class TestStandardModeArgv:
 class TestExtensiveModeArgv:
     def test_discovery_arguments_top_ports_no_scripts(self) -> None:
         assert discovery_arguments("extensive") == [
-            "-sV",
             "-O",
             "--top-ports",
             "10000",
         ]
 
     def test_discovery_arguments_unchanged_for_other_modes(self) -> None:
-        assert discovery_arguments("quick") == ["-sV", "-O", "--script", "vulners"]
+        assert discovery_arguments("quick") == ["-O"]
 
     def test_scan_ports_includes_top_ports_excludes_scripts(self) -> None:
         runner, captured = _make_capturing_runner()
         scan_ports(runner, "10.0.0.1", "extensive")
 
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
         assert "--top-ports" in argv
         assert argv[argv.index("--top-ports") + 1] == "10000"
@@ -157,7 +198,7 @@ class TestExtensiveModeArgv:
         scan_ports(single_runner, "10.0.0.1", "extensive")
         scan_ports_batch(batch_runner, ["10.0.0.1"], "extensive")
 
-        flags = ["-sV", "-O", "--top-ports", "10000"]
+        flags = ["-O", "--top-ports", "10000"]
         for flag in flags:
             assert flag in single_cap[0]
             assert flag in batch_cap[0]
@@ -166,7 +207,6 @@ class TestExtensiveModeArgv:
 class TestMaxModeArgv:
     def test_discovery_arguments_all_ports_min_rate_no_scripts(self) -> None:
         assert discovery_arguments("max") == [
-            "-sV",
             "-O",
             "-p-",
             "--min-rate",
@@ -178,7 +218,7 @@ class TestMaxModeArgv:
         scan_ports(runner, "10.0.0.1", "max")
 
         argv = captured[0]
-        assert "-sV" in argv
+        assert "-sV" not in argv
         assert "-O" in argv
         assert "-p-" in argv
         assert argv[argv.index("--min-rate") + 1] == "1000"

@@ -67,6 +67,15 @@ def _scan_summary_payload(**overrides: object) -> dict:
     return payload
 
 
+def _operating_system_payload() -> dict[str, object]:
+    return {
+        "name": "Linux 5.4 - 5.10",
+        "accuracy": 96,
+        "vendor": "Linux",
+        "cpes": ["cpe:/o:linux:linux_kernel:5"],
+    }
+
+
 def test_all_eleven_read_models_importable():
     models = [
         Port,
@@ -234,3 +243,82 @@ def test_host_port_carries_the_two_dates_and_no_state():
     assert port.first_seen_at < port.last_seen_at
     with pytest.raises(pydantic.ValidationError):
         HostPort.model_validate({**payload, "state": "open"})
+
+
+@pytest.mark.parametrize(
+    ("model", "payload"),
+    (
+        (ScanHostView, _scan_host_view_payload()),
+        (HostSummary, _host_summary_payload()),
+        (
+            HostScanHistoryEntry,
+            {
+                "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
+                "timestamp": "2026-03-05T14:12:45Z",
+                "scan_mode": "standard",
+                "open_ports_count": 0,
+            },
+        ),
+        (
+            HostDetailResponse,
+            {
+                **_host_summary_payload(),
+                "ports": [],
+                "scan_history": [],
+            },
+        ),
+    ),
+)
+def test_host_read_models_accept_optional_nullable_operating_system(
+    model, payload: dict[str, object]
+) -> None:
+    omitted = model.model_validate(payload)
+    assert omitted.operating_system is None
+
+    explicit_null = model.model_validate({**payload, "operating_system": None})
+    assert explicit_null.operating_system is None
+
+    detected = model.model_validate(
+        {**payload, "operating_system": _operating_system_payload()}
+    )
+    assert detected.operating_system.name == "Linux 5.4 - 5.10"
+
+
+@pytest.mark.parametrize(
+    ("model", "payload"),
+    (
+        (ScanHostView, _scan_host_view_payload()),
+        (HostSummary, _host_summary_payload()),
+        (
+            HostScanHistoryEntry,
+            {
+                "scan_id": "b9a2de1d-6cb0-4d1c-9f19-8f313cfa9c77",
+                "timestamp": "2026-03-05T14:12:45Z",
+                "scan_mode": "standard",
+                "open_ports_count": 0,
+            },
+        ),
+        (
+            HostDetailResponse,
+            {
+                **_host_summary_payload(),
+                "ports": [],
+                "scan_history": [],
+            },
+        ),
+    ),
+)
+def test_host_read_models_reject_malformed_operating_system(
+    model, payload: dict[str, object]
+) -> None:
+    with pytest.raises(pydantic.ValidationError):
+        model.model_validate(
+            {
+                **payload,
+                "operating_system": {
+                    "name": "Linux",
+                    "accuracy": 101,
+                    "unexpected": True,
+                },
+            }
+        )

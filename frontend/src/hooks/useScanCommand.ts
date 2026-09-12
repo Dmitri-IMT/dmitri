@@ -11,6 +11,12 @@ import type { components } from '@/types/openapi'
 type AgentDetail = components['schemas']['AgentDetail']
 type CommandDetail = components['schemas']['CommandDetail']
 type ScanMode = components['schemas']['ScanMode']
+type NspiSubmode = components['schemas']['NspiSubmode']
+
+export type ScanSelection = {
+  scanMode: ScanMode
+  nspiSubmode?: NspiSubmode
+}
 
 export type TriggerOutcome = 'followed' | 'subnet-stale' | 'refused'
 
@@ -18,7 +24,7 @@ export type ScanCommand = {
   command: CommandDetail | null
   following: boolean
   triggering: boolean
-  trigger: (scanMode: ScanMode) => Promise<TriggerOutcome>
+  trigger: (selection: ScanSelection) => Promise<TriggerOutcome>
 }
 
 export function useScanCommand(agent: AgentDetail): ScanCommand {
@@ -66,15 +72,29 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     })
   }, [agent.agent_id, commandQuery.data, queryClient])
 
-  async function trigger(scanMode: ScanMode): Promise<TriggerOutcome> {
+  async function trigger(selection: ScanSelection): Promise<TriggerOutcome> {
     if (!agent.target_subnet || triggeringRef.current) return 'refused'
     triggeringRef.current = true
     setTriggering(true)
     try {
-      const command = await createScanCommand(agent.agent_id, {
-        scan_mode: scanMode,
-        subnet: agent.target_subnet,
-      })
+      const scanMode = selection.scanMode
+      const command = await createScanCommand(
+        agent.agent_id,
+        scanMode === 'nspi'
+          ? {
+              scan_mode: scanMode,
+              subnet: agent.target_subnet,
+              nspi_options: {
+                version: 1,
+                submode: selection.nspiSubmode ?? 'inventory',
+                active_risk_acknowledged: false,
+              },
+            }
+          : {
+              scan_mode: scanMode,
+              subnet: agent.target_subnet,
+            },
+      )
       setFollowedCommandId(command.command_id)
       return 'followed'
     } catch (error) {

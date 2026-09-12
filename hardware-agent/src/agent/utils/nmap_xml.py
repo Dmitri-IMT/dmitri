@@ -5,7 +5,91 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from agent.scanner.models import PortInfo, ScriptResult, ServiceInfo
+from agent.scanner.models import (
+    OperatingSystemInfo,
+    PortInfo,
+    ScriptResult,
+    ServiceInfo,
+)
+
+
+def _parse_accuracy(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        accuracy = int(value)
+    except ValueError:
+        return None
+    return accuracy if 0 <= accuracy <= 100 else None
+
+
+def _optional_attribute(element: ET.Element, name: str) -> str | None:
+    value = element.get(name)
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def parse_operating_system(host_element: ET.Element) -> OperatingSystemInfo | None:
+    """Parse the strongest supported OS match from an Nmap host XML node."""
+
+    selected_match: ET.Element | None = None
+    selected_accuracy = -1
+    for match in host_element.findall("os/osmatch"):
+        name = (match.get("name") or "").strip()
+        accuracy = _parse_accuracy(match.get("accuracy"))
+        if not name or accuracy is None or accuracy <= selected_accuracy:
+            continue
+        selected_match = match
+        selected_accuracy = accuracy
+
+    if selected_match is None:
+        return None
+
+    selected_class: ET.Element | None = None
+    selected_class_accuracy = -1
+    classes = selected_match.findall("osclass")
+    for os_class in classes:
+        accuracy = _parse_accuracy(os_class.get("accuracy"))
+        if accuracy is None or accuracy <= selected_class_accuracy:
+            continue
+        selected_class = os_class
+        selected_class_accuracy = accuracy
+
+    cpes = sorted(
+        {
+            normalized
+            for os_class in classes
+            for cpe in os_class.findall("cpe")
+            if (normalized := (cpe.text or "").strip())
+        }
+    )
+    return OperatingSystemInfo(
+        name=(selected_match.get("name") or "").strip(),
+        accuracy=selected_accuracy,
+        vendor=(
+            _optional_attribute(selected_class, "vendor")
+            if selected_class is not None
+            else None
+        ),
+        family=(
+            _optional_attribute(selected_class, "osfamily")
+            if selected_class is not None
+            else None
+        ),
+        generation=(
+            _optional_attribute(selected_class, "osgen")
+            if selected_class is not None
+            else None
+        ),
+        device_type=(
+            _optional_attribute(selected_class, "type")
+            if selected_class is not None
+            else None
+        ),
+        cpes=cpes,
+    )
 
 
 def parse_ports(host_element: ET.Element) -> list[PortInfo]:

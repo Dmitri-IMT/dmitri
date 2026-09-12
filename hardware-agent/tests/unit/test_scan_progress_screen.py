@@ -227,6 +227,37 @@ class TestActivityLog:
             assert "Scanning ports" in text
             assert "all ports" not in text
 
+    @pytest.mark.asyncio
+    async def test_modbus_inventory_stage_is_visible(self) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="ot_stage_started", hosts_total=1),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="modbus_host_inspected",
+                    hosts_done=1,
+                    hosts_total=1,
+                    ip="192.168.1.30",
+                ),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="ot_stage_done", units_total=1),
+            )
+
+            text = _log_text(screen)
+            assert "Inventoried 192.168.1.30 (1/1)" in text
+            assert "1 Modbus hosts inventoried" in text
+            assert screen._target_pct == 95.0
+
 
 class TestProgressTarget:
     @pytest.mark.asyncio

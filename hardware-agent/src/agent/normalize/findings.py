@@ -30,7 +30,60 @@ def extract_findings(hosts: list[HostInfo]) -> list[FindingPayload]:
                 for finding in _extract_script_findings(host, port, script):
                     _append_unique(findings, seen, finding)
 
+        for finding in _extract_modbus_read_findings(host):
+            _append_unique(findings, seen, finding)
+
     return findings
+
+
+def _extract_modbus_read_findings(host: HostInfo) -> list[FindingPayload]:
+    port_index = {port.port: port for port in host.ports}
+    findings: list[FindingPayload] = []
+    for service in host.industrial_services:
+        readable = [
+            (unit.unit_id, item)
+            for unit in service.units
+            for item in unit.address_ranges
+            if item.status == "readable"
+        ]
+        if not readable:
+            continue
+        evidence = "; ".join(
+            f"Unit {unit_id} FC{_function_code(item.address_space):02d} "
+            f"addresses {item.start_address}-{item.start_address + item.count - 1}"
+            for unit_id, item in readable
+        )
+        evidence += ". No Modbus write function was sent."
+        findings.append(
+            _base_finding(
+                host,
+                port_index.get(service.port),
+                severity="medium",
+                title="Unauthenticated Modbus data read is reachable",
+                description=(
+                    "An authorised read-only probe received Modbus process data "
+                    "without application-layer authentication."
+                ),
+                recommendation=(
+                    "Restrict Modbus TCP to required peers and maintenance paths, "
+                    "monitor read requests, and use an authenticated security layer "
+                    "where supported."
+                ),
+                evidence=evidence,
+                source="modbus-read-only-assessment",
+                source_script=None,
+            )
+        )
+    return findings
+
+
+def _function_code(address_space: str) -> int:
+    return {
+        "coil": 1,
+        "discrete_input": 2,
+        "holding_register": 3,
+        "input_register": 4,
+    }[address_space]
 
 
 def _append_unique(
@@ -583,7 +636,7 @@ def _base_finding(
     recommendation: str,
     evidence: str,
     source: str,
-    source_script: str,
+    source_script: str | None,
     cve_id: str | None = None,
     cvss_score: float | None = None,
     references: list[str] | None = None,

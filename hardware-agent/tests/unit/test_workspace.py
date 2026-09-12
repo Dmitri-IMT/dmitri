@@ -12,7 +12,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from agent.normalize.contracts import ScanPayload
+from agent.normalize.contracts import (
+    HostPayload,
+    OperatingSystemDetection,
+    ScanPayload,
+)
 from agent.scanner.workspace import (
     build_nmap_argv,
     ensure_workspace_layout,
@@ -760,6 +764,99 @@ def test_written_json_is_valid(tmp_path):
     assert data["scan_mode"] == "quick"
     assert isinstance(data["hosts"], list)
     assert isinstance(data["findings"], list)
+
+
+def test_operating_system_round_trips_through_workspace_json(tmp_path: Path) -> None:
+    payload = _make_payload().model_copy(
+        update={
+            "hosts": [
+                HostPayload(
+                    ip="192.168.1.10",
+                    hostname="controller.local",
+                    vendor="Vendor",
+                    operating_system=OperatingSystemDetection(
+                        name="Linux 5.4 - 5.10",
+                        accuracy=96,
+                        vendor="Linux",
+                        family="Linux",
+                        generation="5.X",
+                        device_type="general purpose",
+                        cpes=[
+                            "cpe:/o:linux:linux_kernel:5",
+                            "cpe:/o:linux:linux_kernel:6",
+                        ],
+                    ),
+                )
+            ]
+        }
+    )
+
+    result_path = write_scan_result(payload, str(tmp_path))
+    result_json = result_path.read_text(encoding="utf-8")
+    saved = json.loads(result_json)
+    loaded = ScanPayload.model_validate_json(result_json)
+
+    assert saved["hosts"][0]["operating_system"] == {
+        "name": "Linux 5.4 - 5.10",
+        "accuracy": 96,
+        "vendor": "Linux",
+        "family": "Linux",
+        "generation": "5.X",
+        "device_type": "general purpose",
+        "cpes": [
+            "cpe:/o:linux:linux_kernel:5",
+            "cpe:/o:linux:linux_kernel:6",
+        ],
+    }
+    assert loaded == payload
+    assert loaded.hosts[0].operating_system == payload.hosts[0].operating_system
+
+
+def test_legacy_workspace_json_without_operating_system_remains_valid(
+    tmp_path: Path,
+) -> None:
+    legacy = _make_payload().model_dump(mode="json")
+    legacy["hosts"] = [
+        {
+            "ip": "192.168.1.10",
+            "mac": None,
+            "hostname": "legacy.local",
+            "vendor": "unknown",
+            "ports": [],
+            "industrial_services": [],
+        }
+    ]
+    legacy_path = tmp_path / "legacy.json"
+    legacy_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    loaded = ScanPayload.model_validate_json(legacy_path.read_text(encoding="utf-8"))
+
+    assert loaded.hosts[0].operating_system is None
+
+
+def test_workspace_json_with_explicit_null_operating_system_remains_valid(
+    tmp_path: Path,
+) -> None:
+    current = _make_payload().model_dump(mode="json")
+    current["hosts"] = [
+        {
+            "ip": "192.168.1.10",
+            "mac": None,
+            "hostname": "current.local",
+            "vendor": "unknown",
+            "operating_system": None,
+            "ports": [],
+            "industrial_services": [],
+        }
+    ]
+    payload = ScanPayload.model_validate(current)
+    current_path = write_scan_result(payload, str(tmp_path))
+    current_json = current_path.read_text(encoding="utf-8")
+    saved = json.loads(current_json)
+    loaded = ScanPayload.model_validate_json(current_json)
+
+    assert saved["hosts"][0]["operating_system"] is None
+    assert loaded.hosts[0].operating_system is None
 
 
 def test_two_scans_create_two_files(tmp_path):

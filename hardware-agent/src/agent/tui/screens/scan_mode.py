@@ -23,8 +23,17 @@ _GENERAL_OPTIONS = [
 
 _NSPI_OPTIONS = [
     Option(
-        "NSPi Standard  —  Industrial ports · OT + security scripts · ~20–30 min",
-        id="nspi",
+        "Inventory          —  Identify Modbus devices · least intrusive",
+        id="inventory",
+    ),
+    Option(
+        "Read-only mapping  —  Sample coils and registers · no writes",
+        id="read_only_mapping",
+    ),
+    Option(
+        "Active validation  —  Unavailable until guarded restoration ships",
+        id="active_validation",
+        disabled=True,
     ),
 ]
 

@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
+NSPI_SUBMODES: tuple[str, ...] = (
+    "inventory",
+    "read_only_mapping",
+    "active_validation",
+)
+NspiSubmode = Literal["inventory", "read_only_mapping", "active_validation"]
 
 
 @dataclass(slots=True)
@@ -22,6 +28,7 @@ class AgentSettings:
     scan_deadline_s: int = 0
     unit_failure_threshold: float = 0.5
     transient_retries: int = 1
+    nspi_submode: NspiSubmode = "inventory"
 
 
 STANDARD_NSE_SCRIPTS = (
@@ -50,6 +57,8 @@ EXTENSIVE_NSE_SCRIPTS = (
 )
 
 NSPI_PORTS = "502,4840,44818,445,139,3389,5985"
+NSPI_SCRIPT_TIMEOUT = "60s"
+NSPI_HOST_TIMEOUT = "300s"
 
 NSPI_NSE_SCRIPTS = (
     "modbus-discover",
@@ -69,15 +78,6 @@ NSPI_NSE_SCRIPTS = (
 )
 
 
-def port_stage_scripts(scan_mode: str) -> str:
-    """Return the --script CSV for the port-scan stage (quick/standard only)."""
-    if scan_mode == "nspi":
-        return ",".join(NSPI_NSE_SCRIPTS)
-    if scan_mode == "standard":
-        return ",".join(STANDARD_NSE_SCRIPTS)
-    return "vulners"
-
-
 def deep_stage_scripts(scan_mode: str) -> tuple[str, ...]:
     """Return the script tuple for the deep-inspection stage."""
     if scan_mode == "nspi":
@@ -89,6 +89,11 @@ def deep_stage_scripts(scan_mode: str) -> tuple[str, ...]:
     if scan_mode == "max":
         return EXTENSIVE_NSE_SCRIPTS
     return QUICK_NSE_SCRIPTS
+
+
+def effective_version_intensity(configured: int) -> int:
+    """Keep the authoritative service probe at least as deep as Nmap's default."""
+    return max(configured, 7)
 
 
 def min_cvss_for_mode(scan_mode: str) -> float:
@@ -118,7 +123,7 @@ TIMEOUTS: dict[str, dict[str, float]] = {
         "quick": 900.0,
         "standard": 1200.0,
         "extensive": 2400.0,
-        "nspi": 1200.0,
+        "nspi": 600.0,
         "max": 3600.0,
     },
 }

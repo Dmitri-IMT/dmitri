@@ -4,7 +4,7 @@ title: Dmitri — system overview
 description: What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 resource: README.md
 tags: [overview, architecture, scan-pipeline]
-timestamp: 2026-08-29T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # Dmitri — system overview
@@ -80,13 +80,16 @@ Chosen in the TUI; the `scan_mode` value follows the `ScanMode` enum in the cont
 per-mode nmap args come from `discovery_arguments()` / `deep_stage_scripts()` — see
 [discovery](/hardware-agent/discovery.md) and [config](/hardware-agent/cli.md).
 
-| Mode | `scan_mode` | Port stage (actual args) |
-|------|-------------|--------------------------|
-| Quick | `quick` | Default top-1000 ports (`-sV -O`) + quick NSE script set. |
-| Standard | `standard` | Default top-1000 ports + standard NSE script set. |
-| Extensive | `extensive` | Top-10 000 ports (`--top-ports 10000`); `vulners.mincvss = 3.0`. |
-| MAX | `max` | All ports (`-p-`, `--min-rate 1000`), full NSE; `vulners.mincvss = 1.0` (~45 min+). |
-| NSPi | `nspi` | Two-pass: top-1000 + OT-specific ports (`NSPI_PORTS`), merged. |
+| Mode | `scan_mode` | Port stage | Single deep-enrichment stage |
+|------|-------------|------------|------------------------------|
+| Quick | `quick` | Default top-1000, `-T4 -O`; no `-sV`/NSE. | `-sV` + complete Quick NSE set. |
+| Standard | `standard` | Default top-1000, `-T4 -O`; no `-sV`/NSE. | `-sV` + complete Standard NSE set. |
+| Extensive | `extensive` | Top-10 000 (`--top-ports 10000`), `-T4 -O`; no `-sV`/NSE. | `-sV` + complete Extensive NSE set; `vulners.mincvss = 3.0`. |
+| MAX | `max` | All ports (`-p- --min-rate 1000`), `-T4 -O`; no `-sV`/NSE. | `-sV` + complete MAX NSE set; `vulners.mincvss = 1.0` (~45 min+). |
+| NSPi | `nspi` | Two bounded port-only passes: top-1000 at `-T4`, then OT ports at `-T2`; merged. | One `-sV -O` + complete NSPi NSE set over the merged open ports, followed by the unchanged Modbus stage. |
+
+All modes use `-n` in port and deep stages. Deep inspection enforces version intensity at least 7,
+preserving the fingerprint detail formerly obtained from the implicit port-stage `-sV` default.
 
 Legacy `full` mode is being removed in favor of `max`.
 
