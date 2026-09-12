@@ -43,7 +43,9 @@ describe('hosts api', () => {
     expect(response.quiet_total).toBeGreaterThanOrEqual(0)
     expect(response.data.every((host) => 'machine_type' in host)).toBe(true)
     expect(
-      response.data.every((host) => typeof host.vulnerability_count === 'number'),
+      response.data.every(
+        (host) => typeof host.vulnerability_count === 'number',
+      ),
     ).toBe(true)
   })
 
@@ -55,7 +57,9 @@ describe('hosts api', () => {
     expect(active.quiet_total).toBe(quiet.quiet_total)
     expect(active.quiet_total).toBe(quiet.total)
 
-    const activeIds = new Set(active.data.map((host: HostSummary) => host.host_id))
+    const activeIds = new Set(
+      active.data.map((host: HostSummary) => host.host_id),
+    )
     quiet.data.forEach((host: HostSummary) => {
       expect(activeIds.has(host.host_id)).toBe(false)
     })

@@ -31,7 +31,9 @@ describe('hostListColumns', () => {
     const activeRow = await screen.findByTestId(
       `column-probe-row-${staleHost.host_id}`,
     )
-    expect(within(activeRow).queryByText(/Not seen for/i)).not.toBeInTheDocument()
+    expect(
+      within(activeRow).queryByText(/Not seen for/i),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the quiet weeks line when the caller marks the group quiet', async () => {

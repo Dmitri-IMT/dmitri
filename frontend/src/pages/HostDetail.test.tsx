@@ -444,7 +444,9 @@ describe('HostDetail', () => {
     renderPage(`/network/${HOST.host_id}`)
 
     await screen.findByTestId(`host-history-table-row-${SCAN_ID}`)
-    const servicesHeader = screen.getByRole('columnheader', { name: 'Services' })
+    const servicesHeader = screen.getByRole('columnheader', {
+      name: 'Services',
+    })
     expect(servicesHeader).not.toHaveClass('text-right')
 
     const servicesCell = within(
