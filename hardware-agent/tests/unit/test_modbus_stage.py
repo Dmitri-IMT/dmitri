@@ -348,6 +348,51 @@ def test_write_counter_comes_from_service_field() -> None:
     assert metadata["modbus_write_requests_sent"] == 3
 
 
+def test_mapping_deadline_counts_host_that_started(monkeypatch) -> None:
+    hosts = [
+        HostInfo(
+            ip=f"192.168.10.{index}",
+            hostname=f"plc-{index}",
+            ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        )
+        for index in (30, 31)
+    ]
+    monkeypatch.setattr("agent.scanner.stages.MAX_OT_STAGE_SECONDS", 0)
+
+    def slow_inventory(host, **kwargs):
+        time.sleep(0.02)
+        return [_service()]
+
+    mapped: list[str] = []
+
+    def fake_map(host, service, **kwargs):
+        mapped.append(host.ip)
+
+    monkeypatch.setattr("agent.scanner.stages.inventory_modbus_host", slow_inventory)
+    monkeypatch.setattr("agent.scanner.stages.map_modbus_service", fake_map)
+    reporter = _Reporter()
+
+    ot_inspection = run_ot_inspection_stage(
+        AgentSettings(scan_mode="nspi", nspi_submode="read_only_mapping"),
+        hosts,
+        reporter=reporter,
+    )
+
+    inspected = [
+        event.hosts_done
+        for event in reporter.events
+        if event.kind == "modbus_host_inspected"
+    ]
+    deadline_events = [
+        event for event in reporter.events if event.kind == "ot_stage_deadline"
+    ]
+    assert ot_inspection.stage_deadline_reached
+    assert len(deadline_events) == 1
+    assert inspected == list(range(1, len(inspected) + 1))
+    assert deadline_events[0].units_skipped == len(hosts) - len(inspected)
+    assert mapped == [host.ip for host in hosts[: len(inspected)]]
+
+
 def test_default_ot_deadline_constants_are_non_none() -> None:
     now = perf_counter()
     stage_deadline = min_not_none(None, now + MAX_OT_STAGE_SECONDS)

@@ -445,7 +445,6 @@ def run_ot_inspection_stage(
         ),
     )
     hosts_done = 0
-    deadline_reached = False
     deadline_seconds: int | None = None
     effective_policy = policy or OtAutomationPolicy()
     digest_key = load_digest_key()
@@ -454,10 +453,7 @@ def run_ot_inspection_stage(
     for host in eligible_hosts:
         if cancel_event is not None and cancel_event.is_set():
             break
-        hit = _stage_deadline_hit(stage_deadline, stage_started)
-        if hit is not None:
-            deadline_reached = True
-            deadline_seconds = hit
+        if _stage_deadline_hit(stage_deadline, stage_started) is not None:
             break
         host_deadline = min_not_none(
             stage_deadline,
@@ -476,11 +472,6 @@ def run_ot_inspection_stage(
                 used=sum(service.requests_sent for service in host.industrial_services),
             )
             for service in host.industrial_services:
-                hit = _stage_deadline_hit(stage_deadline, stage_started)
-                if hit is not None:
-                    deadline_reached = True
-                    deadline_seconds = hit
-                    break
                 map_modbus_service(
                     host,
                     service,
@@ -491,8 +482,6 @@ def run_ot_inspection_stage(
                     budget=budget,
                     digest_key=digest_key,
                 )
-            if deadline_reached:
-                break
         correlate_fc43_fingerprints(host)
         hosts_done += 1
         _emit(
@@ -509,25 +498,23 @@ def run_ot_inspection_stage(
                 ip=host.ip,
             ),
         )
-        hit = _stage_deadline_hit(stage_deadline, stage_started)
-        if hit is not None:
-            deadline_reached = True
-            deadline_seconds = hit
-            break
-    if deadline_reached and deadline_seconds is not None:
-        reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
-        _emit(
-            reporter,
-            ScanEvent(
-                kind="ot_stage_deadline",
-                message=reason,
-                units_skipped=hosts_total - hosts_done,
-                units_total=hosts_total,
-                deadline_seconds=deadline_seconds,
-            ),
-        )
+    cancelled = cancel_event is not None and cancel_event.is_set()
+    if not cancelled:
+        deadline_seconds = _stage_deadline_hit(stage_deadline, stage_started)
+        if deadline_seconds is not None:
+            reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
+            _emit(
+                reporter,
+                ScanEvent(
+                    kind="ot_stage_deadline",
+                    message=reason,
+                    units_skipped=hosts_total - hosts_done,
+                    units_total=hosts_total,
+                    deadline_seconds=deadline_seconds,
+                ),
+            )
     result = OtInspectionResult(
-        stage_deadline_reached=deadline_reached,
+        stage_deadline_reached=deadline_seconds is not None,
         stage_deadline_seconds=deadline_seconds,
     )
     _emit(
