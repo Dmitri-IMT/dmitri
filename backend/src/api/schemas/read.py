@@ -111,21 +111,7 @@ class HostScanHistoryEntry(BaseModel):
     highest_severity: Severity | None = None
 
 
-class HostDetailResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    host_id: UUID
-    ip: IPv4Address
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
-    hostname: str
-    vendor: str
-    operating_system: OperatingSystemDetection | None = None
-    first_seen_at: datetime
-    last_seen_at: datetime
-    open_ports_count: Annotated[int, Field(ge=0)]
-    machine_type: MachineType
-    vulnerability_count: Annotated[int, Field(ge=0)]
-    highest_severity: Severity | None = None
+class HostDetailResponse(HostSummary):
     ports: list[HostPort]
     scan_history: list[HostScanHistoryEntry]
 

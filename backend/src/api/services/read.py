@@ -153,18 +153,7 @@ def get_host_detail(
     ]
 
     return HostDetailResponse(
-        host_id=host.id,
-        ip=host.ip,
-        mac=host.mac,
-        hostname=host.hostname,
-        vendor=host.vendor,
-        operating_system=_to_operating_system(host.operating_system_json),
-        first_seen_at=host.first_seen_at,
-        last_seen_at=host.last_seen_at,
-        open_ports_count=host.open_ports_count,
-        machine_type=host.machine_type or "unknown",
-        vulnerability_count=host.vulnerability_count,
-        highest_severity=host.highest_severity,
+        **dict(_to_host_summary(host)),
         ports=ports,
         scan_history=scan_history,
     )
