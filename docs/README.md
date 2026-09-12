@@ -70,6 +70,7 @@
 | [`ui/DESIGN-SYSTEM-RESEARCH.md`](ui/DESIGN-SYSTEM-RESEARCH.md) | Read the DMI-131 research record behind Foundations v2 |
 | [`ui/mockups/`](ui/mockups/) | See the approved screen mockups; v4 is the exemplar |
 | [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent, database, backend or frontend locally |
+| [`PI-INSTALLER.md`](PI-INSTALLER.md) | Deploy, provision and register a Raspberry Pi appliance on-site (vendor playbook) |
 
 ## Global conventions (apply everywhere)
 
