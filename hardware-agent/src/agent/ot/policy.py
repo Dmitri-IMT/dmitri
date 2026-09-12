@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import threading
+from collections.abc import Callable
 from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path, PureWindowsPath
 from time import perf_counter
@@ -13,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 AddressSpace = Literal["coil", "discrete_input", "holding_register", "input_register"]
 CaptureValues = Literal["none", "digest"]
+StopReason = Literal["cancel", "deadline"]
 
 MAX_MAPPING_RANGES_PER_PROFILE = 16
 MAX_MAPPING_RANGE_COUNT = 256
@@ -30,14 +32,35 @@ def min_not_none(*values: float | None) -> float | None:
     return min(present)
 
 
+def stop_reason(
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> StopReason | None:
+    if cancel_event is not None and cancel_event.is_set():
+        return "cancel"
+    if deadline is not None and perf_counter() >= deadline:
+        return "deadline"
+    return None
+
+
 def must_stop(
     cancel_event: threading.Event | None,
     deadline: float | None,
 ) -> bool:
-    return bool(
-        (cancel_event is not None and cancel_event.is_set())
-        or (deadline is not None and perf_counter() >= deadline)
-    )
+    return stop_reason(cancel_event, deadline) is not None
+
+
+def pace_or_stop(
+    sleep: Callable[[float], None],
+    delay: float,
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> StopReason | None:
+    reason = stop_reason(cancel_event, deadline)
+    if reason is not None:
+        return reason
+    sleep(delay)
+    return stop_reason(cancel_event, deadline)
 
 
 class OtPolicyError(ValueError):
