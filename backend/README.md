@@ -93,28 +93,6 @@ falhas de transporte e erros `5xx` devolvem o job para `pending`, respeitam
 tambem sao recuperados depois de `ENRICHMENT_STALE_AFTER_SECONDS`. Uma chave NVD permite
 configurar um intervalo menor conforme a cota concedida ao projeto.
 
-## Importar um scan JSON sem Raspberry
-
-O importador local usa o mesmo servico de persistencia do endpoint de ingestao, mas exige
-acesso direto ao banco e, por isso, deve ser usado apenas em desenvolvimento. O JSON e
-validado integralmente antes de qualquer escrita. Informe um agente existente:
-
-```powershell
-cd backend
-uv run backend-import-scan --file C:\caminho\scan.json --agent-id <UUID_DO_AGENTE>
-```
-
-Ou informe uma organizacao existente para criar/reutilizar um agente dedicado, sem gerar
-nem imprimir chave privada:
-
-```powershell
-uv run backend-import-scan --file C:\caminho\scan.json --org-id <UUID_DA_ORG>
-```
-
-O comando imprime `scan_id`, `agent_id` e as quantidades recebidas. Repetir o mesmo arquivo
-com o mesmo agente e idempotente. O worker deve permanecer em execucao para concluir o
-enrichment e a analise por IA.
-
 ## Endpoints
 
 As rotas registradas cobrem:

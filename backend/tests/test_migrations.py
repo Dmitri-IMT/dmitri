@@ -225,7 +225,6 @@ def test_alembic_artifacts_and_backend_package_configuration() -> None:
     assert project["project"]["scripts"] == {
         "backend-worker": "api.worker_main:main",
         "backend-bootstrap-org": "api.management.bootstrap_org:main",
-        "backend-import-scan": "api.management.import_scan:main",
         "backend-provision-agent": "api.management.provision_agent:main",
     }
 
