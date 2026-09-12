@@ -39,9 +39,15 @@ def upgrade() -> None:
         sa.Column("model", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("analysis_json", sa.JSON(), nullable=True),
-        sa.Column("context_version", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("prompt_version", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("context_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column(
+            "context_version", sqlmodel.sql.sqltypes.AutoString(), nullable=False
+        ),
+        sa.Column(
+            "prompt_version", sqlmodel.sql.sqltypes.AutoString(), nullable=False
+        ),
+        sa.Column(
+            "context_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=True
+        ),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("last_error_code", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),

@@ -104,7 +104,8 @@ export interface paths {
          * Get the persisted AI interpretation of a scan
          * @description Returns the current analysis state or its completed structured payload.
          *     This read-only endpoint never invokes an AI provider. Unknown scans and
-         *     scans owned by another organisation are both returned as not found.
+         *     scans owned by another organisation are both returned as not found. AI
+         *     disabled or missing provider credentials is reported as unavailable.
          */
         get: operations["getScanAIAnalysis"];
         put?: never;
