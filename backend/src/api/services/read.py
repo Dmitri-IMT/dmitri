@@ -13,6 +13,8 @@ from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
+    IndustrialServiceRecord,
+    ModbusUnitRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
@@ -21,6 +23,7 @@ from api.models.persistence import (
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
     FindingListResponse,
+    FindingModbusUnitRef,
     FindingRead,
     HostDetailResponse,
     HostListResponse,
@@ -178,7 +181,10 @@ def get_scan_detail(
         .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
         .where(FindingRecord.scan_id == scan_id)
     ).all()
-    findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
+    findings = [
+        _to_finding_read(session, finding, host_id)
+        for finding, host_id in finding_rows
+    ]
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -315,7 +321,10 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[_to_finding_read(finding, resolved) for finding, resolved in rows],
+        data=[
+            _to_finding_read(session, finding, resolved)
+            for finding, resolved in rows
+        ],
         total=total,
         page=page,
     )
@@ -394,7 +403,27 @@ def _to_operating_system(
     return OperatingSystemDetection.model_validate(value)
 
 
-def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:
+def _modbus_unit_ref(
+    session: Session, modbus_unit_id: int | None
+) -> FindingModbusUnitRef | None:
+    if modbus_unit_id is None:
+        return None
+    unit = session.get(ModbusUnitRecord, modbus_unit_id)
+    if unit is None:
+        return None
+    service = session.get(IndustrialServiceRecord, unit.industrial_service_id)
+    if service is None:
+        return None
+    return FindingModbusUnitRef(
+        id=unit.id,
+        unit_id=unit.unit_id,
+        port=service.port,
+    )
+
+
+def _to_finding_read(
+    session: Session, finding: FindingRecord, host_id: UUID | None
+) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -413,5 +442,6 @@ def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRea
         recommendation=finding.recommendation,
         evidence=finding.evidence,
         references=finding.references_json,
+        modbus_unit=_modbus_unit_ref(session, finding.modbus_unit_id),
         detected_at=finding.created_at,
     )

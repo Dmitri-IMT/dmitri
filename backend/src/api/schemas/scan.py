@@ -59,6 +59,7 @@ class FindingPayload(BaseModel):
     recommendation: constr(min_length=3)
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
+    unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
 
 
 class ScanIngestRequest(BaseModel):

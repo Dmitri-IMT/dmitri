@@ -41,6 +41,14 @@ class ScanHostView(BaseModel):
     ports: list[Port]
 
 
+class FindingModbusUnitRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Annotated[int, Field(ge=1)]
+    unit_id: Annotated[int, Field(ge=0, le=255)]
+    port: Annotated[int, Field(ge=1, le=65535)]
+
+
 class FindingRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -61,6 +69,7 @@ class FindingRead(BaseModel):
     recommendation: constr(min_length=3)
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
+    modbus_unit: FindingModbusUnitRef | None = None
     detected_at: datetime
 
 

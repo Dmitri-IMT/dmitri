@@ -180,3 +180,56 @@ def test_provision_agent_module_never_references_logging() -> None:
             referenced_names.add(node.id)
     assert "logging" not in referenced_names
     assert "logger" not in referenced_names
+
+
+def test_provision_agent_issues_one_ot_digest_key_per_org(
+    migrated_database,
+    administrative_session: Session,
+    seeded_org: Org,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    first_exit = provision_agent.main(
+        [
+            "--org-id",
+            str(seeded_org.id),
+            "--display-name",
+            "NSPi lab A",
+            "--public-key",
+            "44" * 32,
+        ]
+    )
+    assert first_exit == 0
+    first_output = capsys.readouterr().out
+    assert "ot_digest_key=" in first_output
+    first_key = next(
+        line.split("=", 1)[1]
+        for line in first_output.splitlines()
+        if line.startswith("ot_digest_key=")
+    )
+    assert len(first_key) == 64
+
+    administrative_session.refresh(seeded_org)
+    assert seeded_org.ot_digest_key == first_key
+
+    second_exit = provision_agent.main(
+        [
+            "--org-id",
+            str(seeded_org.id),
+            "--display-name",
+            "NSPi lab B",
+            "--public-key",
+            "55" * 32,
+        ]
+    )
+    assert second_exit == 0
+    second_output = capsys.readouterr().out
+    second_key = next(
+        line.split("=", 1)[1]
+        for line in second_output.splitlines()
+        if line.startswith("ot_digest_key=")
+    )
+    assert second_key == first_key
+
+    administrative_session.refresh(seeded_org)
+    assert seeded_org.ot_digest_key == first_key
+    assert administrative_session.exec(select(Agent)).all()

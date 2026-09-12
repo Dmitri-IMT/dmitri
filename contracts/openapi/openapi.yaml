@@ -2640,6 +2640,12 @@ components:
             type: string
             minLength: 1
           default: []
+        unit_id:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 255
     ScanIngestRequest:
       type: object
       additionalProperties: false
@@ -3516,6 +3522,25 @@ components:
             - viewer
         org_name:
           type: string
+    FindingModbusUnitRef:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - unit_id
+        - port
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        unit_id:
+          type: integer
+          minimum: 0
+          maximum: 255
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
     FindingRecord:
       type: object
       additionalProperties: false
@@ -3601,6 +3626,10 @@ components:
             type: string
             minLength: 1
           default: []
+        modbus_unit:
+          anyOf:
+            - $ref: '#/components/schemas/FindingModbusUnitRef'
+            - type: 'null'
         detected_at:
           type: string
           format: date-time
