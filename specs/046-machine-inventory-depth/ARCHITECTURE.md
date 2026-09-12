@@ -1,6 +1,6 @@
 # ARCHITECTURE — Deepened machine inventory
 
-> Linear: DMI-135. Implements `specs/045-machine-inventory-depth/TRUTH.md`.
+> Linear: DMI-135. Implements `specs/046-machine-inventory-depth/TRUTH.md`.
 > Supersedes `specs/042-design-system/DESIGN.md` §16 (four fenced-out items) and closes its §17 Q2.
 > `DESIGN.md` is written in parallel by the frontend-design-agent and owns every visual decision;
 > this document owns data, contracts, and the files that carry them.
