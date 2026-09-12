@@ -4,7 +4,7 @@ title: Backend database migrations
 description: The Alembic env and revisions through host inventory depth (`host_ports` / `host_findings`), with Supabase RLS and dmitri_runtime hardening.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T00:00:00Z
 ---
 
 # Backend database migrations
@@ -54,6 +54,8 @@ new table.
 | `upgrade()` (rev `20260904_18`, `scan_box_and_duration`) | Scan list/detail box attribution and duration columns used by the scan UI (spec 043). Head before the Home activity feed. | `backend/alembic/versions/20260904_18_scan_box_and_duration.py` |
 | `upgrade()` (rev `20260905_19`, `home_activity_feed`) | Creates `activity` (int PK, `org_id`, `kind` CHECK, `occurred_at`, nullable `actor_user_id` with no FK, nullable `subject_id`, JSONB `payload`). Partial unique index `uq_activity_org_kind_subject` on guarded kinds. Paging index `(org_id, occurred_at DESC, id DESC)`. RLS plus `SELECT, INSERT` for `dmitri_runtime` (no UPDATE/DELETE). | `backend/alembic/versions/20260905_19_home_activity_feed.py` |
 | `upgrade()` (rev `20260907_20`, `machine_inventory_depth`) | Adds nullable `hosts.machine_type` (CHECK of the nine literals plus NULL) and `hosts.vulnerability_count` (NOT NULL default 0). Creates empty `host_ports` and `host_findings` with unique constraints, indexes, RLS, and `SELECT/INSERT/UPDATE/DELETE` for `dmitri_runtime`. **No backfill.** Vocabulary is spelled literally in the revision, not imported. | `backend/alembic/versions/20260907_20_machine_inventory_depth.py` |
+| `upgrade()` (rev `20260908_19`, `operating_system_inventory`) | Adds nullable JSON `operating_system_json` to `scan_hosts` and `hosts`. Parent is `20260903_18`, so it forks from the `20260904_18` → `20260905_19` → `20260907_20` line. | `backend/alembic/versions/20260908_19_operating_system_inventory.py` |
+| `upgrade()` (rev `20260912_21`, `merge_inventory_and_os`) | Empty merge revision with `down_revision = ("20260907_20", "20260908_19")`, so Alembic has one `head` again. No schema change. Stepping back to either parent leaves two rows in `alembic_version`; `tests/conftest.py::_migrate` reads `get_current_heads()` for that reason. | `backend/alembic/versions/20260912_21_merge_inventory_and_os.py` |
 
 ## How it connects
 
