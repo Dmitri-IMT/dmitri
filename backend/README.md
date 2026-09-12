@@ -54,8 +54,11 @@ default:
 - `DATABASE_URL`
 - `KEV_API_BASE_URL`, `KEV_CACHE_TTL_HOURS`
 - `EPSS_API_BASE_URL`, `EPSS_CACHE_TTL_HOURS`
-- `NVD_API_BASE_URL`, `NVD_API_KEY`, `NVD_CACHE_TTL_HOURS`
-- `ENRICHMENT_POLL_INTERVAL_SECONDS`, `ENRICHMENT_BATCH_SIZE`
+- `NVD_API_BASE_URL`, `NVD_API_KEY`, `NVD_CACHE_TTL_HOURS`,
+  `NVD_MIN_REQUEST_INTERVAL_SECONDS`
+- `ENRICHMENT_POLL_INTERVAL_SECONDS`, `ENRICHMENT_BATCH_SIZE`,
+  `ENRICHMENT_MAX_ATTEMPTS`, `ENRICHMENT_RETRY_DELAY_SECONDS`,
+  `ENRICHMENT_STALE_AFTER_SECONDS`
 
 Sem banco Postgres configurado (ou com `DATABASE_URL` invalida/nao-Postgres), tanto a API
 quanto o worker falham ao iniciar — nao ha fallback para SQLite.
@@ -83,6 +86,34 @@ uv run python -m api.worker_main
 ```
 
 O worker faz polling na tabela `enrichment_jobs`, faz claim dos jobs `pending`, marca `running` durante a execucao e finaliza em `completed` ou `failed`. E um processo separado da API.
+
+Consultas NVD sem cache sao espacadas por seis segundos por padrao. Respostas `429`,
+falhas de transporte e erros `5xx` devolvem o job para `pending`, respeitam
+`Retry-After` quando presente e usam tentativas limitadas. Jobs abandonados em `running`
+tambem sao recuperados depois de `ENRICHMENT_STALE_AFTER_SECONDS`. Uma chave NVD permite
+configurar um intervalo menor conforme a cota concedida ao projeto.
+
+## Importar um scan JSON sem Raspberry
+
+O importador local usa o mesmo servico de persistencia do endpoint de ingestao, mas exige
+acesso direto ao banco e, por isso, deve ser usado apenas em desenvolvimento. O JSON e
+validado integralmente antes de qualquer escrita. Informe um agente existente:
+
+```powershell
+cd backend
+uv run backend-import-scan --file C:\caminho\scan.json --agent-id <UUID_DO_AGENTE>
+```
+
+Ou informe uma organizacao existente para criar/reutilizar um agente dedicado, sem gerar
+nem imprimir chave privada:
+
+```powershell
+uv run backend-import-scan --file C:\caminho\scan.json --org-id <UUID_DA_ORG>
+```
+
+O comando imprime `scan_id`, `agent_id` e as quantidades recebidas. Repetir o mesmo arquivo
+com o mesmo agente e idempotente. O worker deve permanecer em execucao para concluir o
+enrichment e a analise por IA.
 
 ## Endpoints
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -10,12 +13,24 @@ from api.core.config import get_settings
 from api.models.persistence import NvdCacheRecord
 
 
+class NvdTemporaryError(RuntimeError):
+    def __init__(self, code: str, *, retry_after_seconds: float) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retry_after_seconds = retry_after_seconds
+
+
 class NvdClient:
     def __init__(self) -> None:
         settings = get_settings()
         self.base_url = settings.nvd_api_base_url
         self.api_key = settings.nvd_api_key
         self.ttl = timedelta(hours=settings.nvd_cache_ttl_hours)
+        self.min_request_interval_seconds = (
+            settings.nvd_min_request_interval_seconds
+        )
+        self._request_lock = threading.Lock()
+        self._next_request_at = 0.0
 
     def query_by_cpe(self, session: Session, cpe: str) -> dict[str, Any]:
         return self._query(session, "cpe", cpe, {"cpeName": cpe})
@@ -41,10 +56,35 @@ class NvdClient:
         headers = (
             {"apiKey": self.api_key.get_secret_value()} if self.api_key else {}
         )
-        with httpx.Client(timeout=20.0, headers=headers) as client:
-            response = client.get(self.base_url, params=params)
-            response.raise_for_status()
-            payload = response.json()
+        try:
+            with self._request_lock:
+                delay = self._next_request_at - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+                self._next_request_at = (
+                    time.monotonic() + self.min_request_interval_seconds
+                )
+                with httpx.Client(timeout=20.0, headers=headers) as client:
+                    response = client.get(self.base_url, params=params)
+        except httpx.TransportError as exc:
+            raise NvdTemporaryError(
+                "nvd_unavailable",
+                retry_after_seconds=30.0,
+            ) from exc
+
+        status_code = response.status_code
+        if status_code == 429:
+            raise NvdTemporaryError(
+                "nvd_rate_limited",
+                retry_after_seconds=_retry_after_seconds(response.headers),
+            )
+        if status_code >= 500:
+            raise NvdTemporaryError(
+                "nvd_unavailable",
+                retry_after_seconds=30.0,
+            )
+        response.raise_for_status()
+        payload = response.json()
 
         expires_at = now + self.ttl
         if cached is None:
@@ -63,6 +103,22 @@ class NvdClient:
             cached.expires_at = expires_at
         session.commit()
         return payload
+
+
+def _retry_after_seconds(headers: httpx.Headers) -> float:
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return 30.0
+    try:
+        return max(float(raw), 0.0)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(raw)
+        except (TypeError, ValueError):
+            return 30.0
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max((retry_at - datetime.now(timezone.utc)).total_seconds(), 0.0)
 
 
 def parse_nvd_matches(payload: dict[str, Any]) -> list[dict[str, Any]]:

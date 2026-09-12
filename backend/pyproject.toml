@@ -28,6 +28,7 @@ dependencies = [
 backend-worker = "api.worker_main:main"
 backend-bootstrap-org = "api.management.bootstrap_org:main"
 backend-provision-agent = "api.management.provision_agent:main"
+backend-import-scan = "api.management.import_scan:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "pyyaml"]

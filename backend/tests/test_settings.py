@@ -69,8 +69,12 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("EPSS_CACHE_TTL_HOURS", "2")
     monkeypatch.setenv("NVD_API_BASE_URL", "https://example.test/nvd")
     monkeypatch.setenv("NVD_CACHE_TTL_HOURS", "3")
+    monkeypatch.setenv("NVD_MIN_REQUEST_INTERVAL_SECONDS", "0.75")
     monkeypatch.setenv("ENRICHMENT_POLL_INTERVAL_SECONDS", "1.5")
     monkeypatch.setenv("ENRICHMENT_BATCH_SIZE", "7")
+    monkeypatch.setenv("ENRICHMENT_MAX_ATTEMPTS", "4")
+    monkeypatch.setenv("ENRICHMENT_RETRY_DELAY_SECONDS", "20")
+    monkeypatch.setenv("ENRICHMENT_STALE_AFTER_SECONDS", "90")
     monkeypatch.setenv("AI_ENABLED", "true")
     monkeypatch.setenv("AI_PROVIDER", "groq")
     monkeypatch.setenv("AI_MODEL", "custom-model")
@@ -91,8 +95,12 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.epss_cache_ttl_hours == 2
     assert settings.nvd_api_base_url == "https://example.test/nvd"
     assert settings.nvd_cache_ttl_hours == 3
+    assert settings.nvd_min_request_interval_seconds == 0.75
     assert settings.enrichment_poll_interval_seconds == 1.5
     assert settings.enrichment_batch_size == 7
+    assert settings.enrichment_max_attempts == 4
+    assert settings.enrichment_retry_delay_seconds == 20
+    assert settings.enrichment_stale_after_seconds == 90
     assert settings.ai_enabled is True
     assert settings.ai_provider == "groq"
     assert settings.ai_model == "custom-model"
@@ -119,8 +127,12 @@ def test_carried_fields_default_when_env_unset(
         "NVD_API_BASE_URL",
         "NVD_CACHE_TTL_HOURS",
         "NVD_API_KEY",
+        "NVD_MIN_REQUEST_INTERVAL_SECONDS",
         "ENRICHMENT_POLL_INTERVAL_SECONDS",
         "ENRICHMENT_BATCH_SIZE",
+        "ENRICHMENT_MAX_ATTEMPTS",
+        "ENRICHMENT_RETRY_DELAY_SECONDS",
+        "ENRICHMENT_STALE_AFTER_SECONDS",
         "AI_ENABLED",
         "AI_PROVIDER",
         "AI_MODEL",
@@ -149,8 +161,12 @@ def test_carried_fields_default_when_env_unset(
     )
     assert settings.nvd_cache_ttl_hours == 12
     assert settings.nvd_api_key is None
+    assert settings.nvd_min_request_interval_seconds == 6.0
     assert settings.enrichment_poll_interval_seconds == 5.0
     assert settings.enrichment_batch_size == 10
+    assert settings.enrichment_max_attempts == 3
+    assert settings.enrichment_retry_delay_seconds == 30
+    assert settings.enrichment_stale_after_seconds == 120
     assert settings.ai_enabled is False
     assert settings.ai_provider == "groq"
     assert settings.ai_model == "openai/gpt-oss-120b"
@@ -317,6 +333,9 @@ def test_nvd_client_delivers_key_in_header_without_exposing_it(
     captured: dict[str, object] = {}
 
     class _FakeResponse:
+        status_code = 200
+        headers = nvd_module.httpx.Headers()
+
         def raise_for_status(self) -> None:
             return None
 

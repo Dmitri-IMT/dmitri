@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     )
     nvd_api_key: SecretStr | None = Field(default=None, alias="NVD_API_KEY")
     nvd_cache_ttl_hours: int = Field(default=12, alias="NVD_CACHE_TTL_HOURS")
+    nvd_min_request_interval_seconds: float = Field(
+        default=6.0,
+        ge=0,
+        le=60,
+        alias="NVD_MIN_REQUEST_INTERVAL_SECONDS",
+    )
     enrichment_poll_interval_seconds: float = Field(
         default=5.0,
         alias="ENRICHMENT_POLL_INTERVAL_SECONDS",
@@ -67,6 +73,24 @@ class Settings(BaseSettings):
     enrichment_batch_size: int = Field(
         default=10,
         alias="ENRICHMENT_BATCH_SIZE",
+    )
+    enrichment_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        alias="ENRICHMENT_MAX_ATTEMPTS",
+    )
+    enrichment_retry_delay_seconds: float = Field(
+        default=30.0,
+        ge=0,
+        le=3600,
+        alias="ENRICHMENT_RETRY_DELAY_SECONDS",
+    )
+    enrichment_stale_after_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        le=3600,
+        alias="ENRICHMENT_STALE_AFTER_SECONDS",
     )
     jwt_signing_secret: SecretStr = Field(alias="JWT_SIGNING_SECRET")
     access_token_ttl_minutes: int = Field(

@@ -10,6 +10,7 @@ from api.services.ai.factory import build_ai_provider
 from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
+from api.services.nvd import NvdClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,14 @@ def run_worker_loop() -> None:
         poll_interval,
         batch_size,
     )
+    nvd_client = NvdClient()
 
     while True:
         try:
-            processed = run_worker_once(batch_size=batch_size)
+            processed = run_worker_once(
+                batch_size=batch_size,
+                nvd_client=nvd_client,
+            )
             if processed == 0:
                 time.sleep(poll_interval)
         except Exception:
@@ -35,7 +40,11 @@ def run_worker_loop() -> None:
             time.sleep(poll_interval)
 
 
-def run_worker_once(*, batch_size: int | None = None) -> int:
+def run_worker_once(
+    *,
+    batch_size: int | None = None,
+    nvd_client: NvdClient | None = None,
+) -> int:
     settings = get_settings()
     resolved_batch_size = batch_size or settings.enrichment_batch_size
 
@@ -47,10 +56,17 @@ def run_worker_once(*, batch_size: int | None = None) -> int:
             # must not stop enrichment from draining its queue.
             logger.exception("stale command sweep failed; continuing")
             session.rollback()
-        enrichment_count = process_pending_enrichment_jobs(
-            session,
-            batch_size=resolved_batch_size,
-        )
+        if nvd_client is None:
+            enrichment_count = process_pending_enrichment_jobs(
+                session,
+                batch_size=resolved_batch_size,
+            )
+        else:
+            enrichment_count = process_pending_enrichment_jobs(
+                session,
+                batch_size=resolved_batch_size,
+                client=nvd_client,
+            )
         provider = build_ai_provider(settings)
         if provider is None:
             return enrichment_count
