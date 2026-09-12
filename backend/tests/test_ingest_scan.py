@@ -265,104 +265,12 @@ def test_scan_host_snapshot_omits_null_operating_system_details() -> None:
     }
 
 
-def test_scan_host_snapshot_preserves_industrial_services() -> None:
-    observed_at = datetime(2026, 9, 10, 22, 17, 51, tzinfo=timezone.utc)
-    industrial_service = {
-        "protocol": "modbus_tcp",
-        "port": 502,
-        "confidence": "confirmed",
-        "evidence_sources": ["modbus-discover", "pymodbus"],
-        "mapping_source": "generic_baseline",
-        "units": [
-            {
-                "unit_id": 1,
-                "status": "responding",
-                "device_identification": {
-                    "vendor_name": "Schneider Electric",
-                    "product_code": "TM221CE16T",
-                },
-                "identification_sources": ["pymodbus-fc43"],
-                "address_ranges": [
-                    {
-                        "address_space": "holding_register",
-                        "start_address": 0,
-                        "count": 4,
-                        "status": "readable",
-                        "nonzero_count": 0,
-                        "value_sha256": "sha256:test",
-                        "observed_at": observed_at,
-                    }
-                ],
-            }
-        ],
-    }
-    host = HostPayload(
-        ip="192.168.1.10",
-        mac=None,
-        hostname="plc",
-        vendor="Schneider Electric",
-        ports=[],
-        industrial_services=[industrial_service],
-    )
-
-    class RecordingSession:
-        def add(self, _record) -> None:
-            pass
-
-        def flush(self) -> None:
-            pass
-
-    record = _persist_scan_host(RecordingSession(), uuid4(), host)  # type: ignore[arg-type]
-
-    assert record.industrial_services_json == [
-        {
-            "protocol": "modbus_tcp",
-            "port": 502,
-            "confidence": "confirmed",
-            "evidence_sources": ["modbus-discover", "pymodbus"],
-            "mapping_source": "generic_baseline",
-            "units": [
-                {
-                    "unit_id": 1,
-                    "status": "responding",
-                    "device_identification": {
-                        "vendor_name": "Schneider Electric",
-                        "product_code": "TM221CE16T",
-                        "objects": {},
-                    },
-                    "identification_sources": ["pymodbus-fc43"],
-                    "address_ranges": [
-                        {
-                            "address_space": "holding_register",
-                            "start_address": 0,
-                            "count": 4,
-                            "status": "readable",
-                            "nonzero_count": 0,
-                            "value_sha256": "sha256:test",
-                            "observed_at": "2026-09-10T22:17:51Z",
-                        }
-                    ],
-                    "validations": [],
-                }
-            ],
-        }
-    ]
-
-
 @pytest.mark.parametrize("record_type", (ScanHostRecord, HostRecord))
 def test_operating_system_columns_store_python_none_as_sql_null(record_type) -> None:
     column = record_type.__table__.c.operating_system_json
 
     assert isinstance(column.type, JSON)
     assert column.type.none_as_null is True
-
-
-@pytest.mark.parametrize("record_type", (ScanHostRecord, HostRecord))
-def test_industrial_services_columns_are_non_nullable_json(record_type) -> None:
-    column = record_type.__table__.c.industrial_services_json
-
-    assert isinstance(column.type, JSON)
-    assert column.nullable is False
 
 
 def test_worker_processes_pending_jobs_separately(

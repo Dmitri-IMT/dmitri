@@ -322,10 +322,6 @@ def _persist_scan_host(
             if host.operating_system is not None
             else None
         ),
-        industrial_services_json=[
-            service.model_dump(mode="json", exclude_none=True)
-            for service in host.industrial_services
-        ],
     )
     session.add(record)
     session.flush()
