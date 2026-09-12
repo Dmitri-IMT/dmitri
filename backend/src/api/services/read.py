@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, case, cast
+from sqlalchemy import Row, Select, and_, case, cast
 from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
@@ -192,15 +193,11 @@ def get_scan_detail(
         for scan_host in scan_hosts
     ]
 
-    finding_rows = session.exec(
-        _join_finding_life(
-            _finding_life_select().outerjoin(
-                ScanHostRecord,
-                FindingRecord.scan_host_id == ScanHostRecord.id,
-            )
-        ).where(FindingRecord.scan_id == scan_id)
-    ).all()
-    findings = [_to_finding_read(*row) for row in finding_rows]
+    findings = to_finding_reads(
+        session.exec(
+            finding_read_query().where(FindingRecord.scan_id == scan_id)
+        ).all()
+    )
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -309,18 +306,11 @@ def list_findings(
     page: int = 1,
     per_page: int = 20,
 ) -> FindingListResponse:
-    base = _finding_life_select().join(
+    base = finding_read_query().join(
         ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id
     ).where(ScanRecord.org_id == org_id)
     if host_id is not None:
-        base = base.join(
-            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
-        ).where(ScanHostRecord.host_id == host_id)
-    else:
-        base = base.outerjoin(
-            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
-        )
-    base = _join_finding_life(base)
+        base = base.where(ScanHostRecord.host_id == host_id)
     if severity is not None:
         base = base.where(FindingRecord.severity == severity)
     if scan_id is not None:
@@ -336,7 +326,7 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[_to_finding_read(*row) for row in rows],
+        data=to_finding_reads(rows),
         total=total,
         page=page,
     )
@@ -408,25 +398,40 @@ def _to_host_summary(host: HostRecord) -> HostSummary:
     )
 
 
-def _finding_life_select():
-    return select(
-        FindingRecord,
-        ScanHostRecord.host_id,
-        HostRecord.hostname,
-        HostFindingRecord,
+def finding_read_query() -> Select:
+    """Findings joined to their machine and its finding life.
+
+    Callers add their own filters, sort and paging, then map the rows with
+    `to_finding_reads`.
+    """
+    return (
+        select(
+            FindingRecord,
+            ScanHostRecord.host_id,
+            HostRecord.hostname,
+            HostFindingRecord,
+        )
+        .outerjoin(
+            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
+        )
+        .outerjoin(HostRecord, ScanHostRecord.host_id == HostRecord.id)
+        .outerjoin(
+            HostFindingRecord,
+            and_(
+                HostFindingRecord.host_id == HostRecord.id,
+                HostFindingRecord.dedupe_key == FindingRecord.dedupe_key,
+            ),
+        )
     )
 
 
-def _join_finding_life(query):
-    return query.outerjoin(
-        HostRecord, ScanHostRecord.host_id == HostRecord.id
-    ).outerjoin(
-        HostFindingRecord,
-        and_(
-            HostFindingRecord.host_id == HostRecord.id,
-            HostFindingRecord.dedupe_key == FindingRecord.dedupe_key,
-        ),
-    )
+def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
+    return [
+        _to_finding_read(
+            row.FindingRecord, row.host_id, row.hostname, row.HostFindingRecord
+        )
+        for row in rows
+    ]
 
 
 def _to_finding_read(

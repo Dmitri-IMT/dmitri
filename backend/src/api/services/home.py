@@ -21,7 +21,6 @@ from api.models.identity import User
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
-    ScanHostRecord,
     ScanRecord,
 )
 from api.schemas.home import (
@@ -52,14 +51,8 @@ def page_attention(
         return HomeAttentionPage(data=[], total=0, page=page)
 
     base = (
-        read._join_finding_life(
-            read._finding_life_select()
-            .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
-            .outerjoin(
-                ScanHostRecord,
-                FindingRecord.scan_host_id == ScanHostRecord.id,
-            )
-        )
+        read.finding_read_query()
+        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
         .where(ScanRecord.org_id == org_id)
         .where(FindingRecord.scan_id == scan_id)
         .where(FindingRecord.severity.in_(ATTENTION_SEVERITIES))
@@ -76,7 +69,7 @@ def page_attention(
     ).all()
 
     return HomeAttentionPage(
-        data=[read._to_finding_read(*row) for row in rows],
+        data=read.to_finding_reads(rows),
         total=total,
         page=page,
     )
