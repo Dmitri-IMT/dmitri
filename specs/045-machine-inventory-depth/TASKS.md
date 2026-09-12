@@ -325,9 +325,10 @@ Task 7's schemas to return the new fields, which is why 7 lands before it.
     only when both are absent; the row's aria label follows the same order.
   - Home issues **no** second request for the name — it is a field on the record.
   - A machine renamed since its problem appeared shows its **current** name.
-  - `machineLabel()` prefers `finding.host_hostname`, then the `ScanHostView` snapshot, then the
-    address. `hostFindingColumns()` and `scanFindingColumns()` show `first_seen_at`.
-  - `FindingsTable.tsx` is not modified — it only picks between the two column sets.
+  - `machineLabel()` is `finding.host_hostname`, then the address; the `ScanHostView` snapshot is
+    not read (revised 2026-09-12, PR #143 review). `hostFindingColumns()` and
+    `scanFindingColumns()` show `first_seen_at`.
+  - `FindingsTable.tsx` only picks between the two column sets; its `hosts` prop is removed.
   - `data-testid`s match `DESIGN.md` §7.3.
 - **Status**: COMPLETED
 - **Review Rejections**: 0

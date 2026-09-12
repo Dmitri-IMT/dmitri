@@ -694,24 +694,25 @@ Every path an implementer creates or touches. No other file under `frontend/src/
 | --- | --- |
 | `lib/machineType.ts` | The nine-value label map and the unknown check. One place owns the vocabulary, so no screen hand-writes `Router`. |
 | `lib/machineType.test.ts` | Every one of the nine values maps to its label or to the unknown branch; `TV` stays capitalised. |
-| `pages/hosts/QuietMachineGroup.tsx` | The quiet group's own read, its pager, and its loading and error rows. It owns the second `GET /hosts` so `Network.tsx` stays a page and `DataTable` stays generic. |
-| `pages/hosts/QuietMachineGroup.test.tsx` | Independence from the active list; the whole-inventory count; the pager's name; the loading and error rows. |
+| `pages/hosts/QuietMachineGroup.tsx` | The quiet group's own read, its pager, and its loading and error rows. It owns the second `GET /hosts` so `Network.tsx` stays a page and `DataTable` stays generic. The quiet page number stays in `Network.tsx`: the table remounts the group whenever the active list loads, and the page must survive that. |
+| `pages/Network.quiet.test.tsx` | Independence from the active list; the whole-inventory count; the pager's name; the loading and error rows; the quiet page surviving an active-list page change. The group is tested through the page that mounts it, so there is no separate `QuietMachineGroup.test.tsx`. |
 
 ### 6.2 Changed
 
 | File | Change |
 | --- | --- |
 | `pages/hosts/hostListColumns.tsx` | `vendor` → machine type; `open_ports_count` → vulnerability count; `align: 'right'` removed; the vulnerability column becomes `sortable: true`; the quiet sub-line gains its 1-week singular. |
-| `pages/Network.tsx` | Reads the active list with the activity filter; renders the quiet group from the new component instead of `partitionQuietHosts`; passes the whole-inventory quiet count to the group label. |
-| `components/ListSurface.tsx` | `partitionRows` is replaced by a slot that takes an already-rendered collapsed group, so the group can own its own query. `DataTable`'s group contract is otherwise unchanged. |
-| `components/DataTable.tsx` | The collapsed group accepts rendered content (skeleton, error row, rows + pager row) rather than only a row array. Nothing else changes — not the 56px row, not the sort affordance, not `align`. |
+| `pages/Network.tsx` | Reads the active list with the activity filter; renders the quiet group from the new component instead of `partitionQuietHosts`; passes the whole-inventory quiet count to the group label. It holds only the group's open state and its page number. |
+| `components/ListSurface.tsx` | `partitionRows` is replaced by a `collapsedGroup` slot that it passes to `DataTable` unchanged, so the group can own its own query. |
+| `components/DataTable.tsx` | The collapsed group is `count`, `label`, `testId`, `isOpen`, `onOpenChange` and `content`. `DataTable` draws the disclosure row; `content` draws the open group's `tbody` (skeleton, error row, or rows + pager row) and receives the group's `id`, the column count, and `DataTable`'s own row and spanning-row renderers, so quiet rows keep the same shape, tone and link. The group has no `rows`, `isPending`, `error`, `footer` or `columns` of its own. Nothing else changes — not the 56px row, not the sort affordance, not `align`. |
 | `lib/hostLastSeen.ts` | The quiet threshold becomes 7 days. `isQuietHost` stays exported for the row tone; `partitionQuietHosts` is **deleted** — the split is server-side now. |
 | `lib/hostLastSeen.test.ts` | 8 days is quiet, 6 days is not; the singular week. |
 | `api/hosts.ts` | The activity filter param, the new `sort_by` value in `HOST_SORT_DEFAULT_ORDER` (descending first), and a `listQuietHosts` read or an activity argument on `listHosts`. |
 | `api/queryKeys.ts` | A key for the quiet read, distinct from the active list's, so paging one never invalidates the other. |
 | `pages/home/AttentionTable.tsx` | The `Machine` cell renders the name, falls back to the address in mono, then to `EmptyMark`; the row's accessible name uses the same value. |
 | `pages/hosts/HostIdentity.tsx` | The identity line gains type and the open-port phrase; the unknown-type omission. |
-| `pages/scans/findingColumns.tsx` | **`hostFindingColumns` only** — gains `First seen`, drops `align: 'right'` from `Port`, re-shares to 40/10/18/16/16. `scanFindingColumns` is untouched (§5). |
+| `pages/scans/findingColumns.tsx` | `hostFindingColumns` gains `First seen`, drops `align: 'right'` from `Port`, re-shares to 40/10/18/16/16. `scanFindingColumns` gains `First seen` too (TASKS Task 11) and takes no arguments: its `Machine` cell is `host_hostname`, then `host_ip` — the machine's current name, the same one Network and Home show. The at-scan-time `ScanHostView.hostname` is no longer read. Its `Port` alignment is untouched (§5). |
+| `pages/scans/FindingsTable.tsx`, `pages/ScanDetail.tsx` | The `hosts` prop leaves `FindingsTable`, since `scanFindingColumns` no longer needs it. |
 | `pages/hosts/portColumns.tsx` | Gains `Last seen`; re-shares to 34/14/30/22. |
 | `pages/hosts/HostScanHistoryTable.tsx` | `Services` drops `align: 'right'`. |
 | `types/openapi.d.ts` | Regenerated from the contract. **Never hand-edited** — it is generated output. |

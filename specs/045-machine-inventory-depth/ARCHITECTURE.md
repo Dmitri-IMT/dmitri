@@ -268,7 +268,14 @@ Given `host`, `scan_record`, `scan_host`, with `ts = scan_record.timestamp`:
    whose `dedupe_key` is not in `seen` gets `fixed_at = ts`.
 5. **Type.** If `is_latest`: `host.machine_type = classify_machine_type(scan_host.vendor, open_services)`
    where `open_services` are the `(port, service_name)` pairs from step 2.
-6. **Count.** If `is_latest`: `host.vulnerability_count = count(host_findings where host_id = host.id and fixed_at is null)`.
+6. **Count.** If `is_latest`: `host.vulnerability_count` = the machine's `host_findings` rows with `fixed_at is null`.
+
+**Query shape.** Revised 2026-09-12 after the PR #143 review. The body loads the machine's
+`host_ports` and its `host_findings` once each, keys them by `(port, protocol)` and `dedupe_key`,
+applies steps 2–6 in memory, and flushes once. Steps 4 and 6 read the same loaded rows, so there
+is no per-port or per-finding `SELECT` and no `COUNT` query. The enrichment worker runs this body
+after every CPE job (§4.4), so its query count must not grow with a machine's ports or findings —
+`tests/test_inventory_reconcile.py` asserts that.
 
 Steps 4–6 are skipped entirely when `is_latest` is false, so an out-of-order older scan can lower a
 `first_seen_at` — which is true — but can never stamp a `fixed_at`, retype a machine, or rewrite the
@@ -391,15 +398,21 @@ def _to_finding_read(
   `host_findings` row (a host-less finding, or a finding from before this feature).
 - `detected_at` keeps its current meaning (this scan's `created_at`) and is untouched.
 
-Every caller adds the two outer joins:
-`.outerjoin(HostRecord, ScanHostRecord.host_id == HostRecord.id)` and
-`.outerjoin(HostFindingRecord, and_(HostFindingRecord.host_id == HostRecord.id, HostFindingRecord.dedupe_key == FindingRecord.dedupe_key))`.
+Revised 2026-09-12 after the PR #143 review: no caller builds these joins or calls
+`_to_finding_read` itself. `read.py` exposes two public functions:
+
+- `finding_read_query()` — the select of `FindingRecord`, `ScanHostRecord.host_id`,
+  `HostRecord.hostname` and `HostFindingRecord`, with `scan_hosts`, `hosts` and `host_findings`
+  already outer-joined.
+- `to_finding_reads(rows)` — maps those rows to `FindingRead` by name, not by tuple position.
+
+Callers add only their own filters, joins, sort and paging.
 
 | Caller | Ref |
 |---|---|
-| `list_findings()` | `read.py:274` — joins added to `base`; the `func.count()` over `base.subquery()` still works because the joins are outer and add no rows. |
+| `list_findings()` | `read.py` — `base` starts from `finding_read_query()`; the `host_id` filter is `WHERE scan_hosts.host_id = :id` over the outer join, which returns the same rows as the old inner join. The `func.count()` over `base.subquery()` still works because the joins are outer and add no rows. |
 | `get_scan_detail()` | `read.py:170` |
-| `home.page_attention()` | `backend/src/api/services/home.py:50,69` — calls `read._to_finding_read` directly, so its query must gain the same joins. This is what gives Home the machine's name (user story 4) with no new request. |
+| `home.page_attention()` | `backend/src/api/services/home.py` — starts from `read.finding_read_query()` and adds only the attention filters and sort. It imports no `HostFindingRecord` and no private `read` helper. This is what gives Home the machine's name (user story 4) with no new request. |
 
 `_to_host_summary()` (`read.py:368`) gains `machine_type=host.machine_type or "unknown"` and
 `vulnerability_count=host.vulnerability_count`.
@@ -481,8 +494,10 @@ params object, so the active and quiet queries get distinct cache entries automa
 
 ### 8.2 `src/pages/Network.tsx`
 
-Two queries against one endpoint: the active page (`group: 'active'`, its own `page` state) and the
-quiet page (`group: 'quiet'`, its own `page` state, `enabled` only once the group is opened). The
+Two queries against one endpoint: the active page (`group: 'active'`, its own `page` state) in
+`Network.tsx`, and the quiet page (`group: 'quiet'`) in `pages/hosts/QuietMachineGroup.tsx`, which
+mounts only while the group is open. `Network.tsx` keeps the group's open state and its page number;
+the page lives there because the table remounts the group whenever the active list loads. The
 group header's count is `query.data.quiet_total` from the **active** response — a whole-inventory
 number, not a page's. `Pagination` for each group uses that group's own `total`.
 
@@ -517,7 +532,7 @@ the caller knows which group it is rendering, so no row has to work it out from 
 | `src/pages/hosts/HostPortsTable.tsx` | Same retype. |
 | `src/pages/HostDetail.tsx` | Renders `machine_type`, keeps `vendor` and `open_ports_count` — TRUTH keeps both, on this page. |
 | `src/pages/home/AttentionTable.tsx` | Machine column shows `finding.host_hostname ?? finding.host_ip`, falls back to `EmptyMark` when both are absent; the row's aria label follows. |
-| `src/pages/scans/findingColumns.tsx` | `hostFindingColumns()` and `scanFindingColumns()` show the finding's `first_seen_at` ("is this new?"); `machineLabel()` prefers `finding.host_hostname` — the machine's current name — before falling back to the `ScanHostView` snapshot and then the address. Column set and copy are `DESIGN.md`'s. `FindingsTable.tsx` itself needs no change; it only picks between the two column sets. |
+| `src/pages/scans/findingColumns.tsx` | `hostFindingColumns()` and `scanFindingColumns()` show the finding's `first_seen_at` ("is this new?"); `machineLabel()` is `finding.host_hostname || finding.host_ip` — the machine's current name, then the address (revised 2026-09-12: the `ScanHostView` snapshot fallback is gone, so a machine has one name across the app). Column set and copy are `DESIGN.md`'s. `FindingsTable.tsx` loses its `hosts` prop, which only fed that fallback. |
 | `src/test/mswHandlers.ts` | `hostFixtures` gain `machine_type` and `vulnerability_count`; the `/hosts` handler implements the `group` split and returns `quiet_total`; finding fixtures gain the four new fields. |
 
 No new Axios instance, no new query key namespace, no new provider.
@@ -592,9 +607,11 @@ and §6.2, which name frontend files this table omitted:
 | `frontend/src/components/ListSurface.tsx` | Changed | `DESIGN.md` §6.2 requires it. `partitionRows` gives way to a `collapsedGroup` slot plus `emptyRow`, so the blank state yields to a non-empty group (the **All quiet** state, §2.5). |
 | `frontend/src/components/LoadingSkeleton.tsx` | Changed | Optional `id` / `testId` so the group's own skeleton can carry `aria-controls`' target and `network-quiet-loading` (§2.4). |
 
-`frontend/src/pages/hosts/QuietMachineGroup.tsx`, which `DESIGN.md` §6.1 also names, is
-**deliberately not created**. The quiet group is three hooks in `Network.tsx`; a component whose
-only job is to hold one `useQuery` for one caller adds a file and buys nothing.
+`frontend/src/pages/hosts/QuietMachineGroup.tsx`, which `DESIGN.md` §6.1 names, **is created**.
+Revised 2026-09-12 after the PR #143 review: keeping the quiet read in `Network.tsx` pushed a
+second async table protocol (`isPending`, `error`, `footer`, `columns`) into `DataTable`'s group.
+The group now owns its query, skeleton, error row and pager, and `DataTable`'s group only hosts
+that content (`DESIGN.md` §6.2).
 
 ---
 

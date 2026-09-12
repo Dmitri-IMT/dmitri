@@ -3,6 +3,17 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-12
+
+* **Update**: PR #143 review fixes for spec 045. `DataTable`'s collapsed group is now a slot
+  (`count` / `label` / `isOpen` / `onOpenChange` / `content`, plus `DataTableGroupBody`); the new
+  `QuietMachineGroup` owns the quiet query, skeleton, error row and pager, while `Network` keeps
+  `quietPage`. `read.finding_read_query()` / `to_finding_reads()` replace the private finding-life
+  helpers for `list_findings`, `get_scan_detail` and `home.page_attention`. Inventory reconcile loads
+  `host_ports` / `host_findings` once per machine. `scanFindingColumns()` takes no arguments and
+  names the machine by `host_hostname`, then address; `FindingsTable` lost `hosts`. Touched:
+  `frontend/tables.md`, `frontend/screens.md`, `backend/services.md`.
+
 ## 2026-09-11
 
 * **Update**: spec 045 machine inventory depth (DMI-135). Documented `classify_machine_type`,
