@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and seventeen revisions through the agents target-subnet column, with Supabase RLS and dmitri_runtime hardening.
+description: The Alembic env and revisions through host inventory depth and industrial observations, with Supabase RLS and dmitri_runtime hardening.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-09-12T22:45:00Z
 ---
 
 # Backend database migrations
@@ -13,7 +13,7 @@ timestamp: 2026-08-12T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Seventeen chained revisions build the
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. The revision history builds the
 scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
 and the `findings.finding_id` UUID — then the auth session tables (spec 016, DMI-60) and the
@@ -22,7 +22,8 @@ delivery by `20260731_13` (spec 022, DMI-64) — then the device-auth
 schema (spec 017, DMI-61): `agent_nonces`, globally-unique user emails, and the `agents` secret
 columns replaced by a plaintext `public_key`. Each DDL-only step is followed by Supabase
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
-new table.
+new table. Merge revisions join the activity, OS-inventory, and machine-inventory heads; industrial
+observations land as `20260912_22`; `20260912_23` is the single current head.
 
 ## Key classes / functions
 
@@ -53,6 +54,11 @@ new table.
 | `upgrade()` (rev `20260811_17`, `agents_target_subnet`) | Adds one nullable, unindexed `agents.target_subnet` (`sa.String`) — the network an admin chose for a Pi. No grant statement: `agents` already grants `SELECT, INSERT, UPDATE` to `dmitri_runtime` from `20260723_07`, so `RUNTIME_GRANTS_BY_TABLE` is unchanged. `downgrade()` is a single `drop_column`. | `backend/alembic/versions/20260811_17_agents_target_subnet.py` |
 | `upgrade()` (rev `20260904_18`, `scan_box_and_duration`) | Scan list/detail box attribution and duration columns used by the scan UI (spec 043). Head before the Home activity feed. | `backend/alembic/versions/20260904_18_scan_box_and_duration.py` |
 | `upgrade()` (rev `20260905_19`, `home_activity_feed`) | Creates `activity` (int PK, `org_id`, `kind` CHECK, `occurred_at`, nullable `actor_user_id` with no FK, nullable `subject_id`, JSONB `payload`). Partial unique index `uq_activity_org_kind_subject` on guarded kinds. Paging index `(org_id, occurred_at DESC, id DESC)`. RLS plus `SELECT, INSERT` for `dmitri_runtime` (no UPDATE/DELETE). | `backend/alembic/versions/20260905_19_home_activity_feed.py` |
+| `upgrade()` (rev `20260907_20`, `machine_inventory_depth`) | Adds nullable `hosts.machine_type` (CHECK of the nine literals plus NULL) and `hosts.vulnerability_count` (NOT NULL default 0). Creates empty `host_ports` and `host_findings` with unique constraints, indexes, RLS, and `SELECT/INSERT/UPDATE/DELETE` for `dmitri_runtime`. **No backfill.** Vocabulary is spelled literally in the revision, not imported. | `backend/alembic/versions/20260907_20_machine_inventory_depth.py` |
+| `upgrade()` (rev `20260908_19`, `operating_system_inventory`) | Adds nullable JSON `operating_system_json` to `scan_hosts` and `hosts`. Parent is `20260903_18`, so it forks from the `20260904_18` → `20260905_19` → `20260907_20` line. | `backend/alembic/versions/20260908_19_operating_system_inventory.py` |
+| `upgrade()` (rev `20260912_21`, `merge_inventory_and_os`) | Empty merge revision with `down_revision = ("20260907_20", "20260908_19")`, so Alembic has one `head` again. No schema change. Stepping back to either parent leaves two rows in `alembic_version`; `tests/conftest.py::_migrate` reads `get_current_heads()` for that reason. | `backend/alembic/versions/20260912_21_merge_inventory_and_os.py` |
+| `upgrade()` (rev `20260912_22`, `industrial_observations`) | Creates `industrial_services` and `modbus_units`; adds `findings.modbus_unit_id` and `orgs.ot_digest_key`; RLS and `dmitri_runtime` grants. Parent is `20260912_20`. Renumbered from this branch's original `20260912_21` so it does not collide with main's inventory merge. | `backend/alembic/versions/20260912_22_industrial_observations.py` |
+| `upgrade()` (rev `20260912_23`, `merge_industrial_and_inventory`) | Empty merge of `20260912_21` (inventory+OS) and `20260912_22` (industrial observations). Current head. | `backend/alembic/versions/20260912_23_merge_industrial_and_inventory.py` |
 
 ## How it connects
 
@@ -105,6 +111,11 @@ new table.
   `UPDATE`, because a nonce is immutable and prunable. Every other table keeps the append/update
   default. `test_migrations.py` therefore uses `RUNTIME_GRANTS_BY_TABLE` rather than one global set.
 - `alembic.ini` sets `prepend_sys_path = src` so `import api...` resolves during migrations.
+- Head is a single revision. `20260912_20` is an empty merge of `20260905_19` (activity feed) and
+  `20260908_19` (OS inventory). `20260912_21` on main is the empty merge of inventory depth and OS.
+  Do not rewrite released revisions. `20260912_22` adds `industrial_services`, `modbus_units`,
+  `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
+  `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations
 

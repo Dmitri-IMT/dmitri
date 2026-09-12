@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from agent.ot.modbus.client import (
     ModbusClientController,
     ModbusReadSession,
+    _decode_device_information,
     probe_device_identification,
 )
+from agent.ot.untrusted import MAX_DEVICE_STRING_CHARS
 from pymodbus.exceptions import ModbusIOException
 
 
@@ -134,18 +138,17 @@ def test_pymodbus_io_error_is_normalised_as_timeout() -> None:
     assert "No response received" in (unit.error or "")
 
 
-def test_read_only_adapter_has_no_write_or_raw_pdu_surface() -> None:
-    import agent.ot.modbus.client as client_module
+def test_read_only_adapter_blocks_reachable_write_path() -> None:
+    from agent.ot.modbus.readonly import WriteAttemptError
 
-    forbidden = {
-        "write_coil",
-        "write_coils",
-        "write_register",
-        "write_registers",
-        "execute",
-    }
-    assert forbidden.isdisjoint(vars(client_module))
-    assert forbidden.isdisjoint(vars(ModbusReadSession))
+    with ModbusReadSession(
+        "192.168.10.30",
+        502,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: _Client(_Response()),
+    ) as session:
+        with pytest.raises(WriteAttemptError):
+            session._client.write_register(0, 1)
 
 
 class _ReadResponse:
@@ -299,3 +302,30 @@ def test_cancelled_controller_prevents_connect_and_request() -> None:
     assert client.calls == []
     assert client.closed is True
     assert unit.status == "skipped"
+
+
+def test_fc43_bounds_oversized_identification_and_sets_truncated() -> None:
+    long_vendor = "V" * (MAX_DEVICE_STRING_CHARS + 10)
+    identification = _decode_device_information({0: long_vendor.encode("utf-8")})
+
+    assert identification is not None
+    assert len(identification.vendor_name or "") == MAX_DEVICE_STRING_CHARS
+    assert identification.truncated is True
+
+
+def test_fc43_probe_keeps_unit_on_bounded_oversized_identification() -> None:
+    long_vendor = "V" * (MAX_DEVICE_STRING_CHARS + 10)
+    client = _Client(_Response(information={0: long_vendor.encode("utf-8")}))
+
+    unit = probe_device_identification(
+        "192.168.10.30",
+        502,
+        3,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: client,
+    )
+
+    assert unit.status == "responding"
+    assert unit.device_identification is not None
+    assert unit.device_identification.truncated is True
+    assert len(unit.device_identification.vendor_name or "") == MAX_DEVICE_STRING_CHARS

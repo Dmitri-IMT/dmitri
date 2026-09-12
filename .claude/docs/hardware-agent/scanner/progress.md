@@ -4,7 +4,7 @@ title: scanner/progress — scan events & progress mapping
 description: The ScanEvent stream, the ScanReporter protocol, and the ProgressMapper that turns events into a monotonic 0-100% for the UI.
 resource: hardware-agent/src/agent/scanner/progress.py
 tags: [hardware-agent, scanner, progress, events]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # scanner/progress — events & progress mapping
@@ -19,12 +19,12 @@ whatever renders progress — a TUI screen or a stderr reporter — via the `Sca
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanEventKind` | `Literal` of every event: `discovery_started`, `hosts_found`, `port_stage_*`, `port_batch_done`, `deep_stage_*`, `host_inspected`, `unit_timed_out`/`unit_failed`, `normalize_started`, `completed`, `failed`. | `progress.py:6` |
-| `ScanEvent` | Frozen dataclass carrying the kind plus optional counts (`hosts_*`, `batches_*`, `ports_open`, `units_*`, `ip`). | `progress.py:24` |
-| `ScanReporter` | `Protocol` with `emit(event)` — the reporter interface the runner writes to. | `progress.py:37` |
-| `StageWeights` / `STAGE_WEIGHTS` | Per-mode weight of each stage's contribution to 100%. | `progress.py:42`, `progress.py:49` |
-| `target_pct()` | Maps a single event to its target percentage given the mode's weights. | `progress.py:58` |
-| `ProgressMapper` | Stateful wrapper over `target_pct` that never lets the percentage go backwards. | `progress.py:85` |
+| `ScanEventKind` | Event vocabulary for discovery, ports, deep inspection, OT inspection (`modbus_host_inspected`, `ot_stage_deadline`), normalization, completion, and failure. | `progress.py:6` |
+| `ScanEvent` | Frozen dataclass: kind, message, counts, `ip`, and `deadline_seconds` for `ot_stage_deadline`. | `progress.py:28` |
+| `ScanReporter` | `Protocol` with `emit(event)` — the reporter interface the runner writes to. | `progress.py:42` |
+| `StageWeights` / `STAGE_WEIGHTS` | Per-mode weight of each stage's contribution to 100%. | `progress.py:47`, `progress.py:54` |
+| `target_pct()` | Maps a single event to its target percentage given the mode's weights. | `progress.py:64` |
+| `ProgressMapper` | Stateful wrapper over `target_pct` that never lets the percentage go backwards. | `progress.py:97` |
 
 ## How it connects
 

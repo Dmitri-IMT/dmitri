@@ -22,6 +22,8 @@ from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import is_terminal
 from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
+from api.services.industrial import persist_industrial_services
+from api.services.inventory import reconcile_scan_inventory
 from api.services.risk import refresh_risk_snapshot
 
 
@@ -117,13 +119,27 @@ def persist_scan(
 
     scan_host_index: dict[str, ScanHostRecord] = {}
     port_index: dict[tuple[str, int, str], PortRecord] = {}
+    modbus_unit_index: dict[tuple[str, int, int], int] = {}
 
     for host in scan.hosts:
         scan_host_record = _persist_scan_host(session, scan.scan_id, host)
         scan_host_index[str(host.ip)] = scan_host_record
+        port_index_host: dict[tuple[int, str], PortRecord] = {}
         for port in host.ports:
             port_record = _persist_port(session, scan_host_record.id, port)
             port_index[(str(host.ip), port.port, port.protocol)] = port_record
+            port_index_host[(port.port, port.protocol)] = port_record
+        if host.industrial_services:
+            unit_rows = persist_industrial_services(
+                session,
+                scan_host_record.id,
+                host.industrial_services,
+                port_index=port_index_host,
+            )
+            for (service_port, unit_id), unit_record in unit_rows.items():
+                modbus_unit_index[(str(host.ip), service_port, unit_id)] = (
+                    unit_record.id
+                )
 
     for finding in scan.findings:
         scan_host_record = (
@@ -138,15 +154,23 @@ def persist_scan(
             port_record = port_index.get(
                 (str(finding.ip), finding.port, finding.protocol)
             )
+        modbus_unit_id = (
+            _resolve_modbus_unit_id(finding, modbus_unit_index, str(finding.ip))
+            if finding.ip is not None
+            else None
+        )
         upsert_finding(
             session,
             scan_id=scan.scan_id,
             finding=finding,
             scan_host_record=scan_host_record,
             port_record=port_record,
+            modbus_unit_id=modbus_unit_id,
         )
 
     upsert_hosts_for_scan(session, scan_record, scan)
+
+    reconcile_scan_inventory(session, scan_record)
 
     append_scan_activity(
         session,
@@ -187,6 +211,7 @@ def upsert_finding(
     extra_source: str | None = None,
     references: Iterable[str] | None = None,
     evidence_suffix: str | None = None,
+    modbus_unit_id: int | None = None,
 ) -> FindingRecord:
     dedupe_key = finding_dedupe_key(
         ip=str(finding.ip) if finding.ip is not None else None,
@@ -194,6 +219,7 @@ def upsert_finding(
         protocol=finding.protocol,
         cve_id=finding.cve_id,
         title=finding.title,
+        unit_id=finding.unit_id,
     )
     existing = session.exec(
         select(FindingRecord).where(
@@ -215,6 +241,7 @@ def upsert_finding(
             scan_id=scan_id,
             scan_host_id=scan_host_record.id if scan_host_record is not None else None,
             port_id=port_record.id if port_record is not None else None,
+            modbus_unit_id=modbus_unit_id,
             ip=str(finding.ip) if finding.ip is not None else None,
             port=finding.port,
             protocol=finding.protocol,
@@ -250,6 +277,8 @@ def upsert_finding(
         set(existing.source_labels_json).union(source_labels)
     )
     existing.evidence = _merge_evidence(existing.evidence, evidence_suffix)
+    if modbus_unit_id is not None:
+        existing.modbus_unit_id = modbus_unit_id
     existing.updated_at = now
     if existing.source is None:
         existing.source = finding.source
@@ -266,9 +295,11 @@ def finding_dedupe_key(
     protocol: str | None,
     cve_id: str | None,
     title: str,
+    unit_id: int | None = None,
 ) -> str:
     suffix = cve_id or title.strip().lower()
-    return f"{ip or 'global'}|{protocol or 'na'}|{port or 0}|{suffix}"
+    unit_suffix = str(unit_id) if unit_id is not None else "na"
+    return f"{ip or 'global'}|{protocol or 'na'}|{port or 0}|{unit_suffix}|{suffix}"
 
 
 def initial_confidence_for_finding(finding: FindingPayload) -> str:
@@ -410,3 +441,18 @@ def _max_severity(current: str, candidate: str) -> str:
 def _max_confidence(current: str, candidate: str) -> str:
     order = {"tentative": 1, "probable": 2, "confirmed": 3}
     return current if order.get(current, 0) >= order.get(candidate, 0) else candidate
+
+
+def _resolve_modbus_unit_id(
+    finding: FindingPayload,
+    modbus_unit_index: dict[tuple[str, int, int], int],
+    host_ip: str,
+) -> int | None:
+    """Map a finding to a persisted Modbus unit when the ingest payload names one.
+
+    Findings without ``unit_id`` remain port-attributed until the agent contract
+    carries explicit unit attribution on every finding shape.
+    """
+    if finding.unit_id is None or finding.port is None:
+        return None
+    return modbus_unit_index.get((host_ip, finding.port, finding.unit_id))

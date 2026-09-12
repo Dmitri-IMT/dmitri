@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from xml.etree.ElementTree import Element
 
 from agent.config import AgentSettings, subprocess_timeout_for
 from agent.scanner.errors import BudgetExceeded, TransientScanError, UnitScanError
@@ -24,6 +25,9 @@ class _FakeReporter:
 class _DummyRunner:
     def __init__(self) -> None:
         self.nmap_path = "nmap"
+
+    def run_xml(self, arguments, timeout=None):
+        return Element("nmaprun")
 
 
 def _kinds(events: list[ScanEvent], kind: str) -> list[ScanEvent]:

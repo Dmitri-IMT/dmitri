@@ -37,11 +37,8 @@
 > would be a freeze in name only. T2 produces a **baseline**: correct against every decision that
 > exists on the day it lands, and the thing T6/T7/T9 build from. The B11 amendments follow.
 
-- [ ] **T4.1 · Study and fix NSPi port stage.** Review why NSPi mode failed on the real NSPi LAN
-  (field test [`../tests/nspi-september/results.md`](../tests/nspi-september/results.md): discovery
-  OK, 0 ports, partial cancel during port stage while Quick succeeds on the same subnet). Investigate
-  two-pass `-T2` batching, timeouts, progress UX, and log retention. **No field retest planned** —
-  fix and validate in dev; pilot continues on **Quick scan** + dual-homed laptop per field-test close.
+- [x] **T4.1 · Study and fix NSPi port stage.** Closed by 045 OT hardening and the NSPi
+  timeout work on `main`. Port evidence survives a lost deep step; OT stage has its own ceiling.
 - [ ] **T4 · Split headless daemon from TUI.** Make the scan pipeline (`ScanRunner` / stages)
   callable headlessly, separate from the Textual TUI — a `dmitri agent` entrypoint that runs the
   **same** pipeline without a screen ([`PI.md` Pi runtime](PI.md#pi-runtime-september-control)).
@@ -82,10 +79,9 @@ See [`PI.md` Hardware acquisition](PI.md#hardware-acquisition--installer-provisi
 
 ## Suggested start
 
-**T1** (B8 reuse ✅) and **T3** (reconcile ADR-005 ✅) are done. Next dev-machine work with no Pi:
-**T4.1** (NSPi port-stage fix — blocks the September pilot scan mode), then **T4** (headless daemon
-split). **T2 (OpenAPI freeze) is deliberately deferred** to just before the build tasks that consume
-it (T6/T7/T9) — see the Tier 2 note.
+**T1** (B8 reuse ✅) and **T3** (reconcile ADR-005 ✅) are done. **T4.1** is closed.
+Next: **T4** if the headless daemon split is still open on your branch. **T2 (OpenAPI freeze)
+is deliberately deferred** to just before the build tasks that consume it (T6/T7/T9).
 
 ## Dependency notes
 

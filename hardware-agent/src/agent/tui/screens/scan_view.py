@@ -9,7 +9,26 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from agent.normalize.contracts import ScanPayload
+from agent.normalize.contracts import (
+    ModbusAddressRangePayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusUnitPayload,
+    ScanPayload,
+)
+from agent.tui.markup import (
+    LIMIT_HOST_TEXT,
+    LIMIT_IDENTIFICATION,
+    LIMIT_MAPPING_SOURCE,
+    LIMIT_OBJECT_KEY,
+    LIMIT_OBJECT_VALUE,
+    LIMIT_PORT_TEXT,
+    LIMIT_RANGE_LABEL,
+    LIMIT_UNIT_ERROR,
+    MAX_CPES_SHOWN,
+    MAX_OBJECTS_SHOWN,
+    ShortenTracker,
+    safe,
+)
 from agent.tui.screens.base import DmitriScreen
 
 MODE_LABELS = {
@@ -26,6 +45,19 @@ SEVERITY_COLORS = {
     "medium": "yellow",
     "low": "dim",
 }
+
+NOTICE_ONE = (
+    "⚠ Device-supplied text is shown literally. "
+    "1 value was shortened to fit its display limit."
+)
+NOTICE_MANY = (
+    "⚠ Device-supplied text is shown literally. "
+    "{count} values were shortened to fit their display limits."
+)
+PROCESS_NOTE = (
+    "Process values are never shown. "
+    "Address ranges report status and a keyed change digest only."
+)
 
 
 def format_duration(seconds: float) -> str:
@@ -46,6 +78,103 @@ def _has_iolink_banner(device) -> bool:
     return False
 
 
+def _payload_has_address_ranges(payload: ScanPayload) -> bool:
+    for device in payload.hosts:
+        for service in device.industrial_services:
+            for unit in service.units:
+                if unit.address_ranges:
+                    return True
+    return False
+
+
+def _digest_prefix(value_digest: str) -> str:
+    return value_digest.removeprefix("hmac-sha256:")[:8].lower()
+
+
+def _format_range_line(
+    address_range: ModbusAddressRangePayload,
+    tracker: ShortenTracker,
+) -> str:
+    end = address_range.start_address + address_range.count - 1
+    line = (
+        f"        {address_range.address_space} "
+        f"{address_range.start_address}-{end}: {address_range.status}"
+    )
+    if address_range.label:
+        label = safe(address_range.label, LIMIT_RANGE_LABEL, tracker=tracker)
+        line = f"{line} ({label})"
+    suffix_parts: list[str] = []
+    if address_range.exception_code is not None:
+        suffix_parts.append(f"exception {address_range.exception_code}")
+    if address_range.status == "readable":
+        if address_range.value_digest:
+            suffix_parts.append(f"digest {_digest_prefix(address_range.value_digest)}")
+        else:
+            suffix_parts.append("digest not recorded")
+    elif address_range.value_digest:
+        suffix_parts.append(f"digest {_digest_prefix(address_range.value_digest)}")
+    if suffix_parts:
+        line = f"{line} · {' · '.join(suffix_parts)}"
+    return line
+
+
+def _format_identification_fields(
+    detail: ModbusDeviceIdentificationPayload,
+    tracker: ShortenTracker,
+) -> list[str]:
+    fields: list[str] = []
+    mapping = (
+        ("vendor_name", "vendor", LIMIT_IDENTIFICATION),
+        ("product_code", "product", LIMIT_IDENTIFICATION),
+        ("product_name", "product name", LIMIT_IDENTIFICATION),
+        ("major_minor_revision", "firmware", LIMIT_IDENTIFICATION),
+        ("model_name", "model", LIMIT_IDENTIFICATION),
+        ("user_application_name", "application", LIMIT_IDENTIFICATION),
+    )
+    for attr, label, limit in mapping:
+        value = getattr(detail, attr)
+        if value:
+            fields.append(f"{label} {safe(value, limit, tracker=tracker)}")
+    return fields
+
+
+def _format_identification_objects(
+    detail: ModbusDeviceIdentificationPayload,
+    tracker: ShortenTracker,
+) -> list[str]:
+    if not detail.objects:
+        return []
+    lines = ["         Identification extras:"]
+    sorted_items = sorted(detail.objects.items(), key=lambda item: item[0])
+    shown = sorted_items[:MAX_OBJECTS_SHOWN]
+    for key, value in shown:
+        safe_key = safe(key, LIMIT_OBJECT_KEY, tracker=tracker)
+        safe_value = safe(value, LIMIT_OBJECT_VALUE, tracker=tracker)
+        lines.append(f"           {safe_key} = {safe_value}")
+    overflow = len(sorted_items) - len(shown)
+    if overflow > 0:
+        lines.append(f"           … {overflow} more identification objects not shown")
+    return lines
+
+
+def _format_unit_lines(unit: ModbusUnitPayload, tracker: ShortenTracker) -> list[str]:
+    lines: list[str] = []
+    prefix = f"      Unit ID {unit.unit_id}: {unit.status}"
+    if unit.error:
+        prefix = f"{prefix}; {safe(unit.error, LIMIT_UNIT_ERROR, tracker=tracker)}"
+    detail = unit.device_identification
+    if detail is not None:
+        fields = _format_identification_fields(detail, tracker)
+        if fields:
+            prefix = f"{prefix}; {', '.join(fields)}"
+    lines.append(prefix)
+    if detail is not None:
+        lines.extend(_format_identification_objects(detail, tracker))
+    for address_range in unit.address_ranges:
+        lines.append(_format_range_line(address_range, tracker))
+    return lines
+
+
 class ScanViewScreen(DmitriScreen):
     """S7: full scan results display."""
 
@@ -64,17 +193,31 @@ class ScanViewScreen(DmitriScreen):
 
     def compose_body(self):
         with VerticalScroll(id="scan-view-scroll"):
+            yield Static("", id="scan-view-notice")
+            yield Static(PROCESS_NOTE, id="scan-view-process-note")
             yield Static("", id="scan-view-content")
 
     def on_mount(self) -> None:
+        notice = self.query_one("#scan-view-notice", Static)
+        process_note = self.query_one("#scan-view-process-note", Static)
+        notice.display = False
+        process_note.display = False
         payload = self._load_payload()
         if payload is None:
             self.query_one("#scan-view-content", Static).update(
                 "[red]Failed to load scan results.[/red]"
             )
             return
-        rendered = self._render_payload(payload)
+        tracker = ShortenTracker()
+        rendered = self._render_payload(payload, tracker=tracker)
         self.query_one("#scan-view-content", Static).update(rendered)
+        if tracker.count == 1:
+            notice.update(NOTICE_ONE)
+            notice.display = True
+        elif tracker.count > 1:
+            notice.update(NOTICE_MANY.format(count=tracker.count))
+            notice.display = True
+        process_note.display = _payload_has_address_ranges(payload)
 
     def _load_payload(self) -> ScanPayload | None:
         if self._payload:
@@ -87,7 +230,13 @@ class ScanViewScreen(DmitriScreen):
                 return None
         return None
 
-    def _render_payload(self, payload: ScanPayload) -> str:
+    def _render_payload(
+        self,
+        payload: ScanPayload,
+        *,
+        tracker: ShortenTracker | None = None,
+    ) -> str:
+        shorten = tracker or ShortenTracker()
         lines: list[str] = []
 
         lines.append("[bold]── Scan Results ──────────────────────────────[/bold]")
@@ -107,6 +256,11 @@ class ScanViewScreen(DmitriScreen):
         if payload.metadata and "elapsed_seconds" in payload.metadata:
             elapsed = payload.metadata["elapsed_seconds"]
             lines.append(f"Duration: {format_duration(elapsed)}")
+        if payload.metadata and payload.metadata.get("modbus_stage_deadline_reached"):
+            seconds = payload.metadata.get("modbus_stage_deadline_seconds", 0)
+            lines.append(
+                f"Limits:   Time limit reached during Modbus inventory ({seconds}s)"
+            )
         lines.append("")
 
         device_count = len(payload.hosts)
@@ -116,44 +270,76 @@ class ScanViewScreen(DmitriScreen):
         lines.append("")
 
         findings_by_ip: dict[str, list] = {}
-        for f in payload.findings:
-            ip_key = str(f.ip) if f.ip else "_global"
-            findings_by_ip.setdefault(ip_key, []).append(f)
+        for finding in payload.findings:
+            ip_key = str(finding.ip) if finding.ip else "_global"
+            findings_by_ip.setdefault(ip_key, []).append(finding)
 
         for device in payload.hosts:
             ip_str = str(device.ip)
-            vendor_str = f" — {device.vendor}" if device.vendor else ""
-            lines.append(f"[bold]▶ {ip_str}[/bold] ({device.hostname}){vendor_str}")
+            hostname = safe(device.hostname, LIMIT_HOST_TEXT, tracker=shorten)
+            vendor_suffix = ""
+            if device.vendor:
+                vendor_suffix = (
+                    f" — {safe(device.vendor, LIMIT_HOST_TEXT, tracker=shorten)}"
+                )
+            lines.append(f"[bold]▶ {ip_str}[/bold] ({hostname}){vendor_suffix}")
 
             operating_system = device.operating_system
             if operating_system is None:
                 lines.append("  Operating system: Not detected")
             else:
                 lines.append("  Operating system:")
+                os_name = safe(operating_system.name, LIMIT_HOST_TEXT, tracker=shorten)
                 lines.append(
-                    f"    Detected: {operating_system.name} "
+                    f"    Detected: {os_name} "
                     f"({operating_system.accuracy}% confidence)"
                 )
                 if operating_system.vendor is not None:
-                    lines.append(f"    Vendor: {operating_system.vendor}")
+                    vendor = safe(
+                        operating_system.vendor, LIMIT_HOST_TEXT, tracker=shorten
+                    )
+                    lines.append(f"    Vendor: {vendor}")
                 if operating_system.family is not None:
-                    lines.append(f"    Family: {operating_system.family}")
+                    family = safe(
+                        operating_system.family, LIMIT_HOST_TEXT, tracker=shorten
+                    )
+                    lines.append(f"    Family: {family}")
                 if operating_system.generation is not None:
-                    lines.append(f"    Generation: {operating_system.generation}")
+                    generation = safe(
+                        operating_system.generation, LIMIT_HOST_TEXT, tracker=shorten
+                    )
+                    lines.append(f"    Generation: {generation}")
                 if operating_system.device_type is not None:
-                    lines.append(f"    Device type: {operating_system.device_type}")
+                    device_type = safe(
+                        operating_system.device_type, LIMIT_HOST_TEXT, tracker=shorten
+                    )
+                    lines.append(f"    Device type: {device_type}")
                 if operating_system.cpes:
                     lines.append("    Platform IDs:")
-                    for platform_id in operating_system.cpes:
-                        lines.append(f"      - {platform_id}")
+                    shown_cpes = operating_system.cpes[:MAX_CPES_SHOWN]
+                    for platform_id in shown_cpes:
+                        lines.append(
+                            "      - "
+                            f"{safe(platform_id, LIMIT_HOST_TEXT, tracker=shorten)}"
+                        )
+                    cpe_overflow = len(operating_system.cpes) - len(shown_cpes)
+                    if cpe_overflow > 0:
+                        lines.append(
+                            f"      … {cpe_overflow} more platform IDs not shown"
+                        )
 
             if device.ports:
                 lines.append("  Ports:")
-                for p in device.ports:
-                    version_str = f"  {p.version}" if p.version else ""
+                for port in device.ports:
+                    service = safe(port.service, LIMIT_PORT_TEXT, tracker=shorten)
+                    version_str = ""
+                    if port.version:
+                        version_str = (
+                            f"  {safe(port.version, LIMIT_PORT_TEXT, tracker=shorten)}"
+                        )
                     line = (
-                        f"    {p.port}/{p.protocol:<4} "
-                        f"{p.state:<8} {p.service:<10}"
+                        f"    {port.port}/{port.protocol:<4} "
+                        f"{port.state:<8} {service:<10}"
                         f"{version_str}"
                     )
                     lines.append(line)
@@ -167,78 +353,51 @@ class ScanViewScreen(DmitriScreen):
                     confidence = service.confidence.upper()
                     lines.append(f"    Modbus TCP {service.port} - {confidence}")
                     if service.mapping_source:
-                        lines.append(f"      Mapping plan: {service.mapping_source}")
-                    for unit in service.units:
-                        detail = unit.device_identification
-                        fields = []
-                        if detail is not None:
-                            if detail.vendor_name:
-                                fields.append(f"vendor {detail.vendor_name}")
-                            if detail.product_code:
-                                fields.append(f"product {detail.product_code}")
-                            if detail.major_minor_revision:
-                                fields.append(f"firmware {detail.major_minor_revision}")
-                        suffix = f"; {', '.join(fields)}" if fields else ""
-                        lines.append(
-                            f"      Unit ID {unit.unit_id}: {unit.status}{suffix}"
+                        mapping_source = safe(
+                            service.mapping_source,
+                            LIMIT_MAPPING_SOURCE,
+                            tracker=shorten,
                         )
-                        for address_range in unit.address_ranges:
-                            end = address_range.start_address + address_range.count - 1
-                            summary_parts = []
-                            if address_range.nonzero_count is not None:
-                                summary_parts.append(
-                                    f"nonzero {address_range.nonzero_count}"
-                                )
-                            if address_range.value_min is not None:
-                                summary_parts.append(f"min {address_range.value_min}")
-                            if address_range.value_max is not None:
-                                summary_parts.append(f"max {address_range.value_max}")
-                            summary = (
-                                f" · {' · '.join(summary_parts)}"
-                                if summary_parts
-                                else ""
-                            )
-                            lines.append(
-                                "        "
-                                f"{address_range.address_space} "
-                                f"{address_range.start_address}-{end}: "
-                                f"{address_range.status}{summary}"
-                            )
+                        lines.append(f"      Mapping plan: {mapping_source}")
+                    for unit in service.units:
+                        lines.extend(_format_unit_lines(unit, shorten))
 
             device_findings = findings_by_ip.get(ip_str, [])
             if device_findings:
                 lines.append("  Vulnerabilities:")
-                for f in device_findings:
-                    sev = f.severity.upper()
-                    color = SEVERITY_COLORS.get(f.severity, "")
-                    cve = f.cve_id or "N/A"
-                    cvss = f"(CVSS {f.cvss_score})" if f.cvss_score is not None else ""
+                for finding in device_findings:
+                    sev = finding.severity.upper()
+                    color = SEVERITY_COLORS.get(finding.severity, "")
+                    cve = finding.cve_id or "N/A"
+                    cvss = (
+                        f"(CVSS {finding.cvss_score})"
+                        if finding.cvss_score is not None
+                        else ""
+                    )
                     lines.append(
-                        f"    [{color}][{sev}][/{color}] {cve} — {f.title} {cvss}"
+                        f"    [{color}][{sev}][/{color}] {cve} — {finding.title} {cvss}"
                     )
 
             lines.append("")
 
         lines.append("[bold]── Summary ──────────────────────────────────[/bold]")
-        total_ports = sum(len(d.ports) for d in payload.hosts)
+        total_ports = sum(len(host.ports) for host in payload.hosts)
         lines.append(f"Total devices:          {device_count}")
         lines.append(f"Total open ports:       {total_ports}")
         lines.append(f"Vulnerabilities found:  {len(payload.findings)}")
-        modbus_services = sum(
-            len(device.industrial_services) for device in payload.hosts
-        )
+        modbus_services = sum(len(host.industrial_services) for host in payload.hosts)
         if modbus_services:
             modbus_units = sum(
                 len(service.units)
-                for device in payload.hosts
-                for service in device.industrial_services
+                for host in payload.hosts
+                for service in host.industrial_services
             )
             lines.append(f"Modbus services:        {modbus_services}")
             lines.append(f"Modbus Unit IDs:        {modbus_units}")
             mapped_ranges = sum(
                 len(unit.address_ranges)
-                for device in payload.hosts
-                for service in device.industrial_services
+                for host in payload.hosts
+                for service in host.industrial_services
                 for unit in service.units
             )
             if mapped_ranges:

@@ -4,7 +4,7 @@ title: frontend detail read state
 description: readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 resource: frontend/src/lib/detailState.ts
 tags: [frontend, hosts, scans, devices, tanstack-query]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # frontend detail read state
@@ -18,7 +18,9 @@ switches over them itself.
 
 One read per gate. Host detail makes a second, independent read (that host's findings), and it is
 **not** folded into the page state: a pending or failed findings read must not throw away a host
-whose identity, ports and history already arrived.
+whose identity, ports and history already arrived. Identity and services come from `HostDetailResponse`
+(`machine_type`, `HostPort[]`); findings carry `host_hostname` / `first_seen_at` on the same
+`FindingRecord` shape.
 
 ## Key classes / functions
 

@@ -26,6 +26,7 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/discovery](./hardware-agent/discovery.md) — Thin per-stage Nmap-argument builders — host/port/service/NSE-vuln scanning.
 * [hardware-agent/normalize](./hardware-agent/normalize.md) — The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
+* [hardware-agent/ot](./hardware-agent/ot.md) — Modbus inspection package, digest, read-only client, OT stage.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
 * [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
 * [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder.
@@ -57,7 +58,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through host inventory depth, with Supabase RLS and dmitri_runtime hardening.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 

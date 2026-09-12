@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-12T22:45:00Z
 ---
 
 # Backend wire schemas
@@ -27,10 +27,13 @@ the ingest input plus the main persisted projections.
 | `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
 | `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. | `backend/src/api/schemas/scan.py:16` |
 | `PortPayload` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `version`, `cpes`. | `backend/src/api/schemas/scan.py:19` |
-| `HostPayload` | `ip` (`IPv4Address`), MAC regex (required-but-nullable), `hostname`, `vendor`, `ports` (required). | `backend/src/api/schemas/scan.py:30` |
-| `FindingPayload` | Optional `ip` (`IPv4Address`)/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:40` |
+| `HostPayload` | `ip`, MAC, `hostname`, `vendor`, `ports`, `industrial_services`. | `backend/src/api/schemas/scan.py` |
+| `FindingPayload` | Optional `unit_id` (0–255) for Modbus unit attribution. | `backend/src/api/schemas/scan.py` |
 | `ScanIngestRequest` | Top-level payload: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `hosts`, `findings`, `metadata`. `hosts`/`findings` are required (no defaults). | `backend/src/api/schemas/scan.py:59` |
 | `ScanIngestAcceptedResponse` | `message`, `scan_id`, `hosts_received` (`ge=0`), `status` (`Literal["accepted"]`) — the `202` response body. | `backend/src/api/schemas/scan.py:71` |
+
+`schemas/industrial.py` is the Modbus ingest models (`ModbusTcpServicePayload` and units). Read
+views (`IndustrialServiceView`, `ModbusUnitView`, `unreadable_fields`) live in `read.py`.
 
 **All five carry `model_config = ConfigDict(extra="forbid")`** — DMI-63 pushed it to *every* ingest
 depth, not just the top level. Before that only `ScanResult` forbade extras, so `hosts[0].os = "linux"`
@@ -43,16 +46,17 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | Name | What it shapes | Ref |
 |------|-----------------|-----|
 | `Severity` / `SEVERITY_ORDER` | **Moved out of this module 2026-07-31** to [`core/severity.py`](/backend/api.md); `read.py` now imports `Severity` from there. Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order — the single severity-domain definition. | `backend/src/api/core/severity.py:5` |
-| `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:18` |
-| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. | `backend/src/api/schemas/read.py:28` |
-| `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:39` |
-| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `open_ports_count`/`highest_severity`. `mac` is required and nullable. | `backend/src/api/schemas/read.py:62` |
-| `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:76` |
-| `HostDetailResponse` | `GET /hosts/{host_id}`: identity + latest `ports` + full `scan_history`; `ports`/`scan_history` are required (no `default_factory`). | `backend/src/api/schemas/read.py:86` |
+| `Port` | Read-side **per-scan** port view (`extra="forbid"`): port/protocol/state/service/version. Unchanged. | `backend/src/api/schemas/read.py:24` |
+| `HostPort` | Durable service on a machine: port/protocol/service, optional `version`, `first_seen_at`/`last_seen_at`. **No `state`.** | `backend/src/api/schemas/read.py:40` |
+| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. Also `industrial_services` and `unreadable_fields`. | `backend/src/api/schemas/read.py:45` |
+| `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
+| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. | `backend/src/api/schemas/read.py:83` |
+| `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
+| `HostDetailResponse` | `GET /hosts/{host_id}`: **subclasses `HostSummary`** (identity, `machine_type`, `vulnerability_count`) and adds durable `HostPort[]`, `industrial_services` from the latest scan, and `scan_history`. Flat on the wire. | `backend/src/api/schemas/read.py:177` |
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/`error_code`/counts; `hosts`/`findings` are required. `error_code` is `ScanErrorCode \| None` and is **not** required — present as `null` on a non-failed scan, never bare on a failed one. | `backend/src/api/schemas/read.py:103` |
 | `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:118` |
 | `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |
-| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:139` |
+| `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page` plus `quiet_total` (whole-inventory quiet count, independent of the requested group). | `backend/src/api/schemas/read.py:171` |
 | `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:147` |
 
 ## Key classes / functions — `users.py` (profile and member administration)

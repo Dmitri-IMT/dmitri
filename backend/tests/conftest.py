@@ -87,13 +87,19 @@ def _migrate(engine: Engine, revision: str) -> None:
     else:
         config = _alembic_config()
         script = ScriptDirectory.from_config(config)
+        # The revision graph has a merge point, so a test that steps back to one
+        # parent leaves two rows in `alembic_version`; read every current head.
         with engine.connect() as connection:
             current_heads = MigrationContext.configure(connection).get_current_heads()
-        ancestors = {
-            rev.revision
-            for current in current_heads
-            for rev in script.iterate_revisions(current, None)
-        }
+        ancestors = (
+            {
+                rev.revision
+                for head in current_heads
+                for rev in script.iterate_revisions(head, None)
+            }
+            if current_heads
+            else set()
+        )
         if revision in ancestors and revision not in current_heads:
             command.downgrade(config, revision)
         else:
@@ -118,10 +124,17 @@ def _truncate_application_tables(engine: Engine) -> None:
         connection.execute(sa.text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    if DATABASE_URL_TEST is None:
+        raise pytest.UsageError(
+            "DATABASE_URL_TEST must point at the dmitri_test database. "
+            "Run ./database.sh --test."
+        )
+
+
 @pytest.fixture(scope="session")
 def postgres_engine() -> Generator[Engine, None, None]:
-    if DATABASE_URL_TEST is None:
-        pytest.skip("DATABASE_URL_TEST not set")
+    assert DATABASE_URL_TEST is not None
     engine = sa.create_engine(_psycopg_url(DATABASE_URL_TEST))
     created_roles: list[str] = []
     with engine.begin() as connection:

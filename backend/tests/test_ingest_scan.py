@@ -16,6 +16,8 @@ from api.models.persistence import (
     EpssCacheRecord,
     EpssRecord,
     FindingRecord,
+    HostFindingRecord,
+    HostPortRecord,
     HostRecord,
     KevCacheRecord,
     KevRecord,
@@ -184,7 +186,7 @@ def test_ingest_scan_accepts_enriched_findings_example(
     )
     scan_hosts = runtime_session.exec(select(ScanHostRecord)).all()
 
-    assert len(scan_hosts) == 2
+    assert len(scan_hosts) == len(payload["hosts"])
     assert str(record.scan_id) == payload["scan_id"]
     assert record.scan_mode == scan.scan_mode
     assert record.status == "completed"
@@ -778,9 +780,9 @@ def test_ingest_scan_repeated_submission_is_idempotent(
         runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
     )
     counts_after_first = _table_counts()
-    assert counts_after_first["hosts"] == 2
-    assert counts_after_first["ports"] == 4
-    assert counts_after_first["services"] == 4
+    assert counts_after_first["hosts"] == 3
+    assert counts_after_first["ports"] == 5
+    assert counts_after_first["services"] == 5
     assert counts_after_first["findings"] == 2
     assert counts_after_first["jobs"] > 0
 
@@ -878,6 +880,9 @@ def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
         assert fresh_session.exec(select(PortRecord)).first() is None
         assert fresh_session.exec(select(ServiceRecord)).first() is None
         assert fresh_session.exec(select(CPERecord)).first() is None
+        assert fresh_session.exec(select(HostRecord)).first() is None
+        assert fresh_session.exec(select(HostPortRecord)).first() is None
+        assert fresh_session.exec(select(HostFindingRecord)).first() is None
         assert (
             fresh_session.exec(
                 select(FindingRecord).where(FindingRecord.scan_id == scan_id)
@@ -941,6 +946,9 @@ def test_ingest_scan_case_a_rolls_back_completely_on_mid_ingest_failure(
         assert fresh_session.exec(select(PortRecord)).first() is None
         assert fresh_session.exec(select(ServiceRecord)).first() is None
         assert fresh_session.exec(select(CPERecord)).first() is None
+        assert fresh_session.exec(select(HostRecord)).first() is None
+        assert fresh_session.exec(select(HostPortRecord)).first() is None
+        assert fresh_session.exec(select(HostFindingRecord)).first() is None
         assert (
             fresh_session.exec(
                 select(EnrichmentJobRecord).where(

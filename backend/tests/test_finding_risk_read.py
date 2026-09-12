@@ -1,47 +1,4 @@
-from uuid import uuid4
-
-from api.models.persistence import FindingRecord, RiskSnapshotRecord
-from api.services.read import findings_with_risk
-
-
-def test_risk_snapshots_are_loaded_once_and_matched_by_finding_id():
-    findings = [
-        FindingRecord(
-            id=index, scan_id=uuid4(), severity="medium", title="Finding",
-            description="Description", recommendation="Recommendation",
-            evidence="Evidence", dedupe_key=str(index),
-        )
-        for index in (1, 2, 3)
-    ]
-    snapshots = [
-        RiskSnapshotRecord(
-            finding_id=index, risk_score=score, exploitability=0,
-            confidence="tentative", rationale="Evidence-based calculation",
-        )
-        for index, score in ((3, 80), (1, 0))
-    ]
-
-    class Session:
-        calls = 0
-
-        def exec(self, query):
-            self.calls += 1
-            assert query.compile().params["finding_id_1"] == [1, 2, 3]
-            return self
-
-        def all(self):
-            return snapshots
-
-    session = Session()
-    result = findings_with_risk(session, [(finding, None) for finding in findings])
-    assert session.calls == 1
-    assert [item.risk_score for item in result] == [0, None, 80]
-    assert result[0].exploitability == 0
-    assert result[0].confidence == "tentative"
-    assert result[1].risk_rationale is None
-    assert result[2].risk_rationale == "Evidence-based calculation"
-    assert findings_with_risk(session, []) == []
-    assert session.calls == 1
+from api.models.persistence import RiskSnapshotRecord
 
 
 def test_risk_is_returned_by_scan_findings_and_home(

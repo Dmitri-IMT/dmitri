@@ -93,7 +93,6 @@ function ScanDetail() {
                           <FindingsTable
                             findings={group.findings}
                             variant="scan"
-                            hosts={scan.hosts}
                             testId={`findings-${group.severity}`}
                             caption={`${group.severity} vulnerabilities in this scan`}
                             openFindingId={openFindingId}

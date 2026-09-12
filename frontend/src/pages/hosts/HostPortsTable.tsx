@@ -2,9 +2,9 @@ import DataTable from '@/components/DataTable'
 import { portColumns } from '@/pages/hosts/portColumns'
 import type { components } from '@/types/openapi'
 
-type Port = components['schemas']['Port']
+type HostPort = components['schemas']['HostPort']
 
-function HostPortsTable({ ports }: { ports: Port[] }) {
+function HostPortsTable({ ports }: { ports: HostPort[] }) {
   if (ports.length === 0) {
     return (
       <p data-testid="host-no-ports" className="text-body-md">

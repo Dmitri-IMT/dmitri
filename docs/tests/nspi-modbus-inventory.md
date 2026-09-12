@@ -8,7 +8,7 @@ não mapeia endereços de processo e não envia escrita Modbus.
 
 ## 1. Preparar o Raspberry Pi
 
-No repositório e na branch `feature/nspi-modbus-methodology`:
+No repositório, na branch `feat/dmi-157-harden-active-ot-scans` (ou `main` after merge):
 
 ```bash
 cd hardware-agent
@@ -78,6 +78,9 @@ jq '.hosts[]
 
 Interpretação esperada:
 
+- `industrial_services` no JSON local e em `GET /api/v1/hosts/{id}` / `GET /api/v1/scans/{id}`
+  descrevem a mesma observação;
+
 - `suspected`: TCP/502 está aberto, mas não houve resposta Modbus conclusiva;
 - `confirmed`: o serviço do Nmap ou uma resposta Modbus confirmou o protocolo;
 - `unit_id`: endereço lógico respondente atrás daquele endpoint/gateway;
@@ -89,6 +92,9 @@ Interpretação esperada:
 
 Ausência de fabricante/produto/firmware não significa falha do scan: muitos
 equipamentos não implementam todos os objetos FC43.
+
+O limite de tempo de um host interrompe novas consultas a ele, mas não impede
+o inventário dos hosts seguintes enquanto a etapa OT ainda tiver tempo.
 
 ## 4. Evidência de que não houve escrita
 

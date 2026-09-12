@@ -37,6 +37,7 @@ SCHEMA_NAMES = (
     "NspiOptions",
     "HostSummary",
     "ScanHostView",
+    "IndustrialServiceView",
     "HostScanHistoryEntry",
     "HostDetailResponse",
     "HostListResponse",
@@ -576,6 +577,31 @@ def test_error_code_fidelity(response_name: str):
         status, set()
     )
     assert route_codes == contract_codes
+
+
+def test_modbus_validation_payload_absent_from_contract() -> None:
+    contract = _load_contract()
+    assert "ModbusValidationPayload" not in contract["components"]["schemas"]
+    unit_schema = contract["components"]["schemas"]["ModbusUnitPayload"]
+    assert "validations" not in unit_schema["properties"]
+
+
+def test_modbus_address_range_payload_has_no_process_fields() -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+    for spec in (contract, app_spec):
+        properties = spec["components"]["schemas"]["ModbusAddressRangePayload"][
+            "properties"
+        ]
+        for field in (
+            "values",
+            "nonzero_count",
+            "value_min",
+            "value_max",
+            "value_sha256",
+        ):
+            assert field not in properties
+        assert "value_digest" in properties
 
 
 def test_home_page_sizes_match_frontend_exports():

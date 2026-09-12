@@ -3,7 +3,6 @@ import {
   useEffect,
   useId,
   useRef,
-  useState,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
@@ -54,10 +53,24 @@ export type DataTableRowAction<Row> =
 
 export type DataTableRowTone = 'muted' | undefined
 
-export type DataTableCollapsedGroup<Row> = {
-  rows: Row[]
+export type DataTableGroupBody<Row, SortKey extends string = never> = {
+  id: string
+  columnCount: number
+  renderRows: (
+    rows: Row[],
+    columns: DataTableColumn<Row, SortKey>[],
+    tone?: DataTableRowTone,
+  ) => ReactNode
+  spanningRow: (content: ReactNode) => ReactNode
+}
+
+export type DataTableCollapsedGroup<Row, SortKey extends string = never> = {
+  count: number
   label: (count: number) => string
   testId: string
+  isOpen: boolean
+  onOpenChange: (isOpen: boolean) => void
+  content: (body: DataTableGroupBody<Row, SortKey>) => ReactNode
 }
 
 export type DataTableProps<Row, SortKey extends string = never> = {
@@ -72,7 +85,7 @@ export type DataTableProps<Row, SortKey extends string = never> = {
   sort?: DataTableSort<SortKey>
   rowAction?: DataTableRowAction<Row>
   rowTone?: (row: Row) => DataTableRowTone
-  collapsedGroup?: DataTableCollapsedGroup<Row>
+  collapsedGroup?: DataTableCollapsedGroup<Row, SortKey>
 }
 
 const INTERACTIVE_ROW =
@@ -104,7 +117,6 @@ function DataTable<Row, SortKey extends string = never>({
 }: DataTableProps<Row, SortKey>): ReactElement {
   const location = useLocation()
   const tableId = useId()
-  const [isGroupOpen, setIsGroupOpen] = useState(false)
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const openRowId = rowAction?.kind === 'expand' ? rowAction.openRowId : null
@@ -193,12 +205,16 @@ function DataTable<Row, SortKey extends string = never>({
     return content
   }
 
-  function renderRow(row: Row) {
+  function renderRow(
+    row: Row,
+    toneOverride?: DataTableRowTone,
+    rowColumns: DataTableColumn<Row, SortKey>[] = columns,
+  ) {
     const id = rowId(row)
     const isLink = rowAction?.kind === 'link'
     const isExpand = rowAction?.kind === 'expand'
     const isOpen = isExpand && rowAction.openRowId === id
-    const tone = rowTone?.(row)
+    const tone = toneOverride ?? rowTone?.(row)
 
     return (
       <Fragment key={id}>
@@ -219,7 +235,7 @@ function DataTable<Row, SortKey extends string = never>({
             isExpand ? (event) => handleExpandRowClick(event, id) : undefined
           }
         >
-          {columns.map((column, index) => (
+          {rowColumns.map((column, index) => (
             <td
               key={column.key}
               className={`max-w-0 pr-4 align-middle ${
@@ -246,8 +262,18 @@ function DataTable<Row, SortKey extends string = never>({
     )
   }
 
+  function groupSpanningRow(content: ReactNode) {
+    return (
+      <tr key="group-span" className={INERT_ROW}>
+        <td colSpan={columns.length} className="pr-4 align-middle">
+          {content}
+        </td>
+      </tr>
+    )
+  }
+
   const groupId = `${tableId}-group`
-  const isEmpty = rows.length === 0 && !collapsedGroup?.rows.length
+  const isEmpty = rows.length === 0
 
   return (
     <div className="overflow-x-auto">
@@ -324,7 +350,7 @@ function DataTable<Row, SortKey extends string = never>({
         ) : (
           <tbody>{rows.map((row) => renderRow(row))}</tbody>
         )}
-        {!isPending && collapsedGroup && collapsedGroup.rows.length > 0 && (
+        {!isPending && collapsedGroup && collapsedGroup.count > 0 && (
           <>
             <tbody>
               <tr
@@ -335,24 +361,34 @@ function DataTable<Row, SortKey extends string = never>({
                   <Button
                     type="button"
                     variant="link"
-                    aria-expanded={isGroupOpen}
+                    aria-expanded={collapsedGroup.isOpen}
                     aria-controls={groupId}
                     data-testid={`${collapsedGroup.testId}-toggle`}
                     className="h-auto gap-1 rounded-none px-0 py-0 text-caption-md font-normal text-muted-foreground no-underline"
-                    onClick={() => setIsGroupOpen(!isGroupOpen)}
+                    onClick={() =>
+                      collapsedGroup.onOpenChange(!collapsedGroup.isOpen)
+                    }
                   >
                     <ChevronRight
                       aria-hidden="true"
-                      className={`size-4 shrink-0 transition-transform ease-standard ${isGroupOpen ? 'rotate-90' : ''}`}
+                      className={`size-4 shrink-0 transition-transform ease-standard ${collapsedGroup.isOpen ? 'rotate-90' : ''}`}
                     />
-                    {collapsedGroup.label(collapsedGroup.rows.length)}
+                    {collapsedGroup.label(collapsedGroup.count)}
                   </Button>
                 </td>
               </tr>
             </tbody>
-            <tbody id={groupId}>
-              {isGroupOpen && collapsedGroup.rows.map((row) => renderRow(row))}
-            </tbody>
+            {collapsedGroup.isOpen ? (
+              collapsedGroup.content({
+                id: groupId,
+                columnCount: columns.length,
+                renderRows: (groupRows, groupColumns, tone) =>
+                  groupRows.map((row) => renderRow(row, tone, groupColumns)),
+                spanningRow: groupSpanningRow,
+              })
+            ) : (
+              <tbody id={groupId} />
+            )}
           </>
         )}
       </table>

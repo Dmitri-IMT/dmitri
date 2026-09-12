@@ -53,6 +53,7 @@ function trackRequests() {
   const homeUrls: string[] = []
   const scansUrls: string[] = []
   const findingsUrls: string[] = []
+  const hostUrls: string[] = []
 
   server.use(
     http.get(`${baseURL}/home`, ({ request }) => {
@@ -71,9 +72,21 @@ function trackRequests() {
       findingsUrls.push(request.url)
       return HttpResponse.json({ data: [], total: 0, page: 1 })
     }),
+    http.get(`${baseURL}/hosts`, ({ request }) => {
+      hostUrls.push(request.url)
+      return HttpResponse.json({ data: [], total: 0, page: 1 })
+    }),
+    http.get(`${baseURL}/hosts/:hostId`, ({ request }) => {
+      hostUrls.push(request.url)
+      return new HttpResponse(null, { status: 404 })
+    }),
   )
 
-  return { homeUrls, scansUrls, findingsUrls }
+  return { homeUrls, scansUrls, findingsUrls, hostUrls }
+}
+
+function machineCell(row: HTMLElement) {
+  return within(row).getAllByRole('cell')[1]
 }
 
 function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
@@ -102,7 +115,7 @@ const staleSuccessfulScan = {
 }
 
 describe('Home', () => {
-  it('issues one GET /home request and never calls scans or findings', async () => {
+  it('issues one GET /home request and never calls scans, findings, or hosts', async () => {
     const tracked = trackRequests()
     renderWithProviders(<Home />)
 
@@ -110,6 +123,102 @@ describe('Home', () => {
     expect(tracked.homeUrls).toHaveLength(1)
     expect(tracked.scansUrls).toHaveLength(0)
     expect(tracked.findingsUrls).toHaveLength(0)
+    expect(tracked.hostUrls).toHaveLength(0)
+  })
+
+  it('names the machine from host_hostname, then host_ip, then an empty mark', async () => {
+    const namedFinding = {
+      ...criticalFinding,
+      finding_id: '77777777-7777-4777-8777-777777777777',
+      host_hostname: 'Netgear R7000',
+      host_ip: '192.168.1.1',
+    }
+    const addressOnlyFinding = {
+      ...highFinding,
+      finding_id: '88888888-8888-4888-8888-888888888888',
+      host_hostname: null,
+      host_ip: '192.168.1.63',
+    }
+    const unidentifiedFinding = {
+      ...criticalFinding,
+      finding_id: '99999999-9999-4999-8999-999999999999',
+      host_id: null,
+      host_hostname: null,
+      host_ip: null,
+    }
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 3,
+        attention: {
+          data: [namedFinding, addressOnlyFinding, unidentifiedFinding],
+          total: 3,
+          page: 1,
+        },
+      }),
+    )
+    renderWithProviders(<Home />)
+
+    const namedRow = await screen.findByTestId(
+      `home-table-row-${namedFinding.finding_id}`,
+    )
+    expect(machineCell(namedRow)).toHaveTextContent('Netgear R7000')
+    expect(machineCell(namedRow).querySelector('.font-mono')).toBeNull()
+    expect(
+      within(namedRow).getByRole('link', {
+        name: `${namedFinding.title} on Netgear R7000`,
+      }),
+    ).toBeInTheDocument()
+
+    const addressRow = screen.getByTestId(
+      `home-table-row-${addressOnlyFinding.finding_id}`,
+    )
+    expect(machineCell(addressRow)).toHaveTextContent('192.168.1.63')
+    expect(machineCell(addressRow).querySelector('.font-mono')).not.toBeNull()
+    expect(
+      within(addressRow).getByRole('link', {
+        name: `${addressOnlyFinding.title} on 192.168.1.63`,
+      }),
+    ).toBeInTheDocument()
+
+    const unidentifiedRow = screen.getByTestId(
+      `home-table-row-${unidentifiedFinding.finding_id}`,
+    )
+    expect(machineCell(unidentifiedRow)).toHaveTextContent('—')
+    expect(
+      within(unidentifiedRow).getByRole('link', {
+        name: `${unidentifiedFinding.title} on unknown machine`,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a renamed machine by its current host_hostname on the record', async () => {
+    const renamedFinding = {
+      ...criticalFinding,
+      host_hostname: 'Office PC',
+      host_ip: '192.168.1.22',
+    }
+    overrideHome(() =>
+      homeSnapshot({
+        review_count: 1,
+        attention: {
+          data: [renamedFinding],
+          total: 1,
+          page: 1,
+        },
+      }),
+    )
+    renderWithProviders(<Home />)
+
+    const row = await screen.findByTestId(
+      `home-table-row-${renamedFinding.finding_id}`,
+    )
+    expect(machineCell(row)).toHaveTextContent('Office PC')
+    expect(machineCell(row)).not.toHaveTextContent('192.168.1.22')
+    expect(
+      within(row).getByRole('link', {
+        name: `${renamedFinding.title} on Office PC`,
+      }),
+    ).toBeInTheDocument()
   })
 
   it('with attention, the title states the count and each row navigates', async () => {
@@ -134,7 +243,7 @@ describe('Home', () => {
     ).toBeInTheDocument()
 
     const criticalLink = screen.getByRole('link', {
-      name: `${criticalFinding.title} on ${criticalFinding.host_ip}`,
+      name: `${criticalFinding.title} on ${criticalFinding.host_hostname}`,
     })
     await user.click(criticalLink)
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
@@ -142,7 +251,7 @@ describe('Home', () => {
     )
 
     const highLink = screen.getByRole('link', {
-      name: `${highFinding.title} on ${highFinding.host_ip}`,
+      name: `${highFinding.title} on ${highFinding.host_hostname}`,
     })
     await user.click(highLink)
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
@@ -163,7 +272,9 @@ describe('Home', () => {
       `home-table-row-${criticalFinding.finding_id}`,
     )
     await user.click(
-      within(row).getByRole('link', { name: criticalFinding.host_ip ?? '' }),
+      within(row).getByRole('link', {
+        name: criticalFinding.host_hostname ?? '',
+      }),
     )
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/network/${criticalFinding.host_id}`,

@@ -1,10 +1,11 @@
 # Roadmap — Pi Agent
 
-> **Status:** built for **local scanning**. The Pi runs discovery → enumeration → service detection →
-> NSE → normalization via the TUI, then **writes JSON to `hardware-agent/artifacts/`**. There is
-> **no HTTP client to the backend** in the repo (`transport/` described in older docs was never
-> added). There is **no inbound path** to ask the Pi to scan on demand. Closing that gap is the
-> headline product decision below.
+> **Status:** **wired end to end and verified on hardware (2026-09-11).** The Pi runs discovery →
+> enumeration → service detection → NSE → normalization, and `agent.transport` carries both
+> directions: an outbound WebSocket command channel that accepts scan requests, and a signed
+> ingest client that uploads results. A scan triggered from the web reached the device, executed
+> and returned results in about two minutes — see
+> [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md).
 >
 > **Sources:** [`ARCHITECTURE.md §2.1`](../architecture/ARCHITECTURE.md), [`ADR-001`](../adr/ADR-001-hardware-selection.md),
 > [`ADR-002`](../adr/ADR-002-scanning-tools-selection.md), [`ADR-004`](../adr/ADR-004-scan-methodology.md),
@@ -12,10 +13,10 @@
 
 ## Current state
 
-- **Hardware: a Raspberry Pi 3 is in possession as of 2026-08-21** (exact model — B or B+ — to confirm). This is **not** the board [`ADR-001`](../adr/ADR-001-hardware-selection.md) selected: that ADR specifies a Pi 4 Model B 4 GB and explicitly **rejected** the Pi 3 B+ for **1 GB RAM** and **USB 2.0 I/O**. The ADR is annotated, not reversed — the Pi 4 remains the documented target. Still to do: flash, provision and **prove the pipeline actually fits in 1 GB** before the September E2E — see [Hardware acquisition](#hardware-acquisition--open).
+- **Hardware: a Raspberry Pi 4 Model B Rev 1.5 (4 GB) is provisioned and running as of 2026-09-11.** This *is* the board [`ADR-001`](../adr/ADR-001-hardware-selection.md) selected — the earlier belief that only a Pi 3 was in hand was wrong. ADR-001 still carries a divergence annotation describing a Pi 3; correcting it is DMI-109's deliverable and is not done here, since a roadmap document does not change an ADR's status. Read from the device: `/proc/device-tree/model` → `Raspberry Pi 4 Model B Rev 1.5`, `MemTotal` → 3 886 904 kB, `vcgencmd get_throttled` → `0x0`. A **Pi 3 (1 GB) is also held**, deliberately, as the comparison unit for DMI-109's 1 GB vs 4 GB benchmark. The agent is installed at `/opt/dmitri-agent` on Debian 13 (trixie) with `uv`-managed Python 3.12 — see [`../PI-INSTALLER.md`](../PI-INSTALLER.md).
 - **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
-- **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
-- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **implemented on both sides but not yet wired**: the backend route landed with DMI-63 and the device client (`agent.transport.ScanIngestClient`) with DMI-65. What is missing is the daemon that calls it (DMI-66).
+- **Output today:** normalized JSON on disk, and uploaded to `POST /api/v1/scans` by the daemon's signed ingest client. Verified from the real device on 2026-09-11.
+- **Egress, working:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key). The backend route landed with DMI-63, the device client (`agent.transport.ScanIngestClient`) with DMI-65, and the daemon that calls it with DMI-66. Verified against the hosted stack on 2026-09-11: 12 hosts and 20 findings ingested from the real device.
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.
 
 ✅ **RECONCILED:** ADR-005 originally assumed a *one-way push* agent. Control requires the backend
@@ -59,14 +60,14 @@ Matches [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-):
 - Status over WS: `running` → `uploading` → `done` \| `failed`.
 - Ingest uses the command's **`scan_id`** (not a locally generated UUID).
 
-### Interface reporting 🔓 — new, blocks the first scan
+### Interface reporting ✅ — shipped and exercised
 
 **The Pi must report the networks it can see.** On WS connect (and on reconnect, since interfaces
 change), the daemon enumerates its own interfaces and sends the backend a list of
 **`available_subnets`** — for each: the CIDR, the interface name, and whether it holds the default
 route.
 
-**Why this exists.** `POST /commands` requires a `subnet` CIDR, and **nobody can supply one**. The
+**Why this exists.** `POST /commands` requires a `subnet` CIDR, and without this nobody could supply one. The
 org admin is non-technical and does not know their CIDR ([`AUTH.md`](AUTH.md) — they never touch
 provisioning). And the Pi **cannot guess**: it is deliberately **dual-homed** ([NSPi field
 test](../tests/nspi-september/plan.md)) — ethernet onto the target subnet with **no default
@@ -89,11 +90,24 @@ So the Pi **reports**, a human **chooses once**, and the backend **stores** the 
 
 ## Hardware acquisition & installer provisioning
 
-**Unblocked, with a caveat:** a Raspberry Pi 3 is now in hand, so September Scenario B has a real
-appliance. But it is the board ADR-001 rejected, so "we have hardware" is not the same as "the
-hardware is adequate" — the 1 GB RAM and USB 2.0 constraints are unproven against this pipeline
-and are now the top Pi-side risk. **DMI-109** measures then decides, producing **ADR-018**; it blocks DMI-57 so the installer playbook is written once against a settled baseline. Two BOM items from ADR-001 do **not** fit a Pi 3: the USB-C PSU
-(the Pi 3 uses micro-USB) and the Pi 4 case/cooler (different footprint).
+**Unblocked.** The appliance is a **Raspberry Pi 4 Model B 4 GB** — the ADR-001 target — flashed,
+provisioned and running the agent as of 2026-09-11. ADR-001's BOM applies without exception: the
+USB-C PSU and the Pi 4 case both fit.
+
+Measured on the device against `192.168.15.0/24` (Ethernet, no throttling in any run):
+
+| Mode | Outcome | Wall-time | Peak RSS |
+|---|---|---|---|
+| `quick` | completed | 2m 24s | 98 MiB |
+| `nspi` | completed | 4m 34s | 101 MiB |
+| `standard` | completed | 6m 36s | 102 MiB |
+| `max` | completed | 9m 59s | **134 MiB** |
+
+**The pipeline is network-bound, not memory-bound:** wall-time varies 4× across modes while peak
+RSS moves 36 MiB. The 134 MiB worst case is ~13 % of a 1 GB board, which is why **DMI-109 is no
+longer a go/no-go on the Pi 3** — it becomes a comparative benchmark across the two boards held.
+Two caveats on these numbers: the target subnet is small (4–12 hosts), and the TUI's separate
+`ScanRunner` path is not yet measured.
 
 **B2B model ([`AUTH.md`](AUTH.md)):** a **technical installer** deploys the Pi on-site (vendor,
 integrator, or customer IT). The **org admin** never provisions keys — they only use the web app
@@ -102,18 +116,18 @@ after the agent is online. Consumer pairing flows (QR, local setup pages for bus
 
 | Step | Who | Status |
 |------|-----|--------|
-| ~~Procure BOM per ADR-001 (Pi 4 4GB, …)~~ — **board acquired 2026-08-21, but a Pi 3, not the Pi 4** | Vendor | ⚠️ |
-| Confirm the exact Pi 3 model (B vs B+) — decides Ethernet ceiling (100 Mbit vs ~300 Mbit over USB 2.0) | Installer | 🔓 |
-| Source a **micro-USB** PSU and a Pi 3 case/cooler — the ADR-001 USB-C PSU and Pi 4 case do not fit | Vendor | 🔓 |
-| **Benchmark the full pipeline on the Pi 3**: peak RSS under 1 GB, subnet sweep wall-time, `ScanRunner` parallelism. Feeds the go/no-go on a new hardware ADR | Installer | 🔓 |
-| Flash Raspberry Pi OS Lite; headless SSH; static IP or DHCP reservation | Installer | 🔓 |
-| Install `nmap`, `uv`, agent package; verify scan on hardware | Installer | 🔓 |
-| Generate the Ed25519 keypair **on the Pi**; register its **public key** with the backend (creates the `agents` row). No secret leaves the device. | Installer + vendor playbook | 🔓 |
-| Write `/etc/dmitri/agent.env` (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`) | Installer (SSH) | 🔓 |
-| Enable `dmitri-agent.service`; verify WSS + ingest | Installer | 🔓 |
-| Scheduled reboot policy — daemon reconnects via systemd | Installer / docs | 🔓 |
+| ~~Procure BOM per ADR-001 (Pi 4 4GB, …)~~ — **Pi 4 Model B Rev 1.5 4 GB confirmed on-device 2026-09-11** | Vendor | ✅ |
+| ~~Benchmark the full pipeline~~ — headless path measured, peak 134 MiB, no throttling | Installer | ✅ |
+| **Benchmark the Pi 3 (1 GB)** for the DMI-109 comparison, and the TUI's separate `ScanRunner` path | Installer | 🔓 |
+| ~~Flash Raspberry Pi OS Lite; headless SSH~~ — running Debian 13 (trixie) | Installer | ✅ |
+| Assign a **static IP or DHCP reservation** — the device is on DHCP today | Installer | 🔓 |
+| ~~Install `nmap`, `uv`, agent package; verify scan on hardware~~ — `/opt/dmitri-agent`, scan `completed` on the device | Installer | ✅ |
+| ~~Generate the Ed25519 keypair **on the Pi**; register its **public key** with the backend~~ — agent `8ae07687`, org NSPi; the private key never left the device | Installer + vendor playbook | ✅ |
+| ~~Write `/etc/dmitri/agent.env` (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`)~~ — root, 0600 | Installer (SSH) | ✅ |
+| ~~Enable `dmitri-agent.service`; verify WSS + ingest~~ — channel connected, 12 hosts / 20 findings ingested | Installer | ✅ |
+| ~~Scheduled reboot policy — daemon reconnects via systemd~~ — verified: reconnects in ~2 s after a restart, and on boot. **Except when the channel parks** (DMI-155) | Installer / docs | ✅ |
 
-Track spend against ADR-001 budget (R$ 1.250 BOM). Parallelize with cloud work; E2E cannot ship without this.
+Track spend against ADR-001 budget (R$ 1.250 BOM). The September E2E has shipped — see [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md).
 
 ## Pi runtime (September Control)
 
@@ -141,7 +155,7 @@ Production Pi runs a **headless daemon** (`dmitri agent`), not the TUI:
 0. HTTP transport client + Ed25519 signing (Pi submit + backend verify) — closes the unwired contract gap.
 1. ADR-011 ✅ ([`ADR-011`](../adr/ADR-011-pi-command-channel.md)). → *unblocks everything below*
 2. `dmitri agent` daemon + systemd; **WebSocket client** + connection registry on API; Postgres command table for lifecycle/audit.
-2b. **Interface reporting** ✅ — daemon enumerates its subnets and reports them on connect; the backend stores the operator's `target_subnet` and refuses a scan naming a network the Pi is not reporting (DMI-78, [B11-C2](BACKEND.md#b11--frontend-contract-asks-)). The remaining gap to the first web-triggered scan is the Agents screen itself.
+2b. **Interface reporting** ✅ — daemon enumerates its subnets and reports them on connect; the backend stores the operator's `target_subnet` and refuses a scan naming a network the Pi is not reporting (DMI-78, [B11-C2](BACKEND.md#b11--frontend-contract-asks-)). The first web-triggered scan has since run end to end from that screen (2026-09-11).
 3. "Trigger scan from web" end-to-end (frontend → backend → WS → Pi → results → frontend).
 4. **Installer provisioning playbook** documented (vendor); scheduled reboot policy — rotation deferred Phase 2.
 5. (fallback) HTTP poll delivery if WS ops block cutover — same command schema.

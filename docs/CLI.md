@@ -32,7 +32,14 @@ uv run dmitri agent nspi 10.0.0.0/24
 ```
 
 - **`<mode>`** — one of: `quick`, `standard`, `extensive`, `nspi`, `max`
+- **`<nspi-submode>`** (optional, only with `nspi`) — `inventory` or `read_only_mapping`.
+  `active_validation` is refused before any probe. Omitted `nspi` defaults to `inventory`.
 - **`<subnet>`** — IPv4 CIDR (e.g. `192.168.1.0/24`); host addresses without a prefix are rejected
+
+```bash
+uv run dmitri agent nspi inventory 10.0.0.0/24
+uv run dmitri agent nspi read_only_mapping 10.0.0.0/24
+```
 
 `nspi` currently selects the `inventory` submode automatically. It keeps the
 existing NSE coverage and adds bounded Modbus identification after NSE. The

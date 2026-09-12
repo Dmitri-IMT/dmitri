@@ -79,6 +79,7 @@ class HostRecord(SQLModel, table=True):
     mac: str | None = None
     hostname: str
     vendor: str
+    machine_type: str | None = None
     operating_system_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
@@ -87,6 +88,9 @@ class HostRecord(SQLModel, table=True):
     )
     open_ports_count: int
     highest_severity: str | None = None
+    vulnerability_count: int = Field(
+        default=0, sa_column_kwargs={"server_default": "0"}
+    )
     first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
     last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
@@ -103,6 +107,20 @@ class PortRecord(SQLModel, table=True):
     protocol: str
     state: str
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class HostPortRecord(SQLModel, table=True):
+    __tablename__ = "host_ports"
+    __table_args__ = (UniqueConstraint("host_id", "port", "protocol"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    host_id: UUID = Field(index=True, foreign_key="hosts.id")
+    port: int
+    protocol: str
+    service: str
+    version: str | None = None
+    first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
 
 
 class ServiceRecord(SQLModel, table=True):
@@ -124,6 +142,64 @@ class CPERecord(SQLModel, table=True):
     cpe: str = Field(index=True)
 
 
+
+class IndustrialServiceRecord(SQLModel, table=True):
+    __tablename__ = "industrial_services"
+    __table_args__ = (
+        UniqueConstraint("scan_host_id", "protocol", "port"),
+        CheckConstraint(
+            "protocol IN ('modbus_tcp')", name="ck_industrial_services_protocol"
+        ),
+        CheckConstraint(
+            "confidence IN ('suspected', 'confirmed')",
+            name="ck_industrial_services_confidence",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    scan_host_id: int = Field(index=True, foreign_key="scan_hosts.id")
+    port_id: int | None = Field(default=None, index=True, foreign_key="ports.id")
+    protocol: str
+    port: int
+    confidence: str
+    mapping_source: str | None = None
+    evidence_sources_json: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    write_requests_sent: int = Field(default=0)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class ModbusUnitRecord(SQLModel, table=True):
+    __tablename__ = "modbus_units"
+    __table_args__ = (
+        UniqueConstraint("industrial_service_id", "unit_id"),
+        CheckConstraint(
+            "status IN ('responding', 'exception', 'timeout', 'error', 'skipped')",
+            name="ck_modbus_units_status",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    industrial_service_id: int = Field(
+        index=True, foreign_key="industrial_services.id"
+    )
+    unit_id: int
+    status: str
+    exception_code: int | None = None
+    error: str | None = None
+    identification_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
+    identification_sources_json: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    address_ranges_json: list[dict[str, Any]] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
 class FindingRecord(SQLModel, table=True):
     __tablename__ = "findings"
     __table_args__ = (
@@ -138,6 +214,9 @@ class FindingRecord(SQLModel, table=True):
         default=None, index=True, foreign_key="scan_hosts.id"
     )
     port_id: int | None = Field(default=None, index=True, foreign_key="ports.id")
+    modbus_unit_id: int | None = Field(
+        default=None, index=True, foreign_key="modbus_units.id"
+    )
     ip: str | None = Field(default=None, index=True)
     port: int | None = None
     protocol: str | None = None
@@ -157,6 +236,18 @@ class FindingRecord(SQLModel, table=True):
     dedupe_key: str = Field(index=True)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
     updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class HostFindingRecord(SQLModel, table=True):
+    __tablename__ = "host_findings"
+    __table_args__ = (UniqueConstraint("host_id", "dedupe_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    host_id: UUID = Field(index=True, foreign_key="hosts.id")
+    dedupe_key: str = Field(index=True)
+    first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    fixed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
 
 
 class EnrichmentJobRecord(SQLModel, table=True):

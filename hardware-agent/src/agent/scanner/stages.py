@@ -4,6 +4,8 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from time import perf_counter
 from typing import TYPE_CHECKING, TypeVar
 
 from agent.config import (
@@ -20,6 +22,7 @@ from agent.discovery.port_discovery import (
     merge_ports,
     scan_ports_batch,
 )
+from agent.discovery.service_detection import detect_services
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import (
     HostPayload,
@@ -27,14 +30,19 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
-    ModbusValidationPayload,
     OperatingSystemDetection,
     PortPayload,
 )
+from agent.ot.digest import load_digest_key
 from agent.ot.modbus.fingerprints import correlate_fc43_fingerprints
 from agent.ot.modbus.inventory import has_modbus_candidate, inventory_modbus_host
 from agent.ot.modbus.mapper import MappingBudget, map_modbus_service
-from agent.ot.policy import OtAutomationPolicy
+from agent.ot.policy import (
+    MAX_OT_HOST_SECONDS,
+    MAX_OT_STAGE_SECONDS,
+    OtAutomationPolicy,
+    min_not_none,
+)
 from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
@@ -86,6 +94,28 @@ def _chunked(items: list[str], chunk_size: int) -> list[list[str]]:
     return [
         items[index : index + chunk_size] for index in range(0, len(items), chunk_size)
     ]
+
+
+def _recover_deep_stage_services(
+    runner: NmapRunner,
+    settings: AgentSettings,
+    host: HostInfo,
+) -> bool:
+    try:
+        recovered = detect_services(
+            runner,
+            host.ip,
+            host.ports,
+            version_intensity=effective_version_intensity(settings.version_intensity),
+            timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
+        )
+    except (BudgetExceeded, UnitScanError, TransientScanError) as exc:
+        LOGGER.warning("Service recovery failed for %s: %s", host.ip, exc)
+        return False
+    if not recovered:
+        return False
+    host.ports = merge_ports(host.ports, recovered)
+    return True
 
 
 def run_port_stage(
@@ -146,7 +176,11 @@ def run_port_stage(
             else:
                 for ip in batch:
                     host = host_map[ip]
-                    result = results[ip]
+                    result = results.get(ip)
+                    if result is None:
+                        raise UnitScanError(
+                            f"Port scan did not return results for {ip}"
+                        )
                     host.ports = sorted(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
@@ -256,28 +290,60 @@ def run_deep_inspection_stage(
             except CircuitBreakerError:
                 raise
             except BudgetExceeded:
-                hosts_skipped += 1
-                _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
                 LOGGER.warning("Deep inspection timed out for %s.", host.ip)
+                if _recover_deep_stage_services(runner, settings, host):
+                    LOGGER.info(
+                        "Deep inspection recovered service evidence for %s.",
+                        host.ip,
+                    )
+                else:
+                    hosts_skipped += 1
+                    _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
+                    LOGGER.warning(
+                        "Deep inspection service recovery found nothing for %s.",
+                        host.ip,
+                    )
             except UnitScanError:
-                hosts_skipped += 1
-                _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
                 LOGGER.warning("Deep inspection failed for %s.", host.ip)
+                if _recover_deep_stage_services(runner, settings, host):
+                    LOGGER.info(
+                        "Deep inspection recovered service evidence for %s.",
+                        host.ip,
+                    )
+                else:
+                    hosts_skipped += 1
+                    _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
+                    LOGGER.warning(
+                        "Deep inspection service recovery found nothing for %s.",
+                        host.ip,
+                    )
             else:
                 if result is None:
-                    hosts_skipped += 1
                     if settings.scan_mode == "nspi":
-                        _emit(
-                            reporter,
-                            ScanEvent(kind="unit_timed_out", ip=host.ip),
-                        )
                         LOGGER.warning(
                             "Deep inspection hit the host timeout for %s.", host.ip
                         )
                     else:
-                        _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
                         LOGGER.warning(
                             "Deep inspection returned no result for %s.", host.ip
+                        )
+                    if _recover_deep_stage_services(runner, settings, host):
+                        LOGGER.info(
+                            "Deep inspection recovered service evidence for %s.",
+                            host.ip,
+                        )
+                    else:
+                        hosts_skipped += 1
+                        if settings.scan_mode == "nspi":
+                            _emit(
+                                reporter,
+                                ScanEvent(kind="unit_timed_out", ip=host.ip),
+                            )
+                        else:
+                            _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
+                        LOGGER.warning(
+                            "Deep inspection service recovery found nothing for %s.",
+                            host.ip,
                         )
                 else:
                     host.ports = merge_ports(host.ports, result.ports)
@@ -330,6 +396,25 @@ def run_deep_inspection_stage(
     return hosts_skipped
 
 
+@dataclass(frozen=True, slots=True)
+class OtInspectionResult:
+    stage_deadline_reached: bool = False
+    stage_deadline_seconds: int | None = None
+
+
+def _elapsed_stage_seconds(stage_deadline: float, stage_started: float) -> int:
+    return max(1, int(round(stage_deadline - stage_started)))
+
+
+def _stage_deadline_hit(
+    stage_deadline: float | None,
+    stage_started: float,
+) -> int | None:
+    if stage_deadline is None or perf_counter() < stage_deadline:
+        return None
+    return _elapsed_stage_seconds(stage_deadline, stage_started)
+
+
 def run_ot_inspection_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
@@ -338,11 +423,12 @@ def run_ot_inspection_stage(
     modbus_controller: ModbusClientController | None = None,
     policy: OtAutomationPolicy | None = None,
     deadline: float | None = None,
-) -> None:
+) -> OtInspectionResult:
     """Run serial, bounded OT enrichment after the existing NSE stage."""
 
     if settings.scan_mode != "nspi":
-        return
+        return OtInspectionResult()
+
     eligible_hosts = [host for host in hosts if has_modbus_candidate(host)]
     hosts_total = len(eligible_hosts)
     action = (
@@ -359,14 +445,26 @@ def run_ot_inspection_stage(
         ),
     )
     hosts_done = 0
+    deadline_seconds: int | None = None
     effective_policy = policy or OtAutomationPolicy()
+    digest_key = load_digest_key()
+    stage_started = perf_counter()
+    stage_deadline = min_not_none(deadline, stage_started + MAX_OT_STAGE_SECONDS)
     for host in eligible_hosts:
         if cancel_event is not None and cancel_event.is_set():
             break
+        if _stage_deadline_hit(stage_deadline, stage_started) is not None:
+            break
+        host_deadline = min_not_none(
+            stage_deadline,
+            perf_counter() + MAX_OT_HOST_SECONDS,
+        )
         host.industrial_services = inventory_modbus_host(
             host,
+            policy=effective_policy,
             cancel_event=cancel_event,
             controller=modbus_controller,
+            deadline=host_deadline,
         )
         if settings.nspi_submode == "read_only_mapping":
             budget = MappingBudget(
@@ -380,8 +478,9 @@ def run_ot_inspection_stage(
                     policy=effective_policy,
                     cancel_event=cancel_event,
                     controller=modbus_controller,
-                    deadline=deadline,
+                    deadline=host_deadline,
                     budget=budget,
+                    digest_key=digest_key,
                 )
         correlate_fc43_fingerprints(host)
         hosts_done += 1
@@ -399,6 +498,25 @@ def run_ot_inspection_stage(
                 ip=host.ip,
             ),
         )
+    cancelled = cancel_event is not None and cancel_event.is_set()
+    if not cancelled:
+        deadline_seconds = _stage_deadline_hit(stage_deadline, stage_started)
+        if deadline_seconds is not None:
+            reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
+            _emit(
+                reporter,
+                ScanEvent(
+                    kind="ot_stage_deadline",
+                    message=reason,
+                    units_skipped=hosts_total - hosts_done,
+                    units_total=hosts_total,
+                    deadline_seconds=deadline_seconds,
+                ),
+            )
+    result = OtInspectionResult(
+        stage_deadline_reached=deadline_seconds is not None,
+        stage_deadline_seconds=deadline_seconds,
+    )
     _emit(
         reporter,
         ScanEvent(
@@ -412,6 +530,7 @@ def run_ot_inspection_stage(
             units_skipped=hosts_total - hosts_done,
         ),
     )
+    return result
 
 
 def build_host_payload(host: HostInfo) -> HostPayload:
@@ -457,6 +576,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                 confidence=service.confidence,
                 evidence_sources=service.evidence_sources,
                 mapping_source=service.mapping_source,
+                write_requests_sent=service.write_requests_sent,
                 units=[
                     ModbusUnitPayload(
                         unit_id=unit.unit_id,
@@ -477,6 +597,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                                     unit.device_identification.user_application_name
                                 ),
                                 objects=unit.device_identification.objects,
+                                truncated=unit.device_identification.truncated,
                             )
                             if unit.device_identification is not None
                             else None
@@ -490,33 +611,10 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                                 status=item.status,
                                 exception_code=item.exception_code,
                                 label=item.label,
-                                nonzero_count=item.nonzero_count,
-                                value_min=item.value_min,
-                                value_max=item.value_max,
-                                values=item.values,
-                                value_sha256=item.value_sha256,
+                                value_digest=item.value_digest,
                                 observed_at=item.observed_at,
                             )
                             for item in unit.address_ranges
-                        ],
-                        validations=[
-                            ModbusValidationPayload(
-                                address_space=item.address_space,
-                                address=item.address,
-                                label=item.label,
-                                function_code=item.function_code,
-                                original_value=item.original_value,
-                                expected_current_value=item.expected_current_value,
-                                test_value=item.test_value,
-                                write_status=item.write_status,
-                                read_back_value=item.read_back_value,
-                                restoration_status=item.restoration_status,
-                                final_value=item.final_value,
-                                change_ticket=item.change_ticket,
-                                started_at=item.started_at,
-                                completed_at=item.completed_at,
-                            )
-                            for item in unit.validations
                         ],
                     )
                     for unit in service.units
@@ -570,6 +668,7 @@ def build_metadata(
     partial_result: bool = False,
     interrupted_stage: str | None = None,
     terminated_by: str | None = None,
+    ot_inspection: OtInspectionResult | None = None,
 ) -> dict[str, str | int | float | bool]:
     metadata: dict[str, str | int | float | bool] = {
         "agent_version": AGENT_VERSION,
@@ -598,6 +697,7 @@ def build_metadata(
         modbus_services = [
             service for host in hosts or [] for service in host.industrial_services
         ]
+        digest_key = load_digest_key()
         metadata.update(
             {
                 "nspi_policy_version": 1,
@@ -627,7 +727,20 @@ def build_metadata(
                     "fc43-fingerprint-catalog" in service.evidence_sources
                     for service in modbus_services
                 ),
-                "modbus_write_requests_sent": 0,
+                "modbus_write_requests_sent": sum(
+                    service.write_requests_sent for service in modbus_services
+                ),
+                "modbus_parse_failures": sum(
+                    service.parse_failures for service in modbus_services
+                ),
+                "modbus_digest_key_present": digest_key is not None,
             }
         )
+        ot_result = ot_inspection or OtInspectionResult()
+        if ot_result.stage_deadline_reached:
+            metadata["modbus_stage_deadline_reached"] = True
+            if ot_result.stage_deadline_seconds is not None:
+                metadata["modbus_stage_deadline_seconds"] = (
+                    ot_result.stage_deadline_seconds
+                )
     return metadata

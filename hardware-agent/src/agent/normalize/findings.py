@@ -18,7 +18,7 @@ def extract_findings(hosts: list[HostInfo]) -> list[FindingPayload]:
     """Convert parsed NSE results into the shared `findings` payload."""
 
     findings: list[FindingPayload] = []
-    seen: set[tuple[str, int | None, str, str]] = set()
+    seen: set[tuple[str, int | None, int | None, str, str]] = set()
 
     for host in hosts:
         for script in host.host_scripts:
@@ -40,40 +40,39 @@ def _extract_modbus_read_findings(host: HostInfo) -> list[FindingPayload]:
     port_index = {port.port: port for port in host.ports}
     findings: list[FindingPayload] = []
     for service in host.industrial_services:
-        readable = [
-            (unit.unit_id, item)
-            for unit in service.units
-            for item in unit.address_ranges
-            if item.status == "readable"
-        ]
-        if not readable:
-            continue
-        evidence = "; ".join(
-            f"Unit {unit_id} FC{_function_code(item.address_space):02d} "
-            f"addresses {item.start_address}-{item.start_address + item.count - 1}"
-            for unit_id, item in readable
-        )
-        evidence += ". No Modbus write function was sent."
-        findings.append(
-            _base_finding(
-                host,
-                port_index.get(service.port),
-                severity="medium",
-                title="Unauthenticated Modbus data read is reachable",
-                description=(
-                    "An authorised read-only probe received Modbus process data "
-                    "without application-layer authentication."
-                ),
-                recommendation=(
-                    "Restrict Modbus TCP to required peers and maintenance paths, "
-                    "monitor read requests, and use an authenticated security layer "
-                    "where supported."
-                ),
-                evidence=evidence,
-                source="modbus-read-only-assessment",
-                source_script=None,
+        for unit in service.units:
+            readable = [
+                item for item in unit.address_ranges if item.status == "readable"
+            ]
+            if not readable:
+                continue
+            evidence = "; ".join(
+                f"Unit {unit.unit_id} FC{_function_code(item.address_space):02d} "
+                f"addresses {item.start_address}-{item.start_address + item.count - 1}"
+                for item in readable
             )
-        )
+            evidence += ". No Modbus write function was sent."
+            findings.append(
+                _base_finding(
+                    host,
+                    port_index.get(service.port),
+                    severity="medium",
+                    title="Unauthenticated Modbus data read is reachable",
+                    description=(
+                        "An authorised read-only probe received Modbus process data "
+                        "without application-layer authentication."
+                    ),
+                    recommendation=(
+                        "Restrict Modbus TCP to required peers and maintenance "
+                        "paths, monitor read requests, and use an authenticated "
+                        "security layer where supported."
+                    ),
+                    evidence=evidence,
+                    source="modbus-read-only-assessment",
+                    source_script=None,
+                    unit_id=unit.unit_id,
+                )
+            )
     return findings
 
 
@@ -88,12 +87,13 @@ def _function_code(address_space: str) -> int:
 
 def _append_unique(
     findings: list[FindingPayload],
-    seen: set[tuple[str, int | None, str, str]],
+    seen: set[tuple[str, int | None, int | None, str, str]],
     finding: FindingPayload,
 ) -> None:
     key = (
         str(finding.ip) if finding.ip is not None else "global",
         finding.port,
+        finding.unit_id,
         finding.source_script or "unknown-script",
         finding.cve_id or finding.title,
     )
@@ -640,6 +640,7 @@ def _base_finding(
     cve_id: str | None = None,
     cvss_score: float | None = None,
     references: list[str] | None = None,
+    unit_id: int | None = None,
 ) -> FindingPayload:
     protocol = (
         port.protocol if port is not None and port.protocol in {"tcp", "udp"} else None
@@ -648,6 +649,7 @@ def _base_finding(
     return FindingPayload(
         ip=host.ip,
         port=port.port if port is not None else None,
+        unit_id=unit_id,
         protocol=protocol,
         service=service_name,
         source=source,

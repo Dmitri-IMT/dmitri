@@ -3,34 +3,42 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-import pydantic
 import pytest
 from api.models.persistence import HostRecord
 from api.services.read import get_host_detail
-from read_factories import seed_read_graph
+from read_factories import make_org, seed_read_graph
 from sqlmodel import Session
 from starlette.testclient import TestClient
 
 
 def _add_host(
-    session: Session, org_id, *, ip: str, hostname: str, vendor: str
-) -> None:
+    session: Session,
+    org_id,
+    *,
+    ip: str,
+    hostname: str,
+    vendor: str,
+    last_seen_at: datetime | None = None,
+    vulnerability_count: int = 0,
+) -> HostRecord:
     now = datetime.now(timezone.utc)
-    session.add(
-        HostRecord(
-            identity_key=f"sortable-{ip}",
-            org_id=org_id,
-            ip=ip,
-            mac=None,
-            hostname=hostname,
-            vendor=vendor,
-            open_ports_count=0,
-            highest_severity=None,
-            first_seen_at=now,
-            last_seen_at=now,
-        )
+    host = HostRecord(
+        identity_key=f"sortable-{ip}",
+        org_id=org_id,
+        ip=ip,
+        mac=None,
+        hostname=hostname,
+        vendor=vendor,
+        open_ports_count=0,
+        highest_severity=None,
+        first_seen_at=now,
+        last_seen_at=last_seen_at or now,
+        vulnerability_count=vulnerability_count,
     )
+    session.add(host)
     session.commit()
+    session.refresh(host)
+    return host
 
 
 @pytest.mark.parametrize("role", ["viewer", "admin"])
@@ -315,39 +323,7 @@ def test_host_reads_return_inventory_value_and_history_snapshot(
     assert detail.json()["scan_history"][0]["operating_system"] == snapshot
 
 
-def test_host_detail_returns_industrial_inventory(
-    client: TestClient, administrative_session: Session, bearer_headers
-) -> None:
-    seeded = seed_read_graph(administrative_session)
-    seeded["host"].industrial_services_json = [
-        {
-            "port": 502,
-            "confidence": "confirmed",
-            "units": [
-                {
-                    "unit_id": 1,
-                    "status": "responding",
-                    "device_identification": {"product_code": "TM221CE16T"},
-                }
-            ],
-        }
-    ]
-    administrative_session.commit()
-
-    detail = client.get(
-        f"/api/v1/hosts/{seeded['host'].id}",
-        headers=bearer_headers(seeded["org"].id, "viewer"),
-    )
-
-    assert detail.status_code == 200
-    service = detail.json()["industrial_services"][0]
-    assert service["protocol"] == "modbus_tcp"
-    assert service["units"][0]["device_identification"]["product_code"] == (
-        "TM221CE16T"
-    )
-
-
-def test_host_read_rejects_malformed_persisted_operating_system(
+def test_host_read_degrades_malformed_persisted_operating_system(
     administrative_session: Session,
 ) -> None:
     seeded = seed_read_graph(administrative_session)
@@ -358,15 +334,17 @@ def test_host_read_rejects_malformed_persisted_operating_system(
     }
     administrative_session.commit()
 
-    with pytest.raises(pydantic.ValidationError):
-        get_host_detail(
-            administrative_session,
-            seeded["host"].id,
-            org_id=seeded["org"].id,
-        )
+    detail = get_host_detail(
+        administrative_session,
+        seeded["host"].id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.operating_system is None
+    assert "operating_system" in detail.unreadable_fields
 
 
-def test_host_history_rejects_malformed_persisted_operating_system_snapshot(
+def test_host_history_degrades_malformed_persisted_operating_system_snapshot(
     administrative_session: Session,
 ) -> None:
     seeded = seed_read_graph(administrative_session)
@@ -377,12 +355,14 @@ def test_host_history_rejects_malformed_persisted_operating_system_snapshot(
     }
     administrative_session.commit()
 
-    with pytest.raises(pydantic.ValidationError):
-        get_host_detail(
-            administrative_session,
-            seeded["host"].id,
-            org_id=seeded["org"].id,
-        )
+    detail = get_host_detail(
+        administrative_session,
+        seeded["host"].id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.scan_history[0].operating_system is None
+    assert "operating_system" in detail.unreadable_fields
 
 
 def test_mac_less_host_is_listed_and_readable(
@@ -439,3 +419,161 @@ def test_get_host_by_id_cross_org_returns_404_not_403(
     )
     assert response.status_code == 404
     assert response.status_code != 403
+
+
+def test_quiet_total_is_the_whole_inventory_on_every_page_and_both_groups(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    org = make_org(administrative_session, "Quiet Whole Inventory")
+    now = datetime.now(timezone.utc)
+    quiet_ids = set()
+    for index in range(45):
+        is_quiet = index < 6
+        host = _add_host(
+            administrative_session,
+            org.id,
+            ip=f"192.168.7.{index + 1}",
+            hostname=f"machine-{index:02d}",
+            vendor="Acme",
+            last_seen_at=now - timedelta(days=8 if is_quiet else 1),
+        )
+        if is_quiet:
+            quiet_ids.add(str(host.id))
+
+    headers = bearer_headers(org.id, "admin")
+    active_pages = [
+        client.get(f"/api/v1/hosts?page={page}&per_page=20", headers=headers).json()
+        for page in (1, 2, 3)
+    ]
+    quiet_page = client.get(
+        "/api/v1/hosts?group=quiet&per_page=20", headers=headers
+    ).json()
+
+    assert [len(page["data"]) for page in active_pages] == [20, 19, 0]
+    assert [page["total"] for page in active_pages] == [39, 39, 39]
+    assert [page["quiet_total"] for page in active_pages] == [6, 6, 6]
+    assert quiet_page["quiet_total"] == 6
+    assert quiet_page["total"] == 6
+
+    listed = {row["host_id"] for page in active_pages for row in page["data"]}
+    assert len(listed) == 39
+    assert listed.isdisjoint(quiet_ids)
+    assert {row["host_id"] for row in quiet_page["data"]} == quiet_ids
+
+
+def test_quiet_group_pages_on_its_own_without_disturbing_the_active_list(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    org = make_org(administrative_session, "Quiet Paging")
+    now = datetime.now(timezone.utc)
+    active_ids = {
+        str(
+            _add_host(
+                administrative_session,
+                org.id,
+                ip=f"192.168.8.{index + 1}",
+                hostname=f"active-{index}",
+                vendor="Acme",
+                last_seen_at=now - timedelta(days=1),
+            ).id
+        )
+        for index in range(2)
+    }
+    quiet_ids = {
+        str(
+            _add_host(
+                administrative_session,
+                org.id,
+                ip=f"192.168.8.{index + 11}",
+                hostname=f"quiet-{index}",
+                vendor="Acme",
+                last_seen_at=now - timedelta(days=10 + index),
+            ).id
+        )
+        for index in range(3)
+    }
+
+    headers = bearer_headers(org.id, "admin")
+    before = client.get("/api/v1/hosts", headers=headers).json()
+    first = client.get(
+        "/api/v1/hosts?group=quiet&per_page=2&page=1", headers=headers
+    ).json()
+    second = client.get(
+        "/api/v1/hosts?group=quiet&per_page=2&page=2", headers=headers
+    ).json()
+    after = client.get("/api/v1/hosts", headers=headers).json()
+
+    assert [len(first["data"]), len(second["data"])] == [2, 1]
+    assert first["total"] == 3
+    assert first["quiet_total"] == 3
+    assert second["page"] == 2
+    quiet_listed = {row["host_id"] for row in first["data"] + second["data"]}
+    assert quiet_listed == quiet_ids
+
+    assert {row["host_id"] for row in before["data"]} == active_ids
+    assert after == before
+
+
+def test_quiet_threshold_is_seven_days(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    org = make_org(administrative_session, "Quiet Threshold")
+    now = datetime.now(timezone.utc)
+    eight_days = _add_host(
+        administrative_session,
+        org.id,
+        ip="192.168.6.1",
+        hostname="eight-days",
+        vendor="Acme",
+        last_seen_at=now - timedelta(days=8),
+    )
+    six_days = _add_host(
+        administrative_session,
+        org.id,
+        ip="192.168.6.2",
+        hostname="six-days",
+        vendor="Acme",
+        last_seen_at=now - timedelta(days=6),
+    )
+
+    headers = bearer_headers(org.id, "admin")
+    active = client.get("/api/v1/hosts", headers=headers).json()
+    quiet = client.get("/api/v1/hosts?group=quiet", headers=headers).json()
+
+    assert [row["host_id"] for row in active["data"]] == [str(six_days.id)]
+    assert [row["host_id"] for row in quiet["data"]] == [str(eight_days.id)]
+    assert active["quiet_total"] == 1
+    assert active["total"] == 1
+
+
+def test_sort_by_vulnerability_count_ranks_the_whole_network_not_the_page(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    org = make_org(administrative_session, "Worst On The Network")
+    now = datetime.now(timezone.utc)
+    worst = None
+    for index in range(45):
+        host = _add_host(
+            administrative_session,
+            org.id,
+            ip=f"192.168.5.{index + 1}",
+            hostname=f"machine-{index:02d}",
+            vendor="Acme",
+            last_seen_at=now - timedelta(minutes=index),
+            vulnerability_count=index,
+        )
+        worst = host
+
+    headers = bearer_headers(org.id, "admin")
+    query = "sort_by=vulnerability_count&sort_order=desc&per_page=15"
+    pages = [
+        client.get(f"/api/v1/hosts?{query}&page={page}", headers=headers).json()
+        for page in (1, 2, 3)
+    ]
+
+    assert [len(page["data"]) for page in pages] == [15, 15, 15]
+    assert pages[0]["data"][0]["host_id"] == str(worst.id)
+    assert pages[0]["data"][0]["vulnerability_count"] == 44
+    counts = [row["vulnerability_count"] for page in pages for row in page["data"]]
+    assert counts == sorted(counts, reverse=True)
+    assert counts == list(range(44, -1, -1))

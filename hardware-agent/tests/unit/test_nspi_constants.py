@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from time import perf_counter
+
 from agent.config import (
     NSPI_HOST_TIMEOUT,
     NSPI_NSE_SCRIPTS,
     NSPI_PORTS,
     NSPI_SCRIPT_TIMEOUT,
 )
+from agent.ot.policy import MAX_OT_HOST_SECONDS, MAX_OT_STAGE_SECONDS, min_not_none
 from agent.discovery.port_discovery import NSPI_PASS1_ARGS, NSPI_PASS2_ARGS
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.scanner.models import PortInfo
@@ -126,3 +129,13 @@ class TestNspiPorts:
         for arguments in (NSPI_PASS1_ARGS, NSPI_PASS2_ARGS):
             timeout_index = arguments.index("--host-timeout")
             assert arguments[timeout_index + 1] == NSPI_HOST_TIMEOUT
+
+
+class TestOtDeadlineDefaults:
+    def test_default_policy_produces_non_none_ot_deadline(self) -> None:
+        now = perf_counter()
+        stage_deadline = min_not_none(None, now + MAX_OT_STAGE_SECONDS)
+        host_deadline = min_not_none(stage_deadline, now + MAX_OT_HOST_SECONDS)
+        assert stage_deadline is not None
+        assert host_deadline is not None
+        assert host_deadline <= stage_deadline

@@ -18,7 +18,7 @@
           "start_address": 0,
           "count": 16,
           "block_size": 8,
-          "capture_values": "summary",
+          "capture_values": "digest",
           "bisect_on_illegal_address": false,
           "minimum_block_size": 1,
           "label": "laboratory holding-register sample"
@@ -28,7 +28,7 @@
           "start_address": 0,
           "count": 8,
           "block_size": 8,
-          "capture_values": "summary",
+          "capture_values": "digest",
           "bisect_on_illegal_address": false,
           "minimum_block_size": 1,
           "label": "laboratory coil sample"

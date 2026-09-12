@@ -9,8 +9,14 @@ from typing import Any
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ModbusIOException
 
-from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
+from agent.ot.modbus.models import (
+    AddressRangeStatus,
+    ModbusDeviceIdentification,
+    ModbusUnit,
+)
+from agent.ot.modbus.readonly import ReadOnlyModbusClient
 from agent.ot.policy import AddressSpace
+from agent.ot.untrusted import bound_objects, bound_text
 
 _DEVICE_ID_FIELDS = {
     0: "vendor_name",
@@ -56,7 +62,7 @@ class ModbusClientController:
 
 @dataclass(slots=True)
 class ModbusReadResult:
-    status: str
+    status: AddressRangeStatus
     values: list[int | bool] | None = None
     exception_code: int | None = None
     error: str | None = None
@@ -75,7 +81,9 @@ class ModbusReadSession:
         client_factory: Callable[..., Any] = ModbusTcpClient,
         controller: ModbusClientController | None = None,
     ) -> None:
-        self._client = client_factory(host, port=port, timeout=timeout, retries=0)
+        self._client = ReadOnlyModbusClient(
+            client_factory(host, port=port, timeout=timeout, retries=0)
+        )
         self._controller = controller
         self._registered = False
         self._connected: bool | None = None
@@ -187,7 +195,9 @@ def probe_device_identification(
 ) -> ModbusUnit:
     """Read FC43/MEI 14 identification through a deliberately narrow API."""
 
-    client = client_factory(host, port=port, timeout=timeout, retries=0)
+    client = ReadOnlyModbusClient(
+        client_factory(host, port=port, timeout=timeout, retries=0)
+    )
     if controller is not None and not controller.register(client):
         return ModbusUnit(
             unit_id=unit_id,
@@ -224,9 +234,16 @@ def probe_device_identification(
                 ),
                 error=str(response),
             )
-        identification = _decode_device_information(
-            getattr(response, "information", {})
-        )
+        try:
+            identification = _decode_device_information(
+                getattr(response, "information", {})
+            )
+        except Exception as exc:
+            return ModbusUnit(
+                unit_id=unit_id,
+                status="error",
+                error=type(exc).__name__,
+            )
         return ModbusUnit(
             unit_id=unit_id,
             status="responding",
@@ -252,16 +269,23 @@ def _decode_device_information(
     if not isinstance(information, dict):
         return None
     identification = ModbusDeviceIdentification()
+    truncated = False
+    raw_objects: dict[str, str] = {}
     for object_id, raw_value in information.items():
         try:
             numeric_id = int(object_id)
         except (TypeError, ValueError):
             continue
         value = _decode_value(raw_value)
-        identification.objects[str(numeric_id)] = value
+        bounded_value, cut = bound_text(value)
+        truncated = truncated or cut
+        raw_objects[str(numeric_id)] = bounded_value or ""
         field_name = _DEVICE_ID_FIELDS.get(numeric_id)
         if field_name is not None:
-            setattr(identification, field_name, value)
+            setattr(identification, field_name, bounded_value)
+    bounded_objs, dropped = bound_objects(raw_objects)
+    identification.objects = bounded_objs
+    identification.truncated = truncated or dropped
     if identification.has_structured_fields or identification.objects:
         return identification
     return None

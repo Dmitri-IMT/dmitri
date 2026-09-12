@@ -18,6 +18,7 @@ from agent.normalize.contracts import (
     ScanPayload,
 )
 from agent.scanner.workspace import (
+    _FAILED_TERMINATED_BY,
     build_nmap_argv,
     ensure_workspace_layout,
     make_run_folder_name,
@@ -157,6 +158,41 @@ class TestLegacyJsonMigration:
         ensure_workspace_layout(workspace)
 
         assert list((workspace / "results").iterdir()) == []
+
+
+class TestFailedTerminatedBy:
+    def test_completed_is_not_a_failure_termination(self) -> None:
+        assert "completed" not in _FAILED_TERMINATED_BY
+
+    def test_completed_with_partial_is_not_retained_as_failed(
+        self, tmp_path: Path
+    ) -> None:
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir(parents=True)
+        completed_partial = logs_dir / "2026-05-01-10-00-00-discovery-cp01"
+        completed_partial.mkdir()
+        (completed_partial / "console.log").write_text("run", encoding="utf-8")
+        (completed_partial / "meta.json").write_text(
+            json.dumps(
+                {
+                    "parent_scan_id": "scan-completed-partial",
+                    "terminated_by": "completed",
+                }
+            ),
+            encoding="utf-8",
+        )
+        newer = logs_dir / "2026-05-02-10-00-00-discovery-new01"
+        newer.mkdir()
+        (newer / "console.log").write_text("run", encoding="utf-8")
+        (newer / "meta.json").write_text(
+            json.dumps({"parent_scan_id": "scan-new", "terminated_by": "completed"}),
+            encoding="utf-8",
+        )
+
+        prune_logs(logs_dir, max_scans=1)
+
+        assert not completed_partial.exists()
+        assert newer.exists()
 
 
 class TestPruneLogs:

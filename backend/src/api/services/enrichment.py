@@ -15,6 +15,7 @@ from api.models.persistence import (
 )
 from api.schemas.scan import FindingPayload
 from api.services.epss import EpssClient, upsert_epss_record
+from api.services.inventory import reconcile_scan_host_inventory
 from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
@@ -222,6 +223,8 @@ def _process_cpe_job(
             references=match["references"],
             evidence_suffix=f"NVD correlation via CPE {job.target_value}.",
         )
+    if device is not None:
+        reconcile_scan_host_inventory(session, device)
     session.commit()
 
 

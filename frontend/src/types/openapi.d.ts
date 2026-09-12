@@ -126,7 +126,7 @@ export interface paths {
         };
         /**
          * List hosts
-         * @description Returns discovered machines from scans. JWT Bearer required.
+         * @description Returns discovered machines from scans. The default page returns active machines; `group=quiet` pages the machines not seen recently. `quiet_total` counts the quiet machines across the whole inventory, not just this page. JWT Bearer required.
          */
         get: operations["listHosts"];
         put?: never;
@@ -610,6 +610,8 @@ export interface components {
         ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
         /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
+        /** @enum {string} */
+        MachineType: "router" | "computer" | "camera" | "storage" | "tv" | "phone" | "printer" | "sensor" | "unknown";
         Port: {
             port: number;
             /** @enum {string} */
@@ -618,6 +620,17 @@ export interface components {
             state: "open" | "closed" | "filtered";
             service: string;
             version?: string | null;
+        };
+        HostPort: {
+            port: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            service: string;
+            version?: string | null;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
         };
         PortPayload: {
             port: number;
@@ -652,6 +665,8 @@ export interface components {
             objects: {
                 [key: string]: string;
             };
+            /** @default false */
+            truncated: boolean;
         };
         ModbusAddressRangePayload: {
             /** @enum {string} */
@@ -662,35 +677,9 @@ export interface components {
             status: "readable" | "illegal_address" | "illegal_function" | "timeout" | "error" | "skipped";
             exception_code?: number | null;
             label?: string | null;
-            nonzero_count?: number | null;
-            value_min?: number | null;
-            value_max?: number | null;
-            values?: (number | boolean)[] | null;
-            value_sha256?: string | null;
+            value_digest?: string | null;
             /** Format: date-time */
             observed_at: string;
-        };
-        ModbusValidationPayload: {
-            /** @enum {string} */
-            address_space: "coil" | "holding_register";
-            address: number;
-            label: string;
-            /** @enum {integer} */
-            function_code: 5 | 6;
-            original_value?: number | boolean | null;
-            expected_current_value: number | boolean;
-            test_value: number | boolean;
-            /** @enum {string} */
-            write_status: "accepted" | "rejected" | "timeout" | "error" | "skipped";
-            read_back_value?: number | boolean | null;
-            /** @enum {string} */
-            restoration_status: "not_required" | "verified" | "unverified" | "failed";
-            final_value?: number | boolean | null;
-            change_ticket: string;
-            /** Format: date-time */
-            started_at: string;
-            /** Format: date-time */
-            completed_at: string;
         };
         ModbusUnitPayload: {
             unit_id: number;
@@ -703,8 +692,6 @@ export interface components {
             identification_sources: string[];
             /** @default [] */
             address_ranges: components["schemas"]["ModbusAddressRangePayload"][];
-            /** @default [] */
-            validations: components["schemas"]["ModbusValidationPayload"][];
         };
         ModbusTcpServicePayload: {
             /**
@@ -718,6 +705,8 @@ export interface components {
             /** @default [] */
             evidence_sources: string[];
             mapping_source?: string | null;
+            /** @default 0 */
+            write_requests_sent: number;
             /** @default [] */
             units: components["schemas"]["ModbusUnitPayload"][];
         };
@@ -745,7 +734,42 @@ export interface components {
             /** @default [] */
             industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             ports: components["schemas"]["Port"][];
+            /**
+             * @description Industrial observations retained 180 days from scan ingestion. No pruning job enforces that period yet.
+             * @default []
+             */
+            industrial_services: components["schemas"]["IndustrialServiceView"][];
+            /** @default [] */
+            unreadable_fields: string[];
         };
+        /** @description Industrial observations retained 180 days from scan ingestion. No pruning job enforces that period yet. */
+        IndustrialServiceView: {
+            /** @enum {string} */
+            protocol: "modbus_tcp";
+            port: number;
+            /** @enum {string} */
+            confidence: "suspected" | "confirmed";
+            mapping_source?: string | null;
+            /** @default [] */
+            evidence_sources: string[];
+            /** @default [] */
+            units: components["schemas"]["ModbusUnitView"][];
+        };
+        ModbusUnitView: {
+            id: number;
+            unit_id: number;
+            /** @enum {string} */
+            status: "responding" | "exception" | "timeout" | "error" | "skipped";
+            exception_code?: number | null;
+            error?: string | null;
+            identification?: components["schemas"]["ModbusDeviceIdentificationView"] | null;
+            /** @default [] */
+            identification_sources: string[];
+            /** @default [] */
+            address_ranges: components["schemas"]["ModbusAddressRangeView"][];
+        };
+        ModbusDeviceIdentificationView: components["schemas"]["ModbusDeviceIdentificationPayload"];
+        ModbusAddressRangeView: components["schemas"]["ModbusAddressRangePayload"];
         FindingPayload: {
             /** Format: ipv4 */
             ip?: string | null;
@@ -764,6 +788,7 @@ export interface components {
             evidence: string;
             /** @default [] */
             references: string[];
+            unit_id?: number | null;
         };
         ScanIngestRequest: {
             /** Format: uuid */
@@ -845,7 +870,11 @@ export interface components {
             /** Format: date-time */
             last_seen_at: string;
             open_ports_count: number;
+            machine_type: components["schemas"]["MachineType"];
+            vulnerability_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
+            /** @default [] */
+            unreadable_fields: string[];
         };
         HostScanHistoryEntry: {
             /** Format: uuid */
@@ -873,13 +902,20 @@ export interface components {
             /** Format: date-time */
             last_seen_at: string;
             open_ports_count: number;
+            machine_type: components["schemas"]["MachineType"];
+            vulnerability_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
-            ports: components["schemas"]["Port"][];
+            ports: components["schemas"]["HostPort"][];
+            /** @default [] */
+            industrial_services: components["schemas"]["IndustrialServiceView"][];
+            /** @default [] */
+            unreadable_fields: string[];
             scan_history: components["schemas"]["HostScanHistoryEntry"][];
         };
         HostListResponse: {
             data: components["schemas"]["HostSummary"][];
             total: number;
+            quiet_total: number;
             page: number;
         };
         CreateCommandRequest: {
@@ -1089,6 +1125,11 @@ export interface components {
             role: "admin" | "viewer";
             org_name: string;
         };
+        FindingModbusUnitRef: {
+            id: number;
+            unit_id: number;
+            port: number;
+        };
         FindingRecord: {
             risk_score?: number | null;
             exploitability?: number | null;
@@ -1115,8 +1156,13 @@ export interface components {
             evidence: string;
             /** @default [] */
             references: string[];
+            modbus_unit?: components["schemas"]["FindingModbusUnitRef"] | null;
             /** Format: date-time */
             detected_at: string;
+            host_hostname?: string | null;
+            first_seen_at?: string | null;
+            last_seen_at?: string | null;
+            fixed_at?: string | null;
         };
         FindingListResponse: {
             data: components["schemas"]["FindingRecord"][];
@@ -1644,7 +1690,8 @@ export interface components {
         /** @description Limit scans to those produced by this box. */
         ScanAgentIdFilter: string;
         ScanSortBy: "timestamp" | "status" | "scan_mode";
-        HostSortBy: "last_seen_at" | "hostname" | "vendor" | "ip";
+        HostSortBy: "last_seen_at" | "hostname" | "vendor" | "ip" | "vulnerability_count";
+        HostGroup: "active" | "quiet";
         SeverityFilter: components["schemas"]["Severity"];
         /** @description Backend identifier of the scan. */
         ScanId: string;
@@ -1968,6 +2015,7 @@ export interface operations {
                 per_page?: components["parameters"]["PerPage"];
                 sort_by?: components["parameters"]["HostSortBy"];
                 sort_order?: components["parameters"]["SortOrder"];
+                group?: components["parameters"]["HostGroup"];
                 /** @description Free-text search by hostname, IP, MAC, or vendor. */
                 q?: string;
             };

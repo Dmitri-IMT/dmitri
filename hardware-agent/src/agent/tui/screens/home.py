@@ -88,6 +88,9 @@ class HomeScreen(DmitriScreen):
         else:
             payload, navigate_to_view = result, False
 
+        if payload is None:
+            return
+
         self._last_payload = payload
         self._last_scan_path: Path | None = None
 

@@ -1,28 +1,35 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from time import perf_counter
 from time import sleep as default_sleep
 from typing import Any
 
 from pymodbus.client import ModbusTcpClient
 
+from agent.ot.digest import value_digest as compute_value_digest
 from agent.ot.modbus.client import (
     ModbusClientController,
     ModbusReadResult,
     ModbusReadSession,
 )
-from agent.ot.modbus.models import ModbusAddressRange, ModbusService
+from agent.ot.modbus.models import (
+    AddressRangeStatus,
+    ModbusAddressRange,
+    ModbusService,
+)
 from agent.ot.policy import (
     GENERIC_BASELINE_RANGES,
+    AddressSpace,
+    CaptureValues,
     MappingProfile,
     MappingRangeRule,
     OtAutomationPolicy,
+    must_stop,
+    pace_or_stop,
+    profile_is_conservative,
     selector_matches,
 )
 from agent.scanner.models import HostInfo
@@ -33,6 +40,7 @@ class MappingPlan:
     source: str
     unit_ids: tuple[int, ...]
     ranges: tuple[MappingRangeRule, ...]
+    identity_not_corroborated: bool = False
 
 
 @dataclass(slots=True)
@@ -46,12 +54,12 @@ class MappingBudget:
 
 @dataclass(slots=True)
 class _Observation:
-    address_space: str
+    address_space: AddressSpace
     start_address: int
     count: int
-    status: str
+    status: AddressRangeStatus
     observed_at: datetime
-    capture_values: str
+    capture_values: CaptureValues
     values: list[int | bool] | None = None
     exception_code: int | None = None
     label: str | None = None
@@ -97,6 +105,13 @@ def resolve_mapping_plan(
             unit_ids=discovered_ids,
             ranges=GENERIC_BASELINE_RANGES,
         )
+    if selected in vendor_profiles and not profile_is_conservative(selected):
+        return MappingPlan(
+            source="generic_baseline",
+            unit_ids=discovered_ids,
+            ranges=GENERIC_BASELINE_RANGES,
+            identity_not_corroborated=True,
+        )
     return MappingPlan(
         source=("site:" if selected in site_profiles else "vendor:") + selected.name,
         unit_ids=_selected_unit_ids(selected, discovered_ids),
@@ -117,11 +132,15 @@ def map_modbus_service(
     session_factory: SessionFactory = ModbusReadSession,
     client_factory: Callable[..., Any] = ModbusTcpClient,
     sleep: Callable[[float], None] = default_sleep,
+    digest_key: bytes | None = None,
 ) -> None:
     """Execute one read-only plan with a single connection and bounded traffic."""
 
     plan = resolve_mapping_plan(host, service, policy)
     service.mapping_source = plan.source
+    if plan.identity_not_corroborated:
+        if "identity-not-corroborated" not in service.evidence_sources:
+            service.evidence_sources.append("identity-not-corroborated")
     if not plan.unit_ids:
         service.mapping_ranges_skipped += len(plan.ranges)
         return
@@ -143,11 +162,11 @@ def map_modbus_service(
     ) as session:
         for unit_id in plan.unit_ids:
             for rule in plan.ranges:
-                if _must_stop(cancel_event, deadline) or not budget.available():
+                if must_stop(cancel_event, deadline) or not budget.available():
                     service.mapping_ranges_skipped += 1
                     continue
                 for start_address, count in _chunks(rule):
-                    if _must_stop(cancel_event, deadline) or not budget.available():
+                    if must_stop(cancel_event, deadline) or not budget.available():
                         service.mapping_ranges_skipped += 1
                         break
                     observations[unit_id].extend(
@@ -167,7 +186,7 @@ def map_modbus_service(
                     )
     for unit_id, found in observations.items():
         unit_index[unit_id].address_ranges.extend(
-            _materialise(item) for item in _merge_adjacent(found)
+            _materialise(item, digest_key=digest_key) for item in _merge_adjacent(found)
         )
 
 
@@ -185,11 +204,12 @@ def _read_chunk(
     deadline: float | None,
     sleep: Callable[[float], None],
 ) -> list[_Observation]:
-    if _must_stop(cancel_event, deadline) or not budget.available():
-        service.mapping_ranges_skipped += 1
-        return []
-    sleep(policy.inter_request_delay_ms / 1000)
-    if _must_stop(cancel_event, deadline):
+    if not budget.available() or pace_or_stop(
+        sleep,
+        policy.inter_request_delay_ms / 1000,
+        cancel_event,
+        deadline,
+    ):
         service.mapping_ranges_skipped += 1
         return []
     result: ModbusReadResult = session.read(
@@ -262,16 +282,6 @@ def _chunks(rule: MappingRangeRule) -> list[tuple[int, int]]:
     return chunks
 
 
-def _must_stop(
-    cancel_event: threading.Event | None,
-    deadline: float | None,
-) -> bool:
-    return bool(
-        (cancel_event is not None and cancel_event.is_set())
-        or (deadline is not None and perf_counter() >= deadline)
-    )
-
-
 def _merge_adjacent(items: list[_Observation]) -> list[_Observation]:
     merged: list[_Observation] = []
     for item in items:
@@ -297,39 +307,32 @@ def _can_merge(left: _Observation, right: _Observation) -> bool:
     )
 
 
-def _materialise(item: _Observation) -> ModbusAddressRange:
+def _materialise(
+    item: _Observation,
+    *,
+    digest_key: bytes | None = None,
+) -> ModbusAddressRange:
     values = item.values if item.status == "readable" else None
     capture = item.capture_values
-    numeric = (
-        [int(value) for value in values]
-        if values is not None and capture != "none"
-        else None
-    )
+    value_digest = None
+    if values and capture == "digest":
+        value_digest = compute_value_digest(
+            digest_key,
+            item.address_space,
+            item.start_address,
+            item.count,
+            list(values),
+        )
     return ModbusAddressRange(
-        address_space=item.address_space,  # type: ignore[arg-type]
+        address_space=item.address_space,
         start_address=item.start_address,
         count=item.count,
-        status=item.status,  # type: ignore[arg-type]
+        status=item.status,
         observed_at=item.observed_at,
         exception_code=item.exception_code,
         label=item.label,
-        nonzero_count=(
-            sum(value != 0 for value in numeric) if numeric is not None else None
-        ),
-        value_min=min(numeric) if numeric else (0 if numeric == [] else None),
-        value_max=max(numeric) if numeric else (0 if numeric == [] else None),
-        values=(list(values) if values is not None and capture == "raw" else None),
-        value_sha256=(
-            _hash_values(values)
-            if values is not None and capture in {"summary", "raw"}
-            else None
-        ),
+        value_digest=value_digest,
     )
-
-
-def _hash_values(values: list[int | bool]) -> str:
-    canonical = json.dumps(values, separators=(",", ":"), ensure_ascii=True)
-    return "sha256:" + hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
 def _fingerprint_values(service: ModbusService) -> tuple[set[str], set[str]]:

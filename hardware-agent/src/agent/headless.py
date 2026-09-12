@@ -10,6 +10,7 @@ from agent import config
 from agent.config import NspiSubmode
 from agent.normalize.contracts import ScanPayload
 from agent.paths import default_results_dir, load_config
+from agent.scanner.errors import UnsupportedScanDepth
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.scanner.runner import ScanRunner
@@ -54,19 +55,25 @@ def validate_inputs(
         ipaddress.IPv4Network(subnet, strict=False)
     except ValueError as exc:
         raise InvalidScanInput(f"Invalid subnet {subnet!r}: {exc}") from exc
-    if nspi_submode is not None:
-        if mode != "nspi":
-            raise InvalidScanInput("An NSPi submode can only be used with mode 'nspi'")
+    effective_submode: config.NspiSubmode = nspi_submode or "inventory"
+    try:
+        config.validate_nspi_depth(mode, effective_submode)
+    except UnsupportedScanDepth:
+        if mode != "nspi" and nspi_submode is not None:
+            raise InvalidScanInput(
+                "An NSPi submode can only be used with mode 'nspi'"
+            ) from None
         if nspi_submode not in config.NSPI_SUBMODES:
             raise InvalidScanInput(
                 f"Unknown NSPi submode {nspi_submode!r}; "
                 f"must be one of {config.NSPI_SUBMODES}"
-            )
-        if nspi_submode == "active_validation":
+            ) from None
+        if effective_submode == "active_validation":
             raise InvalidScanInput(
                 "NSPi active_validation is not available until guarded "
                 "write restoration is implemented"
-            )
+            ) from None
+        raise
 
 
 def _resolve_workspace_root(workspace_root: Path | None) -> Path:

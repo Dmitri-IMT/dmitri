@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -35,15 +36,22 @@ function readyQuery(data: {
 
 function ListHarness({
   query,
-  partitionRows,
+  collapsedGroup,
+  emptyRow,
   pagination,
   empty,
 }: {
   query: UseQueryResult<{ data: Row[]; total?: number }>
-  partitionRows?: ListSurfaceProps<Row>['partitionRows']
+  collapsedGroup?: Omit<
+    NonNullable<ListSurfaceProps<Row>['collapsedGroup']>,
+    'isOpen' | 'onOpenChange'
+  >
+  emptyRow?: ListSurfaceProps<Row>['emptyRow']
   pagination?: ListSurfaceProps<Row>['pagination']
   empty?: ListSurfaceProps<Row>['empty']
 }) {
+  const [isGroupOpen, setIsGroupOpen] = useState(false)
+
   return (
     <ListSurface
       testId="example"
@@ -58,7 +66,14 @@ function ListHarness({
         to: (row) => `/rows/${row.id}`,
         label: (row) => `Open ${row.name}`,
       }}
-      partitionRows={partitionRows}
+      collapsedGroup={
+        collapsedGroup && {
+          ...collapsedGroup,
+          isOpen: isGroupOpen,
+          onOpenChange: setIsGroupOpen,
+        }
+      }
+      emptyRow={emptyRow}
       pagination={pagination}
     />
   )
@@ -92,18 +107,18 @@ describe('ListSurface', () => {
     ).toBeVisible()
   })
 
-  it('passes partitioned rows and collapsedGroup to DataTable', () => {
+  it('passes a collapsed group through to DataTable', () => {
     renderWithProviders(
       <ListHarness
-        query={readyQuery({ data: rows })}
-        partitionRows={(all) => ({
-          rows: [all[0]],
-          collapsedGroup: {
-            rows: [all[1]],
-            label: (count) => `Grouped (${count})`,
-            testId: 'example-group',
-          },
-        })}
+        query={readyQuery({ data: [rows[0]] })}
+        collapsedGroup={{
+          content: (body) => (
+            <tbody id={body.id}>{body.renderRows([rows[1]], columns)}</tbody>
+          ),
+          count: 1,
+          label: (count) => `Grouped (${count})`,
+          testId: 'example-group',
+        }}
       />,
     )
 
@@ -111,6 +126,27 @@ describe('ListSurface', () => {
     expect(
       screen.queryByTestId('example-table-row-two'),
     ).not.toBeInTheDocument()
+    expect(screen.getByTestId('example-group-group')).toBeVisible()
+  })
+
+  it('renders the table with an empty row rather than the blank state when only a group has rows', () => {
+    renderWithProviders(
+      <ListHarness
+        query={readyQuery({ data: [], total: 0 })}
+        emptyRow={<span data-testid="example-no-rows">Nothing active.</span>}
+        collapsedGroup={{
+          content: (body) => (
+            <tbody id={body.id}>{body.renderRows([rows[1]], columns)}</tbody>
+          ),
+          count: 1,
+          label: (count) => `Grouped (${count})`,
+          testId: 'example-group',
+        }}
+      />,
+    )
+
+    expect(screen.queryByTestId('example-blank')).not.toBeInTheDocument()
+    expect(screen.getByTestId('example-no-rows')).toBeVisible()
     expect(screen.getByTestId('example-group-group')).toBeVisible()
   })
 

@@ -14,13 +14,13 @@
 
 | Doc | Layer | Status today |
 |-----|-------|--------------|
-| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** A **Pi 3** is in hand since 2026-08-21 — not the Pi 4 ADR-001 selected — but nothing is provisioned and the 1 GB fit is unproven. |
+| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** A **Pi 4 Model B 4 GB** — the ADR-001 target — is provisioned and running the agent since 2026-09-11; registered against the hosted `nspi` stack, and verified end to end — a web-triggered scan returned 12 hosts and 20 findings. Peak RSS 134 MiB worst case. The remaining work is automating provisioning (DMI-154), not provisioning itself. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings, Users & Invites, DMI-88 scan/host reads, and DMI-89 Agents scan trigger built. Next: LLM explainer |
 | [`AI.md`](AI.md) | In-app LLM explainer | **In progress.** Grounded context, strict schemas, persistence, Groq generation after enrichment, and a read-only result endpoint are implemented on the feature branch. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
-| [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · NSPi port-stage fix (T4.1) open |
+| [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · T4.1 closed |
 
 ## Reference
 
@@ -36,18 +36,18 @@
 
 ## Where each layer stands (one paragraph)
 
-The scan pipeline, headless command daemon, and signed ingest client run in software; no physical Pi
-is provisioned yet. The FastAPI backend serves data reads, auth, identity administration, the
+The scan pipeline, headless command daemon, and signed ingest client run in software, and a
+**physical Pi 4 appliance is provisioned and online** against the hosted `nspi` stack since
+2026-09-11 — see [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md). The FastAPI backend serves data reads, auth, identity administration, the
 command channel, and ingest. The web app has login → Home, public auth, Settings, Users & Invites, and the DMI-88 scan/host
-read surfaces plus the Agents scan trigger (DMI-89). Still missing are physical Pi operations
-and the LLM explainer. Invite/reset email now sends and delivers from the verified
+read surfaces plus the Agents scan trigger (DMI-89). Still missing is the LLM explainer. Invite/reset email now sends and delivers from the verified
 `mail.peirce.dev`; what remains there is sender reputation, not code.
 
 ## Cross-layer milestone sequencing
 
 These layers are coupled; build in roughly this order so each layer has something real to talk to:
 
-1. **Pi hardware** (PI): board acquired 2026-08-21, but a **Pi 3**, which ADR-001 rejected for 1 GB RAM and USB 2.0. Base configure + **prove the pipeline fits in 1 GB** — still the top Pi-side risk
+1. **Pi provisioning** (PI): the board is a **Pi 4 Model B 4 GB**, matching ADR-001; flashed, agent installed at `/opt/dmitri-agent`, scans `completed` on real hardware. The memory question is settled — 134 MiB peak, network-bound not memory-bound. Remaining: register the device's public key with the backend, then enable `dmitri-agent.service`
 2. **Hosted stack** (BACKEND B4/B5): Supabase + Railway for NSPi — [`epics/EPICS.md`](../epics/EPICS.md)
 3. **Auth Phase 1** — implement [`AUTH.md`](AUTH.md) (roadmap ✅)
 4. **ADR-011 + OpenAPI** — ✅ [`ADR-011`](../adr/ADR-011-pi-command-channel.md); implement `contracts/openapi/` in backend/Pi

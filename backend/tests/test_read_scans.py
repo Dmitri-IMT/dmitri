@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-import pydantic
 import pytest
 from api.models.command import Agent, Command
 from api.models.persistence import KevRecord, RiskSnapshotRecord, ScanRecord
@@ -113,7 +112,7 @@ def test_get_scan_by_id_returns_scan_host_operating_system_snapshot(
     assert row["operating_system"] == snapshot
 
 
-def test_scan_read_rejects_malformed_persisted_operating_system_snapshot(
+def test_scan_read_degrades_malformed_persisted_operating_system_snapshot(
     administrative_session: Session,
 ) -> None:
     seeded = seed_read_graph(administrative_session)
@@ -124,12 +123,17 @@ def test_scan_read_rejects_malformed_persisted_operating_system_snapshot(
     }
     administrative_session.commit()
 
-    with pytest.raises(pydantic.ValidationError):
-        get_scan_detail(
-            administrative_session,
-            seeded["scan"].scan_id,
-            org_id=seeded["org"].id,
-        )
+    detail = get_scan_detail(
+        administrative_session,
+        seeded["scan"].scan_id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    row = next(
+        host for host in detail.hosts if host.host_id == seeded["host"].id
+    )
+    assert row.operating_system is None
+    assert "operating_system" in row.unreadable_fields
 
 
 def test_get_scan_by_id_returns_industrial_service_snapshot(

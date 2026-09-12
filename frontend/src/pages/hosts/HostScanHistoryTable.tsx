@@ -27,7 +27,6 @@ const columns: DataTableColumn<HostScanHistoryEntry>[] = [
     key: 'open_ports_count',
     label: 'Services',
     width: 'w-9/50',
-    align: 'right',
     render: (entry) => (
       <span className="block tabular-nums">{entry.open_ports_count}</span>
     ),
