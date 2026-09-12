@@ -301,10 +301,7 @@ def test_render_contains_plain_language_modbus_inventory():
                             start_address=0,
                             count=4,
                             status="readable",
-                            value_digest=(
-                                "hmac-sha256:"
-                                "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
-                            ),
+                            value_digest=("hmac-sha256:" + "a1b2c3d4" + "0" * 56),
                             observed_at=datetime.now(timezone.utc),
                         )
                     ],
@@ -409,10 +406,7 @@ def test_render_modbus_range_has_no_process_statistics():
                             start_address=0,
                             count=16,
                             status="readable",
-                            value_digest=(
-                                "hmac-sha256:"
-                                "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
-                            ),
+                            value_digest=("hmac-sha256:" + "a1b2c3d4" + "0" * 56),
                             observed_at=datetime.now(timezone.utc),
                         )
                     ],
@@ -539,9 +533,7 @@ def test_render_limits_line_from_metadata_flag():
 
     rendered = ScanViewScreen(payload=payload)._render_payload(payload)
 
-    assert (
-        "Limits:   Time limit reached during Modbus inventory (90s)" in rendered
-    )
+    assert "Limits:   Time limit reached during Modbus inventory (90s)" in rendered
 
 
 def test_render_omits_limits_line_without_metadata_flag():

@@ -184,7 +184,7 @@ def test_ingest_scan_accepts_enriched_findings_example(
     )
     scan_hosts = runtime_session.exec(select(ScanHostRecord)).all()
 
-    assert len(scan_hosts) == 2
+    assert len(scan_hosts) == len(payload["hosts"])
     assert str(record.scan_id) == payload["scan_id"]
     assert record.scan_mode == scan.scan_mode
     assert record.status == "completed"
@@ -686,9 +686,9 @@ def test_ingest_scan_repeated_submission_is_idempotent(
         runtime_session, scan, identity=identity, now=datetime.now(timezone.utc)
     )
     counts_after_first = _table_counts()
-    assert counts_after_first["hosts"] == 2
-    assert counts_after_first["ports"] == 4
-    assert counts_after_first["services"] == 4
+    assert counts_after_first["hosts"] == 3
+    assert counts_after_first["ports"] == 5
+    assert counts_after_first["services"] == 5
     assert counts_after_first["findings"] == 2
     assert counts_after_first["jobs"] > 0
 

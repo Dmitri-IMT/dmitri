@@ -153,9 +153,7 @@ def _format_identification_objects(
         lines.append(f"           {safe_key} = {safe_value}")
     overflow = len(sorted_items) - len(shown)
     if overflow > 0:
-        lines.append(
-            f"           … {overflow} more identification objects not shown"
-        )
+        lines.append(f"           … {overflow} more identification objects not shown")
     return lines
 
 
@@ -291,9 +289,7 @@ class ScanViewScreen(DmitriScreen):
                 lines.append("  Operating system: Not detected")
             else:
                 lines.append("  Operating system:")
-                os_name = safe(
-                    operating_system.name, LIMIT_HOST_TEXT, tracker=shorten
-                )
+                os_name = safe(operating_system.name, LIMIT_HOST_TEXT, tracker=shorten)
                 lines.append(
                     f"    Detected: {os_name} "
                     f"({operating_system.accuracy}% confidence)"
@@ -389,9 +385,7 @@ class ScanViewScreen(DmitriScreen):
         lines.append(f"Total devices:          {device_count}")
         lines.append(f"Total open ports:       {total_ports}")
         lines.append(f"Vulnerabilities found:  {len(payload.findings)}")
-        modbus_services = sum(
-            len(host.industrial_services) for host in payload.hosts
-        )
+        modbus_services = sum(len(host.industrial_services) for host in payload.hosts)
         if modbus_services:
             modbus_units = sum(
                 len(service.units)

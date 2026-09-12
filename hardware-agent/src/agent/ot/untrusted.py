@@ -30,9 +30,7 @@ def bound_objects(objects: Mapping[str, Any]) -> tuple[dict[str, str], bool]:
         except (TypeError, ValueError):
             other.append((str(key), raw_value))
     numeric.sort(key=lambda item: item[0])
-    ordered: list[tuple[str, Any]] = [
-        (key, value) for _, key, value in numeric
-    ] + other
+    ordered: list[tuple[str, Any]] = [(key, value) for _, key, value in numeric] + other
     truncated = len(ordered) > MAX_IDENTIFICATION_OBJECTS
     selected = ordered[:MAX_IDENTIFICATION_OBJECTS]
     result: dict[str, str] = {}

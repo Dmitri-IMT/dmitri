@@ -66,7 +66,10 @@ def page_attention(
     ).all()
 
     return HomeAttentionPage(
-        data=[read._to_finding_read(finding, host_id) for finding, host_id in rows],
+        data=[
+            read._to_finding_read(session, finding, host_id)
+            for finding, host_id in rows
+        ],
         total=total,
         page=page,
     )

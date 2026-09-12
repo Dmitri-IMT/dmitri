@@ -501,9 +501,7 @@ def run_ot_inspection_stage(
             deadline_seconds = max(1, int(round(stage_deadline - stage_started)))
             break
     if deadline_reached and deadline_seconds is not None:
-        reason = (
-            f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
-        )
+        reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
         _emit(
             reporter,
             ScanEvent(

@@ -61,7 +61,9 @@ def upgrade() -> None:
         sa.Column("confidence", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("mapping_source", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("evidence_sources_json", postgresql.JSONB(), nullable=False),
-        sa.Column("write_requests_sent", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "write_requests_sent", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["scan_host_id"], ["scan_hosts.id"]),
         sa.ForeignKeyConstraint(["port_id"], ["ports.id"]),

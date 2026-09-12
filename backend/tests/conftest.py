@@ -88,13 +88,17 @@ def _migrate(engine: Engine, revision: str) -> None:
         config = _alembic_config()
         script = ScriptDirectory.from_config(config)
         with engine.connect() as connection:
-            current = MigrationContext.configure(connection).get_current_revision()
+            current_heads = MigrationContext.configure(connection).get_current_heads()
         ancestors = (
-            {rev.revision for rev in script.iterate_revisions(current, None)}
-            if current is not None
+            {
+                rev.revision
+                for head in current_heads
+                for rev in script.iterate_revisions(head, None)
+            }
+            if current_heads
             else set()
         )
-        if revision in ancestors and revision != current:
+        if revision in ancestors and revision not in current_heads:
             command.downgrade(config, revision)
         else:
             command.upgrade(config, revision)
