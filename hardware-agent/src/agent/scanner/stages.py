@@ -534,7 +534,9 @@ def nmap_arguments_summary(settings: AgentSettings) -> str:
             f"pass2:{' '.join(NSPI_PASS2_ARGS)}"
         )
     else:
-        port_stage = f"-Pn -n -T4 {' '.join(discovery_arguments(settings.scan_mode))}"
+        port_stage = (
+            f"-Pn -n -T4 {' '.join(discovery_arguments(settings.scan_mode))}"
+        )
     deep_scripts = deep_stage_scripts(settings.scan_mode)
     ot_inspection = (
         settings.nspi_submode if settings.scan_mode == "nspi" else "disabled"

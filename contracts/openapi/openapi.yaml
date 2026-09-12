@@ -277,47 +277,6 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
-  /api/v1/scans/{scan_id}/risk-summary:
-    get:
-      tags:
-        - scans
-      summary: Get a bounded risk summary for a scan
-      description: |
-        Returns aggregate risk metrics and at most ten top-ranked findings with
-        their evidence. This read-only response is suitable for dashboards and
-        for a future evidence-grounded LLM tool.
-      operationId: getScanRiskSummary
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/ScanId'
-      responses:
-        '200':
-          description: Risk summary scoped to the caller's organisation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ScanRiskSummaryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    options:
-      tags:
-        - scans
-      summary: CORS preflight for scan risk summary
-      operationId: optionsScanRiskSummary
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/ScanId'
-      responses:
-        '204':
-          $ref: '#/components/responses/CorsPreflightNoContent'
-
   /api/v1/hosts:
     get:
       tags:
@@ -466,47 +425,6 @@ paths:
       summary: CORS preflight for findings collection
       operationId: optionsFindings
       security: []
-      responses:
-        '204':
-          $ref: '#/components/responses/CorsPreflightNoContent'
-
-  /api/v1/findings/{finding_id}:
-    get:
-      tags:
-        - findings
-      summary: Get a finding with evidence and risk context
-      description: |
-        Returns one finding scoped to the caller's organisation. The response
-        includes persisted evidence, remediation guidance, references and the
-        latest risk snapshot, making it suitable for a future read-only LLM tool.
-      operationId: getFindingById
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FindingId'
-      responses:
-        '200':
-          description: Finding detail.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FindingRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    options:
-      tags:
-        - findings
-      summary: CORS preflight for finding detail
-      operationId: optionsFindingById
-      security: []
-      parameters:
-        - $ref: '#/components/parameters/FindingId'
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
@@ -1444,14 +1362,6 @@ components:
       in: path
       required: true
       description: Backend identifier of the scan.
-      schema:
-        type: string
-        format: uuid
-    FindingId:
-      name: finding_id
-      in: path
-      required: true
-      description: Public identifier of a persisted finding.
       schema:
         type: string
         format: uuid
@@ -2722,11 +2632,6 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OperatingSystemDetection'
             - type: 'null'
-        industrial_services:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
-          default: []
         ports:
           type: array
           items:
@@ -3116,11 +3021,6 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OperatingSystemDetection'
             - type: 'null'
-        industrial_services:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
-          default: []
         first_seen_at:
           type: string
           format: date-time
@@ -3697,19 +3597,6 @@ components:
         - evidence
         - detected_at
       properties:
-        risk_score:
-          type: [number, 'null']
-          minimum: 0
-          maximum: 100
-        exploitability:
-          type: [number, 'null']
-          minimum: 0
-          maximum: 1
-        confidence:
-          type: [string, 'null']
-          enum: [tentative, probable, confirmed, null]
-        risk_rationale:
-          type: [string, 'null']
         finding_id:
           type: string
           format: uuid
@@ -3803,67 +3690,6 @@ components:
         page:
           type: integer
           minimum: 1
-    SeverityBreakdown:
-      type: object
-      additionalProperties: false
-      required: [critical, high, medium, low]
-      properties:
-        critical:
-          type: integer
-          minimum: 0
-        high:
-          type: integer
-          minimum: 0
-        medium:
-          type: integer
-          minimum: 0
-        low:
-          type: integer
-          minimum: 0
-    ScanRiskSummaryResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - scan_id
-        - total_findings
-        - scored_findings
-        - confirmed_findings
-        - kev_findings
-        - average_risk_score
-        - max_risk_score
-        - severity
-        - top_findings
-      properties:
-        scan_id:
-          type: string
-          format: uuid
-        total_findings:
-          type: integer
-          minimum: 0
-        scored_findings:
-          type: integer
-          minimum: 0
-        confirmed_findings:
-          type: integer
-          minimum: 0
-        kev_findings:
-          type: integer
-          minimum: 0
-        average_risk_score:
-          type: [number, 'null']
-          minimum: 0
-          maximum: 100
-        max_risk_score:
-          type: [number, 'null']
-          minimum: 0
-          maximum: 100
-        severity:
-          $ref: '#/components/schemas/SeverityBreakdown'
-        top_findings:
-          type: array
-          maxItems: 10
-          items:
-            $ref: '#/components/schemas/FindingRecord'
     HomeEventKind:
       type: string
       enum:

@@ -54,9 +54,6 @@ class ScanHostRecord(SQLModel, table=True):
     operating_system_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
-    industrial_services_json: list[dict[str, Any]] = Field(
-        default_factory=list, sa_column=Column(JSON, nullable=False)
-    )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
@@ -77,9 +74,6 @@ class HostRecord(SQLModel, table=True):
     vendor: str
     operating_system_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
-    )
-    industrial_services_json: list[dict[str, Any]] = Field(
-        default_factory=list, sa_column=Column(JSON, nullable=False)
     )
     open_ports_count: int
     highest_severity: str | None = None

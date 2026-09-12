@@ -28,7 +28,6 @@ def _host(
     hostname: str = "host",
     vendor: str = "vendor",
     operating_system: dict[str, object] | None = None,
-    industrial_services: list[dict[str, object]] | None = None,
 ) -> HostPayload:
     return HostPayload(
         ip=ip,
@@ -37,7 +36,6 @@ def _host(
         vendor=vendor,
         operating_system=operating_system,
         ports=[],
-        industrial_services=industrial_services or [],
     )
 
 
@@ -47,20 +45,6 @@ def _os(name: str, accuracy: int) -> dict[str, object]:
         "accuracy": accuracy,
         "vendor": "Linux",
         "cpes": ["cpe:/o:linux:linux_kernel:5"],
-    }
-
-
-def _modbus(product_code: str) -> dict[str, object]:
-    return {
-        "port": 502,
-        "confidence": "confirmed",
-        "units": [
-            {
-                "unit_id": 1,
-                "status": "responding",
-                "device_identification": {"product_code": product_code},
-            }
-        ],
     }
 
 
@@ -202,69 +186,6 @@ def test_newer_missing_detection_preserves_last_supported_inventory_value(
     assert host.hostname == "new-name"
     assert host.last_seen_at == second_timestamp
     assert latest_scan_host.operating_system_json is None
-
-
-def test_newer_scan_without_ot_inspection_preserves_industrial_inventory(
-    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
-) -> None:
-    mac = "AA:BB:CC:DD:EE:10"
-    industrial_services = [_modbus("TM221CE16T")]
-    _persist(
-        runtime_session,
-        _scan(
-            uuid4(),
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            [_host("192.168.1.60", mac, industrial_services=industrial_services)],
-        ),
-        seeded_org,
-        provisioned_agent,
-    )
-    _persist(
-        runtime_session,
-        _scan(
-            uuid4(),
-            datetime(2026, 2, 1, tzinfo=timezone.utc),
-            [_host("192.168.1.60", mac)],
-        ),
-        seeded_org,
-        provisioned_agent,
-    )
-
-    host = runtime_session.exec(select(HostRecord)).one()
-    assert host.industrial_services_json[0]["units"][0][
-        "device_identification"
-    ]["product_code"] == "TM221CE16T"
-
-
-def test_newer_industrial_detection_refreshes_inventory(
-    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
-) -> None:
-    mac = "AA:BB:CC:DD:EE:11"
-    _persist(
-        runtime_session,
-        _scan(
-            uuid4(),
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            [_host("192.168.1.61", mac, industrial_services=[_modbus("old")])],
-        ),
-        seeded_org,
-        provisioned_agent,
-    )
-    _persist(
-        runtime_session,
-        _scan(
-            uuid4(),
-            datetime(2026, 2, 1, tzinfo=timezone.utc),
-            [_host("192.168.1.61", mac, industrial_services=[_modbus("new")])],
-        ),
-        seeded_org,
-        provisioned_agent,
-    )
-
-    host = runtime_session.exec(select(HostRecord)).one()
-    assert host.industrial_services_json[0]["units"][0][
-        "device_identification"
-    ]["product_code"] == "new"
 
 
 def test_newer_supported_detection_refreshes_inventory_value(
