@@ -5,6 +5,10 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: `HostDetailResponse` subclasses `HostSummary` and `get_host_detail` builds it from
+  `_to_host_summary`; the inventory ingest/enrichment tests moved from `test_ingest_scan.py` to
+  `test_inventory_reconcile.py`. Touched: `backend/schemas.md`, `backend/services.md`.
+
 * **Update**: merged `main` into DMI-135. Alembic had two heads (`20260907_20` and main's
   `20260908_19`); added the empty merge revision `20260912_21`, and `tests/conftest.py::_migrate`
   now reads every current head. Spec folder renumbered to `specs/046-machine-inventory-depth`

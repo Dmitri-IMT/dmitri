@@ -168,7 +168,7 @@ Task 7's schemas to return the new fields, which is why 7 lands before it.
   creates findings for an already-committed scan. `ingest_scan`, `POST /api/v1/scans`, and the
   CVE/KEV/EPSS jobs are unchanged — they create and delete no findings.
 - **Dependencies**: 4
-- **Target Files**: [`backend/src/api/services/persistence.py`, `backend/src/api/services/enrichment.py`, `backend/tests/test_ingest_scan.py` (extended — this task's tests belong where both call paths were already covered)]
+- **Target Files**: [`backend/src/api/services/persistence.py`, `backend/src/api/services/enrichment.py`, `backend/tests/test_inventory_reconcile.py` (moved there from `test_ingest_scan.py` on 2026-09-12, PR #143 review — keeps that file under 1k lines), `backend/tests/test_ingest_scan.py` (rollback assertions only)]
 - **Success Criteria**:
   - `persist_scan` writes `host_ports`, `host_findings`, `machine_type` and `vulnerability_count`
     inside its existing transaction; the case-A and case-C rollback tests still leave nothing behind.
@@ -221,8 +221,8 @@ Task 7's schemas to return the new fields, which is why 7 lands before it.
     (`Literal["active","quiet"]`) and `HostPort` (six fields, `version` optional, **no `state`**).
   - `HostSortBy` = `last_seen_at | hostname | vendor | ip | vulnerability_count` — no `machine_type`
     (`DESIGN.md` §9/Q3).
-  - `HostSummary` and `HostDetailResponse` gain `machine_type` + `vulnerability_count` and keep
-    `vendor` + `open_ports_count`; `HostDetailResponse.ports` is `list[HostPort]`; `Port` unchanged.
+  - `HostSummary` gains `machine_type` + `vulnerability_count` and keeps `vendor` +
+    `open_ports_count`; `HostDetailResponse` subclasses `HostSummary` (revised 2026-09-12); `HostDetailResponse.ports` is `list[HostPort]`; `Port` unchanged.
   - `FindingRead` gains `host_hostname`, `first_seen_at`, `last_seen_at`, `fixed_at`, all nullable
     and none required; no field removed. `HostListResponse` gains `quiet_total`.
   - Every model keeps `extra="forbid"`; bounds hold (`vulnerability_count >= 0`, `quiet_total >= 0`).

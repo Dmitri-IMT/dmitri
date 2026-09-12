@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -49,7 +49,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
-| `HostDetailResponse` | `GET /hosts/{host_id}`: identity including `machine_type`/`vulnerability_count` + latest `ports` as `HostPort[]` + full `scan_history`. | `backend/src/api/schemas/read.py:109` |
+| `HostDetailResponse` | `GET /hosts/{host_id}`: **subclasses `HostSummary`** (identity, `machine_type`, `vulnerability_count`) and adds `ports` as `HostPort[]` + full `scan_history`. Flat on the wire. | `backend/src/api/schemas/read.py:114` |
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/`error_code`/counts; `hosts`/`findings` are required. `error_code` is `ScanErrorCode \| None` and is **not** required — present as `null` on a non-failed scan, never bare on a failed one. | `backend/src/api/schemas/read.py:103` |
 | `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:118` |
 | `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |
