@@ -1,6 +1,6 @@
 [Unit]
 Description=Dmitri scanner agent
-Documentation=https://github.com/Dmitri-IMT/vulnerability-scanner-device
+Documentation=https://github.com/Dmitri-IMT/dmitri
 After=network-online.target
 Wants=network-online.target
 # The daemon reconnects on its own; never give up restarting it.

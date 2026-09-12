@@ -36,11 +36,11 @@
 
 ## Where each layer stands (one paragraph)
 
-The scan pipeline, headless command daemon, and signed ingest client run in software; no physical Pi
-is provisioned yet. The FastAPI backend serves data reads, auth, identity administration, the
+The scan pipeline, headless command daemon, and signed ingest client run in software, and a
+**physical Pi 4 appliance is provisioned and online** against the hosted `nspi` stack since
+2026-09-11 — see [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md). The FastAPI backend serves data reads, auth, identity administration, the
 command channel, and ingest. The web app has login → Home, public auth, Settings, Users & Invites, and the DMI-88 scan/host
-read surfaces plus the Agents scan trigger (DMI-89). Still missing are physical Pi operations
-and the LLM explainer. Invite/reset email now sends and delivers from the verified
+read surfaces plus the Agents scan trigger (DMI-89). Still missing is the LLM explainer. Invite/reset email now sends and delivers from the verified
 `mail.peirce.dev`; what remains there is sender reputation, not code.
 
 ## Cross-layer milestone sequencing

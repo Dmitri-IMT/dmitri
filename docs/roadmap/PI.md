@@ -1,10 +1,11 @@
 # Roadmap — Pi Agent
 
-> **Status:** built for **local scanning**. The Pi runs discovery → enumeration → service detection →
-> NSE → normalization via the TUI, then **writes JSON to `hardware-agent/artifacts/`**. There is
-> **no HTTP client to the backend** in the repo (`transport/` described in older docs was never
-> added). There is **no inbound path** to ask the Pi to scan on demand. Closing that gap is the
-> headline product decision below.
+> **Status:** **wired end to end and verified on hardware (2026-09-11).** The Pi runs discovery →
+> enumeration → service detection → NSE → normalization, and `agent.transport` carries both
+> directions: an outbound WebSocket command channel that accepts scan requests, and a signed
+> ingest client that uploads results. A scan triggered from the web reached the device, executed
+> and returned results in about two minutes — see
+> [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md).
 >
 > **Sources:** [`ARCHITECTURE.md §2.1`](../architecture/ARCHITECTURE.md), [`ADR-001`](../adr/ADR-001-hardware-selection.md),
 > [`ADR-002`](../adr/ADR-002-scanning-tools-selection.md), [`ADR-004`](../adr/ADR-004-scan-methodology.md),
@@ -12,10 +13,10 @@
 
 ## Current state
 
-- **Hardware: a Raspberry Pi 4 Model B Rev 1.5 (4 GB) is provisioned and running as of 2026-09-11.** This *is* the board [`ADR-001`](../adr/ADR-001-hardware-selection.md) selected — the earlier belief that only a Pi 3 was in hand was wrong, and the ADR's divergence annotation is superseded by this reading, taken from the device: `/proc/device-tree/model` → `Raspberry Pi 4 Model B Rev 1.5`, `MemTotal` → 3 886 904 kB, `vcgencmd get_throttled` → `0x0`. A **Pi 3 (1 GB) is also held**, deliberately, as the comparison unit for DMI-109's 1 GB vs 4 GB benchmark. The agent is installed at `/opt/dmitri-agent` on Debian 13 (trixie) with `uv`-managed Python 3.12 — see [`../PI-INSTALLER.md`](../PI-INSTALLER.md).
+- **Hardware: a Raspberry Pi 4 Model B Rev 1.5 (4 GB) is provisioned and running as of 2026-09-11.** This *is* the board [`ADR-001`](../adr/ADR-001-hardware-selection.md) selected — the earlier belief that only a Pi 3 was in hand was wrong. ADR-001 still carries a divergence annotation describing a Pi 3; correcting it is DMI-109's deliverable and is not done here, since a roadmap document does not change an ADR's status. Read from the device: `/proc/device-tree/model` → `Raspberry Pi 4 Model B Rev 1.5`, `MemTotal` → 3 886 904 kB, `vcgencmd get_throttled` → `0x0`. A **Pi 3 (1 GB) is also held**, deliberately, as the comparison unit for DMI-109's 1 GB vs 4 GB benchmark. The agent is installed at `/opt/dmitri-agent` on Debian 13 (trixie) with `uv`-managed Python 3.12 — see [`../PI-INSTALLER.md`](../PI-INSTALLER.md).
 - **Dev today:** `hardware-agent/` runs on a developer machine (Windows/Linux), not on a Pi. Scans are launched **locally** via `ScanRunner` (`scanner/runner.py`), from the TUI or `dmitri agent`.
 - **Output today:** normalized JSON on disk (`AGENT_OUTPUT_PATH` / `artifacts/`). Payload matches `contracts/schemas` — ingestible by `POST /api/v1/scans` when transport exists.
-- **Planned egress:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key) — **implemented on both sides but not yet wired**: the backend route landed with DMI-63 and the device client (`agent.transport.ScanIngestClient`) with DMI-65. What is missing is the daemon that calls it (DMI-66).
+- **Egress, working:** Pi → backend `POST /api/v1/scans` with per-device **Ed25519 signature** ([`ADR-005`](../adr/ADR-005-security-model.md), amended 2026-07-24; private key on the Pi, backend verifies with the public key). The backend route landed with DMI-63, the device client (`agent.transport.ScanIngestClient`) with DMI-65, and the daemon that calls it with DMI-66. Verified against the hosted stack on 2026-09-11: 12 hosts and 20 findings ingested from the real device.
 - **September scope:** [`BACKEND.md` B10](BACKEND.md#b10--september-mvp-) = **Control** — command channel (B6) and headless **`dmitri agent` daemon** are in scope.
 
 ✅ **RECONCILED:** ADR-005 originally assumed a *one-way push* agent. Control requires the backend

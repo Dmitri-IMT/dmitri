@@ -66,38 +66,17 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 4. Install the agent
 
-The agent lives in `/opt/dmitri-agent`, owned by root. `contracts/` must sit beside it
-at `/opt/contracts`, because the agent resolves the OpenAPI contract one level above its
-own directory.
+The agent lives in `/opt/dmitri-agent`, owned by root.
 
 ```bash
-sudo mkdir -p /opt/dmitri-agent /opt/contracts
-# copy hardware-agent/ -> /opt/dmitri-agent, contracts/ -> /opt/contracts
-sudo chown -R root:root /opt/dmitri-agent /opt/contracts
-# verification pass, with dev tooling
-sudo env HOME=/root ~/.local/bin/uv sync --project /opt/dmitri-agent --extra dev
-```
-
-Verify on the device before going further:
-
-```bash
-sudo /opt/dmitri-agent/.venv/bin/python -V     # expect 3.12.x
-cd /opt/dmitri-agent && sudo env HOME=/root ~/.local/bin/uv run pytest -q
-```
-
-The suite must be fully green. A failure in `tests/test_contract_models.py` means
-`/opt/contracts` is missing or misplaced.
-
-**Then strip the dev tooling.** `pytest` and `ruff` have no place on a customer
-appliance; they exist only for the verification above.
-
-```bash
+sudo mkdir -p /opt/dmitri-agent
+# copy hardware-agent/ -> /opt/dmitri-agent
+sudo chown -R root:root /opt/dmitri-agent
 sudo env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python \
   ~/.local/bin/uv sync --project /opt/dmitri-agent
 ```
 
-This removes `pytest`, `pytest-asyncio`, `ruff` and `pyyaml`, leaving only the runtime
-dependencies. Re-run a scan afterwards to confirm the agent still starts.
+One sync, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
 
 > **`UV_PYTHON_INSTALL_DIR` is not optional.** By default `uv` puts its interpreter under
 > `/root/.local/share/uv/`, and the venv's `bin/python` becomes a symlink into `/root`.
@@ -106,9 +85,18 @@ dependencies. Re-run a scan afterwards to confirm the agent still starts.
 > Installing the interpreter under `/opt/uv-python` keeps the whole runtime in one place
 > that the hardened unit can reach. Use the same variable on every later `uv sync`.
 
-> **What ships to the Pi:** only `hardware-agent/` — the daemon (outbound WebSocket
-> command channel), the scanner, the ingest client and the local TUI. The backend and
-> the frontend never go on the device.
+Verify the runtime on the device:
+
+```bash
+sudo /opt/dmitri-agent/.venv/bin/python -V     # expect 3.12.x
+```
+
+> **The test suite does not run here.** `tests/test_contract_models.py` resolves
+> `contracts/openapi/openapi.yaml` two directories above the agent, which is repository
+> layout, not a runtime dependency — `agent.normalize.contracts` is an in-tree Python
+> module and nothing at runtime reads that YAML. Prove the suite on the vendor machine
+> against the release being shipped; the appliance receives the runtime, the virtualenv
+> and the unit, and nothing else.
 
 ## 5. Generate the device keypair **on the Pi**
 
@@ -118,21 +106,33 @@ transmitted, and that channel needs integrity, not confidentiality.
 ```bash
 sudo mkdir -p /etc/dmitri && sudo chmod 700 /etc/dmitri
 
-/opt/dmitri-agent/.venv/bin/python -c "
+sudo /opt/dmitri-agent/.venv/bin/python - <<'PY'
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization as s
-k = Ed25519PrivateKey.generate()
-priv = k.private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()).hex()
-pub  = k.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw).hex()
-open('/tmp/.dk','w').write(priv)
-print('PUBLIC_KEY=' + pub)
-"
 
-sudo sh -c "mv /tmp/.dk /etc/dmitri/device.key; chmod 600 /etc/dmitri/device.key; chown root:root /etc/dmitri/device.key"
+key = Ed25519PrivateKey.generate()
+private_hex = key.private_bytes(
+    s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()
+).hex()
+public_hex = key.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw).hex()
+
+with open("/etc/dmitri/agent.env", "w") as env:
+    env.write("DEVICE_PRIVATE_KEY=" + private_hex + "\n")
+
+print("PUBLIC_KEY=" + public_hex)
+PY
+
+sudo chmod 600 /etc/dmitri/agent.env
+sudo chown root:root /etc/dmitri/agent.env
 ```
 
-Carry the printed `PUBLIC_KEY` to step 6. The private key stays in
-`/etc/dmitri/device.key`, `root:root`, mode `0600`.
+Carry the printed `PUBLIC_KEY` to step 6.
+
+> **One copy of the private key, in one place.** The daemon reads `DEVICE_PRIVATE_KEY` from
+> the environment via `load_ingest_config()` and never opens a key file, so a separate
+> `device.key` would be private material on disk with no consumer — surface area for nothing.
+> The key is written straight into `agent.env`, and the private hex is never printed, never
+> written to `/tmp`, and never leaves the device.
 
 ## 6. Register the public key with the backend
 
@@ -151,22 +151,20 @@ railway run --service api --environment <env> \
 
 It prints `agent_id=<uuid>`. That UUID is the `DEVICE_ID`.
 
-## 7. Write `/etc/dmitri/agent.env`
+## 7. Complete `/etc/dmitri/agent.env`
 
-Three variables, validated by `agent/transport/ingest.py`:
+Step 5 already wrote `DEVICE_PRIVATE_KEY`. Append the other two — `agent/transport/ingest.py`
+validates all three:
 
 | Variable | Format |
 |---|---|
 | `BACKEND_URL` | http/https origin, no credentials |
 | `DEVICE_ID` | UUID — the `agent_id` from step 6 |
-| `DEVICE_PRIVATE_KEY` | 64 hex characters — contents of `/etc/dmitri/device.key` |
+| `DEVICE_PRIVATE_KEY` | 64 hex characters — written in step 5 |
 
 ```bash
-sudo sh -c 'umask 077; cat > /etc/dmitri/agent.env <<ENV
-BACKEND_URL=<backend origin>
-DEVICE_ID=<agent_id>
-DEVICE_PRIVATE_KEY=<contents of /etc/dmitri/device.key>
-ENV'
+sudo sh -c 'printf "BACKEND_URL=%s\nDEVICE_ID=%s\n" \
+  "<backend origin>" "<agent_id>" >> /etc/dmitri/agent.env'
 sudo chmod 600 /etc/dmitri/agent.env
 ```
 
@@ -219,8 +217,7 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 |---|---|
 | Board never appears on the network | Bad microSD. Verify the write; check whether `userconf.txt` is still on the boot partition — the OS deletes it during a successful first boot |
 | Scan ends `partial`, exit 10 | `nmap` not running as root |
-| `test_contract_models.py` fails | `/opt/contracts/openapi/openapi.yaml` missing |
-| `IngestConfigError` on start | `agent.env` malformed — check the `DEVICE_ID` is a UUID and the key is 64 hex characters |
+| `IngestConfigError` on start | `agent.env` malformed — `BACKEND_URL` must be a bare origin, `DEVICE_ID` a UUID, `DEVICE_PRIVATE_KEY` 64 hex characters |
 | Under-voltage or throttling | Check `vcgencmd get_throttled`; `0x0` means healthy |
 
 ## Not covered
