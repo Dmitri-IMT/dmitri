@@ -177,5 +177,3 @@ def _is_modbus_candidate(port: PortInfo) -> bool:
         return False
     service_name = port.service.name.lower()
     return port.port == 502 or "modbus" in service_name or service_name == "mbap"
-
-

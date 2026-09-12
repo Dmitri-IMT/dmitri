@@ -247,5 +247,3 @@ def _parse_unit_id(value: str) -> int | None:
     except ValueError:
         return None
     return unit_id if 0 <= unit_id <= 255 else None
-
-

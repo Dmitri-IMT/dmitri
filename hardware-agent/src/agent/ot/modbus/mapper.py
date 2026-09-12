@@ -17,8 +17,8 @@ from agent.ot.modbus.client import (
 )
 from agent.ot.modbus.models import ModbusAddressRange, ModbusService
 from agent.ot.policy import (
-    AddressSpace,
     GENERIC_BASELINE_RANGES,
+    AddressSpace,
     MappingProfile,
     MappingRangeRule,
     OtAutomationPolicy,
