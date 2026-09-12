@@ -101,6 +101,64 @@ class OtAutomationPolicy(BaseModel):
     mapping_profiles: list[MappingProfile] = Field(default_factory=list, max_length=64)
 
 
+_CAPTURE_VALUES_ORDER: dict[CaptureValues, int] = {
+    "none": 0,
+    "summary": 1,
+    "raw": 2,
+}
+
+
+def profile_is_conservative(profile: MappingProfile) -> bool:
+    """True when the profile is no broader than GENERIC_BASELINE_RANGES."""
+
+    baseline = GENERIC_BASELINE_RANGES
+    if len(profile.ranges) > len(baseline):
+        return False
+    if profile.unit_ids is not None and len(profile.unit_ids) > MAX_MAPPING_UNIT_IDS:
+        return False
+
+    baseline_addresses: dict[AddressSpace, int] = {}
+    baseline_block_size: dict[AddressSpace, int] = {}
+    baseline_capture: dict[AddressSpace, int] = {}
+    for rule in baseline:
+        baseline_addresses[rule.address_space] = (
+            baseline_addresses.get(rule.address_space, 0) + rule.count
+        )
+        baseline_block_size[rule.address_space] = max(
+            baseline_block_size.get(rule.address_space, 0),
+            rule.block_size,
+        )
+        baseline_capture[rule.address_space] = max(
+            baseline_capture.get(rule.address_space, 0),
+            _CAPTURE_VALUES_ORDER[rule.capture_values],
+        )
+
+    profile_addresses: dict[AddressSpace, int] = {}
+    profile_block_size: dict[AddressSpace, int] = {}
+    profile_capture: dict[AddressSpace, int] = {}
+    for rule in profile.ranges:
+        profile_addresses[rule.address_space] = (
+            profile_addresses.get(rule.address_space, 0) + rule.count
+        )
+        profile_block_size[rule.address_space] = max(
+            profile_block_size.get(rule.address_space, 0),
+            rule.block_size,
+        )
+        profile_capture[rule.address_space] = max(
+            profile_capture.get(rule.address_space, 0),
+            _CAPTURE_VALUES_ORDER[rule.capture_values],
+        )
+
+    for space, count in profile_addresses.items():
+        if count > baseline_addresses.get(space, 0):
+            return False
+        if profile_block_size[space] > baseline_block_size.get(space, 0):
+            return False
+        if profile_capture[space] > baseline_capture.get(space, 0):
+            return False
+    return True
+
+
 GENERIC_BASELINE_RANGES = (
     MappingRangeRule(
         address_space="coil",

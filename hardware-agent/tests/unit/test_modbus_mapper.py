@@ -259,3 +259,35 @@ def test_capture_none_records_only_range_status() -> None:
     assert observed.nonzero_count is None
     assert observed.value_min is None
     assert observed.value_max is None
+
+
+def test_empty_numeric_list_does_not_report_min_or_max_zero() -> None:
+    service = _identified_service()
+    session = _Session(
+        [ModbusReadResult(status="readable", values=[], request_sent=True)]
+    )
+    profile = MappingProfile(
+        name="lab",
+        selector={"cidrs": ["192.168.10.0/24"]},
+        ranges=[
+            {
+                "address_space": "holding_register",
+                "start_address": 0,
+                "count": 1,
+                "block_size": 1,
+            }
+        ],
+    )
+
+    map_modbus_service(
+        HostInfo(ip="192.168.10.30", hostname="plc"),
+        service,
+        policy=OtAutomationPolicy(mapping_profiles=[profile]),
+        session_factory=lambda *args, **kwargs: session,
+        sleep=lambda _: None,
+    )
+
+    observed = service.units[0].address_ranges[0]
+    assert observed.value_min is None
+    assert observed.value_max is None
+    assert observed.nonzero_count is None

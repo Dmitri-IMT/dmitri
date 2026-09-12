@@ -23,6 +23,7 @@ from agent.ot.policy import (
     MappingProfile,
     MappingRangeRule,
     OtAutomationPolicy,
+    profile_is_conservative,
     selector_matches,
 )
 from agent.scanner.models import HostInfo
@@ -92,6 +93,14 @@ def resolve_mapping_plan(
     vendor_profiles = [profile for profile in matching if profile not in site_profiles]
     selected = (site_profiles or vendor_profiles or [None])[0]
     if selected is None:
+        return MappingPlan(
+            source="generic_baseline",
+            unit_ids=discovered_ids,
+            ranges=GENERIC_BASELINE_RANGES,
+        )
+    if selected in vendor_profiles and not profile_is_conservative(selected):
+        if "identity-not-corroborated" not in service.evidence_sources:
+            service.evidence_sources.append("identity-not-corroborated")
         return MappingPlan(
             source="generic_baseline",
             unit_ids=discovered_ids,
@@ -305,6 +314,8 @@ def _materialise(item: _Observation) -> ModbusAddressRange:
         if values is not None and capture != "none"
         else None
     )
+    if numeric == []:
+        numeric = None
     return ModbusAddressRange(
         address_space=item.address_space,  # type: ignore[arg-type]
         start_address=item.start_address,
@@ -316,8 +327,8 @@ def _materialise(item: _Observation) -> ModbusAddressRange:
         nonzero_count=(
             sum(value != 0 for value in numeric) if numeric is not None else None
         ),
-        value_min=min(numeric) if numeric else (0 if numeric == [] else None),
-        value_max=max(numeric) if numeric else (0 if numeric == [] else None),
+        value_min=min(numeric) if numeric else None,
+        value_max=max(numeric) if numeric else None,
         values=(list(values) if values is not None and capture == "raw" else None),
         value_sha256=(
             _hash_values(values)

@@ -61,7 +61,7 @@ def test_ot_stage_runs_only_for_nspi_and_is_serial(monkeypatch) -> None:
     ]
     calls = []
 
-    def fake_inventory(host, *, cancel_event, controller):
+    def fake_inventory(host, **kwargs):
         calls.append(host.ip)
         return [_service()]
 

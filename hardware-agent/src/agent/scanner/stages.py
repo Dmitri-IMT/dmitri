@@ -146,7 +146,11 @@ def run_port_stage(
             else:
                 for ip in batch:
                     host = host_map[ip]
-                    result = results[ip]
+                    result = results.get(ip)
+                    if result is None:
+                        raise UnitScanError(
+                            f"Port scan did not return results for {ip}"
+                        )
                     host.ports = sorted(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
@@ -365,8 +369,10 @@ def run_ot_inspection_stage(
             break
         host.industrial_services = inventory_modbus_host(
             host,
+            policy=effective_policy,
             cancel_event=cancel_event,
             controller=modbus_controller,
+            deadline=deadline,
         )
         if settings.nspi_submode == "read_only_mapping":
             budget = MappingBudget(
