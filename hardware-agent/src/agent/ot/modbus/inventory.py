@@ -9,7 +9,7 @@ from agent.ot.modbus.client import ModbusClientController, probe_device_identifi
 from agent.ot.modbus.merge import merge_unit
 from agent.ot.modbus.models import ModbusService, ModbusUnit
 from agent.ot.modbus.nse import parse_modbus_discover
-from agent.ot.policy import OtAutomationPolicy, must_stop
+from agent.ot.policy import OtAutomationPolicy, must_stop, pace_or_stop
 from agent.scanner.models import HostInfo, PortInfo
 
 LOGGER = logging.getLogger(__name__)
@@ -108,18 +108,10 @@ def _inventory_port(
 
         delay_seconds = policy.inter_request_delay_ms / 1000
         for unit_id in fallback_ids:
-            if must_stop(cancel_event, deadline):
-                if cancel_event is not None and cancel_event.is_set():
-                    break
-                merge_unit(
-                    units,
-                    ModbusUnit(unit_id=unit_id, status="skipped"),
-                )
-                continue
-            sleep(delay_seconds)
-            if must_stop(cancel_event, deadline):
-                if cancel_event is not None and cancel_event.is_set():
-                    break
+            reason = pace_or_stop(sleep, delay_seconds, cancel_event, deadline)
+            if reason == "cancel":
+                break
+            if reason == "deadline":
                 merge_unit(
                     units,
                     ModbusUnit(unit_id=unit_id, status="skipped"),

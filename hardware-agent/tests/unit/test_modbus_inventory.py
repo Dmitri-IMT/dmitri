@@ -213,6 +213,51 @@ def test_past_deadline_skips_fallback_without_probe() -> None:
     assert service.requests_sent == 0
 
 
+def test_cancel_during_fallback_does_not_stamp_skipped_units() -> None:
+    port = PortInfo(
+        port=502,
+        service=ServiceInfo(name="modbus"),
+        scripts=[
+            ScriptResult(
+                script_id="modbus-discover",
+                data={
+                    "sid 1": {"Slave ID data": "u1"},
+                    "sid 2": {"Slave ID data": "u2"},
+                },
+            )
+        ],
+    )
+    cancel_event = threading.Event()
+    probe_calls: list[int] = []
+
+    def probe(host, port_number, unit_id, *, timeout, **kwargs):
+        probe_calls.append(unit_id)
+        cancel_event.set()
+        return ModbusUnit(
+            unit_id=unit_id,
+            status="responding",
+            device_identification=ModbusDeviceIdentification(vendor_name="ACME"),
+        )
+
+    service = _inventory_port(
+        "192.168.10.30",
+        port,
+        policy=OtAutomationPolicy(),
+        timeout=1.5,
+        cancel_event=cancel_event,
+        probe=probe,
+        controller=None,
+        sleep=lambda _: None,
+        deadline=None,
+    )
+    by_id = {unit.unit_id: unit for unit in service.units}
+
+    assert probe_calls == [1]
+    assert set(by_id) == {1, 2}
+    assert by_id[1].status == "responding"
+    assert by_id[2].status != "skipped"
+
+
 def test_identification_probes_sleep_before_each_fc43() -> None:
     policy = OtAutomationPolicy(inter_request_delay_ms=250)
     sleeps: list[float] = []

@@ -28,6 +28,7 @@ from agent.ot.policy import (
     MappingRangeRule,
     OtAutomationPolicy,
     must_stop,
+    pace_or_stop,
     profile_is_conservative,
     selector_matches,
 )
@@ -203,11 +204,12 @@ def _read_chunk(
     deadline: float | None,
     sleep: Callable[[float], None],
 ) -> list[_Observation]:
-    if must_stop(cancel_event, deadline) or not budget.available():
-        service.mapping_ranges_skipped += 1
-        return []
-    sleep(policy.inter_request_delay_ms / 1000)
-    if must_stop(cancel_event, deadline):
+    if not budget.available() or pace_or_stop(
+        sleep,
+        policy.inter_request_delay_ms / 1000,
+        cancel_event,
+        deadline,
+    ):
         service.mapping_ranges_skipped += 1
         return []
     result: ModbusReadResult = session.read(
