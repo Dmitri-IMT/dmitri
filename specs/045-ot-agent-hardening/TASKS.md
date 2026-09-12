@@ -135,7 +135,7 @@ Blast radius is `hardware-agent/` and `backend/`. Test agent: `test-engineer`. R
   - One junk JSON column does not 500 the list.
   - No frontend component or screen changes.
   - Each path in ARCHITECTURE.md §9.5 is updated (ADR-019 already done).
-- **Status**: DONE
+- **Status**: DONE (`b5ab84e`)
 - **Review Rejections**: 0
 
 ---
@@ -165,4 +165,4 @@ Parallel tracks: Alembic (#1) beside parse bounds (#3). After #6, progress/outco
 | 7 | Validate depth where it acts and restore completed-with-partial | DONE `3c6f67d` |
 | 8 | Render device text and digests on the results screen | DONE `2bf16c3` |
 | 9 | Persist industrial observations | DONE `dc2a4a9` |
-| 10 | Read industrial observations, degrade bad rows, regenerate types | DONE |
+| 10 | Read industrial observations, degrade bad rows, regenerate types | DONE `b5ab84e` |
