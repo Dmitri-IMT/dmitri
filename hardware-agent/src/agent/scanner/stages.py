@@ -101,13 +101,17 @@ def _recover_deep_stage_services(
     settings: AgentSettings,
     host: HostInfo,
 ) -> bool:
-    recovered = detect_services(
-        runner,
-        host.ip,
-        host.ports,
-        version_intensity=effective_version_intensity(settings.version_intensity),
-        timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
-    )
+    try:
+        recovered = detect_services(
+            runner,
+            host.ip,
+            host.ports,
+            version_intensity=effective_version_intensity(settings.version_intensity),
+            timeout=subprocess_timeout_for(settings.scan_mode, "nse"),
+        )
+    except (BudgetExceeded, UnitScanError, TransientScanError) as exc:
+        LOGGER.warning("Service recovery failed for %s: %s", host.ip, exc)
+        return False
     if not recovered:
         return False
     host.ports = merge_ports(host.ports, recovered)
@@ -496,11 +500,6 @@ def run_ot_inspection_stage(
             deadline_reached = True
             deadline_seconds = max(1, int(round(stage_deadline - stage_started)))
             break
-        if host_deadline is not None and perf_counter() >= host_deadline:
-            deadline_reached = True
-            deadline_seconds = MAX_OT_HOST_SECONDS
-            if hosts_done < hosts_total:
-                break
     if deadline_reached and deadline_seconds is not None:
         reason = (
             f"Time limit reached during Modbus inventory ({deadline_seconds}s)"

@@ -107,3 +107,30 @@ def test_deep_stage_keeps_port_evidence_when_recovery_also_empty(monkeypatch) ->
 
     assert skipped == 1
     assert host.ports[0].service.name == original_name
+
+
+def test_deep_stage_continues_when_recovery_probe_fails(monkeypatch) -> None:
+    first = _host()
+    second = _host()
+    second.ip = "192.168.10.31"
+    runner = _Runner()
+
+    monkeypatch.setattr(
+        "agent.scanner.stages.run_nse_vulnerability_scan",
+        lambda *args, **kwargs: (_ for _ in ()).throw(BudgetExceeded()),
+    )
+
+    def fail_recovery(*args, **kwargs):
+        raise UnitScanError("recovery failed")
+
+    monkeypatch.setattr("agent.scanner.stages.detect_services", fail_recovery)
+
+    skipped = run_deep_inspection_stage(
+        runner,
+        AgentSettings(scan_mode="nspi", unit_failure_threshold=1.0),
+        [first, second],
+    )
+
+    assert skipped == 2
+    assert first.ports[0].service.name == "modbus-tcp"
+    assert second.ports[0].service.name == "modbus-tcp"

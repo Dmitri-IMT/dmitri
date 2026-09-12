@@ -248,7 +248,7 @@ def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
     assert metadata["partial_result"] is False
 
 
-def test_ot_host_deadline_skips_remaining_hosts(monkeypatch) -> None:
+def test_ot_host_deadline_allows_remaining_hosts(monkeypatch) -> None:
     hosts = [
         HostInfo(
             ip=f"192.168.10.{index}",
@@ -275,8 +275,9 @@ def test_ot_host_deadline_skips_remaining_hosts(monkeypatch) -> None:
     inspected = [
         event for event in reporter.events if event.kind == "modbus_host_inspected"
     ]
-    assert len(inspected) == 1
-    assert any(event.kind == "ot_stage_deadline" for event in reporter.events)
+    assert len(inspected) == 2
+    assert all(host.industrial_services for host in hosts)
+    assert not any(event.kind == "ot_stage_deadline" for event in reporter.events)
 
     metadata = build_metadata(
         runner=_Runner(),
@@ -288,8 +289,7 @@ def test_ot_host_deadline_skips_remaining_hosts(monkeypatch) -> None:
         hosts=hosts,
         ot_inspection=ot_inspection,
     )
-    assert metadata["modbus_stage_deadline_reached"] is True
-    assert metadata["modbus_stage_deadline_seconds"] == 0
+    assert "modbus_stage_deadline_reached" not in metadata
 
 
 def test_write_counter_comes_from_service_field() -> None:

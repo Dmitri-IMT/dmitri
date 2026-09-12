@@ -146,6 +146,14 @@ def profile_is_conservative(profile: MappingProfile) -> bool:
     profile_block_size: dict[AddressSpace, int] = {}
     profile_capture: dict[AddressSpace, int] = {}
     for rule in profile.ranges:
+        if not any(
+            rule.address_space == baseline_rule.address_space
+            and rule.start_address >= baseline_rule.start_address
+            and rule.start_address + rule.count
+            <= baseline_rule.start_address + baseline_rule.count
+            for baseline_rule in baseline
+        ):
+            return False
         profile_addresses[rule.address_space] = (
             profile_addresses.get(rule.address_space, 0) + rule.count
         )

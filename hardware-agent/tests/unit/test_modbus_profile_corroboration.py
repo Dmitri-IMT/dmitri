@@ -55,6 +55,33 @@ def test_identity_only_match_cannot_widen_beyond_generic_baseline() -> None:
     assert "identity-not-corroborated" in service.evidence_sources
 
 
+def test_identity_only_match_cannot_read_outside_baseline_addresses() -> None:
+    host = HostInfo(ip="192.168.10.30", hostname="plc")
+    service = _identified_service()
+    shifted = MappingProfile(
+        name="shifted-vendor",
+        selector={"vendors": ["Schneider Electric"]},
+        ranges=[
+            {
+                "address_space": "coil",
+                "start_address": 4,
+                "count": 1,
+                "block_size": 1,
+            }
+        ],
+    )
+
+    plan = resolve_mapping_plan(
+        host,
+        service,
+        OtAutomationPolicy(mapping_profiles=[shifted]),
+    )
+
+    assert plan.source == "generic_baseline"
+    assert plan.ranges == GENERIC_BASELINE_RANGES
+    assert "identity-not-corroborated" in service.evidence_sources
+
+
 def test_cidr_match_can_widen_beyond_generic_baseline() -> None:
     host = HostInfo(ip="192.168.10.30", hostname="plc")
     service = _identified_service()

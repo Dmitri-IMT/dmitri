@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from xml.etree.ElementTree import Element
+
 import pytest
 from agent.config import AgentSettings
 from agent.scanner.errors import BudgetExceeded, CircuitBreakerError, UnitScanError
@@ -19,6 +21,9 @@ class _FakeReporter:
 class _DummyRunner:
     def __init__(self) -> None:
         self.nmap_path = "nmap"
+
+    def run_xml(self, arguments, timeout=None):
+        return Element("nmaprun")
 
 
 def _kinds(events: list[ScanEvent], kind: str) -> list[ScanEvent]:
