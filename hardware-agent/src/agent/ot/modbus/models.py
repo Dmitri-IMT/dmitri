@@ -4,6 +4,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+AddressRangeStatus = Literal[
+    "readable",
+    "illegal_address",
+    "illegal_function",
+    "timeout",
+    "error",
+    "skipped",
+]
+
 
 @dataclass(slots=True)
 class ModbusDeviceIdentification:
@@ -50,14 +59,7 @@ class ModbusAddressRange:
     ]
     start_address: int
     count: int
-    status: Literal[
-        "readable",
-        "illegal_address",
-        "illegal_function",
-        "timeout",
-        "error",
-        "skipped",
-    ]
+    status: AddressRangeStatus
     observed_at: datetime
     exception_code: int | None = None
     label: str | None = None

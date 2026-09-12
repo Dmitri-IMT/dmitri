@@ -9,7 +9,11 @@ from typing import Any
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ModbusIOException
 
-from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
+from agent.ot.modbus.models import (
+    AddressRangeStatus,
+    ModbusDeviceIdentification,
+    ModbusUnit,
+)
 from agent.ot.modbus.readonly import ReadOnlyModbusClient
 from agent.ot.policy import AddressSpace
 from agent.ot.untrusted import bound_objects, bound_text
@@ -58,7 +62,7 @@ class ModbusClientController:
 
 @dataclass(slots=True)
 class ModbusReadResult:
-    status: str
+    status: AddressRangeStatus
     values: list[int | bool] | None = None
     exception_code: int | None = None
     error: str | None = None

@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 AddressSpace = Literal["coil", "discrete_input", "holding_register", "input_register"]
-CaptureValues = Literal["none", "summary", "raw"]
+CaptureValues = Literal["none", "digest"]
 
 MAX_MAPPING_RANGES_PER_PROFILE = 16
 MAX_MAPPING_RANGE_COUNT = 256
@@ -51,7 +51,7 @@ class MappingRangeRule(BaseModel):
     start_address: int = Field(ge=0, le=65535)
     count: int = Field(ge=1, le=MAX_MAPPING_RANGE_COUNT)
     block_size: int = Field(default=8, ge=1, le=MAX_MAPPING_BLOCK_SIZE)
-    capture_values: CaptureValues = "summary"
+    capture_values: CaptureValues = "digest"
     bisect_on_illegal_address: bool = False
     minimum_block_size: int = Field(default=1, ge=1, le=MAX_MAPPING_BLOCK_SIZE)
     label: str | None = Field(default=None, min_length=1, max_length=160)
@@ -65,8 +65,6 @@ class MappingRangeRule(BaseModel):
         if self.address_space in {"holding_register", "input_register"}:
             if self.block_size > 32:
                 raise ValueError("register block_size cannot exceed 32")
-        if self.capture_values == "raw" and self.count > 128:
-            raise ValueError("raw capture cannot exceed 128 values per range")
         return self
 
 
@@ -124,8 +122,7 @@ class OtAutomationPolicy(BaseModel):
 
 _CAPTURE_VALUES_ORDER: dict[CaptureValues, int] = {
     "none": 0,
-    "summary": 1,
-    "raw": 2,
+    "digest": 1,
 }
 
 

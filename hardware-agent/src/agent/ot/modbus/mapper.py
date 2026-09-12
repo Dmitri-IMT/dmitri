@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import sleep as default_sleep
-from typing import Any, Literal
+from typing import Any
 
 from pymodbus.client import ModbusTcpClient
 
@@ -15,10 +15,15 @@ from agent.ot.modbus.client import (
     ModbusReadResult,
     ModbusReadSession,
 )
-from agent.ot.modbus.models import ModbusAddressRange, ModbusService
+from agent.ot.modbus.models import (
+    AddressRangeStatus,
+    ModbusAddressRange,
+    ModbusService,
+)
 from agent.ot.policy import (
     GENERIC_BASELINE_RANGES,
     AddressSpace,
+    CaptureValues,
     MappingProfile,
     MappingRangeRule,
     OtAutomationPolicy,
@@ -46,16 +51,6 @@ class MappingBudget:
         return self.used < self.maximum
 
 
-AddressRangeStatus = Literal[
-    "readable",
-    "illegal_address",
-    "illegal_function",
-    "timeout",
-    "error",
-    "skipped",
-]
-
-
 @dataclass(slots=True)
 class _Observation:
     address_space: AddressSpace
@@ -63,7 +58,7 @@ class _Observation:
     count: int
     status: AddressRangeStatus
     observed_at: datetime
-    capture_values: str
+    capture_values: CaptureValues
     values: list[int | bool] | None = None
     exception_code: int | None = None
     label: str | None = None
@@ -265,7 +260,7 @@ def _read_chunk(
             address_space=rule.address_space,
             start_address=start_address,
             count=count,
-            status=result.status,  # type: ignore[arg-type]
+            status=result.status,
             observed_at=datetime.now(timezone.utc),
             capture_values=rule.capture_values,
             values=result.values,
@@ -318,7 +313,7 @@ def _materialise(
     values = item.values if item.status == "readable" else None
     capture = item.capture_values
     value_digest = None
-    if values and capture in {"summary", "raw"}:
+    if values and capture == "digest":
         value_digest = compute_value_digest(
             digest_key,
             item.address_space,

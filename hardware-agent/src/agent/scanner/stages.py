@@ -406,6 +406,15 @@ def _elapsed_stage_seconds(stage_deadline: float, stage_started: float) -> int:
     return max(1, int(round(stage_deadline - stage_started)))
 
 
+def _stage_deadline_hit(
+    stage_deadline: float | None,
+    stage_started: float,
+) -> int | None:
+    if stage_deadline is None or perf_counter() < stage_deadline:
+        return None
+    return _elapsed_stage_seconds(stage_deadline, stage_started)
+
+
 def run_ot_inspection_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
@@ -445,9 +454,10 @@ def run_ot_inspection_stage(
     for host in eligible_hosts:
         if cancel_event is not None and cancel_event.is_set():
             break
-        if stage_deadline is not None and perf_counter() >= stage_deadline:
+        hit = _stage_deadline_hit(stage_deadline, stage_started)
+        if hit is not None:
             deadline_reached = True
-            deadline_seconds = _elapsed_stage_seconds(stage_deadline, stage_started)
+            deadline_seconds = hit
             break
         host_deadline = min_not_none(
             stage_deadline,
@@ -466,11 +476,10 @@ def run_ot_inspection_stage(
                 used=sum(service.requests_sent for service in host.industrial_services),
             )
             for service in host.industrial_services:
-                if stage_deadline is not None and perf_counter() >= stage_deadline:
+                hit = _stage_deadline_hit(stage_deadline, stage_started)
+                if hit is not None:
                     deadline_reached = True
-                    deadline_seconds = _elapsed_stage_seconds(
-                        stage_deadline, stage_started
-                    )
+                    deadline_seconds = hit
                     break
                 map_modbus_service(
                     host,
@@ -500,9 +509,10 @@ def run_ot_inspection_stage(
                 ip=host.ip,
             ),
         )
-        if stage_deadline is not None and perf_counter() >= stage_deadline:
+        hit = _stage_deadline_hit(stage_deadline, stage_started)
+        if hit is not None:
             deadline_reached = True
-            deadline_seconds = _elapsed_stage_seconds(stage_deadline, stage_started)
+            deadline_seconds = hit
             break
     if deadline_reached and deadline_seconds is not None:
         reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"

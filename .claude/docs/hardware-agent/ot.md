@@ -4,7 +4,7 @@ title: hardware-agent OT package
 description: Modbus inspection on the Pi — policy, digest, read-only client, inventory, and the OT scan stage.
 resource: hardware-agent/src/agent/ot/
 tags: [hardware-agent, ot, modbus, pymodbus]
-timestamp: 2026-09-12T22:20:00Z
+timestamp: 2026-09-12T23:05:00Z
 ---
 
 # hardware-agent OT package
@@ -18,13 +18,14 @@ for Nmap. The dependency is `pymodbus`. `AGENT_VERSION` is `0.1.4`.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `must_stop()` | True when cancel is set or the wall-clock deadline has passed. Inventory and mapping both call it. | `ot/policy.py:33` |
-| `profile_is_conservative()` | Allows an identity-only mapping profile only when every read stays inside a generic-baseline address range and its other limits are no broader. CIDR/MAC matches may use broader site profiles. | `ot/policy.py:120` |
+| `must_stop()` | True when cancel is set or the wall-clock deadline has passed. Inventory fallbacks and mapping both pass the cancel event into it. | `ot/policy.py:33` |
+| `CaptureValues` | `none` or `digest`. Default `digest`. Policy ranks digest as more capture than none. | `ot/policy.py:15` |
+| `profile_is_conservative()` | Allows an identity-only mapping profile only when every read stays inside a generic-baseline address range and its other limits are no broader. CIDR/MAC matches may use broader site profiles. | `ot/policy.py:129` |
 | `load_digest_key()` / `value_digest()` | Load the local key and compute an HMAC-SHA256 digest; no key means no digest. | `ot/digest.py:35`, `:48` |
 | `ReadOnlyModbusClient` | Exposes only the allowed read methods to Modbus sessions. | `ot/modbus/readonly.py:23` |
 | `merge_unit()` | One status rank for NSE parse and inventory probes: responding > exception > timeout/error > skipped. Never demotes. | `ot/modbus/merge.py:14` |
 | `inventory_modbus_host()` | Collects paced, isolated FC43 identification for candidate ports and units. | `ot/modbus/inventory.py:23` |
-| `resolve_mapping_plan()` / `map_modbus_service()` | Choose the allowed range profile and execute read-only mapping. The planner returns `identity_not_corroborated`; the mapper tags evidence. | `ot/modbus/mapper.py:75`, `:126` |
+| `resolve_mapping_plan()` / `map_modbus_service()` | Choose the allowed range profile and execute read-only mapping. The planner returns `identity_not_corroborated`; the mapper tags evidence. | `ot/modbus/mapper.py:70`, `:121` |
 
 ## How it connects
 

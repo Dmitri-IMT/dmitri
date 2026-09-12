@@ -5,6 +5,9 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `_stage_deadline_hit`,
+  inventory `must_stop(cancel_event, deadline)`, and `capture_values` `none`/`digest`.
+
 * **Update**: merged `main` (PR #143 machine inventory) into DMI-157. Host detail keeps durable
   `HostPort` plus latest-scan `industrial_services`; `finding_read_query` also joins Modbus units.
   Industrial Alembic moved to `20260912_22` so it does not collide with main's `20260912_21`;

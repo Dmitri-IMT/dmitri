@@ -50,3 +50,29 @@ def test_invalid_policy_file_fails_closed(tmp_path) -> None:
 def test_local_policy_cannot_remove_minimum_inter_request_delay() -> None:
     with pytest.raises(ValidationError):
         OtAutomationPolicy(inter_request_delay_ms=0)
+
+
+@pytest.mark.parametrize("capture", ["summary", "raw"])
+def test_capture_values_rejects_legacy_modes(capture: str) -> None:
+    with pytest.raises(ValidationError):
+        MappingRangeRule(
+            address_space="holding_register",
+            start_address=0,
+            count=4,
+            capture_values=capture,
+        )
+
+
+def test_capture_values_accepts_digest() -> None:
+    rule = MappingRangeRule(
+        address_space="holding_register",
+        start_address=0,
+        count=4,
+        capture_values="digest",
+    )
+    assert rule.capture_values == "digest"
+
+
+def test_default_capture_values_is_digest() -> None:
+    rule = MappingRangeRule(address_space="coil", start_address=0, count=1)
+    assert rule.capture_values == "digest"

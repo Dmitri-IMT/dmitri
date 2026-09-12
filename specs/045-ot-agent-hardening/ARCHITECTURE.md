@@ -335,7 +335,7 @@ def profile_is_conservative(profile: MappingProfile) -> bool
 ```
 
 True when the profile is no broader than `GENERIC_BASELINE_RANGES` on every axis: total addresses
-per space, `block_size`, `capture_values` (`none` < `summary` < `raw`), range count, and configured
+per space, `block_size`, `capture_values` (`none` < `digest`), range count, and configured
 unit-id count. A profile matched **only** on `vendors`/`products` is applied only when this
 predicate holds; otherwise the generic baseline applies and `mapping_source` records
 `generic_baseline` with `"identity-not-corroborated"` appended to `service.evidence_sources`.

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import struct
 import threading
+from time import perf_counter
 
-from agent.ot.modbus.inventory import inventory_modbus_host
+from agent.ot.modbus.inventory import _inventory_port, inventory_modbus_host
 from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
 from agent.ot.policy import OtAutomationPolicy
 from agent.scanner.models import HostInfo, PortInfo, ScriptResult, ServiceInfo
@@ -184,6 +185,32 @@ def test_nse_responding_unit_stays_responding_after_fallback_timeout() -> None:
     )[0]
 
     assert service.units[0].status == "responding"
+
+
+def test_past_deadline_skips_fallback_without_probe() -> None:
+    port = PortInfo(port=502, service=ServiceInfo(name="unknown"))
+    probe_calls: list[int] = []
+
+    def probe(host, port_number, unit_id, *, timeout, **kwargs):
+        probe_calls.append(unit_id)
+        return ModbusUnit(unit_id=unit_id, status="responding")
+
+    service = _inventory_port(
+        "192.168.10.30",
+        port,
+        policy=OtAutomationPolicy(),
+        timeout=1.5,
+        cancel_event=None,
+        probe=probe,
+        controller=None,
+        sleep=lambda _: None,
+        deadline=perf_counter() - 1,
+    )
+
+    assert probe_calls == []
+    assert len(service.units) == 1
+    assert service.units[0].status == "skipped"
+    assert service.requests_sent == 0
 
 
 def test_identification_probes_sleep_before_each_fc43() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from time import perf_counter
 
@@ -199,6 +200,38 @@ def test_inventory_submode_never_dispatches_mapping(monkeypatch) -> None:
     )
 
     run_ot_inspection_stage(AgentSettings(scan_mode="nspi"), [host])
+
+
+def test_ot_stage_cancel_does_not_emit_deadline() -> None:
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc-a",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+    )
+    cancel_event = threading.Event()
+    cancel_event.set()
+    reporter = _Reporter()
+
+    ot_inspection = run_ot_inspection_stage(
+        AgentSettings(scan_mode="nspi"),
+        [host],
+        reporter=reporter,
+        cancel_event=cancel_event,
+    )
+
+    assert not ot_inspection.stage_deadline_reached
+    assert ot_inspection.stage_deadline_seconds is None
+    assert not any(event.kind == "ot_stage_deadline" for event in reporter.events)
+    assert "modbus_stage_deadline_reached" not in build_metadata(
+        runner=_Runner(),
+        settings=AgentSettings(scan_mode="nspi"),
+        network_info=None,
+        elapsed_seconds=1.0,
+        hosts_discovered=1,
+        findings_count=0,
+        hosts=[host],
+        ot_inspection=ot_inspection,
+    )
 
 
 def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:

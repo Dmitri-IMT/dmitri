@@ -108,18 +108,18 @@ def _inventory_port(
 
         delay_seconds = policy.inter_request_delay_ms / 1000
         for unit_id in fallback_ids:
-            if cancel_event is not None and cancel_event.is_set():
-                break
-            if must_stop(None, deadline):
+            if must_stop(cancel_event, deadline):
+                if cancel_event is not None and cancel_event.is_set():
+                    break
                 merge_unit(
                     units,
                     ModbusUnit(unit_id=unit_id, status="skipped"),
                 )
                 continue
             sleep(delay_seconds)
-            if cancel_event is not None and cancel_event.is_set():
-                break
-            if must_stop(None, deadline):
+            if must_stop(cancel_event, deadline):
+                if cancel_event is not None and cancel_event.is_set():
+                    break
                 merge_unit(
                     units,
                     ModbusUnit(unit_id=unit_id, status="skipped"),
