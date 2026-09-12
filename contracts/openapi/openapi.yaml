@@ -282,7 +282,11 @@ paths:
       tags:
         - hosts
       summary: List hosts
-      description: Returns discovered machines from scans. JWT Bearer required.
+      description: >-
+        Returns discovered machines from scans. The default page returns active
+        machines; `group=quiet` pages the machines not seen recently. `quiet_total`
+        counts the quiet machines across the whole inventory, not just this page.
+        JWT Bearer required.
       operationId: listHosts
       security:
         - FrontendBearerAuth: []
@@ -291,6 +295,7 @@ paths:
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/HostSortBy'
         - $ref: '#/components/parameters/SortOrder'
+        - $ref: '#/components/parameters/HostGroup'
         - name: q
           in: query
           description: Free-text search by hostname, IP, MAC, or vendor.
@@ -1350,7 +1355,18 @@ components:
           - hostname
           - vendor
           - ip
+          - vulnerability_count
         default: last_seen_at
+    HostGroup:
+      name: group
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - active
+          - quiet
+        default: active
     SeverityFilter:
       name: severity
       in: query
@@ -2255,6 +2271,18 @@ components:
         - medium
         - high
         - critical
+    MachineType:
+      type: string
+      enum:
+        - router
+        - computer
+        - camera
+        - storage
+        - tv
+        - phone
+        - printer
+        - sensor
+        - unknown
     Port:
       type: object
       additionalProperties: false
@@ -2286,6 +2314,38 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+    HostPort:
+      type: object
+      additionalProperties: false
+      required:
+        - port
+        - protocol
+        - service
+        - first_seen_at
+        - last_seen_at
+      properties:
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          type: string
+          enum:
+            - tcp
+            - udp
+        service:
+          type: string
+          minLength: 1
+        version:
+          anyOf:
+            - type: string
+            - type: 'null'
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
     PortPayload:
       type: object
       additionalProperties: false
@@ -2926,6 +2986,8 @@ components:
         - first_seen_at
         - last_seen_at
         - open_ports_count
+        - machine_type
+        - vulnerability_count
       properties:
         host_id:
           type: string
@@ -2953,6 +3015,11 @@ components:
           type: string
           format: date-time
         open_ports_count:
+          type: integer
+          minimum: 0
+        machine_type:
+          $ref: '#/components/schemas/MachineType'
+        vulnerability_count:
           type: integer
           minimum: 0
         highest_severity:
@@ -2999,6 +3066,8 @@ components:
         - first_seen_at
         - last_seen_at
         - open_ports_count
+        - machine_type
+        - vulnerability_count
         - ports
         - scan_history
       properties:
@@ -3030,6 +3099,11 @@ components:
         open_ports_count:
           type: integer
           minimum: 0
+        machine_type:
+          $ref: '#/components/schemas/MachineType'
+        vulnerability_count:
+          type: integer
+          minimum: 0
         highest_severity:
           anyOf:
             - $ref: '#/components/schemas/Severity'
@@ -3037,7 +3111,7 @@ components:
         ports:
           type: array
           items:
-            $ref: '#/components/schemas/Port'
+            $ref: '#/components/schemas/HostPort'
         scan_history:
           type: array
           items:
@@ -3048,6 +3122,7 @@ components:
       required:
         - data
         - total
+        - quiet_total
         - page
       properties:
         data:
@@ -3055,6 +3130,9 @@ components:
           items:
             $ref: '#/components/schemas/HostSummary'
         total:
+          type: integer
+          minimum: 0
+        quiet_total:
           type: integer
           minimum: 0
         page:
@@ -3672,6 +3750,25 @@ components:
         detected_at:
           type: string
           format: date-time
+        host_hostname:
+          anyOf:
+            - type: string
+            - type: 'null'
+        first_seen_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        last_seen_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        fixed_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
     FindingListResponse:
       type: object
       additionalProperties: false

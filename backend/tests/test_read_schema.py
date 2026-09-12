@@ -4,12 +4,14 @@ from uuid import UUID
 
 import pydantic
 import pytest
+from api.core.machine_type import MACHINE_TYPES
 from api.schemas import HostPayload
 from api.schemas.read import (
     FindingListResponse,
     FindingRead,
     HostDetailResponse,
     HostListResponse,
+    HostPort,
     HostScanHistoryEntry,
     HostSummary,
     Port,
@@ -43,6 +45,8 @@ def _host_summary_payload(**overrides: object) -> dict:
         "first_seen_at": "2026-03-05T14:12:45Z",
         "last_seen_at": "2026-03-05T14:12:45Z",
         "open_ports_count": 0,
+        "machine_type": "camera",
+        "vulnerability_count": 0,
     }
     payload.update(overrides)
     return payload
@@ -135,7 +139,12 @@ def test_scan_host_view_rejects_missing_hostname():
 
 def test_host_list_response_envelope_shape():
     envelope = HostListResponse.model_validate(
-        {"data": [_host_summary_payload()], "total": 1, "page": 1}
+        {
+            "data": [_host_summary_payload()],
+            "total": 1,
+            "quiet_total": 0,
+            "page": 1,
+        }
     )
 
     assert envelope.total == 1
@@ -193,6 +202,47 @@ def test_scan_list_response_envelope_shape():
     assert envelope.total == 1
     assert isinstance(envelope.data[0], ScanSummary)
     assert "per_page" not in ScanListResponse.model_fields
+
+
+def test_host_summary_rejects_a_negative_vulnerability_count():
+    with pytest.raises(pydantic.ValidationError):
+        HostSummary.model_validate(_host_summary_payload(vulnerability_count=-1))
+
+
+def test_host_summary_machine_type_is_closed_to_the_nine_values():
+    assert len(MACHINE_TYPES) == 9
+    for machine_type in MACHINE_TYPES:
+        summary = HostSummary.model_validate(
+            _host_summary_payload(machine_type=machine_type)
+        )
+        assert summary.machine_type == machine_type
+
+    with pytest.raises(pydantic.ValidationError):
+        HostSummary.model_validate(_host_summary_payload(machine_type="toaster"))
+
+
+def test_host_list_response_rejects_a_negative_quiet_total():
+    with pytest.raises(pydantic.ValidationError):
+        HostListResponse.model_validate(
+            {"data": [], "total": 0, "quiet_total": -1, "page": 1}
+        )
+
+
+def test_host_port_carries_the_two_dates_and_no_state():
+    assert "state" not in HostPort.model_fields
+    payload = {
+        "port": 554,
+        "protocol": "tcp",
+        "service": "rtsp",
+        "version": None,
+        "first_seen_at": "2026-03-05T14:12:45Z",
+        "last_seen_at": "2026-03-06T14:12:45Z",
+    }
+    port = HostPort.model_validate(payload)
+
+    assert port.first_seen_at < port.last_seen_at
+    with pytest.raises(pydantic.ValidationError):
+        HostPort.model_validate({**payload, "state": "open"})
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,12 @@ import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 
+function attentionMachineText(finding: FindingRecord): string | null {
+  if (finding.host_hostname) return finding.host_hostname
+  if (finding.host_ip) return finding.host_ip
+  return null
+}
+
 const columns: DataTableColumn<FindingRecord>[] = [
   {
     key: 'title',
@@ -34,16 +40,21 @@ const columns: DataTableColumn<FindingRecord>[] = [
     label: 'Machine',
     width: 'w-17/50',
     render: (finding) => {
-      if (!finding.host_ip) return <EmptyMark />
-      const address = (
-        <span className="block truncate font-mono" title={finding.host_ip}>
-          {finding.host_ip}
+      const label = attentionMachineText(finding)
+      if (label === null) return <EmptyMark />
+      const machine = finding.host_hostname ? (
+        <span className="block truncate" title={label}>
+          {label}
+        </span>
+      ) : (
+        <span className="block truncate font-mono" title={label}>
+          {label}
         </span>
       )
       return finding.host_id ? (
-        <CellLink to={`/network/${finding.host_id}`}>{address}</CellLink>
+        <CellLink to={`/network/${finding.host_id}`}>{machine}</CellLink>
       ) : (
-        address
+        machine
       )
     },
   },
@@ -82,7 +93,7 @@ function AttentionTable({
             to: (finding) =>
               `/scans/${finding.scan_id}?finding=${finding.finding_id}`,
             label: (finding) =>
-              `${finding.title} on ${finding.host_ip ?? 'unknown machine'}`,
+              `${finding.title} on ${attentionMachineText(finding) ?? 'unknown machine'}`,
           }}
         />
       )}

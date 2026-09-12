@@ -9,8 +9,9 @@ type ListHostsQuery = NonNullable<
 
 export type HostSortBy = components['parameters']['HostSortBy']
 export type HostListParams = Required<
-  Pick<ListHostsQuery, 'page' | 'per_page' | 'sort_by' | 'sort_order'>
+  Pick<ListHostsQuery, 'page' | 'per_page' | 'sort_by' | 'sort_order' | 'group'>
 >
+export type HostGroup = NonNullable<ListHostsQuery['group']>
 
 export const HOSTS_PER_PAGE = 20
 
@@ -25,6 +26,7 @@ export const HOST_SORT_DEFAULT_ORDER: Record<
   hostname: 'asc',
   vendor: 'asc',
   ip: 'asc',
+  vulnerability_count: 'desc',
 }
 
 export async function listHosts(

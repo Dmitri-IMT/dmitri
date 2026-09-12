@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, constr
 
 from api.core.error_codes import ScanErrorCode
+from api.core.machine_type import MachineType
 from api.core.severity import Severity
 
 from .operating_system import OperatingSystemDetection
@@ -15,7 +16,10 @@ from .operating_system import OperatingSystemDetection
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
-HostSortBy = Literal["last_seen_at", "hostname", "vendor", "ip"]
+HostSortBy = Literal[
+    "last_seen_at", "hostname", "vendor", "ip", "vulnerability_count"
+]
+HostGroup = Literal["active", "quiet"]
 SortOrder = Literal["asc", "desc"]
 
 
@@ -27,6 +31,17 @@ class Port(BaseModel):
     state: Literal["open", "closed", "filtered"]
     service: constr(min_length=1)
     version: str | None = None
+
+
+class HostPort(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    port: Annotated[int, Field(ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"]
+    service: constr(min_length=1)
+    version: str | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
 
 
 class ScanHostView(BaseModel):
@@ -62,6 +77,10 @@ class FindingRead(BaseModel):
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
     detected_at: datetime
+    host_hostname: str | None = None
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    fixed_at: datetime | None = None
 
 
 class HostSummary(BaseModel):
@@ -76,6 +95,8 @@ class HostSummary(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
+    machine_type: MachineType
+    vulnerability_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
 
 
@@ -90,20 +111,8 @@ class HostScanHistoryEntry(BaseModel):
     highest_severity: Severity | None = None
 
 
-class HostDetailResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    host_id: UUID
-    ip: IPv4Address
-    mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None
-    hostname: str
-    vendor: str
-    operating_system: OperatingSystemDetection | None = None
-    first_seen_at: datetime
-    last_seen_at: datetime
-    open_ports_count: Annotated[int, Field(ge=0)]
-    highest_severity: Severity | None = None
-    ports: list[Port]
+class HostDetailResponse(HostSummary):
+    ports: list[HostPort]
     scan_history: list[HostScanHistoryEntry]
 
 
@@ -156,6 +165,7 @@ class HostListResponse(BaseModel):
 
     data: list[HostSummary]
     total: Annotated[int, Field(ge=0)]
+    quiet_total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
 
 

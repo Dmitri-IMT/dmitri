@@ -57,7 +57,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and sixteen revisions through user activity and invite revocation privileges, with Supabase RLS and dmitri_runtime hardening.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through host inventory depth, with Supabase RLS and dmitri_runtime hardening.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 

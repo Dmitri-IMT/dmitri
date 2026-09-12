@@ -98,12 +98,13 @@ def make_finding(
     *,
     severity: str = "high",
     created_at: datetime | None = None,
+    ip: str = "192.168.1.10",
 ) -> FindingRecord:
     finding = FindingRecord(
         finding_id=uuid4(),
         scan_id=scan_id,
         scan_host_id=scan_host_id,
-        ip="192.168.1.10",
+        ip=ip,
         port=80,
         protocol="tcp",
         service="http",
