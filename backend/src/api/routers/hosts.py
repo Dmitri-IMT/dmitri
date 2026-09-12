@@ -9,6 +9,7 @@ from api.db.session import get_session
 from api.dependencies.auth import CallerIdentity, require_user
 from api.schemas.read import (
     HostDetailResponse,
+    HostGroup,
     HostListResponse,
     HostSortBy,
     SortOrder,
@@ -29,6 +30,7 @@ def read_hosts(
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=100),
     sort_by: HostSortBy = Query("last_seen_at"),
     sort_order: SortOrder = Query("desc"),
+    group: HostGroup = Query("active"),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
 ) -> HostListResponse:
@@ -39,6 +41,7 @@ def read_hosts(
         per_page=per_page,
         sort_by=sort_by,
         sort_order=sort_order,
+        group=group,
     )
 
 

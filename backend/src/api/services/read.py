@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import case, cast
+from sqlalchemy import and_, case, cast
 from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
@@ -12,17 +13,22 @@ from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
+    HostFindingRecord,
+    HostPortRecord,
     HostRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
+    utc_now,
 )
 from api.schemas.read import (
     FindingListResponse,
     FindingRead,
     HostDetailResponse,
+    HostGroup,
     HostListResponse,
+    HostPort,
     HostScanHistoryEntry,
     HostSortBy,
     HostSummary,
@@ -40,6 +46,7 @@ from api.services.hosts import highest_severity, open_ports_count
 
 DEFAULT_PAGE = 1
 DEFAULT_PER_PAGE = 20
+QUIET_AFTER_DAYS = 7
 
 _SCAN_SORT_COLUMNS = {
     "timestamp": ScanRecord.timestamp,
@@ -51,6 +58,7 @@ _HOST_SORT_COLUMNS = {
     "hostname": HostRecord.hostname,
     "vendor": HostRecord.vendor,
     "ip": cast(HostRecord.ip, INET),
+    "vulnerability_count": HostRecord.vulnerability_count,
 }
 _SEVERITY_RANK = case(SEVERITY_ORDER, value=FindingRecord.severity, else_=0)
 _SEVERITY_RANK_TO_LABEL = {rank: label for label, rank in SEVERITY_ORDER.items()}
@@ -64,17 +72,26 @@ def list_hosts(
     per_page: int = DEFAULT_PER_PAGE,
     sort_by: HostSortBy = "last_seen_at",
     sort_order: SortOrder = "desc",
+    group: HostGroup = "active",
 ) -> HostListResponse:
+    cutoff = utc_now() - timedelta(days=QUIET_AFTER_DAYS)
+    quiet_pred = HostRecord.last_seen_at < cutoff
+    group_pred = quiet_pred if group == "quiet" else HostRecord.last_seen_at >= cutoff
     total = session.exec(
         select(func.count())
         .select_from(HostRecord)
-        .where(HostRecord.org_id == org_id)
+        .where(HostRecord.org_id == org_id, group_pred)
+    ).one()
+    quiet_total = session.exec(
+        select(func.count())
+        .select_from(HostRecord)
+        .where(HostRecord.org_id == org_id, quiet_pred)
     ).one()
     column = _HOST_SORT_COLUMNS[sort_by]
     direction = column.desc() if sort_order == "desc" else column.asc()
     hosts = session.exec(
         select(HostRecord)
-        .where(HostRecord.org_id == org_id)
+        .where(HostRecord.org_id == org_id, group_pred)
         .order_by(direction, HostRecord.id.asc())
         .offset((page - 1) * per_page)
         .limit(per_page)
@@ -82,6 +99,7 @@ def list_hosts(
     return HostListResponse(
         data=[_to_host_summary(host) for host in hosts],
         total=total,
+        quiet_total=quiet_total,
         page=page,
     )
 
@@ -97,16 +115,21 @@ def get_host_detail(
     if host is None:
         return None
 
-    latest_scan_host = session.exec(
-        select(ScanHostRecord)
-        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanHostRecord.host_id == host_id)
-        .where(ScanRecord.org_id == org_id)
-        .order_by(ScanRecord.timestamp.desc())
-    ).first()
-    ports = (
-        _ports_for_scan_host(session, latest_scan_host.id) if latest_scan_host else []
-    )
+    ports = [
+        HostPort(
+            port=row.port,
+            protocol=row.protocol,
+            service=row.service,
+            version=row.version,
+            first_seen_at=row.first_seen_at,
+            last_seen_at=row.last_seen_at,
+        )
+        for row in session.exec(
+            select(HostPortRecord)
+            .where(HostPortRecord.host_id == host_id)
+            .order_by(HostPortRecord.port.asc())
+        ).all()
+    ]
 
     scan_history_rows = session.exec(
         select(ScanHostRecord, ScanRecord)
@@ -135,6 +158,8 @@ def get_host_detail(
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
+        machine_type=host.machine_type or "unknown",
+        vulnerability_count=host.vulnerability_count,
         highest_severity=host.highest_severity,
         ports=ports,
         scan_history=scan_history,
@@ -168,11 +193,14 @@ def get_scan_detail(
     ]
 
     finding_rows = session.exec(
-        select(FindingRecord, ScanHostRecord.host_id)
-        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
-        .where(FindingRecord.scan_id == scan_id)
+        _join_finding_life(
+            _finding_life_select().outerjoin(
+                ScanHostRecord,
+                FindingRecord.scan_host_id == ScanHostRecord.id,
+            )
+        ).where(FindingRecord.scan_id == scan_id)
     ).all()
-    findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
+    findings = [_to_finding_read(*row) for row in finding_rows]
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -281,11 +309,9 @@ def list_findings(
     page: int = 1,
     per_page: int = 20,
 ) -> FindingListResponse:
-    base = (
-        select(FindingRecord, ScanHostRecord.host_id)
-        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanRecord.org_id == org_id)
-    )
+    base = _finding_life_select().join(
+        ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id
+    ).where(ScanRecord.org_id == org_id)
     if host_id is not None:
         base = base.join(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
@@ -294,6 +320,7 @@ def list_findings(
         base = base.outerjoin(
             ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
         )
+    base = _join_finding_life(base)
     if severity is not None:
         base = base.where(FindingRecord.severity == severity)
     if scan_id is not None:
@@ -309,7 +336,7 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[_to_finding_read(finding, resolved) for finding, resolved in rows],
+        data=[_to_finding_read(*row) for row in rows],
         total=total,
         page=page,
     )
@@ -375,11 +402,39 @@ def _to_host_summary(host: HostRecord) -> HostSummary:
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
+        machine_type=host.machine_type or "unknown",
+        vulnerability_count=host.vulnerability_count,
         highest_severity=host.highest_severity,
     )
 
 
-def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:
+def _finding_life_select():
+    return select(
+        FindingRecord,
+        ScanHostRecord.host_id,
+        HostRecord.hostname,
+        HostFindingRecord,
+    )
+
+
+def _join_finding_life(query):
+    return query.outerjoin(
+        HostRecord, ScanHostRecord.host_id == HostRecord.id
+    ).outerjoin(
+        HostFindingRecord,
+        and_(
+            HostFindingRecord.host_id == HostRecord.id,
+            HostFindingRecord.dedupe_key == FindingRecord.dedupe_key,
+        ),
+    )
+
+
+def _to_finding_read(
+    finding: FindingRecord,
+    host_id: UUID | None,
+    hostname: str | None,
+    life: HostFindingRecord | None,
+) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -399,4 +454,8 @@ def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRea
         evidence=finding.evidence,
         references=finding.references_json,
         detected_at=finding.created_at,
+        host_hostname=hostname,
+        first_seen_at=life.first_seen_at if life else None,
+        last_seen_at=life.last_seen_at if life else None,
+        fixed_at=life.fixed_at if life else None,
     )

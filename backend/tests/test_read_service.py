@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from api.models.identity import Org
 from api.models.persistence import (
     FindingRecord,
+    HostPortRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
@@ -244,6 +245,16 @@ def test_get_host_detail_shows_own_org_scan_but_not_foreign(
     )
     administrative_session.add(own_port)
     administrative_session.add(foreign_port)
+    administrative_session.add(
+        HostPortRecord(
+            host_id=host.id,
+            port=443,
+            protocol="tcp",
+            service="https",
+            first_seen_at=host.first_seen_at,
+            last_seen_at=host.last_seen_at,
+        )
+    )
     administrative_session.commit()
 
     detail = read.get_host_detail(administrative_session, host.id, org_id=org_a.id)

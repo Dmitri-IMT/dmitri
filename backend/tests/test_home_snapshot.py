@@ -9,11 +9,11 @@ from api.core.home_constants import (
     STALE_COVERAGE_DAYS,
 )
 from api.models.identity import Org
-from api.models.persistence import ScanRecord
+from api.models.persistence import HostRecord, ScanHostRecord, ScanRecord
 from api.services.activity import ActivityAppend, append_activity
 from api.services.home import read_home_snapshot
 from read_factories import make_finding, make_host, make_org, make_scan, make_scan_host
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
 
@@ -305,3 +305,29 @@ def test_activity_is_newest_first_across_times(
         [item.occurred_at for item in activity.data], reverse=True
     )
     assert activity.data[0].text.startswith("newer")
+
+
+def test_attention_rows_carry_the_machines_current_name(
+    administrative_session: Session,
+) -> None:
+    org, _ = _seed_attention(
+        administrative_session,
+        name="Attention Machine Name",
+        severities=["critical"],
+    )
+    host = administrative_session.exec(
+        select(HostRecord).where(HostRecord.org_id == org.id)
+    ).one()
+    host.hostname = "renamed-machine"
+    scan_host = administrative_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.host_id == host.id)
+    ).one()
+    scan_host.hostname = "name-at-scan-time"
+    administrative_session.add(host)
+    administrative_session.add(scan_host)
+    administrative_session.commit()
+
+    attention = _snapshot(administrative_session, org.id).attention
+
+    assert [row.host_hostname for row in attention.data] == ["renamed-machine"]
+    assert [row.host_id for row in attention.data] == [host.id]
