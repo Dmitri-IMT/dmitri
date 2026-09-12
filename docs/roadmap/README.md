@@ -14,7 +14,7 @@
 
 | Doc | Layer | Status today |
 |-----|-------|--------------|
-| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** A **Pi 4 Model B 4 GB** — the ADR-001 target — is provisioned and running the agent since 2026-09-11; peak RSS measured at 134 MiB worst case. Registration with the backend is the remaining step. |
+| [`PI.md`](PI.md) | Raspberry Pi agent | **Daemon and backend client built in software.** A **Pi 4 Model B 4 GB** — the ADR-001 target — is provisioned and running the agent since 2026-09-11; registered against the hosted `nspi` stack, and verified end to end — a web-triggered scan returned 12 hosts and 20 findings. Peak RSS 134 MiB worst case. The remaining work is automating provisioning (DMI-154), not provisioning itself. |
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings, Users & Invites, DMI-88 scan/host reads, and DMI-89 Agents scan trigger built. Next: LLM explainer |

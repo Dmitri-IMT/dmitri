@@ -82,9 +82,13 @@ Outcome `partial`, exit 10. This is why `dmitri-agent.service` runs as root.
 uv run pytest -q  ->  643 passed, 0 failed  (37 s)
 ```
 
-An earlier run showed 11 failures in `tests/test_contract_models.py`, all caused by a missing
-`/opt/contracts/openapi/openapi.yaml` — the suite resolves the contract one level above the
-agent directory. Not a device fault; the layout requirement is documented in the playbook §4.
+This run was made before the install model was corrected, with the repository laid out on the
+device. An earlier attempt showed 11 failures in `tests/test_contract_models.py`, all from a
+missing `contracts/openapi/openapi.yaml` — that test resolves the contract relative to the
+repository, which is **why the suite no longer runs on the appliance**. It is proven on the
+vendor machine instead, and the device receives only the runtime, the virtualenv and the unit
+(playbook §4). The result is recorded here as evidence the agent runs correctly on this
+hardware, not as an installation step.
 
 ---
 
