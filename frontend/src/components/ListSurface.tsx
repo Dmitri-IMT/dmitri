@@ -34,10 +34,8 @@ export type ListSurfaceProps<Row, SortKey extends string = never> = {
   rowAction: DataTableRowAction<Row>
   rowTone?: (row: Row) => DataTableRowTone
   sort?: DataTableSort<SortKey>
-  partitionRows?: (rows: Row[]) => {
-    rows: Row[]
-    collapsedGroup?: DataTableCollapsedGroup<Row>
-  }
+  collapsedGroup?: DataTableCollapsedGroup<Row, SortKey>
+  emptyRow?: ReactNode
   pagination?: {
     page: number
     perPage: number
@@ -58,7 +56,8 @@ function ListSurface<Row, SortKey extends string = never>({
   rowAction,
   rowTone,
   sort,
-  partitionRows,
+  collapsedGroup,
+  emptyRow,
   pagination,
 }: ListSurfaceProps<Row, SortKey>): ReactElement {
   const table = {
@@ -83,7 +82,8 @@ function ListSurface<Row, SortKey extends string = never>({
 
   if (query.isPending) return <DataTable {...table} rows={[]} isPending />
 
-  const isEmpty = (query.data.total ?? query.data.data.length) === 0
+  const isEmpty =
+    (query.data.total ?? query.data.data.length) === 0 && !collapsedGroup?.count
 
   if (isEmpty) {
     if (empty.kind === 'section') {
@@ -104,19 +104,15 @@ function ListSurface<Row, SortKey extends string = never>({
     )
   }
 
-  const selected = query.data.data
-  const partitioned = partitionRows
-    ? partitionRows(selected)
-    : { rows: selected }
-
   return (
     <div className="flex flex-col gap-4">
       <DataTable
         {...table}
-        rows={partitioned.rows}
+        rows={query.data.data}
+        empty={emptyRow}
         rowAction={rowAction}
         rowTone={rowTone}
-        collapsedGroup={partitioned.collapsedGroup}
+        collapsedGroup={collapsedGroup}
       />
       {pagination && (
         <Pagination

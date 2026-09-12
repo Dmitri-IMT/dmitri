@@ -31,12 +31,15 @@ function overrideUser(profile: typeof adminProfile | typeof viewerProfile) {
 }
 
 function emptyList(): HostListResponse {
-  return { data: [], total: 0, page: 1 }
+  return { data: [], total: 0, page: 1, quiet_total: 0 }
 }
 
 function hostList(
   rows: HostSummary[],
-  { requireLastSeenDesc = false }: { requireLastSeenDesc?: boolean } = {},
+  {
+    requireLastSeenDesc = false,
+    quietRows = [],
+  }: { requireLastSeenDesc?: boolean; quietRows?: HostSummary[] } = {},
 ) {
   server.use(
     http.get(`${baseURL}/hosts`, ({ request }) => {
@@ -48,10 +51,12 @@ function hostList(
       ) {
         return HttpResponse.json(emptyList())
       }
+      const group = params.get('group') === 'quiet' ? quietRows : rows
       return HttpResponse.json({
-        data: rows,
-        total: rows.length,
+        data: group,
+        total: group.length,
         page: 1,
+        quiet_total: quietRows.length,
       } satisfies HostListResponse)
     }),
   )
@@ -190,7 +195,7 @@ describe('Network', () => {
     ).toHaveAttribute('aria-sort', 'descending')
   })
 
-  it('renders the server order for vendor even when that payload is unsorted', async () => {
+  it('sorts the vulnerability count descending first and renders the server order', async () => {
     const user = userEvent.setup()
     const scrambled = [
       hostFixtures[10],
@@ -202,27 +207,65 @@ describe('Network', () => {
       http.get(`${baseURL}/hosts`, ({ request }) => {
         const params = new URL(request.url).searchParams
         const rows =
-          params.get('sort_by') === 'vendor' ? scrambled : [newestHost]
+          params.get('sort_by') === 'vulnerability_count' &&
+          params.get('sort_order') === 'desc'
+            ? scrambled
+            : [newestHost]
         return HttpResponse.json({
           data: rows,
           total: rows.length,
           page: 1,
+          quiet_total: 0,
         } satisfies HostListResponse)
       }),
     )
     renderWithProviders(<Network />, { route: '/network' })
 
     await screen.findByTestId(`network-table-row-${newestHost.host_id}`)
-    await user.click(screen.getByTestId('network-table-sort-vendor'))
+    await user.click(
+      screen.getByTestId('network-table-sort-vulnerability_count'),
+    )
 
     expect(
       await screen.findByTestId(`network-table-row-${scrambled[0].host_id}`),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('columnheader', { name: 'Vulnerabilities' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(
       tableRows().map(
         (hostRow) => within(hostRow).getAllByRole('cell')[0].textContent,
       ),
     ).toEqual(scrambled.map((host) => host.hostname))
+  })
+
+  it('gives Type no sort control', async () => {
+    hostList([newestHost])
+    renderWithProviders(<Network />, { route: '/network' })
+
+    await screen.findByTestId(`network-table-row-${newestHost.host_id}`)
+    expect(
+      screen.queryByTestId('network-table-sort-machine_type'),
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('columnheader', { name: 'Type' })).queryByRole(
+        'button',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
+  it('draws an unknown type as the absence mark and a zero count as zero', async () => {
+    hostList([
+      { ...newestHost, machine_type: 'unknown', vulnerability_count: 0 },
+    ])
+    renderWithProviders(<Network />, { route: '/network' })
+
+    const cells = within(
+      await screen.findByTestId(`network-table-row-${newestHost.host_id}`),
+    ).getAllByRole('cell')
+    expect(cells[2]).toHaveTextContent('—')
+    expect(cells[2]).not.toHaveTextContent(/unknown/i)
+    expect(cells[3]).toHaveTextContent('0')
   })
 
   it('draws only the six specified columns', async () => {
@@ -237,8 +280,8 @@ describe('Network', () => {
     ).toEqual([
       'Machine',
       'Address',
-      'Vendor',
-      'Services',
+      'Type',
+      'Vulnerabilities',
       'Highest severity',
       'Last seen',
     ])
@@ -264,7 +307,7 @@ describe('Network', () => {
   })
 
   it('renders every control enabled on the machine list', async () => {
-    hostList([newestHost, quiet(hostFixtures[3], 3)])
+    hostList([newestHost], { quietRows: [quiet(hostFixtures[3], 3)] })
     renderWithProviders(<Network />, { route: '/network' })
 
     await screen.findByTestId(`network-table-row-${newestHost.host_id}`)
@@ -283,7 +326,7 @@ describe('Network', () => {
   it('collapses a quiet machine into the group, muted and with its weeks line', async () => {
     const user = userEvent.setup()
     const quietHost = quiet(hostFixtures[3], 3)
-    hostList([newestHost, quietHost])
+    hostList([newestHost], { quietRows: [quietHost] })
     renderWithProviders(<Network />, { route: '/network' })
 
     await screen.findByTestId(`network-table-row-${newestHost.host_id}`)
@@ -307,7 +350,9 @@ describe('Network', () => {
     await user.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    const quietRow = row(quietHost.host_id)
+    const quietRow = await screen.findByTestId(
+      `network-table-row-${quietHost.host_id}`,
+    )
     expect(quietRow).toHaveAttribute('data-tone', 'muted')
     expect(quietRow).toHaveTextContent('Not seen for 3 weeks')
     expect(
@@ -327,7 +372,7 @@ describe('Network', () => {
   it('keeps the group last after the sort changes', async () => {
     const user = userEvent.setup()
     const quietHost = quiet(hostFixtures[3], 4)
-    hostList([newestHost, quietHost])
+    hostList([newestHost], { quietRows: [quietHost] })
     renderWithProviders(<Network />, { route: '/network' })
 
     await screen.findByTestId(`network-table-row-${newestHost.host_id}`)
@@ -342,19 +387,25 @@ describe('Network', () => {
   it('renders an empty main body and every machine in the group when all are quiet', async () => {
     const user = userEvent.setup()
     const quietHosts = [quiet(hostFixtures[1], 3), quiet(hostFixtures[2], 5)]
-    hostList(quietHosts)
+    hostList([], { quietRows: quietHosts })
     renderWithProviders(<Network />, { route: '/network' })
 
     const group = await screen.findByTestId('network-quiet-group')
     expect(group).toHaveTextContent('Not seen recently (2)')
     expect(screen.getByTestId('network-table')).toBeInTheDocument()
     expect(screen.queryByTestId('network-blank')).not.toBeInTheDocument()
-    expect(tableRows()).toEqual([group])
+    expect(screen.getByTestId('network-no-active')).toHaveTextContent(
+      'No machines seen in the last 7 days.',
+    )
+    expect(tableRows()).toHaveLength(2)
+    expect(tableRows().at(-1)).toBe(group)
+    expect(screen.queryByTestId('network-pagination')).not.toBeInTheDocument()
 
     await user.click(
       within(group).getByRole('button', { name: 'Not seen recently (2)' }),
     )
 
+    await screen.findByTestId(`network-table-row-${quietHosts[0].host_id}`)
     quietHosts.forEach((host, index) => {
       const quietRow = row(host.host_id)
       expect(quietRow).toHaveAttribute('data-tone', 'muted')
@@ -391,6 +442,148 @@ describe('Network', () => {
         screen.queryByTestId(`network-table-row-${host.host_id}`),
       ).not.toBeInTheDocument()
     }
+  })
+
+  it('reads the group count from the active response on every page', async () => {
+    const user = userEvent.setup()
+    const active = hostFixtures.slice(0, 25)
+    server.use(
+      http.get(`${baseURL}/hosts`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        const activePage = Number(params.get('page') ?? 1)
+        const rows =
+          params.get('group') === 'quiet'
+            ? []
+            : active.slice((activePage - 1) * 20, activePage * 20)
+        return HttpResponse.json({
+          data: rows,
+          total: active.length,
+          page: activePage,
+          quiet_total: 6,
+        } satisfies HostListResponse)
+      }),
+    )
+    renderWithProviders(<Network />, { route: '/network' })
+
+    expect(await screen.findByTestId('network-quiet-group')).toHaveTextContent(
+      'Not seen recently (6)',
+    )
+
+    await user.click(screen.getByTestId('network-next'))
+
+    expect(
+      await screen.findByTestId(`network-table-row-${active[20].host_id}`),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('network-quiet-group')).toHaveTextContent(
+      'Not seen recently (6)',
+    )
+  })
+
+  it('pages the group on its own request without disturbing the active list', async () => {
+    const user = userEvent.setup()
+    const quietRows = hostFixtures.map((host, index) => ({
+      ...quiet(host, index + 1),
+      host_id: `quiet-${index}`,
+    }))
+    const groupPages: number[] = []
+    server.use(
+      http.get(`${baseURL}/hosts`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        const requestedPage = Number(params.get('page') ?? 1)
+        if (params.get('group') === 'quiet') {
+          groupPages.push(requestedPage)
+          return HttpResponse.json({
+            data: quietRows.slice((requestedPage - 1) * 20, requestedPage * 20),
+            total: quietRows.length,
+            page: requestedPage,
+            quiet_total: quietRows.length,
+          } satisfies HostListResponse)
+        }
+        return HttpResponse.json({
+          data: [newestHost],
+          total: 1,
+          page: requestedPage,
+          quiet_total: quietRows.length,
+        } satisfies HostListResponse)
+      }),
+    )
+    renderWithProviders(<Network />, { route: '/network' })
+
+    const group = await screen.findByTestId('network-quiet-group')
+    expect(groupPages).toEqual([])
+
+    await user.click(
+      within(group).getByRole('button', { name: 'Not seen recently (25)' }),
+    )
+
+    expect(
+      await screen.findByTestId('network-table-row-quiet-0'),
+    ).toBeInTheDocument()
+    expect(groupPages).toEqual([1])
+    expect(
+      screen.getByRole('navigation', { name: 'Quiet machine pages' }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('network-quiet-next'))
+
+    expect(
+      await screen.findByTestId('network-table-row-quiet-20'),
+    ).toBeInTheDocument()
+    expect(groupPages).toEqual([1, 2])
+    expect(row(newestHost.host_id)).toBeInTheDocument()
+  })
+
+  it('shows the group error and its Retry without taking down the active list', async () => {
+    const user = userEvent.setup()
+    const quietHost = quiet(hostFixtures[3], 2)
+    let quietFailed = true
+    server.use(
+      http.get(`${baseURL}/hosts`, ({ request }) => {
+        const params = new URL(request.url).searchParams
+        if (params.get('group') === 'quiet') {
+          if (quietFailed) {
+            quietFailed = false
+            return new HttpResponse(null, { status: 500 })
+          }
+          return HttpResponse.json({
+            data: [quietHost],
+            total: 1,
+            page: 1,
+            quiet_total: 1,
+          } satisfies HostListResponse)
+        }
+        return HttpResponse.json({
+          data: [newestHost],
+          total: 1,
+          page: 1,
+          quiet_total: 1,
+        } satisfies HostListResponse)
+      }),
+    )
+    renderWithProviders(<Network />, { route: '/network' })
+
+    const group = await screen.findByTestId('network-quiet-group')
+    await user.click(
+      within(group).getByRole('button', { name: 'Not seen recently (1)' }),
+    )
+
+    expect(await screen.findByTestId('network-quiet-error')).toHaveTextContent(
+      "Couldn't load the machines you haven't seen recently.",
+    )
+    expect(screen.getByTestId('network-quiet-error-retry')).toHaveTextContent(
+      'Retry',
+    )
+    expect(row(newestHost.host_id)).toBeInTheDocument()
+    expect(screen.getByTestId('network-quiet-group')).toHaveTextContent(
+      'Not seen recently (1)',
+    )
+
+    await user.click(screen.getByTestId('network-quiet-error-retry'))
+
+    expect(
+      await screen.findByTestId(`network-table-row-${quietHost.host_id}`),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('network-quiet-error')).not.toBeInTheDocument()
   })
 
   it('renders the first-scan link for an admin blank state', async () => {
@@ -439,6 +632,7 @@ describe('Network', () => {
           data: [newestHost],
           total: 1,
           page: 1,
+          quiet_total: 0,
         } satisfies HostListResponse)
       }),
     )

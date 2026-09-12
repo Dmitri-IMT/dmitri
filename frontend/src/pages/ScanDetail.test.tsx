@@ -63,6 +63,7 @@ const phpCgiFinding: FindingRecord = {
   finding_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   scan_id: SCAN_ID,
   host_id: NAS_HOST_ID,
+  host_hostname: null,
   host_ip: nas.ip,
   port: 443,
   protocol: 'tcp',
@@ -478,6 +479,51 @@ describe('ScanDetail', () => {
     expect(
       screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
     ).not.toBeInTheDocument()
+  })
+
+  it('names the machine from host_hostname on the finding, not the scan snapshot', async () => {
+    const renamedFinding: FindingRecord = {
+      ...phpCgiFinding,
+      host_hostname: 'Office PC',
+    }
+    scanDetail(
+      completedScan({
+        findings: [renamedFinding],
+        finding_count: 1,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const row = await screen.findByTestId(
+      `findings-critical-row-${renamedFinding.finding_id}`,
+    )
+    expect(within(row).getAllByRole('cell')[1]).toHaveTextContent('Office PC')
+    expect(within(row).getAllByRole('cell')[1]).not.toHaveTextContent(
+      nas.hostname,
+    )
+  })
+
+  it('shows First seen on each vulnerability table', async () => {
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    for (const severity of ['critical', 'high', 'medium', 'low']) {
+      const table = screen.getByTestId(`findings-${severity}`)
+      expect(
+        within(table).getByRole('columnheader', { name: 'First seen' }),
+      ).toBeInTheDocument()
+    }
+
+    const row = screen.getByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(
+      within(within(row).getAllByRole('cell')[4]).getByRole('time'),
+    ).toHaveAttribute('datetime', phpCgiFinding.first_seen_at)
   })
 
   it('carries a Back link to the scans log', async () => {

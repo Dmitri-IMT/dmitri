@@ -1,14 +1,16 @@
 import type { HostSortBy } from '@/api/hosts'
 import type { DataTableColumn } from '@/components/DataTable'
+import EmptyMark from '@/components/EmptyMark'
 import SeverityWord from '@/components/SeverityWord'
 import Timestamp from '@/components/Timestamp'
-import { isQuietHost, weeksSinceLastSeen } from '@/lib/hostLastSeen'
+import { weeksSinceLastSeen } from '@/lib/hostLastSeen'
+import { MACHINE_TYPE_LABELS } from '@/lib/machineType'
 import type { components } from '@/types/openapi'
 
 type HostSummary = components['schemas']['HostSummary']
 
-function machineCell(host: HostSummary, now: Date) {
-  const quiet = isQuietHost(host.last_seen_at, now)
+function machineCell(host: HostSummary, now: Date, quiet: boolean) {
+  const weeks = quiet ? weeksSinceLastSeen(host.last_seen_at, now) : 0
   return (
     <>
       {host.hostname ? (
@@ -27,7 +29,7 @@ function machineCell(host: HostSummary, now: Date) {
       )}
       {quiet && (
         <span className="block truncate text-muted-foreground">
-          Not seen for {weeksSinceLastSeen(host.last_seen_at, now)} weeks
+          Not seen for {weeks} {weeks === 1 ? 'week' : 'weeks'}
         </span>
       )}
     </>
@@ -36,6 +38,7 @@ function machineCell(host: HostSummary, now: Date) {
 
 export function hostListColumns(
   now: Date,
+  quiet: boolean,
 ): DataTableColumn<HostSummary, HostSortBy>[] {
   return [
     {
@@ -43,7 +46,7 @@ export function hostListColumns(
       label: 'Machine',
       width: 'w-13/50',
       sortable: true,
-      render: (host) => machineCell(host, now),
+      render: (host) => machineCell(host, now, quiet),
     },
     {
       key: 'ip',
@@ -51,29 +54,31 @@ export function hostListColumns(
       width: 'w-8/50',
       sortable: true,
       render: (host) => (
-        <span className="block truncate" title={host.ip}>
+        <span className="block truncate font-mono" title={host.ip}>
           {host.ip}
         </span>
       ),
     },
     {
-      key: 'vendor',
-      label: 'Vendor',
+      key: 'machine_type',
+      label: 'Type',
       width: 'w-8/50',
-      sortable: true,
-      render: (host) => (
-        <span className="block truncate" title={host.vendor}>
-          {host.vendor}
-        </span>
-      ),
+      render: (host) => {
+        const label = MACHINE_TYPE_LABELS[host.machine_type]
+        return label ? (
+          <span className="block truncate">{label}</span>
+        ) : (
+          <EmptyMark />
+        )
+      },
     },
     {
-      key: 'open_ports_count',
-      label: 'Services',
+      key: 'vulnerability_count',
+      label: 'Vulnerabilities',
       width: 'w-5/50',
-      align: 'right',
+      sortable: true,
       render: (host) => (
-        <span className="block tabular-nums">{host.open_ports_count}</span>
+        <span className="block tabular-nums">{host.vulnerability_count}</span>
       ),
     },
     {

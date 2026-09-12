@@ -2,6 +2,7 @@ import CellLink from '@/components/CellLink'
 import type { DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
 import SeverityWord from '@/components/SeverityWord'
+import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
@@ -11,6 +12,7 @@ function machineLabel(
   finding: FindingRecord,
   hostsById: Map<string, ScanHostView>,
 ): string {
+  if (finding.host_hostname) return finding.host_hostname
   const host = finding.host_id ? hostsById.get(finding.host_id) : undefined
   if (host && host.hostname !== '') return host.hostname
   if (host) return host.ip
@@ -36,7 +38,7 @@ export function scanFindingColumns(
     {
       key: 'host',
       label: 'Machine',
-      width: 'w-11/50',
+      width: 'w-9/50',
       render: (finding) => {
         const label = machineLabel(finding, hostsById)
         if (label === '') return <EmptyMark />
@@ -67,12 +69,23 @@ export function scanFindingColumns(
     {
       key: 'cve',
       label: 'CVE',
-      width: 'w-13/50',
+      width: 'w-7/50',
       render: (finding) =>
         finding.cve_id ? (
           <span className="block truncate font-mono" title={finding.cve_id}>
             {finding.cve_id}
           </span>
+        ) : (
+          <EmptyMark />
+        ),
+    },
+    {
+      key: 'first_seen',
+      label: 'First seen',
+      width: 'w-4/25',
+      render: (finding) =>
+        finding.first_seen_at ? (
+          <Timestamp value={finding.first_seen_at} />
         ) : (
           <EmptyMark />
         ),
@@ -85,7 +98,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     {
       key: 'title',
       label: 'Vulnerability',
-      width: 'w-13/25',
+      width: 'w-2/5',
       render: (finding) => (
         <span className="block truncate" title={finding.title}>
           {finding.title}
@@ -95,8 +108,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     {
       key: 'port',
       label: 'Port',
-      width: 'w-3/25',
-      align: 'right',
+      width: 'w-1/10',
       render: (finding) =>
         finding.port == null ? (
           <EmptyMark />
@@ -107,12 +119,23 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     {
       key: 'cve',
       label: 'CVE',
-      width: 'w-1/5',
+      width: 'w-9/50',
       render: (finding) =>
         finding.cve_id ? (
           <span className="block truncate font-mono" title={finding.cve_id}>
             {finding.cve_id}
           </span>
+        ) : (
+          <EmptyMark />
+        ),
+    },
+    {
+      key: 'first_seen',
+      label: 'First seen',
+      width: 'w-4/25',
+      render: (finding) =>
+        finding.first_seen_at ? (
+          <Timestamp value={finding.first_seen_at} />
         ) : (
           <EmptyMark />
         ),

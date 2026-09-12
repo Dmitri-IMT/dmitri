@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Link } from 'react-router'
 import DataTable, {
   type DataTableColumn,
+  type DataTableProps,
   type DataTableRowAction,
 } from '@/components/DataTable'
 import LocationProbe from '@/test/LocationProbe'
@@ -44,6 +45,7 @@ const quietRows: Row[] = [
 
 const collapsedGroup = {
   rows: quietRows,
+  count: quietRows.length,
   label: (count: number) => `Not seen recently (${count})`,
   testId: 'example-quiet',
 }
@@ -54,6 +56,22 @@ const baseProps = {
   rowId: (row: Row) => row.id,
   testId: 'example-table',
   caption: 'Example rows',
+}
+
+function GroupTable(props: Partial<DataTableProps<Row, 'name'>>) {
+  const [isGroupOpen, setIsGroupOpen] = useState(false)
+
+  return (
+    <DataTable
+      {...baseProps}
+      {...props}
+      collapsedGroup={{
+        ...collapsedGroup,
+        isOpen: isGroupOpen,
+        onOpenChange: setIsGroupOpen,
+      }}
+    />
+  )
 }
 
 describe('DataTable', () => {
@@ -439,9 +457,7 @@ describe('DataTable', () => {
   })
 
   it('renders the collapsed group last, closed, and announcing its count', () => {
-    renderWithProviders(
-      <DataTable {...baseProps} collapsedGroup={collapsedGroup} />,
-    )
+    renderWithProviders(<GroupTable />)
 
     const allRows = screen.getAllByRole('row')
     expect(allRows[allRows.length - 1]).toBe(
@@ -457,11 +473,38 @@ describe('DataTable', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('announces the collapsed count from the count prop, not the rendered rows', () => {
+    function MismatchedCountTable() {
+      const [isGroupOpen, setIsGroupOpen] = useState(false)
+
+      return (
+        <DataTable
+          {...baseProps}
+          collapsedGroup={{
+            rows: [quietRows[0]],
+            count: 99,
+            label: (count) => `Not seen recently (${count})`,
+            testId: 'example-quiet',
+            isOpen: isGroupOpen,
+            onOpenChange: setIsGroupOpen,
+          }}
+        />
+      )
+    }
+
+    renderWithProviders(<MismatchedCountTable />)
+
+    expect(
+      screen.getByRole('button', { name: 'Not seen recently (99)' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Not seen recently (1)' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('expands and collapses the group with Enter and Space', async () => {
     const user = userEvent.setup()
-    renderWithProviders(
-      <DataTable {...baseProps} collapsedGroup={collapsedGroup} />,
-    )
+    renderWithProviders(<GroupTable />)
 
     await user.tab()
     const toggle = screen.getByRole('button', {
@@ -487,9 +530,7 @@ describe('DataTable', () => {
   it('gives expanded group members the same tone and navigation as ordinary rows', async () => {
     const user = userEvent.setup()
     renderWithProviders(
-      <DataTable
-        {...baseProps}
-        collapsedGroup={collapsedGroup}
+      <GroupTable
         rowTone={(row) => (quietRows.includes(row) ? 'muted' : undefined)}
         rowAction={{
           kind: 'link',
