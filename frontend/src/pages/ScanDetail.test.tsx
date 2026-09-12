@@ -31,7 +31,6 @@ const nas: ScanHostView = {
   mac: '00:11:32:AA:BB:CC',
   hostname: 'synology-nas',
   vendor: 'Synology',
-  industrial_services: [],
   ports: [
     {
       port: 443,
@@ -51,7 +50,6 @@ const piLab: ScanHostView = {
   mac: 'DC:A6:32:11:22:33',
   hostname: 'pi-lab',
   vendor: 'Raspberry Pi',
-  industrial_services: [],
   ports: [
     {
       port: 22,
