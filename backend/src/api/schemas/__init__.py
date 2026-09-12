@@ -1,5 +1,11 @@
 """Pydantic schemas used by the public API."""
 
+from .industrial import (
+    ModbusAddressRangePayload,
+    ModbusDeviceIdentificationPayload,
+    ModbusTcpServicePayload,
+    ModbusUnitPayload,
+)
 from .operating_system import OperatingSystemDetection
 from .persistence import (
     PersistedFinding,
@@ -10,9 +16,6 @@ from .persistence import (
 from .scan import (
     FindingPayload,
     HostPayload,
-    ModbusDeviceIdentificationPayload,
-    ModbusTcpServicePayload,
-    ModbusUnitPayload,
     PortPayload,
     ScanIngestAcceptedResponse,
     ScanIngestRequest,
@@ -21,6 +24,7 @@ from .scan import (
 __all__ = [
     "FindingPayload",
     "HostPayload",
+    "ModbusAddressRangePayload",
     "ModbusDeviceIdentificationPayload",
     "ModbusTcpServicePayload",
     "ModbusUnitPayload",

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +10,7 @@ from typing import Any
 
 from pymodbus.client import ModbusTcpClient
 
+from agent.ot.digest import value_digest as compute_value_digest
 from agent.ot.modbus.client import (
     ModbusClientController,
     ModbusReadResult,
@@ -126,6 +125,7 @@ def map_modbus_service(
     session_factory: SessionFactory = ModbusReadSession,
     client_factory: Callable[..., Any] = ModbusTcpClient,
     sleep: Callable[[float], None] = default_sleep,
+    digest_key: bytes | None = None,
 ) -> None:
     """Execute one read-only plan with a single connection and bounded traffic."""
 
@@ -176,7 +176,7 @@ def map_modbus_service(
                     )
     for unit_id, found in observations.items():
         unit_index[unit_id].address_ranges.extend(
-            _materialise(item) for item in _merge_adjacent(found)
+            _materialise(item, digest_key=digest_key) for item in _merge_adjacent(found)
         )
 
 
@@ -306,7 +306,11 @@ def _can_merge(left: _Observation, right: _Observation) -> bool:
     )
 
 
-def _materialise(item: _Observation) -> ModbusAddressRange:
+def _materialise(
+    item: _Observation,
+    *,
+    digest_key: bytes | None = None,
+) -> ModbusAddressRange:
     values = item.values if item.status == "readable" else None
     capture = item.capture_values
     numeric = (
@@ -330,17 +334,18 @@ def _materialise(item: _Observation) -> ModbusAddressRange:
         value_min=min(numeric) if numeric else None,
         value_max=max(numeric) if numeric else None,
         values=(list(values) if values is not None and capture == "raw" else None),
-        value_sha256=(
-            _hash_values(values)
+        value_digest=(
+            compute_value_digest(
+                digest_key,
+                item.address_space,
+                item.start_address,
+                item.count,
+                list(values),
+            )
             if values is not None and capture in {"summary", "raw"}
             else None
         ),
     )
-
-
-def _hash_values(values: list[int | bool]) -> str:
-    canonical = json.dumps(values, separators=(",", ":"), ensure_ascii=True)
-    return "sha256:" + hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
 def _fingerprint_values(service: ModbusService) -> tuple[set[str], set[str]]:

@@ -184,25 +184,17 @@ class ScanViewScreen(DmitriScreen):
                         )
                         for address_range in unit.address_ranges:
                             end = address_range.start_address + address_range.count - 1
-                            summary_parts = []
-                            if address_range.nonzero_count is not None:
-                                summary_parts.append(
-                                    f"nonzero {address_range.nonzero_count}"
+                            digest_note = ""
+                            if address_range.value_digest:
+                                digest_hex = address_range.value_digest.removeprefix(
+                                    "hmac-sha256:"
                                 )
-                            if address_range.value_min is not None:
-                                summary_parts.append(f"min {address_range.value_min}")
-                            if address_range.value_max is not None:
-                                summary_parts.append(f"max {address_range.value_max}")
-                            summary = (
-                                f" · {' · '.join(summary_parts)}"
-                                if summary_parts
-                                else ""
-                            )
+                                digest_note = f" · digest {digest_hex[:8]}"
                             lines.append(
                                 "        "
                                 f"{address_range.address_space} "
                                 f"{address_range.start_address}-{end}: "
-                                f"{address_range.status}{summary}"
+                                f"{address_range.status}{digest_note}"
                             )
 
             device_findings = findings_by_ip.get(ip_str, [])

@@ -5,7 +5,6 @@ from .models import (
     ModbusDeviceIdentification,
     ModbusService,
     ModbusUnit,
-    ModbusValidation,
 )
 
 __all__ = [
@@ -13,5 +12,4 @@ __all__ = [
     "ModbusDeviceIdentification",
     "ModbusService",
     "ModbusUnit",
-    "ModbusValidation",
 ]

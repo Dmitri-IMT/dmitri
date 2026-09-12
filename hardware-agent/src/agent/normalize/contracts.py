@@ -9,6 +9,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
+from agent.ot.untrusted import (
+    MAX_ADDRESS_RANGES_PER_UNIT,
+    MAX_DEVICE_STRING_CHARS,
+    MAX_IDENTIFICATION_OBJECTS,
+    MAX_IDENTIFICATION_SOURCES,
+)
+
+DeviceString = Annotated[str | None, Field(max_length=MAX_DEVICE_STRING_CHARS)]
+ValueDigest = Annotated[
+    str | None,
+    Field(pattern=r"^hmac-sha256:[0-9a-f]{64}$"),
+]
+
 SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
     strip_whitespace=True,
@@ -37,17 +50,24 @@ class OperatingSystemDetection(BaseModel):
 
 
 class ModbusDeviceIdentificationPayload(BaseModel):
-    vendor_name: str | None = None
-    product_code: str | None = None
-    major_minor_revision: str | None = None
-    vendor_url: str | None = None
-    product_name: str | None = None
-    model_name: str | None = None
-    user_application_name: str | None = None
-    objects: dict[str, str] = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
+
+    vendor_name: DeviceString = None
+    product_code: DeviceString = None
+    major_minor_revision: DeviceString = None
+    vendor_url: DeviceString = None
+    product_name: DeviceString = None
+    model_name: DeviceString = None
+    user_application_name: DeviceString = None
+    objects: dict[str, str] = Field(
+        default_factory=dict, max_length=MAX_IDENTIFICATION_OBJECTS
+    )
+    truncated: bool = False
 
 
 class ModbusAddressRangePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     address_space: Literal[
         "coil", "discrete_input", "holding_register", "input_register"
     ]
@@ -62,49 +82,36 @@ class ModbusAddressRangePayload(BaseModel):
         "skipped",
     ]
     exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
-    label: str | None = None
-    nonzero_count: Annotated[int | None, Field(default=None, ge=0)]
-    value_min: int | None = None
-    value_max: int | None = None
-    values: list[int | bool] | None = None
-    value_sha256: str | None = None
+    label: DeviceString = None
+    value_digest: ValueDigest = None
     observed_at: datetime
 
 
-class ModbusValidationPayload(BaseModel):
-    address_space: Literal["coil", "holding_register"]
-    address: Annotated[int, Field(ge=0, le=65535)]
-    label: constr(min_length=1)
-    function_code: Literal[5, 6]
-    original_value: int | bool | None = None
-    expected_current_value: int | bool
-    test_value: int | bool
-    write_status: Literal["accepted", "rejected", "timeout", "error", "skipped"]
-    read_back_value: int | bool | None = None
-    restoration_status: Literal["not_required", "verified", "unverified", "failed"]
-    final_value: int | bool | None = None
-    change_ticket: constr(min_length=1)
-    started_at: datetime
-    completed_at: datetime
-
-
 class ModbusUnitPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     unit_id: Annotated[int, Field(ge=0, le=255)]
     status: Literal["responding", "exception", "timeout", "error", "skipped"]
     exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
-    error: str | None = None
+    error: DeviceString = None
     device_identification: ModbusDeviceIdentificationPayload | None = None
-    identification_sources: list[constr(min_length=1)] = Field(default_factory=list)
-    address_ranges: list[ModbusAddressRangePayload] = Field(default_factory=list)
-    validations: list[ModbusValidationPayload] = Field(default_factory=list)
+    identification_sources: list[constr(min_length=1)] = Field(
+        default_factory=list, max_length=MAX_IDENTIFICATION_SOURCES
+    )
+    address_ranges: list[ModbusAddressRangePayload] = Field(
+        default_factory=list, max_length=MAX_ADDRESS_RANGES_PER_UNIT
+    )
 
 
 class ModbusTcpServicePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     protocol: Literal["modbus_tcp"] = "modbus_tcp"
     port: Annotated[int, Field(ge=1, le=65535)]
     confidence: Literal["suspected", "confirmed"]
     evidence_sources: list[constr(min_length=1)] = Field(default_factory=list)
     mapping_source: str | None = None
+    write_requests_sent: Annotated[int, Field(default=0, ge=0)]
     units: list[ModbusUnitPayload] = Field(default_factory=list)
 
 

@@ -27,10 +27,10 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
-    ModbusValidationPayload,
     OperatingSystemDetection,
     PortPayload,
 )
+from agent.ot.digest import load_digest_key
 from agent.ot.modbus.fingerprints import correlate_fc43_fingerprints
 from agent.ot.modbus.inventory import has_modbus_candidate, inventory_modbus_host
 from agent.ot.modbus.mapper import MappingBudget, map_modbus_service
@@ -364,6 +364,7 @@ def run_ot_inspection_stage(
     )
     hosts_done = 0
     effective_policy = policy or OtAutomationPolicy()
+    digest_key = load_digest_key()
     for host in eligible_hosts:
         if cancel_event is not None and cancel_event.is_set():
             break
@@ -388,6 +389,7 @@ def run_ot_inspection_stage(
                     controller=modbus_controller,
                     deadline=deadline,
                     budget=budget,
+                    digest_key=digest_key,
                 )
         correlate_fc43_fingerprints(host)
         hosts_done += 1
@@ -463,6 +465,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                 confidence=service.confidence,
                 evidence_sources=service.evidence_sources,
                 mapping_source=service.mapping_source,
+                write_requests_sent=service.write_requests_sent,
                 units=[
                     ModbusUnitPayload(
                         unit_id=unit.unit_id,
@@ -483,6 +486,7 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                                     unit.device_identification.user_application_name
                                 ),
                                 objects=unit.device_identification.objects,
+                                truncated=unit.device_identification.truncated,
                             )
                             if unit.device_identification is not None
                             else None
@@ -496,33 +500,10 @@ def build_host_payload(host: HostInfo) -> HostPayload:
                                 status=item.status,
                                 exception_code=item.exception_code,
                                 label=item.label,
-                                nonzero_count=item.nonzero_count,
-                                value_min=item.value_min,
-                                value_max=item.value_max,
-                                values=item.values,
-                                value_sha256=item.value_sha256,
+                                value_digest=item.value_digest,
                                 observed_at=item.observed_at,
                             )
                             for item in unit.address_ranges
-                        ],
-                        validations=[
-                            ModbusValidationPayload(
-                                address_space=item.address_space,
-                                address=item.address,
-                                label=item.label,
-                                function_code=item.function_code,
-                                original_value=item.original_value,
-                                expected_current_value=item.expected_current_value,
-                                test_value=item.test_value,
-                                write_status=item.write_status,
-                                read_back_value=item.read_back_value,
-                                restoration_status=item.restoration_status,
-                                final_value=item.final_value,
-                                change_ticket=item.change_ticket,
-                                started_at=item.started_at,
-                                completed_at=item.completed_at,
-                            )
-                            for item in unit.validations
                         ],
                     )
                     for unit in service.units
@@ -604,6 +585,7 @@ def build_metadata(
         modbus_services = [
             service for host in hosts or [] for service in host.industrial_services
         ]
+        digest_key = load_digest_key()
         metadata.update(
             {
                 "nspi_policy_version": 1,
@@ -633,7 +615,10 @@ def build_metadata(
                     "fc43-fingerprint-catalog" in service.evidence_sources
                     for service in modbus_services
                 ),
-                "modbus_write_requests_sent": 0,
+                "modbus_write_requests_sent": sum(
+                    service.write_requests_sent for service in modbus_services
+                ),
+                "modbus_digest_key_present": digest_key is not None,
             }
         )
     return metadata

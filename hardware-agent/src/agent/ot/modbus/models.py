@@ -41,7 +41,6 @@ class ModbusUnit:
     device_identification: ModbusDeviceIdentification | None = None
     identification_sources: list[str] = field(default_factory=list)
     address_ranges: list[ModbusAddressRange] = field(default_factory=list)
-    validations: list[ModbusValidation] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -66,25 +65,7 @@ class ModbusAddressRange:
     value_min: int | None = None
     value_max: int | None = None
     values: list[int | bool] | None = None
-    value_sha256: str | None = None
-
-
-@dataclass(slots=True)
-class ModbusValidation:
-    address_space: Literal["coil", "holding_register"]
-    address: int
-    label: str
-    function_code: Literal[5, 6]
-    expected_current_value: int | bool
-    test_value: int | bool
-    write_status: Literal["accepted", "rejected", "timeout", "error", "skipped"]
-    restoration_status: Literal["not_required", "verified", "unverified", "failed"]
-    change_ticket: str
-    started_at: datetime
-    completed_at: datetime
-    original_value: int | bool | None = None
-    read_back_value: int | bool | None = None
-    final_value: int | bool | None = None
+    value_digest: str | None = None
 
 
 @dataclass(slots=True)
@@ -99,3 +80,4 @@ class ModbusService:
     mapping_requests_sent: int = 0
     mapping_ranges_skipped: int = 0
     parse_failures: int = 0
+    write_requests_sent: int = 0

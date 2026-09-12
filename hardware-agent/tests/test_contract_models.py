@@ -11,6 +11,7 @@ import yaml
 from agent.normalize.contracts import (
     FindingPayload,
     HostPayload,
+    ModbusAddressRangePayload,
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
@@ -460,6 +461,41 @@ def test_port_payload_preserves_optional_cpes_for_backend_enrichment() -> None:
         state="open",
         service="modbus",
     ).cpes == []
+
+
+def test_modbus_wire_models_forbid_removed_process_fields() -> None:
+    spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    range_schema = spec["components"]["schemas"]["ModbusAddressRangePayload"]
+    unit_schema = spec["components"]["schemas"]["ModbusUnitPayload"]
+
+    for field in (
+        "values",
+        "nonzero_count",
+        "value_min",
+        "value_max",
+        "value_sha256",
+    ):
+        assert field not in range_schema["properties"]
+        assert field not in ModbusAddressRangePayload.model_fields
+
+    assert "validations" not in unit_schema["properties"]
+    assert "validations" not in ModbusUnitPayload.model_fields
+    assert "ModbusValidationPayload" not in spec["components"]["schemas"]
+
+
+def test_modbus_wire_models_forbid_unknown_fields() -> None:
+    observed_at = datetime.now(timezone.utc)
+    with pytest.raises(ValidationError):
+        ModbusAddressRangePayload.model_validate(
+            {
+                "address_space": "coil",
+                "start_address": 0,
+                "count": 4,
+                "status": "readable",
+                "observed_at": observed_at,
+                "values": [0, 1, 0, 1],
+            }
+        )
 
 
 def test_health_503_references_database_unavailable_error() -> None:

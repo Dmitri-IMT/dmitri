@@ -280,10 +280,10 @@ def test_render_contains_plain_language_modbus_inventory():
                             start_address=0,
                             count=4,
                             status="readable",
-                            nonzero_count=3,
-                            value_min=0,
-                            value_max=1450,
-                            value_sha256="sha256:test",
+                            value_digest=(
+                                "hmac-sha256:"
+                                "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+                            ),
                             observed_at=datetime.now(timezone.utc),
                         )
                     ],
@@ -302,7 +302,7 @@ def test_render_contains_plain_language_modbus_inventory():
     assert "product BMX P34" in rendered
     assert "firmware 2.60" in rendered
     assert "holding_register 0-3: readable" in rendered
-    assert "nonzero 3 · min 0 · max 1450" in rendered
+    assert "digest a1b2c3d4" in rendered
     assert "Modbus services:        1" in rendered
     assert "Modbus Unit IDs:        1" in rendered
     assert "Modbus mapped ranges:   1" in rendered
