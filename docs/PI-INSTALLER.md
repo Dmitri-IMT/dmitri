@@ -174,7 +174,7 @@ sudo chmod 600 /etc/dmitri/agent.env
 
 ```bash
 sudo mkdir -p /var/lib/dmitri
-sudo cp /opt/dmitri-agent/deploy/dmitri-agent.service /etc/systemd/system/
+sudo cp /opt/dmitri-agent/dmitri-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now dmitri-agent
 systemctl status dmitri-agent
