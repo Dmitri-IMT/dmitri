@@ -70,29 +70,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scans/{scan_id}/risk-summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get a bounded risk summary for a scan
-         * @description Returns aggregate risk metrics and at most ten top-ranked findings with
-         *     their evidence. This read-only response is suitable for dashboards and
-         *     for a future evidence-grounded LLM tool.
-         */
-        get: operations["getScanRiskSummary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        /** CORS preflight for scan risk summary */
-        options: operations["optionsScanRiskSummary"];
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/hosts": {
         parameters: {
             query?: never;
@@ -152,29 +129,6 @@ export interface paths {
         delete?: never;
         /** CORS preflight for findings collection */
         options: operations["optionsFindings"];
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/findings/{finding_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get a finding with evidence and risk context
-         * @description Returns one finding scoped to the caller's organisation. The response
-         *     includes persisted evidence, remediation guidance, references and the
-         *     latest risk snapshot, making it suitable for a future read-only LLM tool.
-         */
-        get: operations["getFindingById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        /** CORS preflight for finding detail */
-        options: operations["optionsFindingById"];
         head?: never;
         patch?: never;
         trace?: never;
@@ -718,8 +672,6 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
-            /** @default [] */
-            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             ports: components["schemas"]["Port"][];
         };
         FindingPayload: {
@@ -842,8 +794,6 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
-            /** @default [] */
-            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -1066,11 +1016,6 @@ export interface components {
             org_name: string;
         };
         FindingRecord: {
-            risk_score?: number | null;
-            exploitability?: number | null;
-            /** @enum {string|null} */
-            confidence?: "tentative" | "probable" | "confirmed" | null;
-            risk_rationale?: string | null;
             /** Format: uuid */
             finding_id: string;
             /** Format: uuid */
@@ -1098,24 +1043,6 @@ export interface components {
             data: components["schemas"]["FindingRecord"][];
             total: number;
             page: number;
-        };
-        SeverityBreakdown: {
-            critical: number;
-            high: number;
-            medium: number;
-            low: number;
-        };
-        ScanRiskSummaryResponse: {
-            /** Format: uuid */
-            scan_id: string;
-            total_findings: number;
-            scored_findings: number;
-            confirmed_findings: number;
-            kev_findings: number;
-            average_risk_score: number | null;
-            max_risk_score: number | null;
-            severity: components["schemas"]["SeverityBreakdown"];
-            top_findings: components["schemas"]["FindingRecord"][];
         };
         /** @enum {string} */
         HomeEventKind: "box_offline" | "member_idle" | "machine_first_seen";
@@ -1581,8 +1508,6 @@ export interface components {
         SeverityFilter: components["schemas"]["Severity"];
         /** @description Backend identifier of the scan. */
         ScanId: string;
-        /** @description Public identifier of a persisted finding. */
-        FindingId: string;
         /** @description Filter findings by scan identifier. */
         ScanIdFilter: string;
         /** @description Backend identifier of a discovered host. */
@@ -1808,48 +1733,6 @@ export interface operations {
             204: components["responses"]["CorsPreflightNoContent"];
         };
     };
-    getScanRiskSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Backend identifier of the scan. */
-                scan_id: components["parameters"]["ScanId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Risk summary scoped to the caller's organisation. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScanRiskSummaryResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    optionsScanRiskSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Backend identifier of the scan. */
-                scan_id: components["parameters"]["ScanId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: components["responses"]["CorsPreflightNoContent"];
-        };
-    };
     listHosts: {
         parameters: {
             query?: {
@@ -1988,48 +1871,6 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            204: components["responses"]["CorsPreflightNoContent"];
-        };
-    };
-    getFindingById: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Public identifier of a persisted finding. */
-                finding_id: components["parameters"]["FindingId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Finding detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FindingRecord"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    optionsFindingById: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Public identifier of a persisted finding. */
-                finding_id: components["parameters"]["FindingId"];
-            };
             cookie?: never;
         };
         requestBody?: never;

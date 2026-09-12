@@ -14,7 +14,6 @@ import ScanDetailHeader, {
 } from '@/pages/scans/ScanDetailHeader'
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
-import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import SeverityWord from '@/components/SeverityWord'
 import type { components } from '@/types/openapi'
@@ -98,18 +97,6 @@ function ScanDetail() {
                       </Card>
                     ))}
                   </div>
-                )}
-                {scan.hosts.some(
-                  (host) => host.industrial_services.length > 0,
-                ) && (
-                  <Card>
-                    <CardHeader>
-                      <h2 className="text-title-sm">Industrial services</h2>
-                    </CardHeader>
-                    <CardContent>
-                      <ScanIndustrialServices hosts={scan.hosts} />
-                    </CardContent>
-                  </Card>
                 )}
                 <Card>
                   <CardHeader>

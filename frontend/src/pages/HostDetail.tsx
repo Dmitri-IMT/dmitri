@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import HostFindings from '@/pages/hosts/HostFindings'
 import HostIdentity from '@/pages/hosts/HostIdentity'
-import IndustrialServices from '@/pages/hosts/IndustrialServices'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
 
@@ -50,14 +49,6 @@ function HostDetail() {
               </CardHeader>
               <CardContent>
                 <HostPortsTable ports={host.ports} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <h2 className="text-title-sm">Industrial services</h2>
-              </CardHeader>
-              <CardContent>
-                <IndustrialServices services={host.industrial_services} />
               </CardContent>
             </Card>
             <Card>

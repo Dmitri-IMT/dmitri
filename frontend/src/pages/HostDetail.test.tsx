@@ -75,12 +75,6 @@ describe('HostDetail', () => {
     expect(
       screen.getByRole('heading', { name: 'Scan history' }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Industrial services' }),
-    ).toBeInTheDocument()
-    expect(screen.getByTestId('no-industrial-services')).toHaveTextContent(
-      'No industrial services were detected',
-    )
     expect(screen.queryByTestId('host-ports-table')).not.toBeInTheDocument()
     expect(
       screen.getByTestId(`host-history-table-row-${SCAN_ID}`),

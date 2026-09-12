@@ -10,8 +10,8 @@ O enrichment atual cruza `cve_id` com:
 
 Com isso, cada finding pode expor `kev`, `epss` e um `risk_score` inicial explicavel.
 
-O ingest tambem preserva os snapshots de sistema operacional e dos servicos industriais
-Modbus produzidos pelo `hardware-agent`.
+Este README cobre apenas o shell atual (boot, config, migracao, health). Rotas de negocio
+(`/scans`, `/findings`, etc.) ainda nao existem neste shell — chegam em issues futuras.
 
 ## Requisitos
 
@@ -84,30 +84,17 @@ uv run python -m api.worker_main
 
 O worker faz polling na tabela `enrichment_jobs`, faz claim dos jobs `pending`, marca `running` durante a execucao e finaliza em `completed` ou `failed`. E um processo separado da API.
 
-## Endpoints
+## Endpoint
 
-As rotas registradas cobrem:
+Esta versao do shell expoe apenas o health check contratado:
 
-- health check em `GET /api/v1/health`
-- ingest autenticado do agente em `POST /api/v1/scans`
-- leitura de scans, hosts, findings e home
-- detalhe de finding em `GET /api/v1/findings/{finding_id}`
-- resumo de risco limitado e rastreavel em
-  `GET /api/v1/scans/{scan_id}/risk-summary`
-- autenticacao, usuarios e convites
-- cadastro/leitura dos agentes, criacao e acompanhamento de comandos
-- canal WebSocket do agente em `/api/v1/agents/{agent_id}/commands`
+- `GET /api/v1/health` -> `{"status": "ok", "version": "<versao instalada de backend-api>"}` somente apos um round-trip real ao banco (`SELECT 1`); `503` com um envelope de erro estatico se o banco estiver inacessivel.
 
-`/docs`, `/redoc` e `/openapi.json` estao desabilitados. O contrato publicado e
-`../contracts/openapi/openapi.yaml`.
+`/docs`, `/redoc` e `/openapi.json` estao desabilitados; o contrato publicado e
+`../contracts/openapi/openapi.yaml`. Nenhuma outra rota (incluindo as antigas rotas de
+negocio de scans/findings) esta registrada neste shell.
 
 ## Regra inicial de risco (engine mantido, sem mudanca de comportamento)
-
-Os findings retornados pela lista, pelo detalhe de scan e pela home incluem
-`risk_score` (0-100), `exploitability` (0-1), `confidence` e `risk_rationale`.
-Esses campos refletem o snapshot persistido; ficam nulos quando ele nao existe.
-As leituras nao recalculam risco nem consultam fontes externas. O painel de detalhe
-do finding no frontend mostra o score e sua justificativa.
 
 O `risk_score` atual e intencionalmente simples e deterministico:
 
@@ -122,11 +109,6 @@ O resultado persistido em `risk_snapshots` inclui:
 - `exploitability`
 - `risk_score`
 - `rationale`
-
-As duas consultas detalhadas acima formam a primeira superficie somente leitura
-para a futura integracao LLM. Ambas aplicam o escopo da organizacao autenticada;
-o resumo retorna no maximo dez findings, sempre com seus IDs e evidencias, para
-limitar contexto e permitir rastreabilidade.
 
 Roadmap tecnico da proxima fase:
 
