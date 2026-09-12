@@ -24,6 +24,7 @@ from api.services.inventory import (
     reconcile_scan_inventory,
 )
 from api.services.persistence import finding_dedupe_key, ingest_scan
+from sqlalchemy import event
 from sqlmodel import Session, select
 
 T0 = datetime(2026, 6, 1, 11, 0, 0, tzinfo=timezone.utc)
@@ -371,3 +372,54 @@ def test_machine_type_written_from_vendor_and_open_services(
 
     assert _machine(runtime_session, IP).machine_type == "camera"
     assert _machine(runtime_session, "10.0.0.6").machine_type == "computer"
+
+
+def _reconcile_select_count(
+    session: Session, identity: AgentIdentity, *, ts: datetime, size: int
+) -> int:
+    ip = f"10.0.1.{size}"
+    host = _host(ip=ip, mac=f"AA:BB:CC:DD:01:{size:02d}", ports=[
+        _port(1000 + n, "http") for n in range(size)
+    ])
+    findings = [
+        _finding(f"problem {n}", ip=ip, port=1000 + n) for n in range(size)
+    ]
+    _scan_and_reconcile(
+        session, identity, ts=ts, hosts=[host], findings=findings
+    )
+    later = _ingest(
+        session,
+        identity,
+        ts=ts + timedelta(minutes=30),
+        hosts=[host],
+        findings=findings,
+    )
+    scan_host = session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == later.scan_id)
+    ).one()
+    session.flush()
+
+    selects: list[str] = []
+
+    def record(conn, cursor, statement, *args) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects.append(statement)
+
+    engine = session.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        reconcile_scan_host_inventory(session, scan_host)
+        session.flush()
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    return len(selects)
+
+
+def test_reconcile_query_count_does_not_grow_with_ports_or_findings(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    small = _reconcile_select_count(runtime_session, identity, ts=T1, size=2)
+    large = _reconcile_select_count(runtime_session, identity, ts=T2, size=12)
+
+    assert large == small

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func
 from sqlmodel import Session, select
 
 from api.core.machine_type import classify_machine_type
@@ -52,31 +51,16 @@ def _reconcile_machine(
     is_latest = ts >= host.last_seen_at
 
     open_services = _reconcile_ports(session, host, scan_host, ts, is_latest)
-    seen = _reconcile_findings(session, host, scan_record, scan_host, ts, is_latest)
+    findings = _reconcile_findings(
+        session, host, scan_record, scan_host, ts, is_latest
+    )
 
-    if not is_latest:
-        return
-
-    for row in session.exec(
-        select(HostFindingRecord).where(
-            HostFindingRecord.host_id == host.id,
-            HostFindingRecord.fixed_at.is_(None),
+    if is_latest:
+        host.machine_type = classify_machine_type(scan_host.vendor, open_services)
+        host.vulnerability_count = sum(
+            1 for row in findings if row.fixed_at is None
         )
-    ).all():
-        if row.dedupe_key not in seen:
-            row.fixed_at = ts
-            session.add(row)
-
-    host.machine_type = classify_machine_type(scan_host.vendor, open_services)
-    host.vulnerability_count = session.exec(
-        select(func.count())
-        .select_from(HostFindingRecord)
-        .where(
-            HostFindingRecord.host_id == host.id,
-            HostFindingRecord.fixed_at.is_(None),
-        )
-    ).one()
-    session.add(host)
+        session.add(host)
     session.flush()
 
 
@@ -95,29 +79,28 @@ def _reconcile_ports(
             PortRecord.state == "open",
         )
     ).all()
+    known = {
+        (row.port, row.protocol): row
+        for row in session.exec(
+            select(HostPortRecord).where(HostPortRecord.host_id == host.id)
+        ).all()
+    }
 
     open_services: list[tuple[int, str]] = []
     for port, service in rows:
         open_services.append((port.port, service.name))
-        existing = session.exec(
-            select(HostPortRecord).where(
-                HostPortRecord.host_id == host.id,
-                HostPortRecord.port == port.port,
-                HostPortRecord.protocol == port.protocol,
-            )
-        ).first()
+        existing = known.get((port.port, port.protocol))
         if existing is None:
-            session.add(
-                HostPortRecord(
-                    host_id=host.id,
-                    port=port.port,
-                    protocol=port.protocol,
-                    service=service.name,
-                    version=service.version,
-                    first_seen_at=ts,
-                    last_seen_at=ts,
-                )
+            known[(port.port, port.protocol)] = HostPortRecord(
+                host_id=host.id,
+                port=port.port,
+                protocol=port.protocol,
+                service=service.name,
+                version=service.version,
+                first_seen_at=ts,
+                last_seen_at=ts,
             )
+            session.add(known[(port.port, port.protocol)])
             continue
         existing.first_seen_at = min(existing.first_seen_at, ts)
         if is_latest:
@@ -125,7 +108,6 @@ def _reconcile_ports(
             existing.service = service.name
             existing.version = service.version
         session.add(existing)
-    session.flush()
     return open_services
 
 
@@ -136,7 +118,11 @@ def _reconcile_findings(
     scan_host: ScanHostRecord,
     ts: datetime,
     is_latest: bool,
-) -> set[str]:
+) -> list[HostFindingRecord]:
+    """Apply this scan's findings to the machine's finding life.
+
+    Returns every `host_findings` row for the machine after the scan is applied.
+    """
     seen = set(
         session.exec(
             select(FindingRecord.dedupe_key).where(
@@ -145,29 +131,34 @@ def _reconcile_findings(
             )
         ).all()
     )
+    known = {
+        row.dedupe_key: row
+        for row in session.exec(
+            select(HostFindingRecord).where(HostFindingRecord.host_id == host.id)
+        ).all()
+    }
 
     for dedupe_key in seen:
-        existing = session.exec(
-            select(HostFindingRecord).where(
-                HostFindingRecord.host_id == host.id,
-                HostFindingRecord.dedupe_key == dedupe_key,
-            )
-        ).first()
+        existing = known.get(dedupe_key)
         if existing is None:
-            session.add(
-                HostFindingRecord(
-                    host_id=host.id,
-                    dedupe_key=dedupe_key,
-                    first_seen_at=ts,
-                    last_seen_at=ts,
-                    fixed_at=None,
-                )
+            known[dedupe_key] = HostFindingRecord(
+                host_id=host.id,
+                dedupe_key=dedupe_key,
+                first_seen_at=ts,
+                last_seen_at=ts,
+                fixed_at=None,
             )
+            session.add(known[dedupe_key])
             continue
         existing.first_seen_at = min(existing.first_seen_at, ts)
         if is_latest:
             existing.last_seen_at = ts
             existing.fixed_at = None
         session.add(existing)
-    session.flush()
-    return seen
+
+    if is_latest:
+        for row in known.values():
+            if row.dedupe_key not in seen and row.fixed_at is None:
+                row.fixed_at = ts
+                session.add(row)
+    return list(known.values())
