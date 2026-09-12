@@ -118,10 +118,17 @@ def _truncate_application_tables(engine: Engine) -> None:
         connection.execute(sa.text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    if DATABASE_URL_TEST is None:
+        raise pytest.UsageError(
+            "DATABASE_URL_TEST must point at the dmitri_test database. "
+            "Run ./database.sh --test."
+        )
+
+
 @pytest.fixture(scope="session")
 def postgres_engine() -> Generator[Engine, None, None]:
-    if DATABASE_URL_TEST is None:
-        pytest.skip("DATABASE_URL_TEST not set")
+    assert DATABASE_URL_TEST is not None
     engine = sa.create_engine(_psycopg_url(DATABASE_URL_TEST))
     created_roles: list[str] = []
     with engine.begin() as connection:
