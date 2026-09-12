@@ -80,13 +80,16 @@ def _inventory_port(
         evidence.append("nmap-service")
 
     units: dict[int, ModbusUnit] = {}
+    parse_failures = 0
     scripts = [
         script for script in port.scripts if script.script_id == "modbus-discover"
     ]
     if scripts:
         evidence.append("modbus-discover")
     for script in scripts:
-        for unit in parse_modbus_discover(script):
+        discover = parse_modbus_discover(script)
+        parse_failures += discover.parse_failures
+        for unit in discover.units:
             _merge_unit(units, unit)
 
     fallback_ids = [
@@ -129,6 +132,7 @@ def _inventory_port(
         units=sorted(units.values(), key=lambda unit: unit.unit_id),
         requests_sent=requests_sent,
         timeouts=timeouts,
+        parse_failures=parse_failures,
     )
 
 

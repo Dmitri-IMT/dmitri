@@ -15,6 +15,7 @@ class ModbusDeviceIdentification:
     model_name: str | None = None
     user_application_name: str | None = None
     objects: dict[str, str] = field(default_factory=dict)
+    truncated: bool = False
 
     @property
     def has_structured_fields(self) -> bool:
@@ -97,3 +98,4 @@ class ModbusService:
     mapping_source: str | None = None
     mapping_requests_sent: int = 0
     mapping_ranges_skipped: int = 0
+    parse_failures: int = 0
