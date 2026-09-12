@@ -105,6 +105,10 @@ new table.
   `UPDATE`, because a nonce is immutable and prunable. Every other table keeps the append/update
   default. `test_migrations.py` therefore uses `RUNTIME_GRANTS_BY_TABLE` rather than one global set.
 - `alembic.ini` sets `prepend_sys_path = src` so `import api...` resolves during migrations.
+- Head is a single revision. `20260912_20` is an empty merge of `20260905_19` (activity feed) and
+  `20260908_19` (OS inventory). Do not rewrite released revisions. `20260912_21` adds
+  `industrial_services`, `modbus_units`, `findings.modbus_unit_id`, and `orgs.ot_digest_key`.
+  `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations
 

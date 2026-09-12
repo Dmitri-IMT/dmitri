@@ -34,21 +34,18 @@ Per-layer gates:
 | `backend/` | `./database.sh` first (see below), then `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
 | `frontend/` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
 
-**Always run `./database.sh` before the backend suite.** Without `DATABASE_URL_TEST`
-pointing at a live `dmitri_test`, `conftest.py` *skips* every DB-backed test instead of
-failing — a bare `uv run pytest` prints a green ~368 passed / 251 skipped and proves
-almost nothing about services, routers, or migrations. With the database up it is
-665 passed / 0 skipped (2026-08-03, after DMI-77), which is what CI runs.
+**Always run `./database.sh --test` before the backend suite.** `DATABASE_URL_TEST` must
+point at live `dmitri_test`. If it is unset, pytest collection fails with exit code 4.
+There is no skip path.
 
 ```bash
 ./database.sh --test   # start Supabase, ensure dmitri_test, run the backend suite
 ./database.sh          # setup only, then: cd backend && DATABASE_URL_TEST=... uv run pytest
 ```
 
-Never report the backend suite as green from a run with database-test skips in it — if
-the skip count is non-zero, say so or re-run with the database up. The database name
-must be exactly `dmitri_test`, and Alembic owns that schema: never point
-`supabase db reset|push|migration` at it.
+Never report the backend suite as green when `DATABASE_URL_TEST` was missing — that run
+never starts. The database name must be exactly `dmitri_test`. Alembic owns that schema:
+never point `supabase db reset|push|migration` at it.
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 

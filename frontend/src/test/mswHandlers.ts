@@ -307,6 +307,7 @@ export const hostFixtures: HostSummary[] = Array.from(
     first_seen_at: minutesAgo(10_000 + index * 60),
     last_seen_at: minutesAgo(10 + index * 10),
     open_ports_count: index % 5,
+    unreadable_fields: [],
     highest_severity:
       index % 4 === 0
         ? 'critical'
@@ -359,6 +360,7 @@ export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
         highest_severity: host.highest_severity,
       },
     ],
+    industrial_services: [],
   }),
 )
 
@@ -372,6 +374,8 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
       hostname: host.hostname,
       vendor: host.vendor,
       ports: host.ports,
+      industrial_services: host.industrial_services,
+      unreadable_fields: host.unreadable_fields,
     })),
     findings: findingFixtures.filter(
       (finding) => finding.scan_id === scan.scan_id,

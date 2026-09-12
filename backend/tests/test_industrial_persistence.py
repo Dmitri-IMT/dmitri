@@ -66,10 +66,10 @@ def _industrial_service(port: int = 502) -> dict:
     }
 
 
-def _host(ip: str = "192.168.1.50") -> HostPayload:
+def _host(ip: str = "192.168.1.50", mac: str = "00:80:F4:11:22:33") -> HostPayload:
     return HostPayload(
         ip=ip,
-        mac="00:80:F4:11:22:33",
+        mac=mac,
         hostname="plc-line-2.plant.local",
         vendor="Schneider Electric",
         ports=[

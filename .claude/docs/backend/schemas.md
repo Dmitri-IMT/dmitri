@@ -27,10 +27,13 @@ the ingest input plus the main persisted projections.
 | `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
 | `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. | `backend/src/api/schemas/scan.py:16` |
 | `PortPayload` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `version`, `cpes`. | `backend/src/api/schemas/scan.py:19` |
-| `HostPayload` | `ip` (`IPv4Address`), MAC regex (required-but-nullable), `hostname`, `vendor`, `ports` (required). | `backend/src/api/schemas/scan.py:30` |
-| `FindingPayload` | Optional `ip` (`IPv4Address`)/`port`/`protocol`, `cve_id` regex `CVE-\d{4}-\d{4,}`, `cvss_score` (0–10), `severity` enum, title/description/recommendation/evidence, `references`. | `backend/src/api/schemas/scan.py:40` |
+| `HostPayload` | `ip`, MAC, `hostname`, `vendor`, `ports`, `industrial_services`. | `backend/src/api/schemas/scan.py` |
+| `FindingPayload` | Optional `unit_id` (0–255) for Modbus unit attribution. | `backend/src/api/schemas/scan.py` |
 | `ScanIngestRequest` | Top-level payload: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `hosts`, `findings`, `metadata`. `hosts`/`findings` are required (no defaults). | `backend/src/api/schemas/scan.py:59` |
 | `ScanIngestAcceptedResponse` | `message`, `scan_id`, `hosts_received` (`ge=0`), `status` (`Literal["accepted"]`) — the `202` response body. | `backend/src/api/schemas/scan.py:71` |
+
+`schemas/industrial.py` is the Modbus ingest models (`ModbusTcpServicePayload` and units). Read
+views (`IndustrialServiceView`, `ModbusUnitView`, `unreadable_fields`) live in `read.py`.
 
 **All five carry `model_config = ConfigDict(extra="forbid")`** — DMI-63 pushed it to *every* ingest
 depth, not just the top level. Before that only `ScanResult` forbade extras, so `hosts[0].os = "linux"`
@@ -44,7 +47,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 |------|-----------------|-----|
 | `Severity` / `SEVERITY_ORDER` | **Moved out of this module 2026-07-31** to [`core/severity.py`](/backend/api.md); `read.py` now imports `Severity` from there. Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order — the single severity-domain definition. | `backend/src/api/core/severity.py:5` |
 | `Port` | Read-side port view (`extra="forbid"`): port/protocol/state/service/version. | `backend/src/api/schemas/read.py:18` |
-| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. | `backend/src/api/schemas/read.py:28` |
+| `ScanHostView` | Scan-scoped host plus `industrial_services` and `unreadable_fields`. | `backend/src/api/schemas/read.py` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip` and `detected_at`. | `backend/src/api/schemas/read.py:39` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `open_ports_count`/`highest_severity`. `mac` is required and nullable. | `backend/src/api/schemas/read.py:62` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:76` |

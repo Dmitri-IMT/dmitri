@@ -79,8 +79,8 @@ outside an exact disposable point explicitly authorised for active validation:
     address. Human labels come from an operator-supplied asset map. Behavioural
     inference requires repeat observations during an approved lab procedure and
     is labelled as an inference.
-14. Raw coil/register values are not persisted by default. `summary` capture is
-    the default for mapping; `raw` capture is an explicit laboratory choice.
+14. Raw coil/register values stay on the Pi. Mapping records a keyed HMAC digest, not a
+    summary of the values. See `specs/045-ot-agent-hardening`.
 15. Partial results survive cancellation, timeout and per-host failure using the
     existing partial-result behaviour.
 16. The local JSON, ingest contract, backend persistence and read API represent

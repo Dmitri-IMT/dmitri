@@ -58,8 +58,8 @@ RESULT_PATH=$(jq -r '.result_path' nspi-mapping-run.json)
 ```
 
 Na TUI, o caminho equivalente é **Start scan → interface → NSPi → Read-only
-mapping**. Na web, selecione **NSPi** e depois **Read-only mapping** antes de
-iniciar. `Active validation` permanece desabilitado nesta entrega.
+mapping**. Active validation is disabled on the TUI mode list and is not offered
+in the web UI.
 
 ## 3. Conferir o resultado
 
@@ -115,13 +115,9 @@ Um trecho esperado é:
       "address_space": "holding_register",
       "start_address": 0,
       "count": 4,
-      "status": "readable",
-      "label": "generic baseline sample",
-      "nonzero_count": 2,
-      "value_min": 0,
-      "value_max": 120,
-      "values": null,
-      "value_sha256": "sha256:..."
+                      "status": "readable",
+                      "label": "generic baseline sample",
+                      "value_digest": "hmac-sha256:..."
     }
   ]
 }

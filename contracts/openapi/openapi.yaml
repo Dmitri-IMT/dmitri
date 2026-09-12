@@ -2568,6 +2568,110 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Port'
+        industrial_services:
+          type: array
+          description: >
+            Industrial observations retained 180 days from scan ingestion.
+            No pruning job enforces that period yet.
+          items:
+            $ref: '#/components/schemas/IndustrialServiceView'
+          default: []
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
+    IndustrialServiceView:
+      type: object
+      additionalProperties: false
+      description: >
+        Industrial observations retained 180 days from scan ingestion.
+        No pruning job enforces that period yet.
+      required:
+        - protocol
+        - port
+        - confidence
+      properties:
+        protocol:
+          type: string
+          enum:
+            - modbus_tcp
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        confidence:
+          type: string
+          enum:
+            - suspected
+            - confirmed
+        mapping_source:
+          type:
+            - string
+            - 'null'
+        evidence_sources:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusUnitView'
+          default: []
+    ModbusUnitView:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - unit_id
+        - status
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        unit_id:
+          type: integer
+          minimum: 0
+          maximum: 255
+        status:
+          type: string
+          enum:
+            - responding
+            - exception
+            - timeout
+            - error
+            - skipped
+        exception_code:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+          maximum: 255
+        error:
+          type:
+            - string
+            - 'null'
+        identification:
+          anyOf:
+            - $ref: '#/components/schemas/ModbusDeviceIdentificationView'
+            - type: 'null'
+        identification_sources:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          default: []
+        address_ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModbusAddressRangeView'
+          default: []
+    ModbusDeviceIdentificationView:
+      $ref: '#/components/schemas/ModbusDeviceIdentificationPayload'
+    ModbusAddressRangeView:
+      $ref: '#/components/schemas/ModbusAddressRangePayload'
     FindingPayload:
       type: object
       additionalProperties: false
@@ -2897,6 +3001,11 @@ components:
           anyOf:
             - $ref: '#/components/schemas/Severity'
             - type: 'null'
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
     HostScanHistoryEntry:
       type: object
       additionalProperties: false
@@ -2976,6 +3085,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Port'
+        industrial_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndustrialServiceView'
+          default: []
+        unreadable_fields:
+          type: array
+          items:
+            type: string
+          default: []
         scan_history:
           type: array
           items:

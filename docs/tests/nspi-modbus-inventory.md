@@ -8,7 +8,7 @@ não mapeia endereços de processo e não envia escrita Modbus.
 
 ## 1. Preparar o Raspberry Pi
 
-No repositório e na branch `feature/nspi-modbus-methodology`:
+No repositório, na branch `feat/045-ot-agent-hardening` (ou `main` after merge):
 
 ```bash
 cd hardware-agent
@@ -77,6 +77,9 @@ jq '.hosts[]
 ```
 
 Interpretação esperada:
+
+- `industrial_services` no JSON local e em `GET /api/v1/hosts/{id}` / `GET /api/v1/scans/{id}`
+  descrevem a mesma observação;
 
 - `suspected`: TCP/502 está aberto, mas não houve resposta Modbus conclusiva;
 - `confirmed`: o serviço do Nmap ou uma resposta Modbus confirmou o protocolo;

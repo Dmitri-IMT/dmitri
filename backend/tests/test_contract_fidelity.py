@@ -37,6 +37,7 @@ SCHEMA_NAMES = (
     "NspiOptions",
     "HostSummary",
     "ScanHostView",
+    "IndustrialServiceView",
     "HostScanHistoryEntry",
     "HostDetailResponse",
     "HostListResponse",

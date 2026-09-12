@@ -10,6 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, constr
 from api.core.error_codes import ScanErrorCode
 from api.core.severity import Severity
 
+from .industrial import (
+    ModbusAddressRangePayload,
+    ModbusDeviceIdentificationPayload,
+)
 from .operating_system import OperatingSystemDetection
 
 ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
@@ -29,6 +33,51 @@ class Port(BaseModel):
     version: str | None = None
 
 
+class ModbusDeviceIdentificationView(ModbusDeviceIdentificationPayload):
+    pass
+
+
+class ModbusAddressRangeView(ModbusAddressRangePayload):
+    pass
+
+
+class ModbusUnitView(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: Annotated[int, Field(ge=1)]
+    unit_id: Annotated[int, Field(ge=0, le=255)]
+    status: Literal[
+        "responding", "exception", "timeout", "error", "skipped"
+    ]
+    exception_code: Annotated[int | None, Field(default=None, ge=1, le=255)]
+    error: str | None = None
+    identification: ModbusDeviceIdentificationView | None = None
+    identification_sources: list[constr(min_length=1)] = Field(
+        default_factory=list
+    )
+    address_ranges: list[ModbusAddressRangeView] = Field(default_factory=list)
+
+
+class IndustrialServiceView(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "description": (
+                "Industrial observations are retained for "
+                "INDUSTRIAL_OBSERVATION_RETENTION_DAYS (180) days from scan "
+                "ingestion. No pruning job enforces that period yet."
+            )
+        },
+    )
+
+    protocol: Literal["modbus_tcp"]
+    port: Annotated[int, Field(ge=1, le=65535)]
+    confidence: Literal["suspected", "confirmed"]
+    mapping_source: str | None = None
+    evidence_sources: list[constr(min_length=1)] = Field(default_factory=list)
+    units: list[ModbusUnitView] = Field(default_factory=list)
+
+
 class ScanHostView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,6 +88,10 @@ class ScanHostView(BaseModel):
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
     ports: list[Port]
+    industrial_services: list[IndustrialServiceView] = Field(
+        default_factory=list
+    )
+    unreadable_fields: list[str] = Field(default_factory=list)
 
 
 class FindingModbusUnitRef(BaseModel):
@@ -86,6 +139,7 @@ class HostSummary(BaseModel):
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
+    unreadable_fields: list[str] = Field(default_factory=list)
 
 
 class HostScanHistoryEntry(BaseModel):
@@ -113,6 +167,10 @@ class HostDetailResponse(BaseModel):
     open_ports_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
     ports: list[Port]
+    industrial_services: list[IndustrialServiceView] = Field(
+        default_factory=list
+    )
+    unreadable_fields: list[str] = Field(default_factory=list)
     scan_history: list[HostScanHistoryEntry]
 
 

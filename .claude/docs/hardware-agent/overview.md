@@ -31,8 +31,10 @@ There is no separate orchestrator class:
    [stages](/hardware-agent/scanner/stages.md).
 3. **Deep inspection** — the single enrichment pass per eligible host: `-sV` + the mode's full NSE
    set, including `vulners` CVE correlation.
-4. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → `HostPayload`s;
-   assembled into a `ScanPayload` and written to `results/` by
+4. **OT inspection** (NSPi) — bounded Modbus inventory or read-only mapping via [`ot/`](/hardware-agent/ot.md)
+   (`pymodbus`). Wall-clock ceilings are `MAX_OT_STAGE_SECONDS` / `MAX_OT_HOST_SECONDS`.
+5. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → `HostPayload`s
+   including `industrial_services`; assembled into a `ScanPayload` and written to `results/` by
    [workspace](/hardware-agent/scanner/workspace.md).
 
 Each stage runs under cancellation and deadline guards, with a per-unit retry + circuit-breaker

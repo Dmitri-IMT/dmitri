@@ -28,9 +28,9 @@ the CLAUDE.md integration rule requires to stay in sync.
 | `SettingsScreen` (S1) | Modal (`ctrl+t`) to edit `results_dir`; Save/Cancel. | `tui/screens/settings.py:23` |
 | `HomeScreen` (H) | Central `OptionList`: Start scan → wizard; View scan → last payload; Past scans. Receives `(subnet, mode)` and pushes `ScanProgressScreen`; writes the result + summary band on completion. | `tui/screens/home.py:25` |
 | `NetworkScreen` (S2) | Lists IPv4 interfaces/subnets via `psutil` (`ctrl+r` refresh) → `ScanCategoryScreen`. | `tui/screens/network.py:36` |
-| `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker (General: quick/standard/extensive/max; NSPi: nspi) → dismisses `(subnet, mode)`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
-| `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., reporter=_ScreenReporter, on_complete, on_error, workspace_root)` and `.start()`s it; smoothed `ProgressBar` (`ProgressMapper`), `RichLog` feed, terminal success/partial/fatal states; `ctrl+x` → `runner.request_cancel()`. | `tui/screens/scan_progress.py:26` |
-| `ScanViewScreen` (S7) | Renders a `ScanPayload` (in-memory or JSON) into hosts/ports/vulns/summary; `MODE_LABELS`, `SEVERITY_COLORS`, IO-Link banner detection. | `tui/screens/scan_view.py:49` |
+| `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker. NSPi submodes: Inventory, Read-only mapping; Active validation stays `disabled=True`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
+| `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., nspi_submode=...)`. Terminal states: completed, incomplete, stopped, refused. Live `⏱` line for `ot_stage_deadline`. | `tui/screens/scan_progress.py` |
+| `ScanViewScreen` (S7) | Device text escaped via `tui/markup.safe()`; range lines show status and digest prefix. | `tui/screens/scan_view.py` |
 | `PastScansScreen` (S6) | Lists `results/*.json` (`ScanEntry`), newest-first (`ctrl+r`) → `ScanViewScreen`. | `tui/screens/past_scans.py:29` |
 
 ## How it connects

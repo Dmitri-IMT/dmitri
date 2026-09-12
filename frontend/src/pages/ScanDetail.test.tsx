@@ -39,6 +39,8 @@ const nas: ScanHostView = {
       version: 'nginx 1.24',
     },
   ],
+  industrial_services: [],
+  unreadable_fields: [],
 }
 
 const piLab: ScanHostView = {
@@ -56,6 +58,8 @@ const piLab: ScanHostView = {
       version: 'OpenSSH 9.6',
     },
   ],
+  industrial_services: [],
+  unreadable_fields: [],
 }
 
 const phpCgiFinding: FindingRecord = {

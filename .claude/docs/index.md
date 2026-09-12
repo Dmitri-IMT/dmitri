@@ -26,6 +26,7 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/discovery](./hardware-agent/discovery.md) — Thin per-stage Nmap-argument builders — host/port/service/NSE-vuln scanning.
 * [hardware-agent/normalize](./hardware-agent/normalize.md) — The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
+* [hardware-agent/ot](./hardware-agent/ot.md) — Modbus inspection package, digest, read-only client, OT stage.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
 * [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
 * [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder.
