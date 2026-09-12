@@ -7,6 +7,8 @@ from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Agent
 from api.models.identity import Org
 from api.models.persistence import (
+    EnrichmentJobRecord,
+    FindingRecord,
     HostFindingRecord,
     HostPortRecord,
     HostRecord,
@@ -19,13 +21,21 @@ from api.schemas.scan import (
     PortPayload,
     ScanIngestRequest,
 )
+from api.services import worker
+from api.services.enrichment import process_claimed_enrichment_job
 from api.services.inventory import (
     reconcile_scan_host_inventory,
     reconcile_scan_inventory,
 )
-from api.services.persistence import finding_dedupe_key, ingest_scan
+from api.services.nvd import NvdClient
+from api.services.persistence import finding_dedupe_key, ingest_scan, persist_scan
 from sqlalchemy import event
 from sqlmodel import Session, select
+from test_ingest_scan import (
+    _example_scan,
+    _fake_nvd_payload,
+    _scan_with_findable_payload,
+)
 
 T0 = datetime(2026, 6, 1, 11, 0, 0, tzinfo=timezone.utc)
 T1 = T0 + timedelta(hours=1)
@@ -423,3 +433,181 @@ def test_reconcile_query_count_does_not_grow_with_ports_or_findings(
     large = _reconcile_select_count(runtime_session, identity, ts=T2, size=12)
 
     assert large == small
+
+
+def test_persist_scan_reconciles_machine_inventory_in_one_transaction(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, scan = _example_scan()
+
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
+
+    machines = {
+        machine.ip: machine
+        for machine in runtime_session.exec(
+            select(HostRecord).where(HostRecord.org_id == seeded_org.id)
+        ).all()
+    }
+    assert set(machines) == {"192.168.1.10", "192.168.1.40"}
+
+    for ip, expected_ports in (("192.168.1.10", 2), ("192.168.1.40", 1)):
+        machine = machines[ip]
+        ports = runtime_session.exec(
+            select(HostPortRecord).where(HostPortRecord.host_id == machine.id)
+        ).all()
+        host_findings = runtime_session.exec(
+            select(HostFindingRecord).where(
+                HostFindingRecord.host_id == machine.id
+            )
+        ).all()
+        assert len(ports) == expected_ports
+        assert len(host_findings) == 1
+        assert host_findings[0].first_seen_at == scan.timestamp
+        assert host_findings[0].fixed_at is None
+        assert machine.machine_type == "computer"
+        assert machine.vulnerability_count == 1
+
+
+def test_cpe_enrichment_finding_reaches_machine_inventory(
+    monkeypatch, runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:  # type: ignore[no-untyped-def]
+    scan_id = uuid4()
+    scan = _scan_with_findable_payload(scan_id)
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
+    machine = runtime_session.exec(
+        select(HostRecord).where(HostRecord.ip == "10.0.0.99")
+    ).one()
+    assert machine.vulnerability_count == 0
+    assert (
+        runtime_session.exec(
+            select(HostFindingRecord).where(
+                HostFindingRecord.host_id == machine.id
+            )
+        ).first()
+        is None
+    )
+
+    monkeypatch.setattr(
+        NvdClient,
+        "query_by_cpe",
+        lambda self, session, cpe: _fake_nvd_payload("CVE-2016-10012"),
+    )
+    monkeypatch.setattr(worker, "get_session", lambda: iter([runtime_session]))
+    assert worker.run_worker_once(batch_size=25) == 1
+
+    runtime_session.refresh(machine)
+    host_findings = runtime_session.exec(
+        select(HostFindingRecord).where(HostFindingRecord.host_id == machine.id)
+    ).all()
+    assert len(host_findings) == 1
+    assert host_findings[0].first_seen_at == scan.timestamp
+    assert host_findings[0].fixed_at is None
+    assert machine.vulnerability_count == 1
+
+
+def _scan_with_cve_finding(scan_id) -> ScanIngestRequest:
+    host = HostPayload(
+        ip="10.0.0.77",
+        mac=None,
+        hostname="host",
+        vendor="vendor",
+        ports=[
+            PortPayload(
+                port=22, protocol="tcp", state="open", service="ssh", cpes=[]
+            )
+        ],
+    )
+    finding = FindingPayload(
+        ip="10.0.0.77",
+        port=22,
+        protocol="tcp",
+        service="ssh",
+        source="nmap_vulners",
+        cve_id="CVE-2016-10012",
+        cvss_score=4.0,
+        severity="medium",
+        title="OpenSSH version mapped to known CVE",
+        description="a problem",
+        recommendation="fix it",
+        evidence="observed",
+    )
+    return ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=datetime.now(timezone.utc),
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[host],
+        findings=[finding],
+    )
+
+
+def test_cve_enrichment_leaves_machine_inventory_untouched(
+    monkeypatch, runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:  # type: ignore[no-untyped-def]
+    scan_id = uuid4()
+    scan = _scan_with_cve_finding(scan_id)
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=datetime.now(timezone.utc),
+        existing=None,
+    )
+    machine = runtime_session.exec(
+        select(HostRecord).where(HostRecord.ip == "10.0.0.77")
+    ).one()
+    host_finding = runtime_session.exec(
+        select(HostFindingRecord).where(HostFindingRecord.host_id == machine.id)
+    ).one()
+    before = (
+        machine.vulnerability_count,
+        host_finding.first_seen_at,
+        host_finding.last_seen_at,
+        host_finding.fixed_at,
+    )
+    assert before[0] == 1
+
+    monkeypatch.setattr(
+        NvdClient,
+        "query_by_cve",
+        lambda self, session, cve_id: _fake_nvd_payload(cve_id),
+    )
+    job = runtime_session.exec(
+        select(EnrichmentJobRecord).where(
+            EnrichmentJobRecord.scan_id == scan_id,
+            EnrichmentJobRecord.job_type == "nvd_cve",
+        )
+    ).one()
+    process_claimed_enrichment_job(runtime_session, job)
+
+    finding = runtime_session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan_id)
+    ).one()
+    runtime_session.refresh(machine)
+    runtime_session.refresh(host_finding)
+    assert finding.cvss_score == 8.1
+    assert finding.confidence == "confirmed"
+    assert (
+        machine.vulnerability_count,
+        host_finding.first_seen_at,
+        host_finding.last_seen_at,
+        host_finding.fixed_at,
+    ) == before
