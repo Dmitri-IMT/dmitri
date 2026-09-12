@@ -93,6 +93,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scans/{scan_id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the persisted AI interpretation of a scan
+         * @description Returns the current analysis state or its completed structured payload.
+         *     This read-only endpoint never invokes an AI provider. Unknown scans and
+         *     scans owned by another organisation are both returned as not found.
+         */
+        get: operations["getScanAIAnalysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        /** CORS preflight for scan AI analysis */
+        options: operations["optionsScanAIAnalysis"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hosts": {
         parameters: {
             query?: never;
@@ -1117,6 +1140,49 @@ export interface components {
             severity: components["schemas"]["SeverityBreakdown"];
             top_findings: components["schemas"]["FindingRecord"][];
         };
+        AIRecommendedAction: {
+            /** @enum {string} */
+            priority: "immediate" | "high" | "medium" | "low";
+            title: string;
+            description: string;
+            related_finding_ids: string[];
+        };
+        AIFindingExplanation: {
+            /** Format: uuid */
+            finding_id: string;
+            why_it_matters: string;
+            plain_language_explanation: string;
+            recommendation: string;
+            evidence_used: string[];
+            uncertainty: string | null;
+        };
+        ScanAIAnalysis: {
+            executive_summary: string;
+            overall_assessment: string;
+            plain_language_summary: string;
+            priority_actions: components["schemas"]["AIRecommendedAction"][];
+            important_findings: components["schemas"]["AIFindingExplanation"][];
+            uncertainties: string[];
+        };
+        ScanAIAnalysisResponse: {
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uuid */
+            analysis_id: string | null;
+            /** @enum {string} */
+            status: "pending" | "processing" | "completed" | "failed" | "unavailable";
+            analysis: components["schemas"]["ScanAIAnalysis"] | null;
+            provider: string | null;
+            model: string | null;
+            context_version: string | null;
+            prompt_version: string | null;
+            /** Format: date-time */
+            created_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
         /** @enum {string} */
         HomeEventKind: "box_offline" | "member_idle" | "machine_first_seen";
         /** @enum {string} */
@@ -1836,6 +1902,48 @@ export interface operations {
         };
     };
     optionsScanRiskSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    getScanAIAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI analysis state scoped to the caller's organisation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanAIAnalysisResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    optionsScanAIAnalysis: {
         parameters: {
             query?: never;
             header?: never;

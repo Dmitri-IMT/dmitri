@@ -297,6 +297,12 @@ it cannot approve or silently execute one.
 
 ## Delivery milestones
 
+Implementation status (2026-09-12): the backend now has a bounded, organisation-scoped
+scan context builder; strict provider-neutral input/output schemas and validation; a
+versioned `ai_scan_analyses` persistence model; and the read-only
+`GET /api/v1/scans/{scan_id}/analysis` contract. Provider execution, asynchronous job
+orchestration, UI surfaces, chat, and reports remain pending.
+
 1. **Grounded reads** — finding detail and bounded scan risk summary.
 2. **Provider-neutral tools** — allowlisted, read-only tool service with organisation
    scoping and audit-ready results.

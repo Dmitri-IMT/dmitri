@@ -128,6 +128,18 @@ para a futura integracao LLM. Ambas aplicam o escopo da organizacao autenticada;
 o resumo retorna no maximo dez findings, sempre com seus IDs e evidencias, para
 limitar contexto e permitir rastreabilidade.
 
+A analise assistida por IA tem uma superficie inicial somente leitura:
+
+- `GET /api/v1/scans/{scan_id}/analysis`
+- `AI_ENABLED=false` (padrao) retorna `unavailable` sem afetar as demais APIs
+- com IA habilitada, a resposta informa `pending`, `processing`, `completed` ou
+  `failed`; somente `completed` inclui o JSON estruturado da analise
+- a leitura nao chama um provedor nem dispara geracao; a execucao assincrona entra
+  na proxima etapa
+
+O resultado fica versionado e persistido em `ai_scan_analyses`, separado dos fatos
+deterministicos do scan. A migracao deve ser aplicada antes de habilitar a feature.
+
 Roadmap tecnico da proxima fase:
 
 - `../docs/implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`

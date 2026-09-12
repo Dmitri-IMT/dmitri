@@ -66,6 +66,10 @@ SCHEMA_NAMES = (
     "HomeEventsPage",
     "HomeActivityPage",
     "HomeSnapshot",
+    "AIRecommendedAction",
+    "AIFindingExplanation",
+    "ScanAIAnalysis",
+    "ScanAIAnalysisResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -371,6 +375,17 @@ def test_ingest_scan_endpoint_exists():
     contract_operation_id = contract["paths"]["/api/v1/scans"]["post"]["operationId"]
     app_operation = app.openapi()["paths"]["/api/v1/scans"]["post"]
     assert app_operation["operationId"] == contract_operation_id == "ingestScan"
+
+
+def test_scan_ai_analysis_operation_is_published():
+    contract = _load_contract()
+    path = "/api/v1/scans/{scan_id}/analysis"
+    operation = contract["paths"][path]["get"]
+
+    assert operation["operationId"] == "getScanAIAnalysis"
+    assert operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(operation["responses"]) == {"200", "401", "403", "404", "500"}
+    assert "get" in app.openapi()["paths"][path]
 
 
 @pytest.mark.parametrize("path", OPERATION_PATHS)

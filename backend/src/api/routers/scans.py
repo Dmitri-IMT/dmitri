@@ -5,10 +5,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
+from api.core.config import Settings, get_settings
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
 from api.models.persistence import utc_now
+from api.schemas.ai import ScanAIAnalysisResponse
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -18,6 +20,7 @@ from api.schemas.read import (
     SortOrder,
 )
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
+from api.services.ai.read import get_scan_ai_analysis
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 
@@ -101,3 +104,25 @@ def read_scan_risk_summary(
     if summary is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return summary
+
+
+@router.get(
+    "/api/v1/scans/{scan_id}/analysis",
+    response_model=ScanAIAnalysisResponse,
+    operation_id="getScanAIAnalysis",
+)
+def read_scan_ai_analysis(
+    scan_id: UUID,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanAIAnalysisResponse:
+    analysis = get_scan_ai_analysis(
+        session,
+        scan_id,
+        org_id=caller.org_id,
+        ai_enabled=settings.ai_enabled,
+    )
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return analysis

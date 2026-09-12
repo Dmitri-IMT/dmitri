@@ -13,6 +13,10 @@ from api.core.severity import SEVERITY_ORDER
 _FINDING_SEVERITY_CHECK = (
     "severity IN (" + ", ".join(f"'{k}'" for k in SEVERITY_ORDER) + ")"
 )
+AI_ANALYSIS_STATUSES = ("pending", "processing", "completed", "failed")
+_AI_ANALYSIS_STATUS_CHECK = (
+    "status IN (" + ", ".join(f"'{status}'" for status in AI_ANALYSIS_STATUSES) + ")"
+)
 
 
 def utc_now() -> datetime:
@@ -237,4 +241,37 @@ class RiskSnapshotRecord(SQLModel, table=True):
     risk_score: float
     rationale: str
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class AIScanAnalysisRecord(SQLModel, table=True):
+    __tablename__ = "ai_scan_analyses"
+    __table_args__ = (
+        UniqueConstraint("scan_id"),
+        CheckConstraint(_AI_ANALYSIS_STATUS_CHECK, name="ck_ai_scan_analyses_status"),
+        CheckConstraint(
+            "status != 'completed' OR analysis_json IS NOT NULL",
+            name="ck_ai_scan_analyses_completed_payload",
+        ),
+        CheckConstraint("attempts >= 0", name="ck_ai_scan_analyses_attempts"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    analysis_id: UUID = Field(default_factory=uuid4, unique=True, index=True)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    provider: str
+    model: str
+    status: str = Field(default="pending", index=True)
+    analysis_json: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSON(none_as_null=True)),
+    )
+    context_version: str
+    prompt_version: str
+    context_hash: str | None = None
+    attempts: int = 0
+    last_error_code: str | None = None
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    started_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    completed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

@@ -21,6 +21,7 @@ def normalize_postgres_url(value: str, variable: str = "DATABASE_URL") -> str:
 
 class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
+    ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
     kev_api_base_url: str = Field(
         default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
         alias="KEV_API_BASE_URL",

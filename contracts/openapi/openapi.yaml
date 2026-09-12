@@ -318,6 +318,47 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/scans/{scan_id}/analysis:
+    get:
+      tags:
+        - scans
+      summary: Get the persisted AI interpretation of a scan
+      description: |
+        Returns the current analysis state or its completed structured payload.
+        This read-only endpoint never invokes an AI provider. Unknown scans and
+        scans owned by another organisation are both returned as not found.
+      operationId: getScanAIAnalysis
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: AI analysis state scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAIAnalysisResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - scans
+      summary: CORS preflight for scan AI analysis
+      operationId: optionsScanAIAnalysis
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
   /api/v1/hosts:
     get:
       tags:
@@ -3864,6 +3905,155 @@ components:
           maxItems: 10
           items:
             $ref: '#/components/schemas/FindingRecord'
+    AIRecommendedAction:
+      type: object
+      additionalProperties: false
+      required:
+        - priority
+        - title
+        - description
+        - related_finding_ids
+      properties:
+        priority:
+          type: string
+          enum: [immediate, high, medium, low]
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+        description:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        related_finding_ids:
+          type: array
+          maxItems: 15
+          items:
+            type: string
+            format: uuid
+    AIFindingExplanation:
+      type: object
+      additionalProperties: false
+      required:
+        - finding_id
+        - why_it_matters
+        - plain_language_explanation
+        - recommendation
+        - evidence_used
+        - uncertainty
+      properties:
+        finding_id:
+          type: string
+          format: uuid
+        why_it_matters:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        plain_language_explanation:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        recommendation:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        evidence_used:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+        uncertainty:
+          type: [string, 'null']
+          minLength: 3
+          maxLength: 1000
+    ScanAIAnalysis:
+      type: object
+      additionalProperties: false
+      required:
+        - executive_summary
+        - overall_assessment
+        - plain_language_summary
+        - priority_actions
+        - important_findings
+        - uncertainties
+      properties:
+        executive_summary:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        overall_assessment:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        plain_language_summary:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        priority_actions:
+          type: array
+          maxItems: 15
+          items:
+            $ref: '#/components/schemas/AIRecommendedAction'
+        important_findings:
+          type: array
+          maxItems: 15
+          items:
+            $ref: '#/components/schemas/AIFindingExplanation'
+        uncertainties:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+    ScanAIAnalysisResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
+        - analysis
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+        - completed_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: [string, 'null']
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed, unavailable]
+        analysis:
+          anyOf:
+            - $ref: '#/components/schemas/ScanAIAnalysis'
+            - type: 'null'
+        provider:
+          type: [string, 'null']
+        model:
+          type: [string, 'null']
+        context_version:
+          type: [string, 'null']
+        prompt_version:
+          type: [string, 'null']
+        created_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
     HomeEventKind:
       type: string
       enum:

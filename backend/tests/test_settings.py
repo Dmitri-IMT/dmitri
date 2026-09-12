@@ -71,6 +71,7 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("NVD_CACHE_TTL_HOURS", "3")
     monkeypatch.setenv("ENRICHMENT_POLL_INTERVAL_SECONDS", "1.5")
     monkeypatch.setenv("ENRICHMENT_BATCH_SIZE", "7")
+    monkeypatch.setenv("AI_ENABLED", "true")
 
     settings = Settings()
 
@@ -82,6 +83,7 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.nvd_cache_ttl_hours == 3
     assert settings.enrichment_poll_interval_seconds == 1.5
     assert settings.enrichment_batch_size == 7
+    assert settings.ai_enabled is True
 
 
 def test_carried_fields_default_when_env_unset(
@@ -98,6 +100,7 @@ def test_carried_fields_default_when_env_unset(
         "NVD_API_KEY",
         "ENRICHMENT_POLL_INTERVAL_SECONDS",
         "ENRICHMENT_BATCH_SIZE",
+        "AI_ENABLED",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -117,6 +120,7 @@ def test_carried_fields_default_when_env_unset(
     assert settings.nvd_api_key is None
     assert settings.enrichment_poll_interval_seconds == 5.0
     assert settings.enrichment_batch_size == 10
+    assert settings.ai_enabled is False
 
 
 def test_auth_settings_default_when_env_unset(
