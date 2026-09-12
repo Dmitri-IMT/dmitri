@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T22:45:00Z
 ---
 
 # Backend ORM models
