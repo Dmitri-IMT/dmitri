@@ -2756,11 +2756,6 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OperatingSystemDetection'
             - type: 'null'
-        industrial_services:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
-          default: []
         ports:
           type: array
           items:
@@ -3274,11 +3269,6 @@ components:
           anyOf:
             - $ref: '#/components/schemas/OperatingSystemDetection'
             - type: 'null'
-        industrial_services:
-          type: array
-          items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
-          default: []
         first_seen_at:
           type: string
           format: date-time

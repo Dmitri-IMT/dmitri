@@ -731,8 +731,6 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
-            /** @default [] */
-            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             ports: components["schemas"]["Port"][];
             /**
              * @description Industrial observations retained 180 days from scan ingestion. No pruning job enforces that period yet.
@@ -895,8 +893,6 @@ export interface components {
             hostname: string;
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
-            /** @default [] */
-            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
