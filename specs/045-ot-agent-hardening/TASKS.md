@@ -1,6 +1,6 @@
 # TASKS — OT agent hardening (`045-ot-agent-hardening`)
 
-10 tasks. **All ten landed** on `feat/045-ot-agent-hardening` in worktree `/Users/gui/Projects/dmitri-045-ot-agent-hardening`. Do not implement from `feat/dmi-157-harden-active-ot-scans`.
+10 tasks. **All ten landed** on `feat/dmi-157-harden-active-ot-scans`, cut from `main`. Spec folder stays `045-ot-agent-hardening`.
 
 Cut the implementation branch from `main`, not from `audit/nspi-137`. Ordering constraint: Task 1 lands alone before Task 2; Task 2 must not land first.
 

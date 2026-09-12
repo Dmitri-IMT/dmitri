@@ -8,7 +8,7 @@ não mapeia endereços de processo e não envia escrita Modbus.
 
 ## 1. Preparar o Raspberry Pi
 
-No repositório, na branch `feat/045-ot-agent-hardening` (ou `main` after merge):
+No repositório, na branch `feat/dmi-157-harden-active-ot-scans` (ou `main` after merge):
 
 ```bash
 cd hardware-agent

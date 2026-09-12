@@ -8,7 +8,7 @@ Every behaviour required by the audit is a business rule or an acceptance criter
 | | |
 |---|---|
 | **Owner** | Guilherme Ronca (all remediation) |
-| **Vehicle** | `specs/045-ot-agent-hardening` — one spec, one branch |
+| **Vehicle** | Spec `045-ot-agent-hardening` on branch `feat/dmi-157-harden-active-ot-scans` |
 | **Gate** | Review completes before TASKS.md is written |
 | **Audited** | PR #137 (8 commits), plus `6e19062` and `79c559d` pushed directly to `main` |
 | **Branch from** | **`main` (`f68397c`), not `audit/nspi-137`.** This worktree predates `6e19062`, so findings 16 and 17 do not exist here — `runner.py` still has ADR-010's correct pairing and `-sV` is still in `discovery_arguments()`. A fix written on this branch is a no-op that regresses on merge |
