@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -24,7 +24,7 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`, `sort_by`, `sort_order`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:27` |
+| `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`, `sort_by`, `sort_order`, `group` default `active`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:28` |
 | `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:46` |
 | `ingest_scan_route()` | `POST /api/v1/scans` (`operation_id="ingestScan"`, `202`) behind `Depends(require_agent)` → `ingest_scan(...)` → `ScanIngestAcceptedResponse`. `ScanOwnershipError` → `403 Forbidden`; `ScanClosedError` → `400 "Scan is no longer accepting results"`. | `backend/src/api/routers/scans.py:32` |
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |

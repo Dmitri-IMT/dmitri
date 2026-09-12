@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and seventeen revisions through the agents target-subnet column, with Supabase RLS and dmitri_runtime hardening.
+description: The Alembic env and revisions through host inventory depth (`host_ports` / `host_findings`), with Supabase RLS and dmitri_runtime hardening.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # Backend database migrations
@@ -53,6 +53,7 @@ new table.
 | `upgrade()` (rev `20260811_17`, `agents_target_subnet`) | Adds one nullable, unindexed `agents.target_subnet` (`sa.String`) — the network an admin chose for a Pi. No grant statement: `agents` already grants `SELECT, INSERT, UPDATE` to `dmitri_runtime` from `20260723_07`, so `RUNTIME_GRANTS_BY_TABLE` is unchanged. `downgrade()` is a single `drop_column`. | `backend/alembic/versions/20260811_17_agents_target_subnet.py` |
 | `upgrade()` (rev `20260904_18`, `scan_box_and_duration`) | Scan list/detail box attribution and duration columns used by the scan UI (spec 043). Head before the Home activity feed. | `backend/alembic/versions/20260904_18_scan_box_and_duration.py` |
 | `upgrade()` (rev `20260905_19`, `home_activity_feed`) | Creates `activity` (int PK, `org_id`, `kind` CHECK, `occurred_at`, nullable `actor_user_id` with no FK, nullable `subject_id`, JSONB `payload`). Partial unique index `uq_activity_org_kind_subject` on guarded kinds. Paging index `(org_id, occurred_at DESC, id DESC)`. RLS plus `SELECT, INSERT` for `dmitri_runtime` (no UPDATE/DELETE). | `backend/alembic/versions/20260905_19_home_activity_feed.py` |
+| `upgrade()` (rev `20260907_20`, `machine_inventory_depth`) | Adds nullable `hosts.machine_type` (CHECK of the nine literals plus NULL) and `hosts.vulnerability_count` (NOT NULL default 0). Creates empty `host_ports` and `host_findings` with unique constraints, indexes, RLS, and `SELECT/INSERT/UPDATE/DELETE` for `dmitri_runtime`. **No backfill.** Vocabulary is spelled literally in the revision, not imported. | `backend/alembic/versions/20260907_20_machine_inventory_depth.py` |
 
 ## How it connects
 

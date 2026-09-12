@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # frontend API layer
@@ -42,7 +42,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:40` |
 | `listScans(params)` | `GET /scans` with required `page`, `per_page`, `sort_by`, `sort_order`. The scan list always sends `SCAN_LIST_SORT` (`timestamp`/`desc`) plus `SCANS_PER_PAGE` 20. | `frontend/src/api/scans.ts:48` |
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:55` |
-| `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort params (`HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` gives each sortable column its starting order — `desc` for `last_seen_at`, `asc` for `hostname`/`vendor`/`ip`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts:30` |
+| `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort/`group` params (`HostGroup`; `HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` starts `vulnerability_count` and `last_seen_at` at `desc`, text columns at `asc`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts` |
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
 | `getHome(pages)` | `GET /home` with the three page integers. Page sizes are server constants mirrored as `HOME_*_PER_PAGE`. | `frontend/src/api/home.ts:16` |

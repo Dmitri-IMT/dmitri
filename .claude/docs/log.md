@@ -3,6 +3,18 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-11
+
+* **Update**: spec 045 machine inventory depth (DMI-135). Documented `classify_machine_type`,
+  `host_ports` / `host_findings`, `reconcile_scan_inventory` on ingest and CPE enrichment,
+  `group`/`quiet_total`/`vulnerability_count` on the host read path, `HostPort` and finding life
+  fields on the contract, Network's server-side quiet group, host-detail type/service life, and
+  Home/finding `host_hostname` + `first_seen_at`. Touched: `backend/api.md`, `backend/models.md`,
+  `backend/schemas.md`, `backend/services.md`, `backend/routers.md`, `backend/migrations.md`,
+  `backend/index.md`, `contracts.md`, `frontend/api.md`, `frontend/tables.md`,
+  `frontend/screens.md`, `frontend/host-detail.md`, root `index.md`. `docs/ui/FOUNDATIONS.md`
+  §Tables left-align amendment landed in the feature.
+
 ## 2026-09-06
 
 * **Update**: Settings restructure (DMI-110) and password reveal. Settings is two headed groups

@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate hold list- and detail-page state machines; Pagination, EmptyState, SeverityWord, and LoadingSkeleton.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-09-11T00:00:00Z
 ---
 
 # frontend shared tables
@@ -24,10 +24,10 @@ directory table.
 | `DataTable` | Headings, body, loading skeleton and empty body. Generic over `Row` **and** `SortKey`; optional `sort`; optional discriminated `rowAction`; optional `rowTone` (`'muted' \| undefined`); optional `collapsedGroup` for a second tbody the operator expands. | `frontend/src/components/DataTable.tsx:82` |
 | `DataTableRowAction` | `link` puts one `<Link>` in the first cell whose absolutely-positioned child span covers the `relative` `<tr>` — **one** destination, no row `onClick` and no `useNavigate`. `expand` is a disclosure (`aria-expanded` / `aria-controls`) over a `colSpan` panel row. Absent means **no button and no link in any row**. | `frontend/src/components/DataTable.tsx:40` |
 | `DataTableRowTone` | `'muted' \| undefined`. Muted rows keep full interactivity but render with subdued ink — used for offline devices and machines not seen recently. | `frontend/src/components/DataTable.tsx:54` |
-| `DataTableCollapsedGroup` | `{ rows, label(count), testId }` — a disclosure row that reveals additional rows (Network's "Not seen recently" bucket). | `frontend/src/components/DataTable.tsx:56` |
+| `DataTableCollapsedGroup` | Controlled disclosure: required `isOpen` + `onOpenChange`, `count` (not `rows.length`), optional pending/error/footer. Network's quiet bucket uses the active response's `quiet_total`. | `frontend/src/components/DataTable.tsx:56` |
 | `DataTableColumn` | A two-member union over the same base (`label`, `width`, `render`, optional `align: 'right'`): a plain column takes any string `key`, a `sortable: true` column's `key` must be the table's `SortKey`. | `frontend/src/components/DataTable.tsx:30` |
 | `DataTableSort` | `{ by, order, onChange }` all typed in the same `SortKey`. | `frontend/src/components/DataTable.tsx:34` |
-| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + optional pagination — shared by Scans, Network and Devices. Query payload is `ListPage<Row>` (`{ data, total? }`). Pagination, when passed, owns `page` / `perPage` / `total` / `onPageChange` — ListSurface does not read `ListPage.total` for the control. `empty` accepts optional `action` and `note`. Optional `partitionRows` feeds `collapsedGroup` on `DataTable`. Optional `rowTone` passes through. | `frontend/src/components/ListSurface.tsx:36` |
+| `ListSurface` | The one list-page state machine — error → pending skeleton → blank → table + optional pagination — shared by Scans, Network and Devices. Query payload is `ListPage<Row>` (`{ data, total? }`). Pagination, when passed, owns `page` / `perPage` / `total` / `onPageChange`. Optional `collapsedGroup` passes through to `DataTable` (Network supplies it; blank is suppressed when `collapsedGroup.count > 0`). Optional `rowTone` passes through. | `frontend/src/components/ListSurface.tsx` |
 | `NotFoundNotice` | The shared 404 block for a detail route: the sentence at `${testId}-not-found` and a real Back link at `${testId}-back`. Rendered by `ReadDetailGate`, never by a screen. | `frontend/src/components/NotFoundNotice.tsx:11` |
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>`, `backTo`, and `backLabel`; owns notFound → error → loading with a placeholder `PageHeader` in non-ready states. Calls `children(data)` only when ready. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it. | `frontend/src/components/EmptyMark.tsx:2` |
@@ -40,8 +40,9 @@ directory table.
 
 - Scan list renders through `ListSurface` with `rowAction: { kind: 'link' }` and
   `FirstScanCta` / `FirstScanNote` in `empty`.
-- Network and Devices render through `ListSurface`; Network additionally uses `partitionRows` with
-  `isQuietHost()` for the quiet group ([screens](./screens.md)).
+- Network and Devices render through `ListSurface`; Network passes a controlled `collapsedGroup`
+  whose count is `quiet_total` from `GET /hosts` (`group=active`), and a second query with
+  `group=quiet` once the group is open ([screens](./screens.md)).
 - [devices-screen](./devices-screen.md)'s `CommandStatus` renders status as plain text from
   [command-status](./command-status.md).
 - Both findings sections use `expand` into [screens](./screens.md)'s `FindingPanel`. Scan-detail
@@ -55,7 +56,8 @@ directory table.
 - **No `onRowClick`, no `href` string, no `expandable` boolean.** Those would allow a fourth
   interaction the component has no states for.
 - **Column widths are named Tailwind fraction utilities**, never pixel widths.
-- **Numbers right-align only when the column is not first.**
+- **Every column left-aligns; numbers keep tabular figures** (`FOUNDATIONS.md` §Tables). Older
+  screens may still pass `align: 'right'` until a named follow-up restyle.
 - **Severity is the last column of findings tables.**
 - **Row testids are `${testId}-row-${id}`**, not the shorter aliases in older spec drafts.
 - **A link row is one anchor, stretched.** Tests must click the row's link, not the `<tr>`.
