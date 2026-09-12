@@ -161,8 +161,29 @@ def test_struct_error_on_one_unit_preserves_sibling_units() -> None:
     assert by_id[1].status == "responding"
     assert by_id[2].status == "responding"
     assert by_id[4].status == "responding"
-    assert by_id[3].status == "error"
-    assert by_id[3].error == struct.error.__name__
+    assert by_id[3].status == "responding"
+
+
+def test_nse_responding_unit_stays_responding_after_fallback_timeout() -> None:
+    port = PortInfo(
+        port=502,
+        service=ServiceInfo(name="modbus"),
+        scripts=[
+            ScriptResult(
+                script_id="modbus-discover",
+                data={"sid 1": {"VendorName": "ACME"}},
+            )
+        ],
+    )
+
+    def probe(host, port_number, unit_id, *, timeout, **kwargs):
+        return ModbusUnit(unit_id=unit_id, status="timeout")
+
+    service = inventory_modbus_host(
+        _host(port), probe=probe, sleep=lambda _: None
+    )[0]
+
+    assert service.units[0].status == "responding"
 
 
 def test_identification_probes_sleep_before_each_fc43() -> None:

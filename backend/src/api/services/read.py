@@ -195,13 +195,11 @@ def get_scan_detail(
     hosts = [_to_scan_host_view(session, scan_host) for scan_host in scan_hosts]
 
     finding_rows = session.exec(
-        select(FindingRecord, ScanHostRecord.host_id)
-        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
-        .where(FindingRecord.scan_id == scan_id)
+        _finding_select().where(FindingRecord.scan_id == scan_id)
     ).all()
     findings = [
-        _to_finding_read(session, finding, host_id)
-        for finding, host_id in finding_rows
+        _to_finding_read(finding, host_id, unit, service)
+        for finding, host_id, unit, service in finding_rows
     ]
 
     command = commands.command_for_scan(session, scan_id)
@@ -312,18 +310,12 @@ def list_findings(
     per_page: int = 20,
 ) -> FindingListResponse:
     base = (
-        select(FindingRecord, ScanHostRecord.host_id)
+        _finding_select()
         .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
         .where(ScanRecord.org_id == org_id)
     )
     if host_id is not None:
-        base = base.join(
-            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
-        ).where(ScanHostRecord.host_id == host_id)
-    else:
-        base = base.outerjoin(
-            ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id
-        )
+        base = base.where(ScanHostRecord.host_id == host_id)
     if severity is not None:
         base = base.where(FindingRecord.severity == severity)
     if scan_id is not None:
@@ -340,8 +332,8 @@ def list_findings(
 
     return FindingListResponse(
         data=[
-            _to_finding_read(session, finding, resolved)
-            for finding, resolved in rows
+            _to_finding_read(finding, host_id, unit, service)
+            for finding, host_id, unit, service in rows
         ],
         total=total,
         page=page,
@@ -463,27 +455,32 @@ def _validate_or_degrade(
 def _industrial_service_views(
     session: Session, scan_host_id: int, unreadable: list[str]
 ) -> list[IndustrialServiceView]:
-    views: list[IndustrialServiceView] = []
-    for service in industrial_services_for_scan_host(session, scan_host_id):
-        units = session.exec(
+    services = industrial_services_for_scan_host(session, scan_host_id)
+    if not services:
+        return []
+    service_ids = [service.id for service in services if service.id is not None]
+    units_by_service: dict[int, list[ModbusUnitRecord]] = {}
+    if service_ids:
+        for unit in session.exec(
             select(ModbusUnitRecord)
-            .where(ModbusUnitRecord.industrial_service_id == service.id)
+            .where(ModbusUnitRecord.industrial_service_id.in_(service_ids))
             .order_by(ModbusUnitRecord.unit_id)
-        ).all()
-        views.append(
-            IndustrialServiceView(
-                protocol=service.protocol,
-                port=service.port,
-                confidence=service.confidence,
-                mapping_source=service.mapping_source,
-                evidence_sources=list(service.evidence_sources_json),
-                units=[
-                    _to_modbus_unit_view(unit, unreadable)
-                    for unit in units
-                ],
-            )
+        ).all():
+            units_by_service.setdefault(unit.industrial_service_id, []).append(unit)
+    return [
+        IndustrialServiceView(
+            protocol=service.protocol,
+            port=service.port,
+            confidence=service.confidence,
+            mapping_source=service.mapping_source,
+            evidence_sources=list(service.evidence_sources_json),
+            units=[
+                _to_modbus_unit_view(unit, unreadable)
+                for unit in units_by_service.get(service.id or -1, [])
+            ],
         )
-    return views
+        for service in services
+    ]
 
 
 def _to_modbus_unit_view(
@@ -516,16 +513,31 @@ def _to_modbus_unit_view(
     )
 
 
-def _modbus_unit_ref(
-    session: Session, modbus_unit_id: int | None
+def _finding_select():
+    return (
+        select(
+            FindingRecord,
+            ScanHostRecord.host_id,
+            ModbusUnitRecord,
+            IndustrialServiceRecord,
+        )
+        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .outerjoin(
+            ModbusUnitRecord,
+            FindingRecord.modbus_unit_id == ModbusUnitRecord.id,
+        )
+        .outerjoin(
+            IndustrialServiceRecord,
+            ModbusUnitRecord.industrial_service_id == IndustrialServiceRecord.id,
+        )
+    )
+
+
+def _finding_modbus_unit_ref(
+    unit: ModbusUnitRecord | None,
+    service: IndustrialServiceRecord | None,
 ) -> FindingModbusUnitRef | None:
-    if modbus_unit_id is None:
-        return None
-    unit = session.get(ModbusUnitRecord, modbus_unit_id)
-    if unit is None:
-        return None
-    service = session.get(IndustrialServiceRecord, unit.industrial_service_id)
-    if service is None:
+    if unit is None or service is None or unit.id is None:
         return None
     return FindingModbusUnitRef(
         id=unit.id,
@@ -535,7 +547,10 @@ def _modbus_unit_ref(
 
 
 def _to_finding_read(
-    session: Session, finding: FindingRecord, host_id: UUID | None
+    finding: FindingRecord,
+    host_id: UUID | None,
+    unit: ModbusUnitRecord | None,
+    service: IndustrialServiceRecord | None,
 ) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
@@ -555,6 +570,6 @@ def _to_finding_read(
         recommendation=finding.recommendation,
         evidence=finding.evidence,
         references=finding.references_json,
-        modbus_unit=_modbus_unit_ref(session, finding.modbus_unit_id),
+        modbus_unit=_finding_modbus_unit_ref(unit, service),
         detected_at=finding.created_at,
     )

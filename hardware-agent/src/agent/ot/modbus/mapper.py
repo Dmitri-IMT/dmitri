@@ -4,9 +4,8 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from time import perf_counter
 from time import sleep as default_sleep
-from typing import Any
+from typing import Any, Literal
 
 from pymodbus.client import ModbusTcpClient
 
@@ -18,10 +17,12 @@ from agent.ot.modbus.client import (
 )
 from agent.ot.modbus.models import ModbusAddressRange, ModbusService
 from agent.ot.policy import (
+    AddressSpace,
     GENERIC_BASELINE_RANGES,
     MappingProfile,
     MappingRangeRule,
     OtAutomationPolicy,
+    must_stop,
     profile_is_conservative,
     selector_matches,
 )
@@ -33,6 +34,7 @@ class MappingPlan:
     source: str
     unit_ids: tuple[int, ...]
     ranges: tuple[MappingRangeRule, ...]
+    identity_not_corroborated: bool = False
 
 
 @dataclass(slots=True)
@@ -44,12 +46,22 @@ class MappingBudget:
         return self.used < self.maximum
 
 
+AddressRangeStatus = Literal[
+    "readable",
+    "illegal_address",
+    "illegal_function",
+    "timeout",
+    "error",
+    "skipped",
+]
+
+
 @dataclass(slots=True)
 class _Observation:
-    address_space: str
+    address_space: AddressSpace
     start_address: int
     count: int
-    status: str
+    status: AddressRangeStatus
     observed_at: datetime
     capture_values: str
     values: list[int | bool] | None = None
@@ -98,12 +110,11 @@ def resolve_mapping_plan(
             ranges=GENERIC_BASELINE_RANGES,
         )
     if selected in vendor_profiles and not profile_is_conservative(selected):
-        if "identity-not-corroborated" not in service.evidence_sources:
-            service.evidence_sources.append("identity-not-corroborated")
         return MappingPlan(
             source="generic_baseline",
             unit_ids=discovered_ids,
             ranges=GENERIC_BASELINE_RANGES,
+            identity_not_corroborated=True,
         )
     return MappingPlan(
         source=("site:" if selected in site_profiles else "vendor:") + selected.name,
@@ -131,6 +142,9 @@ def map_modbus_service(
 
     plan = resolve_mapping_plan(host, service, policy)
     service.mapping_source = plan.source
+    if plan.identity_not_corroborated:
+        if "identity-not-corroborated" not in service.evidence_sources:
+            service.evidence_sources.append("identity-not-corroborated")
     if not plan.unit_ids:
         service.mapping_ranges_skipped += len(plan.ranges)
         return
@@ -152,11 +166,11 @@ def map_modbus_service(
     ) as session:
         for unit_id in plan.unit_ids:
             for rule in plan.ranges:
-                if _must_stop(cancel_event, deadline) or not budget.available():
+                if must_stop(cancel_event, deadline) or not budget.available():
                     service.mapping_ranges_skipped += 1
                     continue
                 for start_address, count in _chunks(rule):
-                    if _must_stop(cancel_event, deadline) or not budget.available():
+                    if must_stop(cancel_event, deadline) or not budget.available():
                         service.mapping_ranges_skipped += 1
                         break
                     observations[unit_id].extend(
@@ -194,11 +208,11 @@ def _read_chunk(
     deadline: float | None,
     sleep: Callable[[float], None],
 ) -> list[_Observation]:
-    if _must_stop(cancel_event, deadline) or not budget.available():
+    if must_stop(cancel_event, deadline) or not budget.available():
         service.mapping_ranges_skipped += 1
         return []
     sleep(policy.inter_request_delay_ms / 1000)
-    if _must_stop(cancel_event, deadline):
+    if must_stop(cancel_event, deadline):
         service.mapping_ranges_skipped += 1
         return []
     result: ModbusReadResult = session.read(
@@ -251,7 +265,7 @@ def _read_chunk(
             address_space=rule.address_space,
             start_address=start_address,
             count=count,
-            status=result.status,
+            status=result.status,  # type: ignore[arg-type]
             observed_at=datetime.now(timezone.utc),
             capture_values=rule.capture_values,
             values=result.values,
@@ -269,16 +283,6 @@ def _chunks(rule: MappingRangeRule) -> list[tuple[int, int]]:
         chunks.append((rule.start_address + offset, count))
         offset += count
     return chunks
-
-
-def _must_stop(
-    cancel_event: threading.Event | None,
-    deadline: float | None,
-) -> bool:
-    return bool(
-        (cancel_event is not None and cancel_event.is_set())
-        or (deadline is not None and perf_counter() >= deadline)
-    )
 
 
 def _merge_adjacent(items: list[_Observation]) -> list[_Observation]:
@@ -313,38 +317,24 @@ def _materialise(
 ) -> ModbusAddressRange:
     values = item.values if item.status == "readable" else None
     capture = item.capture_values
-    numeric = (
-        [int(value) for value in values]
-        if values is not None and capture != "none"
-        else None
-    )
-    if numeric == []:
-        numeric = None
+    value_digest = None
+    if values and capture in {"summary", "raw"}:
+        value_digest = compute_value_digest(
+            digest_key,
+            item.address_space,
+            item.start_address,
+            item.count,
+            list(values),
+        )
     return ModbusAddressRange(
-        address_space=item.address_space,  # type: ignore[arg-type]
+        address_space=item.address_space,
         start_address=item.start_address,
         count=item.count,
-        status=item.status,  # type: ignore[arg-type]
+        status=item.status,
         observed_at=item.observed_at,
         exception_code=item.exception_code,
         label=item.label,
-        nonzero_count=(
-            sum(value != 0 for value in numeric) if numeric is not None else None
-        ),
-        value_min=min(numeric) if numeric else None,
-        value_max=max(numeric) if numeric else None,
-        values=(list(values) if values is not None and capture == "raw" else None),
-        value_digest=(
-            compute_value_digest(
-                digest_key,
-                item.address_space,
-                item.start_address,
-                item.count,
-                list(values),
-            )
-            if values is not None and capture in {"summary", "raw"}
-            else None
-        ),
+        value_digest=value_digest,
     )
 
 

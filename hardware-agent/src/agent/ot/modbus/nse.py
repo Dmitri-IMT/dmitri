@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from agent.ot.modbus.merge import merge_unit
 from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
 from agent.ot.untrusted import bound_objects, bound_text
 from agent.scanner.models import ScriptResult
@@ -97,7 +98,7 @@ def _parse_structured(
             if match is not None:
                 unit_id = _parse_unit_id(match.group(1))
                 if unit_id is not None:
-                    _merge_unit(units, _unit_from_details(unit_id, value))
+                    merge_unit(units, _unit_from_details(unit_id, value))
                     continue
                 _record_unreadable_unit_id(str(key), match.group(1), failures)
             _parse_structured(value, units, failures=failures)
@@ -119,7 +120,7 @@ def _parse_text(
     def flush() -> None:
         nonlocal details
         if current_id is not None:
-            _merge_unit(units, _unit_from_details(current_id, details))
+            merge_unit(units, _unit_from_details(current_id, details))
         details = {}
 
     for raw_line in output.splitlines():
@@ -248,32 +249,3 @@ def _parse_unit_id(value: str) -> int | None:
     return unit_id if 0 <= unit_id <= 255 else None
 
 
-def _merge_unit(units: dict[int, ModbusUnit], candidate: ModbusUnit) -> None:
-    current = units.get(candidate.unit_id)
-    if current is None:
-        units[candidate.unit_id] = candidate
-        return
-    if current.status != "responding" and candidate.status == "responding":
-        current.status = "responding"
-        current.exception_code = None
-    if current.device_identification is None:
-        current.device_identification = candidate.device_identification
-    elif candidate.device_identification is not None:
-        _merge_identification(
-            current.device_identification,
-            candidate.device_identification,
-        )
-    for source in candidate.identification_sources:
-        if source not in current.identification_sources:
-            current.identification_sources.append(source)
-
-
-def _merge_identification(
-    current: ModbusDeviceIdentification,
-    candidate: ModbusDeviceIdentification,
-) -> None:
-    for field_name in _IDENTIFICATION_FIELDS.values():
-        if getattr(current, field_name) is None:
-            setattr(current, field_name, getattr(candidate, field_name))
-    current.objects.update(candidate.objects)
-    current.truncated = current.truncated or candidate.truncated

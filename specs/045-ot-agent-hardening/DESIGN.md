@@ -659,8 +659,9 @@ Judgement calls, each of which `ARCHITECTURE.md` or a human may overrule:
    `PARTIAL` was rejected: it reads as "incomplete run", which is exactly the
    confusion ADR-010 §3 is about. `FINISHED` + `some hosts incomplete` names the
    run state first and the evidence state second.
-2. **`ot_stage_deadline` event.** Settled. New `ScanEventKind` value. No new
-   event fields. Seconds live in metadata `modbus_stage_deadline_seconds`.
+2. **`ot_stage_deadline` event.** Settled. New `ScanEventKind` value.
+   `ScanEvent.deadline_seconds` is the live TUI source; metadata
+   `modbus_stage_deadline_seconds` still holds the durable seconds.
 3. **Durable Limits line.** Settled. Results screen shows it when
    `modbus_stage_deadline_reached` is true. No `stage_time_limits` list.
 4. **8-character digest prefix.** Settled. Show 8 hex after stripping

@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-06T00:00:00Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -41,9 +41,9 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError`, else fill it. | `backend/src/api/services/persistence.py:35` |
 | `persist_scan()` | Also persists `industrial_services` / `modbus_units` via `services/industrial.py`. | `backend/src/api/services/persistence.py` |
-| `persist_industrial_services()` | Idempotent upsert per scan host. | `backend/src/api/services/industrial.py` |
-| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
-| `finding_dedupe_key()` | `ip|protocol|port|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |
+| `persist_industrial_services()` | Load existing services and units for the scan host once, upsert in memory, flush after services then after units. | `backend/src/api/services/industrial.py:42` |
+| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:200` |
+| `finding_dedupe_key()` | `ip|protocol|port|unit_id or na|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:288` |
 | `_persist_scan_host()` | Inserts one `ScanHostRecord` (`ip`/`mac`/`hostname`/`vendor`) for the scan. | `backend/src/api/services/persistence.py:262` |
 | `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:302` |
 | `command_for_scan()` | Looks up the `Command` a `scan_id` belongs to, or `None`. Used by `ingest_scan` for the Case C ownership check. | `backend/src/api/services/commands.py:104` |
@@ -71,9 +71,9 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `_HOST_SORT_COLUMNS` | The four sortable host columns keyed by `HostSortBy` — `last_seen_at`, `hostname`, `vendor` as plain columns, `ip` as `cast(HostRecord.ip, INET)`. The `_SCAN_SORT_COLUMNS` pattern, one table down. | `backend/src/api/services/read.py:47` |
 | `list_hosts()` | Paginated `HostRecord` list → `HostListResponse`. `sort_by`/`sort_order` (default `last_seen_at desc`, DMI-100) resolve through `_HOST_SORT_COLUMNS`, always with a `HostRecord.id` tie-breaker for stable paging. Requires keyword-only `org_id`; **both** the `count()` and the page query are scoped. | `backend/src/api/services/read.py:57` |
 | `get_host_detail()` | Latest ports plus `industrial_services` and `unreadable_fields`. Junk OS/OT JSON degrades instead of 500. | `backend/src/api/services/read.py` |
-| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings (host_id resolved via outer join) → `ScanDetailResponse`. Joins `commands.command_for_scan` so `command_id` is the real id (not hardcoded `None`) and `error_code` is derived via `scan_error_code(scan.status, stored)`. Requires `org_id`. | `backend/src/api/services/read.py:142` |
+| `get_scan_detail()` | One scan's hosts (as `ScanHostView`, `host_id` required) + findings. Findings come from `_finding_select()`, which outer-joins host, `modbus_units`, and `industrial_services`. | `backend/src/api/services/read.py:181` |
 | `list_scans()` | Paginated `ScanRecord` list with per-scan `host_count`/`finding_count`/`highest_severity` aggregates (four-query strategy, no N+1) → `ScanListResponse`. Optional `status` filter; `sort_by`/`sort_order` with `scan_id` tie-breaker. Requires keyword-only `org_id`. | `backend/src/api/services/read.py:194` |
-| `list_findings()` | Paginated `FindingRecord` list, optionally filtered by `host_id`, `severity`, `scan_id` → `FindingListResponse`. Ordered by `FindingRecord.id` for stable paging. Requires `org_id`; joins `ScanRecord` on `scan_id` **before** the `host_id` branch so the count and page queries share the org predicate. | `backend/src/api/services/read.py:263` |
+| `list_findings()` | Paginated findings via `_finding_select()`, optionally filtered by `host_id`, `severity`, `scan_id`. Ordered by `FindingRecord.id`. Requires `org_id`. | `backend/src/api/services/read.py:302` |
 | `run_worker_loop()` | Reads poll interval + batch size from `Settings`, loops forever calling `run_worker_once()`, sleeps `poll_interval` when idle or after a logged exception. | `backend/src/api/services/worker.py:13` |
 | `run_worker_once()` | Opens a session via `get_session()`, calls `sweep_stale_commands` **globally** (every agent) before delegating to `process_pending_enrichment_jobs`, and returns the enrichment count so idle-sleep behaviour is unchanged. | `backend/src/api/services/worker.py:34` |
 | `claim_pending_enrichment_jobs()` | Selects `pending` jobs by `created_at,id`; on Postgres uses `SELECT ... FOR UPDATE SKIP LOCKED`; flips them to `running`, bumps `attempts`, commits. | `backend/src/api/services/enrichment.py:22` |

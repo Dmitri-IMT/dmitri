@@ -4,16 +4,12 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from time import perf_counter
 
 from agent.ot.modbus.client import ModbusClientController, probe_device_identification
-from agent.ot.modbus.models import (
-    ModbusDeviceIdentification,
-    ModbusService,
-    ModbusUnit,
-)
+from agent.ot.modbus.merge import merge_unit
+from agent.ot.modbus.models import ModbusService, ModbusUnit
 from agent.ot.modbus.nse import parse_modbus_discover
-from agent.ot.policy import OtAutomationPolicy
+from agent.ot.policy import OtAutomationPolicy, must_stop
 from agent.scanner.models import HostInfo, PortInfo
 
 LOGGER = logging.getLogger(__name__)
@@ -42,7 +38,7 @@ def inventory_modbus_host(
     for port in sorted(host.open_ports, key=lambda item: item.port):
         if not _is_modbus_candidate(port):
             continue
-        if cancel_event is not None and cancel_event.is_set():
+        if must_stop(cancel_event, deadline):
             break
         services.append(
             _inventory_port(
@@ -96,7 +92,7 @@ def _inventory_port(
             discover = parse_modbus_discover(script)
             parse_failures += discover.parse_failures
             for unit in discover.units:
-                _merge_unit(units, unit)
+                merge_unit(units, unit)
 
         fallback_ids = [
             unit_id
@@ -114,8 +110,8 @@ def _inventory_port(
         for unit_id in fallback_ids:
             if cancel_event is not None and cancel_event.is_set():
                 break
-            if deadline is not None and perf_counter() >= deadline:
-                _merge_unit(
+            if must_stop(None, deadline):
+                merge_unit(
                     units,
                     ModbusUnit(unit_id=unit_id, status="skipped"),
                 )
@@ -123,8 +119,8 @@ def _inventory_port(
             sleep(delay_seconds)
             if cancel_event is not None and cancel_event.is_set():
                 break
-            if deadline is not None and perf_counter() >= deadline:
-                _merge_unit(
+            if must_stop(None, deadline):
+                merge_unit(
                     units,
                     ModbusUnit(unit_id=unit_id, status="skipped"),
                 )
@@ -148,7 +144,7 @@ def _inventory_port(
                 )
             requests_sent += 1
             timeouts += int(result.status == "timeout")
-            _merge_unit(units, result)
+            merge_unit(units, result)
         if requests_sent:
             evidence.append("pymodbus")
     except Exception:
@@ -183,50 +179,3 @@ def _is_modbus_candidate(port: PortInfo) -> bool:
     return port.port == 502 or "modbus" in service_name or service_name == "mbap"
 
 
-def _merge_unit(units: dict[int, ModbusUnit], candidate: ModbusUnit) -> None:
-    current = units.get(candidate.unit_id)
-    if current is None:
-        units[candidate.unit_id] = candidate
-        return
-
-    if candidate.status in {"responding", "exception"}:
-        current.status = candidate.status
-        current.exception_code = candidate.exception_code
-        current.error = candidate.error
-    elif candidate.status in {"error", "timeout", "skipped"}:
-        current.status = candidate.status
-        current.error = candidate.error
-    elif current.status not in {"responding", "exception"}:
-        current.status = candidate.status
-        current.error = candidate.error
-
-    if candidate.device_identification is not None:
-        if current.device_identification is None:
-            current.device_identification = candidate.device_identification
-        else:
-            _merge_identification(
-                current.device_identification,
-                candidate.device_identification,
-            )
-    for source in candidate.identification_sources:
-        if source not in current.identification_sources:
-            current.identification_sources.append(source)
-
-
-def _merge_identification(
-    current: ModbusDeviceIdentification,
-    candidate: ModbusDeviceIdentification,
-) -> None:
-    for field_name in (
-        "vendor_name",
-        "product_code",
-        "major_minor_revision",
-        "vendor_url",
-        "product_name",
-        "model_name",
-        "user_application_name",
-    ):
-        if getattr(current, field_name) is None:
-            setattr(current, field_name, getattr(candidate, field_name))
-    current.objects.update(candidate.objects)
-    current.truncated = current.truncated or candidate.truncated

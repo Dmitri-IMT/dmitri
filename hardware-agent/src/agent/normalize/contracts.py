@@ -128,6 +128,7 @@ class HostPayload(BaseModel):
 class FindingPayload(BaseModel):
     ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
+    unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
     protocol: Literal["tcp", "udp"] | None = None
     service: str | None = None
     source: str | None = None

@@ -25,8 +25,8 @@ derived from them stop inside the agent process.** Everything downstream of
    Each FC43 probe is preceded by the policy's `inter_request_delay_ms`.
 3. For `read_only_mapping`, `mapper.resolve_mapping_plan()` chooses a profile. A profile matched
    only on device-claimed vendor/product is applied only when `profile_is_conservative()` holds;
-   otherwise the generic baseline applies and `evidence_sources` records
-   `identity-not-corroborated`.
+   otherwise the generic baseline applies and `map_modbus_service()` appends
+   `identity-not-corroborated` to `evidence_sources` once.
 4. `mapper.map_modbus_service()` reads bounded ranges through `ReadOnlyModbusClient`. Values live
    in memory only long enough for `ot/digest.value_digest()` to produce
    `"hmac-sha256:<hex>"` from the org-scoped key on the Pi. No key installed means
@@ -44,9 +44,10 @@ derived from them stop inside the agent process.** Everything downstream of
    `modbus_units` rows under the `ScanHostRecord` created by `_persist_scan_host()`.
 10. `services/persistence.upsert_finding()` attaches `findings.modbus_unit_id` when a finding's
     evidence came from a specific unit.
-    Ingest maps `FindingPayload.unit_id` (Modbus 0–255 on the finding's `port`) to the
-    persisted `modbus_units` row for that scan host; findings without `unit_id` stay
-    port-attributed (`modbus_unit_id` null) until the agent sends explicit unit attribution.
+    The agent emits `FindingPayload.unit_id` on each per-unit read-only Modbus finding
+    (`modbus-read-only-assessment`); ingest maps that Modbus 0–255 id on the finding's `port`
+    to the persisted `modbus_units` row for that scan host. NSE findings omit `unit_id` and
+    stay port-attributed (`modbus_unit_id` null).
 11. Host, scan and finding reads return the views of §3; `frontend/src/types/openapi.d.ts` is
     regenerated from the contract and nothing else in `frontend/` changes.
 

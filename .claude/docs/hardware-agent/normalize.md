@@ -4,7 +4,7 @@ title: normalize — contracts & findings extraction
 description: The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-09-12T21:23:47Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # normalize — contracts & findings
@@ -27,7 +27,8 @@ only range status and an optional keyed digest cross this boundary.
 | `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:106`, `:90` |
 | `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:68` |
 | `FindingPayload` | A vulnerability/observation with optional `unit_id` for Modbus attribution. | `contracts.py:128` |
-| `extract_findings()` | Walks each host's host-scripts and port-scripts, dispatches per script id, dedups by `(ip, port, script, cve/title)`. | `findings.py:17` |
+| `extract_findings()` | Walks host scripts, port scripts, and per-unit Modbus read findings. Dedups by `(ip, port, unit_id, script, cve/title)`. | `findings.py:17` |
+| `_extract_modbus_read_findings()` | One finding per unit that has a readable range, with that `unit_id`. NSE findings omit `unit_id`. | `findings.py:39` |
 | `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:703` |
 | `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:104` |
 | `_extract_smb_signing_finding()` | Emits an SMB-signing finding from either a host script or a port script; the port fields remain null for host-scoped NSE output. | `findings.py:161` |

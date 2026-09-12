@@ -61,10 +61,6 @@ class ModbusAddressRange:
     observed_at: datetime
     exception_code: int | None = None
     label: str | None = None
-    nonzero_count: int | None = None
-    value_min: int | None = None
-    value_max: int | None = None
-    values: list[int | bool] | None = None
     value_digest: str | None = None
 
 

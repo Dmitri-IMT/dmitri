@@ -4,7 +4,7 @@ title: tui — Textual application
 description: The Textual application — app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.
 resource: hardware-agent/src/agent/tui/
 tags: [hardware-agent, tui, textual, ui]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # tui — Textual application
@@ -29,7 +29,7 @@ the CLAUDE.md integration rule requires to stay in sync.
 | `HomeScreen` (H) | Central `OptionList`: Start scan → wizard; View scan → last payload; Past scans. Receives `(subnet, mode)` and pushes `ScanProgressScreen`; writes the result + summary band on completion. | `tui/screens/home.py:25` |
 | `NetworkScreen` (S2) | Lists IPv4 interfaces/subnets via `psutil` (`ctrl+r` refresh) → `ScanCategoryScreen`. | `tui/screens/network.py:36` |
 | `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker. NSPi submodes: Inventory, Read-only mapping; Active validation stays `disabled=True`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
-| `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., nspi_submode=...)`. Terminal states: completed, incomplete, stopped, refused. Live `⏱` line for `ot_stage_deadline`. | `tui/screens/scan_progress.py` |
+| `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., nspi_submode=...)`. Terminal states: completed, incomplete, stopped, refused. Live `⏱` line uses `ScanEvent.deadline_seconds`. | `tui/screens/scan_progress.py:382` |
 | `ScanViewScreen` (S7) | Device text escaped via `tui/markup.safe()`; range lines show status and digest prefix. | `tui/screens/scan_view.py` |
 | `PastScansScreen` (S6) | Lists `results/*.json` (`ScanEntry`), newest-first (`ctrl+r`) → `ScanViewScreen`. | `tui/screens/past_scans.py:29` |
 

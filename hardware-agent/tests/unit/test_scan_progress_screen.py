@@ -644,9 +644,10 @@ class TestOtStageDeadline:
                 screen,
                 ScanEvent(
                     kind="ot_stage_deadline",
-                    message="Time limit reached during Modbus inventory (90s)",
+                    message="Time limit reached during Modbus inventory",
                     units_skipped=1,
                     units_total=3,
+                    deadline_seconds=90,
                 ),
             )
             text = _log_text(screen)

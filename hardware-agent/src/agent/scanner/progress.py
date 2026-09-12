@@ -36,6 +36,7 @@ class ScanEvent:
     ip: str | None = None
     units_skipped: int = 0
     units_total: int = 0
+    deadline_seconds: int = 0
 
 
 class ScanReporter(Protocol):

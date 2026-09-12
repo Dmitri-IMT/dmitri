@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from agent.ot.modbus.mapper import resolve_mapping_plan
+from agent.ot.modbus.client import ModbusReadResult
+from agent.ot.modbus.mapper import map_modbus_service, resolve_mapping_plan
 from agent.ot.modbus.models import (
     ModbusDeviceIdentification,
     ModbusService,
@@ -52,7 +53,8 @@ def test_identity_only_match_cannot_widen_beyond_generic_baseline() -> None:
 
     assert plan.source == "generic_baseline"
     assert plan.ranges == GENERIC_BASELINE_RANGES
-    assert "identity-not-corroborated" in service.evidence_sources
+    assert plan.identity_not_corroborated is True
+    assert "identity-not-corroborated" not in service.evidence_sources
 
 
 def test_identity_only_match_cannot_read_outside_baseline_addresses() -> None:
@@ -79,7 +81,8 @@ def test_identity_only_match_cannot_read_outside_baseline_addresses() -> None:
 
     assert plan.source == "generic_baseline"
     assert plan.ranges == GENERIC_BASELINE_RANGES
-    assert "identity-not-corroborated" in service.evidence_sources
+    assert plan.identity_not_corroborated is True
+    assert "identity-not-corroborated" not in service.evidence_sources
 
 
 def test_cidr_match_can_widen_beyond_generic_baseline() -> None:
@@ -169,4 +172,42 @@ def test_narrower_identity_profile_always_applies() -> None:
 
     assert plan.source == "vendor:narrow-vendor"
     assert plan.ranges[0].count == 1
-    assert "identity-not-corroborated" not in service.evidence_sources
+    assert plan.identity_not_corroborated is False
+
+
+def test_map_appends_identity_not_corroborated_once() -> None:
+    host = HostInfo(ip="192.168.10.30", hostname="plc")
+    service = _identified_service()
+    wide = MappingProfile(
+        name="wide-vendor",
+        selector={"vendors": ["Schneider Electric"]},
+        ranges=[
+            {
+                "address_space": "coil",
+                "start_address": 0,
+                "count": 8,
+                "block_size": 8,
+            }
+        ],
+    )
+
+    map_modbus_service(
+        host,
+        service,
+        policy=OtAutomationPolicy(mapping_profiles=[wide]),
+        session_factory=lambda *args, **kwargs: _NoOpSession(),
+        sleep=lambda _: None,
+    )
+
+    assert service.evidence_sources.count("identity-not-corroborated") == 1
+
+
+class _NoOpSession:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, *args, **kwargs):
+        return ModbusReadResult(status="illegal_address", request_sent=True)

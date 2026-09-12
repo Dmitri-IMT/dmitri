@@ -14,7 +14,7 @@ from api.models.persistence import (
 from api.schemas.scan import FindingPayload, HostPayload, PortPayload, ScanIngestRequest
 from api.services import read
 from api.services.industrial import persist_industrial_services
-from api.services.persistence import persist_scan
+from api.services.persistence import finding_dedupe_key, persist_scan
 from sqlmodel import Session, select
 
 SAMPLE_DIGEST = "hmac-sha256:" + ("a" * 64)
@@ -214,3 +214,24 @@ def test_finding_read_includes_modbus_unit_attribution(
     assert read_finding.modbus_unit is not None
     assert read_finding.modbus_unit.unit_id == 2
     assert read_finding.modbus_unit.port == 502
+
+
+def test_finding_dedupe_key_uses_na_placeholder_without_unit_id() -> None:
+    without_unit = finding_dedupe_key(
+        ip="192.168.1.50",
+        port=502,
+        protocol="tcp",
+        cve_id=None,
+        title="Unauthenticated Modbus data read is reachable",
+    )
+    with_unit = finding_dedupe_key(
+        ip="192.168.1.50",
+        port=502,
+        protocol="tcp",
+        cve_id=None,
+        title="Unauthenticated Modbus data read is reachable",
+        unit_id=2,
+    )
+    assert without_unit.endswith("|na|unauthenticated modbus data read is reachable")
+    assert with_unit.endswith("|2|unauthenticated modbus data read is reachable")
+    assert without_unit != with_unit

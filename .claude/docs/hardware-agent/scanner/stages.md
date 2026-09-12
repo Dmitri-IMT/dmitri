@@ -4,7 +4,7 @@ title: scanner/stages — port, deep, and OT inspection stages
 description: Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and HostInfo-to-HostPayload normalization.
 resource: hardware-agent/src/agent/scanner/stages.py
 tags: [hardware-agent, scanner, pipeline, threading, contingency]
-timestamp: 2026-09-12T21:23:47Z
+timestamp: 2026-09-12T22:20:00Z
 ---
 
 # scanner/stages — port, deep & OT-inspection stages
@@ -23,11 +23,11 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 | `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:121` |
 | `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. | `stages.py:229` |
 | `_recover_deep_stage_services()` | Reuses `detect_services` for recovery; treats a host-level Nmap error or timeout as unsuccessful recovery without stopping the scan. | `stages.py:99` |
-| `run_ot_inspection_stage()` | Performs serial Modbus inventory or read-only mapping. Each host gets its own deadline; reaching it does not prevent later hosts from running. The stage deadline stops the stage and emits `ot_stage_deadline`. | `stages.py:405` |
+| `run_ot_inspection_stage()` | Performs serial Modbus inventory or read-only mapping. Each host gets its own deadline; reaching it does not prevent later hosts from running. The stage deadline stops the stage and emits `ot_stage_deadline` with `deadline_seconds`. | `stages.py:409` |
 | `_run_unit_with_retry()` | Retries a unit of work on `TransientScanError` up to `retries + 1` times, then raises `UnitScanError`. | `stages.py:70` |
-| `build_host_payload()` | Maps host, OS, ports, and industrial evidence into `HostPayload`. | `stages.py:536` |
-| `nmap_arguments_summary()` | Describes port-only enumeration, the primary deep `-sV`/NSE command, and selected OT submode. | `stages.py:628` |
-| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters and the stage-deadline signal. | `stages.py:659` |
+| `build_host_payload()` | Maps host, OS, ports, and industrial evidence into `HostPayload`. Address ranges carry digest only. | `stages.py:539` |
+| `nmap_arguments_summary()` | Describes port-only enumeration, the primary deep `-sV`/NSE command, and selected OT submode. | `stages.py:631` |
+| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters and the stage-deadline signal. | `stages.py:662` |
 | `set_runner_stage()` | Tags a `LoggedNmapRunner` with the current stage name; no-op for a plain runner. | `stages.py:83` |
 
 ## How it connects

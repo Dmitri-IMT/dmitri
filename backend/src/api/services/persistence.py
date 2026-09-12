@@ -216,6 +216,7 @@ def upsert_finding(
         protocol=finding.protocol,
         cve_id=finding.cve_id,
         title=finding.title,
+        unit_id=finding.unit_id,
     )
     existing = session.exec(
         select(FindingRecord).where(
@@ -291,9 +292,11 @@ def finding_dedupe_key(
     protocol: str | None,
     cve_id: str | None,
     title: str,
+    unit_id: int | None = None,
 ) -> str:
     suffix = cve_id or title.strip().lower()
-    return f"{ip or 'global'}|{protocol or 'na'}|{port or 0}|{suffix}"
+    unit_suffix = str(unit_id) if unit_id is not None else "na"
+    return f"{ip or 'global'}|{protocol or 'na'}|{port or 0}|{unit_suffix}|{suffix}"
 
 
 def initial_confidence_for_finding(finding: FindingPayload) -> str:

@@ -122,7 +122,7 @@ def test_read_only_mapping_reads_all_four_spaces_from_lab_target() -> None:
         ("holding_register", "readable"),
         ("input_register", "readable"),
     ]
-    assert ranges[2].nonzero_count == 3
-    assert ranges[2].value_min == 0
-    assert ranges[2].value_max == 1450
+    assert ranges[2].value_digest is None or ranges[2].value_digest.startswith(
+        "hmac-sha256:"
+    )
     assert service.mapping_requests_sent == 4

@@ -5,6 +5,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/progress.md`,
+  `hardware-agent/scanner/stages.md`, `hardware-agent/normalize.md`,
+  `hardware-agent/tui.md`, and `backend/services.md` — shared Modbus `merge_unit`,
+  `ScanEvent.deadline_seconds`, digest-only ranges, per-unit finding `unit_id`, and
+  batched industrial persist/read.
 * **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/stages.md`,
   `hardware-agent/scanner/runner.md`, and `hardware-agent/discovery.md` — identity-only Modbus
   profiles stay within baseline addresses; a host timeout leaves stage time for later hosts;

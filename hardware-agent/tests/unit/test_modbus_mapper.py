@@ -121,10 +121,6 @@ def test_mapper_calls_all_four_read_functions_and_records_summary() -> None:
     ]
     ranges = service.units[0].address_ranges
     assert [item.status for item in ranges] == ["readable"] * 4
-    assert ranges[2].nonzero_count == 3
-    assert ranges[2].value_min == 0
-    assert ranges[2].value_max == 3
-    assert ranges[2].values is None
     assert ranges[2].value_digest is None
     assert service.mapping_source == "generic_baseline"
     assert service.requests_sent == 4
@@ -258,11 +254,7 @@ def test_capture_none_records_only_range_status() -> None:
 
     observed = service.units[0].address_ranges[0]
     assert observed.status == "readable"
-    assert observed.values is None
     assert observed.value_digest is None
-    assert observed.nonzero_count is None
-    assert observed.value_min is None
-    assert observed.value_max is None
 
 
 def test_empty_numeric_list_does_not_report_min_or_max_zero() -> None:
@@ -292,9 +284,7 @@ def test_empty_numeric_list_does_not_report_min_or_max_zero() -> None:
     )
 
     observed = service.units[0].address_ranges[0]
-    assert observed.value_min is None
-    assert observed.value_max is None
-    assert observed.nonzero_count is None
+    assert observed.value_digest is None
 
 
 def test_mapper_records_keyed_digest_when_key_present(

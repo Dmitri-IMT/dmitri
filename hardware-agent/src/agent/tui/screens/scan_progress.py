@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 from time import monotonic
 from typing import Literal
@@ -380,8 +379,7 @@ class ScanProgressScreen(DmitriScreen):
             )
             return
         if kind == "ot_stage_deadline":
-            match = re.search(r"\((\d+)s\)", event.message)
-            limit_seconds = match.group(1) if match else "?"
+            limit_seconds = event.deadline_seconds or "?"
             self._finish_stage(
                 "ot",
                 (

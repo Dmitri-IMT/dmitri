@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import os
 import platform
+import threading
 from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path, PureWindowsPath
+from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -26,6 +28,16 @@ def min_not_none(*values: float | None) -> float | None:
     if not present:
         return None
     return min(present)
+
+
+def must_stop(
+    cancel_event: threading.Event | None,
+    deadline: float | None,
+) -> bool:
+    return bool(
+        (cancel_event is not None and cancel_event.is_set())
+        or (deadline is not None and perf_counter() >= deadline)
+    )
 
 
 class OtPolicyError(ValueError):

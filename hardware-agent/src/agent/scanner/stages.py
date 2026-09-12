@@ -402,6 +402,10 @@ class OtInspectionResult:
     stage_deadline_seconds: int | None = None
 
 
+def _elapsed_stage_seconds(stage_deadline: float, stage_started: float) -> int:
+    return max(1, int(round(stage_deadline - stage_started)))
+
+
 def run_ot_inspection_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
@@ -443,7 +447,7 @@ def run_ot_inspection_stage(
             break
         if stage_deadline is not None and perf_counter() >= stage_deadline:
             deadline_reached = True
-            deadline_seconds = max(1, int(round(stage_deadline - stage_started)))
+            deadline_seconds = _elapsed_stage_seconds(stage_deadline, stage_started)
             break
         host_deadline = min_not_none(
             stage_deadline,
@@ -464,8 +468,8 @@ def run_ot_inspection_stage(
             for service in host.industrial_services:
                 if stage_deadline is not None and perf_counter() >= stage_deadline:
                     deadline_reached = True
-                    deadline_seconds = max(
-                        1, int(round(stage_deadline - stage_started))
+                    deadline_seconds = _elapsed_stage_seconds(
+                        stage_deadline, stage_started
                     )
                     break
                 map_modbus_service(
@@ -498,7 +502,7 @@ def run_ot_inspection_stage(
         )
         if stage_deadline is not None and perf_counter() >= stage_deadline:
             deadline_reached = True
-            deadline_seconds = max(1, int(round(stage_deadline - stage_started)))
+            deadline_seconds = _elapsed_stage_seconds(stage_deadline, stage_started)
             break
     if deadline_reached and deadline_seconds is not None:
         reason = f"Time limit reached during Modbus inventory ({deadline_seconds}s)"
@@ -509,6 +513,7 @@ def run_ot_inspection_stage(
                 message=reason,
                 units_skipped=hosts_total - hosts_done,
                 units_total=hosts_total,
+                deadline_seconds=deadline_seconds,
             ),
         )
     result = OtInspectionResult(

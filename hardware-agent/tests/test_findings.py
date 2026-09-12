@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from datetime import datetime, timezone
+
 from agent.normalize.findings import extract_findings
-from agent.scanner.models import HostInfo
+from agent.ot.modbus.models import ModbusAddressRange, ModbusService, ModbusUnit
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.utils.nmap_xml import parse_host_scripts, parse_ports
 
 
@@ -511,3 +514,56 @@ def test_ftp_anon_writeable_is_critical() -> None:
 
 def test_ftp_anon_denied_yields_no_finding() -> None:
     assert extract_findings([_ftp_anon_host("")]) == []
+
+
+def test_modbus_read_findings_emit_one_finding_per_readable_unit() -> None:
+    observed_at = datetime(2026, 9, 12, tzinfo=timezone.utc)
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        industrial_services=[
+            ModbusService(
+                port=502,
+                confidence="confirmed",
+                units=[
+                    ModbusUnit(
+                        unit_id=1,
+                        status="responding",
+                        address_ranges=[
+                            ModbusAddressRange(
+                                address_space="holding_register",
+                                start_address=0,
+                                count=1,
+                                status="readable",
+                                observed_at=observed_at,
+                            )
+                        ],
+                    ),
+                    ModbusUnit(
+                        unit_id=2,
+                        status="responding",
+                        address_ranges=[
+                            ModbusAddressRange(
+                                address_space="coil",
+                                start_address=0,
+                                count=1,
+                                status="readable",
+                                observed_at=observed_at,
+                            )
+                        ],
+                    ),
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+    modbus_findings = [
+        finding
+        for finding in findings
+        if finding.source == "modbus-read-only-assessment"
+    ]
+
+    assert len(modbus_findings) == 2
+    assert sorted(finding.unit_id for finding in modbus_findings) == [1, 2]

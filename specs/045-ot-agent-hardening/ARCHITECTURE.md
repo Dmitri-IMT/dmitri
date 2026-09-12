@@ -306,9 +306,9 @@ One unreadable sid no longer discards a whole script's units. `build_metadata` s
 
 ### 3.5 Absent data summarises as absent
 
-`mapper._materialise` drops the `0 if numeric == [] else None` branch. `nonzero_count`,
-`value_min` and `value_max` are `None` whenever no value was read. They stay on the in-memory
-dataclass and travel no further (§2.1).
+`mapper._materialise` HMACs readable values then drops the list. `ModbusAddressRange` keeps
+status, bounds, label, and `value_digest`. Empty reads and `capture_values="none"` leave
+`value_digest` unset. Process fields never exist on the in-memory range.
 
 ### 3.6 A missing lookup fails visibly
 
