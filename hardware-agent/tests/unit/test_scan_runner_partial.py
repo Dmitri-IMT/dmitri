@@ -249,8 +249,8 @@ class TestCompletedWithSkippedHosts:
         assert errors == []
         metadata = completed[0].metadata
         assert metadata["partial_result"] is True
-        assert metadata["terminated_by"] == "error"
-        assert metadata["interrupted_stage"] == "ports"
+        assert metadata["terminated_by"] == "completed"
+        assert metadata.get("interrupted_stage") is None
 
     def test_marks_payload_partial_when_deep_stage_skips_host(
         self, monkeypatch: pytest.MonkeyPatch
@@ -267,8 +267,8 @@ class TestCompletedWithSkippedHosts:
         assert errors == []
         metadata = completed[0].metadata
         assert metadata["partial_result"] is True
-        assert metadata["terminated_by"] == "error"
-        assert metadata["interrupted_stage"] == "deep_inspection"
+        assert metadata["terminated_by"] == "completed"
+        assert metadata.get("interrupted_stage") is None
 
     def test_port_skip_has_priority_when_both_stages_skip(
         self, monkeypatch: pytest.MonkeyPatch
@@ -282,7 +282,10 @@ class TestCompletedWithSkippedHosts:
 
         runner._run()
 
-        assert completed[0].metadata["interrupted_stage"] == "ports"
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is True
+        assert metadata["terminated_by"] == "completed"
+        assert metadata.get("interrupted_stage") is None
 
     def test_zero_skips_finishes_complete(
         self, monkeypatch: pytest.MonkeyPatch

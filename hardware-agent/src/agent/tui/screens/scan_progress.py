@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from time import monotonic
 from typing import Literal
@@ -17,6 +18,7 @@ from textual.widgets import Button, ProgressBar, RichLog, Static
 
 from agent.config import NspiSubmode
 from agent.paths import load_config
+from agent.scanner.errors import UnsupportedScanDepth
 from agent.scanner.progress import ProgressMapper, ScanEvent
 from agent.scanner.runner import ScanRunner
 from agent.tui.screens.base import DmitriScreen
@@ -29,11 +31,19 @@ class ScanProgressScreen(DmitriScreen):
 
     _PCT_STEP = 5.0
 
-    _PARTIAL_REASONS = {
+    _STOPPED_REASONS = {
         "user_cancel": "stopped by you; partial results kept",
         "timeout": "a step timed out; partial results kept",
         "error": "scan stopped early; partial results kept",
     }
+
+    _BADGE_CLASSES = (
+        "badge-incomplete",
+        "badge-stopped",
+        "badge-failed",
+        "badge-refused",
+        "badge-cancelling",
+    )
 
     _INTERRUPTED_STAGE_LABELS = {
         "discovery": "host discovery",
@@ -107,6 +117,7 @@ class ScanProgressScreen(DmitriScreen):
         with Vertical(id="progress-container"):
             yield Static("", id="scan-header")
             yield Static("", id="scan-badge")
+            yield Static("", id="scan-refusal-detail")
             with Horizontal(id="progress-row"):
                 yield ProgressBar(
                     total=100,
@@ -127,6 +138,7 @@ class ScanProgressScreen(DmitriScreen):
 
     def on_mount(self) -> None:
         self.query_one("#scan-done-actions").display = False
+        self.query_one("#scan-refusal-detail", Static).display = False
         mode_label = MODE_LABELS.get(self.scan_mode, self.scan_mode.capitalize())
         if self.scan_mode == "nspi":
             submode_label = {
@@ -144,15 +156,19 @@ class ScanProgressScreen(DmitriScreen):
     def _start_scan(self) -> None:
         config = load_config()
         workspace_root = Path(config.results_dir) if config else None
-        self._runner = ScanRunner(
-            subnet=self.subnet,
-            scan_mode=self.scan_mode,
-            reporter=self._ScreenReporter(self),
-            on_complete=self._on_worker_complete,
-            on_error=self._on_worker_error,
-            workspace_root=workspace_root,
-            nspi_submode=self.nspi_submode,
-        )
+        try:
+            self._runner = ScanRunner(
+                subnet=self.subnet,
+                scan_mode=self.scan_mode,
+                reporter=self._ScreenReporter(self),
+                on_complete=self._on_worker_complete,
+                on_error=self._on_worker_error,
+                workspace_root=workspace_root,
+                nspi_submode=self.nspi_submode,
+            )
+        except UnsupportedScanDepth as exc:
+            self._handle_refused(exc.refused_depth)
+            return
         self._runner.start()
 
     def _on_worker_complete(self, payload) -> None:
@@ -363,6 +379,17 @@ class ScanProgressScreen(DmitriScreen):
                 f"({event.hosts_done}/{event.hosts_total})[/dim]"
             )
             return
+        if kind == "ot_stage_deadline":
+            match = re.search(r"\((\d+)s\)", event.message)
+            limit_seconds = match.group(1) if match else "?"
+            self._finish_stage(
+                "ot",
+                (
+                    f"[yellow]⏱ Time limit reached during Modbus inventory "
+                    f"({limit_seconds}s) — evidence gathered so far is kept[/yellow]"
+                ),
+            )
+            return
         if kind == "ot_stage_done":
             if "ot" not in self._stage_lines:
                 return
@@ -406,7 +433,46 @@ class ScanProgressScreen(DmitriScreen):
         )
 
     def _terminal(self) -> bool:
-        return self._state in ("completed", "partial", "fatal")
+        return self._state in (
+            "completed",
+            "incomplete",
+            "stopped",
+            "partial",
+            "fatal",
+            "refused",
+        )
+
+    @staticmethod
+    def _escape_display(value: str, *, limit: int) -> str:
+        cleaned = "".join(
+            "·" if ord(char) < 32 or ord(char) == 127 else char for char in value
+        )
+        cleaned = cleaned.replace("[", "[[]")
+        if len(cleaned) > limit:
+            return cleaned[: limit - 1] + "…"
+        return cleaned
+
+    def _set_badge(self, badge_class: str, text: str) -> None:
+        badge = self.query_one("#scan-badge", Static)
+        for cls in self._BADGE_CLASSES:
+            badge.remove_class(cls)
+        badge.add_class(badge_class)
+        badge.update(text)
+        badge.display = True
+
+    def _refusal_lines(self, refused_depth: str) -> tuple[str, str]:
+        if refused_depth == "active_validation":
+            return (
+                "NSPi active validation is not available in this version.",
+                "No host was contacted. Choose Inventory or Read-only mapping "
+                "and start again.",
+            )
+        safe_value = self._escape_display(refused_depth, limit=32)
+        return (
+            f"The requested NSPi mode is not permitted: {safe_value}",
+            "No host was contacted. Choose Inventory or Read-only mapping "
+            "and start again.",
+        )
 
     def _enable_terminal_bindings(self, *, navigate: bool) -> None:
         self._bindings.bind("escape", "no_op", "Esc Back", show=True)
@@ -420,7 +486,10 @@ class ScanProgressScreen(DmitriScreen):
         self._active_stages.clear()
         metadata = getattr(payload, "metadata", None) or {}
         if metadata.get("partial_result") is True:
-            self._handle_partial(payload)
+            if metadata.get("terminated_by") == "completed":
+                self._handle_incomplete(payload)
+            else:
+                self._handle_stopped(payload)
         else:
             self._handle_success(payload)
 
@@ -437,29 +506,73 @@ class ScanProgressScreen(DmitriScreen):
         self.query_one("#scan-done-actions").display = True
         self.query_one("#btn-view-scan", Button).focus()
 
-    def _handle_partial(self, payload) -> None:
+    def _handle_incomplete(self, payload) -> None:
+        self._done = True
+        self._state = "incomplete"
+        self._target_pct = 100.0
+        self._display_pct = 100.0
+        self.query_one("#progress-bar", ProgressBar).update(progress=100)
+
+        self._set_badge(
+            "badge-incomplete",
+            "[black on yellow] FINISHED [/] some hosts incomplete; all evidence kept",
+        )
+
+        devices = len(payload.hosts)
+        findings = len(payload.findings)
+        metadata = payload.metadata or {}
+        hosts_skipped = metadata.get("hosts_skipped")
+        hosts_total = metadata.get("hosts_total")
+        if hosts_skipped is not None and hosts_total is not None:
+            closing = (
+                f"[yellow]⚠ Finished with incomplete evidence — {devices} devices, "
+                f"{findings} vulnerabilities ({hosts_skipped} of {hosts_total} "
+                f"hosts incomplete)[/yellow]"
+            )
+        elif devices == 0 and findings == 0:
+            closing = "[bold green]✓ Done — 0 devices, 0 vulnerabilities[/bold green]"
+        else:
+            closing = (
+                f"[yellow]⚠ Finished with incomplete evidence — {devices} devices, "
+                f"{findings} vulnerabilities[/yellow]"
+            )
+        self.query_one("#activity-log", RichLog).write(closing)
+
+        self._enable_terminal_bindings(navigate=True)
+        self.query_one("#btn-view-scan", Button).label = "View scan"
+        self.query_one("#scan-done-actions").display = True
+        self.query_one("#btn-view-scan", Button).focus()
+
+    def _handle_stopped(self, payload) -> None:
         if not payload.hosts:
             self.dismiss(None)
             return
         self._done = True
-        self._state = "partial"
+        self._state = "stopped"
         metadata = payload.metadata or {}
-        reason = self._PARTIAL_REASONS.get(
+        reason = self._STOPPED_REASONS.get(
             metadata.get("terminated_by"), "partial results kept"
         )
-        stage = self._INTERRUPTED_STAGE_LABELS.get(
-            metadata.get("interrupted_stage"), "an earlier stage"
+        self._set_badge(
+            "badge-stopped",
+            f"[white on red] STOPPED [/] {reason}",
         )
-        badge = self.query_one("#scan-badge", Static)
-        badge.update(f"[black on yellow] PARTIAL [/] {reason}")
-        badge.display = True
 
         devices = len(payload.hosts)
         findings = len(payload.findings)
-        self.query_one("#activity-log", RichLog).write(
-            f"[yellow]⚠ Partial — {devices} devices, "
-            f"{findings} vulnerabilities (interrupted during {stage})[/yellow]"
-        )
+        interrupted_stage = metadata.get("interrupted_stage")
+        stage_label = self._INTERRUPTED_STAGE_LABELS.get(interrupted_stage)
+        if stage_label:
+            closing = (
+                f"[red]✗ Stopped during {stage_label} — {devices} devices, "
+                f"{findings} vulnerabilities (partial results kept)[/red]"
+            )
+        else:
+            closing = (
+                f"[red]✗ Stopped — {devices} devices, "
+                f"{findings} vulnerabilities (partial results kept)[/red]"
+            )
+        self.query_one("#activity-log", RichLog).write(closing)
 
         self._enable_terminal_bindings(navigate=True)
         view = self.query_one("#btn-view-scan", Button)
@@ -467,12 +580,28 @@ class ScanProgressScreen(DmitriScreen):
         self.query_one("#scan-done-actions").display = True
         view.focus()
 
+    def _handle_refused(self, refused_depth: str) -> None:
+        self._state = "refused"
+        self._set_badge(
+            "badge-refused",
+            "[bold red]⛔ SCAN REFUSED — no request was sent[/bold red]",
+        )
+        line1, line2 = self._refusal_lines(refused_depth)
+        detail = self.query_one("#scan-refusal-detail", Static)
+        detail.update(f"{line1}\n{line2}")
+        detail.display = True
+        self.query_one("#btn-view-scan", Button).display = False
+        self._enable_terminal_bindings(navigate=False)
+        self.query_one("#scan-done-actions").display = True
+        self.query_one("#btn-back-home", Button).focus()
+
     def _handle_error(self, error: Exception) -> None:
         self._state = "fatal"
         self._active_stages.clear()
-        badge = self.query_one("#scan-badge", Static)
-        badge.update("[bold red]✗ SCAN FAILED — nothing to keep[/bold red]")
-        badge.display = True
+        self._set_badge(
+            "badge-failed",
+            "[bold red]✗ SCAN FAILED — nothing to keep[/bold red]",
+        )
         self.query_one("#btn-view-scan", Button).display = False
         self._enable_terminal_bindings(navigate=False)
         self.query_one("#scan-done-actions").display = True
@@ -486,9 +615,10 @@ class ScanProgressScreen(DmitriScreen):
 
     def _enter_cancelling(self) -> None:
         self._state = "cancelling"
-        badge = self.query_one("#scan-badge", Static)
-        badge.update("[black on yellow] CANCELLING [/] saving partial results…")
-        badge.display = True
+        self._set_badge(
+            "badge-cancelling",
+            "[black on yellow] CANCELLING [/] saving partial results…",
+        )
         self.query_one("#activity-log", RichLog).write(
             "[yellow]● Stopping scan — saving partial results, "
             "no new probes will start…[/yellow]"

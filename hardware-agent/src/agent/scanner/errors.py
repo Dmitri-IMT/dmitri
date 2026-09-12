@@ -27,3 +27,9 @@ class BudgetExceeded(ScanError):
 
 class CircuitBreakerError(BudgetExceeded):
     pass
+
+
+class UnsupportedScanDepth(FatalScanError):
+    def __init__(self, refused_depth: str) -> None:
+        self.refused_depth = refused_depth
+        super().__init__(f"Unsupported scan depth: {refused_depth}")

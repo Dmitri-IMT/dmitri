@@ -15,6 +15,7 @@ from agent.config import (
     NspiSubmode,
     min_cvss_for_mode,
     subprocess_timeout_for,
+    validate_nspi_depth,
 )
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
@@ -49,6 +50,7 @@ class ScanRunner:
         nspi_submode: NspiSubmode = "inventory",
         ot_policy: OtAutomationPolicy | None = None,
     ) -> None:
+        validate_nspi_depth(scan_mode, nspi_submode)
         self.subnet = subnet
         self.scan_mode = scan_mode
         self._reporter = reporter
@@ -299,12 +301,7 @@ class ScanRunner:
                 ScanEvent(kind="normalize_started", message="Generating results…")
             )
             self._check_cancel()
-            partial_result = bool(port_units_skipped or deep_units_skipped)
-            partial_stage = (
-                "ports"
-                if port_units_skipped
-                else "deep_inspection" if deep_units_skipped else None
-            )
+            partial_result = port_units_skipped > 0 or deep_units_skipped > 0
             payload = self._build_payload(
                 scan_id=scan_id,
                 settings=settings,
@@ -313,8 +310,8 @@ class ScanRunner:
                 started_counter=started_counter,
                 hosts=hosts,
                 partial_result=partial_result,
-                interrupted_stage=partial_stage,
-                terminated_by="error" if partial_result else "completed",
+                interrupted_stage=None,
+                terminated_by="completed",
                 ot_inspection=ot_inspection,
             )
 
