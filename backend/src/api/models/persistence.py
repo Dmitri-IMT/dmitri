@@ -69,8 +69,12 @@ class HostRecord(SQLModel, table=True):
     mac: str | None = None
     hostname: str
     vendor: str
+    machine_type: str | None = None
     open_ports_count: int
     highest_severity: str | None = None
+    vulnerability_count: int = Field(
+        default=0, sa_column_kwargs={"server_default": "0"}
+    )
     first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
     last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
@@ -87,6 +91,20 @@ class PortRecord(SQLModel, table=True):
     protocol: str
     state: str
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class HostPortRecord(SQLModel, table=True):
+    __tablename__ = "host_ports"
+    __table_args__ = (UniqueConstraint("host_id", "port", "protocol"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    host_id: UUID = Field(index=True, foreign_key="hosts.id")
+    port: int
+    protocol: str
+    service: str
+    version: str | None = None
+    first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
 
 
 class ServiceRecord(SQLModel, table=True):
@@ -141,6 +159,18 @@ class FindingRecord(SQLModel, table=True):
     dedupe_key: str = Field(index=True)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
     updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class HostFindingRecord(SQLModel, table=True):
+    __tablename__ = "host_findings"
+    __table_args__ = (UniqueConstraint("host_id", "dedupe_key"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    host_id: UUID = Field(index=True, foreign_key="hosts.id")
+    dedupe_key: str = Field(index=True)
+    first_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    last_seen_at: datetime = Field(sa_type=UTC_TIMESTAMP)
+    fixed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
 
 
 class EnrichmentJobRecord(SQLModel, table=True):
