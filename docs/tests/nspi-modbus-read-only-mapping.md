@@ -34,6 +34,12 @@ nem do comando remoto. Um JSON inválido interrompe a etapa em vez de ampliar a
 varredura silenciosamente. O caminho pode ser substituído explicitamente com
 `DMITRI_OT_POLICY_PATH`.
 
+Uma correspondência apenas por fabricante ou produto só pode selecionar faixas
+contidas nos endereços `0-3` da amostra genérica, com limites iguais ou menores.
+Faixas fora dessa amostra exigem correspondência por CIDR ou MAC. Se um host
+alcançar seu limite de tempo, o agente conserva o que coletou e tenta os hosts
+seguintes enquanto ainda houver tempo na etapa OT.
+
 ## 2. Executar pela CLI
 
 Confirme primeiro a interface e a rota do laboratório:

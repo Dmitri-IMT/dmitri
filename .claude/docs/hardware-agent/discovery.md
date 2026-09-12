@@ -4,7 +4,7 @@ title: discovery — per-stage Nmap argument builders
 description: Thin per-stage Nmap-argument builders — host discovery, port discovery, service detection, and NSE vulnerability scanning.
 resource: hardware-agent/src/agent/discovery/
 tags: [hardware-agent, discovery, nmap, nse]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # discovery — per-stage Nmap builders
@@ -28,7 +28,7 @@ They hold *what to ask Nmap*; the threading, retry, and batching live in
 | `_scan_ports_batch_nspi()` / `NSPI_PASS1_ARGS` / `NSPI_PASS2_ARGS` | NSPi port-only two-pass scan: default top-1000 at `-T4`, then the seven OT ports at `-T2`; both use `-Pn -n --host-timeout 300s` and their `PortScanResult`s are merged. | `discovery/port_discovery.py:122`, `:12`, `:13` |
 | `merge_ports()` | Deduplicates two port lists by `(port, protocol)`. | `discovery/port_discovery.py:24` |
 | `run_nse_vulnerability_scan()` | Sole enrichment unit: `-Pn -n -T4 -sV --version-intensity <effective> --script <scripts> --script-args vulners.mincvss=<min>` over the already-open ports of one host; optional NSPi OS/internal-timeout flags remain supported. | `discovery/vulnerability_detection.py:14` |
-| `detect_services()` | `-sV --version-intensity` over open ports. Exported but **not called** by the live pipeline. | `discovery/service_detection.py:10` |
+| `detect_services()` | Bounded `-sV --version-intensity` over open ports, called as a service-only recovery probe when deep inspection fails or returns no result. | `discovery/service_detection.py:10` |
 
 ## How it connects
 
@@ -41,9 +41,8 @@ They hold *what to ask Nmap*; the threading, retry, and batching live in
 
 ## Notes / gotchas
 
-- **`detect_services` is dead in the live flow.** Service/version detection and NSE enrichment now
-  happen together exactly once in `run_nse_vulnerability_scan`; `service_detection.py` remains a
-  standalone/legacy helper kept but unwired — do not treat its absence from the pipeline as a bug.
+- `run_nse_vulnerability_scan` is the primary service/version and NSE pass. `detect_services` is
+  reused only on its failure path to recover service evidence; it does not run NSE scripts.
 - Regular port discovery retains OS detection (`-O`) but does not run `-sV` or NSE. NSPi keeps its
   current OS probe in the bounded per-host deep command. The deep stage is the single authority for
   service/version and script evidence in every mode; both NSPi port passes are enrichment-free.

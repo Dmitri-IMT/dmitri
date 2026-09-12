@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and seventeen revisions through the agents target-subnet column, with Supabase RLS and dmitri_runtime hardening.
+description: The Alembic env and revisions through industrial observations, with Supabase RLS and dmitri_runtime hardening.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # Backend database migrations
@@ -13,7 +13,7 @@ timestamp: 2026-08-12T00:00:00Z
 
 **Alembic owns the schema.** The application never calls `create_all`; every table, index,
 constraint, and grant is created by a migration. `alembic/env.py` targets the same
-`SQLModel.metadata` the [ORM models](/backend/models.md) register on. Seventeen chained revisions build the
+`SQLModel.metadata` the [ORM models](/backend/models.md) register on. The revision history builds the
 scan/enrichment schema, the identity schema, the read-path/host-identity schema (spec
 015): `scan_mode`/`status` on `scans`, the `devices`→`scan_hosts` rename, the durable `hosts` table,
 and the `findings.finding_id` UUID — then the auth session tables (spec 016, DMI-60) and the
@@ -22,7 +22,8 @@ delivery by `20260731_13` (spec 022, DMI-64) — then the device-auth
 schema (spec 017, DMI-61): `agent_nonces`, globally-unique user emails, and the `agents` secret
 columns replaced by a plaintext `public_key`. Each DDL-only step is followed by Supabase
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
-new table.
+new table. A merge revision joins the activity and OS-inventory heads; the current revision adds
+industrial observations and Modbus-unit attribution.
 
 ## Key classes / functions
 

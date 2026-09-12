@@ -4,25 +4,34 @@ title: hardware-agent OT package
 description: Modbus inspection on the Pi — policy, digest, read-only client, inventory, and the OT scan stage.
 resource: hardware-agent/src/agent/ot/
 tags: [hardware-agent, ot, modbus, pymodbus]
-timestamp: 2026-09-12T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # hardware-agent OT package
 
+## Purpose
+
 `agent/ot/` talks Modbus TCP from the Pi. It is an extra stage after NSE, not a replacement
 for Nmap. The dependency is `pymodbus`. `AGENT_VERSION` is `0.1.4`.
 
-## Layout
+## Key classes / functions
 
-| Path | Role |
-|------|------|
-| `ot/policy.py` | Installer mapping policy, CIDR/MAC corroboration |
-| `ot/digest.py` | HMAC-SHA256 of process values; key from `DMITRI_OT_DIGEST_KEY` or `~/.config/dmitri/ot-digest-key` |
-| `ot/untrusted.py` | Bound device strings at parse |
-| `ot/modbus/readonly.py` | Client that raises on any write |
-| `ot/modbus/inventory.py` | Per-unit FC43, paced, isolated |
-| `ot/modbus/mapper.py` | Read-only ranges and digests |
-| `scanner/stages.py` | OT stage, host/stage deadlines, `ot_stage_deadline` |
+| Symbol | What it does | Ref |
+|--------|--------------|-----|
+| `profile_is_conservative()` | Allows an identity-only mapping profile only when every read stays inside a generic-baseline address range and its other limits are no broader. CIDR/MAC matches may use broader site profiles. | `ot/policy.py:120` |
+| `load_digest_key()` / `value_digest()` | Load the local key and compute an HMAC-SHA256 digest; no key means no digest. | `ot/digest.py:35`, `:48` |
+| `ReadOnlyModbusClient` | Exposes only the allowed read methods to Modbus sessions. | `ot/modbus/readonly.py:23` |
+| `inventory_modbus_host()` | Collects paced, isolated FC43 identification for candidate ports and units. | `ot/modbus/inventory.py:27` |
+| `resolve_mapping_plan()` / `map_modbus_service()` | Choose the allowed range profile and execute read-only mapping within the request and time budgets. | `ot/modbus/mapper.py:63`, `:115` |
+
+## How it connects
+
+[`run_ot_inspection_stage()`](/hardware-agent/scanner/stages.md) calls inventory, optional mapping,
+and fingerprint correlation after the primary Nmap/NSE pass. Its host and stage deadlines are
+separate: one slow host does not prevent later hosts from being inspected while stage time remains.
+The resulting industrial observations become [scan payloads](/hardware-agent/normalize.md).
+
+## Notes / gotchas
 
 Default NSPi submodes that run: `inventory`, `read_only_mapping`. `active_validation` is
 refused in `ScanRunner.__init__`.

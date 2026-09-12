@@ -3,6 +3,18 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-12
+
+* **Update**: `hardware-agent/ot.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/scanner/runner.md`, and `hardware-agent/discovery.md` — identity-only Modbus
+  profiles stay within baseline addresses; a host timeout leaves stage time for later hosts;
+  failed service recovery remains a host-level skip. Refreshed current call paths and line refs.
+* **Update**: `hardware-agent/cli.md`, `hardware-agent/scanner/errors.md`,
+  `hardware-agent/scanner/progress.md`, `hardware-agent/overview.md`,
+  `hardware-agent/normalize.md`, `backend/management.md`, and
+  `backend/migrations.md` — bounded industrial wire payloads, org digest-key provisioning, and
+  the current Alembic head. Refreshed the affected backend index descriptions.
+
 ## 2026-09-11
 
 * **Update**: `hardware-agent/cli.md`, `hardware-agent/discovery.md`,

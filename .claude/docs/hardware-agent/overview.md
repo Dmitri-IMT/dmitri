@@ -4,7 +4,7 @@ title: hardware-agent — package overview
 description: What the hardware-agent package is, its scan pipeline, and the front doors that drive it — TUI, headless CLI, and the remote command daemon.
 resource: hardware-agent/src/agent/
 tags: [hardware-agent, scan-pipeline, overview]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # hardware-agent — package overview
@@ -29,10 +29,12 @@ There is no separate orchestrator class:
    top-1000, top-10000, all ports, or NSPi's two merged passes. It runs no `-sV` or NSE scripts;
    regular modes retain `-O`, while NSPi's bounded OS probe remains in deep inspection. See
    [stages](/hardware-agent/scanner/stages.md).
-3. **Deep inspection** — the single enrichment pass per eligible host: `-sV` + the mode's full NSE
-   set, including `vulners` CVE correlation.
+3. **Deep inspection** — the primary enrichment pass per eligible host: `-sV` + the mode's full NSE
+   set, including `vulners` CVE correlation. A failed or empty pass can retry service detection
+   alone; a failed recovery leaves that host incomplete and preserves earlier port evidence.
 4. **OT inspection** (NSPi) — bounded Modbus inventory or read-only mapping via [`ot/`](/hardware-agent/ot.md)
-   (`pymodbus`). Wall-clock ceilings are `MAX_OT_STAGE_SECONDS` / `MAX_OT_HOST_SECONDS`.
+   (`pymodbus`). Wall-clock ceilings are `MAX_OT_STAGE_SECONDS` / `MAX_OT_HOST_SECONDS`; a host's
+   limit does not stop later hosts while the stage still has time.
 5. **Normalize** — NSE output → [findings](/hardware-agent/normalize.md); hosts → `HostPayload`s
    including `industrial_services`; assembled into a `ScanPayload` and written to `results/` by
    [workspace](/hardware-agent/scanner/workspace.md).

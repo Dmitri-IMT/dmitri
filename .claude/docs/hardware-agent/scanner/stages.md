@@ -4,7 +4,7 @@ title: scanner/stages — port, deep, and OT inspection stages
 description: Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and HostInfo-to-HostPayload normalization.
 resource: hardware-agent/src/agent/scanner/stages.py
 tags: [hardware-agent, scanner, pipeline, threading, contingency]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-12T21:23:47Z
 ---
 
 # scanner/stages — port, deep & OT-inspection stages
@@ -20,14 +20,15 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:91` |
-| `run_deep_inspection_stage()` | Runs the sole `-sV` + NSE authority per eligible host, retains NSPi's bounded `-O`, merges evidence additively, and returns skipped-host count. Empty regular results emit `unit_failed`; empty NSPi results retain their timeout classification. | `stages.py:195` |
-| `run_ot_inspection_stage()` | After NSPi Nmap enrichment, performs unchanged serial, bounded Modbus inventory or read-only mapping. | `stages.py:333` |
-| `_run_unit_with_retry()` | Retries a unit of work on `TransientScanError` up to `retries + 1` times, then raises `UnitScanError`. | `stages.py:60` |
-| `build_host_payload()` | Maps host, OS, ports, and industrial evidence into `HostPayload`. | `stages.py:417` |
-| `nmap_arguments_summary()` | Describes port-only enumeration, the single deep `-sV`/NSE command, and selected OT submode. | `stages.py:530` |
-| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters. | `stages.py:563` |
-| `set_runner_stage()` | Tags a `LoggedNmapRunner` with the current stage name; no-op for a plain runner. | `stages.py:75` |
+| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:121` |
+| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. | `stages.py:229` |
+| `_recover_deep_stage_services()` | Reuses `detect_services` for recovery; treats a host-level Nmap error or timeout as unsuccessful recovery without stopping the scan. | `stages.py:99` |
+| `run_ot_inspection_stage()` | Performs serial Modbus inventory or read-only mapping. Each host gets its own deadline; reaching it does not prevent later hosts from running. The stage deadline stops the stage and emits `ot_stage_deadline`. | `stages.py:405` |
+| `_run_unit_with_retry()` | Retries a unit of work on `TransientScanError` up to `retries + 1` times, then raises `UnitScanError`. | `stages.py:70` |
+| `build_host_payload()` | Maps host, OS, ports, and industrial evidence into `HostPayload`. | `stages.py:536` |
+| `nmap_arguments_summary()` | Describes port-only enumeration, the primary deep `-sV`/NSE command, and selected OT submode. | `stages.py:628` |
+| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters and the stage-deadline signal. | `stages.py:659` |
+| `set_runner_stage()` | Tags a `LoggedNmapRunner` with the current stage name; no-op for a plain runner. | `stages.py:83` |
 
 ## How it connects
 
@@ -47,10 +48,14 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
   failure ratio crosses `unit_failure_threshold` (default `0.5`).
 - Deep inspection uses `max(settings.version_intensity, 7)`: the former port-stage `-sV` implicitly
   used Nmap intensity 7, so this floor preserves its fingerprint detail after deduplication.
+- A failed deep inspection starts a service-only recovery probe. If that probe times out or has a
+  host-level scan error, the host is counted as skipped; its earlier port evidence remains intact.
+- The OT host deadline limits requests for that host. The separate stage deadline decides when to
+  stop visiting hosts; only that stage limit sets `modbus_stage_deadline_reached`.
 - Both Nmap stages return explicit skip counts. These let the runner preserve all successful
   evidence while truthfully marking an otherwise completed scan partial when any unit was skipped.
-- NSPi still proceeds to `run_ot_inspection_stage()` after its deduplicated deep scan; this change
-  does not modify Modbus candidacy, safety policy, request budgets, or progress events.
+- NSPi proceeds to `run_ot_inspection_stage()` after deep inspection, using the discovered Modbus
+  candidates and the policy's request budget and pacing.
 - `build_host_payload` (formerly `build_device_payload`) emits the wire term **host** for the ingest
   payload — ADR-013 unified the ingest vocabulary with the rest of the pipeline. See
   [glossary](/glossary.md).

@@ -93,6 +93,9 @@ Interpretação esperada:
 Ausência de fabricante/produto/firmware não significa falha do scan: muitos
 equipamentos não implementam todos os objetos FC43.
 
+O limite de tempo de um host interrompe novas consultas a ele, mas não impede
+o inventário dos hosts seguintes enquanto a etapa OT ainda tiver tempo.
+
 ## 4. Evidência de que não houve escrita
 
 Opcionalmente capture somente o tráfego TCP/502 durante o teste:
