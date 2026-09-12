@@ -12,6 +12,7 @@ def detect_services(
     ip: str,
     ports: list[PortInfo],
     version_intensity: int,
+    timeout: float | None = None,
 ) -> list[PortInfo]:
     """Run `-sV` over the discovered open ports for a single host."""
 
@@ -29,7 +30,7 @@ def detect_services(
         ",".join(str(port.port) for port in open_ports),
         ip,
     ]
-    root = runner.run_xml(arguments)
+    root = runner.run_xml(arguments, timeout=timeout)
     host_element = root.find("host")
     if host_element is None:
         return []

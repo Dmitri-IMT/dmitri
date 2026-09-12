@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import time
+from time import perf_counter
+
 from agent.config import AgentSettings
 from agent.ot.modbus.models import (
     ModbusDeviceIdentification,
     ModbusService,
     ModbusUnit,
 )
+from agent.ot.policy import MAX_OT_HOST_SECONDS, MAX_OT_STAGE_SECONDS, min_not_none
 from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.stages import (
     build_host_payload,
@@ -195,3 +199,126 @@ def test_inventory_submode_never_dispatches_mapping(monkeypatch) -> None:
     )
 
     run_ot_inspection_stage(AgentSettings(scan_mode="nspi"), [host])
+
+
+def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
+    hosts = [
+        HostInfo(
+            ip=f"192.168.10.{index}",
+            hostname=f"plc-{index}",
+            ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        )
+        for index in (30, 31, 32)
+    ]
+    monkeypatch.setattr("agent.scanner.stages.MAX_OT_STAGE_SECONDS", 0)
+
+    def slow_inventory(host, **kwargs):
+        time.sleep(0.02)
+        return [_service()]
+
+    monkeypatch.setattr("agent.scanner.stages.inventory_modbus_host", slow_inventory)
+    reporter = _Reporter()
+
+    ot_inspection = run_ot_inspection_stage(
+        AgentSettings(scan_mode="nspi"),
+        hosts,
+        reporter=reporter,
+    )
+
+    deadline_events = [
+        event for event in reporter.events if event.kind == "ot_stage_deadline"
+    ]
+    assert len(deadline_events) == 1
+    assert "Time limit reached during Modbus inventory" in deadline_events[0].message
+    assert deadline_events[0].units_skipped >= 1
+
+    metadata = build_metadata(
+        runner=_Runner(),
+        settings=AgentSettings(scan_mode="nspi"),
+        network_info=None,
+        elapsed_seconds=1.0,
+        hosts_discovered=len(hosts),
+        findings_count=0,
+        hosts=hosts,
+        partial_result=False,
+        ot_inspection=ot_inspection,
+    )
+    assert metadata["modbus_stage_deadline_reached"] is True
+    assert metadata["modbus_stage_deadline_seconds"] == 1
+    assert metadata["partial_result"] is False
+
+
+def test_ot_host_deadline_skips_remaining_hosts(monkeypatch) -> None:
+    hosts = [
+        HostInfo(
+            ip=f"192.168.10.{index}",
+            hostname=f"plc-{index}",
+            ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        )
+        for index in (30, 31)
+    ]
+    monkeypatch.setattr("agent.scanner.stages.MAX_OT_HOST_SECONDS", 0)
+
+    def slow_inventory(host, **kwargs):
+        time.sleep(0.02)
+        return [_service()]
+
+    monkeypatch.setattr("agent.scanner.stages.inventory_modbus_host", slow_inventory)
+    reporter = _Reporter()
+
+    ot_inspection = run_ot_inspection_stage(
+        AgentSettings(scan_mode="nspi"),
+        hosts,
+        reporter=reporter,
+    )
+
+    inspected = [
+        event for event in reporter.events if event.kind == "modbus_host_inspected"
+    ]
+    assert len(inspected) == 1
+    assert any(event.kind == "ot_stage_deadline" for event in reporter.events)
+
+    metadata = build_metadata(
+        runner=_Runner(),
+        settings=AgentSettings(scan_mode="nspi"),
+        network_info=None,
+        elapsed_seconds=1.0,
+        hosts_discovered=len(hosts),
+        findings_count=0,
+        hosts=hosts,
+        ot_inspection=ot_inspection,
+    )
+    assert metadata["modbus_stage_deadline_reached"] is True
+    assert metadata["modbus_stage_deadline_seconds"] == 0
+
+
+def test_write_counter_comes_from_service_field() -> None:
+    service = _service()
+    service.write_requests_sent = 3
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc-a",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        industrial_services=[service],
+    )
+
+    metadata = build_metadata(
+        runner=_Runner(),
+        settings=AgentSettings(scan_mode="nspi"),
+        network_info=None,
+        elapsed_seconds=1.0,
+        hosts_discovered=1,
+        findings_count=0,
+        hosts=[host],
+    )
+
+    assert metadata["modbus_write_requests_sent"] == 3
+
+
+def test_default_ot_deadline_constants_are_non_none() -> None:
+    now = perf_counter()
+    stage_deadline = min_not_none(None, now + MAX_OT_STAGE_SECONDS)
+    host_deadline = min_not_none(stage_deadline, now + MAX_OT_HOST_SECONDS)
+    assert stage_deadline is not None
+    assert host_deadline is not None
+    assert host_deadline <= stage_deadline

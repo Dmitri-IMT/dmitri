@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from agent.ot.modbus.client import (
     ModbusClientController,
     ModbusReadSession,
@@ -136,18 +138,17 @@ def test_pymodbus_io_error_is_normalised_as_timeout() -> None:
     assert "No response received" in (unit.error or "")
 
 
-def test_read_only_adapter_has_no_write_or_raw_pdu_surface() -> None:
-    import agent.ot.modbus.client as client_module
+def test_read_only_adapter_blocks_reachable_write_path() -> None:
+    from agent.ot.modbus.readonly import WriteAttemptError
 
-    forbidden = {
-        "write_coil",
-        "write_coils",
-        "write_register",
-        "write_registers",
-        "execute",
-    }
-    assert forbidden.isdisjoint(vars(client_module))
-    assert forbidden.isdisjoint(vars(ModbusReadSession))
+    with ModbusReadSession(
+        "192.168.10.30",
+        502,
+        timeout=1.0,
+        client_factory=lambda *args, **kwargs: _Client(_Response()),
+    ) as session:
+        with pytest.raises(WriteAttemptError):
+            session._client.write_register(0, 1)
 
 
 class _ReadResponse:

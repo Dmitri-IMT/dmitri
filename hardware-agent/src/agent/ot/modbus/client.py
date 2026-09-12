@@ -10,6 +10,7 @@ from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ModbusIOException
 
 from agent.ot.modbus.models import ModbusDeviceIdentification, ModbusUnit
+from agent.ot.modbus.readonly import ReadOnlyModbusClient
 from agent.ot.policy import AddressSpace
 from agent.ot.untrusted import bound_objects, bound_text
 
@@ -76,7 +77,9 @@ class ModbusReadSession:
         client_factory: Callable[..., Any] = ModbusTcpClient,
         controller: ModbusClientController | None = None,
     ) -> None:
-        self._client = client_factory(host, port=port, timeout=timeout, retries=0)
+        self._client = ReadOnlyModbusClient(
+            client_factory(host, port=port, timeout=timeout, retries=0)
+        )
         self._controller = controller
         self._registered = False
         self._connected: bool | None = None
@@ -188,7 +191,9 @@ def probe_device_identification(
 ) -> ModbusUnit:
     """Read FC43/MEI 14 identification through a deliberately narrow API."""
 
-    client = client_factory(host, port=port, timeout=timeout, retries=0)
+    client = ReadOnlyModbusClient(
+        client_factory(host, port=port, timeout=timeout, retries=0)
+    )
     if controller is not None and not controller.register(client):
         return ModbusUnit(
             unit_id=unit_id,

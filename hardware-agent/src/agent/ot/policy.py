@@ -17,6 +17,15 @@ MAX_MAPPING_RANGE_COUNT = 256
 MAX_MAPPING_BLOCK_SIZE = 64
 MAX_MAPPING_REQUESTS_PER_HOST = 32
 MAX_MAPPING_UNIT_IDS = 4
+MAX_OT_STAGE_SECONDS = 600
+MAX_OT_HOST_SECONDS = 90
+
+
+def min_not_none(*values: float | None) -> float | None:
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    return min(present)
 
 
 class OtPolicyError(ValueError):
