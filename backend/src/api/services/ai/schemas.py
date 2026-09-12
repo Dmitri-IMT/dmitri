@@ -12,6 +12,7 @@ from api.schemas.read import ScanMode, SeverityBreakdown
 
 AIText = Annotated[str, Field(min_length=3, max_length=4000)]
 AIShortText = Annotated[str, Field(min_length=3, max_length=2000)]
+AI_CONTEXT_VERSION = "1"
 
 
 class AIFindingContext(BaseModel):
@@ -47,7 +48,7 @@ class ScanAIContext(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["1"] = "1"
+    context_version: Literal["1"] = AI_CONTEXT_VERSION
     scan_id: UUID
     timestamp: datetime
     subnet: str

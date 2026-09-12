@@ -72,6 +72,16 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("ENRICHMENT_POLL_INTERVAL_SECONDS", "1.5")
     monkeypatch.setenv("ENRICHMENT_BATCH_SIZE", "7")
     monkeypatch.setenv("AI_ENABLED", "true")
+    monkeypatch.setenv("AI_PROVIDER", "groq")
+    monkeypatch.setenv("AI_MODEL", "custom-model")
+    monkeypatch.setenv("AI_API_KEY", "secret-ai-key")
+    monkeypatch.setenv("AI_API_BASE_URL", "https://example.test/openai/v1")
+    monkeypatch.setenv("AI_MAX_FINDINGS", "12")
+    monkeypatch.setenv("AI_TIMEOUT_SECONDS", "25")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "2048")
+    monkeypatch.setenv("AI_REASONING_EFFORT", "medium")
+    monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("AI_RETRY_DELAY_SECONDS", "15")
 
     settings = Settings()
 
@@ -84,6 +94,17 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.enrichment_poll_interval_seconds == 1.5
     assert settings.enrichment_batch_size == 7
     assert settings.ai_enabled is True
+    assert settings.ai_provider == "groq"
+    assert settings.ai_model == "custom-model"
+    assert settings.ai_api_key is not None
+    assert settings.ai_api_key.get_secret_value() == "secret-ai-key"
+    assert settings.ai_api_base_url == "https://example.test/openai/v1"
+    assert settings.ai_max_findings == 12
+    assert settings.ai_timeout_seconds == 25
+    assert settings.ai_max_output_tokens == 2048
+    assert settings.ai_reasoning_effort == "medium"
+    assert settings.ai_max_attempts == 3
+    assert settings.ai_retry_delay_seconds == 15
 
 
 def test_carried_fields_default_when_env_unset(
@@ -101,6 +122,16 @@ def test_carried_fields_default_when_env_unset(
         "ENRICHMENT_POLL_INTERVAL_SECONDS",
         "ENRICHMENT_BATCH_SIZE",
         "AI_ENABLED",
+        "AI_PROVIDER",
+        "AI_MODEL",
+        "AI_API_KEY",
+        "AI_API_BASE_URL",
+        "AI_MAX_FINDINGS",
+        "AI_TIMEOUT_SECONDS",
+        "AI_MAX_OUTPUT_TOKENS",
+        "AI_REASONING_EFFORT",
+        "AI_MAX_ATTEMPTS",
+        "AI_RETRY_DELAY_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -121,6 +152,16 @@ def test_carried_fields_default_when_env_unset(
     assert settings.enrichment_poll_interval_seconds == 5.0
     assert settings.enrichment_batch_size == 10
     assert settings.ai_enabled is False
+    assert settings.ai_provider == "groq"
+    assert settings.ai_model == "openai/gpt-oss-120b"
+    assert settings.ai_api_key is None
+    assert settings.ai_api_base_url == "https://api.groq.com/openai/v1"
+    assert settings.ai_max_findings == 10
+    assert settings.ai_timeout_seconds == 30
+    assert settings.ai_max_output_tokens == 4096
+    assert settings.ai_reasoning_effort == "low"
+    assert settings.ai_max_attempts == 2
+    assert settings.ai_retry_delay_seconds == 30
 
 
 def test_auth_settings_default_when_env_unset(

@@ -131,14 +131,34 @@ limitar contexto e permitir rastreabilidade.
 A analise assistida por IA tem uma superficie inicial somente leitura:
 
 - `GET /api/v1/scans/{scan_id}/analysis`
-- `AI_ENABLED=false` (padrao) retorna `unavailable` sem afetar as demais APIs
+- `AI_ENABLED=false` (padrao), ou a ausencia de `AI_API_KEY`, retorna
+  `unavailable` sem afetar as demais APIs
 - com IA habilitada, a resposta informa `pending`, `processing`, `completed` ou
   `failed`; somente `completed` inclui o JSON estruturado da analise
-- a leitura nao chama um provedor nem dispara geracao; a execucao assincrona entra
-  na proxima etapa
+- a leitura nao chama um provedor nem dispara geracao
 
 O resultado fica versionado e persistido em `ai_scan_analyses`, separado dos fatos
 deterministicos do scan. A migracao deve ser aplicada antes de habilitar a feature.
+O worker reutiliza o ciclo de polling existente: conclui o lote de enrichment,
+seleciona apenas scans sem jobs de enrichment ativos e cria um unico job por scan.
+Timeouts, rate limits e indisponibilidade usam retries limitados; jobs abandonados em
+`processing` sao recuperados, e nenhuma chave ou mensagem de erro bruta do provedor e
+persistida.
+
+Configuracao inicial:
+
+```env
+AI_ENABLED=true
+AI_PROVIDER=groq
+AI_MODEL=openai/gpt-oss-120b
+AI_API_KEY=<chave da Groq>
+AI_MAX_FINDINGS=10
+AI_TIMEOUT_SECONDS=30
+AI_MAX_OUTPUT_TOKENS=4096
+AI_REASONING_EFFORT=low
+AI_MAX_ATTEMPTS=2
+AI_RETRY_DELAY_SECONDS=30
+```
 
 Roadmap tecnico da proxima fase:
 

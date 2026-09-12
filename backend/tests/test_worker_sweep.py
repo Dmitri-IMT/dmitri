@@ -100,6 +100,33 @@ def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
     assert enrichment_calls == [(session, 9)]
 
 
+def test_run_worker_once_processes_ai_after_enrichment(monkeypatch):
+    session = object()
+    provider = object()
+    calls = []
+
+    monkeypatch.setattr(worker_module, "get_session", lambda: iter([session]))
+    monkeypatch.setattr(worker_module, "sweep_stale_commands", lambda *a, **k: 0)
+    monkeypatch.setattr(
+        worker_module,
+        "process_pending_enrichment_jobs",
+        lambda sess, *, batch_size: calls.append(("enrichment", sess)) or 4,
+    )
+    monkeypatch.setattr(worker_module, "build_ai_provider", lambda settings: provider)
+
+    def _fake_ai(sess, **kwargs):
+        calls.append(("ai", sess, kwargs))
+        return 2
+
+    monkeypatch.setattr(worker_module, "process_ready_ai_analyses", _fake_ai)
+
+    assert worker_module.run_worker_once(batch_size=7) == 6
+    assert calls[0] == ("enrichment", session)
+    assert calls[1][0:2] == ("ai", session)
+    assert calls[1][2]["provider"] is provider
+    assert calls[1][2]["batch_size"] == 7
+
+
 def test_run_worker_once_sweeps_stale_and_keeps_enrichment(
     monkeypatch, administrative_session: Session, seeded_org: Org
 ):

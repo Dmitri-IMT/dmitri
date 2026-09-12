@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 from api.core.config import get_settings
 from api.db.session import get_session
+from api.services.ai.factory import build_ai_provider
+from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
 
@@ -45,8 +47,23 @@ def run_worker_once(*, batch_size: int | None = None) -> int:
             # must not stop enrichment from draining its queue.
             logger.exception("stale command sweep failed; continuing")
             session.rollback()
-        return process_pending_enrichment_jobs(
+        enrichment_count = process_pending_enrichment_jobs(
             session,
             batch_size=resolved_batch_size,
         )
+        provider = build_ai_provider(settings)
+        if provider is None:
+            return enrichment_count
+        ai_count = process_ready_ai_analyses(
+            session,
+            provider=provider,
+            provider_name=settings.ai_provider,
+            model=settings.ai_model,
+            batch_size=resolved_batch_size,
+            max_findings=settings.ai_max_findings,
+            max_attempts=settings.ai_max_attempts,
+            retry_delay_seconds=settings.ai_retry_delay_seconds,
+            stale_after_seconds=max(settings.ai_timeout_seconds * 2, 60),
+        )
+        return enrichment_count + ai_count
     return 0

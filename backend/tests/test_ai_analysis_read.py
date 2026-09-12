@@ -5,6 +5,7 @@ from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIScanAnalysisRecord
 from api.services.ai.schemas import ScanAIAnalysis
+from pydantic import SecretStr
 from read_factories import seed_read_graph
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import func, select
@@ -23,7 +24,9 @@ def _analysis() -> ScanAIAnalysis:
 
 @pytest.fixture
 def enable_ai():
-    settings = get_settings().model_copy(update={"ai_enabled": True})
+    settings = get_settings().model_copy(
+        update={"ai_enabled": True, "ai_api_key": SecretStr("fake-key")}
+    )
     app.dependency_overrides[get_settings] = lambda: settings
     try:
         yield
@@ -57,6 +60,28 @@ def test_analysis_read_is_unavailable_when_ai_is_disabled(
         "updated_at": None,
         "completed_at": None,
     }
+
+
+def test_analysis_read_is_unavailable_without_api_key(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+    settings = get_settings().model_copy(
+        update={"ai_enabled": True, "ai_api_key": None}
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = client.get(
+            f"/api/v1/scans/{seeded['scan'].scan_id}/analysis",
+            headers=bearer_headers(seeded["org"].id, "viewer"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
 
 
 def test_analysis_read_returns_pending_without_triggering_generation(

@@ -268,7 +268,8 @@ Manual retry remains available when the provider fails.
 
 ## Model-provider boundary
 
-No provider is selected by this document. The backend must define a small adapter for:
+The initial provider is Groq with `openai/gpt-oss-120b`, selected for the first scan
+summary pilot. The backend keeps it behind a small adapter for:
 
 - message generation and streaming;
 - tool-call requests and tool results;
@@ -276,9 +277,13 @@ No provider is selected by this document. The backend must define a small adapte
 - provider errors and retryability;
 - model identifier and capability flags.
 
-Model ID, limits, and credentials are environment configuration. Selecting OpenAI,
-Anthropic, a local model, or another provider must not change the domain tool layer,
-stored evidence, or public product semantics.
+The first adapter implements the structured scan-generation subset, model identity,
+timeouts, and retryable error classification. Streaming, tools, and usage metadata are
+added when the contextual assistant enters scope.
+
+Model ID, limits, and credentials are environment configuration. Replacing Groq with
+OpenAI, Anthropic, a local model, or another provider must not change the domain tool
+layer, stored evidence, or public product semantics.
 
 ## Safety boundary
 
@@ -300,8 +305,9 @@ it cannot approve or silently execute one.
 Implementation status (2026-09-12): the backend now has a bounded, organisation-scoped
 scan context builder; strict provider-neutral input/output schemas and validation; a
 versioned `ai_scan_analyses` persistence model; and the read-only
-`GET /api/v1/scans/{scan_id}/analysis` contract. Provider execution, asynchronous job
-orchestration, UI surfaces, chat, and reports remain pending.
+`GET /api/v1/scans/{scan_id}/analysis` contract. The Groq adapter and asynchronous,
+post-enrichment scan-analysis lifecycle are also implemented on the feature branch.
+UI surfaces, chat, reports, and operational usage telemetry remain pending.
 
 1. **Grounded reads** — finding detail and bounded scan risk summary.
 2. **Provider-neutral tools** — allowlisted, read-only tool service with organisation
@@ -332,7 +338,7 @@ orchestration, UI surfaces, chat, and reports remain pending.
 
 ## Open decisions
 
-- first LLM provider and model;
+- provider/model evaluation after the initial Groq pilot;
 - streaming transport between frontend and backend;
 - PDF generation and artifact storage mechanism;
 - whether explained reports are generated automatically or on first download;

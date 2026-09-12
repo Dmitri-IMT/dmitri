@@ -20,6 +20,7 @@ from api.schemas.read import (
     SortOrder,
 )
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
+from api.services.ai.factory import ai_is_available
 from api.services.ai.read import get_scan_ai_analysis
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
@@ -121,7 +122,7 @@ def read_scan_ai_analysis(
         session,
         scan_id,
         org_id=caller.org_id,
-        ai_enabled=settings.ai_enabled,
+        ai_enabled=ai_is_available(settings),
     )
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")

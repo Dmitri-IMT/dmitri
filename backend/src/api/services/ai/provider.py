@@ -9,3 +9,10 @@ class AIProvider(Protocol):
     """Provider boundary; business logic does not depend on a vendor SDK."""
 
     def analyze_scan(self, context: ScanAIContext) -> ScanAIAnalysis: ...
+
+
+class AIProviderError(RuntimeError):
+    def __init__(self, code: str, *, retryable: bool) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
