@@ -10,24 +10,10 @@ import { renderWithProviders } from '@/test/renderWithProviders'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
-type ScanHostView = components['schemas']['ScanHostView']
-
-const scanHost: ScanHostView = {
-  host_id: hostFixtures[0].host_id,
-  ip: '192.168.0.17',
-  mac: 'DC:A6:32:11:22:33',
-  hostname: 'pi-lab',
-  vendor: 'Raspberry Pi',
-  ports: [],
-}
-
-function renderScanColumns(
-  finding: FindingRecord,
-  hosts: ScanHostView[] = [scanHost],
-) {
+function renderScanColumns(finding: FindingRecord) {
   renderWithProviders(
     <DataTable
-      columns={scanFindingColumns(hosts)}
+      columns={scanFindingColumns()}
       rows={[finding]}
       rowId={(row) => row.finding_id}
       testId="column-probe"
@@ -61,65 +47,32 @@ function hostFirstSeenCell(row: HTMLElement) {
 }
 
 describe('scanFindingColumns', () => {
-  it('prefers finding.host_hostname over the scan host snapshot', async () => {
+  it("names the machine by finding.host_hostname, the machine's current name", async () => {
     renderScanColumns({
       ...criticalFinding,
-      host_id: scanHost.host_id,
+      host_id: hostFixtures[0].host_id,
       host_hostname: 'Office PC',
-      host_ip: scanHost.ip,
+      host_ip: '192.168.0.17',
     })
 
     const row = await screen.findByTestId(
       `column-probe-row-${criticalFinding.finding_id}`,
     )
     expect(machineCell(row)).toHaveTextContent('Office PC')
-    expect(machineCell(row)).not.toHaveTextContent('pi-lab')
   })
 
-  it('falls back to the scan host hostname, then its ip, then finding.host_ip', async () => {
-    const unnamedHost: ScanHostView = { ...scanHost, hostname: '' }
-
-    renderScanColumns(
-      {
-        ...criticalFinding,
-        host_id: unnamedHost.host_id,
-        host_hostname: null,
-        host_ip: '10.0.0.5',
-      },
-      [unnamedHost],
-    )
-
-    const hostSnapshotRow = await screen.findByTestId(
-      `column-probe-row-${criticalFinding.finding_id}`,
-    )
-    expect(machineCell(hostSnapshotRow)).toHaveTextContent('192.168.0.17')
-
+  it('falls back to finding.host_ip when the machine has no name', async () => {
     renderScanColumns({
       ...criticalFinding,
-      finding_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      host_id: null,
-      host_hostname: null,
+      host_id: hostFixtures[0].host_id,
+      host_hostname: '',
       host_ip: '10.0.0.5',
-    })
-
-    const addressRow = await screen.findByTestId(
-      'column-probe-row-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    )
-    expect(machineCell(addressRow)).toHaveTextContent('10.0.0.5')
-  })
-
-  it('uses the scan host hostname when finding.host_hostname is absent', async () => {
-    renderScanColumns({
-      ...criticalFinding,
-      host_id: scanHost.host_id,
-      host_hostname: null,
-      host_ip: scanHost.ip,
     })
 
     const row = await screen.findByTestId(
       `column-probe-row-${criticalFinding.finding_id}`,
     )
-    expect(machineCell(row)).toHaveTextContent('pi-lab')
+    expect(machineCell(row)).toHaveTextContent('10.0.0.5')
   })
 
   it('renders First seen from first_seen_at', async () => {

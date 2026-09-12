@@ -6,24 +6,12 @@ import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
-type ScanHostView = components['schemas']['ScanHostView']
 
-function machineLabel(
-  finding: FindingRecord,
-  hostsById: Map<string, ScanHostView>,
-): string {
-  if (finding.host_hostname) return finding.host_hostname
-  const host = finding.host_id ? hostsById.get(finding.host_id) : undefined
-  if (host && host.hostname !== '') return host.hostname
-  if (host) return host.ip
-  return finding.host_ip ?? ''
+function machineLabel(finding: FindingRecord): string {
+  return finding.host_hostname || finding.host_ip || ''
 }
 
-export function scanFindingColumns(
-  hosts: ScanHostView[],
-): DataTableColumn<FindingRecord>[] {
-  const hostsById = new Map(hosts.map((host) => [host.host_id, host]))
-
+export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
   return [
     {
       key: 'title',
@@ -40,7 +28,7 @@ export function scanFindingColumns(
       label: 'Machine',
       width: 'w-9/50',
       render: (finding) => {
-        const label = machineLabel(finding, hostsById)
+        const label = machineLabel(finding)
         if (label === '') return <EmptyMark />
         const name = (
           <span className="block truncate" title={label}>

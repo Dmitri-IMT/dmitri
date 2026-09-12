@@ -63,7 +63,7 @@ const phpCgiFinding: FindingRecord = {
   finding_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   scan_id: SCAN_ID,
   host_id: NAS_HOST_ID,
-  host_hostname: null,
+  host_hostname: nas.hostname,
   host_ip: nas.ip,
   port: 443,
   protocol: 'tcp',
