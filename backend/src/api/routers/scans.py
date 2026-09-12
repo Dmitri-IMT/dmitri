@@ -12,13 +12,14 @@ from api.models.persistence import utc_now
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
+    ScanRiskSummaryResponse,
     ScanSortBy,
     ScanStatus,
     SortOrder,
 )
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
-from api.services.read import get_scan_detail, list_scans
+from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 
 router = APIRouter()
 
@@ -84,3 +85,19 @@ def read_scan(
     if scan is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+
+@router.get(
+    "/api/v1/scans/{scan_id}/risk-summary",
+    response_model=ScanRiskSummaryResponse,
+    operation_id="getScanRiskSummary",
+)
+def read_scan_risk_summary(
+    scan_id: UUID,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+) -> ScanRiskSummaryResponse:
+    summary = get_scan_risk_summary(session, scan_id, org_id=caller.org_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return summary

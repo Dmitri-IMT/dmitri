@@ -13,7 +13,9 @@ from api.models.command import Agent
 from api.models.persistence import (
     FindingRecord,
     HostRecord,
+    KevRecord,
     PortRecord,
+    RiskSnapshotRecord,
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
@@ -31,11 +33,14 @@ from api.schemas.read import (
     ScanDetailResponse,
     ScanHostView,
     ScanListResponse,
+    ScanRiskSummaryResponse,
     ScanSortBy,
     ScanStatus,
     ScanSummary,
+    SeverityBreakdown,
     SortOrder,
 )
+from api.schemas.scan import ModbusTcpServicePayload
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 
@@ -135,6 +140,9 @@ def get_host_detail(
         hostname=host.hostname,
         vendor=host.vendor,
         operating_system=_to_operating_system(host.operating_system_json),
+        industrial_services=_to_industrial_services(
+            host.industrial_services_json
+        ),
         first_seen_at=host.first_seen_at,
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
@@ -168,6 +176,9 @@ def get_scan_detail(
             operating_system=_to_operating_system(
                 scan_host.operating_system_json
             ),
+            industrial_services=_to_industrial_services(
+                scan_host.industrial_services_json
+            ),
             ports=_ports_for_scan_host(session, scan_host.id),
         )
         for scan_host in scan_hosts
@@ -178,7 +189,7 @@ def get_scan_detail(
         .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
         .where(FindingRecord.scan_id == scan_id)
     ).all()
-    findings = [_to_finding_read(finding, host_id) for finding, host_id in finding_rows]
+    findings = findings_with_risk(session, finding_rows)
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -315,9 +326,100 @@ def list_findings(
     ).all()
 
     return FindingListResponse(
-        data=[_to_finding_read(finding, resolved) for finding, resolved in rows],
+        data=findings_with_risk(session, rows),
         total=total,
         page=page,
+    )
+
+
+def get_finding_detail(
+    session: Session, finding_id: UUID, *, org_id: UUID
+) -> FindingRead | None:
+    row = session.exec(
+        select(FindingRecord, ScanHostRecord.host_id)
+        .join(ScanRecord, FindingRecord.scan_id == ScanRecord.scan_id)
+        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .where(
+            FindingRecord.finding_id == finding_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if row is None:
+        return None
+    return findings_with_risk(session, [row])[0]
+
+
+def get_scan_risk_summary(
+    session: Session, scan_id: UUID, *, org_id: UUID, top_limit: int = 10
+) -> ScanRiskSummaryResponse | None:
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if scan is None:
+        return None
+
+    rows = session.exec(
+        select(FindingRecord, ScanHostRecord.host_id)
+        .outerjoin(ScanHostRecord, FindingRecord.scan_host_id == ScanHostRecord.id)
+        .where(FindingRecord.scan_id == scan_id)
+    ).all()
+    ids = [finding.id for finding, _host_id in rows]
+    snapshots = {
+        snapshot.finding_id: snapshot
+        for snapshot in session.exec(
+            select(RiskSnapshotRecord).where(RiskSnapshotRecord.finding_id.in_(ids))
+        ).all()
+    } if ids else {}
+
+    cve_ids = {
+        finding.cve_id.upper()
+        for finding, _host_id in rows
+        if finding.cve_id is not None
+    }
+    kev_ids: set[str] = set()
+    if cve_ids:
+        kev_ids = set(
+            session.exec(
+                select(KevRecord.cve_id).where(KevRecord.cve_id.in_(cve_ids))
+            ).all()
+        )
+
+    severity_counts = {label: 0 for label in SEVERITY_ORDER}
+    for finding, _host_id in rows:
+        severity_counts[finding.severity] += 1
+
+    ranked = sorted(
+        rows,
+        key=lambda row: (
+            snapshots[row[0].id].risk_score if row[0].id in snapshots else -1,
+            SEVERITY_ORDER.get(row[0].severity, 0),
+            -int(row[0].id or 0),
+        ),
+        reverse=True,
+    )[:top_limit]
+    scores = [snapshot.risk_score for snapshot in snapshots.values()]
+
+    return ScanRiskSummaryResponse(
+        scan_id=scan_id,
+        total_findings=len(rows),
+        scored_findings=len(scores),
+        confirmed_findings=sum(
+            finding.confidence == "confirmed" for finding, _host_id in rows
+        ),
+        kev_findings=sum(
+            finding.cve_id is not None and finding.cve_id.upper() in kev_ids
+            for finding, _host_id in rows
+        ),
+        average_risk_score=(round(sum(scores) / len(scores), 2) if scores else None),
+        max_risk_score=max(scores) if scores else None,
+        severity=SeverityBreakdown(**severity_counts),
+        top_findings=[
+            _to_finding_read(finding, host_id, snapshots.get(finding.id))
+            for finding, host_id in ranked
+        ],
     )
 
 
@@ -394,7 +496,31 @@ def _to_operating_system(
     return OperatingSystemDetection.model_validate(value)
 
 
-def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRead:
+def _to_industrial_services(
+    values: list[dict[str, object]],
+) -> list[ModbusTcpServicePayload]:
+    return [ModbusTcpServicePayload.model_validate(value) for value in values]
+
+
+def findings_with_risk(session: Session, rows) -> list[FindingRead]:
+    ids = [finding.id for finding, _host_id in rows]
+    snapshots = {
+        snapshot.finding_id: snapshot
+        for snapshot in session.exec(
+            select(RiskSnapshotRecord).where(RiskSnapshotRecord.finding_id.in_(ids))
+        ).all()
+    } if ids else {}
+    return [
+        _to_finding_read(finding, host_id, snapshots.get(finding.id))
+        for finding, host_id in rows
+    ]
+
+
+def _to_finding_read(
+    finding: FindingRecord,
+    host_id: UUID | None,
+    risk: RiskSnapshotRecord | None = None,
+) -> FindingRead:
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -414,4 +540,8 @@ def _to_finding_read(finding: FindingRecord, host_id: UUID | None) -> FindingRea
         evidence=finding.evidence,
         references=finding.references_json,
         detected_at=finding.created_at,
+        risk_score=risk.risk_score if risk else None,
+        exploitability=risk.exploitability if risk else None,
+        confidence=risk.confidence if risk else None,
+        risk_rationale=risk.rationale if risk else None,
     )
