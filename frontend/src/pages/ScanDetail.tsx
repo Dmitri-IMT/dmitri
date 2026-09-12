@@ -9,6 +9,7 @@ import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
 import { SEVERITY_ORDER } from '@/lib/severity'
 import FindingsTable from '@/pages/scans/FindingsTable'
+import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -70,6 +71,10 @@ function ScanDetail() {
               />
             ) : (
               <>
+                <ScanAIAnalysis
+                  scanId={scan.scan_id}
+                  findings={scan.findings}
+                />
                 {groups.length === 0 ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     No vulnerabilities. Every machine in this scan came back

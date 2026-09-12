@@ -556,6 +556,21 @@ export const handlers = [
       ? HttpResponse.json(scan)
       : new HttpResponse(null, { status: 404 })
   }),
+  http.get(`${baseURL}/scans/:scanId/analysis`, ({ params }) =>
+    HttpResponse.json({
+      scan_id: params.scanId as string,
+      analysis_id: null,
+      status: 'unavailable',
+      analysis: null,
+      provider: null,
+      model: null,
+      context_version: null,
+      prompt_version: null,
+      created_at: null,
+      updated_at: null,
+      completed_at: null,
+    } satisfies components['schemas']['ScanAIAnalysisResponse']),
+  ),
   http.get(`${baseURL}/hosts/:hostId`, ({ params }) => {
     const host = hostDetailFixtures.find(
       (fixture) => fixture.host_id === params.hostId,
