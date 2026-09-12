@@ -5,6 +5,10 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-12
 
+* **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `stop_reason` /
+  `pace_or_stop` for cancel vs deadline; OT stage ceiling checked at host start and once after the
+  loop.
+
 * **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `_stage_deadline_hit`,
   inventory `must_stop(cancel_event, deadline)`, and `capture_values` `none`/`digest`.
 
