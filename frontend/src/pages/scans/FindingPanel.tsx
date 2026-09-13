@@ -45,7 +45,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           <dd className="min-w-0 max-w-prose text-body-md">
             {finding.risk_score == null
               ? 'Not calculated'
-              : `${finding.risk_score.toFixed(2)} / 100`}
+              : `${Math.round(finding.risk_score)} of 100`}
             {finding.confidence && <p>Confidence: {finding.confidence}</p>}
             {finding.exploitability != null && (
               <p>

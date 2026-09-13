@@ -18,9 +18,17 @@ describe('FindingPanel risk', () => {
         }}
       />,
     )
-    expect(screen.getByText('0.00 / 100')).toBeVisible()
+    expect(screen.getByText('0 of 100')).toBeVisible()
     expect(screen.getByText('Exploitability index: 0.00 / 1')).toBeVisible()
     expect(screen.getByText('severity=low, confidence=tentative')).toBeVisible()
     expect(screen.queryByText('Not calculated')).not.toBeInTheDocument()
+  })
+
+  it('shows risk as a rounded integer of 100', () => {
+    render(
+      <FindingPanel finding={{ ...criticalFinding, risk_score: 81.25 }} />,
+    )
+    expect(screen.getByText('81 of 100')).toBeVisible()
+    expect(screen.queryByText(/81\.25/)).not.toBeInTheDocument()
   })
 })
