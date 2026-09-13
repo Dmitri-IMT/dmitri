@@ -5,6 +5,21 @@
 > [`../implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`](../implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md).
 > **Neighbours:** [`FRONTEND.md`](FRONTEND.md), [`BACKEND.md`](BACKEND.md),
 > [`SECURITY.md`](SECURITY.md).
+> **Merged record:** [`../adr/ADR-020-ai-scan-analysis.md`](../adr/ADR-020-ai-scan-analysis.md).
+
+## Merged in PR #144
+
+Scan Detail has an on-demand plain-language overview. Groq with `openai/gpt-oss-120b`
+is the merged provider. A member presses **Explain this scan**. That is the only
+trigger. The worker AI loop is separate from enrichment. Output is English.
+`AI_ENABLED` and `AI_API_KEY` are the operator switch. Failure never hides scan
+results.
+
+Epic [DMI-161](https://linear.app/peirce/issue/DMI-161) owns later targets: OpenAI
+Luna (DMI-163), placeholder context (DMI-162), injection containment (DMI-167),
+writing skill (DMI-168), research assistant (DMI-169), card design (DMI-170).
+
+Chat, downloadable reports and a Home summary are **not decided**.
 
 ## Product decision
 
@@ -16,11 +31,11 @@ KEV, or CVEs.
 Technical depth remains available for verification and for sharing with a professional,
 but it must not be the entry point for a non-expert user.
 
-The AI experience has three connected surfaces:
+Surfaces that are **not decided** (do not treat as committed work):
 
-1. an automatic plain-language summary of the latest completed scan on Home;
-2. a contextual assistant available from Home, scan, host, and finding views;
-3. two downloadable reports per completed scan: explained and technical.
+1. an automatic plain-language summary of the latest completed scan on Home
+2. a contextual assistant available from Home, scan, host, and finding views
+3. two downloadable reports per completed scan: explained and technical
 
 ## Product principles
 
@@ -40,20 +55,19 @@ The AI experience has three connected surfaces:
 - **One explanation, multiple depths.** Home, chat, and reports share the same grounded
   analysis while adapting vocabulary and detail to their audience.
 
-## End-to-end experience
+## End-to-end experience (merged)
 
 ```text
 scan completes
-    -> enrichment and deterministic risk calculation finish
-    -> backend creates or refreshes a grounded AI summary
-    -> Home shows the latest summary and suggested questions
-    -> user may ask contextual follow-up questions
-    -> user may download an explained or technical report
+    -> enrichment scores findings on its own loop
+    -> Scan Detail shows results with Explain this scan
+    -> a member presses the button
+    -> worker AI loop claims the job and calls Groq
+    -> the card polls until completed or failed
 ```
 
-Scan completion and analysis completion are separate states. While enrichment or AI
-analysis is pending, the UI should say that the scan finished and the results are being
-organized. A failed AI job must never hide the deterministic scan results.
+Home chat, Home summary and reports stay in the undecided list above. A failed AI job
+must never hide the deterministic scan results.
 
 ## Home: latest scan summary
 

@@ -39,6 +39,7 @@
 | [`adr/ADR-012-headless-exit-code-contract.md`](adr/ADR-012-headless-exit-code-contract.md) | Change how a headless/CLI scan reports outcome (exit codes, `dmitri agent`) |
 | [`adr/ADR-018-nspi-active-modbus-safety.md`](adr/ADR-018-nspi-active-modbus-safety.md) | Active Modbus safety bounds and submodes |
 | [`adr/ADR-019-v2-active-scanning-and-agent-hardening.md`](adr/ADR-019-v2-active-scanning-and-agent-hardening.md) | Agent hardening, keyed digest, industrial persistence |
+| [`adr/ADR-020-ai-scan-analysis.md`](adr/ADR-020-ai-scan-analysis.md) | Groq scan overview, Explain this scan, data boundary |
 
 ### Product roadmap (`roadmap/`)
 

@@ -205,6 +205,25 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 # Email links must return to the local SPA rather than the hosted deployment:
 APP_BASE_URL=http://localhost:5173
+
+# Optional AI overview (Groq). Off by default. Needs a key on the worker to run jobs,
+# and the same pair on the API or Scan Detail returns unavailable.
+# AI_ENABLED=true
+# AI_API_KEY=
+# AI_MODEL=openai/gpt-oss-120b
+# AI_POLL_INTERVAL_SECONDS=5
+# AI_MAX_FINDINGS=10
+# AI_TIMEOUT_SECONDS=30
+# AI_MAX_OUTPUT_TOKENS=4096
+# AI_REASONING_EFFORT=low
+# AI_MAX_ATTEMPTS=2
+# AI_RETRY_DELAY_SECONDS=30
+# ENRICHMENT_POLL_INTERVAL_SECONDS=5
+# ENRICHMENT_BATCH_SIZE=10
+# ENRICHMENT_MAX_ATTEMPTS=3
+# ENRICHMENT_RETRY_DELAY_SECONDS=30
+# ENRICHMENT_STALE_AFTER_SECONDS=120
+# NVD_MIN_REQUEST_INTERVAL_SECONDS=6
 ```
 
 `DATABASE_URL` already points at the local `postgres` database. CORS has no trusted origin by
@@ -245,12 +264,19 @@ That endpoint does a real `SELECT 1`, so a `503` means the database, not the API
 `/docs`, `/redoc` and `/openapi.json` are **disabled by design** — the published contract
 is `contracts/openapi/openapi.yaml`.
 
-The enrichment worker is a separate process, and is optional for UI work:
+The enrichment worker is a separate process. It is optional for UI-only work, but scans will
+not get NVD/KEV/EPSS scores without it, and **Explain this scan** will stay pending:
 
 ```bash
 cd backend
 uv run python -m api.worker_main
 ```
+
+When `AI_ENABLED=true` and `AI_API_KEY` is set, this same process starts an AI poll loop in a
+daemon thread. Completing a scan does not call Groq. A member presses **Explain this scan**
+(`POST /api/v1/scans/{id}/analysis`). The worker will not claim that job while the scan still
+has `pending` or `running` enrichment jobs. Put the same `AI_ENABLED` + `AI_API_KEY` on the
+API process or Scan Detail returns `unavailable`.
 
 ### Create the first user
 

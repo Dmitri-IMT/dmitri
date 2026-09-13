@@ -218,7 +218,7 @@ The nav names domains, not actions, and items do not get renamed between release
 | IDs | Truncate to the first 8 characters; the full value is in the `title`. Never wrap a UUID. |
 | Inline select in a cell | shadcn `Select` with a **ghost, borderless trigger** — the text plus a small chevron close to the text, **aligned with the column header**. |
 | Silent machines | A machine unseen for weeks is **not removed and not flagged as an error**. Its row is set in `--ink-muted` with a second line reading **"Not seen for N weeks"**; no chip, no icon, no colour. Those rows also **collapse into one group row at the bottom of the table**, labelled **"Not seen recently (N)"**, which expands. The group row is always last, after the severity/name sort. This is a `DataTable` pattern. |
-| Loading | `LoadingSkeleton` for the table body on first load only, never on background refetch. |
+| Loading | `LoadingSkeleton` for the table body on first load only, never on background refetch. Its bars appear only after 250 ms, so a fast read never flashes them. |
 | Empty | A table never renders bare with no rows. |
 
 ## Cards & sections

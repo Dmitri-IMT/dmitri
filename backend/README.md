@@ -137,36 +137,35 @@ para a futura integracao LLM. Ambas aplicam o escopo da organizacao autenticada;
 o resumo retorna no maximo dez findings, sempre com seus IDs e evidencias, para
 limitar contexto e permitir rastreabilidade.
 
-A analise assistida por IA tem uma superficie inicial somente leitura:
+A analise assistida por IA e opcional e sob demanda:
 
-- `GET /api/v1/scans/{scan_id}/analysis`
+- `GET /api/v1/scans/{scan_id}/analysis` devolve `unavailable`, `not_requested`,
+  `pending`, `processing`, `completed` ou `failed`
+- `POST /api/v1/scans/{scan_id}/analysis` cria o job (`Explain this scan`)
 - `AI_ENABLED=false` (padrao), ou a ausencia de `AI_API_KEY`, retorna
   `unavailable` sem afetar as demais APIs
-- com IA habilitada, a resposta informa `pending`, `processing`, `completed` ou
-  `failed`; somente `completed` inclui o JSON estruturado da analise
-- a leitura nao chama um provedor nem dispara geracao
+- a leitura nao chama um provedor; so o worker de IA chama Groq
+- o loop de IA e um thread daemon separado do enrichment
 
 O resultado fica versionado e persistido em `ai_scan_analyses`, separado dos fatos
 deterministicos do scan. A migracao deve ser aplicada antes de habilitar a feature.
-O worker reutiliza o ciclo de polling existente: conclui o lote de enrichment,
-seleciona apenas scans sem jobs de enrichment ativos e cria um unico job por scan.
-Timeouts, rate limits e indisponibilidade usam retries limitados; jobs abandonados em
-`processing` sao recuperados, e nenhuma chave ou mensagem de erro bruta do provedor e
-persistida.
+Jobs so existem depois do POST. Timeouts usam retries limitados. Nenhuma chave ou
+mensagem de erro bruta do provedor e persistida.
 
 Configuracao inicial:
 
 ```env
 AI_ENABLED=true
-AI_PROVIDER=groq
 AI_MODEL=openai/gpt-oss-120b
 AI_API_KEY=<chave da Groq>
+AI_API_BASE_URL=https://api.groq.com/openai/v1
 AI_MAX_FINDINGS=10
 AI_TIMEOUT_SECONDS=30
 AI_MAX_OUTPUT_TOKENS=4096
 AI_REASONING_EFFORT=low
 AI_MAX_ATTEMPTS=2
 AI_RETRY_DELAY_SECONDS=30
+AI_POLL_INTERVAL_SECONDS=5
 ```
 
 Roadmap tecnico da proxima fase:
