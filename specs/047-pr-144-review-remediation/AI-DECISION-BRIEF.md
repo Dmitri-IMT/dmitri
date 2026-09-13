@@ -1,4 +1,4 @@
-# AI DECISION BRIEF — PR #144 AI scan analysis (D1–D3 reopened)
+# AI DECISION BRIEF — PR #144 AI scan analysis (D1–D3 decision evidence)
 
 Linear: DMI-158 · Parent: [`TRUTH.md`](TRUTH.md) decision log D1–D3 · Read with
 [`ARCHITECTURE.md`](ARCHITECTURE.md) Part 2 and [`DESIGN.md`](DESIGN.md) §3.1.
@@ -6,7 +6,48 @@ Linear: DMI-158 · Parent: [`TRUTH.md`](TRUTH.md) decision log D1–D3 · Read w
 This brief prepares one human decision session. It decides nothing. It gives facts, the
 choices the teammate made alone, and the questions in the order they must be answered.
 
-**Citation rule.** Code paths are on branch `feature/ia-implementation` (head `7997383`).
+> **Status — decision session held 2026-09-12.** The maintainer's authoritative decisions are
+> recorded in [`TRUTH.md`](TRUTH.md): OpenAI `gpt-5.6-luna` at medium reasoning is the selected
+> model; Mauá's local Qwen server is not the first choice and is outside this implementation;
+> provider input is anonymised and mapped back to real display values only inside the backend;
+> AI execution is separate and
+> failure-isolated; web search is deferred. Added 2026-09-13: D8 (prompt-injection architecture)
+> and D9 (writing skill) are proposed; D10 (trigger, back-fill, consent) is open.
+>
+> **Scope split 2026-09-13 (TRUTH D11).** PR #144 keeps the author's features (Groq, context as
+> built) and only adds the `Explain this scan` trigger and cleanup. D1–D3, D5, D8, D9 targets move to
+> an epic. D10: AI on for every organisation, button trigger, no consent record. This brief remains the evidence and alternatives
+> considered, not the current decision record.
+
+## 0. GPT-5.6 Luna API compatibility check (2026-09-12)
+
+Checked against the official model page, Responses API reference, Structured Outputs guide,
+web-search guide and error-code guide. This confirms documented capability, not account access,
+latency, output quality or the behaviour of combined features; those remain contract/evaluation
+tests before release.
+
+| Need | Official support | Decision / required test |
+|------|------------------|--------------------------|
+| Selected model | Model id `gpt-5.6-luna`; medium reasoning is supported | Pin that id and send `reasoning.effort=medium`; verify the maintainer API project can access it. |
+| Stable integration endpoint | `POST /v1/responses` accepts instructions, input, reasoning, output limits, tools and structured text | Replace the Groq `/chat/completions` adapter with a Luna Responses adapter now; do not build a temporary Chat Completions adapter. |
+| Strict analysis JSON | Luna supports Structured Outputs. Responses uses `text.format.type=json_schema` with `strict=true` | The current `ScanAIAnalysis` schema is compatible on paper: root object, all fields required, nullable value via `anyOf`, and `additionalProperties=false`. Run the exact post-D2 schema against Luna and handle schema-request errors as terminal. |
+| Refusal / incomplete output | Structured output may return a refusal outside the requested schema; Responses also reports incomplete and failed states | Treat refusal, incomplete, empty output and parse failure as explicit AI failure states. Never display partial JSON or hide scan results. |
+| Privacy and retention | Responses defaults `store` to true; stored responses remain at least 30 days. Stateless requests support `store=false` | Always send `store=false`; do not use conversations or `previous_response_id`; do not send a raw user identity as `safety_identifier`. D2 anonymisation remains mandatory and separate organisation retention/ZDR terms must be recorded in ADR-020. |
+| Future live web grounding | Luna supports the Responses `web_search` tool, domain filters, live-access control, inline URL citations and complete source lists | Deferred from PR #144. Future work uses `web_search` (not preview), requires search when a recommendation needs current evidence, includes `web_search_call.action.sources`, and renders citations as visible clickable links. Test web search plus strict output together before accepting that design. |
+| Search scope and leakage | Responses can allow/block domains and control live access; tool input becomes a search query | Future queries contain only D2 public CVE/product facts and request-local placeholders—never IP, subnet, organisation, hostname, UUID or raw evidence. Prefer authoritative security domains and store the returned sources used for each recommendation. |
+| Cost and throughput | Luna is usage-tier rate-limited; the free tier is unsupported. Web search has an additional per-call cost | Keep the application's separate bounded job queue, cap attempts/tool calls and avoid automatic historical back-fill without the consent decision. Confirm the API project's RPM/TPM and spend limit before enabling production. |
+| Retry behaviour | Official guidance says honour `Retry-After`; otherwise use bounded exponential backoff with jitter | Retry 429, timeout/connection failures and temporary 5xx; do not retry authentication, invalid request/schema or other permanent 4xx errors. Record only error codes, never response bodies containing input. |
+| Audit | Responses returns status, model, response id and token usage; web search can return sources | Store provider/model, prompt/context versions, local context hash, latency, token usage and source URLs. Do not depend on remote response retrieval because `store=false`. |
+
+Official references:
+
+- [GPT-5.6 Luna model](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [Create a Responses API response](https://developers.openai.com/api/reference/resources/responses/methods/create)
+- [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- [Web search](https://developers.openai.com/api/docs/guides/tools-web-search)
+- [Error codes](https://developers.openai.com/api/docs/guides/error-codes)
+
+**Citation rule.** Code paths are historic: branch `feature/ia-implementation` (head `7997383`), before main was merged and before remediation. Migration ids `20260912_21` / `_22` are now `20260912_24` / `_25`.
 Backend paths are relative to `backend/src/api/` unless they start with `backend/`. "Approved"
 means `main:docs/roadmap/AI.md`, `docs/implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`
 §Fase 3B, `docs/roadmap/SECURITY.md`, and `docs/adr/ADR-005-security-model.md`.
@@ -178,6 +219,8 @@ answer; a clean spec is cheaper than editing a design nobody approved.
 Note: the AI context reads `get_scan_risk_summary`, which exists only on this branch (PR #138
 re-apply, `1b072dd`). If D6 drops that read, option A also loses its data source.
 
+> **Outcome (D7, decided 2026-09-12).** Option A. AI stays in PR #144 and is fixed there. The migration collision is resolved (DMI-160).
+
 ### Q2 — What is the first AI feature? (product shape)
 
 | Option | Pros | Cons |
@@ -189,6 +232,8 @@ re-apply, `1b072dd`). If D6 drops that read, option A also loses its data source
 **Recommend A, built as the first milestone of the approved roadmap.** It is the smallest unit
 that gives value; B can reuse the same pipeline later. Record that a backend-assembled context
 is the "restricted tool surface" for a one-shot call, and chat (C) needs its own ADR.
+
+> **Outcome (D3, decided).** Option A: one analysis per scan. The bounded child tasks plus synthesizer are Epic E4. Chat stays out of scope.
 
 ### Q3 — Provider and model (D1)
 
@@ -212,6 +257,8 @@ are **not verified here** — whoever proposes Groq must bring them.
 Reason: it is the approved choice; changing provider needs evidence, not a merged PR. Decide
 cost vs quality on a small fixed eval set of real scans before picking the default id.
 
+> **Outcome (D1).** PR #144 keeps Groq as built (option B). Epic E2 moves to OpenAI `gpt-5.6-luna`, medium reasoning, Responses API, `store=false`, no tools. See §0.
+
 ### Q4 — Data boundary (D2, part 1)
 
 | Option | Pros | Cons |
@@ -224,6 +271,8 @@ cost vs quality on a small fixed eval set of real scans before picking the defau
 **Recommend B.** Reason: a plain-language priority summary needs the vulnerability, not the
 address. A test must pin the exact field set (P18).
 
+> **Outcome (D2, Epic E1).** PR #144 keeps the context as built (option A) while there are no customers. Target: stricter than B and close to C: placeholders (`machine_N`, `finding_N`) with local substitution, raw evidence is not sent, and ARCHITECTURE §2 D2 proposes excluding all scanner free text (title, description, recommendation) until D8 allows untrusted text. Only public vulnerability facts and counts.
+
 ### Q5 — Consent and scope (D2, part 2)
 
 | Option | Pros | Cons |
@@ -235,6 +284,8 @@ address. A test must pin the exact field set (P18).
 **Recommend B.** Reason: the customer, not an env var, decides if its recon data goes to a
 third party. With Q6 "on demand", opt-in makes the button appear; it sends nothing by itself.
 
+> **Outcome (D10, decided 2026-09-13).** None of these. AI is on for every organisation; no opt-in, no toggle, no consent record.
+
 ### Q6 — Trigger: automatic or on demand (D3, part 1)
 
 | Option | Pros | Cons |
@@ -245,6 +296,8 @@ third party. With Q6 "on demand", opt-in makes the button appear; it sends nothi
 
 **Recommend B.** Reason: intent, cost, and audit all come from one explicit action. Add a
 per-org daily cap. Regenerate only when the context hash or prompt version changed.
+
+> **Outcome (D10, decided 2026-09-13).** Option B: an `Explain this scan` button creates the job. No automatic analysis, no back-fill. In PR #144.
 
 ### Q7 — Where it runs (D3, part 2)
 
@@ -258,6 +311,8 @@ per-org daily cap. Regenerate only when the context hash or prompt version chang
 **Recommend C.** Reason: bounded cost to enrichment with no new service; move to D only if
 measured latency hurts. Retry only 408/429/5xx/network; 400/422 are final.
 
+> **Outcome (D3).** PR #144 moves AI into its own loop (a thread in the worker service) and jobs only exist after a button press. Epic E4: option D in spirit: a separate, failure-isolated AI flow with its own budget. Whether it is a separate Railway process is an implementation detail for ARCHITECTURE §2 D3.
+
 ### Q8 — Grounding, citations, audit
 
 | Option | Pros | Cons |
@@ -270,6 +325,8 @@ measured latency hurts. Retry only 408/429/5xx/network; 400/422 are final.
 the data boundary. Prompt must carry product vocabulary and the "never certify safety" rule
 (A13).
 
+> **Outcome (D3/D8/D9, Epic E4–E6).** Placeholder validation, context hash, versions and failure codes are required (D3, D8 proposed). Free-text claims are constrained by the D9 writing skill and linter, not by a second model pass.
+
 ### Q9 — Output language
 
 | Option | Pros | Cons |
@@ -279,6 +336,8 @@ the data boundary. Prompt must carry product vocabulary and the "never certify s
 | C. Follow a UI locale setting | Right long-term | No i18n exists; out of scope |
 
 **Recommend B.** Reason: the output language follows the UI language; i18n is its own decision.
+
+> **Outcome (decided).** English.
 
 ### Q10 — Frontend surface and states
 
@@ -297,9 +356,13 @@ plus caption `Written by an AI model from this scan's results. Check the vulnera
 acting.`; outdated (context hash changed) → note + regenerate. Who may click: decide member vs
 admin (cost). A new DESIGN.md from `frontend-design-agent` owns exact copy and test ids.
 
+> **Outcome.** PR #144 keeps the card position and adds the `Explain this scan` button (DESIGN §4). Placement, links and provenance caption are Epic E10.
+
 ---
 
 ## 4. Consequence of "remove AI from PR #144"
+
+> **Not chosen.** D7 kept AI in PR #144. This section is kept only as a record of the option's cost.
 
 ### Files to delete (branch paths)
 
@@ -352,8 +415,7 @@ admin (cost). A new DESIGN.md from `frontend-design-agent` owns exact copy and t
 
 ## 5. What the AI ADR must record
 
-Path: next free ADR number at write time (ARCHITECTURE Phase 3 names `ADR-020`; check open
-branches first). Layout as ADR-018: Status, Context, Decision, Consequences, Rejected
+Path: `docs/adr/ADR-020-ai-scan-analysis.md` (ADR-019 is on main; re-check open branches first). Add D8 (prompt injection) and D9 (writing skill) to the list below. Layout as ADR-018: Status, Context, Decision, Consequences, Rejected
 alternatives, References.
 
 1. **Scope.** Which feature (Q2). What is explicitly not included (chat, reports, Home, active

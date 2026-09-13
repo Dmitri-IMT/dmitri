@@ -1,19 +1,25 @@
 # DESIGN — PR #144 web UI: retroactive review and target states (DMI-158)
 
 > **Retroactive.** PR #144 shipped web UI with no DESIGN.md. This document records the UI **as
-> built** on `feature/ia-implementation` (`git diff main...HEAD -- frontend`), reviews it against
+> built** at PR head `7997383` (§2, historic), reviews it against
 > [`docs/ui/FOUNDATIONS.md`](../../docs/ui/FOUNDATIONS.md) and
 > [`docs/ui/SCREENS.md`](../../docs/ui/SCREENS.md), and states the **target** that Phase 4
 > remediation builds to. It does not re-decide FOUNDATIONS. Where this document and FOUNDATIONS
 > disagree, FOUNDATIONS wins and this document is the bug.
 >
-> **Gate.** Per TRUTH business rule 1, no item here is implemented until its part has a D1–D7
-> decision. Every deviation is marked **to confirm in Phase 1 code review**.
+> **Gate.** Per TRUTH business rule "Decisions come before code changes", no item here is
+> implemented until its part has a decided PR-scoped row in the TRUTH decision log (D1–D11).
+>
+> **D6 applied to this document.** Main's `IndustrialServiceView` replaced the as-built
+> `ModbusTcpServicePayload`. It carries no `values`, `value_min`, `value_max`, `nonzero_count` or
+> `validations`. §2.3 is historic; §3.2, §4 and §6 targets below are written for the new
+> contract. Phase 1 was independently confirmed on 2026-09-12; the authoritative disposition
+> and implementation blockers are recorded in `TRUTH.md` under "Confirmed Phase 1 findings".
 
 **Rendered preview (target states):** https://claude.ai/code/artifact/0beb0454-171d-4d43-8e09-7e8e0f63123d
 — built from FOUNDATIONS values with Inter and Geist Mono. The ASCII below is structural only.
 
-**Visual check (TRUTH business rule 13):** _pending — record the human decision and date here._
+**Visual check:** _pending — record the human decision and date here._
 
 ---
 
@@ -40,9 +46,9 @@ No new routes. Three existing screens gain surfaces.
 | Surface | Reached by | Data |
 |---|---|---|
 | AI overview | Opening a completed scan | `GET /api/v1/scans/{scan_id}/analysis` → `ScanAIAnalysisResponse` (`status`: `pending` · `processing` · `completed` · `failed` · `unavailable`; `analysis: ScanAIAnalysis \| null`). Separate query, polls every 3s while `pending`/`processing`. |
-| Industrial services (scan) | Opening a completed scan with ≥1 host where `industrial_services.length > 0` | `ScanDetailResponse.hosts[].industrial_services: ModbusTcpServicePayload[]` — no extra request |
+| Industrial services (scan) | Opening a completed scan with ≥1 host where `industrial_services.length > 0` | `ScanDetailResponse.hosts[].industrial_services: IndustrialServiceView[]` (main, D6) — no extra request |
 | Industrial services (machine) | Opening a machine | `HostDetailResponse.industrial_services` — no extra request |
-| Risk in vulnerability panel | Expanding a vulnerability row on either screen | `FindingRecord.risk_score`, `exploitability`, `confidence`, `risk_rationale` |
+| Risk in vulnerability panel | Expanding a vulnerability row on either screen | `FindingRecord.risk_score`, `exploitability`, `confidence`, `risk_rationale`; D5 adds enrichment completeness and unavailable sources |
 
 Backend semantics that drive the UI (`backend/src/api/services/ai/read.py`): `unavailable` when AI
 is off **or** the scan failed; `pending` when AI is on and no job record exists yet.
@@ -161,7 +167,7 @@ primitive, since `LoadingSkeleton` is table-only).
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 Industrial services — as built
+### 2.3 Industrial services — as built (historic, pre-D6 payload)
 
 Services arrive inside the page's own response, so **loading** and **error** are the page's
 `ReadDetailGate` states (`host-detail` / `scan-detail` loading skeleton, "Couldn't load this
@@ -222,14 +228,15 @@ Risk is the **first** row. With no score it reads "Not calculated" on every vuln
 
 ## 3. Conformance review
 
-All items: **to confirm in Phase 1 code review**. Severity: **H** breaks a TRUTH criterion or a
+All items were confirmed in the 2026-09-12 Phase 1 review unless `TRUTH.md` records them as
+resolved or decision-dependent. Severity: **H** breaks a TRUTH criterion or a
 binding rule visibly · **M** binding rule, lower impact · **L** polish.
 
 ### 3.1 AI overview (`frontend/src/pages/scans/ScanAIAnalysis.tsx`, `pages/ScanDetail.tsx`)
 
 | # | Sev | Location | Rule broken | Required change |
 |---|---|---|---|---|
-| A1 | H | `backend/src/api/services/ai/prompts.py` `SYSTEM_PROMPT` ("Write all explanatory prose in Brazilian Portuguese") → rendered in `ScanAIAnalysis` | Copy is interface design; one language per screen. The UI is English; the analysis arrives in pt-BR. | Analysis prose must be in the UI language (English). Record in the AI ADR (Q2). |
+| A1 | H | `backend/src/api/services/ai/prompts.py` `SYSTEM_PROMPT` ("Write all explanatory prose in Brazilian Portuguese") → rendered in `ScanAIAnalysis` | Copy is interface design; one language per screen. The UI is English; the analysis arrives in pt-BR. | English, decided (TRUTH D3 context engineering). Enforced by the D9 writing skill. |
 | A2 | H | `ScanAIAnalysis.tsx:73-87` + `read.py` returns `pending` when no record exists | TRUTH "AI never hides results" holds, but the state never ends: unbounded 3s polling and a permanent "organizing" card for scans with no job. | Backend returns `unavailable` (or `failed`) when no job exists and none will run; UI keeps polling only while a job exists. Confirm root cause in Phase 1. |
 | A3 | H | `ScanAIAnalysis.tsx:105-106` — `completed` with `analysis: null` returns `null` | TRUTH "AI provider fails → clear failed state". A completed-but-empty record silently vanishes. | Treat `completed && analysis == null` as the failed state. |
 | A4 | M | `ScanDetail.tsx:74-77` — AI card placed before the severity groups | SCREENS.md §SCAN DETAIL: epicenter is the vulnerabilities; layout order is strip → vulnerabilities → machines. The async card also shifts the epicenter after load. | Move the card after the severity groups (or the "No vulnerabilities" line), before Industrial services. Amend SCREENS.md §SCAN DETAIL layout in Phase 6. See Q1. |
@@ -238,10 +245,10 @@ binding rule visibly · **M** binding rule, lower impact · **L** polish.
 | A7 | M | `ScanAIAnalysis.tsx:122` `text-title-xs` on a `<p>` (executive summary) | §Type: title tokens are for titles. | `text-body-md font-semibold`. |
 | A8 | M | `ScanAIAnalysis.tsx` card body uses `gap-6`, `gap-3`, `gap-4`, `gap-2` | §Spacing rule 4: at most three vertical steps (intra-group, inter-group, inter-section). | Intra-group `2`, inter-group `4`, sections inside the card `6`. Replace `gap-3` with `2`. |
 | A9 | L | `ScanAIAnalysis.tsx:163` `border-t border-rule` between explanations | House style: group by spacing, fewer lines. | Remove the rule; the step-4 gap separates items. |
-| A10 | L | `PRIORITY_LABEL` "High priority" / "Medium priority" / "Low priority" | §Vocabulary: one word per concept. *High/Medium/Low* are severity words; reusing them for action priority invites confusion. | `Do this now` / `Do this soon` / `When you can` / `Later` (maps `immediate`/`high`/`medium`/`low`). |
+| A10 | L | `PRIORITY_LABEL` "High priority" / "Medium priority" / "Low priority" | §Vocabulary: one word per concept. *High/Medium/Low* are severity words; reusing them for action priority invites confusion. | `Do this now` / `Do this soon` / `When you can` / `Later` (maps D9 schema enum `now`/`soon`/`when_possible`/`later`). |
 | A11 | L | Pending/failed/error copy: "We…", "technical scan results below" | §Copy: plain, no product voice; "below" becomes wrong after A4. | Replace per §6. |
 | A12 | L | `ScanAIAnalysis.tsx:166-167` fallback `'Recorded vulnerability'` | Unreachable if `validation.py` holds (ids must be in context) — dead branch. | Confirm in Phase 1; drop the item instead of inventing a title if the id is unknown. |
-| A13 | — | AI-written text may say *finding*, *device* for a machine, or certify safety | §Vocabulary and "Never certify safety" apply to every string on the page, generated or not. | Prompt must carry the vocabulary and the no-safety-claim rule. Belongs in the AI ADR (Phase 3). |
+| A13 | — | AI-written text may say *finding*, *device* for a machine, or certify safety | §Vocabulary and "Never certify safety" apply to every string on the page, generated or not. | D9 writing skill rules 7–10 and its linter ([`WRITING-SKILL.md`](WRITING-SKILL.md)). Recorded in ADR-020. |
 
 Conforming as built: severity has no hue anywhere in the card; `unavailable` renders nothing
 (absent, not disabled); no `dark:`; `Disclosure` is a shared component; `aria-live` on pending;
@@ -253,7 +260,7 @@ the failed state shows no partial analysis.
 |---|---|---|---|---|
 | I1 | H | `IndustrialServices.tsx:7-9 words()`, `:140`, `:146`, `:33-34`, `:58`, `:133` | §Audience: the product interprets, not raw data for triage; zero training. `tcp-port, pymodbus`, `generic baseline`, `illegal address (exception 2)`, `CONFIRMED` are internal identifiers with underscores swapped for spaces. | Map every enum to plain words (§6). Move `evidence_sources`, `mapping_source` and the address-range table behind a `Disclosure` "Show technical details". |
 | I2 | H | `IndustrialServices.tsx:63-65` renders `unit.error` verbatim | §Copy: real, plain content; no raw backend strings. | Do not render `error`. Unit status word carries the meaning (`Error` → "Didn't answer correctly"). |
-| I3 | M | `IndustrialServices.tsx:104-107` "N controlled write validation(s) recorded." | Zero training; ADR-018 active Modbus safety makes a write a sensitive fact. Ambiguous and alarming. | Plain sentence (§6). Wording to confirm against ADR-018. |
+| I3 | — | `IndustrialServices.tsx:104-107` "N controlled write validation(s) recorded." | — | **Moot after D6.** `IndustrialServiceView` carries no `validations`; remove the line. |
 | I4 | M | `IndustrialServices.tsx:53,78` `border-dashed border-border` | FOUNDATIONS has no dashed rule; group by surface and spacing. | Remove the dashed borders; separate units with step `4`. |
 | I5 | M | `IndustrialServices.tsx:72-100` hand-rolled `<table>`, `text-caption-md` cells, uppercase `font-normal` headers | §Interaction/§Tables: tables are shared components (`DataTable` owns 56px rows and header style); dense cells are `text-body-sm`. | Use the shared table primitive with `DataTable` header treatment; cells `text-body-sm`; sentence-case headers. |
 | I6 | M | `IndustrialServices.tsx:137` `sm:grid-cols-2` | §Theme: desktop only, no responsive breakpoints. | Removed with I1 (moves into the disclosure); if kept, plain `grid-cols-2`. |
@@ -282,6 +289,11 @@ allows `size-4`/`size-5` only); `outline` button uses `--rule` not `--edge` (FOU
 ---
 
 ## 4. Required target states (TRUTH acceptance criteria)
+
+> **Scope (TRUTH D11, 2026-09-13).** PR #144 builds only: the AI states below marked PR #144,
+> the industrial UI compiling on `IndustrialServiceView` (F1), and removal of fields the new
+> contract no longer has. Every other target in §3–§4 (A4–A13, I1–I11, R1–R5, card placement,
+> completed-card redesign) is Epic E10 and stays here as its design source.
 
 Vertical rhythm on SCAN DETAIL: intra-group `2`, inter-group `4` (inside cards) / `8` (between
 severity cards), inter-section `12` (unchanged). AI card: `Card` padding step `6` (primitive
@@ -318,7 +330,7 @@ default), inner sections `6`, inner groups `4`, lines `2`.
 │ │  OpenSSH signal handler race condition                          │   │
 │ │  …explanation · why it matters · Recommended action: …          │   │
 │ │                                  (step 4 between items, no rule)│   │
-│ │ › Show assessment details and limitations                       │   │
+│ │ › Show what this overview cannot confirm                        │   │
 │ └─────────────────────────────────────────────────────────────────┘   │
 │ ┌ Industrial services ────────────────── scan-industrial-services ┐   │
 │ ┌ Machines seen ──────────────────────────────────────────────────┐   │
@@ -327,18 +339,33 @@ default), inner sections `6`, inner groups `4`, lines `2`.
 
 ### Target: AI states
 
+**PR #144 (D10).** The card keeps its as-built position and completed layout. It gains a
+`not_requested` state and a button on the failed state. No other AI copy or layout change is in
+the PR; A4–A12 are Epic E10.
+
 ```text
-Disabled (unavailable)   Pending                         Failed                             Read error
-(no card)                ┌ AI overview ───────────────┐  ┌ AI overview ────────────────────┐ ┌ AI overview ─────────────┐
-                         │ Preparing a plain-language │  │ The overview couldn't be        │ │ Couldn't load the        │
-                         │ overview of this scan.     │  │ prepared for this scan. The     │ │ overview.                │
-                         └─ scan-ai-pending ──────────┘  │ vulnerabilities above are       │ │        [Reload overview] │ footer, outline sm
-                                                         │ complete and don't depend on it.│ └─ scan-ai-error ──────────┘
-                                                         └─ scan-ai-failed ────────────────┘    button: scan-ai-retry
+Disabled (unavailable)   Not requested                         Pending (after press)
+(no card)                ┌ AI overview ──────────────────────┐ ┌ AI overview ───────────────┐
+                         │ Get a plain-language overview of  │ │ Preparing a plain-language │
+                         │ this scan.                        │ │ overview of this scan.     │
+                         │               [Explain this scan] │ └─ scan-ai-pending ──────────┘
+                         └─ scan-ai-not-requested ───────────┘   polls 3 s, stops at 5 min
+                             button: scan-ai-request (footer, outline sm)
+
+Failed                                                Read error
+┌ AI overview ─────────────────────────────────────┐  ┌ AI overview ─────────────┐
+│ Couldn't prepare the overview. The scan results  │  │ Couldn't load the        │
+│ are complete without it.                         │  │ overview.                │
+│                              [Explain this scan] │  │        [Reload overview] │
+└─ scan-ai-failed ─────────────────────────────────┘  └─ scan-ai-error ──────────┘
+    button: scan-ai-request (footer, outline sm)          button: scan-ai-retry
 ```
 
-Failed has no action: there is no regenerate endpoint, so the action is absent. The next step is
-the sentence pointing at the results.
+Any member may press `Explain this scan`. Pressing it disables the button while the request is in
+flight, then the card moves to pending and the button is gone for that scan for everyone. Only
+`not_requested` and `failed` show the button. A 409 (someone else already asked) refetches the
+status. If the POST fails, the card shows the read-error state. After the 5-minute
+polling bound the card keeps the pending text; reloading the page reads the latest status.
 
 ### Target: Industrial service block (scan detail; machine detail omits the host heading)
 
@@ -349,12 +376,11 @@ the sentence pointing at the results.
 │                                               step 4                          │
 │ Modbus on port 502 · Confirmed                h4 title-xs, 502 mono           │ industrial-service-502
 │ Unit 1 · Responding · Schneider Electric TM221CE16T V1.0        body-md       │ modbus-unit-1
-│ One test write was made and undone on this controller.          body-sm muted │ (only if validations)
 │ › Show technical details                             industrial-details-toggle-502
 │   Found by       Port check, Modbus reply                                     │
 │   Addresses read on unit 1                                                    │
 │   Area               Addresses   Result                (shared table, 56px)   │
-│   Holding registers  0–3         Readable · 2 of 4 set · values 0 to 42       │
+│   Holding registers  0–3         Readable                                     │
 │   Coils              8–11        Not available on this controller             │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -382,23 +408,23 @@ card announces pending → completed/failed.
 
 ---
 
-## 5. Decision-dependent UI
+## 5. Decision consequences for the UI
 
-| Decision outcome | UI consequence |
+| Decision (TRUTH status) | UI consequence |
 |---|---|
-| **D1 — any provider** | No provider or model name is shown today; none is required unless D2 requires disclosure. Copy stays provider-neutral ("AI overview"). |
-| **D2 — full context as built, or reduced context** | No UI change beyond §4. |
-| **D2 — off by default, per-organisation opt-in** | Off → `unavailable` → no card (no nag on scan detail). Opt-in control lives on **SETTINGS**, admin only, **absent for viewers**. Shape: one `Switch` row. Label `Plain-language AI overviews`; one line under it naming what leaves the product (exact line comes from the ADR, e.g. `Sends vulnerability titles, services and machine names from each scan to {provider}.`); turning it on requires a confirm dialog: title `Turn on AI overviews?`, body = the same data line, buttons `Turn on overviews` / `Keep off`. Blocked on a settings contract field — no endpoint exists. Needs its own SETTINGS spec amendment before build. |
-| **D2 — disclosure required on the result** | Add a caption in the AI card footer: `Written by an AI model from this scan's results. Check the vulnerabilities above before acting.` testid `scan-ai-provenance`. |
-| **D3** | No UI change, provided the status union stays `pending · processing · completed · failed · unavailable`. |
-| **D7 / AI part removed** | Delete `ScanAIAnalysis.tsx` + test, `getScanAnalysis`, `queryKeys.scans.analysis`, the MSW `/analysis` handler, regenerate `openapi.d.ts`. SCAN DETAIL returns to SCREENS.md as written. |
-| **D6 — this PR wins** | §3.2 changes apply; SCREENS.md amended (I9); overlapping issue rescoped to point here. |
-| **D6 — in-progress issue wins** | Delete `IndustrialServices.tsx` + test, `ScanIndustrialServices.tsx`, `test/industrialFixtures.ts`, the `industrial_services` fixture fields, the two cards; that issue's DESIGN.md owns the surface and inherits §3.2 findings. |
-| **D6 — merge both** | This document's §4 industrial target is the baseline the other issue's DESIGN.md must match. |
-| **Risk context** (part 1, rides with D6) | Kept → R1–R5. Removed → revert `FindingPanel.tsx` and delete `FindingPanel.test.tsx`. |
-| D4, D5 | No web UI. |
-
----
+| **D1 — Groq in PR, OpenAI in E2** | No provider or model name shown. Copy stays provider-neutral ("AI overview"). |
+| **D2 — anonymised context (Epic E1)** | The model sees only placeholders. The backend substitutes real machine names and vulnerability titles before the response reaches the UI, so the card shows real names (as in the §4 mock) and links each reference to its vulnerability. The frontend never resolves placeholders itself. |
+| **D3 — isolated pipeline (Epic E4)** | Status union (after D10) is `not_requested · pending · processing · completed · failed · unavailable`. A completed result with `coverage.failed > 0` shows one line under the headline: `Covers {analyzed} of {total} vulnerabilities.` testid `scan-ai-coverage`. Pending ends when the job is terminal; polling is bounded. |
+| **D5 — partial enrichment (Epic E7, E8)** | In the vulnerability panel risk block: completeness `pending` → `Still updating` under the score; `partial` → `Partial · {sources} unavailable`; `unavailable` → block omitted. Scan Detail refetches while any finding is `pending`, with a bound, and stops on terminal state (F2). Exact copy to confirm at visual check. |
+| **D6 — main's industrial contract (PR)** | §3.2 findings apply to `IndustrialServiceView`. No values, counts or validations exist to render. |
+| **D7 / D11 — one PR plus an epic** | PR #144 ships only the scope note in §4; the rest is Epic E10. |
+| **D8 — prompt injection (Epic E5)** | AI text renders as React text nodes only: no markdown, no HTML, no auto-links. Links come only from backend-mapped references. |
+| **D9 — writing skill (Epic E6)** | The completed card maps to schema v2: `headline` → first line (body-md semibold); `summary` → body-md; `actions[]` → "What to do first" (title, detail, priority label per A10); `explanations[]` → "Why these vulnerabilities matter" (title from the referenced vulnerability, `what_it_is`, `why_it_matters`); `limitations[]` → "What this scan cannot confirm" inside the disclosure. `overall_assessment` and `plain_language_summary` are gone; the disclosure label becomes `Show what this overview cannot confirm`. |
+| **D10 — `Explain this scan` (PR, decided 2026-09-13)** | AI is on for every organisation; no SETTINGS row, no confirm dialog, no consent record. `not_requested` and `failed` show the `Explain this scan` button; any signed-in member may press it; after a press the button is gone for that scan and the API returns 409 on a repeat. See §4 Target: AI states. |
+| **Provenance caption (Epic E10)** | Add in the AI card footer: `Written by an AI model from this scan's results and public vulnerability data (NVD, CISA KEV, FIRST EPSS). It can contain mistakes. Check the vulnerabilities before acting.` testid `scan-ai-provenance`. Research note §8.4. |
+| **Research-note UI proposals (Epic E10)** | Pending text names progress (`Reading vulnerabilities: 4 of 12`, `role="status"`); no numeric confidence; no feedback buttons until a review owner exists. The `outdated` and `limit_reached` states belonged to the hybrid trigger, which was not chosen. |
+| **Risk context** | R1–R5 apply. |
+| D4 | No web UI. |
 
 ## 6. Copy
 
@@ -407,14 +433,16 @@ card announces pending → completed/failed.
 | AI card heading (all states) | `AI overview` · failed: `AI overview unavailable` | `AI overview` in every state |
 | AI completed subtitle | `A plain-language interpretation of this scan's recorded evidence.` | *(deleted)* |
 | AI pending | `The scan is complete. We're organizing the results into a simpler explanation. The technical results below are ready now.` | `Preparing a plain-language overview of this scan.` |
-| AI failed | `We couldn't prepare the plain-language overview. This does not affect the technical scan results below.` | `The overview couldn't be prepared for this scan. The vulnerabilities above are complete and don't depend on it.` |
+| AI failed | `We couldn't prepare the plain-language overview. This does not affect the technical scan results below.` | `Couldn't prepare the overview. The scan results are complete without it.` (PR) |
 | AI read error | `We couldn't load the plain-language overview. The technical scan results below are still available.` | `Couldn't load the overview.` |
 | AI read error button | `Try again` | `Reload overview` |
+| AI not requested | *(state did not exist)* | `Get a plain-language overview of this scan.` + button `Explain this scan` (PR) |
+| AI failed button | *(none)* | `Explain this scan` (PR) |
 | AI sections | `What to do first` · `Why these vulnerabilities matter` · `Recommended action: ` · `What this scan cannot confirm` | unchanged |
-| AI disclosure | `Show assessment details and limitations` | unchanged |
+| AI disclosure | `Show assessment details and limitations` | `Show what this overview cannot confirm` (D9 schema v2) |
 | AI priority | `Immediate` · `High priority` · `Medium priority` · `Low priority` | `Do this now` · `Do this soon` · `When you can` · `Later` |
 | AI unknown vulnerability | `Recorded vulnerability` | *(item omitted)* |
-| AI prose language | pt-BR (generated) | English (Q2) |
+| AI prose language | pt-BR (generated) | English for the current English UI; future localisation changes the UI and generated prose together |
 | Industrial card heading | `Industrial services` | unchanged |
 | Industrial empty (machine) | `No industrial services were detected on this machine.` | *(card omitted, Q3)* |
 | Service heading | `Modbus TCP · port 502` | `Modbus on port 502` |
@@ -429,9 +457,9 @@ card announces pending → completed/failed.
 | Table caption | `Address ranges mapped for Modbus unit 1` | `Addresses read on unit 1` |
 | Table headers | `Address space` · `Range` · `Result` | `Area` · `Addresses` · `Result` |
 | Address space | `coil` · `discrete input` · `holding register` · `input register` | `Coils` · `Discrete inputs` · `Holding registers` · `Input registers` |
-| Range result | `readable · 2 non-zero · min 0 · max 42` | `Readable · 2 of 4 set · values 0 to 42` |
+| Range result | `readable · 2 non-zero · min 0 · max 42` | `Readable` (D6: no counts or values in the read contract) |
 | Range status | `illegal address (exception 2)` · `illegal function` · `timeout` · `error` · `skipped` | `Not available on this controller` · `Not supported by this controller` · `Didn't answer in time` · `Couldn't be read` · `Not checked` |
-| Validations | `2 controlled write validations recorded.` | `One test write was made and undone on this controller.` / `{N} test writes were made and undone on this controller.` — wording to confirm against ADR-018 |
+| Validations | `2 controlled write validations recorded.` | *(removed — D6 contract has no validations)* |
 | Panel risk label | `Risk score` | `Risk` |
 | Panel risk value | `81.25 / 100` · null: `Not calculated` | `81 of 100` · null: *(block omitted)* |
 | Panel confidence | `Confidence: confirmed` | `Confirmed` · `Probable` · `Tentative` → `Confirmed` · `Likely` · `Possible` |
@@ -451,7 +479,10 @@ card announces pending → completed/failed.
 | `scan-ai-retry` | `Reload overview` button | — | **add** |
 | `scan-ai-details-toggle` | details disclosure trigger | yes | keep |
 | `scan-ai-details-caret` | disclosure caret | yes | keep |
-| `scan-ai-provenance` | provenance caption | — | add **only** if D2 requires |
+| `scan-ai-provenance` | provenance caption | — | **add** (recommended, §5) |
+| `scan-ai-coverage` | partial coverage line | — | **add** (D3) |
+| `scan-ai-not-requested` | AI card, not requested | — | **add** (PR, D10) |
+| `scan-ai-request` | `Explain this scan` button | — | **add** (PR, D10) |
 | `scan-industrial-services` | industrial card body, scan detail | yes | keep |
 | `scan-industrial-host-{hostId}` | host section | yes | keep |
 | `industrial-services` | services list | yes | keep |
@@ -483,8 +514,7 @@ card announces pending → completed/failed.
 ## Out of scope
 
 - New AI surfaces (chat, reports, Home summary) — TRUTH §Out of scope.
-- The SETTINGS opt-in screen build (only its shape is noted under D2; it needs a contract and a
-  SETTINGS amendment first).
+- A SETTINGS opt-in screen: D10 decided there is none.
 - Pre-existing `Disclosure` caret size and outline-button border token.
 - Linking industrial host headings to machine detail.
 
@@ -492,19 +522,18 @@ card announces pending → completed/failed.
 
 1. **Q1 — AI card position.** Recommended: after the vulnerability groups (A4). Alternative: keep
    it first and amend SCREENS.md to make the overview the scan-detail epicenter. Maintainer to pick.
-2. **Q2 — Analysis language.** English to match the UI (recommended), or localise the whole app.
-   Belongs in the AI ADR.
+2. **Q2 — Analysis language.** **Decided 2026-09-12 (TRUTH D3 context engineering): English.**
+   Localisation changes the UI and generated prose together, later.
 3. **Q3 — Empty industrial card on machine detail.** **Decided 2026-09-12 (Guilherme Ronca, artifact comment): omit the card when `industrial_services` is empty** (matches scan detail). `no-industrial-services` is removed.
-4. **Q4 — Validation-write copy.** Needs ADR-018 owner to confirm what a "controlled write
-   validation" does to the controller before the sentence ships.
+4. **Q4 — Validation-write copy.** **Moot after D6:** the read contract has no validations.
 5. **Q5 — `evidence_sources` vocabulary.** The set of values is open strings; backend to publish
    the list so each maps to plain words.
-6. **Blocked on contract:** D2 opt-in has no settings endpoint.
+6. **D10 decided 2026-09-13:** `Explain this scan` button for any member, once per scan (again only after a failure), no SETTINGS row.
 7. **Q6 — AI pending loading indicator.** Maintainer asked for one (artifact comment, 2026-09-12). Proposed: Lucide `LoaderCircle` spinning, reduced-motion safe. Alternative: new card skeleton primitive. Maintainer to pick.
 
 ## Approved target states (artifact comments, Guilherme Ronca, 2026-09-12)
 
 - AI overview **completed** card as mocked — approved ("clean").
-- AI overview **failed** card with `Couldn't load the overview.` and footer `Reload overview` — approved.
+- AI overview **read-error** card (`scan-ai-error`) with `Couldn't load the overview.` and footer `Reload overview` — approved. (The approval comment called it "failed"; the copy and button belong to the read-error state. The job-failed state now offers `Explain this scan`, per D10.)
 - Machine detail **empty** industrial state: no card (Q3).
 - Vulnerability panel layout: "What it is" / "What to do" main column, risk in the margin (R2).
