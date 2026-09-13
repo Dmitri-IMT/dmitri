@@ -25,9 +25,7 @@ describe('FindingPanel risk', () => {
   })
 
   it('shows risk as a rounded integer of 100', () => {
-    render(
-      <FindingPanel finding={{ ...criticalFinding, risk_score: 81.25 }} />,
-    )
+    render(<FindingPanel finding={{ ...criticalFinding, risk_score: 81.25 }} />)
     expect(screen.getByText('81 of 100')).toBeVisible()
     expect(screen.queryByText(/81\.25/)).not.toBeInTheDocument()
   })
