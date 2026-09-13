@@ -1,15 +1,15 @@
 import type { components } from '@/types/openapi'
 
-type ModbusService = components['schemas']['ModbusTcpServicePayload']
-type ModbusUnit = components['schemas']['ModbusUnitPayload']
-type AddressRange = components['schemas']['ModbusAddressRangePayload']
+type IndustrialService = components['schemas']['IndustrialServiceView']
+type ModbusUnit = components['schemas']['ModbusUnitView']
+type AddressRange = components['schemas']['ModbusAddressRangeView']
 
 function words(value: string): string {
   return value.replaceAll('_', ' ')
 }
 
 function identification(unit: ModbusUnit): string | null {
-  const identity = unit.device_identification
+  const identity = unit.identification
   if (!identity) return null
 
   return (
@@ -28,20 +28,9 @@ function identification(unit: ModbusUnit): string | null {
 }
 
 function rangeSummary(range: AddressRange): string {
-  if (range.status !== 'readable') {
-    return range.exception_code == null
-      ? words(range.status)
-      : `${words(range.status)} (exception ${range.exception_code})`
-  }
-
-  const facts = ['readable']
-  if (range.nonzero_count != null) {
-    facts.push(`${range.nonzero_count} non-zero`)
-  }
-  if (range.value_min != null && range.value_max != null) {
-    facts.push(`min ${range.value_min}`, `max ${range.value_max}`)
-  }
-  return facts.join(' · ')
+  return range.exception_code == null
+    ? words(range.status)
+    : `${words(range.status)} (exception ${range.exception_code})`
 }
 
 function Unit({ unit }: { unit: ModbusUnit }) {
@@ -99,18 +88,11 @@ function Unit({ unit }: { unit: ModbusUnit }) {
           </table>
         </div>
       )}
-
-      {unit.validations.length > 0 && (
-        <p className="text-caption-md text-muted-foreground">
-          {unit.validations.length} controlled write validation
-          {unit.validations.length === 1 ? '' : 's'} recorded.
-        </p>
-      )}
     </section>
   )
 }
 
-function IndustrialServices({ services }: { services: ModbusService[] }) {
+function IndustrialServices({ services }: { services: IndustrialService[] }) {
   if (services.length === 0) {
     return (
       <p data-testid="no-industrial-services" className="text-body-md">

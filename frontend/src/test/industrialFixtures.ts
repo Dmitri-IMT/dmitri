@@ -1,8 +1,8 @@
 import type { components } from '@/types/openapi'
 
-type ModbusService = components['schemas']['ModbusTcpServicePayload']
+type IndustrialService = components['schemas']['IndustrialServiceView']
 
-export const confirmedModbusService: ModbusService = {
+export const confirmedModbusService: IndustrialService = {
   protocol: 'modbus_tcp',
   port: 502,
   confidence: 'confirmed',
@@ -10,15 +10,17 @@ export const confirmedModbusService: ModbusService = {
   mapping_source: 'generic_baseline',
   units: [
     {
+      id: 1,
       unit_id: 1,
       status: 'responding',
       exception_code: null,
       error: null,
-      device_identification: {
+      identification: {
         vendor_name: 'Schneider Electric',
         product_code: 'TM221CE16T',
         major_minor_revision: 'V1.0',
         objects: {},
+        truncated: false,
       },
       identification_sources: ['pymodbus-fc43'],
       address_ranges: [
@@ -27,10 +29,6 @@ export const confirmedModbusService: ModbusService = {
           start_address: 0,
           count: 4,
           status: 'readable',
-          nonzero_count: 2,
-          value_min: 0,
-          value_max: 42,
-          values: [0, 10, 0, 42],
           observed_at: '2026-09-10T22:17:51Z',
         },
         {
@@ -42,7 +40,6 @@ export const confirmedModbusService: ModbusService = {
           observed_at: '2026-09-10T22:17:52Z',
         },
       ],
-      validations: [],
     },
   ],
 }

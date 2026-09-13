@@ -26,7 +26,7 @@ describe('IndustrialServices', () => {
     })
     expect(table).toHaveTextContent('holding register')
     expect(table).toHaveTextContent('0–3')
-    expect(table).toHaveTextContent('readable · 2 non-zero · min 0 · max 42')
+    expect(table).toHaveTextContent('readable')
     expect(table).toHaveTextContent('illegal address (exception 2)')
     expect(table).not.toHaveTextContent('0, 10, 0, 42')
   })
