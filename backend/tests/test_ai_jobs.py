@@ -188,6 +188,39 @@ def test_ungrounded_analysis_fails(administrative_session, defect):
     assert record.analysis_json is None
 
 
+@pytest.mark.parametrize(
+    ("defect", "error"),
+    [("missing_org", "scan_unavailable"), ("context_crash", "internal_error")],
+)
+def test_unbuildable_context_fails(
+    administrative_session, monkeypatch, defect, error
+):
+    scan, finding = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    if defect == "missing_org":
+        scan.org_id = None
+        administrative_session.add(scan)
+        administrative_session.commit()
+    else:
+
+        def crash(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("api.services.ai.jobs.build_scan_ai_context", crash)
+
+    class FakeProvider:
+        def analyze_scan(self, context):
+            return _grounded_analysis(finding.finding_id)
+
+    now = datetime.now(timezone.utc)
+    assert _run(administrative_session, FakeProvider(), now=now) == 1
+
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "failed"
+    assert record.last_error == error
+    assert record.analysis_json is None
+
+
 def test_analysis_schema_forbids_unknown_fields():
     payload = _grounded_analysis(uuid4()).model_dump()
     payload["invented_score"] = 100

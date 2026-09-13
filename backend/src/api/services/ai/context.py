@@ -81,31 +81,21 @@ class ScanAINotReadyError(ValueError):
 
 def build_scan_ai_context(
     session: Session,
-    scan_id: UUID,
+    scan: ScanRecord,
     *,
-    org_id: UUID,
     max_findings: int = 10,
 ) -> ScanAIContext | None:
     if not 1 <= max_findings <= MAX_AI_FINDINGS:
         raise ValueError(
             f"max_findings must be between 1 and {MAX_AI_FINDINGS}"
         )
-
-    scan = session.exec(
-        select(ScanRecord).where(
-            ScanRecord.scan_id == scan_id,
-            ScanRecord.org_id == org_id,
-        )
-    ).first()
-    if scan is None:
-        return None
     if scan.status != "completed":
         raise ScanAINotReadyError("scan must be completed before AI analysis")
 
     risk = get_scan_risk_summary(
         session,
-        scan_id,
-        org_id=org_id,
+        scan.scan_id,
+        org_id=scan.org_id,
         top_limit=max_findings,
     )
     if risk is None:
@@ -114,7 +104,7 @@ def build_scan_ai_context(
     host_count = session.exec(
         select(func.count())
         .select_from(ScanHostRecord)
-        .where(ScanHostRecord.scan_id == scan_id)
+        .where(ScanHostRecord.scan_id == scan.scan_id)
     ).one()
 
     cve_ids = {

@@ -40,10 +40,6 @@ class AIAnalysisAlreadyRequestedError(ValueError):
     pass
 
 
-class _UngroundedAnalysisError(ValueError):
-    pass
-
-
 def scan_ai_analysis_response(
     record: AIScanAnalysisRecord,
 ) -> ScanAIAnalysisResponse:
@@ -233,57 +229,54 @@ def _process_claimed_analysis(
     retry_delay_seconds: float,
     now: datetime,
 ) -> None:
+    def fail(code: str, retryable: bool) -> None:
+        retry_or_fail(
+            record,
+            error=code,
+            retryable=retryable,
+            max_attempts=max_attempts,
+            delay_seconds=retry_delay_seconds,
+            now=now,
+        )
+        session.add(record)
+        session.commit()
+
     scan = session.get(ScanRecord, record.scan_id)
-    code, retryable = "scan_unavailable", False
+    if scan is None or scan.org_id is None:
+        return fail("scan_unavailable", False)
+
     try:
-        context = None
-        if scan is not None and scan.org_id is not None:
-            context = build_scan_ai_context(
-                session,
-                scan.scan_id,
-                org_id=scan.org_id,
-                max_findings=max_findings,
-            )
-        if context is not None:
-            analysis = provider.analyze_scan(context)
-            _check_grounded(context, analysis)
+        context = build_scan_ai_context(
+            session, scan, max_findings=max_findings
+        )
+        analysis = None if context is None else provider.analyze_scan(context)
     except AIProviderError as exc:
-        code, retryable = exc.code, exc.retryable
-    except (_UngroundedAnalysisError, ScanAINotReadyError):
-        code, retryable = "invalid_analysis", False
+        return fail(exc.code, exc.retryable)
+    except ScanAINotReadyError:
+        return fail("invalid_analysis", False)
     except Exception:
         logger.exception("AI analysis job failed scan_id=%s", record.scan_id)
-        code, retryable = "internal_error", False
-    else:
-        if context is not None:
-            record.status = "completed"
-            record.analysis_json = analysis.model_dump(mode="json")
-            record.context_hash = _context_hash(context)
-            record.completed_at = now
-            session.add(record)
-            session.commit()
-            return
+        return fail("internal_error", False)
+    if context is None or analysis is None:
+        return fail("scan_unavailable", False)
+    if not _is_grounded(context, analysis):
+        return fail("invalid_analysis", False)
 
-    retry_or_fail(
-        record,
-        error=code,
-        retryable=retryable,
-        max_attempts=max_attempts,
-        delay_seconds=retry_delay_seconds,
-        now=now,
-    )
+    record.status = "completed"
+    record.analysis_json = analysis.model_dump(mode="json")
+    record.context_hash = _context_hash(context)
+    record.completed_at = now
     session.add(record)
     session.commit()
 
 
-def _check_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> None:
+def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
     allowed = {finding.finding_id for finding in context.top_findings}
     explained = [item.finding_id for item in analysis.important_findings]
     referenced = set(explained).union(
         *(action.related_finding_ids for action in analysis.priority_actions)
     )
-    if not referenced <= allowed or len(explained) != len(set(explained)):
-        raise _UngroundedAnalysisError
+    return referenced <= allowed and len(explained) == len(set(explained))
 
 
 def _context_hash(context: ScanAIContext) -> str:

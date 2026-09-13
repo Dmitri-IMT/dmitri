@@ -1,5 +1,3 @@
-from uuid import uuid4
-
 import pytest
 from api.models.persistence import EpssRecord, KevRecord, RiskSnapshotRecord
 from api.services.ai.context import ScanAINotReadyError, build_scan_ai_context
@@ -53,8 +51,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
 
     context = build_scan_ai_context(
         administrative_session,
-        seeded["scan"].scan_id,
-        org_id=seeded["org"].id,
+        seeded["scan"],
         max_findings=1,
     )
 
@@ -81,19 +78,6 @@ def test_context_uses_ranked_bounded_enriched_findings(
     assert top.known_ransomware is True
 
 
-def test_context_hides_foreign_scan(administrative_session):
-    seeded = seed_read_graph(administrative_session)
-
-    assert (
-        build_scan_ai_context(
-            administrative_session,
-            seeded["foreign_scan"].scan_id,
-            org_id=seeded["org"].id,
-        )
-        is None
-    )
-
-
 def test_context_requires_completed_scan(administrative_session):
     seeded = seed_read_graph(administrative_session)
     seeded["scan"].status = "processing"
@@ -101,11 +85,7 @@ def test_context_requires_completed_scan(administrative_session):
     administrative_session.commit()
 
     with pytest.raises(ScanAINotReadyError):
-        build_scan_ai_context(
-            administrative_session,
-            seeded["scan"].scan_id,
-            org_id=seeded["org"].id,
-        )
+        build_scan_ai_context(administrative_session, seeded["scan"])
 
 
 @pytest.mark.parametrize("max_findings", [0, 16])
@@ -113,10 +93,11 @@ def test_context_rejects_invalid_finding_limit(
     administrative_session,
     max_findings,
 ):
+    seeded = seed_read_graph(administrative_session)
+
     with pytest.raises(ValueError, match="max_findings must be between 1 and 15"):
         build_scan_ai_context(
             administrative_session,
-            uuid4(),
-            org_id=uuid4(),
+            seeded["scan"],
             max_findings=max_findings,
         )

@@ -91,10 +91,15 @@ def process_claimed_enrichment_job(
         managed_job = session.get(EnrichmentJobRecord, job.id)
         if managed_job is None:
             raise
-        managed_job.status = "failed"
-        managed_job.completed_at = datetime.now(timezone.utc)
-        managed_job.next_attempt_at = None
-        managed_job.last_error = str(exc)
+        settings = get_settings()
+        retry_or_fail(
+            managed_job,
+            error=str(exc),
+            retryable=False,
+            max_attempts=settings.enrichment_max_attempts,
+            delay_seconds=settings.enrichment_retry_delay_seconds,
+            now=datetime.now(timezone.utc),
+        )
         session.add(managed_job)
         session.commit()
 
