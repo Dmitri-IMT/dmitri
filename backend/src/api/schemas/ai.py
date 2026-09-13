@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from api.services.ai.schemas import ScanAIAnalysis
 
 AIAnalysisReadStatus = Literal[
+    "not_requested",
     "pending",
     "processing",
     "completed",

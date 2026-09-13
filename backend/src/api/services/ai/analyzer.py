@@ -9,8 +9,6 @@ def generate_scan_analysis(
     provider: AIProvider,
     context: ScanAIContext,
 ) -> ScanAIAnalysis:
-    """Generate and validate an interpretation without changing scan data."""
-
     analysis = provider.analyze_scan(context)
     validate_scan_analysis(context, analysis)
     return analysis

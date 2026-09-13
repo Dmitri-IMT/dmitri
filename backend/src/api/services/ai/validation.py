@@ -6,7 +6,7 @@ from api.services.ai.schemas import ScanAIAnalysis, ScanAIContext
 
 
 class AIAnalysisValidationError(ValueError):
-    """The provider referred to data outside the supplied scan context."""
+    pass
 
 
 def validate_scan_analysis(

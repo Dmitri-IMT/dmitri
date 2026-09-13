@@ -9,7 +9,7 @@ from api.schemas.ai import AIAnalysisReadStatus, ScanAIAnalysisResponse
 from api.services.ai.schemas import ScanAIAnalysis
 
 
-def _empty_analysis_response(
+def empty_scan_ai_analysis_response(
     scan_id: UUID,
     status: AIAnalysisReadStatus,
 ) -> ScanAIAnalysisResponse:
@@ -25,6 +25,29 @@ def _empty_analysis_response(
         created_at=None,
         updated_at=None,
         completed_at=None,
+    )
+
+
+def scan_ai_analysis_response(
+    record: AIScanAnalysisRecord,
+) -> ScanAIAnalysisResponse:
+    analysis = (
+        ScanAIAnalysis.model_validate(record.analysis_json)
+        if record.status == "completed" and record.analysis_json is not None
+        else None
+    )
+    return ScanAIAnalysisResponse(
+        scan_id=record.scan_id,
+        analysis_id=record.analysis_id,
+        status=record.status,
+        analysis=analysis,
+        provider=record.provider,
+        model=record.model,
+        context_version=record.context_version,
+        prompt_version=record.prompt_version,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        completed_at=record.completed_at,
     )
 
 
@@ -44,8 +67,8 @@ def get_scan_ai_analysis(
     if scan is None:
         return None
 
-    if not ai_enabled or scan.status == "failed":
-        return _empty_analysis_response(scan_id, "unavailable")
+    if not ai_enabled or scan.status != "completed":
+        return empty_scan_ai_analysis_response(scan_id, "unavailable")
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
@@ -53,23 +76,6 @@ def get_scan_ai_analysis(
         )
     ).first()
     if record is None:
-        return _empty_analysis_response(scan_id, "pending")
+        return empty_scan_ai_analysis_response(scan_id, "not_requested")
 
-    analysis = (
-        ScanAIAnalysis.model_validate(record.analysis_json)
-        if record.status == "completed" and record.analysis_json is not None
-        else None
-    )
-    return ScanAIAnalysisResponse(
-        scan_id=scan_id,
-        analysis_id=record.analysis_id,
-        status=record.status,
-        analysis=analysis,
-        provider=record.provider,
-        model=record.model,
-        context_version=record.context_version,
-        prompt_version=record.prompt_version,
-        created_at=record.created_at,
-        updated_at=record.updated_at,
-        completed_at=record.completed_at,
-    )
+    return scan_ai_analysis_response(record)

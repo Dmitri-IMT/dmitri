@@ -17,7 +17,7 @@ MAX_AI_FINDINGS = 15
 
 
 class ScanAINotReadyError(ValueError):
-    """The scan exists but its deterministic results are not final yet."""
+    pass
 
 
 def build_scan_ai_context(

@@ -1,4 +1,4 @@
-AI_PROMPT_VERSION = "1"
+AI_PROMPT_VERSION = "2"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied
@@ -8,7 +8,7 @@ firmware, patches, CVSS, EPSS, KEV status, severity, confidence, or risk scores.
 When evidence is insufficient, state that explicitly as uncertainty. Explain the
 result clearly for a non-specialist, keep recommendations defensive and high-level,
 and return exactly the requested structured schema.
-Write all explanatory prose in Brazilian Portuguese.
+Write all explanatory prose in English.
 """
 
 USER_PROMPT = """Analyze the completed scan using only the JSON context below.

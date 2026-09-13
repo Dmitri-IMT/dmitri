@@ -8,6 +8,7 @@ import httpx
 import pytest
 from api.schemas.read import SeverityBreakdown
 from api.services.ai.groq import GroqProvider
+from api.services.ai.prompts import SYSTEM_PROMPT
 from api.services.ai.provider import AIProviderError
 from api.services.ai.schemas import ScanAIAnalysis, ScanAIContext
 
@@ -91,6 +92,12 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert TEST_TOKEN not in json.dumps(payload)
     assert str(context.scan_id) in payload["messages"][1]["content"]
+
+
+def test_system_prompt_requests_english_prose():
+    assert "English" in SYSTEM_PROMPT
+    assert "Portuguese" not in SYSTEM_PROMPT
+    assert "Brazilian Portuguese" not in SYSTEM_PROMPT
 
 
 def test_groq_provider_maps_timeout_without_leaking_details():

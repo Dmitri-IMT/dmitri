@@ -1,9 +1,15 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from threading import Barrier
 
 import pytest
 from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIScanAnalysisRecord
+from api.services.ai.jobs import (
+    AIAnalysisAlreadyRequestedError,
+    request_scan_ai_analysis,
+)
 from api.services.ai.schemas import ScanAIAnalysis
 from pydantic import SecretStr
 from read_factories import seed_read_graph
@@ -84,7 +90,7 @@ def test_analysis_read_is_unavailable_without_api_key(
     assert response.json()["status"] == "unavailable"
 
 
-def test_analysis_read_returns_pending_without_triggering_generation(
+def test_analysis_read_returns_not_requested_without_triggering_generation(
     client,
     administrative_session,
     bearer_headers,
@@ -98,12 +104,203 @@ def test_analysis_read_returns_pending_without_triggering_generation(
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "pending"
+    assert response.json()["status"] == "not_requested"
     assert response.json()["analysis"] is None
     count = administrative_session.exec(
         select(func.count()).select_from(AIScanAnalysisRecord)
     ).one()
     assert count == 0
+
+
+def test_analysis_request_creates_one_pending_job(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+):
+    seeded = seed_read_graph(administrative_session)
+    url = f"/api/v1/scans/{seeded['scan'].scan_id}/analysis"
+    headers = bearer_headers(seeded["org"].id, "viewer")
+
+    response = client.post(url, headers=headers)
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.scan_id == seeded["scan"].scan_id
+    assert record.status == "pending"
+
+    repeated = client.post(url, headers=headers)
+    assert repeated.status_code == 409
+    administrative_session.refresh(record)
+    assert record.status == "pending"
+    assert record.attempts == 0
+
+
+@pytest.mark.parametrize("status", ["processing", "completed"])
+def test_analysis_request_conflicts_after_processing_or_completion(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+    status,
+):
+    seeded = seed_read_graph(administrative_session)
+    analysis = _analysis()
+    record = AIScanAnalysisRecord(
+        scan_id=seeded["scan"].scan_id,
+        provider="fake",
+        model="fake-v1",
+        status=status,
+        analysis_json=(
+            analysis.model_dump(mode="json") if status == "completed" else None
+        ),
+        context_version="1",
+        prompt_version="1",
+        completed_at=datetime.now(timezone.utc) if status == "completed" else None,
+    )
+    administrative_session.add(record)
+    administrative_session.commit()
+
+    response = client.post(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/analysis",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 409
+    administrative_session.refresh(record)
+    assert record.status == status
+    assert record.analysis_json == (
+        analysis.model_dump(mode="json") if status == "completed" else None
+    )
+
+
+def test_concurrent_analysis_requests_create_one_job(administrative_session):
+    seeded = seed_read_graph(administrative_session)
+    barrier = Barrier(2)
+    engine = administrative_session.get_bind()
+
+    class RacingSession(type(administrative_session)):
+        def commit(self):
+            barrier.wait(timeout=5)
+            super().commit()
+
+    def request():
+        with RacingSession(engine) as session:
+            try:
+                response = request_scan_ai_analysis(
+                    session,
+                    seeded["scan"].scan_id,
+                    org_id=seeded["org"].id,
+                    ai_enabled=True,
+                    provider_name="fake",
+                    model="fake-v1",
+                )
+            except AIAnalysisAlreadyRequestedError:
+                return "conflict"
+            assert response is not None
+            return response.status
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(lambda _: request(), range(2)))
+
+    assert sorted(outcomes) == ["conflict", "pending"]
+    administrative_session.expire_all()
+    records = administrative_session.exec(select(AIScanAnalysisRecord)).all()
+    assert len(records) == 1
+    assert records[0].scan_id == seeded["scan"].scan_id
+
+
+def test_analysis_request_retries_failed_job(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+):
+    seeded = seed_read_graph(administrative_session)
+    record = AIScanAnalysisRecord(
+        scan_id=seeded["scan"].scan_id,
+        provider="fake",
+        model="fake-v1",
+        status="failed",
+        context_version="1",
+        prompt_version="1",
+        attempts=2,
+        last_error_code="provider_timeout",
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    administrative_session.add(record)
+    administrative_session.commit()
+
+    response = client.post(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/analysis",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    administrative_session.refresh(record)
+    assert record.status == "pending"
+    assert record.attempts == 0
+    assert record.last_error_code is None
+    assert record.started_at is None
+    assert record.completed_at is None
+
+
+def test_analysis_request_hides_foreign_scan(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+):
+    seeded = seed_read_graph(administrative_session)
+
+    response = client.post(
+        f"/api/v1/scans/{seeded['foreign_scan'].scan_id}/analysis",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 404
+    assert administrative_session.exec(select(AIScanAnalysisRecord)).all() == []
+
+
+def test_analysis_request_is_unavailable_when_ai_is_disabled(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+
+    response = client.post(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/analysis",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "unavailable"
+    assert administrative_session.exec(select(AIScanAnalysisRecord)).all() == []
+
+
+def test_analysis_request_is_unavailable_before_scan_completion(
+    client,
+    administrative_session,
+    bearer_headers,
+    enable_ai,
+):
+    seeded = seed_read_graph(administrative_session)
+    seeded["scan"].status = "running"
+    administrative_session.add(seeded["scan"])
+    administrative_session.commit()
+
+    response = client.post(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/analysis",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "unavailable"
+    assert administrative_session.exec(select(AIScanAnalysisRecord)).all() == []
 
 
 @pytest.mark.parametrize("status", ["pending", "processing", "failed"])

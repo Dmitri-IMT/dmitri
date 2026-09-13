@@ -4,6 +4,8 @@ from api.core.config import Settings
 from api.services.ai.groq import GroqProvider
 from api.services.ai.provider import AIProvider
 
+GROQ_PROVIDER_ID = "groq"
+
 
 def ai_is_available(settings: Settings) -> bool:
     return (

@@ -257,8 +257,6 @@ class SeverityBreakdown(BaseModel):
 
 
 class ScanRiskSummaryResponse(BaseModel):
-    """Bounded, evidence-bearing scan context for UI and future LLM tools."""
-
     model_config = ConfigDict(extra="forbid")
 
     scan_id: UUID

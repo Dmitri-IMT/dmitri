@@ -4,8 +4,10 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from api.models.persistence import (
@@ -13,10 +15,15 @@ from api.models.persistence import (
     EnrichmentJobRecord,
     ScanRecord,
 )
+from api.schemas.ai import ScanAIAnalysisResponse
 from api.services.ai.analyzer import generate_scan_analysis
 from api.services.ai.context import ScanAINotReadyError, build_scan_ai_context
 from api.services.ai.prompts import AI_PROMPT_VERSION
 from api.services.ai.provider import AIProvider, AIProviderError
+from api.services.ai.read import (
+    empty_scan_ai_analysis_response,
+    scan_ai_analysis_response,
+)
 from api.services.ai.schemas import AI_CONTEXT_VERSION, ScanAIContext
 from api.services.ai.validation import AIAnalysisValidationError
 
@@ -24,12 +31,77 @@ logger = logging.getLogger(__name__)
 ACTIVE_ENRICHMENT_STATUSES = ("pending", "running")
 
 
+class AIAnalysisAlreadyRequestedError(ValueError):
+    pass
+
+
+def request_scan_ai_analysis(
+    session: Session,
+    scan_id: UUID,
+    *,
+    org_id: UUID,
+    ai_enabled: bool,
+    provider_name: str,
+    model: str,
+    now: datetime | None = None,
+) -> ScanAIAnalysisResponse | None:
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if scan is None:
+        return None
+    if not ai_enabled or scan.status != "completed":
+        return empty_scan_ai_analysis_response(scan_id, "unavailable")
+
+    record = session.exec(
+        select(AIScanAnalysisRecord).where(
+            AIScanAnalysisRecord.scan_id == scan_id
+        )
+    ).first()
+    current_time = now or datetime.now(timezone.utc)
+    if record is not None:
+        if record.status != "failed":
+            raise AIAnalysisAlreadyRequestedError
+        record.status = "pending"
+        record.attempts = 0
+        record.last_error_code = None
+        record.analysis_json = None
+        record.context_hash = None
+        record.started_at = None
+        record.completed_at = None
+        record.updated_at = current_time
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        return scan_ai_analysis_response(record)
+
+    record = AIScanAnalysisRecord(
+        scan_id=scan_id,
+        provider=provider_name,
+        model=model,
+        status="pending",
+        context_version=AI_CONTEXT_VERSION,
+        prompt_version=AI_PROMPT_VERSION,
+        created_at=current_time,
+        updated_at=current_time,
+    )
+    session.add(record)
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise AIAnalysisAlreadyRequestedError from exc
+    session.refresh(record)
+    return scan_ai_analysis_response(record)
+
+
 def process_ready_ai_analyses(
     session: Session,
     *,
     provider: AIProvider,
-    provider_name: str,
-    model: str,
     batch_size: int,
     max_findings: int,
     max_attempts: int,
@@ -38,12 +110,6 @@ def process_ready_ai_analyses(
     now: datetime | None = None,
 ) -> int:
     current_time = now or datetime.now(timezone.utc)
-    enqueue_ready_ai_analyses(
-        session,
-        provider_name=provider_name,
-        model=model,
-        batch_size=batch_size,
-    )
     records = claim_ai_analyses(
         session,
         batch_size=batch_size,
@@ -62,57 +128,6 @@ def process_ready_ai_analyses(
             now=current_time,
         )
     return len(records)
-
-
-def enqueue_ready_ai_analyses(
-    session: Session,
-    *,
-    provider_name: str,
-    model: str,
-    batch_size: int,
-) -> int:
-    active_enrichment = (
-        select(EnrichmentJobRecord.id)
-        .where(
-            EnrichmentJobRecord.scan_id == ScanRecord.scan_id,
-            EnrichmentJobRecord.status.in_(ACTIVE_ENRICHMENT_STATUSES),
-        )
-        .exists()
-    )
-    existing_analysis = (
-        select(AIScanAnalysisRecord.id)
-        .where(AIScanAnalysisRecord.scan_id == ScanRecord.scan_id)
-        .exists()
-    )
-    statement = (
-        select(ScanRecord)
-        .where(
-            ScanRecord.status == "completed",
-            ScanRecord.org_id.is_not(None),
-            ~active_enrichment,
-            ~existing_analysis,
-        )
-        .order_by(ScanRecord.created_at, ScanRecord.scan_id)
-        .limit(batch_size)
-    )
-    bind = session.get_bind()
-    if bind is not None and bind.dialect.name == "postgresql":
-        statement = statement.with_for_update(skip_locked=True)
-
-    scans = session.exec(statement).all()
-    for scan in scans:
-        session.add(
-            AIScanAnalysisRecord(
-                scan_id=scan.scan_id,
-                provider=provider_name,
-                model=model,
-                status="pending",
-                context_version=AI_CONTEXT_VERSION,
-                prompt_version=AI_PROMPT_VERSION,
-            )
-        )
-    session.commit()
-    return len(scans)
 
 
 def claim_ai_analyses(
@@ -156,9 +171,17 @@ def claim_ai_analyses(
         & (AIScanAnalysisRecord.attempts < max_attempts)
         & (AIScanAnalysisRecord.started_at <= stale_before)
     )
+    active_enrichment = (
+        select(EnrichmentJobRecord.id)
+        .where(
+            EnrichmentJobRecord.scan_id == AIScanAnalysisRecord.scan_id,
+            EnrichmentJobRecord.status.in_(ACTIVE_ENRICHMENT_STATUSES),
+        )
+        .exists()
+    )
     statement = (
         select(AIScanAnalysisRecord)
-        .where(or_(eligible_pending, eligible_stale))
+        .where(or_(eligible_pending, eligible_stale), ~active_enrichment)
         .order_by(AIScanAnalysisRecord.created_at, AIScanAnalysisRecord.id)
         .limit(batch_size)
     )

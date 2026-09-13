@@ -11,8 +11,6 @@ from api.services.ai.schemas import ScanAIAnalysis, ScanAIContext
 
 
 class GroqProvider:
-    """Small direct adapter for Groq's OpenAI-compatible chat API."""
-
     def __init__(
         self,
         *,

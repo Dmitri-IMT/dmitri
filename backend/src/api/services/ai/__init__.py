@@ -1,5 +1,3 @@
-"""Deterministic context and contracts for optional AI interpretation."""
-
 from api.services.ai.analyzer import generate_scan_analysis
 from api.services.ai.context import ScanAINotReadyError, build_scan_ai_context
 from api.services.ai.provider import AIProvider, AIProviderError

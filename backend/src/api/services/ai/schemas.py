@@ -16,8 +16,6 @@ AI_CONTEXT_VERSION = "1"
 
 
 class AIFindingContext(BaseModel):
-    """Bounded, deterministic evidence for one finding sent to a provider."""
-
     model_config = ConfigDict(extra="forbid")
 
     finding_id: UUID
@@ -44,8 +42,6 @@ class AIFindingContext(BaseModel):
 
 
 class ScanAIContext(BaseModel):
-    """Versioned and bounded source of truth for one scan analysis."""
-
     model_config = ConfigDict(extra="forbid")
 
     context_version: Literal["1"] = AI_CONTEXT_VERSION
