@@ -5,6 +5,8 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-13
 
+* **Update**: PR-144 review fixes. `services/ai/` is now `context.py`, `groq.py`, `jobs.py`; AI worker loop moved to `services/worker.py`; new shared `services/jobs.py` (`claim_jobs`, `retry_or_fail`) for enrichment and AI; migration `20260912_26` (head); `ScanAIAnalysisResponse` is a status-keyed union in `schemas/ai.py`. Touched: `backend/ai.md`, `backend/services.md`, `backend/schemas.md`, `backend/migrations.md`, `backend/index.md`, root `index.md`.
+
 * **Update**: `frontend/tables.md` — `DataTable` link rows use a row `onClick` that clicks the
   first-cell `<Link data-row-link>`; the stretched overlay was removed (Safari ignores `relative` on
   `<tr>`, so the last row captured every click).

@@ -59,7 +59,7 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 * [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
 * [backend/ai](./backend/ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through industrial observations, AI scan analyses, and enrichment retries. Head is `20260912_25`.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 

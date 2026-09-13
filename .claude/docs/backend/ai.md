@@ -4,7 +4,7 @@ title: Backend AI scan analysis
 description: On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
 resource: backend/src/api/services/ai/jobs.py
 tags: [backend, ai, groq, worker, scans]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-13T20:00:00Z
 ---
 
 # Backend AI scan analysis
@@ -39,21 +39,22 @@ also `409`.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ai_is_available()` | `AI_ENABLED` and a stripped non-empty `AI_API_KEY`. | `backend/src/api/services/ai/factory.py:10` |
-| `build_ai_provider()` | Builds `GroqProvider` or `None`. | `backend/src/api/services/ai/factory.py:18` |
-| `request_scan_ai_analysis()` | Org-scoped scan; `unavailable` if AI off or scan not completed; insert/`failed`→`pending`; else already-requested. | `backend/src/api/services/ai/jobs.py:38` |
-| `get_scan_ai_analysis()` | `unavailable` / `not_requested` / row status. Foreign scan → `None` (404). | `backend/src/api/services/ai/read.py:54` |
-| `claim_ai_analyses()` | Skip while enrichment is active for that `scan_id`. `FOR UPDATE SKIP LOCKED` on Postgres. Batch size 1 from the worker. | `backend/src/api/services/ai/jobs.py:133` |
-| `process_ready_ai_analyses()` | Claim then `_process_claimed_analysis`. | `backend/src/api/services/ai/jobs.py:101` |
-| `run_ai_worker_loop()` / `run_ai_worker_once()` | Own session and `AI_POLL_INTERVAL_SECONDS` (default 5). Provider required on `once`. | `backend/src/api/services/ai/worker.py:15`, `:36` |
-| `build_scan_ai_context()` | Caps findings at `AI_MAX_FINDINGS` (default 10, max 15). Raises `ScanAINotReadyError` if the scan is not ready. | `backend/src/api/services/ai/context.py:23` |
-| `generate_scan_analysis()` | Provider call then `validate_scan_analysis`. | `backend/src/api/services/ai/analyzer.py:8` |
-| `GroqProvider.analyze_scan()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured `ScanAIAnalysis`. | `backend/src/api/services/ai/groq.py:33` |
-| `validate_scan_analysis()` | Finding ids and CVEs must already be in context; no invented hosts. | `backend/src/api/services/ai/validation.py:12` |
-| `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"2"`. English prose only; context is untrusted evidence. | `backend/src/api/services/ai/prompts.py:1` |
-| `ScanAIAnalysis` / `ScanAIContext` | Internal JSON shapes (not the HTTP envelope). | `backend/src/api/services/ai/schemas.py:44`, `:84` |
-| `ScanAIAnalysisResponse` | HTTP envelope. | `backend/src/api/schemas/ai.py:21` |
-| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; completed requires `analysis_json`. | `backend/src/api/models/persistence.py:335` |
+| `ai_is_available()` | `AI_ENABLED` and a stripped non-empty `AI_API_KEY`. | `backend/src/api/services/ai/groq.py:142` |
+| `build_ai_provider()` | Builds `GroqProvider` or `None`. | `backend/src/api/services/ai/groq.py:150` |
+| `GroqProvider.analyze_scan()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured `ScanAIAnalysis`. Errors raise `AIProviderError(code, retryable=...)`. | `backend/src/api/services/ai/groq.py:63` |
+| `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"2"`. English prose only; context is untrusted evidence. | `backend/src/api/services/ai/groq.py:14` |
+| `request_scan_ai_analysis()` | Org-scoped scan; `unavailable` if AI off or scan not completed; insert/`failed`→`pending`; else already-requested. | `backend/src/api/services/ai/jobs.py:102` |
+| `get_scan_ai_analysis()` | `unavailable` / `not_requested` / row status. Foreign scan → `None` (404). | `backend/src/api/services/ai/jobs.py:72` |
+| `scan_ai_analysis_response()` | Picks the response variant from `record.status`. | `backend/src/api/services/ai/jobs.py:47` |
+| `claim_ai_analyses()` | Calls the shared [`claim_jobs`](/backend/services.md) with running status `processing` and an extra filter: no `enrichment_jobs` in `pending`/`running` for that `scan_id`. | `backend/src/api/services/ai/jobs.py:197` |
+| `process_ready_ai_analyses()` | Claim, build context, call the provider, check grounding, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
+| `_check_grounded()` | Every finding id in explanations and actions must be in the context; no duplicate explanations. Failure → `invalid_analysis`, not retried. | `backend/src/api/services/ai/jobs.py:279` |
+| `build_scan_ai_context()` | Loads `ScanRecord` (not Scan Detail) plus `get_scan_risk_summary`, a host count and EPSS/KEV. Caps findings at `AI_MAX_FINDINGS` (default 10, max 15). Raises `ScanAINotReadyError` if the scan is not completed. | `backend/src/api/services/ai/context.py:82` |
+| `ScanAIContext` / `AIFindingContext` | Internal prompt context shapes. | `backend/src/api/services/ai/context.py:58`, `:32` |
+| `run_ai_worker_loop()` / `run_ai_worker_once()` | In `services/worker.py`. Own session and `AI_POLL_INTERVAL_SECONDS` (default 5); batch size 1; no command sweep. | `backend/src/api/services/worker.py:46`, `:57` |
+| `ScanAIAnalysis` | Wire body of a completed analysis. | `backend/src/api/schemas/ai.py:33` |
+| `ScanAIAnalysisResponse` | HTTP union keyed on `status`: `Unavailable` / `NotRequested` (`scan_id`, `status` only), `Queued` (`pending`/`processing`, job fields), `Failed` (+`completed_at`), `Completed` (+`completed_at`, `analysis`). | `backend/src/api/schemas/ai.py:86` |
+| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`; `updated_at` set on update. | `backend/src/api/models/persistence.py:335` |
 
 ## How it connects
 
@@ -72,6 +73,7 @@ also `409`.
   `nvd_cve` jobs. NVD is paced (`NVD_MIN_REQUEST_INTERVAL_SECONDS`, default 6). The card stays
   `pending` until those jobs leave `pending`/`running`.
 - **Completing a scan never writes `ai_scan_analyses`.** There is no `enqueue_ready_ai_analyses`.
+- **Retries** use `next_attempt_at = now + AI_RETRY_DELAY_SECONDS` through the shared `retry_or_fail`. Only retryable `AIProviderError`s retry, up to `AI_MAX_ATTEMPTS`.
 - **Failed POST retry** is the same button: status `failed` → POST 202 → `pending`, `attempts=0`.
 - **Do not set `DATABASE_URL_DIRECT` on Railway.** Migrations stay operator-run.
 
