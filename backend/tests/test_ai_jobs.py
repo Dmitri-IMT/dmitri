@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
-import api.services.ai.worker as ai_worker_module
+import api.services.worker as worker_module
+import pytest
 from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord
+from api.schemas.ai import AIFindingExplanation, AIRecommendedAction, ScanAIAnalysis
+from api.services.ai.groq import AIProviderError
 from api.services.ai.jobs import process_ready_ai_analyses
-from api.services.ai.provider import AIProviderError
-from api.services.ai.schemas import ScanAIAnalysis
-from api.services.ai.worker import run_ai_worker_once
-from read_factories import make_org, make_scan
+from api.services.worker import run_ai_worker_once
+from pydantic import ValidationError
+from read_factories import (
+    make_finding,
+    make_host,
+    make_org,
+    make_scan,
+    make_scan_host,
+)
 from sqlmodel import select
 
 
@@ -21,6 +30,42 @@ def _analysis() -> ScanAIAnalysis:
         important_findings=[],
         uncertainties=["A ausência de findings não comprova ausência de risco."],
     )
+
+
+def _grounded_analysis(finding_id) -> ScanAIAnalysis:
+    return ScanAIAnalysis(
+        executive_summary="One important issue needs attention.",
+        overall_assessment="The observed risk is high but limited in scope.",
+        plain_language_summary="One exposed service should be reviewed soon.",
+        priority_actions=[
+            AIRecommendedAction(
+                priority="high",
+                title="Review the affected service",
+                description="Ask a qualified professional to validate the service.",
+                related_finding_ids=[finding_id],
+            )
+        ],
+        important_findings=[
+            AIFindingExplanation(
+                finding_id=finding_id,
+                why_it_matters="The service is exposed and has a high risk score.",
+                plain_language_explanation="An exposed service may need an update.",
+                recommendation="Have a professional validate and update it.",
+                evidence_used=["NVD validated the supplied CVE."],
+                uncertainty=None,
+            )
+        ],
+        uncertainties=[],
+    )
+
+
+def _scan_with_finding(session):
+    org = make_org(session, "Grounding Org")
+    scan = make_scan(session, org.id)
+    host = make_host(session, org.id, "192.168.1.10")
+    scan_host = make_scan_host(session, scan.scan_id, host.id, "192.168.1.10")
+    finding = make_finding(session, scan.scan_id, scan_host.id, "grounding")
+    return scan, finding
 
 
 def _run(session, provider, *, now, max_attempts=2, retry_delay_seconds=0):
@@ -94,6 +139,63 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     assert len(received) == 1
 
 
+def test_grounded_analysis_completes(administrative_session):
+    scan, finding = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    expected = _grounded_analysis(finding.finding_id)
+    received = []
+
+    class FakeProvider:
+        def analyze_scan(self, context):
+            received.append(context)
+            return expected
+
+    now = datetime.now(timezone.utc)
+    assert _run(administrative_session, FakeProvider(), now=now) == 1
+
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert record.analysis_json == expected.model_dump(mode="json")
+    assert [item.finding_id for item in received[0].top_findings] == [
+        finding.finding_id
+    ]
+
+
+@pytest.mark.parametrize(
+    "defect", ["invented_explanation", "invented_action", "duplicate_explanation"]
+)
+def test_ungrounded_analysis_fails(administrative_session, defect):
+    scan, finding = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    analysis = _grounded_analysis(finding.finding_id)
+    if defect == "invented_explanation":
+        analysis.important_findings[0].finding_id = uuid4()
+    elif defect == "invented_action":
+        analysis.priority_actions[0].related_finding_ids = [uuid4()]
+    else:
+        analysis.important_findings.append(analysis.important_findings[0])
+
+    class FakeProvider:
+        def analyze_scan(self, context):
+            return analysis
+
+    now = datetime.now(timezone.utc)
+    assert _run(administrative_session, FakeProvider(), now=now) == 1
+
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "failed"
+    assert record.last_error == "invalid_analysis"
+    assert record.analysis_json is None
+
+
+def test_analysis_schema_forbids_unknown_fields():
+    payload = _grounded_analysis(uuid4()).model_dump()
+    payload["invented_score"] = 100
+
+    with pytest.raises(ValidationError):
+        ScanAIAnalysis.model_validate(payload)
+
+
 def test_ai_job_waits_for_active_enrichment(administrative_session):
     org = make_org(administrative_session, "Waiting Org")
     scan = make_scan(administrative_session, org.id)
@@ -139,7 +241,7 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "pending"
     assert record.attempts == 1
-    assert record.last_error_code == "provider_timeout"
+    assert record.last_error == "provider_timeout"
 
     assert (
         _run(
@@ -152,7 +254,7 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     administrative_session.refresh(record)
     assert record.status == "failed"
     assert record.attempts == 2
-    assert record.last_error_code == "provider_timeout"
+    assert record.last_error == "provider_timeout"
     assert record.completed_at is not None
 
 
@@ -166,7 +268,17 @@ def test_retry_waits_for_configured_delay(administrative_session):
             raise AIProviderError("provider_timeout", retryable=True)
 
     now = datetime.now(timezone.utc)
-    assert _run(administrative_session, TimeoutProvider(), now=now) == 1
+    assert (
+        _run(
+            administrative_session,
+            TimeoutProvider(),
+            now=now,
+            retry_delay_seconds=30,
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.next_attempt_at == now + timedelta(seconds=30)
     assert (
         _run(
             administrative_session,
@@ -175,6 +287,15 @@ def test_retry_waits_for_configured_delay(administrative_session):
             retry_delay_seconds=30,
         )
         == 0
+    )
+    assert (
+        _run(
+            administrative_session,
+            TimeoutProvider(),
+            now=now + timedelta(seconds=30),
+            retry_delay_seconds=30,
+        )
+        == 1
     )
 
 
@@ -202,14 +323,14 @@ def test_stale_exhausted_job_becomes_failed(administrative_session):
     assert _run(administrative_session, FakeProvider(), now=now) == 0
     administrative_session.refresh(record)
     assert record.status == "failed"
-    assert record.last_error_code == "processing_timeout"
+    assert record.last_error == "processing_timeout"
 
 
 def test_run_ai_worker_once_processes_one_requested_row(
     monkeypatch, administrative_session
 ):
     monkeypatch.setattr(
-        ai_worker_module,
+        worker_module,
         "get_session",
         lambda: iter([administrative_session]),
     )
@@ -231,14 +352,12 @@ def test_run_ai_worker_once_processes_one_requested_row(
 
 
 def test_run_ai_worker_loop_skips_provider_when_ai_unavailable(monkeypatch):
-    provider_calls: list[object] = []
+    poll_calls: list[object] = []
 
-    def _track_provider(settings):
-        provider_calls.append(settings)
-        raise AssertionError("provider must not be built when AI is unavailable")
+    monkeypatch.setattr(worker_module, "build_ai_provider", lambda settings: None)
+    monkeypatch.setattr(
+        worker_module, "_poll_forever", lambda *args: poll_calls.append(args)
+    )
 
-    monkeypatch.setattr(ai_worker_module, "ai_is_available", lambda settings: False)
-    monkeypatch.setattr(ai_worker_module, "build_ai_provider", _track_provider)
-
-    ai_worker_module.run_ai_worker_loop()
-    assert provider_calls == []
+    worker_module.run_ai_worker_loop()
+    assert poll_calls == []

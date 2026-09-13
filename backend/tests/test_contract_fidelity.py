@@ -70,7 +70,11 @@ SCHEMA_NAMES = (
     "AIRecommendedAction",
     "AIFindingExplanation",
     "ScanAIAnalysis",
-    "ScanAIAnalysisResponse",
+    "ScanAIAnalysisUnavailable",
+    "ScanAIAnalysisNotRequested",
+    "ScanAIAnalysisQueued",
+    "ScanAIAnalysisFailed",
+    "ScanAIAnalysisCompleted",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -397,7 +401,18 @@ def test_scan_ai_analysis_operation_is_published():
         "409",
         "500",
     }
-    assert {"get", "post"} <= app.openapi()["paths"][path].keys()
+    app_operations = app.openapi()["paths"][path]
+    union = contract["components"]["schemas"]["ScanAIAnalysisResponse"]
+    for method, status in (("get", "200"), ("post", "202")):
+        contract_schema = contract["paths"][path][method]["responses"][status][
+            "content"
+        ]["application/json"]["schema"]
+        app_schema = app_operations[method]["responses"][status]["content"][
+            "application/json"
+        ]["schema"]
+        assert _resolve_ref(contract, contract_schema) == union
+        assert app_schema["oneOf"] == union["oneOf"]
+        assert app_schema["discriminator"] == union["discriminator"]
 
 
 @pytest.mark.parametrize("path", OPERATION_PATHS)

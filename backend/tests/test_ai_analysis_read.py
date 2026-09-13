@@ -6,11 +6,11 @@ import pytest
 from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIScanAnalysisRecord
+from api.schemas.ai import ScanAIAnalysis
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
     request_scan_ai_analysis,
 )
-from api.services.ai.schemas import ScanAIAnalysis
 from pydantic import SecretStr
 from read_factories import seed_read_graph
 from sqlalchemy.exc import IntegrityError
@@ -55,16 +55,7 @@ def test_analysis_read_is_unavailable_when_ai_is_disabled(
     assert response.status_code == 200
     assert response.json() == {
         "scan_id": str(seeded["scan"].scan_id),
-        "analysis_id": None,
         "status": "unavailable",
-        "analysis": None,
-        "provider": None,
-        "model": None,
-        "context_version": None,
-        "prompt_version": None,
-        "created_at": None,
-        "updated_at": None,
-        "completed_at": None,
     }
 
 
@@ -104,8 +95,10 @@ def test_analysis_read_returns_not_requested_without_triggering_generation(
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "not_requested"
-    assert response.json()["analysis"] is None
+    assert response.json() == {
+        "scan_id": str(seeded["scan"].scan_id),
+        "status": "not_requested",
+    }
     count = administrative_session.exec(
         select(func.count()).select_from(AIScanAnalysisRecord)
     ).one()
@@ -226,7 +219,7 @@ def test_analysis_request_retries_failed_job(
         context_version="1",
         prompt_version="1",
         attempts=2,
-        last_error_code="provider_timeout",
+        last_error="provider_timeout",
         started_at=datetime.now(timezone.utc),
         completed_at=datetime.now(timezone.utc),
     )
@@ -243,7 +236,7 @@ def test_analysis_request_retries_failed_job(
     administrative_session.refresh(record)
     assert record.status == "pending"
     assert record.attempts == 0
-    assert record.last_error_code is None
+    assert record.last_error is None
     assert record.started_at is None
     assert record.completed_at is None
 
@@ -319,6 +312,7 @@ def test_analysis_read_returns_persisted_non_completed_status(
         status=status,
         context_version="1",
         prompt_version="1",
+        completed_at=datetime.now(timezone.utc) if status == "failed" else None,
     )
     administrative_session.add(record)
     administrative_session.commit()
@@ -332,7 +326,7 @@ def test_analysis_read_returns_persisted_non_completed_status(
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == status
-    assert body["analysis"] is None
+    assert "analysis" not in body
     assert body["analysis_id"] == str(record.analysis_id)
     assert body["provider"] == "fake"
     assert body["model"] == "fake-v1"

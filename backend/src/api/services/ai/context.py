@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+from datetime import datetime
+from ipaddress import IPv4Address
+from typing import Annotated, Literal
 from uuid import UUID
 
-from sqlmodel import Session, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlmodel import Session, func, select
 
-from api.models.persistence import EpssRecord, KevRecord
-from api.services.ai.schemas import AIFindingContext, ScanAIContext
-from api.services.read import get_scan_detail, get_scan_risk_summary
+from api.core.scan_read import scan_duration_seconds
+from api.core.severity import Severity
+from api.models.persistence import (
+    EpssRecord,
+    KevRecord,
+    ScanHostRecord,
+    ScanRecord,
+)
+from api.schemas.read import ScanMode, SeverityBreakdown
+from api.services.read import get_scan_risk_summary
+
+AI_CONTEXT_VERSION = "1"
 
 MAX_DESCRIPTION_LENGTH = 4000
 MAX_RECOMMENDATION_LENGTH = 2000
@@ -14,6 +27,52 @@ MAX_EVIDENCE_LENGTH = 4000
 MAX_REFERENCES = 10
 MAX_REFERENCE_LENGTH = 2000
 MAX_AI_FINDINGS = 15
+
+
+class AIFindingContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: UUID
+    host_id: UUID | None
+    host_ip: IPv4Address | None
+    port: Annotated[int | None, Field(ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"] | None
+    service: str | None
+    cve_id: str | None
+    cvss_score: Annotated[float | None, Field(ge=0, le=10)]
+    severity: Severity
+    confidence: Literal["tentative", "probable", "confirmed"] | None
+    risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    exploitability: Annotated[float | None, Field(ge=0, le=1)]
+    epss_score: Annotated[float | None, Field(ge=0, le=1)]
+    epss_percentile: Annotated[float | None, Field(ge=0, le=1)]
+    is_kev: bool
+    known_ransomware: bool
+    title: Annotated[str, Field(min_length=3, max_length=500)]
+    description: Annotated[str, Field(min_length=3, max_length=4000)]
+    recommendation: Annotated[str, Field(min_length=3, max_length=2000)]
+    evidence: Annotated[str, Field(min_length=3, max_length=4000)]
+    references: Annotated[list[str], Field(max_length=10)]
+
+
+class ScanAIContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_version: Literal["1"] = AI_CONTEXT_VERSION
+    scan_id: UUID
+    timestamp: datetime
+    subnet: str
+    scan_mode: ScanMode
+    duration_seconds: Annotated[int | None, Field(ge=0)]
+    host_count: Annotated[int, Field(ge=0)]
+    total_findings: Annotated[int, Field(ge=0)]
+    scored_findings: Annotated[int, Field(ge=0)]
+    confirmed_findings: Annotated[int, Field(ge=0)]
+    kev_findings: Annotated[int, Field(ge=0)]
+    average_risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    max_risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    severity: SeverityBreakdown
+    top_findings: Annotated[list[AIFindingContext], Field(max_length=15)]
 
 
 class ScanAINotReadyError(ValueError):
@@ -32,7 +91,12 @@ def build_scan_ai_context(
             f"max_findings must be between 1 and {MAX_AI_FINDINGS}"
         )
 
-    scan = get_scan_detail(session, scan_id, org_id=org_id)
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
     if scan is None:
         return None
     if scan.status != "completed":
@@ -46,6 +110,12 @@ def build_scan_ai_context(
     )
     if risk is None:
         return None
+
+    host_count = session.exec(
+        select(func.count())
+        .select_from(ScanHostRecord)
+        .where(ScanHostRecord.scan_id == scan_id)
+    ).one()
 
     cve_ids = {
         finding.cve_id.upper()
@@ -96,8 +166,8 @@ def build_scan_ai_context(
         timestamp=scan.timestamp,
         subnet=scan.subnet,
         scan_mode=scan.scan_mode,
-        duration_seconds=scan.duration,
-        host_count=scan.host_count,
+        duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
+        host_count=host_count,
         total_findings=risk.total_findings,
         scored_findings=risk.scored_findings,
         confirmed_findings=risk.confirmed_findings,

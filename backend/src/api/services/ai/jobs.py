@@ -3,10 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -15,17 +14,23 @@ from api.models.persistence import (
     EnrichmentJobRecord,
     ScanRecord,
 )
-from api.schemas.ai import ScanAIAnalysisResponse
-from api.services.ai.analyzer import generate_scan_analysis
-from api.services.ai.context import ScanAINotReadyError, build_scan_ai_context
-from api.services.ai.prompts import AI_PROMPT_VERSION
-from api.services.ai.provider import AIProvider, AIProviderError
-from api.services.ai.read import (
-    empty_scan_ai_analysis_response,
-    scan_ai_analysis_response,
+from api.schemas.ai import (
+    ScanAIAnalysis,
+    ScanAIAnalysisCompleted,
+    ScanAIAnalysisFailed,
+    ScanAIAnalysisNotRequested,
+    ScanAIAnalysisQueued,
+    ScanAIAnalysisResponse,
+    ScanAIAnalysisUnavailable,
 )
-from api.services.ai.schemas import AI_CONTEXT_VERSION, ScanAIContext
-from api.services.ai.validation import AIAnalysisValidationError
+from api.services.ai.context import (
+    AI_CONTEXT_VERSION,
+    ScanAIContext,
+    ScanAINotReadyError,
+    build_scan_ai_context,
+)
+from api.services.ai.groq import AI_PROMPT_VERSION, AIProviderError, GroqProvider
+from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
 ACTIVE_ENRICHMENT_STATUSES = ("pending", "running")
@@ -33,6 +38,65 @@ ACTIVE_ENRICHMENT_STATUSES = ("pending", "running")
 
 class AIAnalysisAlreadyRequestedError(ValueError):
     pass
+
+
+class _UngroundedAnalysisError(ValueError):
+    pass
+
+
+def scan_ai_analysis_response(
+    record: AIScanAnalysisRecord,
+) -> ScanAIAnalysisResponse:
+    fields = {
+        "scan_id": record.scan_id,
+        "analysis_id": record.analysis_id,
+        "status": record.status,
+        "provider": record.provider,
+        "model": record.model,
+        "context_version": record.context_version,
+        "prompt_version": record.prompt_version,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+    if record.status == "completed":
+        return ScanAIAnalysisCompleted(
+            **fields,
+            completed_at=record.completed_at,
+            analysis=ScanAIAnalysis.model_validate(record.analysis_json),
+        )
+    if record.status == "failed":
+        return ScanAIAnalysisFailed(**fields, completed_at=record.completed_at)
+    return ScanAIAnalysisQueued(**fields)
+
+
+def get_scan_ai_analysis(
+    session: Session,
+    scan_id: UUID,
+    *,
+    org_id: UUID,
+    ai_enabled: bool,
+) -> ScanAIAnalysisResponse | None:
+    scan = session.exec(
+        select(ScanRecord).where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+        )
+    ).first()
+    if scan is None:
+        return None
+
+    if not ai_enabled or scan.status != "completed":
+        return ScanAIAnalysisUnavailable(scan_id=scan_id, status="unavailable")
+
+    record = session.exec(
+        select(AIScanAnalysisRecord).where(
+            AIScanAnalysisRecord.scan_id == scan_id
+        )
+    ).first()
+    if record is None:
+        return ScanAIAnalysisNotRequested(scan_id=scan_id, status="not_requested")
+
+    return scan_ai_analysis_response(record)
 
 
 def request_scan_ai_analysis(
@@ -54,7 +118,7 @@ def request_scan_ai_analysis(
     if scan is None:
         return None
     if not ai_enabled or scan.status != "completed":
-        return empty_scan_ai_analysis_response(scan_id, "unavailable")
+        return ScanAIAnalysisUnavailable(scan_id=scan_id, status="unavailable")
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
@@ -67,12 +131,12 @@ def request_scan_ai_analysis(
             raise AIAnalysisAlreadyRequestedError
         record.status = "pending"
         record.attempts = 0
-        record.last_error_code = None
+        record.last_error = None
+        record.next_attempt_at = None
         record.analysis_json = None
         record.context_hash = None
         record.started_at = None
         record.completed_at = None
-        record.updated_at = current_time
         session.add(record)
         session.commit()
         session.refresh(record)
@@ -101,7 +165,7 @@ def request_scan_ai_analysis(
 def process_ready_ai_analyses(
     session: Session,
     *,
-    provider: AIProvider,
+    provider: GroqProvider,
     batch_size: int,
     max_findings: int,
     max_attempts: int,
@@ -114,7 +178,6 @@ def process_ready_ai_analyses(
         session,
         batch_size=batch_size,
         max_attempts=max_attempts,
-        retry_delay_seconds=retry_delay_seconds,
         stale_after_seconds=stale_after_seconds,
         now=current_time,
     )
@@ -125,6 +188,7 @@ def process_ready_ai_analyses(
             provider=provider,
             max_findings=max_findings,
             max_attempts=max_attempts,
+            retry_delay_seconds=retry_delay_seconds,
             now=current_time,
         )
     return len(records)
@@ -135,42 +199,9 @@ def claim_ai_analyses(
     *,
     batch_size: int,
     max_attempts: int,
-    retry_delay_seconds: float,
     stale_after_seconds: float,
     now: datetime,
 ) -> list[AIScanAnalysisRecord]:
-    retry_before = now - timedelta(seconds=retry_delay_seconds)
-    stale_before = now - timedelta(seconds=stale_after_seconds)
-
-    exhausted = session.exec(
-        select(AIScanAnalysisRecord).where(
-            AIScanAnalysisRecord.status == "processing",
-            AIScanAnalysisRecord.started_at <= stale_before,
-            AIScanAnalysisRecord.attempts >= max_attempts,
-        )
-    ).all()
-    for record in exhausted:
-        record.status = "failed"
-        record.last_error_code = "processing_timeout"
-        record.completed_at = now
-        record.updated_at = now
-        session.add(record)
-    if exhausted:
-        session.commit()
-
-    eligible_pending = (
-        (AIScanAnalysisRecord.status == "pending")
-        & (AIScanAnalysisRecord.attempts < max_attempts)
-        & or_(
-            AIScanAnalysisRecord.started_at.is_(None),
-            AIScanAnalysisRecord.started_at <= retry_before,
-        )
-    )
-    eligible_stale = (
-        (AIScanAnalysisRecord.status == "processing")
-        & (AIScanAnalysisRecord.attempts < max_attempts)
-        & (AIScanAnalysisRecord.started_at <= stale_before)
-    )
     active_enrichment = (
         select(EnrichmentJobRecord.id)
         .where(
@@ -179,131 +210,80 @@ def claim_ai_analyses(
         )
         .exists()
     )
-    statement = (
-        select(AIScanAnalysisRecord)
-        .where(or_(eligible_pending, eligible_stale), ~active_enrichment)
-        .order_by(AIScanAnalysisRecord.created_at, AIScanAnalysisRecord.id)
-        .limit(batch_size)
+    return claim_jobs(
+        session,
+        AIScanAnalysisRecord,
+        running_status="processing",
+        exhausted_error="processing_timeout",
+        batch_size=batch_size,
+        max_attempts=max_attempts,
+        stale_after_seconds=stale_after_seconds,
+        now=now,
+        where=~active_enrichment,
     )
-    bind = session.get_bind()
-    if bind is not None and bind.dialect.name == "postgresql":
-        statement = statement.with_for_update(skip_locked=True)
-
-    records = session.exec(statement).all()
-    for record in records:
-        record.status = "processing"
-        record.attempts += 1
-        record.started_at = now
-        record.completed_at = None
-        record.updated_at = now
-        session.add(record)
-    session.commit()
-    for record in records:
-        session.refresh(record)
-    return records
 
 
 def _process_claimed_analysis(
     session: Session,
     record: AIScanAnalysisRecord,
     *,
-    provider: AIProvider,
+    provider: GroqProvider,
     max_findings: int,
     max_attempts: int,
+    retry_delay_seconds: float,
     now: datetime,
 ) -> None:
     scan = session.get(ScanRecord, record.scan_id)
-    if scan is None or scan.org_id is None:
-        _fail_record(session, record, "scan_unavailable", now=now)
-        return
-
+    code, retryable = "scan_unavailable", False
     try:
-        context = build_scan_ai_context(
-            session,
-            scan.scan_id,
-            org_id=scan.org_id,
-            max_findings=max_findings,
-        )
-        if context is None:
-            _fail_record(session, record, "scan_unavailable", now=now)
-            return
-        analysis = generate_scan_analysis(provider, context)
+        context = None
+        if scan is not None and scan.org_id is not None:
+            context = build_scan_ai_context(
+                session,
+                scan.scan_id,
+                org_id=scan.org_id,
+                max_findings=max_findings,
+            )
+        if context is not None:
+            analysis = provider.analyze_scan(context)
+            _check_grounded(context, analysis)
     except AIProviderError as exc:
-        _handle_attempt_error(
-            session,
-            record,
-            code=exc.code,
-            retryable=exc.retryable,
-            max_attempts=max_attempts,
-            now=now,
-        )
-        return
-    except (AIAnalysisValidationError, ScanAINotReadyError):
-        _handle_attempt_error(
-            session,
-            record,
-            code="invalid_analysis",
-            retryable=False,
-            max_attempts=max_attempts,
-            now=now,
-        )
-        return
+        code, retryable = exc.code, exc.retryable
+    except (_UngroundedAnalysisError, ScanAINotReadyError):
+        code, retryable = "invalid_analysis", False
     except Exception:
         logger.exception("AI analysis job failed scan_id=%s", record.scan_id)
-        _handle_attempt_error(
-            session,
-            record,
-            code="internal_error",
-            retryable=False,
-            max_attempts=max_attempts,
-            now=now,
-        )
-        return
-
-    record.status = "completed"
-    record.analysis_json = analysis.model_dump(mode="json")
-    record.context_hash = _context_hash(context)
-    record.last_error_code = None
-    record.completed_at = now
-    record.updated_at = now
-    session.add(record)
-    session.commit()
-
-
-def _handle_attempt_error(
-    session: Session,
-    record: AIScanAnalysisRecord,
-    *,
-    code: str,
-    retryable: bool,
-    max_attempts: int,
-    now: datetime,
-) -> None:
-    if retryable and record.attempts < max_attempts:
-        record.status = "pending"
-        record.completed_at = None
+        code, retryable = "internal_error", False
     else:
-        record.status = "failed"
-        record.completed_at = now
-    record.last_error_code = code
-    record.updated_at = now
+        if context is not None:
+            record.status = "completed"
+            record.analysis_json = analysis.model_dump(mode="json")
+            record.context_hash = _context_hash(context)
+            record.completed_at = now
+            session.add(record)
+            session.commit()
+            return
+
+    retry_or_fail(
+        record,
+        error=code,
+        retryable=retryable,
+        max_attempts=max_attempts,
+        delay_seconds=retry_delay_seconds,
+        now=now,
+    )
     session.add(record)
     session.commit()
 
 
-def _fail_record(
-    session: Session,
-    record: AIScanAnalysisRecord,
-    code: str,
-    *,
-    now: datetime,
-) -> None:
-    record.status = "failed"
-    record.last_error_code = code
-    record.completed_at = now
-    record.updated_at = now
-    session.add(record)
-    session.commit()
+def _check_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> None:
+    allowed = {finding.finding_id for finding in context.top_findings}
+    explained = [item.finding_id for item in analysis.important_findings]
+    referenced = set(explained).union(
+        *(action.related_finding_ids for action in analysis.priority_actions)
+    )
+    if not referenced <= allowed or len(explained) != len(set(explained)):
+        raise _UngroundedAnalysisError
 
 
 def _context_hash(context: ScanAIContext) -> str:

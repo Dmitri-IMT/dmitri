@@ -102,10 +102,12 @@ export interface paths {
         };
         /**
          * Get the persisted AI interpretation of a scan
-         * @description Returns the current analysis state or its completed structured payload.
-         *     This read-only endpoint never invokes an AI provider. Unknown scans and
-         *     scans owned by another organisation are both returned as not found. AI
-         *     disabled or missing provider credentials is reported as unavailable.
+         * @description Returns the current analysis state. The `status` field selects the
+         *     response variant; only `completed` carries the structured `analysis`
+         *     payload. This read-only endpoint never invokes an AI provider. Unknown
+         *     scans and scans owned by another organisation are both returned as not
+         *     found. AI disabled or missing provider credentials is reported as
+         *     unavailable.
          */
         get: operations["getScanAIAnalysis"];
         put?: never;
@@ -1215,24 +1217,86 @@ export interface components {
             important_findings: components["schemas"]["AIFindingExplanation"][];
             uncertainties: string[];
         };
-        ScanAIAnalysisResponse: {
+        ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
+        ScanAIAnalysisUnavailable: {
+            /** Format: uuid */
+            scan_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "unavailable";
+        };
+        ScanAIAnalysisNotRequested: {
+            /** Format: uuid */
+            scan_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "not_requested";
+        };
+        ScanAIAnalysisQueued: {
             /** Format: uuid */
             scan_id: string;
             /** Format: uuid */
-            analysis_id: string | null;
-            /** @enum {string} */
-            status: "not_requested" | "pending" | "processing" | "completed" | "failed" | "unavailable";
-            analysis: components["schemas"]["ScanAIAnalysis"] | null;
-            provider: string | null;
-            model: string | null;
-            context_version: string | null;
-            prompt_version: string | null;
+            analysis_id: string;
+            provider: string;
+            model: string;
+            context_version: string;
+            prompt_version: string;
             /** Format: date-time */
-            created_at: string | null;
+            created_at: string;
             /** Format: date-time */
-            updated_at: string | null;
+            updated_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "pending" | "processing";
+        };
+        ScanAIAnalysisFailed: {
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uuid */
+            analysis_id: string;
+            provider: string;
+            model: string;
+            context_version: string;
+            prompt_version: string;
             /** Format: date-time */
-            completed_at: string | null;
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "failed";
+            /** Format: date-time */
+            completed_at: string;
+        };
+        ScanAIAnalysisCompleted: {
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uuid */
+            analysis_id: string;
+            provider: string;
+            model: string;
+            context_version: string;
+            prompt_version: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "completed";
+            /** Format: date-time */
+            completed_at: string;
+            analysis: components["schemas"]["ScanAIAnalysis"];
         };
         /** @enum {string} */
         HomeEventKind: "box_offline" | "member_idle" | "machine_first_seen";

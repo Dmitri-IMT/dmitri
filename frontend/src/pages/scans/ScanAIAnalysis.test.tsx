@@ -6,31 +6,10 @@ import ScanAIAnalysis from './ScanAIAnalysis'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import { server } from '@/test/setup'
 import { criticalFinding } from '@/test/mswHandlers'
-import type { components } from '@/types/openapi'
-
-type ScanAIAnalysisResponse = components['schemas']['ScanAIAnalysisResponse']
+import type { ScanAIAnalysisResponse } from '@/api/scans'
 
 const baseURL = 'http://localhost:8000/api/v1'
 const scanId = criticalFinding.scan_id
-
-function response(
-  overrides: Partial<ScanAIAnalysisResponse>,
-): ScanAIAnalysisResponse {
-  return {
-    scan_id: scanId,
-    analysis_id: null,
-    status: 'unavailable',
-    analysis: null,
-    provider: null,
-    model: null,
-    context_version: null,
-    prompt_version: null,
-    created_at: null,
-    updated_at: null,
-    completed_at: null,
-    ...overrides,
-  }
-}
 
 const completedAnalysis = {
   executive_summary: 'Uma vulnerabilidade precisa de atenção.',
@@ -60,6 +39,42 @@ const completedAnalysis = {
   uncertainties: ['O scan não confirma se a vulnerabilidade foi explorada.'],
 }
 
+const unavailable: ScanAIAnalysisResponse = {
+  scan_id: scanId,
+  status: 'unavailable',
+}
+
+const notRequested: ScanAIAnalysisResponse = {
+  scan_id: scanId,
+  status: 'not_requested',
+}
+
+const job = {
+  scan_id: scanId,
+  analysis_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  provider: 'groq',
+  model: 'openai/gpt-oss-120b',
+  context_version: '1',
+  prompt_version: '1',
+  created_at: '2026-09-12T12:00:00Z',
+  updated_at: '2026-09-12T12:00:10Z',
+}
+
+const pending: ScanAIAnalysisResponse = { ...job, status: 'pending' }
+
+const failed: ScanAIAnalysisResponse = {
+  ...job,
+  status: 'failed',
+  completed_at: '2026-09-12T12:00:10Z',
+}
+
+const completed: ScanAIAnalysisResponse = {
+  ...job,
+  status: 'completed',
+  completed_at: '2026-09-12T12:00:10Z',
+  analysis: completedAnalysis,
+}
+
 function serve(payload: ScanAIAnalysisResponse) {
   server.use(
     http.get(`${baseURL}/scans/:scanId/analysis`, () =>
@@ -78,7 +93,7 @@ describe('ScanAIAnalysis', () => {
   it.each(['pending', 'processing'] as const)(
     'keeps deterministic results available while analysis is %s',
     async (status) => {
-      serve(response({ status }))
+      serve({ ...job, status })
       renderAnalysis()
 
       const panel = await screen.findByTestId('scan-ai-pending')
@@ -90,7 +105,7 @@ describe('ScanAIAnalysis', () => {
   )
 
   it('shows the request button when analysis has not been requested', async () => {
-    serve(response({ status: 'not_requested' }))
+    serve(notRequested)
     renderAnalysis()
 
     const panel = await screen.findByTestId('scan-ai-not-requested')
@@ -111,24 +126,16 @@ describe('ScanAIAnalysis', () => {
       http.get(`${baseURL}/scans/:scanId/analysis`, () => {
         getCount += 1
         if (getCount === 1) {
-          return HttpResponse.json(response({ status: 'not_requested' }))
+          return HttpResponse.json(notRequested)
         }
         if (getCount <= 2) {
-          return HttpResponse.json(response({ status: 'pending' }))
+          return HttpResponse.json(pending)
         }
-        return HttpResponse.json(
-          response({
-            analysis_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            status: 'completed',
-            analysis: completedAnalysis,
-          }),
-        )
+        return HttpResponse.json(completed)
       }),
       http.post(`${baseURL}/scans/:scanId/analysis`, () => {
         postCount += 1
-        return HttpResponse.json(response({ status: 'pending' }), {
-          status: 202,
-        })
+        return HttpResponse.json(pending, { status: 202 })
       }),
     )
 
@@ -154,7 +161,7 @@ describe('ScanAIAnalysis', () => {
     server.use(
       http.get(`${baseURL}/scans/:scanId/analysis`, () => {
         requests += 1
-        return HttpResponse.json(response({ status: 'unavailable' }))
+        return HttpResponse.json(unavailable)
       }),
     )
     const { container } = renderAnalysis()
@@ -166,7 +173,7 @@ describe('ScanAIAnalysis', () => {
   })
 
   it('contains provider failure without hiding the scan results', async () => {
-    serve(response({ status: 'failed' }))
+    serve(failed)
     renderAnalysis()
 
     const panel = await screen.findByTestId('scan-ai-failed')
@@ -177,13 +184,7 @@ describe('ScanAIAnalysis', () => {
   })
 
   it('does not show the request button on completed analysis', async () => {
-    serve(
-      response({
-        analysis_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        status: 'completed',
-        analysis: completedAnalysis,
-      }),
-    )
+    serve(completed)
     renderAnalysis()
 
     await screen.findByTestId('scan-ai-completed')
@@ -198,9 +199,9 @@ describe('ScanAIAnalysis', () => {
       http.get(`${baseURL}/scans/:scanId/analysis`, () => {
         getCount += 1
         if (getCount === 1) {
-          return HttpResponse.json(response({ status: 'not_requested' }))
+          return HttpResponse.json(notRequested)
         }
-        return HttpResponse.json(response({ status: 'pending' }))
+        return HttpResponse.json(pending)
       }),
       http.post(
         `${baseURL}/scans/:scanId/analysis`,
@@ -220,20 +221,7 @@ describe('ScanAIAnalysis', () => {
 
   it('renders the plain-language summary, priorities, and grounded findings', async () => {
     const user = userEvent.setup()
-    serve(
-      response({
-        analysis_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        status: 'completed',
-        provider: 'groq',
-        model: 'openai/gpt-oss-120b',
-        context_version: '1',
-        prompt_version: '1',
-        created_at: '2026-09-12T12:00:00Z',
-        updated_at: '2026-09-12T12:00:10Z',
-        completed_at: '2026-09-12T12:00:10Z',
-        analysis: completedAnalysis,
-      }),
-    )
+    serve(completed)
     renderAnalysis()
 
     const panel = await screen.findByTestId('scan-ai-completed')
@@ -257,7 +245,7 @@ describe('ScanAIAnalysis', () => {
       http.get(`${baseURL}/scans/:scanId/analysis`, () =>
         shouldFail
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json(response({ status: 'unavailable' })),
+          : HttpResponse.json(unavailable),
       ),
     )
     renderAnalysis()

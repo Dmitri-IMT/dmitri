@@ -1,42 +1,93 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from api.services.ai.schemas import ScanAIAnalysis
-
-AIAnalysisReadStatus = Literal[
-    "not_requested",
-    "pending",
-    "processing",
-    "completed",
-    "failed",
-    "unavailable",
-]
+AIText = Annotated[str, Field(min_length=3, max_length=4000)]
+AIShortText = Annotated[str, Field(min_length=3, max_length=2000)]
 
 
-class ScanAIAnalysisResponse(BaseModel):
+class AIRecommendedAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: Literal["immediate", "high", "medium", "low"]
+    title: Annotated[str, Field(min_length=3, max_length=200)]
+    description: AIShortText
+    related_finding_ids: Annotated[list[UUID], Field(max_length=15)]
+
+
+class AIFindingExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: UUID
+    why_it_matters: AIShortText
+    plain_language_explanation: AIShortText
+    recommendation: AIShortText
+    evidence_used: Annotated[list[AIShortText], Field(max_length=10)]
+    uncertainty: Annotated[str | None, Field(max_length=1000)]
+
+
+class ScanAIAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: AIText
+    overall_assessment: AIText
+    plain_language_summary: AIText
+    priority_actions: Annotated[list[AIRecommendedAction], Field(max_length=15)]
+    important_findings: Annotated[list[AIFindingExplanation], Field(max_length=15)]
+    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+
+
+class ScanAIAnalysisUnavailable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scan_id: UUID
-    analysis_id: UUID | None
-    status: AIAnalysisReadStatus
-    analysis: ScanAIAnalysis | None
-    provider: str | None
-    model: str | None
-    context_version: str | None
-    prompt_version: str | None
-    created_at: datetime | None
-    updated_at: datetime | None
-    completed_at: datetime | None
+    status: Literal["unavailable"]
 
-    @model_validator(mode="after")
-    def completed_requires_analysis(self) -> "ScanAIAnalysisResponse":
-        if self.status == "completed" and self.analysis is None:
-            raise ValueError("completed analysis requires a payload")
-        if self.status != "completed" and self.analysis is not None:
-            raise ValueError("only a completed analysis may expose a payload")
-        return self
+
+class ScanAIAnalysisNotRequested(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    status: Literal["not_requested"]
+
+
+class _ScanAIAnalysisJob(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    analysis_id: UUID
+    provider: str
+    model: str
+    context_version: str
+    prompt_version: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScanAIAnalysisQueued(_ScanAIAnalysisJob):
+    status: Literal["pending", "processing"]
+
+
+class ScanAIAnalysisFailed(_ScanAIAnalysisJob):
+    status: Literal["failed"]
+    completed_at: datetime
+
+
+class ScanAIAnalysisCompleted(_ScanAIAnalysisJob):
+    status: Literal["completed"]
+    completed_at: datetime
+    analysis: ScanAIAnalysis
+
+
+ScanAIAnalysisResponse = Annotated[
+    ScanAIAnalysisUnavailable
+    | ScanAIAnalysisNotRequested
+    | ScanAIAnalysisQueued
+    | ScanAIAnalysisFailed
+    | ScanAIAnalysisCompleted,
+    Field(discriminator="status"),
+]

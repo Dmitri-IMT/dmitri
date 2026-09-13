@@ -324,10 +324,12 @@ paths:
         - scans
       summary: Get the persisted AI interpretation of a scan
       description: |
-        Returns the current analysis state or its completed structured payload.
-        This read-only endpoint never invokes an AI provider. Unknown scans and
-        scans owned by another organisation are both returned as not found. AI
-        disabled or missing provider credentials is reported as unavailable.
+        Returns the current analysis state. The `status` field selects the
+        response variant; only `completed` carries the structured `analysis`
+        payload. This read-only endpoint never invokes an AI provider. Unknown
+        scans and scans owned by another organisation are both returned as not
+        found. AI disabled or missing provider credentials is reported as
+        unavailable.
       operationId: getScanAIAnalysis
       security:
         - FrontendBearerAuth: []
@@ -4213,13 +4215,91 @@ components:
             minLength: 3
             maxLength: 2000
     ScanAIAnalysisResponse:
+      oneOf:
+        - $ref: '#/components/schemas/ScanAIAnalysisUnavailable'
+        - $ref: '#/components/schemas/ScanAIAnalysisNotRequested'
+        - $ref: '#/components/schemas/ScanAIAnalysisQueued'
+        - $ref: '#/components/schemas/ScanAIAnalysisFailed'
+        - $ref: '#/components/schemas/ScanAIAnalysisCompleted'
+      discriminator:
+        propertyName: status
+        mapping:
+          unavailable: '#/components/schemas/ScanAIAnalysisUnavailable'
+          not_requested: '#/components/schemas/ScanAIAnalysisNotRequested'
+          pending: '#/components/schemas/ScanAIAnalysisQueued'
+          processing: '#/components/schemas/ScanAIAnalysisQueued'
+          failed: '#/components/schemas/ScanAIAnalysisFailed'
+          completed: '#/components/schemas/ScanAIAnalysisCompleted'
+    ScanAIAnalysisUnavailable:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - status
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [unavailable]
+    ScanAIAnalysisNotRequested:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - status
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [not_requested]
+    ScanAIAnalysisQueued:
       type: object
       additionalProperties: false
       required:
         - scan_id
         - analysis_id
         - status
-        - analysis
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        context_version:
+          type: string
+        prompt_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, processing]
+    ScanAIAnalysisFailed:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
         - provider
         - model
         - context_version
@@ -4232,32 +4312,72 @@ components:
           type: string
           format: uuid
         analysis_id:
-          type: [string, 'null']
-          format: uuid
-        status:
           type: string
-          enum: [not_requested, pending, processing, completed, failed, unavailable]
-        analysis:
-          anyOf:
-            - $ref: '#/components/schemas/ScanAIAnalysis'
-            - type: 'null'
+          format: uuid
         provider:
-          type: [string, 'null']
+          type: string
         model:
-          type: [string, 'null']
+          type: string
         context_version:
-          type: [string, 'null']
+          type: string
         prompt_version:
-          type: [string, 'null']
+          type: string
         created_at:
-          type: [string, 'null']
+          type: string
           format: date-time
         updated_at:
-          type: [string, 'null']
+          type: string
           format: date-time
+        status:
+          type: string
+          enum: [failed]
         completed_at:
-          type: [string, 'null']
+          type: string
           format: date-time
+    ScanAIAnalysisCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+        - completed_at
+        - analysis
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        context_version:
+          type: string
+        prompt_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [completed]
+        completed_at:
+          type: string
+          format: date-time
+        analysis:
+          $ref: '#/components/schemas/ScanAIAnalysis'
     HomeEventKind:
       type: string
       enum:

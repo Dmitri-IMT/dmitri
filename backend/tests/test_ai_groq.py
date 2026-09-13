@@ -6,11 +6,10 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from api.schemas.ai import ScanAIAnalysis
 from api.schemas.read import SeverityBreakdown
-from api.services.ai.groq import GroqProvider
-from api.services.ai.prompts import SYSTEM_PROMPT
-from api.services.ai.provider import AIProviderError
-from api.services.ai.schemas import ScanAIAnalysis, ScanAIContext
+from api.services.ai.context import ScanAIContext
+from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
 
 TEST_TOKEN = "test-token"
 

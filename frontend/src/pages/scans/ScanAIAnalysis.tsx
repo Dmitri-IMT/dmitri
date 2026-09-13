@@ -1,7 +1,11 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { getScanAnalysis, requestScanAnalysis } from '@/api/scans'
+import {
+  getScanAnalysis,
+  requestScanAnalysis,
+  type ScanAIAnalysisResponse,
+} from '@/api/scans'
 import { queryKeys } from '@/api/queryKeys'
 import Disclosure from '@/components/Disclosure'
 import { Button } from '@/components/ui/button'
@@ -9,7 +13,6 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
-type ScanAIAnalysisResponse = components['schemas']['ScanAIAnalysisResponse']
 type AIRecommendedAction = components['schemas']['AIRecommendedAction']
 
 const ANALYSIS_POLL_INTERVAL_MS = 3_000
@@ -174,7 +177,6 @@ function ScanAIAnalysis({
       return failedCard
     case 'completed': {
       const analysis = query.data.analysis
-      if (!analysis) return failedCard
       const findingTitles = new Map(
         findings.map((finding) => [finding.finding_id, finding.title]),
       )
@@ -278,7 +280,7 @@ function ScanAIAnalysis({
       )
     }
     default: {
-      const _exhaustive: never = query.data.status
+      const _exhaustive: never = query.data
       return _exhaustive
     }
   }

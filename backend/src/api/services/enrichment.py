@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from api.core.config import get_settings
@@ -16,6 +15,7 @@ from api.models.persistence import (
 from api.schemas.scan import FindingPayload
 from api.services.epss import EpssClient, upsert_epss_record
 from api.services.inventory import reconcile_scan_host_inventory
+from api.services.jobs import claim_jobs, retry_or_fail
 from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
@@ -29,62 +29,16 @@ def claim_pending_enrichment_jobs(
     now: datetime | None = None,
 ) -> list[EnrichmentJobRecord]:
     settings = get_settings()
-    current_time = now or datetime.now(timezone.utc)
-    stale_before = current_time - timedelta(
-        seconds=settings.enrichment_stale_after_seconds
+    return claim_jobs(
+        session,
+        EnrichmentJobRecord,
+        running_status="running",
+        exhausted_error="enrichment_attempts_exhausted",
+        batch_size=batch_size,
+        max_attempts=settings.enrichment_max_attempts,
+        stale_after_seconds=settings.enrichment_stale_after_seconds,
+        now=now or datetime.now(timezone.utc),
     )
-
-    exhausted = session.exec(
-        select(EnrichmentJobRecord).where(
-            EnrichmentJobRecord.status == "running",
-            EnrichmentJobRecord.started_at <= stale_before,
-            EnrichmentJobRecord.attempts >= settings.enrichment_max_attempts,
-        )
-    ).all()
-    for job in exhausted:
-        job.status = "failed"
-        job.completed_at = current_time
-        job.last_error = "enrichment_attempts_exhausted"
-        session.add(job)
-    if exhausted:
-        session.commit()
-
-    eligible_pending = (
-        (EnrichmentJobRecord.status == "pending")
-        & (EnrichmentJobRecord.attempts < settings.enrichment_max_attempts)
-        & or_(
-            EnrichmentJobRecord.next_attempt_at.is_(None),
-            EnrichmentJobRecord.next_attempt_at <= current_time,
-        )
-    )
-    eligible_stale = (
-        (EnrichmentJobRecord.status == "running")
-        & (EnrichmentJobRecord.attempts < settings.enrichment_max_attempts)
-        & (EnrichmentJobRecord.started_at <= stale_before)
-    )
-    statement = (
-        select(EnrichmentJobRecord)
-        .where(or_(eligible_pending, eligible_stale))
-        .order_by(EnrichmentJobRecord.created_at, EnrichmentJobRecord.id)
-        .limit(batch_size)
-    )
-    bind = session.get_bind()
-    if bind is not None and bind.dialect.name == "postgresql":
-        statement = statement.with_for_update(skip_locked=True)
-
-    jobs = session.exec(statement).all()
-    for job in jobs:
-        job.status = "running"
-        job.attempts += 1
-        job.started_at = current_time
-        job.next_attempt_at = None
-        job.completed_at = None
-        job.last_error = None
-        session.add(job)
-    session.commit()
-    for job in jobs:
-        session.refresh(job)
-    return jobs
 
 
 def process_claimed_enrichment_job(
@@ -119,20 +73,17 @@ def process_claimed_enrichment_job(
         if managed_job is None:
             raise
         settings = get_settings()
-        now = datetime.now(timezone.utc)
-        if managed_job.attempts < settings.enrichment_max_attempts:
-            managed_job.status = "pending"
-            managed_job.completed_at = None
-            retry_delay = max(
+        retry_or_fail(
+            managed_job,
+            error=exc.code,
+            retryable=True,
+            max_attempts=settings.enrichment_max_attempts,
+            delay_seconds=max(
                 exc.retry_after_seconds,
                 settings.enrichment_retry_delay_seconds,
-            )
-            managed_job.next_attempt_at = now + timedelta(seconds=retry_delay)
-        else:
-            managed_job.status = "failed"
-            managed_job.completed_at = now
-            managed_job.next_attempt_at = None
-        managed_job.last_error = exc.code
+            ),
+            now=datetime.now(timezone.utc),
+        )
         session.add(managed_job)
         session.commit()
     except Exception as exc:

@@ -21,12 +21,12 @@ from api.schemas.read import (
     SortOrder,
 )
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
-from api.services.ai.factory import GROQ_PROVIDER_ID, ai_is_available
+from api.services.ai.groq import GROQ_PROVIDER_ID, ai_is_available
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
+    get_scan_ai_analysis,
     request_scan_ai_analysis,
 )
-from api.services.ai.read import get_scan_ai_analysis
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 

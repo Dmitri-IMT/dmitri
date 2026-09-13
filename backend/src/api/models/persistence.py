@@ -358,8 +358,15 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     prompt_version: str
     context_hash: str | None = None
     attempts: int = 0
-    last_error_code: str | None = None
+    last_error: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
     started_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    next_attempt_at: datetime | None = Field(
+        default=None, index=True, sa_type=UTC_TIMESTAMP
+    )
     completed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
-    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+    updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=UTC_TIMESTAMP,
+        sa_column_kwargs={"onupdate": utc_now},
+    )

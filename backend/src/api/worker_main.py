@@ -4,9 +4,8 @@ import logging
 import threading
 
 from api.core.config import get_settings
-from api.services.ai.factory import ai_is_available
-from api.services.ai.worker import run_ai_worker_loop
-from api.services.worker import run_worker_loop
+from api.services.ai.groq import ai_is_available
+from api.services.worker import run_ai_worker_loop, run_worker_loop
 
 
 def main() -> int:
