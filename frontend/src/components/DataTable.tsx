@@ -89,7 +89,7 @@ export type DataTableProps<Row, SortKey extends string = never> = {
 }
 
 const INTERACTIVE_ROW =
-  'group relative h-row cursor-pointer border-t border-border text-caption-md hover:bg-card focus-within:bg-card focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50 active:bg-border'
+  'group h-row cursor-pointer border-t border-border text-caption-md hover:bg-card focus-within:bg-card focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50 active:bg-border'
 
 const INERT_ROW = 'h-row border-t border-border text-caption-md'
 
@@ -148,6 +148,12 @@ function DataTable<Row, SortKey extends string = never>({
     }
   }
 
+  function handleLinkRowClick(event: MouseEvent<HTMLTableRowElement>) {
+    if ((event.target as HTMLElement).closest('a, button')) return
+    const link = event.currentTarget.querySelector('[data-row-link]')
+    if (link instanceof HTMLAnchorElement) link.click()
+  }
+
   function renderCell(
     row: Row,
     column: DataTableColumn<Row, SortKey>,
@@ -161,10 +167,10 @@ function DataTable<Row, SortKey extends string = never>({
           to={rowAction.to(row)}
           state={fromHere(location)}
           aria-label={rowAction.label(row)}
+          data-row-link=""
           className="block underline-offset-4 outline-none group-hover:underline group-focus-within:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span className="block truncate">{content}</span>
-          <span aria-hidden="true" className="absolute inset-0" />
         </Link>
       )
     }
@@ -232,7 +238,11 @@ function DataTable<Row, SortKey extends string = never>({
               : INERT_ROW
           } ${tone === 'muted' ? 'text-muted-foreground' : ''}`}
           onClick={
-            isExpand ? (event) => handleExpandRowClick(event, id) : undefined
+            isLink
+              ? handleLinkRowClick
+              : isExpand
+                ? (event) => handleExpandRowClick(event, id)
+                : undefined
           }
         >
           {rowColumns.map((column, index) => (
