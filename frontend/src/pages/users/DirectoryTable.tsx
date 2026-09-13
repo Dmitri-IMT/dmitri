@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { OrgDirectory } from '@/hooks/useOrgDirectory'
+import { useSkeletonDelay } from '@/hooks/useSkeletonDelay'
 import { lastSeenCell, statusLabel, type DirectoryRow } from '@/lib/directory'
 
 type Role = DirectoryRow['role']
@@ -158,17 +159,20 @@ function Row({
 }
 
 function SkeletonRows() {
+  const isVisible = useSkeletonDelay()
+
   return (
     <tbody>
-      {[0, 1, 2].map((index) => (
-        <tr key={index} className="h-row border-t border-border">
-          {[0, 1, 2, 3, 4].map((cell) => (
-            <td key={cell} className="pr-4">
-              <span className="block h-3 w-full bg-muted" />
-            </td>
-          ))}
-        </tr>
-      ))}
+      {isVisible &&
+        [0, 1, 2].map((index) => (
+          <tr key={index} className="h-row border-t border-border">
+            {[0, 1, 2, 3, 4].map((cell) => (
+              <td key={cell} className="pr-4">
+                <span className="block h-3 w-full bg-muted" />
+              </td>
+            ))}
+          </tr>
+        ))}
     </tbody>
   )
 }

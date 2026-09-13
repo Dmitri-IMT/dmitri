@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import { HOME_ATTENTION_PER_PAGE } from '@/api/home'
 import { useHome } from '@/hooks/useHome'
+import { useSkeletonDelay } from '@/hooks/useSkeletonDelay'
 import AttentionNotices from '@/pages/home/AttentionNotices'
 import AttentionTable from '@/pages/home/AttentionTable'
 import Verdict from '@/pages/home/Verdict'
@@ -12,8 +13,13 @@ import { HOME_PANEL_CHROME } from '@/pages/home/HomeFeedPanel'
 import HomeSidePanels from '@/pages/home/HomeSidePanels'
 
 function HomeLoading() {
+  const isVisible = useSkeletonDelay()
+
   return (
-    <div data-testid="home-loading" className="flex flex-col gap-12">
+    <div
+      data-testid="home-loading"
+      className={`flex flex-col gap-12 ${isVisible ? '' : 'invisible'}`}
+    >
       <table className="w-full table-fixed border-collapse">
         <LoadingSkeleton rows={HOME_ATTENTION_PER_PAGE} columns={3} />
       </table>
