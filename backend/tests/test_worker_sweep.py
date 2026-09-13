@@ -6,7 +6,7 @@ from uuid import uuid4
 import api.services.worker as worker_module
 from api.models.command import Agent, Command
 from api.models.identity import Org
-from api.models.persistence import ScanRecord
+from api.models.persistence import AIScanAnalysisRecord, ScanRecord
 from sqlmodel import Session
 
 NOW = datetime.now(UTC)
@@ -82,7 +82,7 @@ def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
         )
         return 0
 
-    def _fake_enrichment(sess, *, batch_size):
+    def _fake_enrichment(sess, *, batch_size, client=None):
         enrichment_calls.append((sess, batch_size))
         return 4
 
@@ -98,6 +98,43 @@ def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
     assert sweep_calls[0]["agent_id"] is None
     assert sweep_calls[0]["now"].tzinfo is not None
     assert enrichment_calls == [(session, 9)]
+
+
+def test_run_worker_once_ignores_pending_ai_jobs(
+    monkeypatch, administrative_session, seeded_org
+):
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    scan.status = "completed"
+    administrative_session.add(scan)
+    ai_record = AIScanAnalysisRecord(
+        scan_id=scan.scan_id,
+        provider="groq",
+        model="openai/gpt-oss-120b",
+        status="pending",
+        context_version="1",
+        prompt_version="1",
+    )
+    administrative_session.add(ai_record)
+    administrative_session.commit()
+
+    enrichment_calls: list[tuple] = []
+
+    def _fake_enrichment(session, *, batch_size, client=None):
+        enrichment_calls.append((session, batch_size))
+        return 2
+
+    monkeypatch.setattr(
+        worker_module, "get_session", lambda: iter([administrative_session])
+    )
+    monkeypatch.setattr(
+        worker_module, "process_pending_enrichment_jobs", _fake_enrichment
+    )
+
+    assert worker_module.run_worker_once(batch_size=5) == 2
+    assert enrichment_calls == [(administrative_session, 5)]
+
+    administrative_session.refresh(ai_record)
+    assert ai_record.status == "pending"
 
 
 def test_run_worker_once_sweeps_stale_and_keeps_enrichment(
@@ -152,7 +189,7 @@ def test_run_worker_once_sweeps_stale_and_keeps_enrichment(
 
     enrichment_calls: list[object] = []
 
-    def _fake_enrichment(session, *, batch_size):
+    def _fake_enrichment(session, *, batch_size, client=None):
         enrichment_calls.append((session, batch_size))
         return 3
 

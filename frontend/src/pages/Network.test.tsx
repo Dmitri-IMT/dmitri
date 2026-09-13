@@ -282,7 +282,7 @@ describe('Network', () => {
       'Address',
       'Type',
       'Vulnerabilities',
-      'Highest severity',
+      'Severity',
       'Last seen',
     ])
   })

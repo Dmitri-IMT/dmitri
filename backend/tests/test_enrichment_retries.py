@@ -1,0 +1,170 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+from api.core.config import get_settings
+from api.dependencies.agent_auth import AgentIdentity
+from api.models.command import Agent
+from api.models.identity import Org
+from api.models.persistence import EnrichmentJobRecord
+from api.schemas.scan import HostPayload, PortPayload, ScanIngestRequest
+from api.services.enrichment import (
+    claim_pending_enrichment_jobs,
+    process_claimed_enrichment_job,
+)
+from api.services.nvd import NvdTemporaryError
+from api.services.persistence import ingest_scan
+from sqlmodel import Session, select
+
+
+def _one_nvd_job(
+    session: Session,
+    *,
+    org: Org,
+    agent: Agent,
+) -> EnrichmentJobRecord:
+    scan = ScanIngestRequest(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[
+            HostPayload(
+                ip="10.0.0.10",
+                mac=None,
+                hostname="host",
+                vendor="vendor",
+                ports=[
+                    PortPayload(
+                        port=443,
+                        protocol="tcp",
+                        state="open",
+                        service="https",
+                        cpes=["cpe:2.3:a:vendor:product:1.0:*:*:*:*:*:*:*"],
+                    )
+                ],
+            )
+        ],
+        findings=[],
+    )
+    ingest_scan(
+        session,
+        scan,
+        identity=AgentIdentity(agent_id=agent.id, org_id=org.id),
+        now=datetime.now(timezone.utc),
+    )
+    return session.exec(select(EnrichmentJobRecord)).one()
+
+
+def test_nvd_rate_limit_requeues_job_for_later(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    monkeypatch.setenv("ENRICHMENT_RETRY_DELAY_SECONDS", "12")
+    get_settings.cache_clear()
+    job = _one_nvd_job(
+        runtime_session,
+        org=seeded_org,
+        agent=provisioned_agent,
+    )
+    claimed = claim_pending_enrichment_jobs(runtime_session, batch_size=1)
+    assert claimed == [job]
+
+    class _RateLimitedClient:
+        def query_by_cpe(self, session: Session, cpe: str) -> dict:
+            raise NvdTemporaryError(
+                "nvd_rate_limited",
+                retry_after_seconds=45,
+            )
+
+    before = datetime.now(timezone.utc)
+    process_claimed_enrichment_job(
+        runtime_session,
+        claimed[0],
+        client=_RateLimitedClient(),  # type: ignore[arg-type]
+    )
+
+    runtime_session.refresh(job)
+    assert job.status == "pending"
+    assert job.attempts == 1
+    assert job.last_error == "nvd_rate_limited"
+    assert job.completed_at is None
+    assert job.next_attempt_at is not None
+    assert job.next_attempt_at >= before + timedelta(seconds=45)
+
+    assert claim_pending_enrichment_jobs(runtime_session, batch_size=1) == []
+    get_settings.cache_clear()
+
+
+def test_nvd_rate_limit_fails_after_attempt_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    monkeypatch.setenv("ENRICHMENT_MAX_ATTEMPTS", "1")
+    get_settings.cache_clear()
+    job = _one_nvd_job(
+        runtime_session,
+        org=seeded_org,
+        agent=provisioned_agent,
+    )
+    claimed = claim_pending_enrichment_jobs(runtime_session, batch_size=1)
+
+    class _UnavailableClient:
+        def query_by_cpe(self, session: Session, cpe: str) -> dict:
+            raise NvdTemporaryError(
+                "nvd_unavailable",
+                retry_after_seconds=30,
+            )
+
+    process_claimed_enrichment_job(
+        runtime_session,
+        claimed[0],
+        client=_UnavailableClient(),  # type: ignore[arg-type]
+    )
+
+    runtime_session.refresh(job)
+    assert job.status == "failed"
+    assert job.attempts == 1
+    assert job.last_error == "nvd_unavailable"
+    assert job.next_attempt_at is None
+    assert job.completed_at is not None
+    get_settings.cache_clear()
+
+
+def test_stale_running_job_is_reclaimed(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    monkeypatch.setenv("ENRICHMENT_STALE_AFTER_SECONDS", "60")
+    get_settings.cache_clear()
+    job = _one_nvd_job(
+        runtime_session,
+        org=seeded_org,
+        agent=provisioned_agent,
+    )
+    job.status = "running"
+    job.attempts = 1
+    job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    runtime_session.add(job)
+    runtime_session.commit()
+
+    now = datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc)
+    claimed = claim_pending_enrichment_jobs(
+        runtime_session,
+        batch_size=1,
+        now=now,
+    )
+
+    assert claimed == [job]
+    assert job.status == "running"
+    assert job.attempts == 2
+    assert job.started_at == now
+    get_settings.cache_clear()

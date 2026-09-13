@@ -3,6 +3,30 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-13
+
+* **Update**: PR-144 review fixes. `services/ai/` is now `context.py`, `groq.py`, `jobs.py`; AI worker loop moved to `services/worker.py`; new shared `services/jobs.py` (`claim_jobs`, `retry_or_fail`) for enrichment and AI; migration `20260912_26` (head); `ScanAIAnalysisResponse` is a status-keyed union in `schemas/ai.py`. Touched: `backend/ai.md`, `backend/services.md`, `backend/schemas.md`, `backend/migrations.md`, `backend/index.md`, root `index.md`.
+
+* **Update**: `frontend/tables.md` — `DataTable` link rows use a row `onClick` that clicks the
+  first-cell `<Link data-row-link>`; the stretched overlay was removed (Safari ignores `relative` on
+  `<tr>`, so the last row captured every click).
+
+* **Update**: `useSkeletonDelay` (250 ms) before skeleton bars — `LoadingSkeleton`, Home loading,
+  Users directory. `docs/ui/FOUNDATIONS.md` Loading row already records it.
+
+* **Creation**: `backend/ai.md` — how on-demand Groq analysis works now (POST request, enrichment
+  gate, separate worker thread, statuses). `frontend/scan-ai.md` — Scan Detail card, polling, risk
+  integer display pointer.
+* **Update**: AI + enrichment-retry head `20260912_25`; Network column label `Severity`; industrial
+  UI on `IndustrialServiceView`. Touched: `backend/overview.md`, `backend/api.md`,
+  `backend/routers.md`, `backend/models.md`, `backend/schemas.md`, `backend/migrations.md`,
+  `backend/services.md`, `backend/index.md`, `frontend/screens.md`, `frontend/api.md`,
+  `frontend/index.md`, `contracts.md`, root `index.md`. `docs/DEV-SETUP.md` worker/AI run notes.
+
+* **Update**: AI scan analysis is on-demand (`POST /scans/{id}/analysis`, `not_requested`),
+  with `run_ai_worker_loop` outside enrichment. `AI_PROVIDER` setting removed. Touched:
+  `backend/services.md`. ADR-020 added.
+
 ## 2026-09-12
 
 * **Update**: `hardware-agent/ot.md` and `hardware-agent/scanner/stages.md` — `stop_reason` /

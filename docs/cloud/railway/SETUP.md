@@ -196,6 +196,25 @@ railway logs --service worker --environment "$ENV" --project "$PROJECT"
 loop starting without the previous `psycopg` authentication/undefined-table errors once the
 hosted schema is migrated (see the Supabase runbook).
 
+### Optional: AI scan analysis
+
+Set the same pair on **both** `api` and `worker`. The API returns `unavailable`
+without them. The worker is the process that calls Groq. Leave other `AI_*`
+values at their defaults unless this runbook says otherwise. Never set
+`DATABASE_URL_DIRECT` on either service.
+
+```bash
+railway variable set AI_ENABLED=true --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set AI_ENABLED=true --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set AI_API_KEY="<GROQ_API_KEY>" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway variable set AI_API_KEY="<GROQ_API_KEY>" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
+railway up --detach --service api --environment "$ENV" --project "$PROJECT"
+railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+```
+
+After restart, `worker` logs should show both the enrichment loop and
+`starting AI worker poll_interval=...`.
+
 ### Optional: sealing the NVD API key
 
 If an `NVD_API_KEY` is configured, seal it the same way on both services — the API and worker

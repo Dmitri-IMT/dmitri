@@ -139,6 +139,10 @@ class FindingRead(BaseModel):
     references: list[constr(min_length=1)] = Field(default_factory=list)
     modbus_unit: FindingModbusUnitRef | None = None
     detected_at: datetime
+    risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    exploitability: Annotated[float | None, Field(default=None, ge=0, le=1)]
+    confidence: Literal["tentative", "probable", "confirmed"] | None = None
+    risk_rationale: str | None = None
     host_hostname: str | None = None
     first_seen_at: datetime | None = None
     last_seen_at: datetime | None = None
@@ -241,3 +245,28 @@ class FindingListResponse(BaseModel):
     data: list[FindingRead]
     total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
+
+
+class SeverityBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    critical: Annotated[int, Field(ge=0)] = 0
+    high: Annotated[int, Field(ge=0)] = 0
+    medium: Annotated[int, Field(ge=0)] = 0
+    low: Annotated[int, Field(ge=0)] = 0
+
+
+class ScanRiskSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: UUID
+    total_findings: Annotated[int, Field(ge=0)]
+    scored_findings: Annotated[int, Field(ge=0)]
+    confirmed_findings: Annotated[int, Field(ge=0)]
+    kev_findings: Annotated[int, Field(ge=0)]
+    average_risk_score: Annotated[
+        float | None, Field(default=None, ge=0, le=100)
+    ]
+    max_risk_score: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    severity: SeverityBreakdown
+    top_findings: list[FindingRead]

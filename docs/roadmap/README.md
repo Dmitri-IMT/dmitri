@@ -18,7 +18,7 @@
 | [`BACKEND.md`](BACKEND.md) | FastAPI — decisions | B4/B5 ✅ · B10 Control ✅ · B6/B7/B8 ✅ · C4 admin identity API ✅ |
 | [`AUTH.md`](AUTH.md) | Identity & authorization | Phase 1 software controls built, including account removal, member/invite administration, activity stamps, and signed command/ingest transports. Operational Pi provisioning remains |
 | [`FRONTEND.md`](FRONTEND.md) | React SPA | Scaffold, login → Home, public auth, Settings, Users & Invites, DMI-88 scan/host reads, and DMI-89 Agents scan trigger built. Next: LLM explainer |
-| [`AI.md`](AI.md) | In-app LLM explainer | **Not built.** Backend vuln-intelligence roadmap already exists separately. |
+| [`AI.md`](AI.md) | In-app LLM explainer | **Merged on demand.** Groq scan overview behind **Explain this scan** ([ADR-020](../adr/ADR-020-ai-scan-analysis.md)). Chat, reports and Home summary not decided. |
 | [`SECURITY.md`](SECURITY.md) | Cross-cutting security | Cross-cutting posture; auth phases in [`AUTH.md`](AUTH.md) |
 | [`TASKS.md`](TASKS.md) | Actionable task list | Tier 1 ✅ · Tier 2 in progress · T4.1 closed |
 

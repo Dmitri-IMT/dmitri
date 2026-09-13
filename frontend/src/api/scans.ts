@@ -4,6 +4,8 @@ import type { components, operations } from '../types/openapi'
 type ScanSummary = components['schemas']['ScanSummary']
 type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
+export type ScanAIAnalysisResponse =
+  components['schemas']['ScanAIAnalysisResponse']
 type ListScansQuery = NonNullable<
   operations['listScans']['parameters']['query']
 >
@@ -55,5 +57,23 @@ export async function listScans(
 
 export async function getScan(scanId: string): Promise<ScanDetailResponse> {
   const response = await apiClient.get<ScanDetailResponse>(`/scans/${scanId}`)
+  return response.data
+}
+
+export async function getScanAnalysis(
+  scanId: string,
+): Promise<ScanAIAnalysisResponse> {
+  const response = await apiClient.get<ScanAIAnalysisResponse>(
+    `/scans/${scanId}/analysis`,
+  )
+  return response.data
+}
+
+export async function requestScanAnalysis(
+  scanId: string,
+): Promise<ScanAIAnalysisResponse> {
+  const response = await apiClient.post<ScanAIAnalysisResponse>(
+    `/scans/${scanId}/analysis`,
+  )
   return response.data
 }

@@ -600,6 +600,28 @@ export const handlers = [
       ? HttpResponse.json(scan)
       : new HttpResponse(null, { status: 404 })
   }),
+  http.get(`${baseURL}/scans/:scanId/analysis`, ({ params }) =>
+    HttpResponse.json({
+      scan_id: params.scanId as string,
+      status: 'unavailable',
+    } satisfies components['schemas']['ScanAIAnalysisResponse']),
+  ),
+  http.post(`${baseURL}/scans/:scanId/analysis`, ({ params }) =>
+    HttpResponse.json(
+      {
+        scan_id: params.scanId as string,
+        analysis_id: '00000000-0000-4000-8000-000000000000',
+        status: 'pending',
+        provider: 'groq',
+        model: 'openai/gpt-oss-120b',
+        context_version: '1',
+        prompt_version: '1',
+        created_at: '2026-09-12T12:00:00Z',
+        updated_at: '2026-09-12T12:00:00Z',
+      } satisfies components['schemas']['ScanAIAnalysisResponse'],
+      { status: 202 },
+    ),
+  ),
   http.get(`${baseURL}/hosts/:hostId`, ({ params }) => {
     const host = hostDetailFixtures.find(
       (fixture) => fixture.host_id === params.hostId,

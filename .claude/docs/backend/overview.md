@@ -1,10 +1,10 @@
 ---
 type: Package Overview
 title: Backend — API + enrichment worker
-description: The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker.
+description: The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker and optional AI analysis loop.
 resource: backend/src/api
-tags: [backend, fastapi, worker, persistence, enrichment, read, auth]
-timestamp: 2026-08-11T00:00:00Z
+tags: [backend, fastapi, worker, persistence, enrichment, read, auth, ai]
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend — API + enrichment worker
@@ -25,7 +25,8 @@ The backend is the cloud half of Dmitri: it receives a normalized scan result fr
 host to a durable cross-scan identity, and then enriches every CVE against three public feeds —
 **NVD**, **CISA KEV**, and **FIRST EPSS** — to produce an explainable, deterministic risk score per
 finding. Read access to that data is now served over HTTP. It is two Python processes sharing one
-Postgres database: a FastAPI **API** service and a long-running enrichment **worker**.
+Postgres database: a FastAPI **API** service and a long-running **worker** (enrichment, plus an
+optional AI thread). On-demand scan overviews are documented in [ai](/backend/ai.md).
 
 ## Layout
 
@@ -36,6 +37,7 @@ Postgres database: a FastAPI **API** service and a long-running enrichment **wor
 | ORM / tables | [models](/backend/models.md) | Scan/enrichment, identity/activity, session, and command-channel SQLModel tables. |
 | Wire schemas | [schemas](/backend/schemas.md) | Ingest/read/command shapes plus profile, member, auth, and invite models. |
 | Business logic | [services](/backend/services.md) | Ingest/persistence, member administration, reads, enrichment/risk, and command lifecycle. |
+| AI scan analysis | [ai](/backend/ai.md) | On-demand Groq overview; not started by ingest. |
 | Auth subsystem | [auth](/backend/auth.md) | Sessions/passwords, activity stamps, invite lifecycle, role gates, and CORS. |
 | Database schema | [migrations](/backend/migrations.md) | Alembic env + sixteen revisions with RLS and runtime grants. |
 
@@ -47,7 +49,8 @@ Deployed as two Railway services (per `docs/adr/ADR-007`), both importing the `a
 - **API** — `uvicorn api.main:app`. Serves data reads, auth and identity administration, the
   command channel, and scan ingest.
 - **Worker** — `python -m api.worker_main` (also the `backend-worker` console script). Polls
-  `enrichment_jobs` forever and calls the upstream feeds.
+  `enrichment_jobs` forever. When `AI_ENABLED` and `AI_API_KEY` are set, also runs
+  [AI analysis](/backend/ai.md) in a daemon thread.
 
 The database is a **Supabase-managed Postgres 17** instance. The app **never creates tables** —
 [Alembic owns the schema](/backend/migrations.md); the ORM metadata exists only to be the migration
@@ -71,6 +74,8 @@ target and to map queries.
 4. Every finding ends with an explainable `risk_score` row in `risk_snapshots`.
 5. **Wired:** [`GET /hosts`, `/hosts/{id}`, `/scans/{id}`, `/findings`](/backend/routers.md) read that
    persisted state back out over HTTP.
+6. **Optional, on request:** a member POSTs `/scans/{id}/analysis`. After enrichment for that scan
+   is idle, the AI thread calls Groq and stores one overview ([ai](/backend/ai.md)).
 
 ## Notes / gotchas
 

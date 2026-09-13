@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-09-12T22:45:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend ORM models
@@ -42,6 +42,7 @@ order is irrelevant.
 | `KevRecord` / `EpssRecord` | Normalized per-CVE results (PK `cve_id`): KEV `date_added`/`known_ransomware`/`required_action`; EPSS `epss_score`/`percentile`/`scored_at`. | `backend/src/api/models/persistence.py:175`, `:187` |
 | `KevCacheRecord` / `EpssCacheRecord` | Raw cached upstream payloads per CVE with `expires_at` TTL. | `backend/src/api/models/persistence.py:199`, `:208` |
 | `RiskSnapshotRecord` → `risk_snapshots` | Unique `finding_id`; `confidence`, `exploitability`, `risk_score`, `rationale`. | `backend/src/api/models/persistence.py:217` |
+| `AIScanAnalysisRecord` → `ai_scan_analyses` | Unique `scan_id`; status check; completed requires `analysis_json`. See [ai](/backend/ai.md). | `backend/src/api/models/persistence.py:335` |
 
 `ArtifactRecord` → `artifacts` was **deleted in DMI-63** (migration `20260804_14` drops the table).
 The agent never wrote artifacts, so the table was dead weight; the reverse migration recreates it.

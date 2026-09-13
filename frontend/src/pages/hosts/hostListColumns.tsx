@@ -83,7 +83,7 @@ export function hostListColumns(
     },
     {
       key: 'highest_severity',
-      label: 'Highest severity',
+      label: 'Severity',
       width: 'w-8/50',
       render: (host) => <SeverityWord severity={host.highest_severity} />,
     },

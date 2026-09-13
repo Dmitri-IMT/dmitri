@@ -95,7 +95,7 @@ describe('Network quiet group', () => {
       'Address',
       'Type',
       'Vulnerabilities',
-      'Highest severity',
+      'Severity',
       'Last seen',
     ])
 

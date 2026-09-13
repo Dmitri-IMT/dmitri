@@ -69,8 +69,23 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("EPSS_CACHE_TTL_HOURS", "2")
     monkeypatch.setenv("NVD_API_BASE_URL", "https://example.test/nvd")
     monkeypatch.setenv("NVD_CACHE_TTL_HOURS", "3")
+    monkeypatch.setenv("NVD_MIN_REQUEST_INTERVAL_SECONDS", "0.75")
     monkeypatch.setenv("ENRICHMENT_POLL_INTERVAL_SECONDS", "1.5")
     monkeypatch.setenv("ENRICHMENT_BATCH_SIZE", "7")
+    monkeypatch.setenv("ENRICHMENT_MAX_ATTEMPTS", "4")
+    monkeypatch.setenv("ENRICHMENT_RETRY_DELAY_SECONDS", "20")
+    monkeypatch.setenv("ENRICHMENT_STALE_AFTER_SECONDS", "90")
+    monkeypatch.setenv("AI_ENABLED", "true")
+    monkeypatch.setenv("AI_MODEL", "custom-model")
+    monkeypatch.setenv("AI_API_KEY", "secret-ai-key")
+    monkeypatch.setenv("AI_API_BASE_URL", "https://example.test/openai/v1")
+    monkeypatch.setenv("AI_MAX_FINDINGS", "12")
+    monkeypatch.setenv("AI_TIMEOUT_SECONDS", "25")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "2048")
+    monkeypatch.setenv("AI_REASONING_EFFORT", "medium")
+    monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("AI_RETRY_DELAY_SECONDS", "15")
+    monkeypatch.setenv("AI_POLL_INTERVAL_SECONDS", "2.5")
 
     settings = Settings()
 
@@ -80,8 +95,24 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.epss_cache_ttl_hours == 2
     assert settings.nvd_api_base_url == "https://example.test/nvd"
     assert settings.nvd_cache_ttl_hours == 3
+    assert settings.nvd_min_request_interval_seconds == 0.75
     assert settings.enrichment_poll_interval_seconds == 1.5
     assert settings.enrichment_batch_size == 7
+    assert settings.enrichment_max_attempts == 4
+    assert settings.enrichment_retry_delay_seconds == 20
+    assert settings.enrichment_stale_after_seconds == 90
+    assert settings.ai_enabled is True
+    assert settings.ai_model == "custom-model"
+    assert settings.ai_api_key is not None
+    assert settings.ai_api_key.get_secret_value() == "secret-ai-key"
+    assert settings.ai_api_base_url == "https://example.test/openai/v1"
+    assert settings.ai_max_findings == 12
+    assert settings.ai_timeout_seconds == 25
+    assert settings.ai_max_output_tokens == 2048
+    assert settings.ai_reasoning_effort == "medium"
+    assert settings.ai_max_attempts == 3
+    assert settings.ai_retry_delay_seconds == 15
+    assert settings.ai_poll_interval_seconds == 2.5
 
 
 def test_carried_fields_default_when_env_unset(
@@ -96,8 +127,23 @@ def test_carried_fields_default_when_env_unset(
         "NVD_API_BASE_URL",
         "NVD_CACHE_TTL_HOURS",
         "NVD_API_KEY",
+        "NVD_MIN_REQUEST_INTERVAL_SECONDS",
         "ENRICHMENT_POLL_INTERVAL_SECONDS",
         "ENRICHMENT_BATCH_SIZE",
+        "ENRICHMENT_MAX_ATTEMPTS",
+        "ENRICHMENT_RETRY_DELAY_SECONDS",
+        "ENRICHMENT_STALE_AFTER_SECONDS",
+        "AI_ENABLED",
+        "AI_MODEL",
+        "AI_API_KEY",
+        "AI_API_BASE_URL",
+        "AI_MAX_FINDINGS",
+        "AI_TIMEOUT_SECONDS",
+        "AI_MAX_OUTPUT_TOKENS",
+        "AI_REASONING_EFFORT",
+        "AI_MAX_ATTEMPTS",
+        "AI_RETRY_DELAY_SECONDS",
+        "AI_POLL_INTERVAL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -115,8 +161,27 @@ def test_carried_fields_default_when_env_unset(
     )
     assert settings.nvd_cache_ttl_hours == 12
     assert settings.nvd_api_key is None
+    assert settings.nvd_min_request_interval_seconds == 6.0
     assert settings.enrichment_poll_interval_seconds == 5.0
     assert settings.enrichment_batch_size == 10
+    assert settings.enrichment_max_attempts == 3
+    assert settings.enrichment_retry_delay_seconds == 30
+    assert settings.enrichment_stale_after_seconds == 120
+    assert settings.ai_enabled is False
+    assert settings.ai_model == "openai/gpt-oss-120b"
+    assert settings.ai_api_key is None
+    assert settings.ai_api_base_url == "https://api.groq.com/openai/v1"
+    assert settings.ai_max_findings == 10
+    assert settings.ai_timeout_seconds == 30
+    assert settings.ai_max_output_tokens == 4096
+    assert settings.ai_reasoning_effort == "low"
+    assert settings.ai_max_attempts == 2
+    assert settings.ai_retry_delay_seconds == 30
+    assert settings.ai_poll_interval_seconds == 5.0
+
+
+def test_ai_provider_is_not_a_setting() -> None:
+    assert "ai_provider" not in Settings.model_fields
 
 
 def test_auth_settings_default_when_env_unset(
@@ -272,6 +337,9 @@ def test_nvd_client_delivers_key_in_header_without_exposing_it(
     captured: dict[str, object] = {}
 
     class _FakeResponse:
+        status_code = 200
+        headers = nvd_module.httpx.Headers()
+
         def raise_for_status(self) -> None:
             return None
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,31 @@ def normalize_postgres_url(value: str, variable: str = "DATABASE_URL") -> str:
 
 class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
+    ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
+    ai_model: str = Field(default="openai/gpt-oss-120b", alias="AI_MODEL")
+    ai_api_key: SecretStr | None = Field(default=None, alias="AI_API_KEY")
+    ai_api_base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        alias="AI_API_BASE_URL",
+    )
+    ai_max_findings: int = Field(default=10, ge=1, le=15, alias="AI_MAX_FINDINGS")
+    ai_timeout_seconds: float = Field(
+        default=30.0, gt=0, le=120, alias="AI_TIMEOUT_SECONDS"
+    )
+    ai_max_output_tokens: int = Field(
+        default=4096, ge=256, le=8192, alias="AI_MAX_OUTPUT_TOKENS"
+    )
+    ai_reasoning_effort: Literal["low", "medium", "high"] = Field(
+        default="low", alias="AI_REASONING_EFFORT"
+    )
+    ai_max_attempts: int = Field(default=2, ge=1, le=5, alias="AI_MAX_ATTEMPTS")
+    ai_retry_delay_seconds: float = Field(
+        default=30.0, ge=0, le=3600, alias="AI_RETRY_DELAY_SECONDS"
+    )
+    ai_poll_interval_seconds: float = Field(
+        default=5.0,
+        alias="AI_POLL_INTERVAL_SECONDS",
+    )
     kev_api_base_url: str = Field(
         default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
         alias="KEV_API_BASE_URL",
@@ -37,6 +63,12 @@ class Settings(BaseSettings):
     )
     nvd_api_key: SecretStr | None = Field(default=None, alias="NVD_API_KEY")
     nvd_cache_ttl_hours: int = Field(default=12, alias="NVD_CACHE_TTL_HOURS")
+    nvd_min_request_interval_seconds: float = Field(
+        default=6.0,
+        ge=0,
+        le=60,
+        alias="NVD_MIN_REQUEST_INTERVAL_SECONDS",
+    )
     enrichment_poll_interval_seconds: float = Field(
         default=5.0,
         alias="ENRICHMENT_POLL_INTERVAL_SECONDS",
@@ -44,6 +76,24 @@ class Settings(BaseSettings):
     enrichment_batch_size: int = Field(
         default=10,
         alias="ENRICHMENT_BATCH_SIZE",
+    )
+    enrichment_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        alias="ENRICHMENT_MAX_ATTEMPTS",
+    )
+    enrichment_retry_delay_seconds: float = Field(
+        default=30.0,
+        ge=0,
+        le=3600,
+        alias="ENRICHMENT_RETRY_DELAY_SECONDS",
+    )
+    enrichment_stale_after_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        le=3600,
+        alias="ENRICHMENT_STALE_AFTER_SECONDS",
     )
     jwt_signing_secret: SecretStr = Field(alias="JWT_SIGNING_SECRET")
     access_token_ttl_minutes: int = Field(

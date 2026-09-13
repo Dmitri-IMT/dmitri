@@ -277,6 +277,127 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/scans/{scan_id}/risk-summary:
+    get:
+      tags:
+        - scans
+      summary: Get a bounded risk summary for a scan
+      description: |
+        Returns aggregate risk metrics and at most ten top-ranked findings with
+        their evidence. This read-only response is suitable for dashboards and
+        for a future evidence-grounded LLM tool.
+      operationId: getScanRiskSummary
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: Risk summary scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanRiskSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - scans
+      summary: CORS preflight for scan risk summary
+      operationId: optionsScanRiskSummary
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/scans/{scan_id}/analysis:
+    get:
+      tags:
+        - scans
+      summary: Get the persisted AI interpretation of a scan
+      description: |
+        Returns the current analysis state. The `status` field selects the
+        response variant; only `completed` carries the structured `analysis`
+        payload. This read-only endpoint never invokes an AI provider. Unknown
+        scans and scans owned by another organisation are both returned as not
+        found. AI disabled or missing provider credentials is reported as
+        unavailable.
+      operationId: getScanAIAnalysis
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: AI analysis state scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAIAnalysisResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - scans
+      summary: Request an AI interpretation of a completed scan
+      description: |
+        Creates one analysis job for a completed scan. A failed job may be
+        requested again. AI disabled or missing provider credentials, and scans
+        that are not completed, are reported as unavailable without creating a
+        job. Pending, processing, and completed analyses conflict with a repeat
+        request.
+      operationId: requestScanAIAnalysis
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '202':
+          description: AI analysis request state scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAIAnalysisResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: An analysis has already been requested for this scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - scans
+      summary: CORS preflight for scan AI analysis
+      operationId: optionsScanAIAnalysis
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
   /api/v1/hosts:
     get:
       tags:
@@ -430,6 +551,47 @@ paths:
       summary: CORS preflight for findings collection
       operationId: optionsFindings
       security: []
+      responses:
+        '204':
+          $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/findings/{finding_id}:
+    get:
+      tags:
+        - findings
+      summary: Get a finding with evidence and risk context
+      description: |
+        Returns one finding scoped to the caller's organisation. The response
+        includes persisted evidence, remediation guidance, references and the
+        latest risk snapshot, making it suitable for a future read-only LLM tool.
+      operationId: getFindingById
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FindingId'
+      responses:
+        '200':
+          description: Finding detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    options:
+      tags:
+        - findings
+      summary: CORS preflight for finding detail
+      operationId: optionsFindingById
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FindingId'
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
@@ -1378,6 +1540,14 @@ components:
       in: path
       required: true
       description: Backend identifier of the scan.
+      schema:
+        type: string
+        format: uuid
+    FindingId:
+      name: finding_id
+      in: path
+      required: true
+      description: Public identifier of a persisted finding.
       schema:
         type: string
         format: uuid
@@ -3751,6 +3921,19 @@ components:
         - evidence
         - detected_at
       properties:
+        risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        exploitability:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        confidence:
+          type: [string, 'null']
+          enum: [tentative, probable, confirmed, null]
+        risk_rationale:
+          type: [string, 'null']
         finding_id:
           type: string
           format: uuid
@@ -3867,6 +4050,334 @@ components:
         page:
           type: integer
           minimum: 1
+    SeverityBreakdown:
+      type: object
+      additionalProperties: false
+      required: [critical, high, medium, low]
+      properties:
+        critical:
+          type: integer
+          minimum: 0
+        high:
+          type: integer
+          minimum: 0
+        medium:
+          type: integer
+          minimum: 0
+        low:
+          type: integer
+          minimum: 0
+    ScanRiskSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - total_findings
+        - scored_findings
+        - confirmed_findings
+        - kev_findings
+        - average_risk_score
+        - max_risk_score
+        - severity
+        - top_findings
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        total_findings:
+          type: integer
+          minimum: 0
+        scored_findings:
+          type: integer
+          minimum: 0
+        confirmed_findings:
+          type: integer
+          minimum: 0
+        kev_findings:
+          type: integer
+          minimum: 0
+        average_risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        max_risk_score:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+        severity:
+          $ref: '#/components/schemas/SeverityBreakdown'
+        top_findings:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/FindingRecord'
+    AIRecommendedAction:
+      type: object
+      additionalProperties: false
+      required:
+        - priority
+        - title
+        - description
+        - related_finding_ids
+      properties:
+        priority:
+          type: string
+          enum: [immediate, high, medium, low]
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+        description:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        related_finding_ids:
+          type: array
+          maxItems: 15
+          items:
+            type: string
+            format: uuid
+    AIFindingExplanation:
+      type: object
+      additionalProperties: false
+      required:
+        - finding_id
+        - why_it_matters
+        - plain_language_explanation
+        - recommendation
+        - evidence_used
+        - uncertainty
+      properties:
+        finding_id:
+          type: string
+          format: uuid
+        why_it_matters:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        plain_language_explanation:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        recommendation:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        evidence_used:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+        uncertainty:
+          type: [string, 'null']
+          minLength: 3
+          maxLength: 1000
+    ScanAIAnalysis:
+      type: object
+      additionalProperties: false
+      required:
+        - executive_summary
+        - overall_assessment
+        - plain_language_summary
+        - priority_actions
+        - important_findings
+        - uncertainties
+      properties:
+        executive_summary:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        overall_assessment:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        plain_language_summary:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        priority_actions:
+          type: array
+          maxItems: 15
+          items:
+            $ref: '#/components/schemas/AIRecommendedAction'
+        important_findings:
+          type: array
+          maxItems: 15
+          items:
+            $ref: '#/components/schemas/AIFindingExplanation'
+        uncertainties:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+    ScanAIAnalysisResponse:
+      oneOf:
+        - $ref: '#/components/schemas/ScanAIAnalysisUnavailable'
+        - $ref: '#/components/schemas/ScanAIAnalysisNotRequested'
+        - $ref: '#/components/schemas/ScanAIAnalysisQueued'
+        - $ref: '#/components/schemas/ScanAIAnalysisFailed'
+        - $ref: '#/components/schemas/ScanAIAnalysisCompleted'
+      discriminator:
+        propertyName: status
+        mapping:
+          unavailable: '#/components/schemas/ScanAIAnalysisUnavailable'
+          not_requested: '#/components/schemas/ScanAIAnalysisNotRequested'
+          pending: '#/components/schemas/ScanAIAnalysisQueued'
+          processing: '#/components/schemas/ScanAIAnalysisQueued'
+          failed: '#/components/schemas/ScanAIAnalysisFailed'
+          completed: '#/components/schemas/ScanAIAnalysisCompleted'
+    ScanAIAnalysisUnavailable:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - status
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [unavailable]
+    ScanAIAnalysisNotRequested:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - status
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [not_requested]
+    ScanAIAnalysisQueued:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        context_version:
+          type: string
+        prompt_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, processing]
+    ScanAIAnalysisFailed:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+        - completed_at
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        context_version:
+          type: string
+        prompt_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [failed]
+        completed_at:
+          type: string
+          format: date-time
+    ScanAIAnalysisCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - analysis_id
+        - status
+        - provider
+        - model
+        - context_version
+        - prompt_version
+        - created_at
+        - updated_at
+        - completed_at
+        - analysis
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        analysis_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        context_version:
+          type: string
+        prompt_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [completed]
+        completed_at:
+          type: string
+          format: date-time
+        analysis:
+          $ref: '#/components/schemas/ScanAIAnalysis'
     HomeEventKind:
       type: string
       enum:

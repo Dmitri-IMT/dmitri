@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
-from api.models.persistence import HostFindingRecord, ScanHostRecord
+from api.models.persistence import (
+    HostFindingRecord,
+    RiskSnapshotRecord,
+    ScanHostRecord,
+)
 from read_factories import make_finding, seed_read_graph
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
@@ -227,3 +231,47 @@ def test_finding_first_seen_at_is_null_until_the_machine_has_a_problem_life(
     assert datetime.fromisoformat(lived["first_seen_at"]) == first_seen
     assert lived["fixed_at"] is None
     assert unlived["first_seen_at"] is None
+
+
+def test_get_finding_by_id_returns_evidence_and_risk(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    finding = seeded["finding"]
+    administrative_session.add(
+        RiskSnapshotRecord(
+            finding_id=finding.id,
+            confidence="confirmed",
+            exploitability=0.62,
+            risk_score=81.5,
+            rationale="severity=high, confidence=confirmed, kev=yes",
+        )
+    )
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/findings/{finding.finding_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["finding_id"] == str(finding.finding_id)
+    assert body["host_id"] == str(seeded["host"].id)
+    assert body["evidence"] == finding.evidence
+    assert body["recommendation"] == finding.recommendation
+    assert body["risk_score"] == 81.5
+    assert body["exploitability"] == 0.62
+    assert body["confidence"] == "confirmed"
+
+
+def test_get_finding_by_id_hides_foreign_and_unknown_ids(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    headers = bearer_headers(seeded["org"].id, "admin")
+
+    for finding_id in (seeded["foreign_finding"].finding_id, uuid4()):
+        response = client.get(f"/api/v1/findings/{finding_id}", headers=headers)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "not_found"

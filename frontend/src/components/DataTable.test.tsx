@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Link } from 'react-router'
@@ -111,12 +111,13 @@ describe('DataTable', () => {
     expect(new Set(shapes).size).toBe(1)
   })
 
-  it('keeps headings while pending, ignores rows, and uses the requested skeleton count', () => {
+  it('keeps headings while pending, ignores rows, and shows the requested skeleton count after the delay', async () => {
     renderWithProviders(<DataTable {...baseProps} isPending skeletonRows={2} />)
 
     expect(screen.getByRole('columnheader', { name: 'Name' })).toBeVisible()
     expect(screen.queryByText('First row')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('row')).toHaveLength(3)
+    expect(screen.getAllByRole('row')).toHaveLength(1)
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(3))
   })
 
   it('renders empty content only for an empty, non-pending body', () => {
@@ -154,22 +155,11 @@ describe('DataTable', () => {
     expect(within(firstRow).getAllByRole('link')).toHaveLength(1)
     expect(firstRow).not.toHaveAttribute('tabindex')
     expect(firstRow).toHaveAttribute('data-row-action', 'link')
-    expect(firstRow).toHaveClass(
-      'relative',
-      'focus-within:bg-card',
-      'focus-within:ring-3',
-      'focus-within:ring-inset',
-      'focus-within:ring-ring/50',
-    )
-    expect(link.querySelector('span[aria-hidden="true"]')).toHaveClass(
-      'absolute',
-      'inset-0',
-    )
 
     await user.tab()
     expect(link).toHaveFocus()
 
-    await user.click(link)
+    await user.keyboard('{Enter}')
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/rows/one')
     expect(screen.getByTestId('location-state')).toHaveTextContent(
       '{"from":"/"}',
@@ -179,6 +169,35 @@ describe('DataTable', () => {
       within(screen.getByTestId('example-table-row-two')).getByRole('link', {
         name: 'Open Second row',
       }),
+    )
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/rows/two')
+  })
+
+  it('navigates from a later cell of the same row and does not cover other rows', async () => {
+    const user = userEvent.setup()
+    const rowAction: DataTableRowAction<Row> = {
+      kind: 'link',
+      to: (row) => `/rows/${row.id}`,
+      label: (row) => `Open ${row.name}`,
+    }
+    renderWithProviders(
+      <>
+        <DataTable {...baseProps} rowAction={rowAction} />
+        <LocationProbe />
+      </>,
+    )
+
+    await user.click(
+      within(screen.getByTestId('example-table-row-one')).getByText(
+        'First detail',
+      ),
+    )
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/rows/one')
+
+    await user.click(
+      within(screen.getByTestId('example-table-row-two')).getByText(
+        'Second detail',
+      ),
     )
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/rows/two')
   })

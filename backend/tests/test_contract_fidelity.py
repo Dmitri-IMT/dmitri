@@ -67,6 +67,14 @@ SCHEMA_NAMES = (
     "HomeEventsPage",
     "HomeActivityPage",
     "HomeSnapshot",
+    "AIRecommendedAction",
+    "AIFindingExplanation",
+    "ScanAIAnalysis",
+    "ScanAIAnalysisUnavailable",
+    "ScanAIAnalysisNotRequested",
+    "ScanAIAnalysisQueued",
+    "ScanAIAnalysisFailed",
+    "ScanAIAnalysisCompleted",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -372,6 +380,39 @@ def test_ingest_scan_endpoint_exists():
     contract_operation_id = contract["paths"]["/api/v1/scans"]["post"]["operationId"]
     app_operation = app.openapi()["paths"]["/api/v1/scans"]["post"]
     assert app_operation["operationId"] == contract_operation_id == "ingestScan"
+
+
+def test_scan_ai_analysis_operation_is_published():
+    contract = _load_contract()
+    path = "/api/v1/scans/{scan_id}/analysis"
+    get_operation = contract["paths"][path]["get"]
+    post_operation = contract["paths"][path]["post"]
+
+    assert get_operation["operationId"] == "getScanAIAnalysis"
+    assert get_operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(get_operation["responses"]) == {"200", "401", "403", "404", "500"}
+    assert post_operation["operationId"] == "requestScanAIAnalysis"
+    assert post_operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(post_operation["responses"]) == {
+        "202",
+        "401",
+        "403",
+        "404",
+        "409",
+        "500",
+    }
+    app_operations = app.openapi()["paths"][path]
+    union = contract["components"]["schemas"]["ScanAIAnalysisResponse"]
+    for method, status in (("get", "200"), ("post", "202")):
+        contract_schema = contract["paths"][path][method]["responses"][status][
+            "content"
+        ]["application/json"]["schema"]
+        app_schema = app_operations[method]["responses"][status]["content"][
+            "application/json"
+        ]["schema"]
+        assert _resolve_ref(contract, contract_schema) == union
+        assert app_schema["oneOf"] == union["oneOf"]
+        assert app_schema["discriminator"] == union["discriminator"]
 
 
 @pytest.mark.parametrize("path", OPERATION_PATHS)

@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Shared contracts
@@ -28,9 +28,11 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   another agent-or-org, `400` results after the command was written off, `422` payload shape.
 - `GET /api/v1/scans`, `/scans/{id}`, `/hosts`, `/findings` — JWT-authed reads (a `pending` scan
   stub is returned before ingest completes). `GET /scans/{id}` (`ScanDetailResponse`) carries
-  optional `error_code` (`ScanErrorCode | null`) since DMI-75; the list row (`ScanSummary`) does not.
+  findings and hosts. `GET` and `POST /scans/{id}/analysis` (`getScanAIAnalysis` /
+  `requestScanAIAnalysis`) are the on-demand AI envelope (`not_requested` until a member POSTs).
   Host and scan detail include `industrial_services` and `unreadable_fields`. Findings may include
-  `modbus_unit`. Process values are not on the contract.
+  optional `error_code` (`ScanErrorCode | null`) since DMI-75; the list row (`ScanSummary`) does not.
+  Findings may include `modbus_unit`. Process values are not on the contract.
 - `POST /api/v1/agents/{agent_id}/commands` — admin-only "Scan now" trigger; `201` +
   `CommandSummary`, `409 device_busy`, `422 subnet_not_reported` (DMI-78, `ScanSubnetNotReported`),
   `503 device_offline`. **Wired** (DMI-64).

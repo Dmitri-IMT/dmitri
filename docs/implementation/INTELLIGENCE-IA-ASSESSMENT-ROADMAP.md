@@ -406,6 +406,9 @@ Status atual:
 - concluido: persistencia minima de KEV, EPSS e `risk_snapshots`
 - concluido: enrichment por `cve_id` no worker
 - concluido: exposicao de `kev`, `epss` e `risk` na API
+- concluido: detalhe de finding com evidencia e snapshot de risco
+- concluido: resumo de risco por scan, limitado aos dez principais findings
+- proxima iteracao: tool layer somente leitura, independente do provedor LLM
 - proxima iteracao: reprocessamento explicito por scan e endpoints historicos adicionais
 
 ### Marco 2B

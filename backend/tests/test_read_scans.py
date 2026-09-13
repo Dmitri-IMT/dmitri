@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from api.models.command import Agent, Command
-from api.models.persistence import ScanRecord
+from api.models.persistence import KevRecord, RiskSnapshotRecord, ScanRecord
 from api.services.read import get_scan_detail
 from read_factories import seed_read_graph
 from sqlmodel import Session
@@ -191,6 +191,80 @@ def test_get_scan_by_id_cross_org_returns_404_not_403(
     )
     assert response.status_code == 404
     assert response.status_code != 403
+
+
+def test_get_scan_risk_summary_is_bounded_and_evidence_bearing(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    finding = seeded["finding"]
+    other_finding = seeded["other_finding"]
+    finding.cve_id = "CVE-2024-10001"
+    finding.confidence = "confirmed"
+    other_finding.cve_id = "CVE-2024-10002"
+    administrative_session.add(finding)
+    administrative_session.add(other_finding)
+    administrative_session.add(
+        KevRecord(cve_id=finding.cve_id, known_ransomware=False)
+    )
+    administrative_session.add(
+        RiskSnapshotRecord(
+            finding_id=finding.id,
+            confidence="confirmed",
+            exploitability=0.7,
+            risk_score=80,
+            rationale="severity=high, confidence=confirmed, kev=yes",
+        )
+    )
+    administrative_session.add(
+        RiskSnapshotRecord(
+            finding_id=other_finding.id,
+            confidence="tentative",
+            exploitability=0.1,
+            risk_score=20,
+            rationale="severity=low, confidence=tentative, kev=no",
+        )
+    )
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/risk-summary",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "scan_id": str(seeded["scan"].scan_id),
+        "total_findings": 2,
+        "scored_findings": 2,
+        "confirmed_findings": 1,
+        "kev_findings": 1,
+        "average_risk_score": 50.0,
+        "max_risk_score": 80.0,
+        "severity": {"critical": 0, "high": 1, "medium": 0, "low": 1},
+        "top_findings": body["top_findings"],
+    }
+    assert [item["finding_id"] for item in body["top_findings"]] == [
+        str(finding.finding_id),
+        str(other_finding.finding_id),
+    ]
+    assert body["top_findings"][0]["evidence"] == finding.evidence
+    assert body["top_findings"][0]["risk_rationale"].endswith("kev=yes")
+
+
+def test_get_scan_risk_summary_hides_foreign_and_unknown_scans(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    headers = bearer_headers(seeded["org"].id, "admin")
+
+    for scan_id in (seeded["foreign_scan"].scan_id, uuid4()):
+        response = client.get(
+            f"/api/v1/scans/{scan_id}/risk-summary", headers=headers
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "not_found"
 
 
 def test_list_scans_empty_org_returns_200_not_404(
