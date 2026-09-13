@@ -23,7 +23,6 @@ def normalize_postgres_url(value: str, variable: str = "DATABASE_URL") -> str:
 class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
     ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
-    ai_provider: Literal["groq"] = Field(default="groq", alias="AI_PROVIDER")
     ai_model: str = Field(default="openai/gpt-oss-120b", alias="AI_MODEL")
     ai_api_key: SecretStr | None = Field(default=None, alias="AI_API_KEY")
     ai_api_base_url: str = Field(
@@ -43,6 +42,10 @@ class Settings(BaseSettings):
     ai_max_attempts: int = Field(default=2, ge=1, le=5, alias="AI_MAX_ATTEMPTS")
     ai_retry_delay_seconds: float = Field(
         default=30.0, ge=0, le=3600, alias="AI_RETRY_DELAY_SECONDS"
+    )
+    ai_poll_interval_seconds: float = Field(
+        default=5.0,
+        alias="AI_POLL_INTERVAL_SECONDS",
     )
     kev_api_base_url: str = Field(
         default="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",

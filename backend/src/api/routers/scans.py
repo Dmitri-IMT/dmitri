@@ -9,6 +9,7 @@ from api.core.config import Settings, get_settings
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
+from api.errors import ApiError
 from api.models.persistence import utc_now
 from api.schemas.ai import ScanAIAnalysisResponse
 from api.schemas.read import (
@@ -20,7 +21,11 @@ from api.schemas.read import (
     SortOrder,
 )
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
-from api.services.ai.factory import ai_is_available
+from api.services.ai.factory import GROQ_PROVIDER_ID, ai_is_available
+from api.services.ai.jobs import (
+    AIAnalysisAlreadyRequestedError,
+    request_scan_ai_analysis,
+)
 from api.services.ai.read import get_scan_ai_analysis
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
@@ -124,6 +129,38 @@ def read_scan_ai_analysis(
         org_id=caller.org_id,
         ai_enabled=ai_is_available(settings),
     )
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return analysis
+
+
+@router.post(
+    "/api/v1/scans/{scan_id}/analysis",
+    response_model=ScanAIAnalysisResponse,
+    status_code=202,
+    operation_id="requestScanAIAnalysis",
+)
+def request_scan_ai_analysis_route(
+    scan_id: UUID,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> ScanAIAnalysisResponse:
+    try:
+        analysis = request_scan_ai_analysis(
+            session,
+            scan_id,
+            org_id=caller.org_id,
+            ai_enabled=ai_is_available(settings),
+            provider_name=GROQ_PROVIDER_ID,
+            model=settings.ai_model,
+        )
+    except AIAnalysisAlreadyRequestedError as exc:
+        raise ApiError(
+            409,
+            "An analysis has already been requested for this scan.",
+            code="analysis_already_requested",
+        ) from exc
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return analysis

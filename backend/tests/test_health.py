@@ -38,6 +38,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/scans", "POST"),
     ("/api/v1/scans/{scan_id}", "GET"),
     ("/api/v1/scans/{scan_id}/analysis", "GET"),
+    ("/api/v1/scans/{scan_id}/analysis", "POST"),
     ("/api/v1/scans/{scan_id}/risk-summary", "GET"),
     ("/api/v1/findings", "GET"),
     ("/api/v1/findings/{finding_id}", "GET"),

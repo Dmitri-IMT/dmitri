@@ -76,7 +76,6 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("ENRICHMENT_RETRY_DELAY_SECONDS", "20")
     monkeypatch.setenv("ENRICHMENT_STALE_AFTER_SECONDS", "90")
     monkeypatch.setenv("AI_ENABLED", "true")
-    monkeypatch.setenv("AI_PROVIDER", "groq")
     monkeypatch.setenv("AI_MODEL", "custom-model")
     monkeypatch.setenv("AI_API_KEY", "secret-ai-key")
     monkeypatch.setenv("AI_API_BASE_URL", "https://example.test/openai/v1")
@@ -86,6 +85,7 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("AI_REASONING_EFFORT", "medium")
     monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
     monkeypatch.setenv("AI_RETRY_DELAY_SECONDS", "15")
+    monkeypatch.setenv("AI_POLL_INTERVAL_SECONDS", "2.5")
 
     settings = Settings()
 
@@ -102,7 +102,6 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.enrichment_retry_delay_seconds == 20
     assert settings.enrichment_stale_after_seconds == 90
     assert settings.ai_enabled is True
-    assert settings.ai_provider == "groq"
     assert settings.ai_model == "custom-model"
     assert settings.ai_api_key is not None
     assert settings.ai_api_key.get_secret_value() == "secret-ai-key"
@@ -113,6 +112,7 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.ai_reasoning_effort == "medium"
     assert settings.ai_max_attempts == 3
     assert settings.ai_retry_delay_seconds == 15
+    assert settings.ai_poll_interval_seconds == 2.5
 
 
 def test_carried_fields_default_when_env_unset(
@@ -134,7 +134,6 @@ def test_carried_fields_default_when_env_unset(
         "ENRICHMENT_RETRY_DELAY_SECONDS",
         "ENRICHMENT_STALE_AFTER_SECONDS",
         "AI_ENABLED",
-        "AI_PROVIDER",
         "AI_MODEL",
         "AI_API_KEY",
         "AI_API_BASE_URL",
@@ -144,6 +143,7 @@ def test_carried_fields_default_when_env_unset(
         "AI_REASONING_EFFORT",
         "AI_MAX_ATTEMPTS",
         "AI_RETRY_DELAY_SECONDS",
+        "AI_POLL_INTERVAL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -168,7 +168,6 @@ def test_carried_fields_default_when_env_unset(
     assert settings.enrichment_retry_delay_seconds == 30
     assert settings.enrichment_stale_after_seconds == 120
     assert settings.ai_enabled is False
-    assert settings.ai_provider == "groq"
     assert settings.ai_model == "openai/gpt-oss-120b"
     assert settings.ai_api_key is None
     assert settings.ai_api_base_url == "https://api.groq.com/openai/v1"
@@ -178,6 +177,11 @@ def test_carried_fields_default_when_env_unset(
     assert settings.ai_reasoning_effort == "low"
     assert settings.ai_max_attempts == 2
     assert settings.ai_retry_delay_seconds == 30
+    assert settings.ai_poll_interval_seconds == 5.0
+
+
+def test_ai_provider_is_not_a_setting() -> None:
+    assert "ai_provider" not in Settings.model_fields
 
 
 def test_auth_settings_default_when_env_unset(
