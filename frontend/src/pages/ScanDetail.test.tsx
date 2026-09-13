@@ -585,4 +585,20 @@ describe('ScanDetail', () => {
     await user.click(screen.getByRole('link', { name: 'Back to scans' }))
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/scans')
   })
+
+  it('renders vulnerabilities and machines while analysis never resolves', async () => {
+    server.use(
+      http.get(
+        'http://localhost:8000/api/v1/scans/:scanId/analysis',
+        () => new Promise(() => {}),
+      ),
+    )
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.getByTestId('scan-hosts-table')).toBeInTheDocument()
+  })
 })

@@ -68,3 +68,12 @@ export async function getScanAnalysis(
   )
   return response.data
 }
+
+export async function requestScanAnalysis(
+  scanId: string,
+): Promise<ScanAIAnalysisResponse> {
+  const response = await apiClient.post<ScanAIAnalysisResponse>(
+    `/scans/${scanId}/analysis`,
+  )
+  return response.data
+}
