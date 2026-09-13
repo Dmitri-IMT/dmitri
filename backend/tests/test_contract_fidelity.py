@@ -381,12 +381,23 @@ def test_ingest_scan_endpoint_exists():
 def test_scan_ai_analysis_operation_is_published():
     contract = _load_contract()
     path = "/api/v1/scans/{scan_id}/analysis"
-    operation = contract["paths"][path]["get"]
+    get_operation = contract["paths"][path]["get"]
+    post_operation = contract["paths"][path]["post"]
 
-    assert operation["operationId"] == "getScanAIAnalysis"
-    assert operation["security"] == [{"FrontendBearerAuth": []}]
-    assert set(operation["responses"]) == {"200", "401", "403", "404", "500"}
-    assert "get" in app.openapi()["paths"][path]
+    assert get_operation["operationId"] == "getScanAIAnalysis"
+    assert get_operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(get_operation["responses"]) == {"200", "401", "403", "404", "500"}
+    assert post_operation["operationId"] == "requestScanAIAnalysis"
+    assert post_operation["security"] == [{"FrontendBearerAuth": []}]
+    assert set(post_operation["responses"]) == {
+        "202",
+        "401",
+        "403",
+        "404",
+        "409",
+        "500",
+    }
+    assert {"get", "post"} <= app.openapi()["paths"][path].keys()
 
 
 @pytest.mark.parametrize("path", OPERATION_PATHS)

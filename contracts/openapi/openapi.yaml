@@ -348,6 +348,42 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - scans
+      summary: Request an AI interpretation of a completed scan
+      description: |
+        Creates one analysis job for a completed scan. A failed job may be
+        requested again. AI disabled or missing provider credentials, and scans
+        that are not completed, are reported as unavailable without creating a
+        job. Pending, processing, and completed analyses conflict with a repeat
+        request.
+      operationId: requestScanAIAnalysis
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '202':
+          description: AI analysis request state scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAIAnalysisResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: An analysis has already been requested for this scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - scans
@@ -4200,7 +4236,7 @@ components:
           format: uuid
         status:
           type: string
-          enum: [pending, processing, completed, failed, unavailable]
+          enum: [not_requested, pending, processing, completed, failed, unavailable]
         analysis:
           anyOf:
             - $ref: '#/components/schemas/ScanAIAnalysis'

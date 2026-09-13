@@ -109,7 +109,15 @@ export interface paths {
          */
         get: operations["getScanAIAnalysis"];
         put?: never;
-        post?: never;
+        /**
+         * Request an AI interpretation of a completed scan
+         * @description Creates one analysis job for a completed scan. A failed job may be
+         *     requested again. AI disabled or missing provider credentials, and scans
+         *     that are not completed, are reported as unavailable without creating a
+         *     job. Pending, processing, and completed analyses conflict with a repeat
+         *     request.
+         */
+        post: operations["requestScanAIAnalysis"];
         delete?: never;
         /** CORS preflight for scan AI analysis */
         options: operations["optionsScanAIAnalysis"];
@@ -1213,7 +1221,7 @@ export interface components {
             /** Format: uuid */
             analysis_id: string | null;
             /** @enum {string} */
-            status: "pending" | "processing" | "completed" | "failed" | "unavailable";
+            status: "not_requested" | "pending" | "processing" | "completed" | "failed" | "unavailable";
             analysis: components["schemas"]["ScanAIAnalysis"] | null;
             provider: string | null;
             model: string | null;
@@ -1984,6 +1992,42 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    requestScanAIAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI analysis request state scoped to the caller's organisation. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanAIAnalysisResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description An analysis has already been requested for this scan. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             500: components["responses"]["InternalServerError"];
         };
     };
