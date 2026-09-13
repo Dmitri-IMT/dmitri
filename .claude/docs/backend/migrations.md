@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through host inventory depth and industrial observations, with Supabase RLS and dmitri_runtime hardening.
+description: The Alembic env and revisions through industrial observations, AI scan analyses, and enrichment retries. Head is `20260912_25`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-09-12T22:45:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend database migrations
@@ -23,7 +23,8 @@ schema (spec 017, DMI-61): `agent_nonces`, globally-unique user emails, and the 
 columns replaced by a plaintext `public_key`. Each DDL-only step is followed by Supabase
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
 new table. Merge revisions join the activity, OS-inventory, and machine-inventory heads; industrial
-observations land as `20260912_22`; `20260912_23` is the single current head.
+observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_24` adds
+`ai_scan_analyses`; `20260912_25` adds enrichment retry columns. Head is `20260912_25`.
 
 ## Key classes / functions
 
@@ -58,7 +59,9 @@ observations land as `20260912_22`; `20260912_23` is the single current head.
 | `upgrade()` (rev `20260908_19`, `operating_system_inventory`) | Adds nullable JSON `operating_system_json` to `scan_hosts` and `hosts`. Parent is `20260903_18`, so it forks from the `20260904_18` → `20260905_19` → `20260907_20` line. | `backend/alembic/versions/20260908_19_operating_system_inventory.py` |
 | `upgrade()` (rev `20260912_21`, `merge_inventory_and_os`) | Empty merge revision with `down_revision = ("20260907_20", "20260908_19")`, so Alembic has one `head` again. No schema change. Stepping back to either parent leaves two rows in `alembic_version`; `tests/conftest.py::_migrate` reads `get_current_heads()` for that reason. | `backend/alembic/versions/20260912_21_merge_inventory_and_os.py` |
 | `upgrade()` (rev `20260912_22`, `industrial_observations`) | Creates `industrial_services` and `modbus_units`; adds `findings.modbus_unit_id` and `orgs.ot_digest_key`; RLS and `dmitri_runtime` grants. Parent is `20260912_20`. Renumbered from this branch's original `20260912_21` so it does not collide with main's inventory merge. | `backend/alembic/versions/20260912_22_industrial_observations.py` |
-| `upgrade()` (rev `20260912_23`, `merge_industrial_and_inventory`) | Empty merge of `20260912_21` (inventory+OS) and `20260912_22` (industrial observations). Current head. | `backend/alembic/versions/20260912_23_merge_industrial_and_inventory.py` |
+| `upgrade()` (rev `20260912_23`, `merge_industrial_and_inventory`) | Empty merge of `20260912_21` (inventory+OS) and `20260912_22` (industrial observations). | `backend/alembic/versions/20260912_23_merge_industrial_and_inventory.py` |
+| `upgrade()` (rev `20260912_24`, `ai_scan_analyses`) | Creates `ai_scan_analyses` (unique `scan_id`, RLS + runtime grants). Parent `20260912_23`. | `backend/alembic/versions/20260912_24_ai_scan_analyses.py` |
+| `upgrade()` (rev `20260912_25`, `enrichment_retries`) | Enrichment job retry columns. Current head. | `backend/alembic/versions/20260912_25_enrichment_retries.py` |
 
 ## How it connects
 
@@ -115,6 +118,7 @@ observations land as `20260912_22`; `20260912_23` is the single current head.
   `20260908_19` (OS inventory). `20260912_21` on main is the empty merge of inventory depth and OS.
   Do not rewrite released revisions. `20260912_22` adds `industrial_services`, `modbus_units`,
   `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
+  `20260912_24` adds `ai_scan_analyses`. `20260912_25` is the current head (enrichment retries).
   `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations

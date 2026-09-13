@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -29,6 +29,8 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `ingest_scan_route()` | `POST /api/v1/scans` (`operation_id="ingestScan"`, `202`) behind `Depends(require_agent)` → `ingest_scan(...)` → `ScanIngestAcceptedResponse`. `ScanOwnershipError` → `403 Forbidden`; `ScanClosedError` → `400 "Scan is no longer accepting results"`. | `backend/src/api/routers/scans.py:32` |
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
+| `read_scan_ai_analysis()` | `GET /api/v1/scans/{scan_id}/analysis` (`getScanAIAnalysis`) behind `require_user`. See [ai](/backend/ai.md). | `backend/src/api/routers/scans.py:120` |
+| `request_scan_ai_analysis_route()` | `POST /api/v1/scans/{scan_id}/analysis` (`requestScanAIAnalysis`, 202). `409` if already requested. | `backend/src/api/routers/scans.py:143` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
 | `read_home()` | `GET /api/v1/home` behind `require_user`. Three `Query(1, ge=1)` page integers, no `per_page`. Returns `HomeSnapshot`. Viewers are allowed. | `backend/src/api/routers/home.py:15` |
 | `read_current_user()` | `GET /api/v1/users/me` → caller profile, with role loaded from the DB row by `require_user_row`. | `backend/src/api/routers/users.py:29` |

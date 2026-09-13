@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-12T22:45:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -79,8 +79,9 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `list_scans()` | Paginated `ScanRecord` list with per-scan `host_count`/`finding_count`/`highest_severity` aggregates (four-query strategy, no N+1) → `ScanListResponse`. Optional `status` filter; `sort_by`/`sort_order` with `scan_id` tie-breaker. Requires keyword-only `org_id`. | `backend/src/api/services/read.py:194` |
 | `list_findings()` | Paginated findings via `finding_read_query()`, optionally filtered by `host_id`, `severity`, `scan_id`. Ordered by `FindingRecord.id`. Requires `org_id`. | `backend/src/api/services/read.py:299` |
 | `finding_read_query()` / `to_finding_reads()` | The one finding read: a select of `FindingRecord`, `ScanHostRecord.host_id`, `HostRecord.hostname`, `HostFindingRecord`, `ModbusUnitRecord` and `IndustrialServiceRecord` with those outer-joined; the mapper reads rows by name into `FindingRead`. Callers add filters, sort and paging only. | `backend/src/api/services/read.py:529` |
-| `run_worker_loop()` | Reads poll interval + batch size from `Settings`, loops forever calling `run_worker_once()`, sleeps `poll_interval` when idle or after a logged exception. | `backend/src/api/services/worker.py:13` |
-| `run_worker_once()` | Opens a session via `get_session()`, calls `sweep_stale_commands` **globally** (every agent) before delegating to `process_pending_enrichment_jobs`, and returns the enrichment count so idle-sleep behaviour is unchanged. | `backend/src/api/services/worker.py:34` |
+| `run_worker_loop()` | Reads poll interval + batch size from `Settings`, loops forever calling `run_worker_once()`, sleeps `poll_interval` when idle or after a logged exception. | `backend/src/api/services/worker.py:16` |
+| `run_worker_once()` | Opens a session via `get_session()`, sweeps stale commands, then `process_pending_enrichment_jobs`. Returns the enrichment count only. No AI provider. | `backend/src/api/services/worker.py:41` |
+| `run_ai_worker_loop()` / `run_ai_worker_once()` / `request_scan_ai_analysis()` | Documented in [ai](/backend/ai.md). Enrichment `run_worker_once` does not call them. | `backend/src/api/services/ai/worker.py`, `backend/src/api/services/ai/jobs.py` |
 | `claim_pending_enrichment_jobs()` | Selects `pending` jobs by `created_at,id`; on Postgres uses `SELECT ... FOR UPDATE SKIP LOCKED`; flips them to `running`, bumps `attempts`, commits. | `backend/src/api/services/enrichment.py:22` |
 | `process_claimed_enrichment_job()` | Dispatches by `job_type` to `_process_cpe/cve/kev/epss_job`; success → `completed`; exception → rollback + `failed` with `last_error`. | `backend/src/api/services/enrichment.py:52` |
 | `_process_cpe_job()` | NVD-by-CPE → one new finding per match (source `nvd_enrichment`, confidence `probable`) via `upsert_finding`, then `reconcile_scan_host_inventory` before commit so enrichment-created findings land in `host_findings`. | `backend/src/api/services/enrichment.py:116` |
@@ -131,9 +132,8 @@ ML/AI scoring is future work.
   ingest gate reuses the command channel's own terminal-state definition rather than restating it.
 - `read.py`'s functions back the [hosts/scans/findings routers](/backend/routers.md) directly — this
   is the one service group actually invoked over HTTP.
-- The worker entry [`worker_main.py`](/backend/api.md) calls `run_worker_loop`; the loop's cadence
-  and batch size come from `Settings` in [config](/backend/api.md), as does
-  `command_disconnect_grace_seconds` for the sweep.
+- The worker entry [`worker_main.py`](/backend/api.md) starts [AI](/backend/ai.md) in a daemon
+  thread when configured, then `run_worker_loop`. Enrichment cadence comes from `Settings`.
 - `commands.py` backs the two command [routers](/backend/routers.md) (`POST /agents/{agent_id}/commands`,
   `GET /commands/{command_id}`), is called by `agent_ws.py` for inbound `status` frames, and is swept by
   `worker.py` — three entry points, one module.

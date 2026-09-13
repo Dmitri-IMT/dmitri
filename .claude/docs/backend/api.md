@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-13T16:40:00Z
 ---
 
 # Backend entry points & config
@@ -35,8 +35,8 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 | `app.include_router(agents.router / commands.router)` | Wires the agent list/detail/target-subnet routes and command enqueue/read plus the agent WebSocket channel. | `backend/src/api/main.py:150` |
 | lifespan startup → `reconcile_all(session)` | Clears every `agents.connected_at` at boot, so a hard-crashed API (where the WS `finally` never ran) does not leave agents looking permanently connected to the worker's sweeper. See [services](/backend/services.md). | `backend/src/api/main.py:39` |
 | `ws_validation_denial()` | `WebSocketRequestValidationError` handler — pre-accept HTTP **403** with the [error envelope](/backend/errors.md) for malformed `{agent_id}` (non-UUID path segment) via `send_denial_response`. | `backend/src/api/main.py:103` |
-| `main()` | Worker process entry. Configures INFO logging, calls `run_worker_loop()`, returns `0`; run as `python -m api.worker_main` (or the `backend-worker` script). | `backend/src/api/worker_main.py:8` |
-| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `enrichment_poll_interval_seconds` (5.0) / `enrichment_batch_size` (10), and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins` (**empty by default**, so browsers fail closed until a deployment supplies an allowlist), `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the device/invite knobs `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48), the command-channel knob `command_disconnect_grace_seconds` (900), and the mail/link knobs `resend_api_key`, `resend_api_base_url`, `mail_from`, `mail_reply_to`, `mail_timeout_seconds` (10.0) and `app_base_url`. | `backend/src/api/core/config.py:22` |
+| `main()` | Worker process entry. Configures INFO logging; if `ai_is_available`, starts `run_ai_worker_loop` in a daemon thread; then `run_worker_loop()`. Run as `python -m api.worker_main` or `backend-worker`. | `backend/src/api/worker_main.py:12` |
+| `Settings` | pydantic-settings `BaseSettings` (env + `.env`, `extra="ignore"`). Fields: `database_url` (`SecretStr`, validated to a Postgres URL), optional **AI** (`ai_enabled` default false, `ai_api_key`, `ai_model`, `ai_api_base_url`, `ai_max_findings`, `ai_timeout_seconds`, `ai_max_output_tokens`, `ai_reasoning_effort`, `ai_max_attempts`, `ai_retry_delay_seconds`, `ai_poll_interval_seconds`; no `AI_PROVIDER`), the KEV/EPSS/NVD base URLs + cache TTLs, optional `nvd_api_key`, `nvd_min_request_interval_seconds` (6), enrichment poll/batch/retry knobs, and the **auth knobs**: `jwt_signing_secret` (`SecretStr`, **required**), `access_token_ttl_minutes` (15), `refresh_token_ttl_days` (7), `refresh_cookie_secure` (true), `cors_allowed_origins` (**empty by default**, so browsers fail closed until a deployment supplies an allowlist), `reset_token_ttl_minutes` (60), `hibp_enabled` (true), `hibp_timeout_seconds` (2), plus the device/invite knobs `device_sig_max_skew_seconds` (300) and `invite_ttl_hours` (48), the command-channel knob `command_disconnect_grace_seconds` (900), and the mail/link knobs `resend_api_key`, `resend_api_base_url`, `mail_from`, `mail_reply_to`, `mail_timeout_seconds` (10.0) and `app_base_url`. | `backend/src/api/core/config.py:22` |
 | `normalize_postgres_url()` | Rewrites any accepted Postgres scheme to `postgresql+psycopg://`; **rejects** unknown schemes (no SQLite). Used by both config validation and the engine. | `backend/src/api/core/config.py:16` |
 | `get_settings()` | `lru_cache`d `Settings` accessor (singleton). | `backend/src/api/core/config.py:98` |
 | `Severity` / `SEVERITY_ORDER` | The severity domain and its `low→1 … critical→4` ranking, derived from the literal's declaration order. Dependency-free on purpose: it sits in `core/` so [models](/backend/models.md) can spell the `findings.severity` check constraint without importing the schema layer above them. Read by `services/hosts.py` (host ranking), `services/read.py` (scan-list rank), `routers/findings.py` (the `severity` query param) and `schemas/read.py`. Moved here from `schemas/read.py` on 2026-07-31. | `backend/src/api/core/severity.py:5` |
@@ -52,7 +52,8 @@ starts, how it is configured from the environment, and how it reaches Postgres.
   `get_engine` engine built from `Settings` — all four files in this doc form the boot chain.
 - The [routers](/backend/routers.md) call straight into [`services/read.py`](/backend/services.md);
   no other layer sits between `main.py` and the DB for the read path.
-- The worker entry delegates to `run_worker_loop()` in [services](/backend/services.md).
+- The worker entry starts [AI](/backend/ai.md) in a thread when configured, then
+  `run_worker_loop()` in [services](/backend/services.md).
 - `command_disconnect_grace_seconds` is read by `sweep_stale_commands`. There is deliberately **no**
   duration-based timeout setting: D11/D12 replaced that design with connection-loss detection, and the
   vestigial `command_running_timeout_seconds` was deleted once it was found to have no consumer.
