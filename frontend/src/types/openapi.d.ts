@@ -617,7 +617,7 @@ export interface components {
         /** @enum {string} */
         CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
         /** @enum {string} */
-        ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
+        ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "scan_timeout" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
         /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
         /** @enum {string} */
@@ -1453,8 +1453,8 @@ export interface components {
          *     revoked, or the command left `queued` before the delivery commit. Delivery is not retried;
          *     triggering the scan again is the retry. The command is recorded as `expired` (never
          *     `failed`: the Pi never took the job). A send that throws after the delivery commit is not
-         *     this error: the trigger returns `201` and the stale sweep fails the command after the agent
-         *     disconnects. The `code` is pinned.
+         *     this error: the trigger returns `201` with the command already `failed`
+         *     (`agent_disconnected`). The `code` is pinned.
          */
         DeviceOfflineError: {
             headers: {

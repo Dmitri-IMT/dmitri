@@ -181,51 +181,63 @@ def sweep_stale_commands(
     grace_seconds: int | None = None,
     agent_id: UUID | None = None,
 ) -> int:
+    settings = get_settings()
     grace = (
         grace_seconds
         if grace_seconds is not None
-        else get_settings().command_disconnect_grace_seconds
+        else settings.command_disconnect_grace_seconds
     )
     cutoff = now - timedelta(seconds=grace)
-    stale_conditions = [
-        Command.status.in_(NON_TERMINAL),
-        Agent.connected_at.is_(None),
-        Agent.last_seen_at.is_not(None),
-        Agent.last_seen_at < cutoff,
-    ]
+    non_terminal = [Command.status.in_(NON_TERMINAL)]
     if agent_id is not None:
-        stale_conditions.append(Command.agent_id == agent_id)
-    stale_ids = (
+        non_terminal.append(Command.agent_id == agent_id)
+
+    disconnected_ids = (
         select(Command.id)
         .join(Agent, Command.agent_id == Agent.id)
-        .where(*stale_conditions)
-    )
-    rows = list(
-        session.execute(
-            update(Command)
-            .where(Command.id.in_(stale_ids))
-            .values(
-                status=case(
-                    (Command.status == "queued", "expired"),
-                    else_="failed",
-                ),
-                completed_at=case(
-                    (Command.status == "queued", None),
-                    else_=now,
-                ),
-                error_code=case(
-                    (Command.status == "queued", "device_offline"),
-                    else_="agent_disconnected",
-                ),
-            )
-            .returning(
-                Command.scan_id,
-                Command.status,
-                Command.org_id,
-                Command.scan_mode,
-            )
+        .where(
+            *non_terminal,
+            Agent.connected_at.is_(None),
+            Agent.last_seen_at.is_not(None),
+            Agent.last_seen_at < cutoff,
         )
     )
+    rows = _retire_commands(
+        session,
+        [Command.id.in_(disconnected_ids)],
+        values={
+            "status": case((Command.status == "queued", "expired"), else_="failed"),
+            "completed_at": case((Command.status == "queued", None), else_=now),
+            "error_code": case(
+                (Command.status == "queued", "device_offline"),
+                else_="agent_disconnected",
+            ),
+        },
+    )
+
+    # Runs after the disconnect pass, so a dead agent keeps its more specific
+    # reason. Only delivered commands are timed: queue wait is not scan time.
+    deadline_by_mode = {
+        mode: now - timedelta(seconds=seconds)
+        for mode, seconds in settings.command_max_duration_by_mode().items()
+    }
+    rows += _retire_commands(
+        session,
+        [
+            *non_terminal,
+            Command.scan_id.is_not(None),
+            func.coalesce(Command.delivered_at, Command.created_at)
+            < case(deadline_by_mode, value=Command.scan_mode),
+        ],
+        values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
+    )
+    _mirror_retired_commands(session, rows, now=now)
+    if rows:
+        session.commit()
+    return len(rows)
+
+
+def _mirror_retired_commands(session: Session, rows: list, *, now: datetime) -> None:
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
             session.execute(
@@ -242,9 +254,22 @@ def sweep_stale_commands(
                     scan_mode=command_scan_mode,
                     occurred_at=now,
                 )
-    if rows:
-        session.commit()
-    return len(rows)
+
+
+def _retire_commands(session: Session, where: list, *, values: dict) -> list:
+    return list(
+        session.execute(
+            update(Command)
+            .where(*where)
+            .values(**values)
+            .returning(
+                Command.scan_id,
+                Command.status,
+                Command.org_id,
+                Command.scan_mode,
+            )
+        )
+    )
 
 
 def _expire_queued_command(session: Session, command_id: UUID) -> None:
@@ -255,6 +280,20 @@ def _expire_queued_command(session: Session, command_id: UUID) -> None:
         # same reason: the Pi was not reachable to take the job.
         .values(status="expired", error_code="device_offline")
     )
+    session.commit()
+
+
+def _fail_unsent_command(session: Session, command_id: UUID, now: datetime) -> None:
+    rows = _retire_commands(
+        session,
+        [Command.id == command_id, Command.status == "delivered"],
+        values={
+            "status": "failed",
+            "completed_at": now,
+            "error_code": "agent_disconnected",
+        },
+    )
+    _mirror_retired_commands(session, rows, now=now)
     session.commit()
 
 
@@ -339,6 +378,8 @@ async def deliver(
         await socket.send_text(frame.model_dump_json())
     except Exception:
         logger.exception("Failed to send command %s", command.id)
+        await run_in_threadpool(_fail_unsent_command, session, command.id, now)
+        await run_in_threadpool(session.refresh, command)
 
     return command
 

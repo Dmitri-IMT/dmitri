@@ -135,7 +135,7 @@ def test_deliver_preserves_nspi_options_in_frame(
         ValueError("bad frame"),
     ],
 )
-def test_deliver_send_failure_keeps_durable_delivery(
+def test_deliver_send_failure_fails_command_and_frees_agent(
     administrative_session: Session,
     provisioned_agent,
     seeded_org,
@@ -156,18 +156,24 @@ def test_deliver_send_failure_keeps_durable_delivery(
             administrative_session, command=command, now=T0
         )
 
-    delivered = asyncio.run(run())
+    returned = asyncio.run(run())
 
     assert ws.send_text.await_count == 1
-    assert delivered.status == "delivered"
-    assert delivered.scan_id is not None
-    assert delivered.delivered_at == T0
-    administrative_session.refresh(command)
-    assert command.status == "delivered"
-    assert command.error_code is None
-    assert command.scan_id is not None
-    assert command.delivered_at == T0
-    assert administrative_session.get(ScanRecord, command.scan_id) is not None
+    assert returned.status == "failed"
+    assert returned.error_code == "agent_disconnected"
+    assert returned.scan_id is not None
+    assert returned.delivered_at == T0
+    assert returned.completed_at == T0
+    scan = administrative_session.get(ScanRecord, returned.scan_id)
+    assert scan is not None
+    assert scan.status == "failed"
+    failed = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_failed"
+    )
+    assert len(failed) == 1
+    assert commands.active_command_for(
+        administrative_session, provisioned_agent.id
+    ) is None
     assert f"Failed to send command {command.id}" in caplog.text
 
 

@@ -20,7 +20,7 @@ import it. That is deliberate, not a stopgap.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `SCAN_FAILURE_REASONS` | `Record<ScanErrorCode, string>` — eight verbatim approved sentences. Each names the Pi, says what happened, and ends with the next action. | `frontend/src/lib/scanFailureReasons.ts:7` |
+| `SCAN_FAILURE_REASONS` | `Record<ScanErrorCode, string>` — nine verbatim approved sentences. Each names the Pi, says what happened, and ends with the next action. | `frontend/src/lib/scanFailureReasons.ts:7` |
 | `scanFailureReason(code)` | `string \| null \| undefined` in — `error_code` is an *optional* property on the generated types, so callers pass it straight through without a `?? null`. Looks up through a widened `Record<string, string \| undefined>` and `??` falls back to the `unknown` sentence. | `frontend/src/lib/scanFailureReasons.ts:27` |
 
 ## How it connects
@@ -34,7 +34,7 @@ import it. That is deliberate, not a stopgap.
 ## Notes / gotchas
 
 - **Copy is frozen.** Do not reword, re-punctuate, or "fix" the em dashes. The test asserts the
-  eight sentences verbatim and forbids code strings, `_`, `nmap`, and `Traceback`.
+  nine sentences verbatim and forbids code strings, `_`, `nmap`, and `Traceback`.
 - `scanFailureReason('warp_core_breach')`, `scanFailureReason(null)` and
   `scanFailureReason(undefined)` all return the `unknown` sentence — same honesty as the backend's
   `scan_error_code`.

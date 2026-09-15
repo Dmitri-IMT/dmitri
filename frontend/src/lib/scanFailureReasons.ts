@@ -13,6 +13,8 @@ export const SCAN_FAILURE_REASONS: Record<ScanErrorCode, string> = {
     "The Pi stopped responding while the scan was running. Check that it's powered on and online, then try again.",
   scan_failed:
     "The scan didn't finish on the Pi. Try again — if it keeps failing, contact support.",
+  scan_timeout:
+    'The scan ran on the Pi for longer than allowed and was stopped. Try again — if it keeps happening, contact support.',
   invalid_command:
     "The Pi couldn't read the scan request. Try again — if it keeps failing, contact support.",
   result_unavailable:

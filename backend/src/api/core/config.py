@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from api.core.scan_mode import ScanMode
 
 _POSTGRES_PREFIXES = (
     "postgres://",
@@ -131,6 +133,21 @@ class Settings(BaseSettings):
     command_disconnect_grace_seconds: int = Field(
         default=900, alias="COMMAND_DISCONNECT_GRACE_SECONDS"
     )
+    command_max_duration_quick_seconds: int = Field(
+        default=10800, gt=0, alias="COMMAND_MAX_DURATION_QUICK_SECONDS"
+    )
+    command_max_duration_standard_seconds: int = Field(
+        default=28800, gt=0, alias="COMMAND_MAX_DURATION_STANDARD_SECONDS"
+    )
+    command_max_duration_extensive_seconds: int = Field(
+        default=57600, gt=0, alias="COMMAND_MAX_DURATION_EXTENSIVE_SECONDS"
+    )
+    command_max_duration_nspi_seconds: int = Field(
+        default=21600, gt=0, alias="COMMAND_MAX_DURATION_NSPI_SECONDS"
+    )
+    command_max_duration_max_seconds: int = Field(
+        default=93600, gt=0, alias="COMMAND_MAX_DURATION_MAX_SECONDS"
+    )
     industrial_observation_retention_days: int = Field(
         default=180, alias="INDUSTRIAL_OBSERVATION_RETENTION_DAYS"
     )
@@ -146,6 +163,25 @@ class Settings(BaseSettings):
     def _validate_database_url(cls, value: SecretStr) -> SecretStr:
         normalize_postgres_url(value.get_secret_value())
         return value
+
+    def command_max_duration_by_mode(self) -> dict[str, int]:
+        return {
+            mode: getattr(self, f"command_max_duration_{mode}_seconds")
+            for mode in get_args(ScanMode)
+        }
+
+    @model_validator(mode="after")
+    def _validate_command_max_duration(self) -> Settings:
+        # Fails at startup, not on the first sweep, if a ScanMode has no field.
+        self.command_max_duration_by_mode()
+        max_seconds = self.command_max_duration_max_seconds
+        extensive_seconds = self.command_max_duration_extensive_seconds
+        if max_seconds < extensive_seconds:
+            raise ValueError(
+                "command_max_duration_max_seconds must be >= "
+                "command_max_duration_extensive_seconds"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

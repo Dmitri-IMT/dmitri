@@ -1,3 +1,18 @@
+## Codex layout
+
+This repository mirrors Claude Code guidance from `.claude/` into Codex-native paths:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| Instructions | `AGENTS.md` (this file) + nested `AGENTS.md` | Persistent project rules |
+| Skills | `.agents/skills/` | Reusable workflows (`$skill-name` or implicit match) |
+| Subagents | `.codex/agents/*.toml` | Specialized roles (reviewer, verifier, design agents) |
+| Code-map | `.codex/docs/index.md` | OKF bundle — module map and architecture references |
+| MCP | `.codex/config.toml` | Project-scoped MCP servers (trusted repos only) |
+
+Start at `.codex/docs/index.md` when you need to find where code lives. Invoke skills
+from `.agents/skills/` before improvising a workflow that already exists.
+
 ## Integration rules
 
 When wiring a new module into the codebase, trace ALL call paths that reach

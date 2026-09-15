@@ -14,6 +14,7 @@ PUBLISHED = (
     "device_busy",
     "agent_disconnected",
     "scan_failed",
+    "scan_timeout",
     "invalid_command",
     "result_unavailable",
     "ingest_failed",
@@ -31,11 +32,11 @@ def test_null_stays_null():
 
 
 def test_off_contract_string_normalises_to_unknown():
-    assert normalise_error_code("scan_timeout") == "unknown"
+    assert normalise_error_code("warp_core_breach") == "unknown"
 
 
-def test_set_is_exactly_eight_literal_members():
-    assert len(SCAN_ERROR_CODES) == 8
+def test_set_is_exactly_nine_literal_members():
+    assert len(SCAN_ERROR_CODES) == 9
     assert SCAN_ERROR_CODES == frozenset(get_args(ScanErrorCode))
     assert SCAN_ERROR_CODES == frozenset(PUBLISHED)
 
@@ -47,4 +48,4 @@ def test_non_failed_scan_carries_nothing():
 
 def test_failed_scan_is_never_bare():
     assert scan_error_code("failed", None) == "unknown"
-    assert scan_error_code("failed", "scan_timeout") == "unknown"
+    assert scan_error_code("failed", "warp_core_breach") == "unknown"

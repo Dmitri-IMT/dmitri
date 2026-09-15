@@ -12,7 +12,7 @@ timestamp: 2026-08-13T00:00:00Z
 ## Purpose
 
 A failed scan must carry a reason on the scan itself, in one request. The reason is a closed
-machine code, not prose. This leaf module is the single vocabulary: eight published codes, plus
+machine code, not prose. This leaf module is the single vocabulary: nine published codes, plus
 the two pure functions that map a stored `commands.error_code` (which may be NULL, off-contract,
 or from a newer Pi) onto that set. It lives in `api/core/` for the same reason
 [`Severity`](/backend/api.md) does — `schemas/read.py` and `schemas/commands.py` have no import
@@ -22,7 +22,7 @@ edge between them, and must not gain one.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ScanErrorCode` | `Literal` of the eight published codes: `device_offline`, `device_busy`, `agent_disconnected`, `scan_failed`, `invalid_command`, `result_unavailable`, `ingest_failed`, `unknown`. | `backend/src/api/core/error_codes.py:5` |
+| `ScanErrorCode` | `Literal` of the nine published codes: `device_offline`, `device_busy`, `agent_disconnected`, `scan_failed`, `scan_timeout`, `invalid_command`, `result_unavailable`, `ingest_failed`, `unknown`. | `backend/src/api/core/error_codes.py:5` |
 | `SCAN_ERROR_CODES` | `frozenset` of those members, derived via `get_args` so the set cannot drift from the Literal. | `backend/src/api/core/error_codes.py:16` |
 | `UNKNOWN` | The `"unknown"` member, used when a failed scan has no usable stored code. | `backend/src/api/core/error_codes.py:18` |
 | `normalise_error_code(stored)` | `None` stays `None`; a published code round-trips; any other string becomes `"unknown"`. Used on `GET /commands/{id}`. | `backend/src/api/core/error_codes.py:21` |
@@ -47,8 +47,9 @@ edge between them, and must not gain one.
 - **An `expired` command has no `scan_id`** (ADR-011 CHECK). Both `queued → expired` writers —
   the sweep's `queued` branch and `_expire_queued_command` on the delivery path — record
   `device_offline`, and both are observable only on `GET /commands/{id}`, never on scan detail.
-- **Only two codes have an emitter today**, both backend-side: `device_offline` (delivery +
-  sweep) and `agent_disconnected` (sweep). The other six are the vocabulary the Pi reports into —
+- **Only three codes have an emitter today**, all backend-side: `device_offline` (delivery +
+  sweep), `agent_disconnected` (sweep, disconnect pass) and `scan_timeout` (sweep, duration pass —
+  a connected Pi that ran past its per-mode budget). The other six are the vocabulary the Pi reports into —
   `hardware-agent` threads `error_code: str | None` up its whole status path but passes `None` on
   every branch. Publishing the closed set now is what lets the Pi name its failures later without
   a contract revision.

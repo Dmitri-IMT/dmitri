@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, constr
 
 from api.core.error_codes import ScanErrorCode
 from api.core.machine_type import MachineType
+from api.core.scan_mode import ScanMode
 from api.core.severity import Severity
 
 from .industrial import (
@@ -17,7 +18,6 @@ from .industrial import (
 )
 from .operating_system import OperatingSystemDetection
 
-ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[

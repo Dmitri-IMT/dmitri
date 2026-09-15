@@ -9,6 +9,7 @@ const PUBLISHED_CODES = [
   'invalid_command',
   'result_unavailable',
   'scan_failed',
+  'scan_timeout',
   'unknown',
 ]
 
@@ -21,6 +22,8 @@ const APPROVED: Record<(typeof PUBLISHED_CODES)[number], string> = {
     "The Pi stopped responding while the scan was running. Check that it's powered on and online, then try again.",
   scan_failed:
     "The scan didn't finish on the Pi. Try again — if it keeps failing, contact support.",
+  scan_timeout:
+    'The scan ran on the Pi for longer than allowed and was stopped. Try again — if it keeps happening, contact support.',
   invalid_command:
     "The Pi couldn't read the scan request. Try again — if it keeps failing, contact support.",
   result_unavailable:
@@ -31,7 +34,7 @@ const APPROVED: Record<(typeof PUBLISHED_CODES)[number], string> = {
 }
 
 describe('scanFailureReasons', () => {
-  it('covers exactly the eight published codes', () => {
+  it('covers exactly the nine published codes', () => {
     expect(Object.keys(SCAN_FAILURE_REASONS).sort()).toEqual(PUBLISHED_CODES)
   })
 
