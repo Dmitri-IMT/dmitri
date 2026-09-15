@@ -10,8 +10,8 @@ from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
-from api.services import agent_connections, agent_presence, commands
-from sqlalchemy import text
+from api.services import activity, agent_connections, agent_presence, commands
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
@@ -148,17 +148,19 @@ def test_deliver_send_failure_keeps_durable_delivery(
     ws = AsyncMock()
     ws.send_text.side_effect = send_error
 
-    async def run() -> None:
+    async def run() -> Command:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
-        with pytest.raises(commands.DeviceOfflineError):
-            await commands.deliver(
-                administrative_session, command=command, now=T0
-            )
+        return await commands.deliver(
+            administrative_session, command=command, now=T0
+        )
 
-    asyncio.run(run())
+    delivered = asyncio.run(run())
 
     # A WebSocket that raised on send is already closed: one attempt, no retry.
     assert ws.send_text.await_count == 1
+    assert delivered.status == "delivered"
+    assert delivered.scan_id is not None
+    assert delivered.delivered_at == T0
     administrative_session.refresh(command)
     assert command.status == "delivered"
     assert command.error_code is None
@@ -206,14 +208,14 @@ def test_deliver_ignores_activity_failure_before_sending(
     ws = AsyncMock()
 
     def fail_activity(*_args, **_kwargs) -> None:
-        administrative_session.execute(text("SELECT * FROM missing_activity_table"))
+        raise SQLAlchemyError("activity insert failed")
 
     async def assert_delivery_is_durable(_payload: str) -> None:
         administrative_session.refresh(command)
         assert command.status == "delivered"
         assert command.scan_id is not None
 
-    monkeypatch.setattr(commands, "append_scan_activity", fail_activity)
+    monkeypatch.setattr(activity, "append_activity", fail_activity)
     ws.send_text.side_effect = assert_delivery_is_durable
 
     async def run() -> Command:
@@ -229,7 +231,7 @@ def test_deliver_ignores_activity_failure_before_sending(
     assert delivered.scan_id is not None
     assert administrative_session.get(ScanRecord, delivered.scan_id) is not None
     assert _activity_rows(administrative_session, seeded_org.id) == []
-    assert "Failed to append scan activity during command delivery" in caplog.text
+    assert "Failed to append scan activity" in caplog.text
 
 
 def test_deliver_no_socket_raises_offline_without_awaiting_send(

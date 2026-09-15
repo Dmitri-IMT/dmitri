@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import case, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
 from starlette.websockets import WebSocketDisconnect
@@ -26,9 +25,6 @@ from api.services.command_lifecycle import (
     scan_status_for,
     status_rank,
 )
-
-logger = logging.getLogger(__name__)
-
 
 class DeviceOfflineError(Exception):
     pass
@@ -282,18 +278,14 @@ def _record_delivery(
         )
     )
     session.flush()
-    try:
-        with session.begin_nested():
-            append_scan_activity(
-                session,
-                org_id=command.org_id,
-                scan_id=scan_id,
-                kind="scan_started",
-                scan_mode=command.scan_mode,
-                occurred_at=now,
-            )
-    except SQLAlchemyError:
-        logger.exception("Failed to append scan activity during command delivery")
+    append_scan_activity(
+        session,
+        org_id=command.org_id,
+        scan_id=scan_id,
+        kind="scan_started",
+        scan_mode=command.scan_mode,
+        occurred_at=now,
+    )
     result = session.execute(
         update(Command)
         .where(Command.id == command.id, Command.status == "queued")
@@ -343,7 +335,8 @@ async def deliver(
     try:
         await socket.send_text(frame.model_dump_json())
     except (WebSocketDisconnect, OSError, RuntimeError):
-        raise DeviceOfflineError from None
+        # Transport died after durable delivery — row is already `delivered`.
+        pass
 
     return command
 

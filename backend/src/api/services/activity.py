@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from api.models.activity import ActivityKind, ActivityRecord
+
+logger = logging.getLogger(__name__)
 
 SCAN_MODE_LABEL = {
     "quick": "Quick",
@@ -54,19 +58,24 @@ def append_scan_activity(
     """Record one scan lifecycle row.
 
     `occurred_at` is the API clock the caller already holds — never the Pi's
-    `scan.timestamp`.
+    `scan.timestamp`. Best-effort: a failed insert is logged and does not abort
+    the caller's transaction.
     """
-    append_activity(
-        session,
-        ActivityAppend(
-            org_id=org_id,
-            kind=kind,
-            occurred_at=occurred_at,
-            actor_user_id=None,
-            subject_id=scan_id,
-            payload={"scan_mode": scan_mode},
-        ),
-    )
+    try:
+        with session.begin_nested():
+            append_activity(
+                session,
+                ActivityAppend(
+                    org_id=org_id,
+                    kind=kind,
+                    occurred_at=occurred_at,
+                    actor_user_id=None,
+                    subject_id=scan_id,
+                    payload={"scan_mode": scan_mode},
+                ),
+            )
+    except SQLAlchemyError:
+        logger.exception("Failed to append scan activity")
 
 
 def activity_text(kind: str, role: str, payload: dict[str, str]) -> str:
