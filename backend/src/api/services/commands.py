@@ -186,16 +186,23 @@ def sweep_stale_commands(
         else settings.command_disconnect_grace_seconds
     )
     cutoff = now - timedelta(seconds=grace)
-    stale_conditions = [
-        Command.status.in_(NON_TERMINAL),
-        Agent.connected_at.is_(None),
-        Agent.last_seen_at.is_not(None),
-        Agent.last_seen_at < cutoff,
-    ]
+    non_terminal = [Command.status.in_(NON_TERMINAL)]
+    if agent_id is not None:
+        non_terminal.append(Command.agent_id == agent_id)
+
+    disconnected_ids = (
+        select(Command.id)
+        .join(Agent, Command.agent_id == Agent.id)
+        .where(
+            *non_terminal,
+            Agent.connected_at.is_(None),
+            Agent.last_seen_at.is_not(None),
+            Agent.last_seen_at < cutoff,
+        )
+    )
     rows = _retire_commands(
         session,
-        stale_conditions,
-        agent_id=agent_id,
+        [Command.id.in_(disconnected_ids)],
         values={
             "status": case((Command.status == "queued", "expired"), else_="failed"),
             "completed_at": case((Command.status == "queued", None), else_=now),
@@ -212,16 +219,14 @@ def sweep_stale_commands(
         mode: now - timedelta(seconds=seconds)
         for mode, seconds in settings.command_max_duration_by_mode().items()
     }
-    overdue_conditions = [
-        Command.status.in_(NON_TERMINAL),
-        Command.scan_id.is_not(None),
-        func.coalesce(Command.delivered_at, Command.created_at)
-        < case(deadline_by_mode, value=Command.scan_mode),
-    ]
     rows += _retire_commands(
         session,
-        overdue_conditions,
-        agent_id=agent_id,
+        [
+            *non_terminal,
+            Command.scan_id.is_not(None),
+            func.coalesce(Command.delivered_at, Command.created_at)
+            < case(deadline_by_mode, value=Command.scan_mode),
+        ],
         values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
     )
 
@@ -246,24 +251,11 @@ def sweep_stale_commands(
     return len(rows)
 
 
-def _retire_commands(
-    session: Session,
-    conditions: list,
-    *,
-    agent_id: UUID | None,
-    values: dict,
-) -> list:
-    if agent_id is not None:
-        conditions = [*conditions, Command.agent_id == agent_id]
-    stale_ids = (
-        select(Command.id)
-        .join(Agent, Command.agent_id == Agent.id)
-        .where(*conditions)
-    )
+def _retire_commands(session: Session, where: list, *, values: dict) -> list:
     return list(
         session.execute(
             update(Command)
-            .where(Command.id.in_(stale_ids))
+            .where(*where)
             .values(**values)
             .returning(
                 Command.scan_id,

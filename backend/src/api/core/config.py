@@ -171,7 +171,9 @@ class Settings(BaseSettings):
         }
 
     @model_validator(mode="after")
-    def _validate_command_max_duration_max(self) -> Settings:
+    def _validate_command_max_duration(self) -> Settings:
+        # Fails at startup, not on the first sweep, if a ScanMode has no field.
+        self.command_max_duration_by_mode()
         max_seconds = self.command_max_duration_max_seconds
         extensive_seconds = self.command_max_duration_extensive_seconds
         if max_seconds < extensive_seconds:
