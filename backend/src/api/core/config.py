@@ -182,7 +182,9 @@ class Settings(BaseSettings):
                 "command_max_duration_by_mode keys must match ScanMode: "
                 f"expected {sorted(expected)}, got {sorted(actual)}"
             )
-        if self.command_max_duration_max_seconds < self.command_max_duration_extensive_seconds:
+        max_seconds = self.command_max_duration_max_seconds
+        extensive_seconds = self.command_max_duration_extensive_seconds
+        if max_seconds < extensive_seconds:
             raise ValueError(
                 "command_max_duration_max_seconds must be >= "
                 "command_max_duration_extensive_seconds"
