@@ -231,7 +231,13 @@ def sweep_stale_commands(
         ],
         values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
     )
+    _mirror_retired_commands(session, rows, now=now)
+    if rows:
+        session.commit()
+    return len(rows)
 
+
+def _mirror_retired_commands(session: Session, rows: list, *, now: datetime) -> None:
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
             session.execute(
@@ -248,9 +254,6 @@ def sweep_stale_commands(
                     scan_mode=command_scan_mode,
                     occurred_at=now,
                 )
-    if rows:
-        session.commit()
-    return len(rows)
 
 
 def _retire_commands(session: Session, where: list, *, values: dict) -> list:
@@ -277,6 +280,20 @@ def _expire_queued_command(session: Session, command_id: UUID) -> None:
         # same reason: the Pi was not reachable to take the job.
         .values(status="expired", error_code="device_offline")
     )
+    session.commit()
+
+
+def _fail_unsent_command(session: Session, command_id: UUID, now: datetime) -> None:
+    rows = _retire_commands(
+        session,
+        [Command.id == command_id, Command.status == "delivered"],
+        values={
+            "status": "failed",
+            "completed_at": now,
+            "error_code": "agent_disconnected",
+        },
+    )
+    _mirror_retired_commands(session, rows, now=now)
     session.commit()
 
 
@@ -361,6 +378,8 @@ async def deliver(
         await socket.send_text(frame.model_dump_json())
     except Exception:
         logger.exception("Failed to send command %s", command.id)
+        await run_in_threadpool(_fail_unsent_command, session, command.id, now)
+        await run_in_threadpool(session.refresh, command)
 
     return command
 
