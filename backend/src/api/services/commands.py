@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, update
+from sqlalchemy import and_, case, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
@@ -179,17 +179,38 @@ def sweep_stale_commands(
     grace_seconds: int | None = None,
     agent_id: UUID | None = None,
 ) -> int:
+    settings = get_settings()
     grace = (
         grace_seconds
         if grace_seconds is not None
-        else get_settings().command_disconnect_grace_seconds
+        else settings.command_disconnect_grace_seconds
     )
     cutoff = now - timedelta(seconds=grace)
-    stale_conditions = [
-        Command.status.in_(NON_TERMINAL),
+    max_by_mode = settings.command_max_duration_by_mode()
+
+    disconnect_stale = and_(
         Agent.connected_at.is_(None),
         Agent.last_seen_at.is_not(None),
         Agent.last_seen_at < cutoff,
+    )
+
+    duration_stale = and_(
+        Command.scan_id.is_not(None),
+        or_(
+            *(
+                and_(
+                    Command.scan_mode == mode,
+                    Command.created_at
+                    < now - timedelta(seconds=max_duration_seconds),
+                )
+                for mode, max_duration_seconds in max_by_mode.items()
+            )
+        ),
+    )
+
+    stale_conditions = [
+        Command.status.in_(NON_TERMINAL),
+        or_(disconnect_stale, duration_stale),
     ]
     if agent_id is not None:
         stale_conditions.append(Command.agent_id == agent_id)
@@ -204,16 +225,20 @@ def sweep_stale_commands(
             .where(Command.id.in_(stale_ids))
             .values(
                 status=case(
-                    (Command.status == "queued", "expired"),
+                    (Command.scan_id.is_(None), "expired"),
                     else_="failed",
                 ),
                 completed_at=case(
-                    (Command.status == "queued", None),
+                    (Command.scan_id.is_(None), None),
                     else_=now,
                 ),
                 error_code=case(
-                    (Command.status == "queued", "device_offline"),
-                    else_="agent_disconnected",
+                    (duration_stale, "scan_failed"),
+                    (
+                        and_(disconnect_stale, Command.scan_id.is_(None)),
+                        "device_offline",
+                    ),
+                    (disconnect_stale, "agent_disconnected"),
                 ),
             )
             .returning(

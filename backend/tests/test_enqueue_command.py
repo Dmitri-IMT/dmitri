@@ -46,15 +46,19 @@ def _seed_command(
     agent_id,
     status: str,
     scan_id=None,
+    scan_mode: str = "standard",
+    created_at: datetime | None = None,
 ) -> Command:
     command = Command(
         org_id=org_id,
         agent_id=agent_id,
         scan_id=scan_id,
-        scan_mode="standard",
+        scan_mode=scan_mode,
         subnet="192.168.1.0/24",
         status=status,
     )
+    if created_at is not None:
+        command.created_at = created_at
     session.add(command)
     session.commit()
     session.refresh(command)
@@ -386,6 +390,49 @@ def test_enqueue_sweep_clears_stale_command_wedge(
     assert response.status_code == 201
     administrative_session.refresh(stale)
     assert stale.status == "failed"
+    assert response.json()["status"] == "delivered"
+
+
+def test_enqueue_sweep_clears_overdue_connected_command_wedge(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    provisioned_agent.last_seen_at = T0.replace(tzinfo=None)
+    provisioned_agent.connected_at = T0.replace(tzinfo=None)
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    stale = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+        scan_mode="quick",
+        created_at=T0 - timedelta(seconds=10801),
+    )
+
+    ws = AsyncMock()
+
+    async def register() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+
+    asyncio.run(register())
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json=REQUEST_BODY,
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    administrative_session.refresh(stale)
+    assert stale.status == "failed"
+    assert stale.error_code == "scan_failed"
     assert response.json()["status"] == "delivered"
 
 

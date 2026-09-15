@@ -1,8 +1,23 @@
+## Codex layout
+
+This repository mirrors Claude Code guidance from `.claude/` into Codex-native paths:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| Instructions | `AGENTS.md` (this file) + nested `AGENTS.md` | Persistent project rules |
+| Skills | `.agents/skills/` | Reusable workflows (`$skill-name` or implicit match) |
+| Subagents | `.codex/agents/*.toml` | Specialized roles (reviewer, verifier, design agents) |
+| Code-map | `.codex/docs/index.md` | OKF bundle — module map and architecture references |
+| MCP | `.codex/config.toml` | Project-scoped MCP servers (trusted repos only) |
+
+Start at `.codex/docs/index.md` when you need to find where code lives. Invoke skills
+from `.agents/skills/` before improvising a workflow that already exists.
+
 ## Integration rules
 
 When wiring a new module into the codebase, trace ALL call paths that reach
 the affected code — not just the primary pipeline. In this project the TUI has
-its own scan runner (`ScanRunner` in `scanner.py`) that bypasses
+its own scan runner (`ScanRunner` in `scanner/runner.py`) that bypasses
 `ScanOrchestrator.run()` and calls discovery functions directly. Any new
 parameter added to the orchestrator (e.g. `workspace_root`) MUST also be
 threaded through `ScanRunner` and `ScanProgressScreen` so TUI-initiated scans
@@ -31,8 +46,21 @@ Per-layer gates:
 | Layer | Gate |
 |-------|------|
 | `hardware-agent/` | `uv run pytest`; black + ruff run from the pre-push hooks |
-| `backend/` | `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
+| `backend/` | `./database.sh` first (see below), then `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
 | `frontend/` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
+
+**Always run `./database.sh --test` before the backend suite.** `DATABASE_URL_TEST` must
+point at live `dmitri_test`. If it is unset, pytest collection fails with exit code 4.
+There is no skip path.
+
+```bash
+./database.sh --test   # start Supabase, ensure dmitri_test, run the backend suite
+./database.sh          # setup only, then: cd backend && DATABASE_URL_TEST=... uv run pytest
+```
+
+Never report the backend suite as green when `DATABASE_URL_TEST` was missing — that run
+never starts. The database name must be exactly `dmitri_test`. Alembic owns that schema:
+never point `supabase db reset|push|migration` at it.
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
@@ -97,3 +125,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+**When talking to user, explaining, or asking questions** write in ASD-STE100, or simplified technical english and follow Zinsser's four principles of quality writing:
+1. Simplicity
+2. Brevity
+3. Clarity
+4. Humanity

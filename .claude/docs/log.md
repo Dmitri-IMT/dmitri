@@ -3,6 +3,15 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-14
+
+* **Update**: Command stale sweep gains per-mode duration budgets and dual stale reasons
+  (disconnect vs in-flight duration). `Settings.command_max_duration_by_mode()` aggregates
+  `COMMAND_MAX_DURATION_*_SECONDS` (defaults quick 10800, standard 28800, extensive 57600, nspi 21600,
+  max 93600); startup rejects `max < extensive`. `sweep_stale_commands` duration-stales only rows with
+  `scan_id IS NOT NULL`; `scan_failed` wins when both predicates hold. Touched: `backend/api.md`,
+  `backend/services.md`.
+
 ## 2026-09-13
 
 * **Update**: PR-144 review fixes. `services/ai/` is now `context.py`, `groq.py`, `jobs.py`; AI worker loop moved to `services/worker.py`; new shared `services/jobs.py` (`claim_jobs`, `retry_or_fail`) for enrichment and AI; migration `20260912_26` (head); `ScanAIAnalysisResponse` is a status-keyed union in `schemas/ai.py`. Touched: `backend/ai.md`, `backend/services.md`, `backend/schemas.md`, `backend/migrations.md`, `backend/index.md`, root `index.md`.

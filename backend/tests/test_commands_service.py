@@ -6,15 +6,25 @@ from uuid import uuid4
 import pytest
 from api.db.session import get_session
 from api.main import app
+from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
 from api.services import commands, read
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
 STALE = T0 - timedelta(minutes=20)
+
+
+def _activity_rows(
+    session: Session, org_id, kind: str | None = None
+) -> list[ActivityRecord]:
+    statement = select(ActivityRecord).where(ActivityRecord.org_id == org_id)
+    if kind is not None:
+        statement = statement.where(ActivityRecord.kind == kind)
+    return list(session.exec(statement).all())
 
 
 @pytest.fixture
@@ -75,15 +85,19 @@ def _seed_command(
     agent_id,
     status: str,
     scan_id=None,
+    scan_mode: str = "standard",
+    created_at: datetime | None = None,
 ) -> Command:
     command = Command(
         org_id=org_id,
         agent_id=agent_id,
         scan_id=scan_id,
-        scan_mode="standard",
+        scan_mode=scan_mode,
         subnet="192.168.1.0/24",
         status=status,
     )
+    if created_at is not None:
+        command.created_at = created_at
     session.add(command)
     session.commit()
     session.refresh(command)
@@ -389,7 +403,87 @@ def test_sweep_stale_commands_fails_stale_non_terminal(
     assert detail.command_id == command.id
 
 
-def test_sweep_stale_commands_leaves_connected_agent_command(
+def test_sweep_stale_commands_leaves_connected_queued_past_mode_limit(
+    administrative_session: Session, seeded_org: Org
+):
+    agent = _seed_agent(
+        administrative_session,
+        seeded_org.id,
+        last_seen_at=T0,
+        connected_at=T0,
+    )
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        status="queued",
+        scan_mode="quick",
+        created_at=T0 - timedelta(seconds=10801),
+    )
+
+    swept = commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    assert swept == 0
+    administrative_session.refresh(command)
+    assert command.status == "queued"
+    assert command.scan_id is None
+
+
+@pytest.mark.parametrize(
+    ("scan_mode", "max_duration_seconds"),
+    [
+        ("quick", 10800),
+        ("standard", 28800),
+        ("extensive", 57600),
+        ("nspi", 21600),
+        ("max", 93600),
+    ],
+)
+def test_sweep_stale_commands_expires_connected_agent_past_mode_limit(
+    administrative_session: Session,
+    seeded_org: Org,
+    scan_mode: str,
+    max_duration_seconds: int,
+):
+    agent = _seed_agent(
+        administrative_session,
+        seeded_org.id,
+        last_seen_at=STALE,
+        connected_at=T0,
+    )
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+        scan_mode=scan_mode,
+        created_at=T0 - timedelta(seconds=max_duration_seconds + 1),
+    )
+
+    swept = commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    assert swept == 1
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == "failed"
+    assert command.error_code == "scan_failed"
+    assert command.completed_at == T0
+    assert scan.status == "failed"
+    failed = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_failed"
+    )
+    assert len(failed) == 1
+    assert failed[0].subject_id == scan.scan_id
+    assert failed[0].payload == {"scan_mode": scan_mode}
+
+
+def test_sweep_stale_commands_leaves_connected_agent_command_inside_mode_limit(
     administrative_session: Session, seeded_org: Org
 ):
     agent = _seed_agent(
@@ -405,6 +499,8 @@ def test_sweep_stale_commands_leaves_connected_agent_command(
         agent_id=agent.id,
         status="running",
         scan_id=scan.scan_id,
+        scan_mode="quick",
+        created_at=T0 - timedelta(seconds=10800),
     )
 
     swept = commands.sweep_stale_commands(

@@ -217,10 +217,24 @@ def test_command_settings_defaults_when_env_unset(
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
     monkeypatch.delenv("COMMAND_DISCONNECT_GRACE_SECONDS", raising=False)
+    for mode in ("QUICK", "STANDARD", "EXTENSIVE", "NSPI", "MAX"):
+        monkeypatch.delenv(f"COMMAND_MAX_DURATION_{mode}_SECONDS", raising=False)
 
     settings = Settings()
 
     assert settings.command_disconnect_grace_seconds == 900
+    assert settings.command_max_duration_quick_seconds == 10800
+    assert settings.command_max_duration_standard_seconds == 28800
+    assert settings.command_max_duration_extensive_seconds == 57600
+    assert settings.command_max_duration_nspi_seconds == 21600
+    assert settings.command_max_duration_max_seconds == 93600
+    assert settings.command_max_duration_by_mode() == {
+        "quick": 10800,
+        "standard": 28800,
+        "extensive": 57600,
+        "nspi": 21600,
+        "max": 93600,
+    }
 
 
 def test_command_settings_read_from_env_aliases(
@@ -228,10 +242,20 @@ def test_command_settings_read_from_env_aliases(
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/d")
     monkeypatch.setenv("COMMAND_DISCONNECT_GRACE_SECONDS", "1200")
+    monkeypatch.setenv("COMMAND_MAX_DURATION_QUICK_SECONDS", "3600")
+    monkeypatch.setenv("COMMAND_MAX_DURATION_STANDARD_SECONDS", "7200")
+    monkeypatch.setenv("COMMAND_MAX_DURATION_EXTENSIVE_SECONDS", "10800")
+    monkeypatch.setenv("COMMAND_MAX_DURATION_NSPI_SECONDS", "5400")
+    monkeypatch.setenv("COMMAND_MAX_DURATION_MAX_SECONDS", "14400")
 
     settings = Settings()
 
     assert settings.command_disconnect_grace_seconds == 1200
+    assert settings.command_max_duration_quick_seconds == 3600
+    assert settings.command_max_duration_standard_seconds == 7200
+    assert settings.command_max_duration_extensive_seconds == 10800
+    assert settings.command_max_duration_nspi_seconds == 5400
+    assert settings.command_max_duration_max_seconds == 14400
 
 
 @pytest.mark.parametrize("status", ["delivered", "running", "uploading", "done"])
