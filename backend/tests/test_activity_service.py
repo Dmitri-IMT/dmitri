@@ -6,7 +6,13 @@ import pytest
 from api.models.activity import ActivityRecord
 from api.models.identity import Org
 from api.models.persistence import utc_now
-from api.services.activity import ActivityAppend, activity_text, append_activity
+from api.services.activity import (
+    ActivityAppend,
+    activity_text,
+    append_activity,
+    append_scan_activity,
+)
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 
@@ -221,3 +227,30 @@ def test_box_caused_text_is_role_independent(
 def test_unknown_kind_is_rejected() -> None:
     with pytest.raises(ValueError):
         activity_text("nope", "admin", {})
+
+
+def test_append_scan_activity_logs_and_continues_on_failure(
+    administrative_session: Session,
+    seeded_org: Org,
+    monkeypatch,
+    caplog,
+) -> None:
+    def fail_activity(*_args, **_kwargs) -> None:
+        raise SQLAlchemyError("activity insert failed")
+
+    monkeypatch.setattr(
+        "api.services.activity.append_activity",
+        fail_activity,
+    )
+
+    append_scan_activity(
+        administrative_session,
+        org_id=seeded_org.id,
+        scan_id=uuid4(),
+        kind="scan_started",
+        scan_mode="quick",
+        occurred_at=utc_now(),
+    )
+
+    assert "Failed to append scan activity" in caplog.text
+    assert _rows(administrative_session, seeded_org.id, "scan_started") == []

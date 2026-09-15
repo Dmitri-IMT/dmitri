@@ -1449,9 +1449,12 @@ export interface components {
             };
         };
         /**
-         * @description The command never reached the Pi — there was no open socket, or the single send attempt
-         *     threw. Delivery is not retried; triggering the scan again is the retry. The command is
-         *     recorded as `expired` (never `failed`: the Pi never took the job). The `code` is pinned.
+         * @description The command was never recorded as delivered — there was no open socket, the agent is
+         *     revoked, or the command left `queued` before the delivery commit. Delivery is not retried;
+         *     triggering the scan again is the retry. The command is recorded as `expired` (never
+         *     `failed`: the Pi never took the job). A send that throws after the delivery commit is not
+         *     this error: the trigger returns `201` and the stale sweep fails the command after the agent
+         *     disconnects. The `code` is pinned.
          */
         DeviceOfflineError: {
             headers: {

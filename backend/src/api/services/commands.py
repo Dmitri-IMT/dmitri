@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -7,7 +8,6 @@ from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
-from starlette.websockets import WebSocketDisconnect
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
@@ -25,6 +25,8 @@ from api.services.command_lifecycle import (
     scan_status_for,
     status_rank,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceOfflineError(Exception):
@@ -315,9 +317,6 @@ def _record_delivery(
         .values(status="delivered", delivered_at=now, scan_id=scan_id)
     )
     if result.rowcount == 0:
-        # The command left `queued` while we awaited the send — in practice the
-        # sweeper expiring it after the socket dropped. Roll back so the flushed
-        # ScanRecord never lands: an expired command must carry no scan row.
         session.rollback()
         raise DeviceOfflineError
     session.commit()
@@ -354,18 +353,16 @@ async def deliver(
         nspi_options=command.nspi_options,
     )
 
-    try:
-        await socket.send_text(frame.model_dump_json())
-    except (WebSocketDisconnect, OSError, RuntimeError):
-        # Starlette maps a dead transport OSError to WebSocketDisconnect(1006);
-        # a socket already marked DISCONNECTED raises RuntimeError instead
-        # (same as the receive loop in agent_ws). Nothing left to retry.
-        await run_in_threadpool(_expire_queued_command, session, command.id)
-        raise DeviceOfflineError from None
-
-    return await run_in_threadpool(
+    command = await run_in_threadpool(
         _record_delivery, session, command=command, scan_id=scan_id, now=now
     )
+
+    try:
+        await socket.send_text(frame.model_dump_json())
+    except Exception:
+        logger.exception("Failed to send command %s", command.id)
+
+    return command
 
 
 def _claim_agent(

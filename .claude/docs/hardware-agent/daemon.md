@@ -4,7 +4,7 @@ title: daemon — the unattended command executor
 description: The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-15T02:22:00Z
 ---
 
 # daemon — the unattended command executor
@@ -70,13 +70,13 @@ The receive loop never runs nmap or HTTP. Both blocking calls — `run_headless_
 `ScanIngestClient.submit` — go through `asyncio.to_thread`, which is what keeps the socket
 answering duplicates and busy rejections while a scan subprocess is mid-flight.
 
-### The early-`running` race
+### The early-`running` frame
 
-The backend commits its stub scan *after* sending the command frame, so a prompt `running` can
-overtake the commit and be dropped by the backend's `scan_id IS NOT NULL` guard. The daemon emits
-`running` once anyway and never sleeps, retries, or waits for an ack — later `uploading`/`done`/
-`failed` advance monotonically and are authoritative. Integration acceptance therefore checks the
-terminal state, not every intermediate row in command history.
+The backend commits its stub scan **before** sending the command frame, so a prompt `running`
+status finds `scan_id` already set and applies normally. The daemon emits `running` once anyway and
+never sleeps, retries, or waits for an ack — later `uploading`/`done`/`failed` advance
+monotonically and are authoritative. Integration acceptance therefore checks the terminal state, not
+every intermediate row in command history.
 
 ## How it connects
 
