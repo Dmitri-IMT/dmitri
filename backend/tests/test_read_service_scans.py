@@ -484,7 +484,7 @@ def test_get_scan_detail_failed_off_contract_code_is_unknown(
         org.id,
         scan.scan_id,
         status="failed",
-        error_code="scan_timeout",
+        error_code="warp_core_breach",
     )
 
     detail = read.get_scan_detail(

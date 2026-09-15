@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, case, or_, update
+from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
@@ -186,69 +186,45 @@ def sweep_stale_commands(
         else settings.command_disconnect_grace_seconds
     )
     cutoff = now - timedelta(seconds=grace)
-    max_by_mode = settings.command_max_duration_by_mode()
-
-    disconnect_stale = and_(
+    stale_conditions = [
+        Command.status.in_(NON_TERMINAL),
         Agent.connected_at.is_(None),
         Agent.last_seen_at.is_not(None),
         Agent.last_seen_at < cutoff,
-    )
-
-    duration_stale = and_(
-        Command.scan_id.is_not(None),
-        or_(
-            *(
-                and_(
-                    Command.scan_mode == mode,
-                    Command.created_at
-                    < now - timedelta(seconds=max_duration_seconds),
-                )
-                for mode, max_duration_seconds in max_by_mode.items()
-            )
-        ),
-    )
-
-    stale_conditions = [
-        Command.status.in_(NON_TERMINAL),
-        or_(disconnect_stale, duration_stale),
     ]
-    if agent_id is not None:
-        stale_conditions.append(Command.agent_id == agent_id)
-    stale_ids = (
-        select(Command.id)
-        .join(Agent, Command.agent_id == Agent.id)
-        .where(*stale_conditions)
+    rows = _retire_commands(
+        session,
+        stale_conditions,
+        agent_id=agent_id,
+        values={
+            "status": case((Command.status == "queued", "expired"), else_="failed"),
+            "completed_at": case((Command.status == "queued", None), else_=now),
+            "error_code": case(
+                (Command.status == "queued", "device_offline"),
+                else_="agent_disconnected",
+            ),
+        },
     )
-    rows = list(
-        session.execute(
-            update(Command)
-            .where(Command.id.in_(stale_ids))
-            .values(
-                status=case(
-                    (Command.scan_id.is_(None), "expired"),
-                    else_="failed",
-                ),
-                completed_at=case(
-                    (Command.scan_id.is_(None), None),
-                    else_=now,
-                ),
-                error_code=case(
-                    (duration_stale, "scan_failed"),
-                    (
-                        and_(disconnect_stale, Command.scan_id.is_(None)),
-                        "device_offline",
-                    ),
-                    (disconnect_stale, "agent_disconnected"),
-                ),
-            )
-            .returning(
-                Command.scan_id,
-                Command.status,
-                Command.org_id,
-                Command.scan_mode,
-            )
-        )
+
+    # Runs after the disconnect pass, so a dead agent keeps its more specific
+    # reason. Only delivered commands are timed: queue wait is not scan time.
+    deadline_by_mode = {
+        mode: now - timedelta(seconds=seconds)
+        for mode, seconds in settings.command_max_duration_by_mode().items()
+    }
+    overdue_conditions = [
+        Command.status.in_(NON_TERMINAL),
+        Command.scan_id.is_not(None),
+        func.coalesce(Command.delivered_at, Command.created_at)
+        < case(deadline_by_mode, value=Command.scan_mode),
+    ]
+    rows += _retire_commands(
+        session,
+        overdue_conditions,
+        agent_id=agent_id,
+        values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
     )
+
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
             session.execute(
@@ -268,6 +244,35 @@ def sweep_stale_commands(
     if rows:
         session.commit()
     return len(rows)
+
+
+def _retire_commands(
+    session: Session,
+    conditions: list,
+    *,
+    agent_id: UUID | None,
+    values: dict,
+) -> list:
+    if agent_id is not None:
+        conditions = [*conditions, Command.agent_id == agent_id]
+    stale_ids = (
+        select(Command.id)
+        .join(Agent, Command.agent_id == Agent.id)
+        .where(*conditions)
+    )
+    return list(
+        session.execute(
+            update(Command)
+            .where(Command.id.in_(stale_ids))
+            .values(**values)
+            .returning(
+                Command.scan_id,
+                Command.status,
+                Command.org_id,
+                Command.scan_mode,
+            )
+        )
+    )
 
 
 def _expire_queued_command(session: Session, command_id: UUID) -> None:

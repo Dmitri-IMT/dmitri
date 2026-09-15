@@ -48,6 +48,7 @@ def _seed_command(
     scan_id=None,
     scan_mode: str = "standard",
     created_at: datetime | None = None,
+    delivered_at: datetime | None = None,
 ) -> Command:
     command = Command(
         org_id=org_id,
@@ -56,6 +57,7 @@ def _seed_command(
         scan_mode=scan_mode,
         subnet="192.168.1.0/24",
         status=status,
+        delivered_at=delivered_at,
     )
     if created_at is not None:
         command.created_at = created_at
@@ -413,7 +415,7 @@ def test_enqueue_sweep_clears_overdue_connected_command_wedge(
         status="running",
         scan_id=scan.scan_id,
         scan_mode="quick",
-        created_at=T0 - timedelta(seconds=10801),
+        delivered_at=T0 - timedelta(seconds=10801),
     )
 
     ws = AsyncMock()
@@ -432,7 +434,7 @@ def test_enqueue_sweep_clears_overdue_connected_command_wedge(
     assert response.status_code == 201
     administrative_session.refresh(stale)
     assert stale.status == "failed"
-    assert stale.error_code == "scan_failed"
+    assert stale.error_code == "scan_timeout"
     assert response.json()["status"] == "delivered"
 
 

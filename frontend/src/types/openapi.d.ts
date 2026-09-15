@@ -617,7 +617,7 @@ export interface components {
         /** @enum {string} */
         CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
         /** @enum {string} */
-        ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
+        ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "scan_timeout" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
         /** @enum {string} */
         Severity: "low" | "medium" | "high" | "critical";
         /** @enum {string} */

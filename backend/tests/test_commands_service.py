@@ -87,6 +87,7 @@ def _seed_command(
     scan_id=None,
     scan_mode: str = "standard",
     created_at: datetime | None = None,
+    delivered_at: datetime | None = None,
 ) -> Command:
     command = Command(
         org_id=org_id,
@@ -95,6 +96,7 @@ def _seed_command(
         scan_mode=scan_mode,
         subnet="192.168.1.0/24",
         status=status,
+        delivered_at=delivered_at,
     )
     if created_at is not None:
         command.created_at = created_at
@@ -461,7 +463,7 @@ def test_sweep_stale_commands_expires_connected_agent_past_mode_limit(
         status="running",
         scan_id=scan.scan_id,
         scan_mode=scan_mode,
-        created_at=T0 - timedelta(seconds=max_duration_seconds + 1),
+        delivered_at=T0 - timedelta(seconds=max_duration_seconds + 1),
     )
 
     swept = commands.sweep_stale_commands(
@@ -472,7 +474,7 @@ def test_sweep_stale_commands_expires_connected_agent_past_mode_limit(
     administrative_session.refresh(command)
     administrative_session.refresh(scan)
     assert command.status == "failed"
-    assert command.error_code == "scan_failed"
+    assert command.error_code == "scan_timeout"
     assert command.completed_at == T0
     assert scan.status == "failed"
     failed = _activity_rows(
@@ -500,7 +502,7 @@ def test_sweep_stale_commands_leaves_connected_agent_command_inside_mode_limit(
         status="running",
         scan_id=scan.scan_id,
         scan_mode="quick",
-        created_at=T0 - timedelta(seconds=10800),
+        delivered_at=T0 - timedelta(seconds=10800),
     )
 
     swept = commands.sweep_stale_commands(
@@ -512,6 +514,61 @@ def test_sweep_stale_commands_leaves_connected_agent_command_inside_mode_limit(
     administrative_session.refresh(scan)
     assert command.status == "running"
     assert scan.status == "pending"
+
+
+def test_sweep_stale_commands_times_from_delivery_not_enqueue(
+    administrative_session: Session, seeded_org: Org
+):
+    agent = _seed_agent(
+        administrative_session,
+        seeded_org.id,
+        last_seen_at=T0,
+        connected_at=T0,
+    )
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+        scan_mode="quick",
+        created_at=T0 - timedelta(seconds=10801),
+        delivered_at=T0 - timedelta(seconds=60),
+    )
+
+    swept = commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    assert swept == 0
+    administrative_session.refresh(command)
+    assert command.status == "running"
+
+
+def test_sweep_stale_commands_disconnect_reason_wins_past_mode_limit(
+    administrative_session: Session, seeded_org: Org
+):
+    agent = _seed_agent(administrative_session, seeded_org.id, last_seen_at=STALE)
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+        scan_mode="quick",
+        delivered_at=T0 - timedelta(seconds=10801),
+    )
+
+    swept = commands.sweep_stale_commands(
+        administrative_session, now=T0, grace_seconds=900
+    )
+
+    assert swept == 1
+    administrative_session.refresh(command)
+    assert command.status == "failed"
+    assert command.error_code == "agent_disconnected"
 
 
 def test_sweep_stale_commands_mirrors_scan_status_for_delivered(

@@ -7,6 +7,7 @@ ScanErrorCode = Literal[
     "device_busy",
     "agent_disconnected",
     "scan_failed",
+    "scan_timeout",
     "invalid_command",
     "result_unavailable",
     "ingest_failed",

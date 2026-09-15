@@ -211,7 +211,7 @@ def test_get_command_off_contract_error_code_returns_unknown_not_500(
         agent_id=provisioned_agent.id,
         status="failed",
         scan_id=uuid4(),
-        error_code="scan_timeout",
+        error_code="warp_core_breach",
     )
 
     response = client.get(
