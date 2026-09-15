@@ -6,7 +6,7 @@ from typing import Literal, get_args
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from api.schemas.scan import ScanMode
+from api.core.scan_mode import ScanMode
 
 _POSTGRES_PREFIXES = (
     "postgres://",
@@ -166,22 +166,12 @@ class Settings(BaseSettings):
 
     def command_max_duration_by_mode(self) -> dict[str, int]:
         return {
-            "quick": self.command_max_duration_quick_seconds,
-            "standard": self.command_max_duration_standard_seconds,
-            "extensive": self.command_max_duration_extensive_seconds,
-            "nspi": self.command_max_duration_nspi_seconds,
-            "max": self.command_max_duration_max_seconds,
+            mode: getattr(self, f"command_max_duration_{mode}_seconds")
+            for mode in get_args(ScanMode)
         }
 
     @model_validator(mode="after")
-    def _validate_command_max_duration_modes(self) -> Settings:
-        expected = set(get_args(ScanMode))
-        actual = set(self.command_max_duration_by_mode())
-        if actual != expected:
-            raise ValueError(
-                "command_max_duration_by_mode keys must match ScanMode: "
-                f"expected {sorted(expected)}, got {sorted(actual)}"
-            )
+    def _validate_command_max_duration_max(self) -> Settings:
         max_seconds = self.command_max_duration_max_seconds
         extensive_seconds = self.command_max_duration_extensive_seconds
         if max_seconds < extensive_seconds:

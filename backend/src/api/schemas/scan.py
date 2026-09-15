@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
+from api.core.scan_mode import ScanMode
+
 from .industrial import ModbusTcpServicePayload
 from .operating_system import OperatingSystemDetection
 
@@ -14,9 +16,6 @@ SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
     strip_whitespace=True,
 )
-
-
-ScanMode = Literal["quick", "standard", "extensive", "nspi", "max"]
 
 
 class PortPayload(BaseModel):
