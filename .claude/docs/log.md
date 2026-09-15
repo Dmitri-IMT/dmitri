@@ -3,6 +3,14 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-15
+
+* **Update**: PR-147 review fixes. The sweep is two `UPDATE`s (disconnect first, then duration), the
+  duration clock is `COALESCE(delivered_at, created_at)`, and overtime writes the new backend-owned
+  code `scan_timeout` (contract, generated types, SPA copy deck). `ScanMode` moved to `core/scan_mode.py`;
+  the settings key-set validator is gone. Touched: `backend/api.md`, `backend/services.md`,
+  `backend/schemas.md`, `backend/error-codes.md`, `frontend/scan-failure-reasons.md`.
+
 ## 2026-09-14
 
 * **Update**: Command stale sweep gains per-mode duration budgets and dual stale reasons

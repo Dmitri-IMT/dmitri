@@ -26,7 +26,7 @@ the ingest input plus the main persisted projections.
 | Name | What it validates | Ref |
 |------|-------------------|-----|
 | `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
-| `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. | `backend/src/api/schemas/scan.py:16` |
+| `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. Defined in `core/scan_mode.py` (so `core/config.py` does not import schemas); `scan.py` and `read.py` re-export it. | `backend/src/api/core/scan_mode.py:5` |
 | `PortPayload` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `version`, `cpes`. | `backend/src/api/schemas/scan.py:19` |
 | `HostPayload` | `ip`, MAC, `hostname`, `vendor`, `ports`, `industrial_services`. | `backend/src/api/schemas/scan.py` |
 | `FindingPayload` | Optional `unit_id` (0–255) for Modbus unit attribution. | `backend/src/api/schemas/scan.py` |
