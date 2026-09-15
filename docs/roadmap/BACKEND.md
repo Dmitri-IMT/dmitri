@@ -112,7 +112,7 @@ See prior week-by-week plan in git history or expand in [`docs/cloud/`](../cloud
 | `uploading` | Scan finished locally; `POST /scans` in flight |
 | `done` | Ingest succeeded |
 | `failed` | Command **reached the Pi** and then broke: error reported by Pi, ingest failure, WS drop mid-scan, or stale `running` past the timeout |
-| `expired` | Command **never reached the Pi**: no open socket, or the one send attempt threw (set at the same moment the trigger returns `503 device_offline`) — or the stale sweep found it still `queued` |
+| `expired` | Command **never recorded as delivered**: no open socket, a revoked agent, or it left `queued` before the delivery commit (set at the same moment the trigger returns `503 device_offline`). A send that throws after the commit is not `expired` — it ends `failed` via the stale sweep (ADR-011, amended 2026-09-14) — or the stale sweep found it still `queued` |
 
 **The dividing line is `delivered_at` (C12, decided 2026-07-13).** Not the timeout duration — *whether the
 Pi ever took the job*. Never delivered → `expired`; delivered then broke → `failed`. This is why
