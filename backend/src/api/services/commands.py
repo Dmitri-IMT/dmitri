@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import case, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
 from starlette.websockets import WebSocketDisconnect
@@ -25,6 +26,8 @@ from api.services.command_lifecycle import (
     scan_status_for,
     status_rank,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceOfflineError(Exception):
@@ -279,23 +282,24 @@ def _record_delivery(
         )
     )
     session.flush()
-    append_scan_activity(
-        session,
-        org_id=command.org_id,
-        scan_id=scan_id,
-        kind="scan_started",
-        scan_mode=command.scan_mode,
-        occurred_at=now,
-    )
+    try:
+        with session.begin_nested():
+            append_scan_activity(
+                session,
+                org_id=command.org_id,
+                scan_id=scan_id,
+                kind="scan_started",
+                scan_mode=command.scan_mode,
+                occurred_at=now,
+            )
+    except SQLAlchemyError:
+        logger.exception("Failed to append scan activity during command delivery")
     result = session.execute(
         update(Command)
         .where(Command.id == command.id, Command.status == "queued")
         .values(status="delivered", delivered_at=now, scan_id=scan_id)
     )
     if result.rowcount == 0:
-        # The command left `queued` while we awaited the send — in practice the
-        # sweeper expiring it after the socket dropped. Roll back so the flushed
-        # ScanRecord never lands: an expired command must carry no scan row.
         session.rollback()
         raise DeviceOfflineError
     session.commit()
@@ -332,18 +336,16 @@ async def deliver(
         nspi_options=command.nspi_options,
     )
 
+    command = await run_in_threadpool(
+        _record_delivery, session, command=command, scan_id=scan_id, now=now
+    )
+
     try:
         await socket.send_text(frame.model_dump_json())
     except (WebSocketDisconnect, OSError, RuntimeError):
-        # Starlette maps a dead transport OSError to WebSocketDisconnect(1006);
-        # a socket already marked DISCONNECTED raises RuntimeError instead
-        # (same as the receive loop in agent_ws). Nothing left to retry.
-        await run_in_threadpool(_expire_queued_command, session, command.id)
         raise DeviceOfflineError from None
 
-    return await run_in_threadpool(
-        _record_delivery, session, command=command, scan_id=scan_id, now=now
-    )
+    return command
 
 
 def _claim_agent(
