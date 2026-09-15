@@ -58,8 +58,7 @@ def append_scan_activity(
     """Record one scan lifecycle row.
 
     `occurred_at` is the API clock the caller already holds — never the Pi's
-    `scan.timestamp`. Best-effort: a failed insert is logged and does not abort
-    the caller's transaction.
+    `scan.timestamp`.
     """
     try:
         with session.begin_nested():

@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-15T02:45:00Z
+timestamp: 2026-09-15T02:50:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk

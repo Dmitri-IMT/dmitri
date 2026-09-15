@@ -156,7 +156,6 @@ def test_deliver_send_failure_keeps_durable_delivery(
 
     delivered = asyncio.run(run())
 
-    # A WebSocket that raised on send is already closed: one attempt, no retry.
     assert ws.send_text.await_count == 1
     assert delivered.status == "delivered"
     assert delivered.scan_id is not None

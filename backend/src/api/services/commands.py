@@ -26,6 +26,7 @@ from api.services.command_lifecycle import (
     status_rank,
 )
 
+
 class DeviceOfflineError(Exception):
     pass
 
@@ -335,7 +336,6 @@ async def deliver(
     try:
         await socket.send_text(frame.model_dump_json())
     except (WebSocketDisconnect, OSError, RuntimeError):
-        # Transport died after durable delivery — row is already `delivered`.
         pass
 
     return command

@@ -7,10 +7,9 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 * **Update**: PR-146 review — `DeviceOfflineError` only before durable delivery; post-durable
   transport send failures return the committed command (`201`). Best-effort `append_scan_activity`
-  moved to `activity.py` (savepoint + `logger.exception`); `_record_delivery` calls it directly.
-  Touched: `backend/services.md` (`deliver`/`_record_delivery`/`DeviceOfflineError` rows, gotchas
-  on HTTP/persistence alignment and activity logging), `test_command_delivery.py`,
-  `test_activity_service.py`.
+  in `activity.py` (savepoint + `logger.exception`); `_record_delivery` calls it directly.
+  Touched: `backend/services.md`, `test_command_delivery.py`, `test_activity_service.py`.
+  Inline comments and docstring prose removed from source; behavior stays in the code-map.
 
 * **Update**: Durable-first command delivery in `commands.py`. `_record_delivery` now commits the
   stub scan and `delivered` status **before** `send_text`; send failure raises `DeviceOfflineError`
