@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -7,7 +8,6 @@ from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
-from starlette.websockets import WebSocketDisconnect
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
@@ -25,6 +25,8 @@ from api.services.command_lifecycle import (
     scan_status_for,
     status_rank,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceOfflineError(Exception):
@@ -335,8 +337,8 @@ async def deliver(
 
     try:
         await socket.send_text(frame.model_dump_json())
-    except (WebSocketDisconnect, OSError, RuntimeError):
-        pass
+    except Exception:
+        logger.exception("Failed to send command %s", command.id)
 
     return command
 

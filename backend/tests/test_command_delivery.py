@@ -132,12 +132,14 @@ def test_deliver_preserves_nspi_options_in_frame(
         WebSocketDisconnect(code=1006),
         OSError("broken pipe"),
         RuntimeError('Cannot call "send" once a close message has been sent.'),
+        ValueError("bad frame"),
     ],
 )
 def test_deliver_send_failure_keeps_durable_delivery(
     administrative_session: Session,
     provisioned_agent,
     seeded_org,
+    caplog,
     send_error: BaseException,
 ):
     command = _seed_queued_command(
@@ -166,30 +168,7 @@ def test_deliver_send_failure_keeps_durable_delivery(
     assert command.scan_id is not None
     assert command.delivered_at == T0
     assert administrative_session.get(ScanRecord, command.scan_id) is not None
-
-
-def test_deliver_send_bug_is_not_treated_as_offline(
-    administrative_session: Session, provisioned_agent, seeded_org
-):
-    command = _seed_queued_command(
-        administrative_session,
-        org_id=seeded_org.id,
-        agent_id=provisioned_agent.id,
-    )
-    ws = AsyncMock()
-    ws.send_text.side_effect = ValueError("bad frame")
-
-    async def run() -> None:
-        await agent_connections.register(provisioned_agent.id, ws, now=T0)
-        with pytest.raises(ValueError, match="bad frame"):
-            await commands.deliver(
-                administrative_session, command=command, now=T0
-            )
-
-    asyncio.run(run())
-
-    administrative_session.refresh(command)
-    assert command.status == "delivered"
+    assert f"Failed to send command {command.id}" in caplog.text
 
 
 def test_deliver_ignores_activity_failure_before_sending(
@@ -406,6 +385,40 @@ def test_deliver_cannot_be_expired_during_send(
     assert command.scan_id is not None
     assert command.delivered_at == T0
     assert administrative_session.get(ScanRecord, command.scan_id) is not None
+
+
+def test_deliver_expired_before_record_rolls_back_without_sending(
+    administrative_session: Session, provisioned_agent, seeded_org, monkeypatch
+):
+    command = _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+    )
+    ws = AsyncMock()
+
+    def expire_after_gate(session: Session, _agent_id) -> bool:
+        commands._expire_queued_command(session, command.id)
+        return False
+
+    monkeypatch.setattr(agent_presence, "agent_is_revoked", expire_after_gate)
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        with pytest.raises(commands.DeviceOfflineError):
+            await commands.deliver(
+                administrative_session, command=command, now=T0
+            )
+
+    asyncio.run(run())
+
+    ws.send_text.assert_not_awaited()
+    administrative_session.refresh(command)
+    assert command.status == "expired"
+    assert command.scan_id is None
+    assert command.delivered_at is None
+    assert administrative_session.exec(select(ScanRecord)).all() == []
+    assert _activity_rows(administrative_session, seeded_org.id) == []
 
 
 def test_deliver_to_revoked_agent_closes_socket_without_sending(
