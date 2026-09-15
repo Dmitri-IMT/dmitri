@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-14
 
+* **Update**: PR-146 second review — `deliver()` catches **any** send exception after the delivery
+  commit and logs it (`Failed to send command …`); the transport exception tuple is gone. New test
+  covers the `_record_delivery` zero-rowcount rollback. ADR-011 (amendment 2026-09-14), OpenAPI
+  `DeviceOfflineError`, `docs/roadmap/BACKEND.md` and `docs/ui/FLOWS.md` now match; the earlier
+  **Contested** item is resolved. Touched: `backend/services.md` (`deliver()` row, `path:line` refs,
+  durable-delivery gotcha, new open-socket send-failure gotcha), `backend/api.md` (logger names).
+
 * **Update**: PR-146 review — `DeviceOfflineError` only before durable delivery; post-durable
   transport send failures return the committed command (`201`). Best-effort `append_scan_activity`
   in `activity.py` (savepoint + `logger.exception`); `_record_delivery` calls it directly.

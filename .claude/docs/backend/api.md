@@ -4,7 +4,7 @@ title: Backend entry points & config
 description: The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
 resource: backend/src/api/main.py
 tags: [backend, entrypoint, fastapi, config, database, websocket]
-timestamp: 2026-09-15T02:22:00Z
+timestamp: 2026-09-15T03:30:00Z
 ---
 
 # Backend entry points & config
@@ -88,7 +88,8 @@ starts, how it is configured from the environment, and how it reaches Postgres.
 - The worker uses `time.sleep`, not FastAPI — it never imports `app`.
 - **Application logging is configured only in the worker entry.** `worker_main.main()` calls
   `logging.basicConfig`; `main.py` does not. Module loggers in the API process (for example
-  `api.services.commands` on activity-append failure during delivery) propagate to stderr via
+  `api.services.activity` on activity-append failure, `api.services.commands` on a failed command
+  frame send) propagate to stderr via
   Python's last-resort handler unless uvicorn adds handlers. Uvicorn's default **access** logger is
   separate — it writes request targets to stdout (see DR-0001 in `specs/027-invite-lookup/`).
 
