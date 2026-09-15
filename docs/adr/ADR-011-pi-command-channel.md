@@ -28,6 +28,12 @@
 > path as the half-open socket above. `503 device_offline` + `expired` now means only: no socket,
 > a revoked agent, or the command left `queued` before the delivery commit.
 
+> **Amendment 2026-09-15 (DMI-171):** a send that throws after the delivery commit now fails the
+> command **in the same request**: `failed` / `agent_disconnected`, `completed_at` set, the stub
+> scan mirrored to `failed`, one `scan_failed` activity. The request still returns `201`, now with
+> the `failed` command. Waiting for the stale sweep left a Pi whose socket stayed open answering
+> `409 device_busy` until it disconnected or hit its duration budget.
+
 ## Context
 
 September MVP scope is **Control** ([`BACKEND.md` B10](../roadmap/BACKEND.md)): operators trigger scans from the web UI; the Pi executes and pushes results via the existing ingest path.
@@ -169,9 +175,9 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 **Delivery:**
 
 - Pi **online** (open WS): set `delivered`, persist `scan_id`, create the **stub** `scans` row,
-  and commit; then send the command frame once. A send that throws is logged and does not change
-  the response — the stale sweep fails the command after the agent disconnects (see the
-  2026-09-14 amendment).
+  and commit; then send the command frame once. A send that throws is logged, the command is set
+  `failed` / `agent_disconnected` at once, and the trigger returns `201` with that command (see the
+  2026-09-15 amendment).
 - Pi **offline** (no socket, or revoked), or the command left `queued` before the delivery
   commit: set `expired` (still no `scan_id`, and `error_code=device_offline`), return **`503`** +
   `code: device_offline`. No retry — see the 2026-08-13 amendment.
@@ -201,7 +207,7 @@ from the null — `command.status` stays the only signal.
 | Case | State | When it is set |
 |------|-------|----------------|
 | Delivery gave up — the Pi **never took the job** | `expired` | Synchronously with `503 device_offline`, or by the worker/enqueue stale sweep for a stuck `queued` command |
-| Pi error, ingest failure, WS drop mid-scan, a failed frame send after the delivery commit, or stale post-delivery — the Pi **took the job and broke** | `failed` | On report, or by the stale sweeper |
+| Pi error, ingest failure, WS drop mid-scan, a failed frame send after the delivery commit, or stale post-delivery — the Pi **took the job and broke** | `failed` | On report, at a failed frame send, or by the stale sweeper |
 
 A headless `fatal` is a Pi-reported `failed`, including a result-write failure after the scan
 pipeline completed. The daemon may retain the returned payload in memory, but must not report

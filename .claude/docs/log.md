@@ -5,6 +5,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-15
 
+* **Update**: DMI-171 on PR-147. `deliver()` now fails the command at once when the frame send
+  throws after the delivery commit (`_fail_unsent_command`: `failed` / `agent_disconnected`, stub scan
+  mirrored, one `scan_failed` activity) and still returns `201`. The sweep's scan-mirror loop is now
+  `_mirror_retired_commands`, shared by both. ADR-011 amended 2026-09-15; OpenAPI `DeviceOfflineError`
+  and `docs/roadmap/BACKEND.md` match. Touched: `backend/services.md`.
+
 * **Update**: PR-147 review fixes. The sweep is two `UPDATE`s (disconnect first, then duration), the
   duration clock is `COALESCE(delivered_at, created_at)`, and overtime writes the new backend-owned
   code `scan_timeout` (contract, generated types, SPA copy deck). `ScanMode` moved to `core/scan_mode.py`;
