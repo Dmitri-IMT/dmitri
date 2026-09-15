@@ -3,6 +3,32 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-14
+
+* **Update**: PR-146 second review — `deliver()` catches **any** send exception after the delivery
+  commit and logs it (`Failed to send command …`); the transport exception tuple is gone. New test
+  covers the `_record_delivery` zero-rowcount rollback. ADR-011 (amendment 2026-09-14), OpenAPI
+  `DeviceOfflineError`, `docs/roadmap/BACKEND.md` and `docs/ui/FLOWS.md` now match; the earlier
+  **Contested** item is resolved. Touched: `backend/services.md` (`deliver()` row, `path:line` refs,
+  durable-delivery gotcha, new open-socket send-failure gotcha), `backend/api.md` (logger names).
+
+* **Update**: PR-146 review — `DeviceOfflineError` only before durable delivery; post-durable
+  transport send failures return the committed command (`201`). Best-effort `append_scan_activity`
+  in `activity.py` (savepoint + `logger.exception`); `_record_delivery` calls it directly.
+  Touched: `backend/services.md`, `test_command_delivery.py`, `test_activity_service.py`.
+  Inline comments and docstring prose removed from source; behavior stays in the code-map.
+
+* **Update**: Durable-first command delivery in `commands.py`. `_record_delivery` now commits the
+  stub scan and `delivered` status **before** `send_text`; send failure raises `DeviceOfflineError`
+  but does not roll back; `append_scan_activity` failure is logged (`logger.exception`) inside a
+  savepoint and ignored. Touched: `backend/services.md` (new `_record_delivery` row, rewritten
+  `deliver()`/`DeviceOfflineError` rows, gotchas on durable-vs-HTTP mismatch, activity logging to
+  API stderr, early-`running` race retired), `hardware-agent/daemon.md` (stub now commits before the
+  frame). **Contested:** `docs/adr/ADR-011` §4 delivery bullets and OpenAPI `503 device_offline`
+  text still describe send-failure → `expired` with no `scan_id` — code now leaves `delivered` +
+  stub scan. `backend/api.md` notes API-process logging goes to stderr, not the worker's
+  `basicConfig` stream.
+
 ## 2026-09-13
 
 * **Update**: PR-144 review fixes. `services/ai/` is now `context.py`, `groq.py`, `jobs.py`; AI worker loop moved to `services/worker.py`; new shared `services/jobs.py` (`claim_jobs`, `retry_or_fail`) for enrichment and AI; migration `20260912_26` (head); `ScanAIAnalysisResponse` is a status-keyed union in `schemas/ai.py`. Touched: `backend/ai.md`, `backend/services.md`, `backend/schemas.md`, `backend/migrations.md`, `backend/index.md`, root `index.md`.

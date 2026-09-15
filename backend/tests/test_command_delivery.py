@@ -10,7 +10,8 @@ from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCommandFrame
-from api.services import agent_connections, agent_presence, commands
+from api.services import activity, agent_connections, agent_presence, commands
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
@@ -52,6 +53,13 @@ def test_deliver_success_sets_delivered_at_and_stub_scan(
         agent_id=provisioned_agent.id,
     )
     ws = AsyncMock()
+
+    async def assert_delivery_is_durable(_payload: str) -> None:
+        administrative_session.refresh(command)
+        assert command.status == "delivered"
+        assert command.scan_id is not None
+
+    ws.send_text.side_effect = assert_delivery_is_durable
 
     async def run() -> Command:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
@@ -124,12 +132,14 @@ def test_deliver_preserves_nspi_options_in_frame(
         WebSocketDisconnect(code=1006),
         OSError("broken pipe"),
         RuntimeError('Cannot call "send" once a close message has been sent.'),
+        ValueError("bad frame"),
     ],
 )
-def test_deliver_send_failure_expires_without_scan(
+def test_deliver_send_failure_keeps_durable_delivery(
     administrative_session: Session,
     provisioned_agent,
     seeded_org,
+    caplog,
     send_error: BaseException,
 ):
     command = _seed_queued_command(
@@ -140,27 +150,33 @@ def test_deliver_send_failure_expires_without_scan(
     ws = AsyncMock()
     ws.send_text.side_effect = send_error
 
-    async def run() -> None:
+    async def run() -> Command:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
-        with pytest.raises(commands.DeviceOfflineError):
-            await commands.deliver(
-                administrative_session, command=command, now=T0
-            )
+        return await commands.deliver(
+            administrative_session, command=command, now=T0
+        )
 
-    asyncio.run(run())
+    delivered = asyncio.run(run())
 
-    # A WebSocket that raised on send is already closed: one attempt, no retry.
     assert ws.send_text.await_count == 1
+    assert delivered.status == "delivered"
+    assert delivered.scan_id is not None
+    assert delivered.delivered_at == T0
     administrative_session.refresh(command)
-    assert command.status == "expired"
-    assert command.error_code == "device_offline"
-    assert command.scan_id is None
-    assert command.delivered_at is None
-    assert administrative_session.exec(select(ScanRecord)).all() == []
+    assert command.status == "delivered"
+    assert command.error_code is None
+    assert command.scan_id is not None
+    assert command.delivered_at == T0
+    assert administrative_session.get(ScanRecord, command.scan_id) is not None
+    assert f"Failed to send command {command.id}" in caplog.text
 
 
-def test_deliver_send_bug_is_not_treated_as_offline(
-    administrative_session: Session, provisioned_agent, seeded_org
+def test_deliver_ignores_activity_failure_before_sending(
+    administrative_session: Session,
+    provisioned_agent,
+    seeded_org,
+    monkeypatch,
+    caplog,
 ):
     command = _seed_queued_command(
         administrative_session,
@@ -168,19 +184,32 @@ def test_deliver_send_bug_is_not_treated_as_offline(
         agent_id=provisioned_agent.id,
     )
     ws = AsyncMock()
-    ws.send_text.side_effect = ValueError("bad frame")
 
-    async def run() -> None:
+    def fail_activity(*_args, **_kwargs) -> None:
+        raise SQLAlchemyError("activity insert failed")
+
+    async def assert_delivery_is_durable(_payload: str) -> None:
+        administrative_session.refresh(command)
+        assert command.status == "delivered"
+        assert command.scan_id is not None
+
+    monkeypatch.setattr(activity, "append_activity", fail_activity)
+    ws.send_text.side_effect = assert_delivery_is_durable
+
+    async def run() -> Command:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
-        with pytest.raises(ValueError, match="bad frame"):
-            await commands.deliver(
-                administrative_session, command=command, now=T0
-            )
+        return await commands.deliver(
+            administrative_session, command=command, now=T0
+        )
 
-    asyncio.run(run())
+    delivered = asyncio.run(run())
 
-    administrative_session.refresh(command)
-    assert command.status == "queued"
+    ws.send_text.assert_awaited_once()
+    assert delivered.status == "delivered"
+    assert delivered.scan_id is not None
+    assert administrative_session.get(ScanRecord, delivered.scan_id) is not None
+    assert _activity_rows(administrative_session, seeded_org.id) == []
+    assert "Failed to append scan activity" in caplog.text
 
 
 def test_deliver_no_socket_raises_offline_without_awaiting_send(
@@ -329,16 +358,9 @@ def test_sweep_stale_failed_scan_activity_is_idempotent(
     assert len(failed) == 1
 
 
-def test_deliver_leaves_no_scan_when_command_expired_during_send(
+def test_deliver_cannot_be_expired_during_send(
     administrative_session: Session, provisioned_agent, seeded_org
 ):
-    """The sweeper expires the command while `deliver` awaits the socket send.
-
-    The post-send UPDATE then matches no row. Without the rowcount check the
-    flushed stub scan would still commit, orphaning a `pending` scan against a
-    command that says `expired` — and tripping the `scan_id is not None` assert
-    in the router's response builder.
-    """
     command = _seed_queued_command(
         administrative_session,
         org_id=seeded_org.id,
@@ -347,11 +369,39 @@ def test_deliver_leaves_no_scan_when_command_expired_during_send(
     ws = AsyncMock()
 
     async def expire_mid_send(_payload: str) -> None:
-        # Stand in for the concurrent sweeper: the row leaves `queued` between
-        # the send and the UPDATE that would have marked it delivered.
         commands._expire_queued_command(administrative_session, command.id)
 
     ws.send_text.side_effect = expire_mid_send
+
+    async def run() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+        await commands.deliver(administrative_session, command=command, now=T0)
+
+    asyncio.run(run())
+
+    ws.send_text.assert_awaited_once()
+    administrative_session.refresh(command)
+    assert command.status == "delivered"
+    assert command.scan_id is not None
+    assert command.delivered_at == T0
+    assert administrative_session.get(ScanRecord, command.scan_id) is not None
+
+
+def test_deliver_expired_before_record_rolls_back_without_sending(
+    administrative_session: Session, provisioned_agent, seeded_org, monkeypatch
+):
+    command = _seed_queued_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+    )
+    ws = AsyncMock()
+
+    def expire_after_gate(session: Session, _agent_id) -> bool:
+        commands._expire_queued_command(session, command.id)
+        return False
+
+    monkeypatch.setattr(agent_presence, "agent_is_revoked", expire_after_gate)
 
     async def run() -> None:
         await agent_connections.register(provisioned_agent.id, ws, now=T0)
@@ -362,7 +412,7 @@ def test_deliver_leaves_no_scan_when_command_expired_during_send(
 
     asyncio.run(run())
 
-    ws.send_text.assert_awaited_once()
+    ws.send_text.assert_not_awaited()
     administrative_session.refresh(command)
     assert command.status == "expired"
     assert command.scan_id is None
