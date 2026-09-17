@@ -105,6 +105,7 @@ def test_choosing_a_reported_subnet_returns_detail_and_is_readable(
         "display_name",
         "online",
         "last_seen_at",
+        "revoked_at",
         "available_subnets",
         "target_subnet",
         "active_command_id",

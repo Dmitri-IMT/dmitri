@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from sqlmodel import Session
+from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent_ws
@@ -28,6 +29,8 @@ from api.services.agents import (
     AgentOfflineError,
     get_agent_detail,
     list_agents,
+    restore_agent,
+    revoke_agent,
     set_target_subnet,
 )
 
@@ -98,6 +101,39 @@ def update_agent_target_subnet_route(
 @router.options("/api/v1/agents/{agent_id}", status_code=204)
 def options_agent() -> None:
     return None
+
+
+@router.post("/api/v1/agents/{agent_id}/revoke", response_model=AgentDetail)
+async def revoke_agent_route(
+    agent_id: UUID,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> AgentDetail:
+    detail = await run_in_threadpool(
+        revoke_agent,
+        session,
+        agent_id=agent_id,
+        org_id=caller.org_id,
+        now=utc_now(),
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    socket = agent_connections.get_socket(agent_id)
+    if socket is not None:
+        await agent_connections.close_revoked(socket)
+    return detail
+
+
+@router.post("/api/v1/agents/{agent_id}/restore", response_model=AgentDetail)
+def restore_agent_route(
+    agent_id: UUID,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> AgentDetail:
+    detail = restore_agent(session, agent_id=agent_id, org_id=caller.org_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return detail
 
 
 @router.post(

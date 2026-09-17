@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -21,6 +22,7 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
         "display_name": agent.display_name,
         "online": agent_connections.is_online(agent.id),
         "last_seen_at": agent_connections.last_seen_at(agent.id) or agent.last_seen_at,
+        "revoked_at": agent.revoked_at,
         "target_subnet": agent.target_subnet,
         "active_command_id": None if active is None else active.id,
     }
@@ -72,4 +74,30 @@ def set_target_subnet(
     agent.target_subnet = target_subnet
     session.add(agent)
     session.commit()
+    return _detail(session, agent)
+
+
+def revoke_agent(
+    session: Session, *, agent_id: UUID, org_id: UUID, now: datetime
+) -> AgentDetail | None:
+    agent = _agent(session, agent_id, org_id)
+    if agent is None:
+        return None
+    if agent.revoked_at is None:
+        agent.revoked_at = now
+        session.add(agent)
+        session.commit()
+    return _detail(session, agent)
+
+
+def restore_agent(
+    session: Session, *, agent_id: UUID, org_id: UUID
+) -> AgentDetail | None:
+    agent = _agent(session, agent_id, org_id)
+    if agent is None:
+        return None
+    if agent.revoked_at is not None:
+        agent.revoked_at = None
+        session.add(agent)
+        session.commit()
     return _detail(session, agent)
