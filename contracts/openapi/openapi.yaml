@@ -398,6 +398,87 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/scans/{scan_id}/reports/{kind}:
+    get:
+      tags:
+        - scans
+      summary: Read a scan report
+      description: Returns a deterministic explained or technical report for a completed scan.
+      operationId: getScanReport
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportKind'
+      responses:
+        '200':
+          description: Report scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The scan is not ready for a report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/scans/{scan_id}/reports/{kind}/download:
+    get:
+      tags:
+        - scans
+      summary: Download a scan report
+      description: Downloads the explained or technical report as a PDF.
+      operationId: downloadScanReport
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportKind'
+      responses:
+        '200':
+          description: Downloadable PDF report.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The scan is not ready for a report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/hosts:
     get:
       tags:
@@ -4234,6 +4315,36 @@ components:
           processing: '#/components/schemas/ScanAIAnalysisQueued'
           failed: '#/components/schemas/ScanAIAnalysisFailed'
           completed: '#/components/schemas/ScanAIAnalysisCompleted'
+    ReportKind:
+      type: string
+      enum: [explained, technical]
+    ScanReportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - kind
+        - generated_at
+        - filename
+        - content_type
+        - sections
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/ReportKind'
+        generated_at:
+          type: string
+          format: date-time
+        filename:
+          type: string
+        content_type:
+          type: string
+          enum: [application/pdf]
+        sections:
+          type: object
+          additionalProperties: true
     ScanAIAnalysisUnavailable:
       type: object
       additionalProperties: false

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -31,6 +30,7 @@ from api.services.ai.jobs import (
 )
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
+from api.services.report_pdf import render_scan_report_pdf
 from api.services.reports import ReportNotReadyError, build_scan_report
 
 router = APIRouter()
@@ -214,7 +214,7 @@ def download_scan_report(
 ) -> Response:
     report = read_scan_report(scan_id, kind, session, caller, settings)
     return Response(
-        content=json.dumps(report.model_dump(mode="json"), indent=2),
+        content=render_scan_report_pdf(report),
         media_type=report.content_type,
         headers={
             "Content-Disposition": f'attachment; filename="{report.filename}"'

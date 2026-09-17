@@ -16,5 +16,5 @@ class ScanReportResponse(BaseModel):
     kind: ReportKind
     generated_at: datetime
     filename: str
-    content_type: Literal["application/json"]
+    content_type: Literal["application/pdf"]
     sections: dict[str, Any]

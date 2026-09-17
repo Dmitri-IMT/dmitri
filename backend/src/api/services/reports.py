@@ -50,8 +50,8 @@ def build_scan_report(
         scan_id=scan_id,
         kind=kind,
         generated_at=generated_at,
-        filename=f"dmitri-scan-{scan_id}-{kind}.json",
-        content_type="application/json",
+        filename=f"dmitri-scan-{scan_id}-{kind}.pdf",
+        content_type="application/pdf",
         sections=sections,
     )
 

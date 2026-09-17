@@ -77,3 +77,16 @@ export async function requestScanAnalysis(
   )
   return response.data
 }
+
+export type ScanReportKind = 'explained' | 'technical'
+
+export async function downloadScanReport(
+  scanId: string,
+  kind: ScanReportKind,
+): Promise<Blob> {
+  const response = await apiClient.get<Blob>(
+    `/scans/${scanId}/reports/${kind}/download`,
+    { responseType: 'blob' },
+  )
+  return response.data
+}

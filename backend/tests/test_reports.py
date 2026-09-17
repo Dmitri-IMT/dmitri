@@ -42,10 +42,9 @@ def test_technical_report_download_has_attachment_header(
     )
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-type"].startswith("application/pdf")
     assert "attachment; filename=\"dmitri-scan-" in response.headers[
         "content-disposition"
     ]
-    assert response.json()["sections"]["scan"]["scan_id"] == str(
-        seeded["scan"].scan_id
-    )
+    assert response.content.startswith(b"%PDF-")
+    assert response.headers["content-disposition"].endswith('.pdf"')

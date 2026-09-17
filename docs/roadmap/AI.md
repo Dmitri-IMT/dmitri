@@ -19,7 +19,8 @@ Epic [DMI-161](https://linear.app/peirce/issue/DMI-161) owns later targets: Open
 Luna (DMI-163), injection containment (DMI-167),
 writing skill (DMI-168), research assistant (DMI-169), card design (DMI-170).
 
-Chat, downloadable reports and a Home summary are **not decided**.
+Chat and a Home summary are still pending. Downloadable reports are implemented as
+explained and technical PDF exports from Scan Detail.
 
 DMI-162 is complete: the provider receives only aggregate counts, public
 vulnerability facts and request-local placeholders. The backend validates those
@@ -53,7 +54,7 @@ Surfaces that are **not decided** (do not treat as committed work):
 
 1. an automatic plain-language summary of the latest completed scan on Home
 2. a contextual assistant available from Home, scan, host, and finding views
-3. two downloadable reports per completed scan: explained and technical
+3. two downloadable PDF reports per completed scan: explained and technical (implemented)
 
 ## Product principles
 
@@ -84,7 +85,7 @@ scan completes
     -> the card polls until completed or failed
 ```
 
-Home chat, Home summary and reports stay in the undecided list above. A failed AI job
+Home chat and Home summary stay in the undecided list above. A failed AI job
 must never hide the deterministic scan results.
 
 ## Home: latest scan summary
