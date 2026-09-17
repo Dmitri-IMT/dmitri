@@ -6,11 +6,10 @@ import httpx
 from pydantic import ValidationError
 
 from api.core.config import Settings
-from api.schemas.ai import ScanAIAnalysis
+from api.schemas.ai import ProviderScanAIAnalysis
 from api.services.ai.context import ScanAIContext
 
 GROQ_PROVIDER_ID = "groq"
-
 AI_PROMPT_VERSION = "2"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
@@ -60,7 +59,7 @@ class GroqProvider:
         self.reasoning_effort = reasoning_effort
         self.client = client
 
-    def analyze_scan(self, context: ScanAIContext) -> ScanAIAnalysis:
+    def analyze_scan(self, context: ScanAIContext) -> ProviderScanAIAnalysis:
         payload = {
             "model": self.model,
             "messages": [
@@ -77,7 +76,7 @@ class GroqProvider:
                 "json_schema": {
                     "name": "scan_ai_analysis",
                     "strict": True,
-                    "schema": ScanAIAnalysis.model_json_schema(),
+                    "schema": ProviderScanAIAnalysis.model_json_schema(),
                 },
             },
             "max_completion_tokens": self.max_output_tokens,
@@ -98,7 +97,7 @@ class GroqProvider:
             envelope = response.json()
             content = envelope["choices"][0]["message"]["content"]
             decoded = json.loads(content)
-            return ScanAIAnalysis.model_validate(decoded)
+            return ProviderScanAIAnalysis.model_validate(decoded)
         except (
             KeyError,
             IndexError,
@@ -116,10 +115,7 @@ class GroqProvider:
         url = f"{self.base_url}/chat/completions"
         if self.client is not None:
             return self.client.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=self.timeout_seconds,
+                url, headers=headers, json=payload, timeout=self.timeout_seconds
             )
         with httpx.Client(timeout=self.timeout_seconds) as client:
             return client.post(url, headers=headers, json=payload)

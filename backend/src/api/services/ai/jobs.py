@@ -28,8 +28,13 @@ from api.services.ai.context import (
     ScanAIContext,
     ScanAINotReadyError,
     build_scan_ai_context,
+    materialize_scan_ai_analysis,
 )
 from api.services.ai.groq import AI_PROMPT_VERSION, AIProviderError, GroqProvider
+from api.services.ai.validation import (
+    sanitize_scan_ai_analysis,
+    validate_provider_analysis,
+)
 from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
@@ -58,7 +63,9 @@ def scan_ai_analysis_response(
         return ScanAIAnalysisCompleted(
             **fields,
             completed_at=record.completed_at,
-            analysis=ScanAIAnalysis.model_validate(record.analysis_json),
+            analysis=sanitize_scan_ai_analysis(
+                ScanAIAnalysis.model_validate(record.analysis_json)
+            ),
         )
     if record.status == "failed":
         return ScanAIAnalysisFailed(**fields, completed_at=record.completed_at)
@@ -249,10 +256,21 @@ def _process_claimed_analysis(
         context = build_scan_ai_context(
             session, scan, max_findings=max_findings
         )
-        analysis = None if context is None else provider.analyze_scan(context)
+        provider_analysis = (
+            None if context is None else provider.analyze_scan(context)
+        )
+        analysis = (
+            None
+            if context is None or provider_analysis is None
+            else materialize_scan_ai_analysis(
+                context, validate_provider_analysis(context, provider_analysis)
+            )
+        )
     except AIProviderError as exc:
         return fail(exc.code, exc.retryable)
     except ScanAINotReadyError:
+        return fail("invalid_analysis", False)
+    except ValueError:
         return fail("invalid_analysis", False)
     except Exception:
         logger.exception("AI analysis job failed scan_id=%s", record.scan_id)
@@ -271,7 +289,7 @@ def _process_claimed_analysis(
 
 
 def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
-    allowed = {finding.finding_id for finding in context.top_findings}
+    allowed = set(context._finding_ids_by_ref.values())
     explained = [item.finding_id for item in analysis.important_findings]
     referenced = set(explained).union(
         *(action.related_finding_ids for action in analysis.priority_actions)

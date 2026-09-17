@@ -10,16 +10,24 @@
 ## Merged in PR #144
 
 Scan Detail has an on-demand plain-language overview. Groq with `openai/gpt-oss-120b`
-is the merged provider. A member presses **Explain this scan**. That is the only
-trigger. The worker AI loop is separate from enrichment. Output is English.
+is the provider. A member presses **Explain this scan**. That is the only trigger.
+The worker AI loop is separate from enrichment. Output is English.
 `AI_ENABLED` and `AI_API_KEY` are the operator switch. Failure never hides scan
 results.
 
 Epic [DMI-161](https://linear.app/peirce/issue/DMI-161) owns later targets: OpenAI
-Luna (DMI-163), placeholder context (DMI-162), injection containment (DMI-167),
+Luna (DMI-163), injection containment (DMI-167),
 writing skill (DMI-168), research assistant (DMI-169), card design (DMI-170).
 
 Chat, downloadable reports and a Home summary are **not decided**.
+
+DMI-162 is complete: the provider receives only aggregate counts, public
+vulnerability facts and request-local placeholders. The backend validates those
+placeholders and restores local IDs and display values before persistence.
+
+DMI-167 is complete: generated text is normalized before storage and before display,
+while action priority and KEV coverage are checked deterministically in the backend.
+
 
 ## Product decision
 
@@ -282,7 +290,7 @@ Manual retry remains available when the provider fails.
 
 ## Model-provider boundary
 
-The initial provider is Groq with `openai/gpt-oss-120b`, selected for the first scan
+The provider is OpenAI Responses API with `gpt-5.6-luna`, selected for the first scan
 summary pilot. The backend keeps it behind a small adapter for:
 
 - message generation and streaming;

@@ -12,8 +12,9 @@ overview in the web app. No ADR existed for that boundary. The AI roadmap still
 named Claude as the default. This ADR records what merged in PR #144 and points
 at the epic for later changes.
 
-The project has no customers yet. That is why the as-built context (including
-subnet, host IP and evidence) is accepted until DMI-162 lands.
+The initial implementation sent subnet, host IP and raw evidence to the
+provider. DMI-162 replaces that temporary boundary with public facts and
+request-local placeholders.
 
 ## Decision
 
@@ -53,12 +54,41 @@ English prose is required in the system prompt.
 `AI_API_KEY` follows ADR-005: never log it, never persist provider error bodies,
 never put `DATABASE_URL_DIRECT` on Railway.
 
+### 6. Provider data boundary
+
+The provider receives aggregate scan counts and allow-listed public
+vulnerability facts only: request-local `finding_N` and `machine_N`
+placeholders, CVE, CVSS, severity, confidence, deterministic risk values, EPSS
+and KEV state. It never receives a subnet, IP, hostname, MAC, vendor, operating
+system identity, organisation data, database UUID, port/service map, raw
+evidence, scanner banner, recommendation or reference text.
+
+The provider response refers to findings only through `finding_N` placeholders.
+The backend rejects unknown references, maps valid references to persisted IDs,
+and replaces placeholders with local display values before it stores or returns
+the analysis.
+
+### 7. Prompt-injection containment
+
+The model has no tools or write capability, and it receives only the bounded
+placeholder context described above. The backend normalizes generated text before
+storage and again before returning older stored analyses, stripping Unicode format,
+variation-selector and tag characters. This is a hygiene control, not a security
+boundary.
+
+Action priority and ordering are computed from the supplied KEV, EPSS, CVSS and
+deterministic risk facts. Every KEV finding supplied to the model must be referenced
+by an action; otherwise the analysis is rejected. The model cannot downgrade or
+reorder those actions.
+
+
 ## Consequences
 
 - Operators must set `AI_ENABLED=true` and `AI_API_KEY` on **both** `api` and
   `worker`, then restart both.
-- Customer-identifying fields in the current context leave the product on each
-  press until DMI-162.
+- The provider cannot use customer-identifying scan fields to identify a network
+  or machine. The backend retains the local placeholder mapping only while it
+  validates and materialises that response.
 - Groq is a temporary merged choice. DMI-163 replaces the adapter with OpenAI
   GPT-5.6 Luna on the Responses API.
 
@@ -79,7 +109,7 @@ scan analysis:
 
 | Issue | Change |
 |-------|--------|
-| [DMI-162](https://linear.app/peirce/issue/DMI-162) | D2. Public facts and request-local placeholders only |
+| [DMI-162](https://linear.app/peirce/issue/DMI-162) | D2. Public facts and request-local placeholders only — completed |
 | [DMI-163](https://linear.app/peirce/issue/DMI-163) | D1. OpenAI GPT-5.6 Luna, Responses API |
 | [DMI-164](https://linear.app/peirce/issue/DMI-164) | D5. Independent KEV/EPSS/NVD retries |
 | [DMI-165](https://linear.app/peirce/issue/DMI-165) | D5. Refresh an open scan page after late enrichment |

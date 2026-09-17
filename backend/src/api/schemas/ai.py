@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 AIText = Annotated[str, Field(min_length=3, max_length=4000)]
 AIShortText = Annotated[str, Field(min_length=3, max_length=2000)]
+FindingReference = Annotated[str, Field(pattern=r"^finding_[1-9][0-9]*$")]
 
 
 class AIRecommendedAction(BaseModel):
@@ -19,10 +20,30 @@ class AIRecommendedAction(BaseModel):
     related_finding_ids: Annotated[list[UUID], Field(max_length=15)]
 
 
+class AIProviderRecommendedAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: Literal["immediate", "high", "medium", "low"]
+    title: Annotated[str, Field(min_length=3, max_length=200)]
+    description: AIShortText
+    related_finding_refs: Annotated[list[FindingReference], Field(max_length=15)]
+
+
 class AIFindingExplanation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     finding_id: UUID
+    why_it_matters: AIShortText
+    plain_language_explanation: AIShortText
+    recommendation: AIShortText
+    evidence_used: Annotated[list[AIShortText], Field(max_length=10)]
+    uncertainty: Annotated[str | None, Field(max_length=1000)]
+
+
+class AIProviderFindingExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_ref: FindingReference
     why_it_matters: AIShortText
     plain_language_explanation: AIShortText
     recommendation: AIShortText
@@ -38,6 +59,21 @@ class ScanAIAnalysis(BaseModel):
     plain_language_summary: AIText
     priority_actions: Annotated[list[AIRecommendedAction], Field(max_length=15)]
     important_findings: Annotated[list[AIFindingExplanation], Field(max_length=15)]
+    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+
+
+class ProviderScanAIAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: AIText
+    overall_assessment: AIText
+    plain_language_summary: AIText
+    priority_actions: Annotated[
+        list[AIProviderRecommendedAction], Field(max_length=15)
+    ]
+    important_findings: Annotated[
+        list[AIProviderFindingExplanation], Field(max_length=15)
+    ]
     uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
 
 

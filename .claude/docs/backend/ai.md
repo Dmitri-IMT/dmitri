@@ -39,22 +39,23 @@ also `409`.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ai_is_available()` | `AI_ENABLED` and a stripped non-empty `AI_API_KEY`. | `backend/src/api/services/ai/groq.py:142` |
-| `build_ai_provider()` | Builds `GroqProvider` or `None`. | `backend/src/api/services/ai/groq.py:150` |
-| `GroqProvider.analyze_scan()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured `ScanAIAnalysis`. Errors raise `AIProviderError(code, retryable=...)`. | `backend/src/api/services/ai/groq.py:63` |
-| `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"2"`. English prose only; context is untrusted evidence. | `backend/src/api/services/ai/groq.py:14` |
+| `ai_is_available()` | `AI_ENABLED` and a stripped non-empty `AI_API_KEY`. | `backend/src/api/services/ai/groq.py` |
+| `build_ai_provider()` | Builds `GroqProvider` or `None`. | `backend/src/api/services/ai/groq.py` |
+| `GroqProvider.analyze_scan()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured placeholder-only provider analysis. Errors raise `AIProviderError(code, retryable=...)`. | `backend/src/api/services/ai/groq.py` |
+| `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"2"`. English prose only; context is untrusted evidence. | `backend/src/api/services/ai/groq.py` |
 | `request_scan_ai_analysis()` | Org-scoped scan; `unavailable` if AI off or scan not completed; insert/`failed`→`pending`; else already-requested. | `backend/src/api/services/ai/jobs.py:102` |
 | `get_scan_ai_analysis()` | `unavailable` / `not_requested` / row status. Foreign scan → `None` (404). | `backend/src/api/services/ai/jobs.py:72` |
 | `scan_ai_analysis_response()` | Picks the response variant from `record.status`. | `backend/src/api/services/ai/jobs.py:47` |
 | `claim_ai_analyses()` | Calls the shared [`claim_jobs`](/backend/services.md) with running status `processing` and an extra filter: no `enrichment_jobs` in `pending`/`running` for that `scan_id`. | `backend/src/api/services/ai/jobs.py:197` |
-| `process_ready_ai_analyses()` | Claim, build context, call the provider, check grounding, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
+| `process_ready_ai_analyses()` | Claim, build context, call the provider, materialise placeholders locally, check grounding, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
 | `_check_grounded()` | Every finding id in explanations and actions must be in the context; no duplicate explanations. Failure → `invalid_analysis`, not retried. | `backend/src/api/services/ai/jobs.py:279` |
 | `build_scan_ai_context()` | Loads `ScanRecord` (not Scan Detail) plus `get_scan_risk_summary`, a host count and EPSS/KEV. Caps findings at `AI_MAX_FINDINGS` (default 10, max 15). Raises `ScanAINotReadyError` if the scan is not completed. | `backend/src/api/services/ai/context.py:82` |
-| `ScanAIContext` / `AIFindingContext` | Internal prompt context shapes. | `backend/src/api/services/ai/context.py:58`, `:32` |
+| `ScanAIContext` / `AIFindingContext` | Provider context with public facts and request-local placeholders only. | `backend/src/api/services/ai/context.py` |
+| `materialize_scan_ai_analysis()` | Rejects unknown placeholders, maps valid finding placeholders to persisted IDs and replaces display placeholders before storage. | `backend/src/api/services/ai/context.py` |
 | `run_ai_worker_loop()` / `run_ai_worker_once()` | In `services/worker.py`. Own session and `AI_POLL_INTERVAL_SECONDS` (default 5); batch size 1; no command sweep. | `backend/src/api/services/worker.py:46`, `:57` |
 | `ScanAIAnalysis` | Wire body of a completed analysis. | `backend/src/api/schemas/ai.py:33` |
 | `ScanAIAnalysisResponse` | HTTP union keyed on `status`: `Unavailable` / `NotRequested` (`scan_id`, `status` only), `Queued` (`pending`/`processing`, job fields), `Failed` (+`completed_at`), `Completed` (+`completed_at`, `analysis`). | `backend/src/api/schemas/ai.py:86` |
-| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`; `updated_at` set on update. | `backend/src/api/models/persistence.py:335` |
+| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`. | `backend/src/api/models/persistence.py` |
 
 ## How it connects
 

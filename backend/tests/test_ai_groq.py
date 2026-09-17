@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from uuid import uuid4
 
 import httpx
 import pytest
-from api.schemas.ai import ScanAIAnalysis
+from api.schemas.ai import ProviderScanAIAnalysis
 from api.schemas.read import SeverityBreakdown
 from api.services.ai.context import ScanAIContext
 from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
@@ -16,9 +14,6 @@ TEST_TOKEN = "test-token"
 
 def _context() -> ScanAIContext:
     return ScanAIContext(
-        scan_id=uuid4(),
-        timestamp=datetime.now(timezone.utc),
-        subnet="192.168.1.0/24",
         scan_mode="quick",
         duration_seconds=10,
         host_count=1,
@@ -33,8 +28,8 @@ def _context() -> ScanAIContext:
     )
 
 
-def _analysis() -> ScanAIAnalysis:
-    return ScanAIAnalysis(
+def _analysis() -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
         executive_summary="Nenhum risco prioritário foi identificado.",
         overall_assessment="O scan não apresentou findings para priorização.",
         plain_language_summary="Nada urgente apareceu neste resultado.",
@@ -69,9 +64,7 @@ def test_groq_provider_requests_strict_structured_output():
                 "choices": [
                     {
                         "message": {
-                            "content": json.dumps(
-                                _analysis().model_dump(mode="json")
-                            )
+                            "content": _analysis().model_dump_json(),
                         }
                     }
                 ]
@@ -90,13 +83,13 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert TEST_TOKEN not in json.dumps(payload)
-    assert str(context.scan_id) in payload["messages"][1]["content"]
+    assert '"context_version":"2"' in payload["messages"][1]["content"]
+    assert "scan_id" not in payload["messages"][1]["content"]
 
 
 def test_system_prompt_requests_english_prose():
     assert "English" in SYSTEM_PROMPT
     assert "Portuguese" not in SYSTEM_PROMPT
-    assert "Brazilian Portuguese" not in SYSTEM_PROMPT
 
 
 def test_groq_provider_maps_timeout_without_leaking_details():

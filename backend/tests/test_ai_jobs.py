@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import api.services.worker as worker_module
 import pytest
 from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord
-from api.schemas.ai import AIFindingExplanation, AIRecommendedAction, ScanAIAnalysis
+from api.schemas.ai import (
+    AIProviderFindingExplanation,
+    AIProviderRecommendedAction,
+    ProviderScanAIAnalysis,
+)
 from api.services.ai.groq import AIProviderError
 from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.worker import run_ai_worker_once
@@ -21,8 +24,8 @@ from read_factories import (
 from sqlmodel import select
 
 
-def _analysis() -> ScanAIAnalysis:
-    return ScanAIAnalysis(
+def _analysis() -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
         executive_summary="Nenhum risco prioritário foi identificado.",
         overall_assessment="O scan não apresentou findings para priorização.",
         plain_language_summary="Nada urgente apareceu neste resultado.",
@@ -32,22 +35,22 @@ def _analysis() -> ScanAIAnalysis:
     )
 
 
-def _grounded_analysis(finding_id) -> ScanAIAnalysis:
-    return ScanAIAnalysis(
+def _grounded_analysis(finding_ref: str = "finding_1") -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
         executive_summary="One important issue needs attention.",
         overall_assessment="The observed risk is high but limited in scope.",
         plain_language_summary="One exposed service should be reviewed soon.",
         priority_actions=[
-            AIRecommendedAction(
+            AIProviderRecommendedAction(
                 priority="high",
                 title="Review the affected service",
                 description="Ask a qualified professional to validate the service.",
-                related_finding_ids=[finding_id],
+                related_finding_refs=[finding_ref],
             )
         ],
         important_findings=[
-            AIFindingExplanation(
-                finding_id=finding_id,
+            AIProviderFindingExplanation(
+                finding_ref=finding_ref,
                 why_it_matters="The service is exposed and has a high risk score.",
                 plain_language_explanation="An exposed service may need an update.",
                 recommendation="Have a professional validate and update it.",
@@ -133,7 +136,14 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.scan_id == scan.scan_id
     assert record.status == "completed"
-    assert record.analysis_json == _analysis().model_dump(mode="json")
+    assert record.analysis_json == {
+        "executive_summary": _analysis().executive_summary,
+        "overall_assessment": _analysis().overall_assessment,
+        "plain_language_summary": _analysis().plain_language_summary,
+        "priority_actions": [],
+        "important_findings": [],
+        "uncertainties": _analysis().uncertainties,
+    }
     assert record.context_hash is not None and len(record.context_hash) == 64
     assert record.attempts == 1
     assert len(received) == 1
@@ -142,7 +152,7 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
 def test_grounded_analysis_completes(administrative_session):
     scan, finding = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
-    expected = _grounded_analysis(finding.finding_id)
+    expected = _grounded_analysis()
     received = []
 
     class FakeProvider:
@@ -155,10 +165,10 @@ def test_grounded_analysis_completes(administrative_session):
 
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "completed"
-    assert record.analysis_json == expected.model_dump(mode="json")
-    assert [item.finding_id for item in received[0].top_findings] == [
+    assert record.analysis_json["important_findings"][0]["finding_id"] == str(
         finding.finding_id
-    ]
+    )
+    assert received[0].top_findings[0].finding_ref == "finding_1"
 
 
 @pytest.mark.parametrize(
@@ -167,11 +177,11 @@ def test_grounded_analysis_completes(administrative_session):
 def test_ungrounded_analysis_fails(administrative_session, defect):
     scan, finding = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
-    analysis = _grounded_analysis(finding.finding_id)
+    analysis = _grounded_analysis()
     if defect == "invented_explanation":
-        analysis.important_findings[0].finding_id = uuid4()
+        analysis.important_findings[0].finding_ref = "finding_99"
     elif defect == "invented_action":
-        analysis.priority_actions[0].related_finding_ids = [uuid4()]
+        analysis.priority_actions[0].related_finding_refs = ["finding_99"]
     else:
         analysis.important_findings.append(analysis.important_findings[0])
 
@@ -210,7 +220,7 @@ def test_unbuildable_context_fails(
 
     class FakeProvider:
         def analyze_scan(self, context):
-            return _grounded_analysis(finding.finding_id)
+            return _grounded_analysis()
 
     now = datetime.now(timezone.utc)
     assert _run(administrative_session, FakeProvider(), now=now) == 1
@@ -222,11 +232,11 @@ def test_unbuildable_context_fails(
 
 
 def test_analysis_schema_forbids_unknown_fields():
-    payload = _grounded_analysis(uuid4()).model_dump()
+    payload = _grounded_analysis().model_dump()
     payload["invented_score"] = 100
 
     with pytest.raises(ValidationError):
-        ScanAIAnalysis.model_validate(payload)
+        ProviderScanAIAnalysis.model_validate(payload)
 
 
 def test_ai_job_waits_for_active_enrichment(administrative_session):
