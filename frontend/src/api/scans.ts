@@ -6,6 +6,7 @@ type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 export type ScanAIAnalysisResponse =
   components['schemas']['ScanAIAnalysisResponse']
+export type AIChatResponse = components['schemas']['AIChatResponse']
 type ListScansQuery = NonNullable<
   operations['listScans']['parameters']['query']
 >
@@ -74,6 +75,17 @@ export async function requestScanAnalysis(
 ): Promise<ScanAIAnalysisResponse> {
   const response = await apiClient.post<ScanAIAnalysisResponse>(
     `/scans/${scanId}/analysis`,
+  )
+  return response.data
+}
+
+export async function askScanAI(
+  scanId: string,
+  question: string,
+): Promise<AIChatResponse> {
+  const response = await apiClient.post<AIChatResponse>(
+    `/scans/${scanId}/chat`,
+    { question },
   )
   return response.data
 }

@@ -4,7 +4,7 @@ import json
 
 import httpx
 import pytest
-from api.schemas.ai import ProviderScanAIAnalysis
+from api.schemas.ai import ProviderAIChatResponse, ProviderScanAIAnalysis
 from api.schemas.read import SeverityBreakdown
 from api.services.ai.context import ScanAIContext
 from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
@@ -166,3 +166,39 @@ def test_groq_provider_rejects_invalid_payload():
 
     assert captured.value.code == "invalid_provider_response"
     assert captured.value.retryable is True
+
+
+def test_groq_provider_answers_chat_with_bounded_structured_schema():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": ProviderAIChatResponse(
+                                answer="Priorize a atualização do serviço exposto.",
+                                uncertainties=[
+                                    "O scan não confirma exploração ativa."
+                                ],
+                                referenced_finding_refs=["finding_1"],
+                            ).model_dump_json(),
+                        }
+                    }
+                ]
+            },
+        )
+
+    result = _provider(handler).answer_question(
+        {"top_findings": [{"finding_ref": "finding_1"}]},
+        "O que devo corrigir primeiro?",
+    )
+
+    assert result.answer.startswith("Priorize")
+    payload = captured["payload"]
+    assert payload["response_format"]["json_schema"]["strict"] is True
+    assert payload["max_completion_tokens"] == 1024
+    assert "O que devo corrigir primeiro?" in payload["messages"][1]["content"]

@@ -147,6 +147,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scans/{scan_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the scan AI assistant
+         * @description Answers one bounded question using only the selected completed scan.
+         */
+        post: operations["askScanAI"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scans/{scan_id}/reports/{kind}/download": {
         parameters: {
             query?: never;
@@ -1273,6 +1293,14 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        AIChatRequest: {
+            question: string;
+        };
+        AIChatResponse: {
+            answer: string;
+            uncertainties: string[];
+            referenced_finding_ids: string[];
+        };
         ScanAIAnalysisUnavailable: {
             /** Format: uuid */
             scan_id: string;
@@ -2203,6 +2231,46 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalServerError"];
+        };
+    };
+    askScanAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Grounded answer for the selected scan. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The scan is not ready for questions. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            502: components["responses"]["InternalServerError"];
         };
     };
     downloadScanReport: {

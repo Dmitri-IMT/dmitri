@@ -11,6 +11,28 @@ AIShortText = Annotated[str, Field(min_length=3, max_length=2000)]
 FindingReference = Annotated[str, Field(pattern=r"^finding_[1-9][0-9]*$")]
 
 
+class AIChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: Annotated[str, Field(min_length=3, max_length=1000)]
+
+
+class AIChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: AIText
+    uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
+    referenced_finding_ids: Annotated[list[UUID], Field(max_length=15)]
+
+
+class ProviderAIChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: AIText
+    uncertainties: Annotated[list[AIShortText], Field(max_length=10)]
+    referenced_finding_refs: Annotated[list[FindingReference], Field(max_length=15)]
+
+
 class AIRecommendedAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

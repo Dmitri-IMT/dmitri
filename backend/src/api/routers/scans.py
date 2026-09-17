@@ -11,7 +11,7 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
 from api.models.persistence import utc_now
-from api.schemas.ai import ScanAIAnalysisResponse
+from api.schemas.ai import AIChatRequest, AIChatResponse, ScanAIAnalysisResponse
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -22,7 +22,17 @@ from api.schemas.read import (
 )
 from api.schemas.reports import ReportKind, ScanReportResponse
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
-from api.services.ai.groq import GROQ_PROVIDER_ID, ai_is_available
+from api.services.ai.chat import (
+    build_chat_context,
+    finding_reference_map,
+    materialize_chat_response,
+)
+from api.services.ai.groq import (
+    GROQ_PROVIDER_ID,
+    AIProviderError,
+    ai_is_available,
+    build_ai_provider,
+)
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
     get_scan_ai_analysis,
@@ -167,6 +177,48 @@ def request_scan_ai_analysis_route(
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return analysis
+
+
+@router.post(
+    "/api/v1/scans/{scan_id}/chat",
+    response_model=AIChatResponse,
+    operation_id="askScanAI",
+)
+def ask_scan_ai(
+    scan_id: UUID,
+    payload: AIChatRequest,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> AIChatResponse:
+    if not ai_is_available(settings):
+        raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
+    detail = get_scan_detail(session, scan_id, org_id=caller.org_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if detail.status != "completed":
+        raise ApiError(
+            409, "The scan is not ready for questions.", code="scan_not_ready"
+        )
+    risk = get_scan_risk_summary(session, scan_id, org_id=caller.org_id)
+    if risk is None:
+        raise ApiError(409, "Risk summary is not available.", code="scan_not_ready")
+    analysis = get_scan_ai_analysis(
+        session, scan_id, org_id=caller.org_id, ai_enabled=True
+    )
+    provider = build_ai_provider(settings)
+    assert provider is not None
+    try:
+        answer = provider.answer_question(
+            build_chat_context(detail, risk, analysis), payload.question
+        )
+        return materialize_chat_response(answer, finding_reference_map(risk))
+    except (AIProviderError, ValueError) as exc:
+        raise ApiError(
+            502,
+            "The AI assistant could not answer this question.",
+            code="ai_provider_error",
+        ) from exc
 
 
 @router.get(

@@ -76,6 +76,8 @@ SCHEMA_NAMES = (
     "ScanAIAnalysisFailed",
     "ScanAIAnalysisCompleted",
     "ScanReportResponse",
+    "AIChatRequest",
+    "AIChatResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 

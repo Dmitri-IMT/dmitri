@@ -436,6 +436,45 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/v1/scans/{scan_id}/chat:
+    post:
+      tags:
+        - scans
+      summary: Ask the scan AI assistant
+      description: Answers one bounded question using only the selected completed scan.
+      operationId: askScanAI
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIChatRequest'
+      responses:
+        '200':
+          description: Grounded answer for the selected scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The scan is not ready for questions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/scans/{scan_id}/reports/{kind}/download:
     get:
       tags:
@@ -4345,6 +4384,37 @@ components:
         sections:
           type: object
           additionalProperties: true
+    AIChatRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 1000
+    AIChatResponse:
+      type: object
+      additionalProperties: false
+      required: [answer, uncertainties, referenced_finding_ids]
+      properties:
+        answer:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        uncertainties:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+        referenced_finding_ids:
+          type: array
+          maxItems: 15
+          items:
+            type: string
+            format: uuid
     ScanAIAnalysisUnavailable:
       type: object
       additionalProperties: false
