@@ -14,7 +14,7 @@ knowledge base. See [MAINTAINING.md](./MAINTAINING.md) for how this bundle is ke
 
 * [overview](./overview.md) — What Dmitri is, its components, the end-to-end scan flow, and what is built vs planned.
 * [glossary](./glossary.md) — The core domain terms — agent, host, scan_host, command, scan, org — and their code meanings.
-* [contracts](./contracts.md) — The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member and invite administration surface.
+* [contracts](./contracts.md) — The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 
 ## Hardware agent (active)
 
@@ -28,8 +28,8 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
 * [hardware-agent/ot](./hardware-agent/ot.md) — Modbus inspection package, digest, read-only client, OT stage.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
-* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process that executes one remote scan at a time, uploads it, reports lifecycle status, and logs safe upload outcomes.
-* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder.
+* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process executes one remote scan, cancels active work when parked, and resumes after the command channel recovers.
+* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict frames, short transient backoff, and hourly recovery from a typed parked state.
 * [hardware-agent/transport](./hardware-agent/transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 
 ### Scan engine — `scanner/`
@@ -50,14 +50,14 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 
 * [backend/overview](./backend/overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker and optional AI analysis loop.
 * [backend/api](./backend/api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
-* [backend/routers](./backend/routers.md) — The FastAPI read, user/member admin, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
+* [backend/routers](./backend/routers.md) — The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
 * [backend/auth](./backend/auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 * [backend/device-auth](./backend/device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 * [backend/management](./backend/management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
 * [backend/models](./backend/models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
-* [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command schemas plus profile, organization-member, auth and invite request/response models.
+* [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
-* [backend/services](./backend/services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, enrichment/risk, and command lifecycle/delivery.
+* [backend/services](./backend/services.md) — Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 * [backend/ai](./backend/ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
 * [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
 
@@ -67,14 +67,14 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 
 * [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 * [frontend/linting](./frontend/linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
-* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read resource modules.
+* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/network/devices), nested admin Users, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
-* [frontend/devices-screen](./frontend/devices-screen.md) — Devices list and DeviceDetail scan trigger — useScanCommand, scan-type tabs, and cache invalidation on done.
+* [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
 * [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.

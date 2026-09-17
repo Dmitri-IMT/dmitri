@@ -1,10 +1,10 @@
 ---
 type: Module
 title: command-channel — the signed WebSocket client and shared signer
-description: "The signed device WebSocket: strict hello/command/status frames, visible connection loss/recovery, and the pinned reconnect ladder."
+description: "The signed device WebSocket: strict frames, short transient backoff, and hourly recovery from a typed parked state."
 resource: hardware-agent/src/agent/transport/command_channel.py
 tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-09-17T00:00:00Z
 ---
 
 # command-channel — the signed WebSocket client
@@ -30,16 +30,18 @@ ingest. That split is the contract, not an implementation detail.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `build_device_signature_headers(method, path, body, device_id, private_key_bytes)` | Builds the five proof headers from a fresh timestamp, nonce, body SHA-256 and signature. Stores nothing; the key never reaches an attribute, a log or an exception message. | `transport/signing.py:10` |
-| `AvailableSubnet` | `interface`, `cidr`, required `is_default_route`. Mirrors the contract component. | `command_channel.py:41` |
-| `AgentHello` | `type="hello"`, `agent_version`, `available_subnets`. | `command_channel.py:49` |
-| `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:57` |
-| `AgentStatus` | `type="status"`, `command_id`, `status`, nullable `error_code`. | `command_channel.py:67` |
-| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which is what lets the tests run the full reconnect ladder with no socket and no wall clock. | `command_channel.py:111` |
-| `.run(on_command, on_connected=None)` | The connect → hello → replay → receive loop. Returns **only** when parked. | `command_channel.py:144` |
-| `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:170` |
-| `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:83` |
-| `_permanent_reason(exc)` | The park/retry decision — see below. | `command_channel.py:92` |
-| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:237` |
+| `AvailableSubnet` | `interface`, `cidr`, required `is_default_route`. Mirrors the contract component. | `command_channel.py:52` |
+| `AgentHello` | `type="hello"`, `agent_version`, `available_subnets`. | `command_channel.py:60` |
+| `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:92` |
+| `AgentStatus` | `type="status"`, `command_id`, `status`, nullable `error_code`. | `command_channel.py:109` |
+| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:155` |
+| `.run(on_command, on_connected=None, on_parked=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:189` |
+| `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:223` |
+| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets the terminal `_closed` flag without parking. | `command_channel.py:233`, `:237` |
+| `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:125` |
+| `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:134` |
+| `_wait_out_park()` | Logs the typed reason and next UTC attempt, sleeps through the injected sleeper for 3600 seconds, then clears the reason. | `command_channel.py:294` |
+| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:308` |
 
 ### The upgrade envelope
 
@@ -52,7 +54,7 @@ lets a Pi whose clock was wrong at boot recover on a later retry without operato
 
 ### Hello-first ordering
 
-`_serve_once` (`command_channel.py:184`) does connect → send hello → mark ready → log the
+`_serve_once` (`command_channel.py:241`) does connect → send hello → mark ready → log the
 connection → `on_connected()`
 → first `recv()`, in that order, on **every** connection including reconnects. The subnet list is
 re-enumerated per hello via [`detect_available_subnets`](/hardware-agent/utils.md), never cached, so
@@ -68,25 +70,24 @@ upgrade *and* a successful hello send — a socket that dies during the handshak
 | Result | Action |
 |---|---|
 | Network failure, normal close, backend restart, upgrade `401` | Retry with a completely fresh proof |
-| Upgrade `403` | Park |
-| Close `4000` reason `replaced` | Park — another daemon owns the device slot |
-| Any other close code `>= 4000` | Park |
+| Upgrade `403` | Park as `refused`; retry in one hour |
+| Close `4000` reason `replaced` | Park as `replaced`; retry in one hour |
+| Close `4001` | Park as `revoked`; retry in one hour |
+| Any other close code `>= 4000` | Park as `refused`; retry in one hour |
 | Any other upgrade status (`404`, `500`, …) | Retry — treated as transient backend-side |
 | Unusable `BACKEND_URL` | Raise before dialing |
 
-The `>= 4000` floor (`_PERMANENT_CLOSE_FLOOR`, `command_channel.py:25`) is a deliberate
-placeholder: the WebSocket private range is reserved for backend-defined terminal conditions, and
-the only 4xxx close the backend emits today is `4000/replaced`. **DMI-97 owns the concrete
-live-revocation close code** — when it lands, replace the floor with that specific code so a future
-retryable 4xxx close is not silently parked.
+Every `ParkReason` uses the same 3600-second policy. A successful hello returns later transient
+losses to the short ladder from one second; a refusal after the hourly dial parks for another hour.
+The process stays alive throughout.
 
 ## How it connects
 
 * Signs through [`build_device_signature_headers`](./command-channel.md), shared with the
   [ingest client](/hardware-agent/transport.md).
 * Enumerates via [`detect_available_subnets`](/hardware-agent/utils.md).
-* Driven by [`AgentDaemon`](/hardware-agent/daemon.md), which supplies `on_command` and
-  `on_connected`.
+* Driven by [`AgentDaemon`](/hardware-agent/daemon.md), which supplies `on_command`,
+  `on_connected`, and the active-scan cancellation callback for `on_parked`.
 * Talks to the backend WS route and its frame schemas ([backend/schemas](/backend/schemas.md),
   [backend/services](/backend/services.md)); the normative shapes live in
   [contracts](/contracts.md).
@@ -100,9 +101,13 @@ retryable 4xxx close is not silently parked.
   interleave frames on the wire — the lock is load-bearing, not defensive.
 * Diagnostics carry only an exception class name and an integer status or close code. No key, no
   signature, no signed URL, no response body, no raw exception text ever reaches a log.
-* Each successful hello emits `command channel connected` (`command_channel.py:189-193`), while a
+* Each successful hello emits `command channel connected` (`command_channel.py:249`), while a
   retryable loss emits the existing sanitized `command channel lost` warning. Together they make
   reconnects visible without exposing the signed upgrade headers.
+* Each park emits exactly `command channel parked (<reason>); next attempt at <UTC ISO-8601>` before
+  the hourly wait. Only the closed `ParkReason` literals reach that log line.
+* `park()` deliberately drops the socket. The receive-loop exception is ignored when a park reason
+  is already set, so operators do not see a false `command channel lost` warning for that action.
 * The module reads `ConnectionClosed.code` / `.reason`, which `websockets` 17 deprecates in favour
   of `.rcvd.code` / `.rcvd.reason`. The deprecated accessors are the *correct* ones here — they fold
   the `rcvd is None` case into `1006`, which the reconnect classifier depends on. Any future
@@ -115,3 +120,4 @@ retryable 4xxx close is not silently parked.
 [2] [ADR-005 — security model](../../../docs/adr/ADR-005-security-model.md)
 [3] [spec 026 — Pi agent daemon](../../../specs/026-pi-agent-daemon/ARCHITECTURE.md)
 [4] [spec 026 — cross-process contract](../../../specs/026-pi-agent-daemon/INTEGRATION.md)
+[5] [spec 048 — parked channel recovery](../../../specs/048-parked-channel-recovery/TRUTH.md)

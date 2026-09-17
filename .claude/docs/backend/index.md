@@ -11,7 +11,7 @@ not a missing client or backend route.
 
 * [Backend — API + enrichment worker](./overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker and optional AI analysis loop.
 * [Backend entry points & config](./api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
-* [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
+* [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
 * [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + admin invite) and backend-provision-agent (device public key + org OT digest key).
 
 ## Data model
@@ -22,7 +22,7 @@ not a missing client or backend route.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 * [Backend AI scan analysis](./ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
 
 ## Auth

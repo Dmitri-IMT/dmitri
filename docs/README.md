@@ -74,6 +74,7 @@
 | [`ui/mockups/`](ui/mockups/) | See the approved screen mockups; v4 is the exemplar |
 | [`DEV-SETUP.md`](DEV-SETUP.md) | Set up the dev environment / run the agent, database, backend or frontend locally |
 | [`PI-INSTALLER.md`](PI-INSTALLER.md) | Deploy, provision and register a Raspberry Pi appliance on-site (vendor playbook) |
+| [`PI-RECOVERY.md`](PI-RECOVERY.md) | Diagnose parked, refused, offline, or damaged Raspberry Pi appliances |
 | [`tests/nspi-modbus-inventory.md`](tests/nspi-modbus-inventory.md) | Laboratory checklist for NSPi inventory |
 | [`tests/nspi-modbus-read-only-mapping.md`](tests/nspi-modbus-read-only-mapping.md) | Laboratory checklist for read-only mapping |
 | [`examples/ot-policy.example.json`](examples/ot-policy.example.json) | Sample OT mapping policy |

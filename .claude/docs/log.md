@@ -3,6 +3,27 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-17
+
+* **Creation**: `ConfirmDialog` now owns the shared single-click confirm state for invite and device
+  revocation. Device presence is one discriminated mode through
+  `readAgentPresence`/`AgentPresence`, and `DeviceDetailBody` alone converts that mode to child
+  interactivity.
+* **Deletion**: The bespoke users `RevokeDialog` was replaced by `ConfirmDialog`.
+* **Update**: Intentional command-channel parking no longer logs a false transport loss. Touched:
+  `frontend/screens.md`, `frontend/devices-screen.md`, `hardware-agent/command-channel.md`, and
+  `hardware-agent/daemon.md`.
+
+## 2026-09-16
+
+* **Update**: DMI-155/spec 048. The Pi command channel keeps parked daemons alive and retries all
+  typed park reasons hourly; the daemon cancels active scan work on park. Backend agent reads expose
+  `revoked_at`, admin revoke/restore writes are idempotent and revoke closes the live socket, and
+  Home omits revoked devices from long-offline events. Device list/detail render Revoked first and
+  provide the admin actions. Touched: `hardware-agent/command-channel.md`, `hardware-agent/daemon.md`,
+  `backend/routers.md`, `backend/services.md`, `backend/schemas.md`, `frontend/api.md`,
+  `frontend/devices-screen.md`, and `contracts.md`.
+
 ## 2026-09-15
 
 * **Update**: DMI-171 on PR-147. `deliver()` now fails the command at once when the frame send

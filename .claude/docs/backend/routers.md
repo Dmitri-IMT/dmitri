@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend routers — reads, identity admin, ingest and commands
-description: The FastAPI read, user/member admin, agent read/target-subnet, account-removal, scan-ingest and command-channel HTTP/WS routers with their user/device auth gates.
+description: The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -38,12 +38,14 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |
 | `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`, gated by `require_admin_row` so the actor's row is on hand for the activity log. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:75` |
 | `delete_user_route()` | Admin-only `DELETE /api/v1/users/{user_id}` (`204`), gated by `require_admin_row`. Self-targeting → `409 self_target`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:107` |
-| `list_agents_route()` | `GET /api/v1/agents` (`listAgents`) behind `require_user` → `{data: AgentSummary[]}`, org-scoped in SQL. Viewers may read; an org with no agents gets an empty list, never a 404. | `backend/src/api/routers/agents.py:47` |
-| `read_agent_route()` | `GET /api/v1/agents/{agent_id}` behind `require_user` → `AgentDetail`, which adds the Pi's currently reported `available_subnets`. Unknown **and** foreign ids both → `404` with the same body. | `backend/src/api/routers/agents.py:60` |
-| `update_agent_target_subnet_route()` | Admin-only `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) → the full `AgentDetail`, so the SPA needs no refetch. Resolution order is fixed: missing/foreign row → `404`, no `hello` report → `409 device_offline`, value the Pi did not report → `422 subnet_not_reported`, then commit. | `backend/src/api/routers/agents.py:72` |
-| `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → the reported-subnet check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `SubnetNotReportedError` → `422 subnet_not_reported`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:108` |
+| `list_agents_route()` | `GET /api/v1/agents` (`listAgents`) behind `require_user` → `{data: AgentSummary[]}`, org-scoped in SQL. Viewers may read; an org with no agents gets an empty list, never a 404. | `backend/src/api/routers/agents.py:49` |
+| `read_agent_route()` | `GET /api/v1/agents/{agent_id}` behind `require_user` → `AgentDetail`, which adds the Pi's currently reported `available_subnets`. Unknown **and** foreign ids both → `404` with the same body. | `backend/src/api/routers/agents.py:62` |
+| `update_agent_target_subnet_route()` | Admin-only `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) → the full `AgentDetail`, so the SPA needs no refetch. Resolution order is fixed: missing/foreign row → `404`, no `hello` report → `409 device_offline`, value the Pi did not report → `422 subnet_not_reported`, then commit. | `backend/src/api/routers/agents.py:74` |
+| `revoke_agent_route()` | Admin-only `POST /api/v1/agents/{agent_id}/revoke`. Runs the sync DB write in a threadpool, commits before looking up the socket, then closes it with `4001 revoked`. Missing and foreign ids both return 404. | `backend/src/api/routers/agents.py:107` |
+| `restore_agent_route()` | Admin-only `POST /api/v1/agents/{agent_id}/restore`. Clears revocation and returns the full detail; repeat restore is a 200 no-op. | `backend/src/api/routers/agents.py:128` |
+| `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → the reported-subnet check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `SubnetNotReportedError` → `422 subnet_not_reported`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:144` |
 | `read_command()` | `GET /api/v1/commands/{command_id}` → `get_command_detail(...)` → `CommandDetail`, or `404` for an unknown id or another org's command. **Pure read** — the sweep is deliberately not called here. | `backend/src/api/routers/commands.py:17` |
-| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` now drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:140` |
+| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:181` |
 
 ## How it connects
 
@@ -90,6 +92,9 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 - **A foreign row is 404, never 403.** The read service returns `None` for a row outside the
   caller's org and the router turns that into a 404; answering 403 would confirm the row exists in
   some other tenant.
+- **Revoke commits before closing the socket.** A frame or delivery that races the close therefore
+  sees `revoked_at` through the existing DMI-97 gates. Restore does no socket work; the Pi's hourly
+  redial is the recovery path.
 - **Business reads and identity-admin reads use different gates.** Scan/host/finding reads and
   `/users/me` accept viewers; `GET /users`, role changes, invite listing/revocation, and invite
   creation require `require_admin`. The four admin **mutations** (role change, member removal,
@@ -158,3 +163,4 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 [9] [docs/adr/ADR-017-account-removal.md](../../../docs/adr/ADR-017-account-removal.md)
 [10] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
 [11] [specs/031-agents-read-surface-target-subnet](../../../specs/031-agents-read-surface-target-subnet/TRUTH.md)
+[12] [specs/048-parked-channel-recovery](../../../specs/048-parked-channel-recovery/TRUTH.md)
