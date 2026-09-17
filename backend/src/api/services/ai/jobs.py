@@ -35,6 +35,11 @@ from api.services.ai.validation import (
     sanitize_scan_ai_analysis,
     validate_provider_analysis,
 )
+from api.services.ai.writing import (
+    WRITING_SKILL_VERSION,
+    WritingStyleViolation,
+    lint_provider_analysis,
+)
 from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
@@ -152,6 +157,7 @@ def request_scan_ai_analysis(
         status="pending",
         context_version=AI_CONTEXT_VERSION,
         prompt_version=AI_PROMPT_VERSION,
+        writing_skill_version=WRITING_SKILL_VERSION,
         created_at=current_time,
         updated_at=current_time,
     )
@@ -256,18 +262,29 @@ def _process_claimed_analysis(
         context = build_scan_ai_context(
             session, scan, max_findings=max_findings
         )
-        provider_analysis = (
-            None if context is None else provider.analyze_scan(context)
-        )
+        provider_analysis = None
+        if context is not None:
+            provider_analysis = provider.analyze_scan(context)
+            try:
+                provider_analysis = validate_provider_analysis(
+                    context, provider_analysis
+                )
+                lint_provider_analysis(provider_analysis)
+            except WritingStyleViolation as exc:
+                provider_analysis = provider.repair_analysis(context, exc.codes)
+                provider_analysis = validate_provider_analysis(
+                    context, provider_analysis
+                )
+                lint_provider_analysis(provider_analysis)
         analysis = (
             None
             if context is None or provider_analysis is None
-            else materialize_scan_ai_analysis(
-                context, validate_provider_analysis(context, provider_analysis)
-            )
+            else materialize_scan_ai_analysis(context, provider_analysis)
         )
     except AIProviderError as exc:
         return fail(exc.code, exc.retryable)
+    except WritingStyleViolation:
+        return fail("style_violation", False)
     except ScanAINotReadyError:
         return fail("invalid_analysis", False)
     except ValueError:

@@ -8,9 +8,10 @@ from pydantic import ValidationError
 from api.core.config import Settings
 from api.schemas.ai import ProviderScanAIAnalysis
 from api.services.ai.context import ScanAIContext
+from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "2"
+AI_PROMPT_VERSION = "3"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied
@@ -21,6 +22,7 @@ When evidence is insufficient, state that explicitly as uncertainty. Explain the
 result clearly for a non-specialist, keep recommendations defensive and high-level,
 and return exactly the requested structured schema.
 Write all explanatory prose in English.
+{writing_skill_instructions}
 """
 
 USER_PROMPT = """Analyze the completed scan using only the JSON context below.
@@ -60,15 +62,46 @@ class GroqProvider:
         self.client = client
 
     def analyze_scan(self, context: ScanAIContext) -> ProviderScanAIAnalysis:
+        return self._analyze(
+            context,
+            USER_PROMPT.format(context_json=context.model_dump_json()),
+        )
+
+    def repair_analysis(
+        self,
+        context: ScanAIContext,
+        violation_codes: tuple[str, ...],
+    ) -> ProviderScanAIAnalysis:
+        return self._analyze(
+            context,
+            """Write the analysis again using the same JSON context. The previous draft
+violated these writing rules: {violation_codes}. Return the requested schema only.
+
+SCAN_CONTEXT_JSON:
+{context_json}
+""".format(
+                violation_codes=", ".join(violation_codes),
+                context_json=context.model_dump_json(),
+            ),
+        )
+
+    def _analyze(
+        self,
+        context: ScanAIContext,
+        user_prompt: str,
+    ) -> ProviderScanAIAnalysis:
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT.format(
+                        writing_skill_instructions=WRITING_SKILL_INSTRUCTIONS
+                    ),
+                },
                 {
                     "role": "user",
-                    "content": USER_PROMPT.format(
-                        context_json=context.model_dump_json()
-                    ),
+                    "content": user_prompt,
                 },
             ],
             "response_format": {

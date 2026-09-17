@@ -82,6 +82,7 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["include_reasoning"] is False
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
+    assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
     assert '"context_version":"2"' in payload["messages"][1]["content"]
     assert "scan_id" not in payload["messages"][1]["content"]
@@ -90,6 +91,34 @@ def test_groq_provider_requests_strict_structured_output():
 def test_system_prompt_requests_english_prose():
     assert "English" in SYSTEM_PROMPT
     assert "Portuguese" not in SYSTEM_PROMPT
+
+
+def test_groq_provider_repair_sends_codes_not_rejected_prose():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": _analysis().model_dump_json(),
+                        }
+                    }
+                ]
+            },
+        )
+
+    _provider(handler).repair_analysis(
+        _context(),
+        ("executive_summary:safety_certification",),
+    )
+
+    repair_prompt = captured["payload"]["messages"][1]["content"]
+    assert "executive_summary:safety_certification" in repair_prompt
+    assert "Your network is safe." not in repair_prompt
 
 
 def test_groq_provider_maps_timeout_without_leaking_details():

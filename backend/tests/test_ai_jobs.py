@@ -37,7 +37,7 @@ def _analysis() -> ProviderScanAIAnalysis:
 
 def _grounded_analysis(finding_ref: str = "finding_1") -> ProviderScanAIAnalysis:
     return ProviderScanAIAnalysis(
-        executive_summary="One important issue needs attention.",
+        executive_summary="One vulnerability needs attention.",
         overall_assessment="The observed risk is high but limited in scope.",
         plain_language_summary="One exposed service should be reviewed soon.",
         priority_actions=[
@@ -299,6 +299,61 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     assert record.attempts == 2
     assert record.last_error == "provider_timeout"
     assert record.completed_at is not None
+
+
+def test_style_violation_is_repaired_once(administrative_session):
+    scan, _ = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    rejected = _grounded_analysis()
+    rejected.executive_summary = "Your network is safe."
+    repaired = _grounded_analysis()
+    received_codes = []
+
+    class RepairingProvider:
+        def analyze_scan(self, context):
+            return rejected
+
+        def repair_analysis(self, context, violation_codes):
+            received_codes.extend(violation_codes)
+            return repaired
+
+    assert (
+        _run(
+            administrative_session,
+            RepairingProvider(),
+            now=datetime.now(timezone.utc),
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert "executive_summary:safety_certification" in received_codes
+
+
+def test_second_style_violation_fails_the_job(administrative_session):
+    scan, _ = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    rejected = _grounded_analysis()
+    rejected.executive_summary = "Your network is safe."
+
+    class InvalidRepairProvider:
+        def analyze_scan(self, context):
+            return rejected
+
+        def repair_analysis(self, context, violation_codes):
+            return rejected
+
+    assert (
+        _run(
+            administrative_session,
+            InvalidRepairProvider(),
+            now=datetime.now(timezone.utc),
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "failed"
+    assert record.last_error == "style_violation"
 
 
 def test_retry_waits_for_configured_delay(administrative_session):

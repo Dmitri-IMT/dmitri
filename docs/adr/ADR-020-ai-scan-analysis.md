@@ -81,6 +81,19 @@ deterministic risk facts. Every KEV finding supplied to the model must be refere
 by an action; otherwise the analysis is rejected. The model cannot downgrade or
 reorder those actions.
 
+### 8. Customer-facing writing contract
+
+The provider receives a versioned, application-owned English writing skill with
+short plain-language prose rules. After the structural and grounding checks, the
+backend deterministically rejects text that exceeds field limits, uses raw
+identifiers or markup, certifies safety, or violates the agreed vocabulary and
+style patterns. Each analysis stores the writing-skill version that it passed.
+
+On the first style failure, the worker sends only violation codes and the original
+bounded context for one repair attempt; it never echoes rejected prose. A second
+style failure ends the job with `style_violation`, without changing deterministic
+scan data.
+
 
 ## Consequences
 
@@ -115,7 +128,7 @@ scan analysis:
 | [DMI-165](https://linear.app/peirce/issue/DMI-165) | D5. Refresh an open scan page after late enrichment |
 | [DMI-166](https://linear.app/peirce/issue/DMI-166) | D3. Bounded child tasks and synthesizer |
 | [DMI-167](https://linear.app/peirce/issue/DMI-167) | D8. Prompt-injection containment |
-| [DMI-168](https://linear.app/peirce/issue/DMI-168) | D9. Writing skill and linter |
+| [DMI-168](https://linear.app/peirce/issue/DMI-168) | D9. Writing skill and linter - completed |
 | [DMI-169](https://linear.app/peirce/issue/DMI-169) | Research assistant with web search |
 | [DMI-170](https://linear.app/peirce/issue/DMI-170) | DESIGN follow-ups for the AI card |
 

@@ -122,6 +122,7 @@ def test_analysis_request_creates_one_pending_job(
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.scan_id == seeded["scan"].scan_id
     assert record.status == "pending"
+    assert record.writing_skill_version == "1"
 
     repeated = client.post(url, headers=headers)
     assert repeated.status_code == 409

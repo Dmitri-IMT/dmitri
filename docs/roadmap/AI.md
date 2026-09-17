@@ -28,6 +28,11 @@ placeholders and restores local IDs and display values before persistence.
 DMI-167 is complete: generated text is normalized before storage and before display,
 while action priority and KEV coverage are checked deterministically in the backend.
 
+DMI-168 is complete: a versioned English writing skill is included in each Groq
+request and a backend linter enforces prose limits, safe vocabulary, plain-text
+rendering, and no unsupported safety claims. One repair attempt receives only
+violation codes and the original bounded context; a second violation fails safely.
+
 
 ## Product decision
 
