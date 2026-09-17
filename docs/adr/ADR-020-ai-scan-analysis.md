@@ -94,6 +94,19 @@ bounded context for one repair attempt; it never echoes rejected prose. A second
 style failure ends the job with `style_violation`, without changing deterministic
 scan data.
 
+### 9. Bounded child analysis and synthesis
+
+Large scans use a map-reduce shape. The backend splits the bounded placeholder
+context into independent finding chunks. Each Groq child call returns a smaller
+strict schema and passes grounding, normalization, and writing validation before
+it can reach synthesis. A child failure is isolated and its finding references
+are recorded as failed coverage.
+
+The synthesizer receives aggregate scan counts, validated child records, and the
+failed-reference list. It does not receive the original finding context or raw
+scanner text. The persisted job records analyzed, failed, and total supplied
+finding counts while keeping the public one-analysis-per-scan API.
+
 
 ## Consequences
 
@@ -126,7 +139,7 @@ scan analysis:
 | [DMI-163](https://linear.app/peirce/issue/DMI-163) | D1. OpenAI GPT-5.6 Luna, Responses API |
 | [DMI-164](https://linear.app/peirce/issue/DMI-164) | D5. Independent KEV/EPSS/NVD retries |
 | [DMI-165](https://linear.app/peirce/issue/DMI-165) | D5. Refresh an open scan page after late enrichment |
-| [DMI-166](https://linear.app/peirce/issue/DMI-166) | D3. Bounded child tasks and synthesizer |
+| [DMI-166](https://linear.app/peirce/issue/DMI-166) | D3. Bounded child tasks and synthesizer - completed |
 | [DMI-167](https://linear.app/peirce/issue/DMI-167) | D8. Prompt-injection containment |
 | [DMI-168](https://linear.app/peirce/issue/DMI-168) | D9. Writing skill and linter - completed |
 | [DMI-169](https://linear.app/peirce/issue/DMI-169) | Research assistant with web search |

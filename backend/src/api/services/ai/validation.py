@@ -8,6 +8,7 @@ from api.schemas.ai import (
     AIProviderRecommendedAction,
     AIRecommendedAction,
     ProviderScanAIAnalysis,
+    ProviderScanAIChildAnalysis,
     ScanAIAnalysis,
 )
 from api.services.ai.context import AIFindingContext, ScanAIContext
@@ -32,6 +33,46 @@ def validate_provider_analysis(
                 priority=_priority_for_references(
                     context, action.related_finding_refs
                 ),
+                title=_normalize_text(action.title),
+                description=_normalize_text(action.description),
+                related_finding_refs=action.related_finding_refs,
+            )
+            for action in analysis.priority_actions
+        ],
+        important_findings=[
+            AIProviderFindingExplanation(
+                finding_ref=item.finding_ref,
+                why_it_matters=_normalize_text(item.why_it_matters),
+                plain_language_explanation=_normalize_text(
+                    item.plain_language_explanation
+                ),
+                recommendation=_normalize_text(item.recommendation),
+                evidence_used=[_normalize_text(value) for value in item.evidence_used],
+                uncertainty=(
+                    _normalize_text(item.uncertainty)
+                    if item.uncertainty is not None
+                    else None
+                ),
+            )
+            for item in analysis.important_findings
+        ],
+        uncertainties=[_normalize_text(value) for value in analysis.uncertainties],
+    )
+    _require_kev_coverage(context, normalized)
+    normalized.priority_actions.sort(
+        key=lambda action: _PRIORITY_ORDER[action.priority]
+    )
+    return normalized
+
+
+def validate_provider_child_analysis(
+    context: ScanAIContext,
+    analysis: ProviderScanAIChildAnalysis,
+) -> ProviderScanAIChildAnalysis:
+    normalized = ProviderScanAIChildAnalysis(
+        priority_actions=[
+            AIProviderRecommendedAction(
+                priority=_priority_for_references(context, action.related_finding_refs),
                 title=_normalize_text(action.title),
                 description=_normalize_text(action.description),
                 related_finding_refs=action.related_finding_refs,
@@ -101,7 +142,7 @@ def sanitize_scan_ai_analysis(analysis: ScanAIAnalysis) -> ScanAIAnalysis:
 
 def _require_kev_coverage(
     context: ScanAIContext,
-    analysis: ProviderScanAIAnalysis,
+    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
 ) -> None:
     kev_references = {
         finding.finding_ref for finding in context.top_findings if finding.is_kev

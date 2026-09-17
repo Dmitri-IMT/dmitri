@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from api.schemas.ai import ProviderScanAIAnalysis
+from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
 
 WRITING_SKILL_VERSION = "1"
 
@@ -98,6 +98,16 @@ class WritingStyleViolation(ValueError):
 
 
 def lint_provider_analysis(analysis: ProviderScanAIAnalysis) -> None:
+    _lint_prose(analysis)
+
+
+def lint_provider_child_analysis(analysis: ProviderScanAIChildAnalysis) -> None:
+    _lint_prose(analysis)
+
+
+def _lint_prose(
+    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
+) -> None:
     violations: list[str] = []
     prose = list(_prose_fields(analysis))
     for field, value, limit in prose:
@@ -112,13 +122,17 @@ def lint_provider_analysis(analysis: ProviderScanAIAnalysis) -> None:
 
 
 def _prose_fields(
-    analysis: ProviderScanAIAnalysis,
+    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
 ) -> list[tuple[str, str, int]]:
-    values = [
-        ("executive_summary", analysis.executive_summary, 280),
-        ("overall_assessment", analysis.overall_assessment, 280),
-        ("plain_language_summary", analysis.plain_language_summary, 280),
-    ]
+    values: list[tuple[str, str, int]] = []
+    if isinstance(analysis, ProviderScanAIAnalysis):
+        values.extend(
+            [
+                ("executive_summary", analysis.executive_summary, 280),
+                ("overall_assessment", analysis.overall_assessment, 280),
+                ("plain_language_summary", analysis.plain_language_summary, 280),
+            ]
+        )
     for index, action in enumerate(analysis.priority_actions):
         values.extend(
             [

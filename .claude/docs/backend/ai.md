@@ -44,11 +44,12 @@ also `409`.
 | `GroqProvider.analyze_scan()` / `repair_analysis()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured placeholder-only provider analysis; one style repair gets codes and the original context, never rejected prose. Errors raise `AIProviderError(code, retryable=...)`. | `backend/src/api/services/ai/groq.py` |
 | `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"3"`. English prose only; context is untrusted evidence and includes the writing skill. | `backend/src/api/services/ai/groq.py` |
 | `lint_provider_analysis()` | Deterministically enforces the versioned writing skill after structural validation. A second violation is terminal `style_violation`. | `backend/src/api/services/ai/writing.py` |
+| `run_bounded_analysis()` | Splits the placeholder context into independent chunks, validates each child result, and sends only validated child records plus aggregate counts to the synthesizer. | `backend/src/api/services/ai/analyzer.py` |
 | `request_scan_ai_analysis()` | Org-scoped scan; `unavailable` if AI off or scan not completed; insert/`failed`→`pending`; else already-requested. | `backend/src/api/services/ai/jobs.py:102` |
 | `get_scan_ai_analysis()` | `unavailable` / `not_requested` / row status. Foreign scan → `None` (404). | `backend/src/api/services/ai/jobs.py:72` |
 | `scan_ai_analysis_response()` | Picks the response variant from `record.status`. | `backend/src/api/services/ai/jobs.py:47` |
 | `claim_ai_analyses()` | Calls the shared [`claim_jobs`](/backend/services.md) with running status `processing` and an extra filter: no `enrichment_jobs` in `pending`/`running` for that `scan_id`. | `backend/src/api/services/ai/jobs.py:197` |
-| `process_ready_ai_analyses()` | Claim, build context, call the provider, materialise placeholders locally, check grounding, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
+| `process_ready_ai_analyses()` | Claim, build context, run bounded child tasks plus synthesis, materialise placeholders locally, check grounding, persist coverage, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
 | `_check_grounded()` | Every finding id in explanations and actions must be in the context; no duplicate explanations. Failure → `invalid_analysis`, not retried. | `backend/src/api/services/ai/jobs.py:279` |
 | `build_scan_ai_context()` | Loads `ScanRecord` (not Scan Detail) plus `get_scan_risk_summary`, a host count and EPSS/KEV. Caps findings at `AI_MAX_FINDINGS` (default 10, max 15). Raises `ScanAINotReadyError` if the scan is not completed. | `backend/src/api/services/ai/context.py:82` |
 | `ScanAIContext` / `AIFindingContext` | Provider context with public facts and request-local placeholders only. | `backend/src/api/services/ai/context.py` |
@@ -56,7 +57,7 @@ also `409`.
 | `run_ai_worker_loop()` / `run_ai_worker_once()` | In `services/worker.py`. Own session and `AI_POLL_INTERVAL_SECONDS` (default 5); batch size 1; no command sweep. | `backend/src/api/services/worker.py:46`, `:57` |
 | `ScanAIAnalysis` | Wire body of a completed analysis. | `backend/src/api/schemas/ai.py:33` |
 | `ScanAIAnalysisResponse` | HTTP union keyed on `status`: `Unavailable` / `NotRequested` (`scan_id`, `status` only), `Queued` (`pending`/`processing`, job fields), `Failed` (+`completed_at`), `Completed` (+`completed_at`, `analysis`). | `backend/src/api/schemas/ai.py:86` |
-| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; records prompt/context/writing-skill versions; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`. | `backend/src/api/models/persistence.py` |
+| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; records prompt/context/writing-skill versions and analyzed/failed/total finding coverage; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`. | `backend/src/api/models/persistence.py` |
 
 ## How it connects
 

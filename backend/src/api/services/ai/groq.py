@@ -6,7 +6,7 @@ import httpx
 from pydantic import ValidationError
 
 from api.core.config import Settings
-from api.schemas.ai import ProviderScanAIAnalysis
+from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
 from api.services.ai.context import ScanAIContext
 from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 
@@ -65,6 +65,19 @@ class GroqProvider:
         return self._analyze(
             context,
             USER_PROMPT.format(context_json=context.model_dump_json()),
+            ProviderScanAIAnalysis,
+        )
+
+    def analyze_chunk(self, context: ScanAIContext) -> ProviderScanAIChildAnalysis:
+        return self._analyze(
+            context,
+            """Analyze only the bounded finding chunk in the JSON context.
+Return actions, explanations, and limitations for these findings only.
+
+CHUNK_CONTEXT_JSON:
+{context_json}
+""".format(context_json=context.model_dump_json()),
+            ProviderScanAIChildAnalysis,
         )
 
     def repair_analysis(
@@ -83,13 +96,67 @@ SCAN_CONTEXT_JSON:
                 violation_codes=", ".join(violation_codes),
                 context_json=context.model_dump_json(),
             ),
+            ProviderScanAIAnalysis,
+        )
+
+    def repair_chunk(
+        self,
+        context: ScanAIContext,
+        violation_codes: tuple[str, ...],
+    ) -> ProviderScanAIChildAnalysis:
+        return self._analyze(
+            context,
+            """Rewrite this bounded finding chunk using only the JSON context.
+The previous draft violated these writing rules: {violation_codes}.
+Return the requested child schema only.
+
+CHUNK_CONTEXT_JSON:
+{context_json}
+""".format(
+                violation_codes=", ".join(violation_codes),
+                context_json=context.model_dump_json(),
+            ),
+            ProviderScanAIChildAnalysis,
+        )
+
+    def synthesize_scan(
+        self,
+        context: ScanAIContext,
+        child_results: list[dict[str, object]],
+        failed_refs: tuple[str, ...],
+    ) -> ProviderScanAIAnalysis:
+        synthesis_context = {
+            "aggregate": {
+                "host_count": context.host_count,
+                "total_findings": context.total_findings,
+                "scored_findings": context.scored_findings,
+                "confirmed_findings": context.confirmed_findings,
+                "kev_findings": context.kev_findings,
+                "severity": context.severity.model_dump(mode="json"),
+            },
+            "validated_child_results": child_results,
+            "failed_finding_refs": list(failed_refs),
+        }
+        return self._analyze(
+            context,
+            """Synthesize one scan analysis from the validated child results below.
+Do not add facts that are absent from those results. Mention failed finding refs as
+uncertain limitations when present. Return the requested scan schema only.
+
+SYNTHESIS_CONTEXT_JSON:
+{context_json}
+""".format(
+                context_json=json.dumps(synthesis_context, separators=(",", ":"))
+            ),
+            ProviderScanAIAnalysis,
         )
 
     def _analyze(
         self,
         context: ScanAIContext,
         user_prompt: str,
-    ) -> ProviderScanAIAnalysis:
+        response_schema: type[ProviderScanAIAnalysis | ProviderScanAIChildAnalysis],
+    ) -> ProviderScanAIAnalysis | ProviderScanAIChildAnalysis:
         payload = {
             "model": self.model,
             "messages": [
@@ -109,7 +176,7 @@ SCAN_CONTEXT_JSON:
                 "json_schema": {
                     "name": "scan_ai_analysis",
                     "strict": True,
-                    "schema": ProviderScanAIAnalysis.model_json_schema(),
+                    "schema": response_schema.model_json_schema(),
                 },
             },
             "max_completion_tokens": self.max_output_tokens,
@@ -130,7 +197,7 @@ SCAN_CONTEXT_JSON:
             envelope = response.json()
             content = envelope["choices"][0]["message"]["content"]
             decoded = json.loads(content)
-            return ProviderScanAIAnalysis.model_validate(decoded)
+            return response_schema.model_validate(decoded)
         except (
             KeyError,
             IndexError,

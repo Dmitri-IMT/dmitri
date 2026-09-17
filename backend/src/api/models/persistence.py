@@ -357,6 +357,9 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     context_version: str
     prompt_version: str
     writing_skill_version: str = "1"
+    analyzed_findings: int = 0
+    failed_findings: int = 0
+    total_findings: int = 0
     context_hash: str | None = None
     attempts: int = 0
     last_error: str | None = None

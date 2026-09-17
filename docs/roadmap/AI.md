@@ -33,6 +33,11 @@ request and a backend linter enforces prose limits, safe vocabulary, plain-text
 rendering, and no unsupported safety claims. One repair attempt receives only
 violation codes and the original bounded context; a second violation fails safely.
 
+DMI-166 is complete: large bounded contexts can be split into independent finding
+chunks, validated child results can be synthesized by Groq, and each job persists
+analyzed, failed, and total finding coverage. The public contract remains one
+analysis per scan.
+
 
 ## Product decision
 

@@ -145,6 +145,9 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
         "uncertainties": _analysis().uncertainties,
     }
     assert record.context_hash is not None and len(record.context_hash) == 64
+    assert record.analyzed_findings == 0
+    assert record.failed_findings == 0
+    assert record.total_findings == 0
     assert record.attempts == 1
     assert len(received) == 1
 

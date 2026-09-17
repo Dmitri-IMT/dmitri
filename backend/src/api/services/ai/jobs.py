@@ -23,6 +23,7 @@ from api.schemas.ai import (
     ScanAIAnalysisResponse,
     ScanAIAnalysisUnavailable,
 )
+from api.services.ai.analyzer import AnalysisCoverage, run_bounded_analysis
 from api.services.ai.context import (
     AI_CONTEXT_VERSION,
     ScanAIContext,
@@ -263,8 +264,9 @@ def _process_claimed_analysis(
             session, scan, max_findings=max_findings
         )
         provider_analysis = None
+        coverage = AnalysisCoverage(0, 0, 0)
         if context is not None:
-            provider_analysis = provider.analyze_scan(context)
+            provider_analysis, coverage = run_bounded_analysis(provider, context)
             try:
                 provider_analysis = validate_provider_analysis(
                     context, provider_analysis
@@ -299,6 +301,9 @@ def _process_claimed_analysis(
 
     record.status = "completed"
     record.analysis_json = analysis.model_dump(mode="json")
+    record.analyzed_findings = coverage.analyzed_findings
+    record.failed_findings = coverage.failed_findings
+    record.total_findings = coverage.total_findings
     record.context_hash = _context_hash(context)
     record.completed_at = now
     session.add(record)

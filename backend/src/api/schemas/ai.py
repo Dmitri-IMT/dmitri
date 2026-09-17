@@ -77,6 +77,20 @@ class ProviderScanAIAnalysis(BaseModel):
     uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
 
 
+class ProviderScanAIChildAnalysis(BaseModel):
+    """Structured result for one bounded finding chunk."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    priority_actions: Annotated[
+        list[AIProviderRecommendedAction], Field(max_length=15)
+    ]
+    important_findings: Annotated[
+        list[AIProviderFindingExplanation], Field(max_length=15)
+    ]
+    uncertainties: Annotated[list[AIShortText], Field(max_length=20)]
+
+
 class ScanAIAnalysisUnavailable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
