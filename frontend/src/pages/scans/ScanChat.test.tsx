@@ -41,4 +41,27 @@ describe('ScanChat', () => {
       screen.getByText('O scan não confirma exploração ativa.'),
     ).toBeVisible()
   })
+
+  it('explains when the provider token limit was reached', async () => {
+    vi.mocked(askScanAI).mockRejectedValueOnce({
+      response: {
+        data: {
+          error: {
+            code: 'ai_rate_limited',
+            message:
+              'Limite de tokens da IA atingido. Tente novamente em aproximadamente 8 segundos.',
+          },
+        },
+      },
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ScanChat scanId="scan-1" />)
+
+    await user.type(screen.getByLabelText('Sua pergunta'), 'O que aconteceu?')
+    await user.click(screen.getByRole('button', { name: 'Perguntar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Limite de tokens da IA atingido. Tente novamente em aproximadamente 8 segundos.',
+    )
+  })
 })

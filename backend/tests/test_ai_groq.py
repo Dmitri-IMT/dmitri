@@ -153,6 +153,38 @@ def test_groq_provider_maps_http_errors(status, code, retryable):
     assert "secret" not in str(captured.value)
 
 
+def test_groq_provider_classifies_oversized_context_without_retry_wait():
+    provider = _provider(
+        lambda request: httpx.Response(
+            413,
+            headers={"x-ratelimit-reset-tokens": "7.66s"},
+            json={"error": {"message": "request too large"}},
+        )
+    )
+
+    with pytest.raises(AIProviderError) as captured:
+        provider.analyze_scan(_context())
+
+    assert captured.value.code == "provider_context_too_large"
+    assert captured.value.retryable is False
+
+
+def test_groq_provider_exposes_rate_limit_wait_time():
+    provider = _provider(
+        lambda request: httpx.Response(
+            429,
+            headers={"x-ratelimit-reset-tokens": "7.66s"},
+            json={"error": {"message": "rate limited"}},
+        )
+    )
+
+    with pytest.raises(AIProviderError) as captured:
+        provider.analyze_scan(_context())
+
+    assert captured.value.code == "provider_rate_limited"
+    assert captured.value.retry_after_seconds == 8
+
+
 def test_groq_provider_rejects_invalid_payload():
     provider = _provider(
         lambda request: httpx.Response(

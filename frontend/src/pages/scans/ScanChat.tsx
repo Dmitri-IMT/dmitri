@@ -8,7 +8,7 @@ function ScanChat({ scanId }: { scanId: string }) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<string | null>(null)
   const [uncertainties, setUncertainties] = useState<string[]>([])
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -16,13 +16,13 @@ function ScanChat({ scanId }: { scanId: string }) {
     const trimmed = question.trim()
     if (trimmed.length < 3 || isSending) return
     setIsSending(true)
-    setError(false)
+    setError(null)
     try {
       const response = await askScanAI(scanId, trimmed)
       setAnswer(response.answer)
       setUncertainties(response.uncertainties)
-    } catch {
-      setError(true)
+    } catch (caughtError) {
+      setError(readChatErrorMessage(caughtError))
     } finally {
       setIsSending(false)
     }
@@ -77,12 +77,28 @@ function ScanChat({ scanId }: { scanId: string }) {
         )}
         {error && (
           <p className="text-body-sm text-destructive" role="alert">
-            Não foi possível obter uma resposta agora. Tente novamente.
+            {error}
           </p>
         )}
       </CardContent>
     </Card>
   )
+}
+
+function readChatErrorMessage(error: unknown): string {
+  const response = (
+    error as {
+      response?: { data?: { error?: { code?: string; message?: string } } }
+    }
+  ).response
+  if (
+    (response?.data?.error?.code === 'ai_rate_limited' ||
+      response?.data?.error?.code === 'ai_context_too_large') &&
+    response.data.error.message
+  ) {
+    return response.data.error.message
+  }
+  return 'Não foi possível obter uma resposta agora. Tente novamente.'
 }
 
 export default ScanChat

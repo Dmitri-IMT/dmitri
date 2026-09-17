@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 
 import httpx
 from pydantic import ValidationError
@@ -39,10 +41,17 @@ SCAN_CONTEXT_JSON:
 
 
 class AIProviderError(RuntimeError):
-    def __init__(self, code: str, *, retryable: bool) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        retryable: bool,
+        retry_after_seconds: int | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.retryable = retryable
+        self.retry_after_seconds = retry_after_seconds
 
 
 class GroqProvider:
@@ -217,7 +226,7 @@ SCAN_CONTEXT_JSON:
             raise AIProviderError("provider_unavailable", retryable=True) from exc
 
         if response.status_code >= 400:
-            raise _http_error(response.status_code)
+            raise _http_error(response)
 
         try:
             envelope = response.json()
@@ -267,7 +276,7 @@ SCAN_CONTEXT_JSON:
         except httpx.RequestError as exc:
             raise AIProviderError("provider_unavailable", retryable=True) from exc
         if response.status_code >= 400:
-            raise _http_error(response.status_code)
+            raise _http_error(response)
         try:
             content = response.json()["choices"][0]["message"]["content"]
             return ProviderAIChatResponse.model_validate(json.loads(content))
@@ -294,7 +303,13 @@ SCAN_CONTEXT_JSON:
             return client.post(url, headers=headers, json=payload)
 
 
-def _http_error(status_code: int) -> AIProviderError:
+def _http_error(response: httpx.Response) -> AIProviderError:
+    status_code = response.status_code
+    if status_code == 413:
+        return AIProviderError(
+            "provider_context_too_large",
+            retryable=False,
+        )
     if status_code in {401, 403}:
         return AIProviderError("provider_authentication_failed", retryable=False)
     if status_code in {400, 422}:
@@ -302,10 +317,27 @@ def _http_error(status_code: int) -> AIProviderError:
     if status_code in {408, 499}:
         return AIProviderError("provider_timeout", retryable=True)
     if status_code == 429:
-        return AIProviderError("provider_rate_limited", retryable=True)
+        return AIProviderError(
+            "provider_rate_limited",
+            retryable=True,
+            retry_after_seconds=_retry_after_seconds(response),
+        )
     if status_code == 498 or status_code >= 500:
         return AIProviderError("provider_unavailable", retryable=True)
     return AIProviderError("provider_request_rejected", retryable=False)
+
+
+def _retry_after_seconds(response: httpx.Response) -> int:
+    raw = response.headers.get("x-ratelimit-reset-tokens") or response.headers.get(
+        "retry-after"
+    )
+    if raw:
+        match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*([smh]?)\s*", raw)
+        if match:
+            value = float(match.group(1))
+            multiplier = {"": 1, "s": 1, "m": 60, "h": 3600}[match.group(2)]
+            return max(1, math.ceil(value * multiplier))
+    return 60
 
 
 def ai_is_available(settings: Settings) -> bool:

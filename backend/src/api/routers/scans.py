@@ -214,6 +214,24 @@ def ask_scan_ai(
         )
         return materialize_chat_response(answer, finding_reference_map(risk))
     except (AIProviderError, ValueError) as exc:
+        if (
+            isinstance(exc, AIProviderError)
+            and exc.code == "provider_context_too_large"
+        ):
+            raise ApiError(
+                413,
+                "O contexto deste scan é grande demais para uma pergunta. "
+                "Tente uma pergunta mais específica.",
+                code="ai_context_too_large",
+            ) from exc
+        if isinstance(exc, AIProviderError) and exc.code == "provider_rate_limited":
+            wait_seconds = exc.retry_after_seconds or 60
+            raise ApiError(
+                429,
+                "Limite temporário de tokens da IA atingido. "
+                f"Tente novamente em aproximadamente {wait_seconds} segundos.",
+                code="ai_rate_limited",
+            ) from exc
         raise ApiError(
             502,
             "The AI assistant could not answer this question.",
