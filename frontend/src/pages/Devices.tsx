@@ -3,6 +3,7 @@ import { listAgents } from '@/api/agents'
 import { queryKeys } from '@/api/queryKeys'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
+import { readAgentPresence } from '@/lib/agentPresence'
 import { deviceListColumns } from '@/pages/agents/deviceListColumns'
 
 function Devices() {
@@ -42,7 +43,9 @@ function Devices() {
           to: (agent) => `/devices/${agent.agent_id}`,
           label: (agent) => `Open ${agent.display_name}`,
         }}
-        rowTone={(agent) => (agent.online ? undefined : 'muted')}
+        rowTone={(agent) =>
+          readAgentPresence(agent).kind === 'online' ? undefined : 'muted'
+        }
       />
     </div>
   )

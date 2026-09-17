@@ -11,6 +11,7 @@ type AvailableSubnet = components['schemas']['AvailableSubnet']
 
 type Props = {
   agent: AgentDetail
+  interactive: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void
@@ -45,7 +46,13 @@ function ChooserSession({ agent, onSaved }: ChooserSessionProps) {
   )
 }
 
-function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
+function TargetSubnetSection({
+  agent,
+  interactive,
+  open,
+  onOpenChange,
+  onSaved,
+}: Props) {
   const { user } = useSession()
   const target = agent.target_subnet
     ? findAvailableSubnet(agent.available_subnets, agent.target_subnet)
@@ -66,7 +73,7 @@ function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
                 ? 'No network chosen yet. Ask your admin to choose one.'
                 : 'No network chosen yet.'}
           </p>
-          {agent.target_subnet && (
+          {interactive && agent.target_subnet && (
             <AdminOnly>
               <Button
                 type="button"
@@ -80,7 +87,7 @@ function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
           )}
         </div>
       )}
-      {open && (
+      {interactive && open && (
         <AdminOnly>
           <ChooserSession
             agent={agent}

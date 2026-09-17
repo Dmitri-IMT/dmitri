@@ -9,8 +9,10 @@ import ReadDetailGate from '@/components/ReadDetailGate'
 import { useScanCommand } from '@/hooks/useScanCommand'
 import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
+import { readAgentPresence } from '@/lib/agentPresence'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
 import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
+import DeviceRevocation from '@/pages/agents/DeviceRevocation'
 import ScanControl from '@/pages/agents/ScanControl'
 import ScanTypeTabs, { ScanTypeReadOnly } from '@/pages/agents/ScanTypeTabs'
 import TargetSubnetSection from '@/pages/agents/TargetSubnetSection'
@@ -25,12 +27,22 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
   const [selectedMode, setSelectedMode] = useState<ScanMode>(DEFAULT_SCAN_MODE)
   const scanCommand = useScanCommand(agent)
   const isAdmin = user?.role === 'admin'
-  const needsNetworkChoice = isAdmin && agent.target_subnet == null
+  const interactive = readAgentPresence(agent).kind !== 'revoked'
+  const needsNetworkChoice =
+    interactive && isAdmin && agent.target_subnet == null
   const [chooserEditing, setChooserEditing] = useState(false)
-  const chooserOpen = needsNetworkChoice || chooserEditing
+  const chooserOpen = interactive && (needsNetworkChoice || chooserEditing)
 
   const showScanSection =
-    !chooserOpen && (agent.target_subnet != null || scanCommand.following)
+    interactive &&
+    !chooserOpen &&
+    (agent.target_subnet != null || scanCommand.following)
+
+  function focusPresence() {
+    document
+      .querySelector<HTMLElement>('[data-testid="agents-presence"]')
+      ?.focus()
+  }
 
   return (
     <div className="flex flex-col gap-12">
@@ -38,10 +50,18 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
       <AgentIdentity agent={agent} />
       <TargetSubnetSection
         agent={agent}
+        interactive={interactive}
         open={chooserOpen}
         onOpenChange={setChooserEditing}
         onSaved={() => setSavedTargetSubnet(true)}
       />
+      {!interactive && (
+        <DeviceRevocation
+          agent={agent}
+          mode="restore"
+          onChanged={focusPresence}
+        />
+      )}
       {showScanSection && (
         <div className="flex flex-col gap-4">
           {agent.target_subnet != null &&
@@ -64,6 +84,13 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
         </div>
       )}
       <DeviceScanHistory agentId={agent.agent_id} />
+      {interactive && (
+        <DeviceRevocation
+          agent={agent}
+          mode="revoke"
+          onChanged={focusPresence}
+        />
+      )}
     </div>
   )
 }
