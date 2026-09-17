@@ -5,6 +5,7 @@ import contextlib
 import ipaddress
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -29,8 +30,11 @@ LOGGER = logging.getLogger(__name__)
 
 _COMMAND_PATH = "/api/v1/agents/{device_id}/commands"
 _BACKOFF_SCHEDULE = (1.0, 2.0, 5.0, 10.0, 30.0)
+_PARK_RETRY_SECONDS = 3600.0
 _PERMANENT_CLOSE_FLOOR = 4000
 _TRANSPORT_ERRORS = (OSError, WebSocketException)
+
+ParkReason = Literal["revoked", "replaced", "refused", "upload_refused"]
 
 
 class _NotConnected(RuntimeError):
@@ -127,14 +131,16 @@ async def _default_connect(url: str, headers: dict[str, str]) -> Any:
     return await websocket_connect(url, additional_headers=headers)
 
 
-def _permanent_reason(exc: BaseException) -> str | None:
+def _park_reason(exc: BaseException) -> ParkReason | None:
     if isinstance(exc, InvalidStatus) and exc.response.status_code == 403:
-        return "backend refused the device (403); not reconnecting"
+        return "refused"
     if isinstance(exc, ConnectionClosed):
         if exc.code == _PERMANENT_CLOSE_FLOOR and exc.reason == "replaced":
-            return "another daemon owns this device slot; not reconnecting"
+            return "replaced"
+        if exc.code == 4001:
+            return "revoked"
         if exc.code >= _PERMANENT_CLOSE_FLOOR:
-            return f"backend closed the channel permanently ({exc.code})"
+            return "refused"
     return None
 
 
@@ -168,7 +174,8 @@ class CommandChannelClient:
         self._agent_version = agent_version or _installed_version()
         self._send_lock = asyncio.Lock()
         self._socket: Any = None
-        self._parked_reason: str | None = None
+        self._parked_reason: ParkReason | None = None
+        self._closed = False
         self._ready = False
 
     @property
@@ -176,29 +183,37 @@ class CommandChannelClient:
         return self._url
 
     @property
-    def parked_reason(self) -> str | None:
+    def parked_reason(self) -> ParkReason | None:
         return self._parked_reason
 
     async def run(
         self,
         on_command: Callable[[AgentCommand], Awaitable[None]],
         on_connected: Callable[[], Awaitable[None]] | None = None,
+        on_parked: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         attempt = 0
-        while self._parked_reason is None:
+        while not self._closed:
+            if self._parked_reason is not None:
+                if on_parked is not None:
+                    await on_parked()
+                await self._wait_out_park()
+                attempt = 0
+                continue
             self._ready = False
             try:
                 await self._serve_once(on_command, on_connected)
             except _TRANSPORT_ERRORS as exc:
-                reason = _permanent_reason(exc)
-                if reason is not None:
-                    self._park(reason)
+                if self._parked_reason is not None:
+                    pass
+                elif reason := _park_reason(exc):
+                    self._set_parked(reason)
                 else:
                     LOGGER.warning("command channel lost: %s", _describe(exc))
             finally:
                 await self._drop_socket()
-            if self._parked_reason is not None:
-                return
+            if self._closed or self._parked_reason is not None:
+                continue
             if self._ready:
                 attempt = 0
             index = min(attempt, len(_BACKOFF_SCHEDULE) - 1)
@@ -215,8 +230,12 @@ class CommandChannelClient:
             return False
         return True
 
-    async def close(self, reason: str = "command channel closed") -> None:
-        self._park(reason)
+    async def park(self, reason: ParkReason) -> None:
+        self._set_parked(reason)
+        await self._drop_socket()
+
+    async def close(self) -> None:
+        self._closed = True
         await self._drop_socket()
 
     async def _serve_once(
@@ -230,6 +249,8 @@ class CommandChannelClient:
         LOGGER.info("command channel connected")
         if on_connected is not None:
             await on_connected()
+        if self._parked_reason is not None:
+            return
         while True:
             command = _parse_command(await self._socket.recv())
             if command is not None:
@@ -266,10 +287,22 @@ class CommandChannelClient:
             with contextlib.suppress(*_TRANSPORT_ERRORS):
                 await socket.close()
 
-    def _park(self, reason: str) -> None:
+    def _set_parked(self, reason: ParkReason) -> None:
         if self._parked_reason is None:
             self._parked_reason = reason
-            LOGGER.error("command channel parked: %s", reason)
+
+    async def _wait_out_park(self) -> None:
+        reason = self._parked_reason
+        if reason is None:
+            return
+        next_attempt = datetime.now(UTC) + timedelta(seconds=_PARK_RETRY_SECONDS)
+        LOGGER.error(
+            "command channel parked (%s); next attempt at %s",
+            reason,
+            next_attempt.isoformat(timespec="seconds"),
+        )
+        await self._sleep(_PARK_RETRY_SECONDS)
+        self._parked_reason = None
 
 
 def _parse_command(raw: object) -> AgentCommand | None:

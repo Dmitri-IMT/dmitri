@@ -25,8 +25,6 @@ LOGGER = logging.getLogger(__name__)
 
 CommandStatus = Literal["running", "uploading", "done", "failed"]
 
-_FORBIDDEN_PARK = "backend refused the upload; not reconnecting"
-
 
 @dataclass(slots=True)
 class CommandRecord:
@@ -52,7 +50,9 @@ class AgentDaemon:
 
     async def run(self) -> None:
         try:
-            await self._client.run(self.handle_command, self.replay_pending)
+            await self._client.run(
+                self.handle_command, self.replay_pending, self._cancel_active
+            )
         finally:
             await self.close()
 
@@ -144,7 +144,7 @@ class AgentDaemon:
         )
         await self._update(command.command_id, "failed", "ingest_failed")
         if submission.outcome == "forbidden":
-            await self._client.close(_FORBIDDEN_PARK)
+            await self._client.park("upload_refused")
 
     async def _update(
         self, command_id: UUID, status: CommandStatus, error_code: str | None = None
