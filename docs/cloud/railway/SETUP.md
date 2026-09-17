@@ -278,11 +278,26 @@ Alembic head. The check asserts the hosted revision is **at or ahead of** the br
 to it, so a pull request that adds no migration still passes while another branch's migration
 is live.
 
-It needs one GitHub Actions secret, `HOSTED_DATABASE_URL`: the same restricted pooled runtime
-credential the services use. Never the direct or administrative URL — the check only reads one
-version string, and `20260917_27` grants `dmitri_runtime` exactly that one `SELECT`. If the
-secret is absent the job fails rather than passing quietly, so fork pull requests cannot
-satisfy it.
+It needs one secret, `HOSTED_DATABASE_URL`: the same restricted pooled runtime credential the
+services use. Never the direct or administrative URL — the check only reads one version string,
+and `20260917_27` grants `dmitri_runtime` exactly that one `SELECT`. If the secret is absent the
+job fails rather than passing quietly, so fork pull requests cannot satisfy it.
+
+**The credential never meets pull-request code.** Alembic imports migration files as Python
+modules to read their revision ids, so pointing Alembic at a branch executes that branch's code
+— with `HOSTED_DATABASE_URL` in the environment, that hands the credential to anyone who can
+push. The job therefore takes two checkouts: the **base branch** supplies the checker, which is
+already reviewed, and the **pull request** supplies only its `alembic/versions` files, which
+`read_revision_graph` parses with `ast.literal_eval`. Nothing from the branch runs.
+
+The usual answer would be a GitHub Environment with required reviewers, but deployment
+protection rules need GitHub Team and `Dmitri-IMT` is on the free plan.
+
+The cost of that choice is a second implementation of Alembic's revision conventions. A silently
+wrong graph would be worse than a failing check, so
+`test_parser_agrees_with_alembic_on_the_real_graph` asserts the parser and Alembic's own
+`ScriptDirectory` produce an identical graph and identical heads across every shipped migration.
+If Alembic's conventions ever change, that test fails rather than the gate quietly misreading.
 
 Run the same check locally before pushing:
 
