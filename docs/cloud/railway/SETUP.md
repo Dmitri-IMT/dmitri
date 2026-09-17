@@ -255,6 +255,61 @@ Note that device auth is **Ed25519 signatures** (ADR-005 amended 2026-07-24): th
 only each device's public key, so there is **no** `AGENT_HMAC_SECRET` or device-secret encryption
 key to provision.
 
+## Deploying a schema change
+
+Railway auto-deploys `main`, but **no deploy step applies Alembic migrations**, and none can:
+`dmitri_runtime` holds no DDL privilege, and `DATABASE_URL_DIRECT` is deliberately absent from
+both services (Gotcha 7). Applying a migration is a human step that must happen **before** the
+code that needs it starts serving.
+
+Skipping it is silent at deploy time and loud afterwards: the deploy goes green, then every
+query against the changed table fails with `UndefinedColumn` until someone reads the logs. This
+happened on 2026-09-16 — `20260912_26` was never applied, so the AI scan analysis feature 500ed
+on every read and its worker loop crashed on every poll for four days.
+
+### The schema gate
+
+The CI job `schema` (`.github/workflows/ci.yml`) asks the hosted database what revision it is
+actually at, and fails the pull request when that is behind the branch. It is an observation,
+not an acknowledgement — there is no label or checklist that satisfies it.
+
+It runs `backend-check-hosted-revision`, which compares `alembic_version` against the branch's
+Alembic head. The check asserts the hosted revision is **at or ahead of** the branch, not equal
+to it, so a pull request that adds no migration still passes while another branch's migration
+is live.
+
+It needs one GitHub Actions secret, `HOSTED_DATABASE_URL`: the same restricted pooled runtime
+credential the services use. Never the direct or administrative URL — the check only reads one
+version string, and `20260917_27` grants `dmitri_runtime` exactly that one `SELECT`. If the
+secret is absent the job fails rather than passing quietly, so fork pull requests cannot
+satisfy it.
+
+Run the same check locally before pushing:
+
+```bash
+cd backend
+DATABASE_URL='<pooled runtime URL>' uv run backend-check-hosted-revision
+```
+
+### Applying the migration
+
+```bash
+cd backend
+# Export transiently from your gitignored local .env; never set this on a Railway service.
+export DATABASE_URL_DIRECT='postgresql+psycopg://postgres:<PASSWORD>@<host>:5432/postgres?sslmode=require'
+uv run alembic current        # what the hosted database is actually at
+uv run alembic upgrade head
+uv run alembic current        # confirm it moved
+unset DATABASE_URL_DIRECT
+```
+
+Use the direct **5432** target (or the Session pooler on 5432), never the 6543 transaction
+pooler — see Gotcha 8 and `ARCHITECTURE.md` § Connection targets. Then re-run the `schema` job.
+
+Both services recover on their own once the column exists: the worker loop catches its
+exception and retries on the next poll, and the API opens a new transaction per request. A
+restart is only needed if a service is in a crash-restart loop.
+
 ## Rollback
 
 Hosted rollback is quiescent by design: the API and worker must never run while

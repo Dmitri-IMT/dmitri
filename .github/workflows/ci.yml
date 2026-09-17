@@ -210,3 +210,43 @@ jobs:
           VITE_API_URL: http://localhost:8000
         working-directory: frontend
         run: npm run build
+
+  # Railway auto-deploys `main`, but nothing in the deploy applies Alembic
+  # migrations: `dmitri_runtime` holds no DDL privilege, and `DATABASE_URL_DIRECT`
+  # is deliberately absent from both services (docs/cloud/railway/SETUP.md, risk 7).
+  # Applying a migration is a human step, and skipping it ships code whose model
+  # does not match the live schema — every query against the changed table then
+  # 500s until someone reads the logs, which is exactly how 20260912_26 went
+  # unapplied for four days.
+  #
+  # So this job asks the hosted database what revision it is actually at, rather
+  # than trusting a label or a checklist. It reads one string from
+  # alembic_version with the restricted pooled runtime credential; that read is
+  # the only privilege it needs, granted by 20260917_27.
+  schema:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+
+      # A missing secret must fail, never pass quietly: a gate that green-lights
+      # itself when it cannot see the database is worse than no gate. Fork pull
+      # requests get no secrets and so cannot satisfy this check by design.
+      - name: Check the hosted database is not behind this branch
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.HOSTED_DATABASE_URL }}
+          JWT_SIGNING_SECRET: unused-by-this-check
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::HOSTED_DATABASE_URL is not set; this check cannot verify the hosted schema."
+            exit 1
+          fi
+          uv run backend-check-hosted-revision

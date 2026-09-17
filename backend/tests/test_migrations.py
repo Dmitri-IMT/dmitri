@@ -226,6 +226,9 @@ def test_alembic_artifacts_and_backend_package_configuration() -> None:
         "backend-worker": "api.worker_main:main",
         "backend-bootstrap-org": "api.management.bootstrap_org:main",
         "backend-provision-agent": "api.management.provision_agent:main",
+        "backend-check-hosted-revision": (
+            "api.management.check_hosted_revision:main"
+        ),
     }
 
 
