@@ -56,7 +56,18 @@ def _reconcile_machine(
     )
 
     if is_latest:
-        host.machine_type = classify_machine_type(scan_host.vendor, open_services)
+        if scan_record.assessment_policy_version is not None:
+            host.machine_type = scan_host.machine_type
+            host.device_profile_json = scan_host.device_profile_json
+            host.device_profile_policy_version = (
+                scan_record.assessment_policy_version
+            )
+        else:
+            host.machine_type = classify_machine_type(
+                scan_host.vendor, open_services
+            )
+            host.device_profile_json = None
+            host.device_profile_policy_version = None
         host.vulnerability_count = sum(
             1 for row in findings if row.fixed_at is None
         )

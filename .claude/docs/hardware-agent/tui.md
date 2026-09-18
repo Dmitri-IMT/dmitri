@@ -1,10 +1,10 @@
 ---
 type: Module
 title: tui — Textual application
-description: The Textual application — app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.
+description: The Textual application — scan setup/progress plus local inventory, profile, exposure and finding result views.
 resource: hardware-agent/src/agent/tui/
 tags: [hardware-agent, tui, textual, ui]
-timestamp: 2026-09-12T22:20:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # tui — Textual application
@@ -30,7 +30,8 @@ the CLAUDE.md integration rule requires to stay in sync.
 | `NetworkScreen` (S2) | Lists IPv4 interfaces/subnets via `psutil` (`ctrl+r` refresh) → `ScanCategoryScreen`. | `tui/screens/network.py:36` |
 | `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker. NSPi submodes: Inventory, Read-only mapping; Active validation stays `disabled=True`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
 | `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., nspi_submode=...)`. Terminal states: completed, incomplete, stopped, refused. Live `⏱` line uses `ScanEvent.deadline_seconds`. | `tui/screens/scan_progress.py:382` |
-| `ScanViewScreen` (S7) | Device text escaped via `tui/markup.safe()`; range lines show status and digest prefix. | `tui/screens/scan_view.py` |
+| `ScanViewScreen` (S7) | Local summary with separate inventory, attack-surface, and vulnerability counts; lists devices and opens the selected device with Enter. Legacy scans label assessment unavailable. | `tui/screens/scan_view.py:88` |
+| `DeviceDetailScreen` | Local-only profile, evidence, conflicts, limitations, endpoints, exposures, findings, and industrial evidence for one device. | `tui/screens/device_detail.py:54` |
 | `PastScansScreen` (S6) | Lists `results/*.json` (`ScanEntry`), newest-first (`ctrl+r`) → `ScanViewScreen`. | `tui/screens/past_scans.py:29` |
 
 ## How it connects
@@ -45,6 +46,9 @@ the CLAUDE.md integration rule requires to stay in sync.
 Navigation: `setup?` → home → Start scan → network → category → mode → (home) → progress (runs
 `ScanRunner`) → view. Side paths: home → view (last), home → past scans → view. Settings is a global
 modal.
+
+The result path is deliberately local: `ScanViewScreen` and `DeviceDetailScreen` consume the
+in-memory or saved `ScanPayload`; they do not call the backend API.
 
 ## Notes / gotchas
 

@@ -43,6 +43,55 @@ def _base_payload(**overrides: object) -> dict:
     return payload
 
 
+def _current_payload(**overrides: object) -> dict:
+    payload = _base_payload(
+        findings=[],
+        assessment_policy_version="2026-09-15.1",
+        exposures=[
+            {
+                "ip": "192.168.1.10",
+                "port": 22,
+                "protocol": "tcp",
+                "observed_service": "ssh",
+                "observed_version": "OpenSSH 9.0",
+                "role": "remote_access",
+                "attention": "review",
+                "confidence": "high",
+                "reason": "Remote access service is reachable.",
+                "evidence": [
+                    {"kind": "port", "source": "endpoint", "value": "tcp/22"}
+                ],
+            }
+        ],
+    )
+    payload["hosts"][0]["ports"] = [
+        {
+            "port": 22,
+            "protocol": "tcp",
+            "state": "open",
+            "service": "ssh",
+        }
+    ]
+    payload["hosts"][0]["machine_type"] = "computer"
+    payload["hosts"][0]["device_profile"] = {
+        "manufacturer": "Raspberry Pi Trading Ltd",
+        "product_family": None,
+        "model": None,
+        "confidence": "medium",
+        "evidence": [
+            {
+                "kind": "manufacturer",
+                "source": "vendor",
+                "value": "Raspberry Pi Trading Ltd",
+            }
+        ],
+        "conflicts": [],
+        "limitations": ["Exact model was not observed."],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_scan_result_validates_scan_mode_and_hosts_payload():
     payload = _base_payload(findings=[])
     result = ScanIngestRequest.model_validate(payload)
@@ -419,3 +468,114 @@ def test_example_payload_validates_against_tightened_model():
         device_type="general purpose",
         cpes=["cpe:/o:linux:linux_kernel:5"],
     )
+
+
+def test_current_assessment_payload_validates_exact_endpoint_coverage() -> None:
+    result = ScanIngestRequest.model_validate(_current_payload())
+
+    assert result.assessment_policy_version == "2026-09-15.1"
+    assert result.hosts[0].machine_type == "computer"
+    assert result.hosts[0].device_profile is not None
+    assert len(result.exposures) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param("exposure", id="exposure-with-null-version"),
+        pytest.param("machine_type", id="machine-type-with-null-version"),
+        pytest.param("device_profile", id="profile-with-null-version"),
+    ],
+)
+def test_legacy_payload_rejects_assessment_content(mutation: str) -> None:
+    current = _current_payload()
+    payload = _base_payload(findings=[], assessment_policy_version=None)
+    if mutation == "exposure":
+        payload["exposures"] = current["exposures"]
+    else:
+        payload["hosts"][0][mutation] = current["hosts"][0][mutation]
+
+    with pytest.raises(pydantic.ValidationError, match="legacy payloads"):
+        ScanIngestRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [pytest.param("machine_type"), pytest.param("device_profile")],
+)
+def test_current_payload_requires_complete_host_assessment(field: str) -> None:
+    payload = _current_payload()
+    payload["hosts"][0].pop(field)
+
+    with pytest.raises(pydantic.ValidationError, match="every host"):
+        ScanIngestRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param("missing", id="missing-open-endpoint"),
+        pytest.param("duplicate", id="duplicate-open-endpoint"),
+        pytest.param("unmatched", id="unmatched-endpoint"),
+        pytest.param("closed", id="closed-endpoint"),
+    ],
+)
+def test_current_payload_rejects_invalid_exposure_coverage(mutation: str) -> None:
+    payload = _current_payload()
+    if mutation == "missing":
+        payload["exposures"] = []
+    elif mutation == "duplicate":
+        payload["exposures"].append(dict(payload["exposures"][0]))
+    elif mutation == "unmatched":
+        payload["exposures"][0]["port"] = 23
+    else:
+        payload["hosts"][0]["ports"][0]["state"] = "closed"
+
+    with pytest.raises(pydantic.ValidationError, match="exposure|endpoint"):
+        ScanIngestRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("hosts", 0, "machine_type"), "toaster"),
+        (("hosts", 0, "device_profile", "confidence"), "certain"),
+        (("exposures", 0, "role"), "vulnerability"),
+        (("exposures", 0, "attention"), "high"),
+        (("exposures", 0, "confidence"), "unknown"),
+        (("exposures", 0, "evidence", 0, "kind"), "secret"),
+    ],
+)
+def test_assessment_models_reject_values_outside_exact_enums(
+    path: tuple[object, ...], value: str
+) -> None:
+    payload = _current_payload()
+    target: object = payload
+    for part in path[:-1]:
+        target = target[part]  # type: ignore[index]
+    target[path[-1]] = value  # type: ignore[index]
+
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+def test_assessment_models_enforce_string_and_collection_bounds() -> None:
+    too_long_source = _current_payload()
+    too_long_source["exposures"][0]["evidence"][0]["source"] = "s" * 81
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(too_long_source)
+
+    too_many_evidence = _current_payload()
+    too_many_evidence["exposures"][0]["evidence"] = [
+        {"kind": "port", "source": f"endpoint-{index}", "value": "tcp/22"}
+        for index in range(13)
+    ]
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(too_many_evidence)
+
+    too_many_conflicts = _current_payload()
+    too_many_conflicts["hosts"][0]["device_profile"]["conflicts"] = [
+        f"conflict-{index}" for index in range(6)
+    ]
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(too_many_conflicts)

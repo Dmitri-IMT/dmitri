@@ -7,7 +7,14 @@ import HostDetail from '@/pages/HostDetail'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
 import LocationProbe from '@/test/LocationProbe'
-import { baseURL, hostDetail, hostNotFound } from '@/test/hostsHarness'
+import {
+  baseURL,
+  confidentHostProfile,
+  hostDetail,
+  hostExposure,
+  hostNotFound,
+  withHostAssessment,
+} from '@/test/hostsHarness'
 import {
   criticalFinding,
   findingFixtures,
@@ -57,6 +64,129 @@ function expectPageError() {
 }
 
 describe('HostDetail', () => {
+  it('presents the assessed profile and attack surface before vulnerabilities without replacing observed identity', async () => {
+    const host = withHostAssessment(HOST_WITH_PORTS)
+    hostDetail(host, [])
+    renderPage(`/network/${host.host_id}`)
+
+    const profile = await screen.findByTestId('host-profile')
+    expect(profile).toHaveTextContent('Likely typeTV')
+    expect(profile).toHaveTextContent('ManufacturerSamsung')
+    expect(profile).toHaveTextContent('Product familySmart TV')
+    expect(profile).toHaveTextContent('ModelUnknown')
+    expect(profile).toHaveTextContent('Profile confidenceHigh')
+    expect(screen.getByTestId('host-detail-meta')).toHaveTextContent(
+      host.vendor,
+    )
+    expect(
+      screen
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual([
+      'Machine profile',
+      'Attack surface',
+      'Vulnerabilities',
+      'Services running on this machine',
+      'Industrial services',
+      'Scan history',
+    ])
+    expect(screen.getByTestId('host-exposures-table')).toBeInTheDocument()
+  })
+
+  it('reveals profile evidence in stored order with conflicts and randomized-MAC limitations', async () => {
+    const user = userEvent.setup()
+    const host = withHostAssessment(HOST_WITH_PORTS, {
+      machine_type: 'unknown',
+      device_profile: {
+        ...confidentHostProfile,
+        manufacturer: null,
+        product_family: null,
+        confidence: 'low',
+        conflicts: ['The service label conflicts with protocol evidence.'],
+        limitations: [
+          'Locally administered MAC address; OUI manufacturer unavailable.',
+        ],
+      },
+    })
+    hostDetail(host, [])
+    renderPage(`/network/${host.host_id}`)
+
+    await user.click(await screen.findByTestId('host-profile-evidence'))
+    const profile = screen.getByTestId('host-profile')
+    expect(profile).toHaveTextContent('Likely typeUnknown')
+    expect(profile).toHaveTextContent('ManufacturerUnknown')
+    expect(profile).toHaveTextContent('Product familyUnknown')
+    expect(profile).toHaveTextContent('ModelUnknown')
+    expect(profile).not.toHaveTextContent(/IoT/i)
+    const text = profile.textContent ?? ''
+    expect(text.indexOf('Observed vendor: Samsung')).toBeLessThan(
+      text.indexOf('8001/tcp: http'),
+    )
+    expect(screen.getByTestId('host-profile-conflicts')).toHaveTextContent(
+      'Conflicting evidence: The service label conflicts with protocol evidence.',
+    )
+    expect(screen.getByTestId('host-profile-limitations')).toHaveTextContent(
+      'Limitation: Locally administered MAC address; OUI manufacturer unavailable.',
+    )
+  })
+
+  it('distinguishes current empty assessment data from legacy unavailable data', async () => {
+    const current = withHostAssessment(HOST_WITH_PORTS, { exposures: [] })
+    hostDetail(current, [])
+    const { unmount } = renderPage(`/network/${current.host_id}`)
+
+    expect(await screen.findByTestId('host-no-exposures')).toHaveTextContent(
+      'No reachable services were found on this machine.',
+    )
+    expect(
+      screen.queryByTestId('host-exposures-unavailable'),
+    ).not.toBeInTheDocument()
+    unmount()
+
+    hostDetail(HOST, [])
+    renderPage(`/network/${HOST.host_id}`)
+    expect(
+      await screen.findByTestId('host-profile-unavailable'),
+    ).toHaveTextContent('Unavailable')
+    expect(screen.getByTestId('host-exposures-unavailable')).toHaveTextContent(
+      'Unavailable',
+    )
+    expect(screen.getByTestId('host-detail')).toHaveTextContent(HOST.ip)
+  })
+
+  it('navigates a related exposure vulnerability to its scan and finding', async () => {
+    const user = userEvent.setup()
+    const exposure = hostExposure(HOST_WITH_PORTS, {
+      related_finding_ids: [criticalFinding.finding_id],
+    })
+    const host = withHostAssessment(HOST_WITH_PORTS, { exposures: [exposure] })
+    hostDetail(host, [])
+    renderPage(`/network/${host.host_id}`)
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: `Show details for ${exposure.observed_service} on ${exposure.ip}:${exposure.port}/${exposure.protocol}`,
+      }),
+    )
+    expect(
+      screen.getByTestId(`host-exposures-table-row-${exposure.exposure_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`host-exposures-table-panel-${exposure.exposure_id}`),
+    ).toHaveTextContent(exposure.reason)
+    const relatedLink = screen.getByTestId(
+      `exposure-related-finding-${criticalFinding.finding_id}`,
+    )
+    expect(relatedLink).toHaveAttribute(
+      'href',
+      `/scans/${exposure.scan_id}?finding=${criticalFinding.finding_id}`,
+    )
+    await user.click(relatedLink)
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      `/scans/${exposure.scan_id}`,
+    )
+  })
+
   it("renders only this host's findings, identity, empty-ports copy, and history", async () => {
     hostDetail(HOST, findingFixtures)
     renderPage(`/network/${HOST.host_id}`)
@@ -230,6 +360,49 @@ describe('HostDetail', () => {
     expectPageError()
   })
 
+  it('keeps the page loading state free of false empty-result copy', () => {
+    server.use(
+      http.get(`${baseURL}/hosts/:hostId`, async () => {
+        await new Promise(() => {})
+        return HttpResponse.json(HOST)
+      }),
+    )
+    renderPage(`/network/${HOST.host_id}`)
+
+    expect(screen.getByRole('heading', { name: 'Machine' })).toBeInTheDocument()
+    expect(screen.queryByTestId('host-profile')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('host-no-exposures')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('host-no-findings')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No reachable services/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/No confirmed vulnerabilities/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps findings loading local while profile, attack surface, services, and history remain visible', async () => {
+    const host = withHostAssessment(HOST_WITH_PORTS)
+    hostDetail(host, [])
+    server.use(
+      http.get(`${baseURL}/findings`, async () => {
+        await new Promise(() => {})
+        return HttpResponse.json({ data: [], total: 0, page: 1 })
+      }),
+    )
+    renderPage(`/network/${host.host_id}`)
+
+    expect(await screen.findByTestId('host-profile')).toBeInTheDocument()
+    expect(screen.getByTestId('host-exposures-table')).toBeInTheDocument()
+    expect(screen.getByTestId('host-ports-table')).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`host-history-table-row-${SCAN_ID}`),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('host-findings-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('host-no-findings')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/No confirmed vulnerabilities/),
+    ).not.toBeInTheDocument()
+  })
+
   it('fails the findings section alone and keeps the rest of the host', async () => {
     hostDetail(HOST, findingFixtures)
     server.use(
@@ -293,6 +466,7 @@ describe('HostDetail', () => {
       ),
     ).toBeInTheDocument()
     expect(hostReads).toBe(1)
+    expect(findingsReads).toBe(2)
   })
 
   it('renders the not-found line and Back to the network', async () => {

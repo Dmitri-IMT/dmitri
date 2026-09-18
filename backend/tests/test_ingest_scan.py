@@ -15,6 +15,7 @@ from api.models.persistence import (
     EnrichmentJobRecord,
     EpssCacheRecord,
     EpssRecord,
+    ExposureRecord,
     FindingRecord,
     HostFindingRecord,
     HostPortRecord,
@@ -191,6 +192,31 @@ def test_ingest_scan_accepts_enriched_findings_example(
     assert record.scan_mode == scan.scan_mode
     assert record.status == "completed"
     assert record.agent_id == provisioned_agent.id
+    assert record.assessment_policy_version == payload["assessment_policy_version"]
+
+    exposures = runtime_session.exec(
+        select(ExposureRecord).order_by(
+            ExposureRecord.ip, ExposureRecord.protocol, ExposureRecord.port
+        )
+    ).all()
+    assert len(exposures) == len(payload["exposures"])
+    assert len({exposure.exposure_id for exposure in exposures}) == len(exposures)
+    for exposure in exposures:
+        scan_host = runtime_session.get(ScanHostRecord, exposure.scan_host_id)
+        port = runtime_session.get(PortRecord, exposure.port_id)
+        assert scan_host is not None
+        assert port is not None
+        assert exposure.scan_id == record.scan_id == scan_host.scan_id
+        assert exposure.ip == scan_host.ip
+        assert (exposure.port, exposure.protocol) == (port.port, port.protocol)
+        assert port.scan_host_id == scan_host.id
+        assert port.state == "open"
+
+    snapshots = {row.ip: row for row in scan_hosts}
+    for host in payload["hosts"]:
+        snapshot = snapshots[host["ip"]]
+        assert snapshot.machine_type == host["machine_type"]
+        assert snapshot.device_profile_json == host["device_profile"]
 
 
 def test_scan_hosts_persist_exact_operating_system_snapshots(
@@ -681,6 +707,7 @@ def test_ingest_scan_repeated_submission_is_idempotent(
             "services": len(runtime_session.exec(select(ServiceRecord)).all()),
             "cpes": len(runtime_session.exec(select(CPERecord)).all()),
             "findings": len(runtime_session.exec(select(FindingRecord)).all()),
+            "exposures": len(runtime_session.exec(select(ExposureRecord)).all()),
             "jobs": len(runtime_session.exec(select(EnrichmentJobRecord)).all()),
         }
 
@@ -692,6 +719,7 @@ def test_ingest_scan_repeated_submission_is_idempotent(
     assert counts_after_first["ports"] == 5
     assert counts_after_first["services"] == 5
     assert counts_after_first["findings"] == 2
+    assert counts_after_first["exposures"] == 4
     assert counts_after_first["jobs"] > 0
 
     second = ingest_scan(
@@ -701,6 +729,41 @@ def test_ingest_scan_repeated_submission_is_idempotent(
 
     assert second.scan_id == first.scan_id
     assert counts_after_second == counts_after_first
+
+
+def test_invalid_exposure_reference_rolls_back_all_scan_children(
+    migrated_database, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, scan = _example_scan()
+    invalid_exposure = scan.exposures[0].model_copy(update={"port": 65000})
+    invalid_scan = scan.model_copy(
+        update={"scan_id": uuid4(), "exposures": [invalid_exposure]}
+    )
+
+    with pytest.raises(ValueError, match="open endpoint"):
+        with Session(migrated_database) as session:
+            persist_scan(
+                session,
+                invalid_scan,
+                org_id=seeded_org.id,
+                agent_id=provisioned_agent.id,
+                command=None,
+                now=datetime.now(timezone.utc),
+                existing=None,
+            )
+
+    with Session(migrated_database) as session:
+        assert session.get(ScanRecord, invalid_scan.scan_id) is None
+        assert session.exec(
+            select(ScanHostRecord).where(
+                ScanHostRecord.scan_id == invalid_scan.scan_id
+            )
+        ).first() is None
+        assert session.exec(
+            select(ExposureRecord).where(
+                ExposureRecord.scan_id == invalid_scan.scan_id
+            )
+        ).first() is None
 
 
 def test_ingest_scan_rejects_completed_scan_owned_by_another_agent(

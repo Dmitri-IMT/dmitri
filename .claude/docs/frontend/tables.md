@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate hold list- and detail-page state machines; Pagination, EmptyState, SeverityWord, and LoadingSkeleton.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-09-13T18:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # frontend shared tables
@@ -35,6 +35,7 @@ directory table.
 | `Pagination` | Required `label` becomes the nav `aria-label` (for example `Scan pages`, `Attention pages`). Previous/Next stay icon-only. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:20` |
 | `EmptyState` | Centred heading, body, optional `action` and `note` slots — no ornament. Devices blank is the one list blank with `note` only and no `action`. | `frontend/src/components/EmptyState.tsx:11` |
 | `SeverityWord` | Severity as semibold text (`Critical` / `High` / …). Null severity renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
+| `AttentionWord` | Exposure attention as semantic text (`Informational`, `Review`, `Priority`); deliberately separate from vulnerability severity. | `frontend/src/components/AttentionWord.tsx:11` |
 | `LoadingSkeleton` | `rows × columns` bars using `bg-border`, inside one `<tbody>`. Rendered by a pending `DataTable`, Home loading and `QuietMachineGroup`. Bars mount only after `useSkeletonDelay` (250 ms) so a fast read never flashes. | `frontend/src/components/LoadingSkeleton.tsx:13` |
 | `useSkeletonDelay` | `false` until 250 ms after mount, then `true`. Shared by `LoadingSkeleton`, Home loading, and Users `SkeletonRows`. | `frontend/src/hooks/useSkeletonDelay.ts:6` |
 

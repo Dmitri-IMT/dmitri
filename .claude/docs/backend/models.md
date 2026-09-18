@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Backend ORM models
@@ -26,13 +26,14 @@ order is irrelevant.
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
 | `utc_now()` | Timezone-aware `default_factory` shared by every model. | `backend/src/api/models/persistence.py:18` |
-| `ScanRecord` → `scans` | PK `scan_id` (UUID); nullable `org_id` FK → `orgs`; nullable `agent_id` FK → `agents` (the submitting device, added by DMI-63, no backfill); `subnet`, `scan_mode`, `status` (default `completed`), JSON `metadata_json`. | `backend/src/api/models/persistence.py:29` |
-| `ScanHostRecord` → `scan_hosts` | A **per-scan host observation**; unique `(scan_id, ip)`; `mac`, `hostname`, `vendor`; `host_id` FK → `hosts` (nullable until identity resolution runs). | `backend/src/api/models/persistence.py:43` |
-| `HostRecord` → `hosts` | The **durable cross-scan host identity**; PK `id` (UUID); `org_id`, `identity_key` (unique with `org_id`, `NULLS NOT DISTINCT`); `ip`/`mac`/`hostname`/`vendor` snapshot from the latest scan; nullable `machine_type`; `open_ports_count`, `vulnerability_count` (NOT NULL, default 0), `highest_severity`; `first_seen_at`/`last_seen_at`. | `backend/src/api/models/persistence.py:57` |
+| `ScanRecord` → `scans` | Per-scan header including nullable `assessment_policy_version`; null means the stored scan predates assessment. | `backend/src/api/models/persistence.py:38` |
+| `ScanHostRecord` → `scan_hosts` | A **per-scan host observation**; unique `(scan_id, ip)`; original observations plus nullable assessment `machine_type` and `device_profile_json`; `host_id` resolves durable identity. | `backend/src/api/models/persistence.py:53` |
+| `HostRecord` → `hosts` | Durable cross-scan identity. Its latest accepted profile projection is `machine_type`, nullable `device_profile_json`, and nullable `device_profile_policy_version`; older scans do not overwrite it. | `backend/src/api/models/persistence.py:77` |
 | `PortRecord` → `ports` | Unique `(scan_host_id, port, protocol)`; `state`. Per-scan evidence — not the durable service list. | `backend/src/api/models/persistence.py:84` |
 | `HostPortRecord` → `host_ports` | Durable open-port life on a machine: `host_id` FK, `port`/`protocol`/`service`, optional `version`, `first_seen_at`/`last_seen_at`; unique `(host_id, port, protocol)`. No `state`, no `closed_at`. | `backend/src/api/models/persistence.py:96` |
 | `ServiceRecord` → `services` | Unique `port_id` (one service per port); `name`, `version`. | `backend/src/api/models/persistence.py:92` |
 | `CPERecord` → `cpes` | Unique `(port_id, cpe)`. | `backend/src/api/models/persistence.py:102` |
+| `ExposureRecord` → `exposures` | Immutable per-scan endpoint assessment linked to `scan`, `scan_host`, and the exact `port`; stores role, attention, confidence, reason, and bounded evidence JSON. Unique `(scan_id, scan_host_id, port_id)`. | `backend/src/api/models/persistence.py:156` |
 | `IndustrialServiceRecord` → `industrial_services` | Unique `(scan_host_id, protocol, port)`; JSONB evidence; `write_requests_sent`. | `backend/src/api/models/persistence.py` |
 | `ModbusUnitRecord` → `modbus_units` | Unique `(industrial_service_id, unit_id)`; JSONB identification, sources, address ranges (digest, no values). | `backend/src/api/models/persistence.py` |
 | `FindingRecord` → `findings` | Unique `(scan_id, dedupe_key)`; nullable `modbus_unit_id` FK → `modbus_units`; check `ck_findings_severity` on `severity`, spelled from `SEVERITY_ORDER` in [`core/severity.py`](/backend/api.md) so the constraint and the domain cannot drift (`low`/`medium`/`high`/`critical`); `finding_id` (UUID, `default_factory=uuid4`, unique+indexed — a stable public identifier separate from the integer PK); `cve_id`, `cvss_score`, `severity`, `confidence` (default `tentative`), title/description/recommendation/evidence, JSON `references_json` + `source_labels_json`, `dedupe_key`; FKs scan_host/port/scan. | `backend/src/api/models/persistence.py:129` |

@@ -4,7 +4,13 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from api.models.persistence import HostRecord
+from api.models.persistence import (
+    ExposureRecord,
+    HostRecord,
+    PortRecord,
+    ScanHostRecord,
+    ScanRecord,
+)
 from api.services.read import get_host_detail
 from read_factories import make_org, seed_read_graph
 from sqlmodel import Session
@@ -419,6 +425,103 @@ def test_get_host_by_id_cross_org_returns_404_not_403(
     )
     assert response.status_code == 404
     assert response.status_code != 403
+
+
+def test_legacy_host_detail_reports_assessment_unavailable(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    response = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["device_profile"] is None
+    assert body["assessment_status"] == "unavailable"
+    assert body["assessment_policy_version"] is None
+    assert body["exposures"] == []
+
+
+def test_host_detail_uses_latest_scan_profile_and_exposures(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    profile = {
+        "manufacturer": "Acme",
+        "product_family": "Gateway",
+        "model": "GW-1",
+        "confidence": "medium",
+        "evidence": [],
+        "conflicts": [],
+        "limitations": [],
+    }
+    latest = ScanRecord(
+        scan_id=uuid4(),
+        org_id=seeded["org"].id,
+        timestamp=seeded["scan"].timestamp + timedelta(minutes=1),
+        subnet="192.168.1.0/24",
+        scan_mode="extensive",
+        status="completed",
+        metadata_json={},
+        assessment_policy_version="2026-09-15.1",
+    )
+    administrative_session.add(latest)
+    administrative_session.flush()
+    snapshot = ScanHostRecord(
+        scan_id=latest.scan_id,
+        host_id=seeded["host"].id,
+        ip=seeded["host"].ip,
+        mac=seeded["host"].mac,
+        hostname=seeded["host"].hostname,
+        vendor=seeded["host"].vendor,
+        machine_type="router",
+        device_profile_json=profile,
+    )
+    administrative_session.add(snapshot)
+    administrative_session.flush()
+    port = PortRecord(
+        scan_host_id=snapshot.id,
+        port=443,
+        protocol="tcp",
+        state="open",
+    )
+    administrative_session.add(port)
+    administrative_session.flush()
+    administrative_session.add(
+        ExposureRecord(
+            scan_id=latest.scan_id,
+            scan_host_id=snapshot.id,
+            port_id=port.id,
+            ip=snapshot.ip,
+            port=443,
+            protocol="tcp",
+            observed_service="https",
+            role="administration",
+            attention="review",
+            confidence="medium",
+            reason="administration endpoint",
+        )
+    )
+    seeded["host"].machine_type = "router"
+    seeded["host"].device_profile_json = profile
+    seeded["host"].device_profile_policy_version = "2026-09-15.1"
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/hosts/{seeded['host'].id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["machine_type"] == "router"
+    assert body["device_profile"] == profile
+    assert body["assessment_status"] == "available"
+    assert body["assessment_policy_version"] == "2026-09-15.1"
+    assert [(row["port"], row["protocol"]) for row in body["exposures"]] == [
+        (443, "tcp")
+    ]
+    assert body["vulnerability_count"] == seeded["host"].vulnerability_count
 
 
 def test_quiet_total_is_the_whole_inventory_on_every_page_and_both_groups(

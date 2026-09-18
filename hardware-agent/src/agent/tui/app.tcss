@@ -170,8 +170,59 @@ Screen {
     margin: 1 4;
 }
 
-#scan-view-content {
+#scan-view-container {
+    height: auto;
     width: 1fr;
+}
+
+#scan-result-header,
+#scan-category-summary,
+#scan-devices-title,
+#device-detail-header,
+#device-profile,
+#device-inventory,
+#device-exposures,
+#device-findings,
+#device-industrial {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#scan-partial-banner,
+#device-partial-banner {
+    height: auto;
+    margin-bottom: 1;
+    text-style: bold;
+    color: $warning;
+}
+
+#scan-partial-banner.stopped,
+#device-partial-banner.stopped {
+    color: $error;
+}
+
+#scan-enrichment-note,
+#scan-devices-empty {
+    height: auto;
+    margin-bottom: 1;
+    text-style: dim italic;
+}
+
+#scan-devices-title {
+    text-style: bold;
+}
+
+#scan-device-list {
+    height: auto;
+    max-height: 20;
+}
+
+#device-detail-scroll {
+    margin: 1 4;
+}
+
+#device-exposures {
+    color: $text;
 }
 
 #past-scans-container {

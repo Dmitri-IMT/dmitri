@@ -10,6 +10,8 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
+from agent.assessment import assess_hosts
+from agent.assessment.policy import LOCAL_ASSESSMENT_POLICY_VERSION
 from agent.config import (
     AgentSettings,
     NspiSubmode,
@@ -112,8 +114,16 @@ class ScanRunner:
         ot_inspection: OtInspectionResult | None = None,
     ) -> ScanPayload:
         findings = extract_findings(hosts)
+        assessment = assess_hosts(hosts)
         elapsed_seconds = round(perf_counter() - started_counter, 2)
-        hosts_payload = [stages.build_host_payload(h) for h in hosts]
+        hosts_payload = [
+            stages.build_host_payload(
+                host,
+                machine_type=assessment.machine_types[host.ip],
+                device_profile=assessment.device_profiles[host.ip],
+            )
+            for host in hosts
+        ]
         return ScanPayload(
             scan_id=scan_id,
             timestamp=datetime.now(timezone.utc),
@@ -121,6 +131,8 @@ class ScanRunner:
             scan_mode=self.scan_mode,
             hosts=hosts_payload,
             findings=findings,
+            assessment_policy_version=LOCAL_ASSESSMENT_POLICY_VERSION,
+            exposures=assessment.exposures,
             metadata=stages.build_metadata(
                 runner=runner,
                 settings=settings,

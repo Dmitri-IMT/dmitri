@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Shared contracts
@@ -83,7 +83,14 @@ The agent emits a [`ScanPayload`](/hardware-agent/normalize.md); the backend val
 contract component share the same name, as do `HostPayload`/`PortPayload`/`FindingPayload`. Both
 carry a scan header (`scan_id`, `timestamp`, `subnet`, `scan_mode`), a list of **hosts**
 (ip/mac/hostname/vendor + ports), a list of **findings** (cve_id, cvss, severity, confidence,
-evidence), and metadata.
+evidence), and metadata. Current scans also carry `assessment_policy_version`, one bounded
+`device_profile` per host, and one `ExposurePayload` per open endpoint. The policy/version and
+exposure collection are jointly optional only so legacy payloads remain valid.
+
+Exposures are a separate attack-surface inventory. Their `attention` field is not vulnerability
+severity and does not contribute to finding totals. Read contracts expose `assessment_status`, the
+stored policy version, profiles, and `ExposureRead[]` on scan/host detail. Legacy records return
+`unavailable` with an empty exposure list rather than reconstructed data.
 
 **`PortPayload` is ingest-only (DMI-63).** The contract gained a *new* `PortPayload` component —
 `Port` plus `cpes` — and `HostPayload.ports` was re-pointed at it. `Port` itself was deliberately

@@ -3,6 +3,19 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-18
+
+* **Creation**: `hardware-agent/assessment.md` maps the versioned, deterministic local policy that
+  produces conservative device profiles and one attack-surface exposure per open endpoint.
+* **Update**: spec 047 attack-surface and IoT profiling. Documented the assessment normalization
+  substep, payload compatibility, local TUI summary/detail path, persisted assessment snapshots and
+  exposures, latest-scan reconciliation, scan/host read surfaces, React presentation, OpenAPI
+  contract, and Alembic head `20260915_27`. Touched: `hardware-agent/index.md`,
+  `hardware-agent/normalize.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/stages.md`, `hardware-agent/tui.md`, `backend/models.md`,
+  `backend/schemas.md`, `backend/services.md`, `backend/migrations.md`, `backend/index.md`,
+  `contracts.md`, `frontend/screens.md`, `frontend/host-detail.md`, and `frontend/tables.md`.
+
 ## 2026-09-15
 
 * **Update**: DMI-171 on PR-147. `deliver()` now fails the command at once when the frame send

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from uuid import uuid4
 
 import pytest
+from agent.config import AgentSettings
+from agent.normalize.contracts import ScanPayload
 from agent.ot.modbus.models import ModbusService, ModbusUnit
 from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.scanner.runner import ScanRunner
+from agent.utils.network import LocalNetworkInfo
 
 
 class _FakeReporter:
@@ -40,6 +44,129 @@ class _BoomRunner(NmapRunner):
 
 def _kinds(events: list[ScanEvent]) -> list[str]:
     return [event.kind for event in events]
+
+
+def _assessable_host() -> HostInfo:
+    return HostInfo(
+        ip="192.168.1.10",
+        hostname="camera.local",
+        mac="00:11:22:33:44:55",
+        vendor="Acme",
+        ports=[
+            PortInfo(
+                port=80,
+                protocol="tcp",
+                state="open",
+                service=ServiceInfo(name="http", product="Acme Camera"),
+            ),
+            PortInfo(port=443, protocol="tcp", state="closed"),
+        ],
+    )
+
+
+@pytest.mark.parametrize("scan_mode", ["quick", "standard", "extensive", "nspi", "max"])
+def test_build_payload_assesses_each_mode_once_and_preserves_raw_inventory(
+    monkeypatch: pytest.MonkeyPatch, scan_mode: str
+) -> None:
+    host = _assessable_host()
+    original = (
+        host.ip,
+        host.hostname,
+        host.mac,
+        host.vendor,
+        [
+            (port.port, port.protocol, port.state, port.service.name)
+            for port in host.ports
+        ],
+    )
+    calls = 0
+    from agent.assessment.analyzer import assess_hosts as real_assess_hosts
+
+    def counted_assessment(hosts):
+        nonlocal calls
+        calls += 1
+        return real_assess_hosts(hosts)
+
+    monkeypatch.setattr("agent.scanner.runner.assess_hosts", counted_assessment)
+    runner = ScanRunner(
+        subnet="192.168.1.0/24",
+        scan_mode=scan_mode,  # type: ignore[arg-type]
+        runner=_FakeRunner(),
+    )
+    payload = runner._build_payload(
+        scan_id=uuid4(),
+        settings=AgentSettings(scan_mode=scan_mode),  # type: ignore[arg-type]
+        network_info=LocalNetworkInfo(
+            ip="192.168.1.2",
+            netmask="255.255.255.0",
+            subnet="192.168.1.0/24",
+            interface="test",
+        ),
+        runner=_FakeRunner(),
+        started_counter=0.0,
+        hosts=[host],
+        partial_result=False,
+        interrupted_stage=None,
+        terminated_by="completed",
+    )
+
+    assert calls == 1
+    assert payload.assessment_policy_version == "2026-09-15.1"
+    assert payload.hosts[0].machine_type is not None
+    assert payload.hosts[0].device_profile is not None
+    assert [(str(item.ip), item.protocol, item.port) for item in payload.exposures] == [
+        ("192.168.1.10", "tcp", 80)
+    ]
+    assert (
+        host.ip,
+        host.hostname,
+        host.mac,
+        host.vendor,
+        [
+            (port.port, port.protocol, port.state, port.service.name)
+            for port in host.ports
+        ],
+    ) == original
+    assert ScanPayload.model_validate_json(payload.model_dump_json()) == payload
+
+
+@pytest.mark.parametrize(
+    "terminated_by", ["completed", "error", "timeout", "user_cancel"]
+)
+def test_partial_payload_is_assessed_for_every_accepted_termination(
+    terminated_by: str,
+) -> None:
+    completed: list[ScanPayload] = []
+    runner = ScanRunner(
+        subnet="192.168.1.0/24",
+        scan_mode="standard",
+        on_complete=completed.append,
+        runner=_FakeRunner(),
+    )
+    runner._finalize_partial(
+        scan_id=uuid4(),
+        settings=AgentSettings(scan_mode="standard"),
+        network_info=LocalNetworkInfo(
+            ip="192.168.1.2",
+            netmask="255.255.255.0",
+            subnet="192.168.1.0/24",
+            interface="test",
+        ),
+        runner=_FakeRunner(),
+        started_counter=0.0,
+        hosts=[_assessable_host()],
+        interrupted_stage=None if terminated_by == "completed" else "ports",
+        terminated_by=terminated_by,
+        message="partial",
+    )
+
+    assert len(completed) == 1
+    payload = completed[0]
+    assert payload.metadata is not None
+    assert payload.metadata["partial_result"] is True
+    assert payload.metadata["terminated_by"] == terminated_by
+    assert payload.hosts[0].device_profile is not None
+    assert len(payload.exposures) == 1
 
 
 class TestScanRunnerSuccess:

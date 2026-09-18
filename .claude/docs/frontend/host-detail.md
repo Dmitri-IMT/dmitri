@@ -4,7 +4,7 @@ title: frontend detail read state
 description: readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 resource: frontend/src/lib/detailState.ts
 tags: [frontend, hosts, scans, devices, tanstack-query]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # frontend detail read state
@@ -18,8 +18,8 @@ switches over them itself.
 
 One read per gate. Host detail makes a second, independent read (that host's findings), and it is
 **not** folded into the page state: a pending or failed findings read must not throw away a host
-whose identity, ports and history already arrived. Identity and services come from `HostDetailResponse`
-(`machine_type`, `HostPort[]`); findings carry `host_hostname` / `first_seen_at` on the same
+whose identity, profile, exposures, ports and history already arrived. Identity and services come from `HostDetailResponse`
+(`machine_type`, optional `device_profile`, `ExposureRead[]`, `HostPort[]`); findings carry `host_hostname` / `first_seen_at` on the same
 `FindingRecord` shape.
 
 ## Key classes / functions
@@ -30,6 +30,8 @@ whose identity, ports and history already arrived. Identity and services come fr
 | `readDetailState(id, query)` | Empty `id` **or** a 404 (`readApiError(...).status === 404`) is `notFound`; any other error carries a `retry` that refetches; pending is `loading`; otherwise `ready` with the data. Called inline by `ScanDetail`, `HostDetail`, and `DeviceDetail`. | `frontend/src/lib/detailState.ts:10` |
 | `ReadDetailGate` `backTo` / `backLabel` | Required on every detail gate. `NotFoundNotice` renders a real back link using both props — `/network` for machines, `/devices` for boxes. | `frontend/src/components/ReadDetailGate.tsx:12` |
 | `HostFindings` | The host's findings section: its own `useQuery` on `listFindings({ host_id, per_page: 100 })`, its own open-row state, and its own three states. Retrying it refetches findings only. | `frontend/src/pages/hosts/HostFindings.tsx:11` |
+| `HostProfile` | Renders stored profile identity, confidence, evidence, conflicts, and limitations; it never infers missing fields in the browser. | `frontend/src/pages/hosts/HostProfile.tsx:59` |
+| `HostExposures` | Renders latest-scan exposure inventory or the explicit legacy-unavailable state from `HostDetailResponse`. | `frontend/src/pages/hosts/HostExposures.tsx:7` |
 
 ## How it connects
 

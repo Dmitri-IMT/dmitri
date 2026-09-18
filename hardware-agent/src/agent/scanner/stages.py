@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import TYPE_CHECKING, TypeVar
 
+from agent.assessment.policy import MachineType
 from agent.config import (
     NSPI_HOST_TIMEOUT,
     NSPI_SCRIPT_TIMEOUT,
@@ -25,6 +26,7 @@ from agent.discovery.port_discovery import (
 from agent.discovery.service_detection import detect_services
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import (
+    DeviceProfilePayload,
     HostPayload,
     ModbusAddressRangePayload,
     ModbusDeviceIdentificationPayload,
@@ -533,7 +535,12 @@ def run_ot_inspection_stage(
     return result
 
 
-def build_host_payload(host: HostInfo) -> HostPayload:
+def build_host_payload(
+    host: HostInfo,
+    *,
+    machine_type: MachineType | None = None,
+    device_profile: DeviceProfilePayload | None = None,
+) -> HostPayload:
     return HostPayload(
         ip=host.ip,
         mac=host.mac,
@@ -622,6 +629,8 @@ def build_host_payload(host: HostInfo) -> HostPayload:
             )
             for service in host.industrial_services
         ],
+        machine_type=machine_type,
+        device_profile=device_profile,
     )
 
 

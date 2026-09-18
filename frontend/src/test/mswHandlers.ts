@@ -325,6 +325,7 @@ export const hostFixtures: HostSummary[] = Array.from(
     last_seen_at: minutesAgo(10 + index * 10),
     open_ports_count: index % 5,
     machine_type: machineTypes[index % machineTypes.length],
+    device_profile: null,
     vulnerability_count: index % 4 === 3 ? 0 : (index % 7) + 1,
     unreadable_fields: [],
     highest_severity:
@@ -385,6 +386,9 @@ export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
       },
     ],
     industrial_services: [],
+    assessment_status: 'unavailable',
+    assessment_policy_version: null,
+    exposures: [],
   }),
 )
 
@@ -405,11 +409,16 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
         version: port.version,
       })),
       industrial_services: host.industrial_services,
+      machine_type: host.machine_type,
+      device_profile: host.device_profile,
       unreadable_fields: host.unreadable_fields,
     })),
     findings: findingFixtures.filter(
       (finding) => finding.scan_id === scan.scan_id,
     ),
+    assessment_status: 'unavailable',
+    assessment_policy_version: null,
+    exposures: [],
     error_code: scan.status === 'failed' ? 'device_offline' : null,
   }),
 )

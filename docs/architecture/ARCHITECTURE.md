@@ -14,6 +14,8 @@ Este documento consolida todas as decisões de arquitetura tomadas nos ADRs do S
   - Execução de scripts NSE (`default`, `safe`, `vuln`, `auth`, `discovery`)
   - Correlação de vulnerabilidades via **vulners NSE**
   - Normalização dos resultados em payload JSON estruturado
+  - Avaliação local, determinística e versionada da superfície de ataque e do perfil de cada host,
+    usando somente evidências já aceitas pelo scan (sem nova sondagem ou consulta externa)
   - Envio seguro do payload para o Backend API
 - **Restrições:** 4 GB RAM, CPU ARM64, adaptador Wi-Fi USB dedicado para monitor mode
 
@@ -67,7 +69,7 @@ O banco **não roda no Pi** nem no container do Backend. O FastAPI e o Backgroun
 - FastAPI / Background Worker → Pooler (PgBouncer, porta 6543, transaction mode)
 - Alembic / migrações → Conexão direta (porta 5432)
 
-**Entidades principais:** `scans`, `devices`, `ports`, `services`, `findings`  
+**Entidades principais:** `scans`, `scan_hosts`, `hosts`, `ports`, `services`, `exposures`, `findings`
 **Padrão de escrita:** bulk `POST /scans` com idempotência (`INSERT ... ON CONFLICT DO NOTHING`)
 
 **Recursos adicionais do PostgreSQL:** fila de jobs, materialized views para métricas e full-text search para pesquisa de findings/serviços.
@@ -81,7 +83,7 @@ flowchart TB
     %% === EDGE DEVICE ===
     subgraph "Raspberry Pi 4 - Edge Device"
         direction TB
-        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Normalização JSON]
+        A[Pi Agent<br/><b>Python</b><br/>Nmap + NSE + vulners NSE<br/>Normalização + avaliação local]
     end
 
     %% === CLOUD ===
@@ -132,7 +134,7 @@ flowchart TB
 
 ## Fluxo principal
 
-- Pi Agent realiza varredura → normaliza → envia via POST com assinatura Ed25519  
+- Pi Agent realiza varredura → normaliza → avalia localmente perfis e exposições → envia via POST com assinatura Ed25519
 - Backend valida, enfileira job no PostgreSQL  
 - Background Worker processa e persiste via **SQLModel + psycopg3 síncrono** no Supabase  
 - Frontend React consulta via JWT e exibe os resultados  
@@ -218,6 +220,8 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
   - Metadados do scan (timestamp, `scan_id`, rede escaneada e modo)
   - Resultados normalizados de Nmap + NSE, incluindo a melhor detecção de sistema operacional e sua precisão quando disponíveis
   - Hosts, portas, serviços, versões e CVEs encontrados
+  - Versão da política local, perfil de cada host e uma exposição para cada endpoint aberto;
+    exposições permanecem separadas de vulnerabilidades
 - **Formato de autenticação**: Header customizado + assinatura do body (método + path + timestamp + body hash)
 - **Resposta esperada**: `202 Accepted` com ID do scan registrado
 - **Referência**: ADR-002, ADR-005, ADR-007
@@ -241,6 +245,9 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
   - `GET /api/v1/commands/{command_id}` → Ciclo de vida do comando enfileirado
 - **Formato**: JSON completo (request e response)
 - **Contrato**: Tipos TypeScript gerados via `openapi-typescript` a partir do contrato publicado em `contracts/openapi/openapi.yaml`
+- **Leituras de avaliação**: os detalhes de scan e host incluem status/versão da avaliação,
+  perfis armazenados e exposições. Scans legados informam `unavailable`; o backend não reconstrói
+  resultados históricos com a política atual.
 - **Referência**: ADR-003, ADR-005, ADR-008
 
 ### 6.3 Backend API → Background Worker (comunicação assíncrona)

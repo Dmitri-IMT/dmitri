@@ -11,13 +11,20 @@ from api.models.command import Command
 from api.models.persistence import (
     CPERecord,
     EnrichmentJobRecord,
+    ExposureRecord,
     FindingRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
     ServiceRecord,
 )
-from api.schemas.scan import FindingPayload, HostPayload, PortPayload, ScanIngestRequest
+from api.schemas.scan import (
+    ExposurePayload,
+    FindingPayload,
+    HostPayload,
+    PortPayload,
+    ScanIngestRequest,
+)
 from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import is_terminal
 from api.services.commands import apply_status, command_for_scan
@@ -99,6 +106,7 @@ def persist_scan(
             subnet=scan.subnet,
             scan_mode=scan.scan_mode,
             metadata_json=scan.metadata,
+            assessment_policy_version=scan.assessment_policy_version,
             status="completed",
         )
         session.add(scan_record)
@@ -113,6 +121,7 @@ def persist_scan(
         scan_record.subnet = scan.subnet
         scan_record.scan_mode = scan.scan_mode
         scan_record.metadata_json = scan.metadata
+        scan_record.assessment_policy_version = scan.assessment_policy_version
         scan_record.agent_id = agent_id
         session.add(scan_record)
     session.flush()
@@ -140,6 +149,24 @@ def persist_scan(
                 modbus_unit_index[(str(host.ip), service_port, unit_id)] = (
                     unit_record.id
                 )
+
+    for exposure in scan.exposures:
+        endpoint = (str(exposure.ip), exposure.port, exposure.protocol)
+        scan_host_record = scan_host_index.get(endpoint[0])
+        port_record = port_index.get(endpoint)
+        if (
+            scan_host_record is None
+            or port_record is None
+            or port_record.state != "open"
+        ):
+            raise ValueError("exposure must resolve to an open endpoint in this scan")
+        _persist_exposure(
+            session,
+            scan.scan_id,
+            scan_host_record,
+            port_record,
+            exposure,
+        )
 
     for finding in scan.findings:
         scan_host_record = (
@@ -322,6 +349,12 @@ def _persist_scan_host(
             if host.operating_system is not None
             else None
         ),
+        machine_type=host.machine_type,
+        device_profile_json=(
+            host.device_profile.model_dump(mode="json")
+            if host.device_profile is not None
+            else None
+        ),
     )
     session.add(record)
     session.flush()
@@ -353,6 +386,35 @@ def _persist_port(
         session.add(CPERecord(port_id=port_record.id, cpe=cpe))
     session.flush()
     return port_record
+
+
+def _persist_exposure(
+    session: Session,
+    scan_id: UUID,
+    scan_host_record: ScanHostRecord,
+    port_record: PortRecord,
+    exposure: ExposurePayload,
+) -> ExposureRecord:
+    if scan_host_record.id is None or port_record.id is None:
+        raise ValueError("exposure endpoints must be persisted before exposure records")
+    record = ExposureRecord(
+        scan_id=scan_id,
+        scan_host_id=scan_host_record.id,
+        port_id=port_record.id,
+        ip=str(exposure.ip),
+        port=exposure.port,
+        protocol=exposure.protocol,
+        observed_service=exposure.observed_service,
+        observed_version=exposure.observed_version,
+        role=exposure.role,
+        attention=exposure.attention,
+        confidence=exposure.confidence,
+        reason=exposure.reason,
+        evidence_json=[item.model_dump(mode="json") for item in exposure.evidence],
+    )
+    session.add(record)
+    session.flush()
+    return record
 
 
 def _enqueue_enrichment_jobs(

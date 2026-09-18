@@ -31,7 +31,7 @@ function HostFindings({ hostId }: { hostId: string }) {
   if (!query.isPending && query.data.data.length === 0) {
     return (
       <p data-testid="host-no-findings" className="text-body-md">
-        No vulnerabilities on this machine.
+        No confirmed vulnerabilities were found on this machine.
       </p>
     )
   }

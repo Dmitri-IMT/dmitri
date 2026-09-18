@@ -15,7 +15,7 @@ from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.network import NetworkScreen
 from agent.tui.screens.past_scans import PastScansScreen
 from agent.tui.screens.scan_progress import ScanProgressScreen
-from agent.tui.screens.scan_view import ScanViewScreen
+from agent.tui.screens.scan_view import ScanViewScreen, count_unique_open_endpoints
 
 MENU_START_SCAN = "start_scan"
 MENU_VIEW_SCAN = "view_scan"
@@ -102,14 +102,29 @@ class HomeScreen(DmitriScreen):
                 self.notify(f"Failed to save scan: {exc}", severity="error")
 
         devices = len(payload.hosts)
-        ports = sum(len(d.ports) for d in payload.hosts)
+        ports = count_unique_open_endpoints(payload)
         findings = len(payload.findings)
-        summary = (
+        summary_lines = [
             f"Last scan: {payload.subnet}\n"
             f"  Devices: {devices} | Ports open: {ports} | "
             f"Vulnerabilities: {findings}"
-        )
-        self.query_one("#summary-band", Static).update(summary)
+        ]
+        if payload.assessment_policy_version is None:
+            summary_lines.append("  Attack surface: Unavailable")
+        else:
+            exposures = len(payload.exposures)
+            attention = sum(
+                exposure.attention in {"review", "priority"}
+                for exposure in payload.exposures
+            )
+            attention_copy = (
+                "1 needs attention" if attention == 1 else f"{attention} need attention"
+            )
+            summary_lines.append(
+                f"  Attack surface: {exposures} "
+                f"{'exposure' if exposures == 1 else 'exposures'} · {attention_copy}"
+            )
+        self.query_one("#summary-band", Static).update("\n".join(summary_lines))
         self.query_one("#summary-section").display = True
 
         if navigate_to_view:

@@ -459,9 +459,13 @@ def test_persist_scan_reconciles_machine_inventory_in_one_transaction(
     assert set(machines) == {"192.168.1.10", "192.168.1.40", "192.168.1.50"}
 
     expected = {
-        "192.168.1.10": (2, 1, "computer"),
-        "192.168.1.40": (1, 1, "computer"),
-        "192.168.1.50": (1, 0, "unknown"),
+        "192.168.1.10": (2, 1, "camera"),
+        "192.168.1.40": (1, 1, "unknown"),
+        "192.168.1.50": (1, 0, "sensor"),
+    }
+    source_profiles = {
+        str(host.ip): host.device_profile.model_dump(mode="json")
+        for host in scan.hosts
     }
     for ip, (expected_ports, expected_findings, machine_type) in expected.items():
         machine = machines[ip]
@@ -476,10 +480,98 @@ def test_persist_scan_reconciles_machine_inventory_in_one_transaction(
         assert len(ports) == expected_ports
         assert len(host_findings) == expected_findings
         assert machine.machine_type == machine_type
+        assert machine.device_profile_json == source_profiles[ip]
+        assert machine.device_profile_policy_version == "2026-09-15.1"
         assert machine.vulnerability_count == expected_findings
         for host_finding in host_findings:
             assert host_finding.first_seen_at == scan.timestamp
             assert host_finding.fixed_at is None
+
+
+def test_newer_legacy_scan_uses_fallback_and_clears_profile_projection(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, current = _example_scan()
+    persist_scan(
+        runtime_session,
+        current,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=current.timestamp,
+        existing=None,
+    )
+    source = current.hosts[0]
+    machine = _machine(runtime_session, str(source.ip))
+    previous_count = machine.vulnerability_count
+    assert machine.device_profile_json is not None
+
+    _scan_and_reconcile(
+        runtime_session,
+        _identity(seeded_org, provisioned_agent),
+        ts=current.timestamp + timedelta(hours=1),
+        hosts=[
+            _host(
+                ip=str(source.ip),
+                mac=source.mac or MAC,
+                vendor="Hikvision",
+                ports=[_port(554, "rtsp")],
+            )
+        ],
+    )
+
+    runtime_session.refresh(machine)
+    assert machine.machine_type == "camera"
+    assert machine.device_profile_json is None
+    assert machine.device_profile_policy_version is None
+    assert machine.vulnerability_count == 0
+    assert previous_count >= 0
+
+
+def test_older_legacy_scan_cannot_replace_current_profile_or_counts(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    _, current = _example_scan()
+    persist_scan(
+        runtime_session,
+        current,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=current.timestamp,
+        existing=None,
+    )
+    source = current.hosts[0]
+    machine = _machine(runtime_session, str(source.ip))
+    before = (
+        machine.machine_type,
+        machine.device_profile_json,
+        machine.device_profile_policy_version,
+        machine.vulnerability_count,
+    )
+
+    _scan_and_reconcile(
+        runtime_session,
+        _identity(seeded_org, provisioned_agent),
+        ts=current.timestamp - timedelta(hours=1),
+        hosts=[
+            _host(
+                ip=str(source.ip),
+                mac=source.mac or MAC,
+                vendor="Brother",
+                ports=[_port(9100, "jetdirect")],
+            )
+        ],
+        findings=[_finding("older finding", ip=str(source.ip), port=9100)],
+    )
+
+    runtime_session.refresh(machine)
+    assert (
+        machine.machine_type,
+        machine.device_profile_json,
+        machine.device_profile_policy_version,
+        machine.vulnerability_count,
+    ) == before
 
 
 def test_cpe_enrichment_finding_reaches_machine_inventory(

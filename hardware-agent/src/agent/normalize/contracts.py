@@ -7,8 +7,30 @@ from ipaddress import IPv4Address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, constr
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    constr,
+    field_validator,
+    model_validator,
+)
 
+from agent.assessment.policy import (
+    MAX_ASSESSMENT_TEXT_CHARS,
+    MAX_CONFLICTS,
+    MAX_EVIDENCE_ITEMS,
+    MAX_EVIDENCE_SOURCE_CHARS,
+    MAX_EVIDENCE_VALUE_CHARS,
+    MAX_LIMITATIONS,
+    MAX_REASON_CHARS,
+    AssessmentConfidence,
+    EvidenceKind,
+    ExposureAttention,
+    ExposureConfidence,
+    ExposureRole,
+    MachineType,
+)
 from agent.ot.untrusted import (
     MAX_ADDRESS_RANGES_PER_UNIT,
     MAX_DEVICE_STRING_CHARS,
@@ -26,6 +48,99 @@ SubnetCIDR = constr(
     pattern=r"^([0-9]{1,3}[.]){3}[0-9]{1,3}/[0-9]{1,2}$",
     strip_whitespace=True,
 )
+
+AssessmentText = constr(
+    min_length=1,
+    max_length=MAX_ASSESSMENT_TEXT_CHARS,
+    strip_whitespace=True,
+)
+AssessmentReason = constr(
+    min_length=1,
+    max_length=MAX_REASON_CHARS,
+    strip_whitespace=True,
+)
+
+
+class AssessmentEvidencePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: EvidenceKind
+    source: constr(
+        min_length=1,
+        max_length=MAX_EVIDENCE_SOURCE_CHARS,
+        strip_whitespace=True,
+    )
+    value: constr(
+        min_length=1,
+        max_length=MAX_EVIDENCE_VALUE_CHARS,
+        strip_whitespace=True,
+    )
+
+
+def _ordered_evidence(
+    items: list[AssessmentEvidencePayload],
+) -> list[AssessmentEvidencePayload]:
+    unique: dict[tuple[str, str, str], AssessmentEvidencePayload] = {}
+    for item in items:
+        key = (item.kind, item.source, item.value.casefold())
+        unique.setdefault(key, item)
+    return sorted(
+        unique.values(),
+        key=lambda item: (item.kind, item.source, item.value),
+    )
+
+
+class ExposurePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ip: IPv4Address
+    port: Annotated[int, Field(ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"]
+    observed_service: AssessmentText
+    observed_version: AssessmentText | None = None
+    role: ExposureRole
+    attention: ExposureAttention
+    confidence: ExposureConfidence
+    reason: AssessmentReason
+    evidence: list[AssessmentEvidencePayload] = Field(
+        default_factory=list,
+        max_length=MAX_EVIDENCE_ITEMS,
+    )
+
+    @field_validator("evidence")
+    @classmethod
+    def order_evidence(
+        cls, value: list[AssessmentEvidencePayload]
+    ) -> list[AssessmentEvidencePayload]:
+        return _ordered_evidence(value)
+
+
+class DeviceProfilePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manufacturer: AssessmentText | None = None
+    product_family: AssessmentText | None = None
+    model: AssessmentText | None = None
+    confidence: AssessmentConfidence
+    evidence: list[AssessmentEvidencePayload] = Field(
+        default_factory=list,
+        max_length=MAX_EVIDENCE_ITEMS,
+    )
+    conflicts: list[AssessmentReason] = Field(
+        default_factory=list,
+        max_length=MAX_CONFLICTS,
+    )
+    limitations: list[AssessmentReason] = Field(
+        default_factory=list,
+        max_length=MAX_LIMITATIONS,
+    )
+
+    @field_validator("evidence")
+    @classmethod
+    def order_evidence(
+        cls, value: list[AssessmentEvidencePayload]
+    ) -> list[AssessmentEvidencePayload]:
+        return _ordered_evidence(value)
 
 
 class PortPayload(BaseModel):
@@ -123,6 +238,8 @@ class HostPayload(BaseModel):
     operating_system: OperatingSystemDetection | None = None
     ports: list[PortPayload] = Field(default_factory=list)
     industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
+    machine_type: MachineType | None = None
+    device_profile: DeviceProfilePayload | None = None
 
 
 class FindingPayload(BaseModel):
@@ -151,3 +268,44 @@ class ScanPayload(BaseModel):
     hosts: list[HostPayload] = Field(default_factory=list)
     findings: list[FindingPayload] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None
+    assessment_policy_version: constr(min_length=1, strip_whitespace=True) | None = None
+    exposures: list[ExposurePayload] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_assessment_snapshot(self) -> ScanPayload:
+        has_host_assessment = any(
+            host.machine_type is not None or host.device_profile is not None
+            for host in self.hosts
+        )
+        if self.assessment_policy_version is None:
+            if self.exposures or has_host_assessment:
+                raise ValueError(
+                    "legacy payloads cannot carry exposures or host assessment"
+                )
+            return self
+
+        incomplete_hosts = [
+            str(host.ip)
+            for host in self.hosts
+            if host.machine_type is None or host.device_profile is None
+        ]
+        if incomplete_hosts:
+            raise ValueError("current payloads require assessment for every host")
+
+        open_endpoints = {
+            (str(host.ip), port.protocol, port.port)
+            for host in self.hosts
+            for port in host.ports
+            if port.state == "open"
+        }
+        assessed_endpoints = [
+            (str(exposure.ip), exposure.protocol, exposure.port)
+            for exposure in self.exposures
+        ]
+        if len(assessed_endpoints) != len(set(assessed_endpoints)):
+            raise ValueError("current payloads cannot duplicate endpoint assessments")
+        if set(assessed_endpoints) != open_endpoints:
+            raise ValueError(
+                "current payloads require exactly one exposure per open endpoint"
+            )
+        return self

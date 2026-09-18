@@ -16,7 +16,8 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 ## Discovery & normalization
 
 * [discovery](./discovery.md) — Thin per-stage Nmap-argument builders: host discovery, port discovery, service detection, and NSE vulnerability scanning.
-* [normalize](./normalize.md) — The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
+* [normalize](./normalize.md) — The Pydantic scan payloads for observations, profiles, exposures and findings, plus the NSE finding extractor.
+* [assessment](./assessment.md) — The deterministic, versioned local policy that turns accepted scan evidence into endpoint exposures and conservative device profiles.
 * [utils](./utils.md) — Local-network detection/connectivity checks and the Nmap/NSE XML parsers.
 
 ## Remote control & upload
@@ -27,5 +28,5 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 
 ## TUI
 
-* [tui](./tui.md) — The Textual application: app root, screens (setup, home, wizard, progress, view, past scans), and shared widgets.
+* [tui](./tui.md) — The Textual application — scan setup/progress plus local inventory, profile, exposure and finding result views.
 * [ot](./ot.md) — Modbus inspection: policy, keyed digest, read-only client, inventory, OT stage (`pymodbus`).

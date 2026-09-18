@@ -30,6 +30,10 @@ ERROR_RESPONSE_ROUTES = {
 }
 
 SCHEMA_NAMES = (
+    "AssessmentEvidencePayload",
+    "DeviceProfilePayload",
+    "ExposurePayload",
+    "ExposureRead",
     "ScanSummary",
     "ScanListResponse",
     "CommandSummary",
@@ -309,6 +313,125 @@ def test_schema_matches_contract(schema_name: str):
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
     )
+
+
+def _enum_values(spec: dict[str, Any], node: dict[str, Any]) -> list[str]:
+    node = _resolve_ref(spec, node)
+    if "enum" in node:
+        return sorted(value for value in node["enum"] if value is not None)
+    values = []
+    for part in node.get("anyOf", []):
+        values.extend(_enum_values(spec, part))
+    return sorted(values)
+
+
+@pytest.mark.parametrize(
+    ("enum_name", "model_name", "field"),
+    [
+        ("AssessmentConfidence", "DeviceProfilePayload", "confidence"),
+        ("EvidenceKind", "AssessmentEvidencePayload", "kind"),
+        ("ExposureRole", "ExposurePayload", "role"),
+        ("ExposureAttention", "ExposurePayload", "attention"),
+        ("ExposureConfidence", "ExposurePayload", "confidence"),
+        ("MachineType", "HostPayload", "machine_type"),
+    ],
+)
+def test_assessment_enum_matches_contract(
+    enum_name: str, model_name: str, field: str
+) -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    expected = sorted(contract["components"]["schemas"][enum_name]["enum"])
+    app_field = app_spec["components"]["schemas"][model_name]["properties"][field]
+    assert _enum_values(app_spec, app_field) == expected
+
+
+@pytest.mark.parametrize(
+    ("schema_name", "field", "limits"),
+    [
+        ("AssessmentEvidencePayload", "source", {"minLength": 1, "maxLength": 80}),
+        ("AssessmentEvidencePayload", "value", {"minLength": 1, "maxLength": 160}),
+        ("DeviceProfilePayload", "evidence", {"maxItems": 12}),
+        ("DeviceProfilePayload", "conflicts", {"maxItems": 5}),
+        ("DeviceProfilePayload", "limitations", {"maxItems": 5}),
+        ("ExposurePayload", "port", {"minimum": 1, "maximum": 65535}),
+        ("ExposurePayload", "observed_service", {"minLength": 1, "maxLength": 160}),
+        ("ExposurePayload", "reason", {"minLength": 1, "maxLength": 240}),
+        ("ExposurePayload", "evidence", {"maxItems": 12}),
+    ],
+)
+def test_assessment_field_limits_match_contract(
+    schema_name: str, field: str, limits: dict[str, int]
+) -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    for key, expected in limits.items():
+        contract_field = _resolve_ref(
+            contract,
+            contract["components"]["schemas"][schema_name]["properties"][field],
+        )
+        app_field = _resolve_ref(
+            app_spec,
+            app_spec["components"]["schemas"][schema_name]["properties"][field],
+        )
+        assert contract_field[key] == app_field[key] == expected
+
+
+@pytest.mark.parametrize(
+    ("schema_name", "required_fields"),
+    [
+        ("ScanHostView", {"machine_type", "device_profile"}),
+        (
+            "ScanDetailResponse",
+            {"assessment_status", "assessment_policy_version", "exposures"},
+        ),
+        ("HostSummary", {"device_profile"}),
+        (
+            "HostDetailResponse",
+            {
+                "device_profile",
+                "assessment_status",
+                "assessment_policy_version",
+                "exposures",
+            },
+        ),
+    ],
+)
+def test_assessment_read_fields_are_required_in_contract_and_app(
+    schema_name: str, required_fields: set[str]
+) -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    for spec in (contract, app_spec):
+        schema = spec["components"]["schemas"][schema_name]
+        assert required_fields <= set(schema["required"])
+
+
+@pytest.mark.parametrize(
+    ("schema_name", "nullable_fields"),
+    [
+        ("ScanHostView", {"machine_type", "device_profile"}),
+        ("ScanDetailResponse", {"assessment_policy_version"}),
+        ("HostSummary", {"device_profile"}),
+        (
+            "HostDetailResponse",
+            {"device_profile", "assessment_policy_version"},
+        ),
+    ],
+)
+def test_assessment_read_fields_are_nullable_in_contract_and_app(
+    schema_name: str, nullable_fields: set[str]
+) -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+
+    for spec in (contract, app_spec):
+        schema = spec["components"]["schemas"][schema_name]
+        for field in nullable_fields:
+            assert _property_shape(spec, schema["properties"][field])["nullable"]
 
 
 def _operating_system_schema_shape(

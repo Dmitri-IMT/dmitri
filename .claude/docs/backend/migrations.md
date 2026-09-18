@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
+description: The Alembic env and revisions through attack-surface profiles. Head is `20260915_27`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-09-13T20:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Backend database migrations
@@ -24,7 +24,8 @@ columns replaced by a plaintext `public_key`. Each DDL-only step is followed by 
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
 new table. Merge revisions join the activity, OS-inventory, and machine-inventory heads; industrial
 observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_24` adds
-`ai_scan_analyses`; `20260912_25` adds enrichment retry columns; `20260912_26` adds AI retry columns. Head is `20260912_26`.
+`ai_scan_analyses`; `20260912_25` adds enrichment retry columns; `20260912_26` adds AI retry columns;
+`20260915_27` adds assessment snapshots and endpoint exposures. Head is `20260915_27`.
 
 ## Key classes / functions
 
@@ -62,7 +63,8 @@ observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_
 | `upgrade()` (rev `20260912_23`, `merge_industrial_and_inventory`) | Empty merge of `20260912_21` (inventory+OS) and `20260912_22` (industrial observations). | `backend/alembic/versions/20260912_23_merge_industrial_and_inventory.py` |
 | `upgrade()` (rev `20260912_24`, `ai_scan_analyses`) | Creates `ai_scan_analyses` (unique `scan_id`, RLS + runtime grants). Parent `20260912_23`. | `backend/alembic/versions/20260912_24_ai_scan_analyses.py` |
 | `upgrade()` (rev `20260912_25`, `enrichment_retries`) | Enrichment job retry columns. | `backend/alembic/versions/20260912_25_enrichment_retries.py` |
-| `upgrade()` (rev `20260912_26`, `ai_scan_analysis_retries`) | Adds indexed `ai_scan_analyses.next_attempt_at`; renames `last_error_code` to `last_error`, so both job tables share the `claim_jobs` columns. Current head. | `backend/alembic/versions/20260912_26_ai_scan_analysis_retries.py` |
+| `upgrade()` (rev `20260912_26`, `ai_scan_analysis_retries`) | Adds indexed `ai_scan_analyses.next_attempt_at`; renames `last_error_code` to `last_error`, so both job tables share the `claim_jobs` columns. | `backend/alembic/versions/20260912_26_ai_scan_analysis_retries.py` |
+| `upgrade()` (rev `20260915_27`, `attack_surface_profiles`) | Adds nullable assessment fields to scans/scan_hosts/hosts and creates `exposures` with endpoint FKs, uniqueness, checks, indexes, RLS, and runtime grants. No historical backfill. Current head. | `backend/alembic/versions/20260915_27_attack_surface_profiles.py` |
 
 ## How it connects
 
@@ -119,7 +121,8 @@ observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_
   `20260908_19` (OS inventory). `20260912_21` on main is the empty merge of inventory depth and OS.
   Do not rewrite released revisions. `20260912_22` adds `industrial_services`, `modbus_units`,
   `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
-  `20260912_24` adds `ai_scan_analyses`. `20260912_25` adds enrichment retries. `20260912_26` is the current head (AI retries).
+  `20260912_24` adds `ai_scan_analyses`. `20260912_25` adds enrichment retries, `20260912_26`
+  adds AI retries, and `20260915_27` is the current head (attack-surface profiles).
   `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations

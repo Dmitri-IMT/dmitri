@@ -33,4 +33,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through attack-surface profiles. Head is `20260915_27`.

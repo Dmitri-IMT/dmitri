@@ -1,10 +1,10 @@
 ---
 type: Module
 title: normalize — contracts & findings extraction
-description: The Pydantic scan payloads and NSE extractor, including port- and host-scoped SMB findings.
+description: The Pydantic scan payloads for observations, profiles, exposures and findings, plus the NSE finding extractor.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-09-12T22:20:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -21,8 +21,11 @@ only range status and an optional keyed digest cross this boundary.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanPayload` | Top-level result: `scan_id`, `timestamp`, `subnet` (CIDR), `scan_mode`, `hosts`, `findings`, `metadata`. | `contracts.py:145` |
-| `HostPayload` | A host on the wire: IP/MAC, hostname, vendor, OS, ports, and industrial services. Formerly `DevicePayload`. | `contracts.py:118` |
+| `ScanPayload` | Top-level result including optional `assessment_policy_version` and `exposures`; absence marks a legacy scan whose assessment is unavailable. | `contracts.py:263` |
+| `HostPayload` | A host on the wire: original observations plus optional `machine_type` and `device_profile`. | `contracts.py:233` |
+| `AssessmentEvidencePayload` | Bounded evidence item with a closed kind, source, and normalized value. | `contracts.py:64` |
+| `ExposurePayload` | One open endpoint's role, attention, confidence, reason, and evidence; separate from findings. | `contracts.py:93` |
+| `DeviceProfilePayload` | Evidence-backed machine type, manufacturer/product/model assessment, confidence, conflicts, and limitations. | `contracts.py:118` |
 | `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`, CPEs. | `contracts.py:31` |
 | `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:106`, `:90` |
 | `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:68` |
@@ -45,6 +48,8 @@ only range status and an optional keyed digest cross this boundary.
 - **Downstream** — `ScanPayload` is serialized by
   [workspace `write_scan_result`](/hardware-agent/scanner/workspace.md) and rendered by the TUI's
   scan-view ([tui](/hardware-agent/tui.md)). It mirrors the shared [contracts](/contracts.md).
+- **Assessment** — [`assess_hosts`](/hardware-agent/assessment.md) produces the profile and exposure
+  fields without mutating original host/port observations.
 
 ## Notes / gotchas
 
