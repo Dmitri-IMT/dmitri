@@ -210,7 +210,8 @@ def ask_scan_ai(
     assert provider is not None
     try:
         answer = provider.answer_question(
-            build_chat_context(detail, risk, analysis), payload.question
+            build_chat_context(detail, risk, analysis, payload.question),
+            payload.question,
         )
         return materialize_chat_response(answer, finding_reference_map(risk))
     except (AIProviderError, ValueError) as exc:

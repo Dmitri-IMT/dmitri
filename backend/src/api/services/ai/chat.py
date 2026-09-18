@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from uuid import UUID
 
 from api.schemas.ai import AIChatResponse, ProviderAIChatResponse
@@ -10,6 +12,7 @@ def build_chat_context(
     detail: ScanDetailResponse,
     risk: ScanRiskSummaryResponse,
     analysis: object | None,
+    question: str | None = None,
 ) -> dict[str, object]:
     """Build a bounded, read-only context for one scan question."""
     completed_analysis = getattr(analysis, "analysis", None)
@@ -33,6 +36,7 @@ def build_chat_context(
             ],
         }
 
+    selected_findings = _select_findings(risk.top_findings, question)
     return {
         "scan": {
             "scan_id": str(detail.scan_id),
@@ -68,10 +72,57 @@ def build_chat_context(
                 "port": finding.port,
                 "service": finding.service,
             }
-            for index, finding in enumerate(risk.top_findings[:5], start=1)
+            for index, finding in enumerate(selected_findings, start=1)
         ],
         "existing_ai_analysis": analysis_context,
     }
+
+
+_QUESTION_STOPWORDS = {
+    "a", "as", "ao", "aos", "com", "como", "da", "das", "de", "do", "dos",
+    "e", "em", "essa", "este", "eu", "foi", "me", "na", "nas", "no", "nos",
+    "o", "os", "para", "por", "que", "qual", "quando", "se", "sobre", "um",
+    "uma", "vou", "é", "são",
+}
+
+
+def _select_findings(findings: list[object], question: str | None) -> list[object]:
+    """Keep the bounded context while putting question-relevant findings first."""
+    bounded = list(findings[:5])
+    if not question or not bounded:
+        return bounded
+    terms = _question_terms(question)
+    if not terms:
+        return bounded
+
+    ranked: list[tuple[int, int, object]] = []
+    for index, finding in enumerate(bounded):
+        searchable = " ".join(
+            str(getattr(finding, field, "") or "")
+            for field in (
+                "title",
+                "description",
+                "recommendation",
+                "service",
+                "cve_id",
+                "host_ip",
+                "host_hostname",
+            )
+        )
+        tokens = set(_question_terms(searchable))
+        score = sum(term in tokens for term in terms)
+        ranked.append((score, -index, finding))
+    ranked.sort(reverse=True, key=lambda item: (item[0], item[1]))
+    return [finding for _, _, finding in ranked]
+
+
+def _question_terms(value: str) -> list[str]:
+    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    return [
+        token
+        for token in re.findall(r"[a-z0-9][a-z0-9._:-]*", normalized.lower())
+        if len(token) >= 3 and token not in _QUESTION_STOPWORDS
+    ]
 
 
 def _clip(value: str, limit: int) -> str:
