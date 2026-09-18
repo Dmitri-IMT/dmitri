@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 import type { components, operations } from '../types/openapi'
 
+export type AIChatResponse = components['schemas']['AIChatResponse']
+export type AIChatHistoryResponse = components['schemas']['AIChatHistoryResponse']
+
 type HostListResponse = components['schemas']['HostListResponse']
 type HostDetailResponse = components['schemas']['HostDetailResponse']
 type ListHostsQuery = NonNullable<
@@ -38,5 +41,25 @@ export async function listHosts(
 
 export async function getHost(hostId: string): Promise<HostDetailResponse> {
   const response = await apiClient.get<HostDetailResponse>(`/hosts/${hostId}`)
+  return response.data
+}
+
+export async function explainHost(
+  hostId: string,
+  question = 'Explique o estado de segurança deste equipamento e o que devo priorizar.',
+): Promise<AIChatResponse> {
+  const response = await apiClient.post<AIChatResponse>(
+    `/hosts/${hostId}/explain`,
+    { question },
+  )
+  return response.data
+}
+
+export async function getHostAIHistory(
+  hostId: string,
+): Promise<AIChatHistoryResponse> {
+  const response = await apiClient.get<AIChatHistoryResponse>(
+    `/hosts/${hostId}/explain`,
+  )
   return response.data
 }

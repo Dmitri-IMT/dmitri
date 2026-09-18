@@ -647,6 +647,66 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+  /api/v1/hosts/{host_id}/explain:
+    get:
+      tags:
+        - hosts
+      summary: List host AI explanation history
+      operationId: listHostAIHistory
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HostId'
+      responses:
+        '200':
+          description: Persisted host-scoped AI conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - hosts
+      summary: Explain a host with AI
+      operationId: explainHostWithAI
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HostId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIChatRequest'
+      responses:
+        '200':
+          description: Grounded explanation for the host.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: The AI provider rate limit was reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/InternalServerError'
+
   /api/v1/findings:
     get:
       tags:
@@ -737,6 +797,66 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/findings/{finding_id}/explain:
+    get:
+      tags:
+        - findings
+      summary: List finding AI explanation history
+      operationId: listFindingAIHistory
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FindingId'
+      responses:
+        '200':
+          description: Persisted finding-scoped AI conversation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - findings
+      summary: Explain a finding with AI
+      operationId: explainFindingWithAI
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FindingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIChatRequest'
+      responses:
+        '200':
+          description: Grounded explanation for the finding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          description: The AI provider rate limit was reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/home:
     get:

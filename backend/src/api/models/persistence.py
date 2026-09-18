@@ -382,6 +382,8 @@ class AIChatMessageRecord(SQLModel, table=True):
     message_id: UUID = Field(default_factory=uuid4, primary_key=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
     user_id: UUID = Field(index=True, foreign_key="users.id")
+    scope_type: str = Field(default="scan", index=True)
+    scope_id: UUID = Field(index=True)
     question: str
     answer: str
     uncertainties_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))

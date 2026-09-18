@@ -16,6 +16,17 @@ class _FakeProvider:
         )
 
 
+class _ScopedFakeProvider:
+    def answer_question(self, context, question):
+        assert question == "explique este contexto"
+        assert "finding" in context or "host" in context
+        return ProviderAIChatResponse(
+            answer="Explicação fundamentada.",
+            uncertainties=[],
+            referenced_finding_refs=["finding_1"],
+        )
+
+
 def _enable_ai(monkeypatch):
     settings = get_settings().model_copy(
         update={"ai_enabled": True, "ai_api_key": "test-key"}
@@ -73,3 +84,64 @@ def test_scan_chat_maps_provider_rate_limit_to_api_error(
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "ai_rate_limited"
     assert "42 segundos" in response.json()["error"]["message"]
+
+
+def test_finding_explain_returns_grounded_response(
+    client, administrative_session, bearer_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        "api.routers.findings.build_ai_provider",
+        lambda settings: _ScopedFakeProvider(),
+    )
+    try:
+        response = client.post(
+            f"/api/v1/findings/{seeded['finding'].finding_id}/explain",
+            json={"question": "explique este contexto"},
+            headers=bearer_headers(seeded["org"].id, "viewer"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Explicação fundamentada."
+
+
+def test_host_explain_returns_grounded_response(
+    client, administrative_session, bearer_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    _enable_ai(monkeypatch)
+    monkeypatch.setattr(
+        "api.routers.hosts.build_ai_provider",
+        lambda settings: _ScopedFakeProvider(),
+    )
+    try:
+        response = client.post(
+            f"/api/v1/hosts/{seeded['host'].id}/explain",
+            json={"question": "explique este contexto"},
+            headers=bearer_headers(seeded["org"].id, "viewer"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Explicação fundamentada."
+
+
+def test_finding_explain_unknown_finding_returns_404(
+    client, administrative_session, bearer_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    _enable_ai(monkeypatch)
+    try:
+        response = client.post(
+            "/api/v1/findings/00000000-0000-4000-8000-000000000000/explain",
+            json={"question": "explique este contexto"},
+            headers=bearer_headers(seeded["org"].id, "viewer"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 404

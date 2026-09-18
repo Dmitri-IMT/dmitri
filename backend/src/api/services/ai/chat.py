@@ -8,7 +8,12 @@ from sqlmodel import Session, select
 
 from api.models.persistence import AIChatMessageRecord, ScanRecord
 from api.schemas.ai import AIChatHistoryEntry, AIChatResponse, ProviderAIChatResponse
-from api.schemas.read import ScanDetailResponse, ScanRiskSummaryResponse
+from api.schemas.read import (
+    FindingRead,
+    HostDetailResponse,
+    ScanDetailResponse,
+    ScanRiskSummaryResponse,
+)
 
 
 def build_chat_context(
@@ -120,6 +125,73 @@ def _host_vulnerability_summary(findings: list[object]) -> list[dict[str, object
     )[:20]
 
 
+def build_finding_context(finding: object) -> dict[str, object]:
+    """Build a bounded context for a future finding-specific explanation."""
+    return {
+        "finding": {
+            "finding_ref": "finding_1",
+            "finding_id": str(getattr(finding, "finding_id", "")),
+            "title": _clip(str(getattr(finding, "title", "") or ""), 240),
+            "description": _clip(
+                str(getattr(finding, "description", "") or ""), 1200
+            ),
+            "recommendation": _clip(
+                str(getattr(finding, "recommendation", "") or ""), 800
+            ),
+            "evidence": _clip(str(getattr(finding, "evidence", "") or ""), 800),
+            "severity": getattr(finding, "severity", None),
+            "risk_score": getattr(finding, "risk_score", None),
+            "confidence": getattr(finding, "confidence", None),
+            "cve_id": getattr(finding, "cve_id", None),
+            "cvss_score": getattr(finding, "cvss_score", None),
+            "host_ip": str(getattr(finding, "host_ip", "") or "") or None,
+            "host_hostname": getattr(finding, "host_hostname", None),
+            "service": getattr(finding, "service", None),
+            "port": getattr(finding, "port", None),
+        }
+    }
+
+
+def build_host_context(
+    host: HostDetailResponse, findings: list[FindingRead]
+) -> dict[str, object]:
+    """Build a bounded context for a host-specific explanation."""
+    return {
+        "host": {
+            "host_id": str(host.host_id),
+            "ip": str(host.ip),
+            "hostname": host.hostname,
+            "vendor": host.vendor,
+            "machine_type": host.machine_type,
+            "vulnerability_count": host.vulnerability_count,
+            "highest_severity": host.highest_severity,
+            "open_ports_count": host.open_ports_count,
+            "services": [
+                {
+                    "port": port.port,
+                    "protocol": port.protocol,
+                    "service": port.service,
+                    "version": port.version,
+                }
+                for port in host.ports[:20]
+            ],
+        },
+        "findings": [
+            {
+                "finding_ref": f"finding_{index}",
+                "finding_id": str(finding.finding_id),
+                "title": _clip(finding.title, 180),
+                "severity": finding.severity,
+                "risk_score": finding.risk_score,
+                "service": finding.service,
+                "cve_id": finding.cve_id,
+                "recommendation": _clip(finding.recommendation, 400),
+            }
+            for index, finding in enumerate(findings[:10], start=1)
+        ],
+    }
+
+
 _QUESTION_STOPWORDS = {
     "a", "as", "ao", "aos", "com", "como", "da", "das", "de", "do", "dos",
     "e", "em", "essa", "este", "eu", "foi", "me", "na", "nas", "no", "nos",
@@ -205,10 +277,14 @@ def save_chat_message(
     user_id: UUID,
     question: str,
     response: AIChatResponse,
+    scope_type: str = "scan",
+    scope_id: UUID | None = None,
 ) -> AIChatHistoryEntry:
     record = AIChatMessageRecord(
         scan_id=scan_id,
         user_id=user_id,
+        scope_type=scope_type,
+        scope_id=scope_id or scan_id,
         question=question,
         answer=response.answer,
         uncertainties_json=response.uncertainties,
@@ -223,12 +299,23 @@ def save_chat_message(
 
 
 def list_chat_messages(
-    session: Session, *, scan_id: UUID, org_id: UUID, limit: int = 50
+    session: Session,
+    *,
+    scan_id: UUID,
+    org_id: UUID,
+    scope_type: str = "scan",
+    scope_id: UUID | None = None,
+    limit: int = 50,
 ) -> list[AIChatHistoryEntry]:
     statement = (
         select(AIChatMessageRecord)
         .join(ScanRecord, ScanRecord.scan_id == AIChatMessageRecord.scan_id)
-        .where(AIChatMessageRecord.scan_id == scan_id, ScanRecord.org_id == org_id)
+        .where(
+            AIChatMessageRecord.scan_id == scan_id,
+            ScanRecord.org_id == org_id,
+            AIChatMessageRecord.scope_type == scope_type,
+            AIChatMessageRecord.scope_id == (scope_id or scan_id),
+        )
         .order_by(AIChatMessageRecord.created_at)
         .limit(limit)
     )
