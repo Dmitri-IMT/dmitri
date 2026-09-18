@@ -137,7 +137,9 @@ para a futura integracao LLM. Ambas aplicam o escopo da organizacao autenticada;
 o resumo retorna no maximo dez findings, sempre com seus IDs e evidencias, para
 limitar contexto e permitir rastreabilidade.
 
-A analise assistida por IA e opcional e sob demanda:
+A analise assistida por IA e opcional. Por padrao continua sob demanda; quando
+`AI_AUTO_ANALYSIS=true`, o worker cria automaticamente um job depois que todos os
+jobs de enriquecimento do scan chegam a um estado terminal:
 
 - `GET /api/v1/scans/{scan_id}/analysis` devolve `unavailable`, `not_requested`,
   `pending`, `processing`, `completed` ou `failed`
@@ -156,6 +158,7 @@ Configuracao inicial:
 
 ```env
 AI_ENABLED=true
+AI_AUTO_ANALYSIS=false
 AI_MODEL=openai/gpt-oss-120b
 AI_API_KEY=<chave da Groq>
 AI_API_BASE_URL=https://api.groq.com/openai/v1

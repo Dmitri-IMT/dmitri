@@ -16,10 +16,10 @@ from api.services.ai.chat import (
     build_finding_context,
     finding_reference_map,
     list_chat_messages,
-    materialize_chat_response,
     save_chat_message,
 )
 from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
+from api.services.ai.orchestrator import AIOrchestrator
 from api.services.read import get_finding_detail, list_findings
 
 router = APIRouter()
@@ -68,11 +68,10 @@ def explain_finding(
     provider = build_ai_provider(settings)
     assert provider is not None
     try:
-        answer = provider.answer_question(
-            build_finding_context(finding), payload.question
-        )
-        response = materialize_chat_response(
-            answer, finding_reference_map([finding], payload.question)
+        response = AIOrchestrator(provider).answer_question(
+            context=build_finding_context(finding),
+            question=payload.question,
+            finding_references=finding_reference_map([finding], payload.question),
         )
         save_chat_message(
             session,

@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from api.core.config import Settings, get_settings
 from api.models.persistence import (
     AIScanAnalysisRecord,
     EnrichmentJobRecord,
@@ -31,7 +32,12 @@ from api.services.ai.context import (
     build_scan_ai_context,
     materialize_scan_ai_analysis,
 )
-from api.services.ai.groq import AI_PROMPT_VERSION, AIProviderError, GroqProvider
+from api.services.ai.groq import (
+    AI_PROMPT_VERSION,
+    GROQ_PROVIDER_ID,
+    AIProviderError,
+    GroqProvider,
+)
 from api.services.ai.validation import (
     sanitize_scan_ai_analysis,
     validate_provider_analysis,
@@ -170,6 +176,50 @@ def request_scan_ai_analysis(
         raise AIAnalysisAlreadyRequestedError from exc
     session.refresh(record)
     return scan_ai_analysis_response(record)
+
+
+def enqueue_auto_scan_analysis(
+    session: Session,
+    scan_id: UUID,
+    *,
+    settings: Settings | None = None,
+) -> bool:
+    """Create one analysis job after all enrichment jobs reach a terminal state."""
+    resolved_settings = settings or get_settings()
+    if not resolved_settings.ai_auto_analysis or not resolved_settings.ai_enabled:
+        return False
+    if (
+        resolved_settings.ai_api_key is None
+        or not resolved_settings.ai_api_key.get_secret_value().strip()
+    ):
+        return False
+    active_enrichment = session.exec(
+        select(EnrichmentJobRecord.id).where(
+            EnrichmentJobRecord.scan_id == scan_id,
+            EnrichmentJobRecord.status.in_(ACTIVE_ENRICHMENT_STATUSES),
+        )
+    ).first()
+    if active_enrichment is not None:
+        return False
+    try:
+        request_scan_ai_analysis(
+            session,
+            scan_id,
+            org_id=_scan_org_id(session, scan_id),
+            ai_enabled=True,
+            provider_name=GROQ_PROVIDER_ID,
+            model=resolved_settings.ai_model,
+        )
+    except AIAnalysisAlreadyRequestedError:
+        return False
+    return True
+
+
+def _scan_org_id(session: Session, scan_id: UUID) -> UUID:
+    scan = session.get(ScanRecord, scan_id)
+    if scan is None:
+        raise ValueError("scan not found")
+    return scan.org_id
 
 
 def process_ready_ai_analyses(

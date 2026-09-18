@@ -21,10 +21,10 @@ from api.services.ai.chat import (
     build_host_context,
     finding_reference_map,
     list_chat_messages,
-    materialize_chat_response,
     save_chat_message,
 )
 from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
+from api.services.ai.orchestrator import AIOrchestrator
 from api.services.read import (
     DEFAULT_PAGE,
     DEFAULT_PER_PAGE,
@@ -82,11 +82,10 @@ def explain_host(
     provider = build_ai_provider(settings)
     assert provider is not None
     try:
-        answer = provider.answer_question(
-            build_host_context(host, findings), payload.question
-        )
-        response = materialize_chat_response(
-            answer, finding_reference_map(findings, payload.question)
+        response = AIOrchestrator(provider).answer_question(
+            context=build_host_context(host, findings),
+            question=payload.question,
+            finding_references=finding_reference_map(findings, payload.question),
         )
         latest_scan_id = host.scan_history[0].scan_id if host.scan_history else None
         if latest_scan_id is not None:

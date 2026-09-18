@@ -31,7 +31,6 @@ from api.services.ai.chat import (
     build_chat_context,
     finding_reference_map,
     list_chat_messages,
-    materialize_chat_response,
     save_chat_message,
 )
 from api.services.ai.groq import (
@@ -45,6 +44,7 @@ from api.services.ai.jobs import (
     get_scan_ai_analysis,
     request_scan_ai_analysis,
 )
+from api.services.ai.orchestrator import AIOrchestrator
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 from api.services.report_pdf import render_scan_report_pdf
@@ -234,13 +234,10 @@ def ask_scan_ai(
     provider = build_ai_provider(settings)
     assert provider is not None
     try:
-        answer = provider.answer_question(
-            build_chat_context(detail, risk, analysis, payload.question),
-            payload.question,
-        )
-        response = materialize_chat_response(
-            answer,
-            finding_reference_map(
+        response = AIOrchestrator(provider).answer_question(
+            context=build_chat_context(detail, risk, analysis, payload.question),
+            question=payload.question,
+            finding_references=finding_reference_map(
                 detail.findings if payload.question else risk.top_findings,
                 payload.question,
             ),

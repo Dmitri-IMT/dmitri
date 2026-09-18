@@ -209,6 +209,7 @@ APP_BASE_URL=http://localhost:5173
 # Optional AI overview (Groq). Off by default. Needs a key on the worker to run jobs,
 # and the same pair on the API or Scan Detail returns unavailable.
 # AI_ENABLED=true
+# AI_AUTO_ANALYSIS=false
 # AI_API_KEY=
 # AI_MODEL=openai/gpt-oss-120b
 # AI_POLL_INTERVAL_SECONDS=5

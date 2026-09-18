@@ -15,6 +15,8 @@ from api.schemas.read import (
     ScanRiskSummaryResponse,
 )
 
+MAX_CHAT_HISTORY = 10
+
 
 def build_chat_context(
     detail: ScanDetailResponse,
@@ -295,6 +297,19 @@ def save_chat_message(
     session.add(record)
     session.commit()
     session.refresh(record)
+    older_records = session.exec(
+        select(AIChatMessageRecord)
+        .where(
+            AIChatMessageRecord.scope_type == scope_type,
+            AIChatMessageRecord.scope_id == (scope_id or scan_id),
+        )
+        .order_by(AIChatMessageRecord.created_at.desc())
+        .offset(MAX_CHAT_HISTORY)
+    ).all()
+    for older_record in older_records:
+        session.delete(older_record)
+    if older_records:
+        session.commit()
     return _history_entry(record)
 
 
@@ -305,8 +320,9 @@ def list_chat_messages(
     org_id: UUID,
     scope_type: str = "scan",
     scope_id: UUID | None = None,
-    limit: int = 50,
+    limit: int = MAX_CHAT_HISTORY,
 ) -> list[AIChatHistoryEntry]:
+    limit = min(limit, MAX_CHAT_HISTORY)
     statement = (
         select(AIChatMessageRecord)
         .join(ScanRecord, ScanRecord.scan_id == AIChatMessageRecord.scan_id)
@@ -316,10 +332,12 @@ def list_chat_messages(
             AIChatMessageRecord.scope_type == scope_type,
             AIChatMessageRecord.scope_id == (scope_id or scan_id),
         )
-        .order_by(AIChatMessageRecord.created_at)
+        .order_by(AIChatMessageRecord.created_at.desc())
         .limit(limit)
     )
-    return [_history_entry(record) for record in session.exec(statement).all()]
+    records = list(session.exec(statement).all())
+    records.reverse()
+    return [_history_entry(record) for record in records]
 
 
 def _history_entry(record: AIChatMessageRecord) -> AIChatHistoryEntry:
