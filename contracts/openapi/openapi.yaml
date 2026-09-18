@@ -437,6 +437,28 @@ paths:
           $ref: '#/components/responses/InternalServerError'
 
   /api/v1/scans/{scan_id}/chat:
+    get:
+      tags:
+        - scans
+      summary: List the scan AI chat history
+      operationId: listScanAIChat
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '200':
+          description: Previously answered questions for the selected scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
         - scans
@@ -4415,6 +4437,32 @@ components:
           items:
             type: string
             format: uuid
+    AIChatHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/AIChatResponse'
+        - type: object
+          additionalProperties: false
+          required: [message_id, question, created_at]
+          properties:
+            message_id:
+              type: string
+              format: uuid
+            question:
+              type: string
+              minLength: 3
+              maxLength: 2000
+            created_at:
+              type: string
+              format: date-time
+    AIChatHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIChatHistoryEntry'
     ScanAIAnalysisUnavailable:
       type: object
       additionalProperties: false

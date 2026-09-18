@@ -11,7 +11,12 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
 from api.models.persistence import utc_now
-from api.schemas.ai import AIChatRequest, AIChatResponse, ScanAIAnalysisResponse
+from api.schemas.ai import (
+    AIChatHistoryResponse,
+    AIChatRequest,
+    AIChatResponse,
+    ScanAIAnalysisResponse,
+)
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -25,7 +30,9 @@ from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
 from api.services.ai.chat import (
     build_chat_context,
     finding_reference_map,
+    list_chat_messages,
     materialize_chat_response,
+    save_chat_message,
 )
 from api.services.ai.groq import (
     GROQ_PROVIDER_ID,
@@ -44,6 +51,24 @@ from api.services.report_pdf import render_scan_report_pdf
 from api.services.reports import ReportNotReadyError, build_scan_report
 
 router = APIRouter()
+
+
+@router.get(
+    "/api/v1/scans/{scan_id}/chat",
+    response_model=AIChatHistoryResponse,
+    operation_id="listScanAIChat",
+)
+def read_scan_ai_chat(
+    scan_id: UUID,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+) -> AIChatHistoryResponse:
+    detail = get_scan_detail(session, scan_id, org_id=caller.org_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return AIChatHistoryResponse(
+        data=list_chat_messages(session, scan_id=scan_id, org_id=caller.org_id)
+    )
 
 
 @router.post(
@@ -213,7 +238,21 @@ def ask_scan_ai(
             build_chat_context(detail, risk, analysis, payload.question),
             payload.question,
         )
-        return materialize_chat_response(answer, finding_reference_map(risk))
+        response = materialize_chat_response(
+            answer,
+            finding_reference_map(
+                detail.findings if payload.question else risk.top_findings,
+                payload.question,
+            ),
+        )
+        save_chat_message(
+            session,
+            scan_id=scan_id,
+            user_id=caller.sub,
+            question=payload.question,
+            response=response,
+        )
+        return response
     except (AIProviderError, ValueError) as exc:
         if (
             isinstance(exc, AIProviderError)

@@ -25,6 +25,18 @@ class AIChatResponse(BaseModel):
     referenced_finding_ids: Annotated[list[UUID], Field(max_length=15)]
 
 
+class AIChatHistoryEntry(AIChatResponse):
+    message_id: UUID
+    question: AIShortText
+    created_at: datetime
+
+
+class AIChatHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[AIChatHistoryEntry]
+
+
 class ProviderAIChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

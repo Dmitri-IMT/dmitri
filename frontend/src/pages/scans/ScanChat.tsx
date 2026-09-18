@@ -1,15 +1,39 @@
-import { useState } from 'react'
-import { askScanAI } from '@/api/scans'
+import { useEffect, useState } from 'react'
+import { askScanAI, getScanAIChat } from '@/api/scans'
+import type { AIChatHistoryResponse } from '@/api/scans'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 
 function ScanChat({ scanId }: { scanId: string }) {
   const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState<string | null>(null)
-  const [uncertainties, setUncertainties] = useState<string[]>([])
+  const [messages, setMessages] = useState<AIChatHistoryResponse['data']>([])
+  const [isHistoryVisible, setIsHistoryVisible] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const visibleMessages = messages.filter(
+    (message) =>
+      isHistoryVisible || message.message_id.startsWith('local-'),
+  )
+
+  useEffect(() => {
+    if (!isHistoryVisible) return
+    let active = true
+    getScanAIChat(scanId)
+      .then((response) => {
+        if (active) setMessages(response.data)
+      })
+      .catch(() => {
+        // History is supplementary; the user can still ask a new question.
+      })
+      .finally(() => {
+        if (active) setIsLoadingHistory(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [isHistoryVisible, scanId])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -19,8 +43,18 @@ function ScanChat({ scanId }: { scanId: string }) {
     setError(null)
     try {
       const response = await askScanAI(scanId, trimmed)
-      setAnswer(response.answer)
-      setUncertainties(response.uncertainties)
+      setMessages((current) => [
+        ...current,
+        {
+          message_id: `local-${Date.now()}`,
+          question: trimmed,
+          answer: response.answer,
+          uncertainties: response.uncertainties,
+          referenced_finding_ids: response.referenced_finding_ids,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      setQuestion('')
     } catch (caughtError) {
       setError(readChatErrorMessage(caughtError))
     } finally {
@@ -38,6 +72,18 @@ function ScanChat({ scanId }: { scanId: string }) {
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-expanded={isHistoryVisible}
+          onClick={() => {
+            setIsHistoryVisible((visible) => !visible)
+            if (!isHistoryVisible) setIsLoadingHistory(true)
+          }}
+        >
+          {isHistoryVisible ? 'Ocultar histórico' : 'Mostrar histórico'}
+        </Button>
         <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
           <label className="text-body-sm" htmlFor="scan-question">
             Sua pergunta
@@ -57,24 +103,50 @@ function ScanChat({ scanId }: { scanId: string }) {
             {isSending ? 'Analisando...' : 'Perguntar'}
           </Button>
         </form>
-        {answer && (
+        {isHistoryVisible && isLoadingHistory && (
+          <p className="text-body-sm text-muted-foreground">
+            Carregando histórico...
+          </p>
+        )}
+        {visibleMessages.map((message) => (
           <div
-            className="rounded-md border border-border p-4"
+            className="flex flex-col gap-3 rounded-md border border-border p-4"
+            key={message.message_id}
             aria-live="polite"
           >
-            <p className="text-body-md">{answer}</p>
-            {uncertainties.length > 0 && (
-              <div className="mt-3 text-body-sm text-muted-foreground">
+            <div>
+              <p className="text-body-sm font-medium">Sua pergunta</p>
+              <p className="text-body-md">{message.question}</p>
+            </div>
+            <div>
+              <p className="text-body-sm font-medium">Resposta</p>
+              <p className="text-body-md">{message.answer}</p>
+            </div>
+            {message.referenced_finding_ids.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {message.referenced_finding_ids.map((findingId, index) => (
+                  <a
+                    className="text-body-sm text-primary underline underline-offset-2"
+                    href={`/scans/${scanId}?finding=${findingId}`}
+                    key={findingId}
+                  >
+                    Ver achado {index + 1}
+                  </a>
+                ))}
+              </div>
+            )}
+            {message.uncertainties.length > 0 && (
+              <div className="text-body-sm text-muted-foreground">
                 <p className="font-medium">Limitações</p>
                 <ul className="list-disc pl-4">
-                  {uncertainties.map((item) => (
+                  {message.uncertainties.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
-        )}
+        ))}
         {error && (
           <p className="text-body-sm text-destructive" role="alert">
             {error}

@@ -154,7 +154,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List the scan AI chat history */
+        get: operations["listScanAIChat"];
         put?: never;
         /**
          * Ask the scan AI assistant
@@ -1301,6 +1302,16 @@ export interface components {
             uncertainties: string[];
             referenced_finding_ids: string[];
         };
+        AIChatHistoryEntry: components["schemas"]["AIChatResponse"] & {
+            /** Format: uuid */
+            message_id: string;
+            question: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AIChatHistoryResponse: {
+            data: components["schemas"]["AIChatHistoryEntry"][];
+        };
         ScanAIAnalysisUnavailable: {
             /** Format: uuid */
             scan_id: string;
@@ -2231,6 +2242,32 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalServerError"];
+        };
+    };
+    listScanAIChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Previously answered questions for the selected scan. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatHistoryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     askScanAI: {

@@ -172,6 +172,10 @@ SYNTHESIS_CONTEXT_JSON:
 If the context does not contain enough evidence, say so in uncertainties. Never
 invent hosts, findings, CVEs, versions, commands, or risk values. Explain in
 Brazilian Portuguese and return only the requested structured schema.
+For questions asking which equipment/host has more vulnerabilities, use the
+deterministic `host_vulnerability_summary` counts and name the host and count
+directly; do not claim that per-host totals are unavailable when that field is
+present.
 
 USER_QUESTION:
 {question}

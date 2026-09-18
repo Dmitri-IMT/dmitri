@@ -374,3 +374,18 @@ class AIScanAnalysisRecord(SQLModel, table=True):
         sa_type=UTC_TIMESTAMP,
         sa_column_kwargs={"onupdate": utc_now},
     )
+
+
+class AIChatMessageRecord(SQLModel, table=True):
+    __tablename__ = "ai_chat_messages"
+
+    message_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    user_id: UUID = Field(index=True, foreign_key="users.id")
+    question: str
+    answer: str
+    uncertainties_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    referenced_finding_ids_json: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

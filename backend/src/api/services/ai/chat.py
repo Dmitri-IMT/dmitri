@@ -4,7 +4,10 @@ import re
 import unicodedata
 from uuid import UUID
 
-from api.schemas.ai import AIChatResponse, ProviderAIChatResponse
+from sqlmodel import Session, select
+
+from api.models.persistence import AIChatMessageRecord, ScanRecord
+from api.schemas.ai import AIChatHistoryEntry, AIChatResponse, ProviderAIChatResponse
 from api.schemas.read import ScanDetailResponse, ScanRiskSummaryResponse
 
 
@@ -36,7 +39,10 @@ def build_chat_context(
             ],
         }
 
-    selected_findings = _select_findings(risk.top_findings, question)
+    candidates = detail.findings if question else risk.top_findings
+    if not candidates:
+        candidates = risk.top_findings
+    selected_findings = _select_findings(candidates, question)
     return {
         "scan": {
             "scan_id": str(detail.scan_id),
@@ -56,6 +62,9 @@ def build_chat_context(
             "max_risk_score": risk.max_risk_score,
             "severity": risk.severity.model_dump(mode="json"),
         },
+        "host_vulnerability_summary": _host_vulnerability_summary(
+            detail.findings
+        ),
         "top_findings": [
             {
                 "finding_ref": f"finding_{index}",
@@ -76,6 +85,39 @@ def build_chat_context(
         ],
         "existing_ai_analysis": analysis_context,
     }
+
+
+def _host_vulnerability_summary(findings: list[object]) -> list[dict[str, object]]:
+    """Provide deterministic per-host totals for questions about equipment."""
+    hosts: dict[str, dict[str, object]] = {}
+    for finding in findings:
+        ip = str(getattr(finding, "host_ip", "") or "")
+        hostname = str(getattr(finding, "host_hostname", "") or "")
+        key = ip or hostname or "unknown"
+        entry = hosts.setdefault(
+            key,
+            {
+                "host_ip": ip or None,
+                "host_hostname": hostname or None,
+                "finding_count": 0,
+                "severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+                "max_risk_score": None,
+            },
+        )
+        entry["finding_count"] = int(entry["finding_count"]) + 1
+        severity = str(getattr(finding, "severity", "") or "").lower()
+        severity_counts = entry["severity"]
+        if isinstance(severity_counts, dict) and severity in severity_counts:
+            severity_counts[severity] = int(severity_counts[severity]) + 1
+        risk_score = getattr(finding, "risk_score", None)
+        if risk_score is not None and (
+            entry["max_risk_score"] is None or risk_score > entry["max_risk_score"]
+        ):
+            entry["max_risk_score"] = risk_score
+    return sorted(
+        hosts.values(),
+        key=lambda host: (-int(host["finding_count"]), str(host["host_ip"] or "")),
+    )[:20]
 
 
 _QUESTION_STOPWORDS = {
@@ -147,8 +189,60 @@ def materialize_chat_response(
     )
 
 
-def finding_reference_map(risk: ScanRiskSummaryResponse) -> dict[str, UUID]:
+def finding_reference_map(
+    findings: list[object], question: str | None = None
+) -> dict[str, UUID]:
     return {
         f"finding_{index}": finding.finding_id
-        for index, finding in enumerate(risk.top_findings, start=1)
+        for index, finding in enumerate(_select_findings(findings, question), start=1)
     }
+
+
+def save_chat_message(
+    session: Session,
+    *,
+    scan_id: UUID,
+    user_id: UUID,
+    question: str,
+    response: AIChatResponse,
+) -> AIChatHistoryEntry:
+    record = AIChatMessageRecord(
+        scan_id=scan_id,
+        user_id=user_id,
+        question=question,
+        answer=response.answer,
+        uncertainties_json=response.uncertainties,
+        referenced_finding_ids_json=[
+            str(item) for item in response.referenced_finding_ids
+        ],
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _history_entry(record)
+
+
+def list_chat_messages(
+    session: Session, *, scan_id: UUID, org_id: UUID, limit: int = 50
+) -> list[AIChatHistoryEntry]:
+    statement = (
+        select(AIChatMessageRecord)
+        .join(ScanRecord, ScanRecord.scan_id == AIChatMessageRecord.scan_id)
+        .where(AIChatMessageRecord.scan_id == scan_id, ScanRecord.org_id == org_id)
+        .order_by(AIChatMessageRecord.created_at)
+        .limit(limit)
+    )
+    return [_history_entry(record) for record in session.exec(statement).all()]
+
+
+def _history_entry(record: AIChatMessageRecord) -> AIChatHistoryEntry:
+    return AIChatHistoryEntry(
+        message_id=record.message_id,
+        question=record.question,
+        answer=record.answer,
+        uncertainties=record.uncertainties_json,
+        referenced_finding_ids=[
+            UUID(item) for item in record.referenced_finding_ids_json
+        ],
+        created_at=record.created_at,
+    )
