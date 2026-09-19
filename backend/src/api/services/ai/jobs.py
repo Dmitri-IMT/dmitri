@@ -128,6 +128,7 @@ def request_scan_ai_analysis(
     model: str,
     language: str = "en",
     now: datetime | None = None,
+    commit: bool = True,
 ) -> ScanAIAnalysisResponse | None:
     scan = session.exec(
         select(ScanRecord).where(
@@ -159,8 +160,9 @@ def request_scan_ai_analysis(
         record.started_at = None
         record.completed_at = None
         session.add(record)
-        session.commit()
-        session.refresh(record)
+        if commit:
+            session.commit()
+            session.refresh(record)
         return scan_ai_analysis_response(record)
 
     record = AIScanAnalysisRecord(
@@ -176,12 +178,13 @@ def request_scan_ai_analysis(
         updated_at=current_time,
     )
     session.add(record)
-    try:
-        session.commit()
-    except IntegrityError as exc:
-        session.rollback()
-        raise AIAnalysisAlreadyRequestedError from exc
-    session.refresh(record)
+    if commit:
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise AIAnalysisAlreadyRequestedError from exc
+        session.refresh(record)
     return scan_ai_analysis_response(record)
 
 
@@ -190,6 +193,7 @@ def enqueue_auto_scan_analysis(
     scan_id: UUID,
     *,
     settings: Settings | None = None,
+    commit: bool = True,
 ) -> bool:
     """Create one analysis job after all enrichment jobs reach a terminal state."""
     resolved_settings = settings or get_settings()
@@ -217,6 +221,7 @@ def enqueue_auto_scan_analysis(
             provider_name=GROQ_PROVIDER_ID,
             model=resolved_settings.ai_model,
             language="en",
+            commit=commit,
         )
     except AIAnalysisAlreadyRequestedError:
         return False

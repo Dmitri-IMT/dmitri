@@ -40,8 +40,10 @@ function ScanDetail() {
     queryKey: queryKeys.scans.detail(scanId),
     queryFn: () => getScan(scanId),
     enabled: scanId !== '',
-    refetchInterval: (current) =>
-      isUnfinished(current.state.data?.status ?? 'pending') ? 2000 : false,
+    refetchInterval: (current) => {
+      const status = current.state.data?.status
+      return status != null && isUnfinished(status) ? 2000 : false
+    },
     refetchIntervalInBackground: true,
   })
 
