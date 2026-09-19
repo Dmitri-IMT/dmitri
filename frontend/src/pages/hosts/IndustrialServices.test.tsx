@@ -22,7 +22,7 @@ describe('IndustrialServices', () => {
     expect(service).toHaveTextContent('Schneider Electric · TM221CE16T · V1.0')
 
     const table = within(service).getByRole('table', {
-      name: 'Address ranges mapped for Modbus unit 1',
+      name: 'Address space',
     })
     expect(table).toHaveTextContent('holding register')
     expect(table).toHaveTextContent('0–3')
