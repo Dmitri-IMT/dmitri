@@ -31,11 +31,20 @@ function ScanUnfinishedNotice({
           {t('scans.liveProgress')}
         </p>
       </div>
-      <div className="grid w-full max-w-xl grid-cols-2 gap-3 text-left sm:grid-cols-4" aria-live="polite">
+      <div
+        className="grid w-full max-w-xl grid-cols-2 gap-3 text-left sm:grid-cols-4"
+        aria-live="polite"
+      >
         <ProgressMetric label={t('common.machines')} value={scan.host_count} />
         <ProgressMetric label={t('common.services')} value={ports} />
-        <ProgressMetric label={t('common.industrialServices')} value={industrial} />
-        <ProgressMetric label={t('common.vulnerabilities')} value={scan.finding_count} />
+        <ProgressMetric
+          label={t('common.industrialServices')}
+          value={industrial}
+        />
+        <ProgressMetric
+          label={t('common.vulnerabilities')}
+          value={scan.finding_count}
+        />
       </div>
       <Button
         type="button"

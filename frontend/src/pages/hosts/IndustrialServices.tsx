@@ -34,7 +34,13 @@ function rangeSummary(range: AddressRange): string {
     : `${words(range.status)} (exception ${range.exception_code})`
 }
 
-function Unit({ unit, t }: { unit: ModbusUnit; t: ReturnType<typeof useI18n>['t'] }) {
+function Unit({
+  unit,
+  t,
+}: {
+  unit: ModbusUnit
+  t: ReturnType<typeof useI18n>['t']
+}) {
   const identity = identification(unit)
 
   return (
@@ -43,7 +49,9 @@ function Unit({ unit, t }: { unit: ModbusUnit; t: ReturnType<typeof useI18n>['t'
       className="flex flex-col gap-3 border-t border-dashed border-border pt-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-body-md font-medium">{t('common.unit', { id: unit.unit_id })}</h4>
+        <h4 className="text-body-md font-medium">
+          {t('common.unit', { id: unit.unit_id })}
+        </h4>
         <span className="text-caption-md uppercase text-muted-foreground">
           {words(unit.status)}
         </span>
@@ -61,12 +69,12 @@ function Unit({ unit, t }: { unit: ModbusUnit; t: ReturnType<typeof useI18n>['t'
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-left text-caption-md">
-            <caption className="sr-only">
-              {t('common.addressSpace')}
-            </caption>
+            <caption className="sr-only">{t('common.addressSpace')}</caption>
             <thead>
               <tr className="border-b border-dashed border-border text-muted-foreground uppercase">
-                <th className="w-1/3 pr-4 font-normal">{t('common.addressSpace')}</th>
+                <th className="w-1/3 pr-4 font-normal">
+                  {t('common.addressSpace')}
+                </th>
                 <th className="w-1/4 pr-4 font-normal">{t('common.range')}</th>
                 <th className="font-normal">{t('common.result')}</th>
               </tr>
@@ -124,7 +132,9 @@ function IndustrialServices({ services }: { services: IndustrialService[] }) {
               <dd>{service.evidence_sources.join(', ') || 'Not reported'}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">{t('common.mappingSource')}</dt>
+              <dt className="text-muted-foreground">
+                {t('common.mappingSource')}
+              </dt>
               <dd>
                 {service.mapping_source
                   ? words(service.mapping_source)
@@ -138,7 +148,9 @@ function IndustrialServices({ services }: { services: IndustrialService[] }) {
               No Modbus units responded.
             </p>
           ) : (
-            service.units.map((unit) => <Unit key={unit.unit_id} unit={unit} t={t} />)
+            service.units.map((unit) => (
+              <Unit key={unit.unit_id} unit={unit} t={t} />
+            ))
           )}
         </article>
       ))}

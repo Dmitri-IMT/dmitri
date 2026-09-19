@@ -218,7 +218,8 @@ const en: Catalog = {
   'scans.open': ({ id }) => 'Open scan ' + id,
   'scans.pages': 'Scan pages',
   'scans.running': 'This scan is still running.',
-  'scans.liveProgress': 'Progress updates automatically while the scan is running.',
+  'scans.liveProgress':
+    'Progress updates automatically while the scan is running.',
   'network.title': 'Network',
   'network.caption': 'Machines on your network',
   'network.error': "Couldn't load your network.",
@@ -282,7 +283,8 @@ const en: Catalog = {
   'common.range': 'Range',
   'common.result': 'Result',
   'common.noServices': 'No services are running on this machine.',
-  'common.noIndustrialServices': 'No industrial services were detected on this machine.',
+  'common.noIndustrialServices':
+    'No industrial services were detected on this machine.',
   'common.noAddressRanges': 'No address ranges were mapped.',
   'common.back': 'Back',
   'common.findingsLoadError': "Couldn't load this machine's vulnerabilities.",
@@ -291,9 +293,11 @@ const en: Catalog = {
   'common.machineNotFound': "That machine doesn't exist.",
   'common.machineLoadError': "Couldn't load this machine.",
   'common.lastSeenInline': 'last seen',
-  'common.notSeenForInline': ({ count, unit }) => 'not seen for ' + count + ' ' + unit,
+  'common.notSeenForInline': ({ count, unit }) =>
+    'not seen for ' + count + ' ' + unit,
   'common.firstSeen': 'First seen',
-  'common.openPorts': ({ count }) => `${count} open port${count === 1 ? '' : 's'}`,
+  'common.openPorts': ({ count }) =>
+    `${count} open port${count === 1 ? '' : 's'}`,
   'common.noOpenPorts': 'no open ports',
   'common.service': 'Service',
   'common.protocol': 'Protocol',
@@ -302,8 +306,10 @@ const en: Catalog = {
   'common.openScan': ({ id }) => 'Open scan ' + id,
   'ai.explainMachine': 'Explain with AI',
   'ai.explainMachineLoading': 'Analyzing...',
-  'ai.explanationUnavailable': 'Unable to get an explanation right now. Try again.',
-  'ai.answerConsidered': ({ count }) => `The answer considered ${count} vulnerability${count === 1 ? '' : 'ies'} on this machine.`,
+  'ai.explanationUnavailable':
+    'Unable to get an explanation right now. Try again.',
+  'ai.answerConsidered': ({ count }) =>
+    `The answer considered ${count} vulnerability${count === 1 ? '' : 'ies'} on this machine.`,
   'ai.contextHint':
     'The answer uses only the evidence available in this context.',
   'ai.showHistory': 'Show history',
@@ -429,7 +435,8 @@ const pt: Catalog = {
   'scans.open': ({ id }) => 'Abrir varredura ' + id,
   'scans.pages': 'Páginas de varreduras',
   'scans.running': 'Esta varredura ainda está em andamento.',
-  'scans.liveProgress': 'O progresso é atualizado automaticamente enquanto a varredura acontece.',
+  'scans.liveProgress':
+    'O progresso é atualizado automaticamente enquanto a varredura acontece.',
   'network.title': 'Rede',
   'network.caption': 'Equipamentos da sua rede',
   'network.error': 'Não foi possível carregar sua rede.',
@@ -479,7 +486,8 @@ const pt: Catalog = {
   'common.weeks': 'semanas',
   'common.machinesSeen': 'Equipamentos encontrados',
   'common.industrialServices': 'Servi\u00e7os industriais',
-  'common.servicesRunning': 'Servi\u00e7os em execu\u00e7\u00e3o neste equipamento',
+  'common.servicesRunning':
+    'Servi\u00e7os em execu\u00e7\u00e3o neste equipamento',
   'common.scanHistory': 'Hist\u00f3rico de varreduras',
   'common.machine': 'Equipamento',
   'common.vendor': 'Fabricante',
@@ -491,19 +499,25 @@ const pt: Catalog = {
   'common.addressSpace': 'Espa\u00e7o de endere\u00e7os',
   'common.range': 'Faixa',
   'common.result': 'Resultado',
-  'common.noServices': 'Nenhum servi\u00e7o est\u00e1 em execu\u00e7\u00e3o neste equipamento.',
-  'common.noIndustrialServices': 'Nenhum servi\u00e7o industrial foi detectado neste equipamento.',
+  'common.noServices':
+    'Nenhum servi\u00e7o est\u00e1 em execu\u00e7\u00e3o neste equipamento.',
+  'common.noIndustrialServices':
+    'Nenhum servi\u00e7o industrial foi detectado neste equipamento.',
   'common.noAddressRanges': 'Nenhuma faixa de endere\u00e7os foi mapeada.',
   'common.back': 'Voltar',
-  'common.findingsLoadError': 'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
+  'common.findingsLoadError':
+    'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
   'common.noVulnerabilities': 'Nenhuma vulnerabilidade neste equipamento.',
   'common.vulnerabilitiesOnMachine': 'Vulnerabilidades neste equipamento',
   'common.machineNotFound': 'Esse equipamento n\u00e3o existe.',
-  'common.machineLoadError': 'N\u00e3o foi poss\u00edvel carregar este equipamento.',
+  'common.machineLoadError':
+    'N\u00e3o foi poss\u00edvel carregar este equipamento.',
   'common.lastSeenInline': 'visto por \u00faltimo',
-  'common.notSeenForInline': ({ count, unit }) => 'n\u00e3o visto por ' + count + ' ' + unit,
+  'common.notSeenForInline': ({ count, unit }) =>
+    'n\u00e3o visto por ' + count + ' ' + unit,
   'common.firstSeen': 'Visto pela primeira vez',
-  'common.openPorts': ({ count }) => `${count} porta${count === 1 ? '' : 's'} aberta${count === 1 ? '' : 's'}`,
+  'common.openPorts': ({ count }) =>
+    `${count} porta${count === 1 ? '' : 's'} aberta${count === 1 ? '' : 's'}`,
   'common.noOpenPorts': 'nenhuma porta aberta',
   'common.service': 'Servi\u00e7o',
   'common.protocol': 'Protocolo',
@@ -512,8 +526,10 @@ const pt: Catalog = {
   'common.openScan': ({ id }) => 'Abrir varredura ' + id,
   'ai.explainMachine': 'Explicar com IA',
   'ai.explainMachineLoading': 'Analisando...',
-  'ai.explanationUnavailable': 'N\u00e3o foi poss\u00edvel obter uma explica\u00e7\u00e3o agora. Tente novamente.',
-  'ai.answerConsidered': ({ count }) => `A resposta considerou ${count} vulnerabilidade${count === 1 ? '' : 's'} deste equipamento.`,
+  'ai.explanationUnavailable':
+    'N\u00e3o foi poss\u00edvel obter uma explica\u00e7\u00e3o agora. Tente novamente.',
+  'ai.answerConsidered': ({ count }) =>
+    `A resposta considerou ${count} vulnerabilidade${count === 1 ? '' : 's'} deste equipamento.`,
   'ai.contextHint':
     'A resposta usa somente as evidências disponíveis neste contexto.',
   'ai.showHistory': 'Mostrar histórico',
@@ -644,7 +660,8 @@ const ru: Catalog = {
   'scans.open': ({ id }) => 'Открыть сканирование ' + id,
   'scans.pages': 'Страницы сканирований',
   'scans.running': 'Сканирование ещё выполняется.',
-  'scans.liveProgress': 'Прогресс обновляется автоматически во время сканирования.',
+  'scans.liveProgress':
+    'Прогресс обновляется автоматически во время сканирования.',
   'network.title': 'Сеть',
   'network.caption': 'Устройства вашей сети',
   'network.error': 'Не удалось загрузить сеть.',
@@ -714,7 +731,8 @@ const ru: Catalog = {
   'common.machineNotFound': 'Устройство не существует.',
   'common.machineLoadError': 'Не удалось загрузить устройство.',
   'common.lastSeenInline': 'последняя активность',
-  'common.notSeenForInline': ({ count, unit }) => 'не видно ' + count + ' ' + unit,
+  'common.notSeenForInline': ({ count, unit }) =>
+    'не видно ' + count + ' ' + unit,
   'common.firstSeen': 'Впервые замечено',
   'common.openPorts': ({ count }) => `Открытых портов: ${count}`,
   'common.noOpenPorts': 'нет открытых портов',
@@ -725,8 +743,10 @@ const ru: Catalog = {
   'common.openScan': ({ id }) => 'Открыть сканирование ' + id,
   'ai.explainMachine': 'Объяснить с помощью ИИ',
   'ai.explainMachineLoading': 'Анализ...',
-  'ai.explanationUnavailable': 'Не удалось получить объяснение. Попробуйте ещё раз.',
-  'ai.answerConsidered': ({ count }) => `Ответ учитывает уязвимостей: ${count}.`,
+  'ai.explanationUnavailable':
+    'Не удалось получить объяснение. Попробуйте ещё раз.',
+  'ai.answerConsidered': ({ count }) =>
+    `Ответ учитывает уязвимостей: ${count}.`,
   'ai.contextHint':
     'Ответ использует только доступные сведения из этого контекста.',
   'ai.showHistory': 'Показать историю',

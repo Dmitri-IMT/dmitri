@@ -136,13 +136,22 @@ function ScanDetail() {
                     })}
                   </div>
                 )}
-                {scan.hosts.some((host) => host.industrial_services.length > 0) && (
+                {scan.hosts.some(
+                  (host) => host.industrial_services.length > 0,
+                ) && (
                   <Collapsible.Root defaultOpen={false} asChild>
                     <Card>
                       <CardHeader className="p-0">
                         <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                          <h2 className="text-title-sm">{t('common.industrialServices')}</h2>
-                          <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">›</span>
+                          <h2 className="text-title-sm">
+                            {t('common.industrialServices')}
+                          </h2>
+                          <span
+                            aria-hidden="true"
+                            className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90"
+                          >
+                            ›
+                          </span>
                         </Collapsible.Trigger>
                       </CardHeader>
                       <Collapsible.Content forceMount asChild>
@@ -157,8 +166,15 @@ function ScanDetail() {
                   <Card>
                     <CardHeader className="p-0">
                       <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <h2 className="text-title-sm">{t('common.machinesSeen')}</h2>
-                        <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">›</span>
+                        <h2 className="text-title-sm">
+                          {t('common.machinesSeen')}
+                        </h2>
+                        <span
+                          aria-hidden="true"
+                          className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90"
+                        >
+                          ›
+                        </span>
                       </Collapsible.Trigger>
                     </CardHeader>
                     <Collapsible.Content forceMount asChild>

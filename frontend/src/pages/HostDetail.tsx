@@ -50,9 +50,7 @@ function HostDetail() {
             </Card>
             <Card>
               <CardHeader>
-                <h2 className="text-title-sm">
-                  {t('common.servicesRunning')}
-                </h2>
+                <h2 className="text-title-sm">{t('common.servicesRunning')}</h2>
               </CardHeader>
               <CardContent>
                 <HostPortsTable ports={host.ports} />
@@ -60,7 +58,9 @@ function HostDetail() {
             </Card>
             <Card>
               <CardHeader>
-                <h2 className="text-title-sm">{t('common.industrialServices')}</h2>
+                <h2 className="text-title-sm">
+                  {t('common.industrialServices')}
+                </h2>
               </CardHeader>
               <CardContent>
                 <IndustrialServices services={host.industrial_services} />
@@ -111,7 +111,9 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-title-sm">{t('ai.askAbout', { label: t('common.machine') })}</h2>
+        <h2 className="text-title-sm">
+          {t('ai.askAbout', { label: t('common.machine') })}
+        </h2>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <Button
@@ -127,7 +129,9 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
             <p className="text-body-md">{answer.answer}</p>
             {answer.referenced_finding_ids.length > 0 && (
               <p className="mt-2 text-body-sm text-muted-foreground">
-                {t('ai.answerConsidered', { count: answer.referenced_finding_ids.length })}
+                {t('ai.answerConsidered', {
+                  count: answer.referenced_finding_ids.length,
+                })}
               </p>
             )}
             {answer.uncertainties.length > 0 && (
