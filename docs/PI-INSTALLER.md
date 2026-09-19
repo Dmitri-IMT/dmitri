@@ -218,6 +218,7 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 | Board never appears on the network | Bad microSD. Verify the write; check whether `userconf.txt` is still on the boot partition — the OS deletes it during a successful first boot |
 | Scan ends `partial`, exit 10 | `nmap` not running as root |
 | `IngestConfigError` on start | `agent.env` malformed — `BACKEND_URL` must be a bare origin, `DEVICE_ID` a UUID, `DEVICE_PRIVATE_KEY` 64 hex characters |
+| Device shows **Revoked** or the Pi log says `command channel parked` | Use the [Pi recovery guide](PI-RECOVERY.md). A parked agent stays running and retries once per hour |
 | Under-voltage or throttling | Check `vcgencmd get_throttled`; `0x0` means healthy |
 
 ## Not covered

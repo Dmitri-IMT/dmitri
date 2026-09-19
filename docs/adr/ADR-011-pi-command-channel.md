@@ -33,6 +33,16 @@
 > scan mirrored to `failed`, one `scan_failed` activity. The request still returns `201`, now with
 > the `failed` command. Waiting for the stale sweep left a Pi whose socket stayed open answering
 > `409 device_busy` until it disconnected or hit its duration budget.
+>
+> **Amendment 2026-09-16 (DMI-155, park policy):** no refusal is terminal for the Pi. On an upgrade
+> `403`, a close `>= 4000` (including `4000 replaced` and `4001 revoked`), or a refused scan upload,
+> the agent **parks** and retries **once per hour**. Parking no longer ends `run()`: the daemon keeps
+> its process alive, logs `command channel parked (<reason>); next attempt at <UTC ISO>`, and starts
+> no scan while parked. This replaces the earlier "stay down" client action, which left a refused
+> appliance in a 10-second systemd restart loop that only an on-site SSH session could end.
+> Revocation becomes reversible through the API: `POST /api/v1/agents/{agent_id}/revoke` and
+> `POST /api/v1/agents/{agent_id}/restore` (admin only) write and clear `agents.revoked_at`, and a
+> restored device is let in on its next hourly attempt.
 
 ## Context
 

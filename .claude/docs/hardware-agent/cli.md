@@ -24,7 +24,7 @@ and OS-aware defaults.
 | `main()` | Dispatches argv: bare/`start`→TUI; `agent …`→`_run_agent`; else usage exit 2. | `cli.py:11` |
 | `_run_tui()` | Nmap preflight, then `DmitriApp().run()`. | `cli.py:41` |
 | `_run_agent()` | Arity guard → `_check_nmap()` → zero args start the daemon; two args run a general or default NSPi scan; three args select an explicit NSPi submode. One-shot scans print a JSON result line and exit with `EXIT_CODES`. | `cli.py:53` |
-| `run_headless_scan()` | Validates input and NSPi depth, resolves the workspace, constructs a `ScanRunner` + `run_blocking()`, captures the payload via callbacks, writes the result, and returns a `HeadlessScanResult`. | `headless.py:88` |
+| `run_headless_scan()` | Validates input and NSPi depth, resolves the workspace, constructs a `ScanRunner` + `run_blocking()`, captures the payload via callbacks, writes the result, and returns a `HeadlessScanResult`. Optional `bind_cancel` receives `ScanRunner.request_cancel` before the run starts; the daemon uses it to stop a scan when the channel parks. | `headless.py:89` |
 | `HeadlessScanResult` / `EXIT_CODES` | Outcome (`completed`/`partial`/`fatal`) + payload/path/error; exit map `{completed:0, partial:10, fatal:20}` (invalid input → 2). | `headless.py:25`, `headless.py:32` |
 | `StderrReporter` | `ScanReporter` that prints each event message to stderr. | `headless.py:36` |
 | `AgentSettings` | Scan-tuning dataclass: subnet, mode, `nmap_path`, `min_cvss`, workers/batching, version intensity, deadline, retry/breaker policy, and NSPi submode. | `config.py:20` |
@@ -48,8 +48,8 @@ and OS-aware defaults.
 - **Two front doors, one runner.** `run_headless_scan` and the TUI's
   [`ScanProgressScreen`](/hardware-agent/tui.md) each construct a `ScanRunner` and thread
   `workspace_root` — the invariant the CLAUDE.md integration rule protects. The daemon is a *third*
-  front door but not a third runner: it calls `run_headless_scan` unchanged, adding no parameter to
-  it or to `ScanRunner`.
+  front door but not a third runner: it calls `run_headless_scan` with one extra hook, `bind_cancel`,
+  and adds no parameter to `ScanRunner`.
 - **`_check_nmap()` runs once, before dispatch, for both arities.** A missing scanner exits `20`
   with the installation guidance before the daemon module is even imported, so no socket is ever
   dialed. There is no version probe or background health check; if nmap disappears later, the

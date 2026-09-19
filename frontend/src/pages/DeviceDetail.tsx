@@ -9,17 +9,37 @@ import ReadDetailGate from '@/components/ReadDetailGate'
 import { useScanCommand } from '@/hooks/useScanCommand'
 import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
+import { readAgentPresence } from '@/lib/agentPresence'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
+import DeviceRestore from '@/pages/agents/DeviceRestore'
+import DeviceRevoke from '@/pages/agents/DeviceRevoke'
 import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
 import ScanControl from '@/pages/agents/ScanControl'
 import ScanTypeTabs, { ScanTypeReadOnly } from '@/pages/agents/ScanTypeTabs'
 import TargetSubnetSection from '@/pages/agents/TargetSubnetSection'
+import WatchedNetworkReadOnly from '@/pages/agents/WatchedNetworkReadOnly'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
 type ScanMode = components['schemas']['ScanMode']
 
-function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
+function focusPresence() {
+  document
+    .querySelector<HTMLElement>('[data-testid="agents-presence"]')
+    ?.focus()
+}
+
+function RevokedDeviceSections({ agent }: { agent: AgentDetail }) {
+  return (
+    <>
+      <WatchedNetworkReadOnly agent={agent} />
+      <DeviceRestore agent={agent} onRestored={focusPresence} />
+      <DeviceScanHistory agentId={agent.agent_id} />
+    </>
+  )
+}
+
+function LiveDeviceSections({ agent }: { agent: AgentDetail }) {
   const { user } = useSession()
   const [savedTargetSubnet, setSavedTargetSubnet] = useState(false)
   const [selectedMode, setSelectedMode] = useState<ScanMode>(DEFAULT_SCAN_MODE)
@@ -33,9 +53,7 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
     !chooserOpen && (agent.target_subnet != null || scanCommand.following)
 
   return (
-    <div className="flex flex-col gap-12">
-      <BackLink fallback="/devices" testId="device-detail-back" />
-      <AgentIdentity agent={agent} />
+    <>
       <TargetSubnetSection
         agent={agent}
         open={chooserOpen}
@@ -64,6 +82,21 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
         </div>
       )}
       <DeviceScanHistory agentId={agent.agent_id} />
+      <DeviceRevoke agent={agent} onRevoked={focusPresence} />
+    </>
+  )
+}
+
+function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
+  return (
+    <div className="flex flex-col gap-12">
+      <BackLink fallback="/devices" testId="device-detail-back" />
+      <AgentIdentity agent={agent} />
+      {readAgentPresence(agent).kind === 'revoked' ? (
+        <RevokedDeviceSections agent={agent} />
+      ) : (
+        <LiveDeviceSections agent={agent} />
+      )}
     </div>
   )
 }

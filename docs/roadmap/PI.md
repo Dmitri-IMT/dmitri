@@ -125,7 +125,7 @@ after the agent is online. Consumer pairing flows (QR, local setup pages for bus
 | ~~Generate the Ed25519 keypair **on the Pi**; register its **public key** with the backend~~ — agent `8ae07687`, org NSPi; the private key never left the device | Installer + vendor playbook | ✅ |
 | ~~Write `/etc/dmitri/agent.env` (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`)~~ — root, 0600 | Installer (SSH) | ✅ |
 | ~~Enable `dmitri-agent.service`; verify WSS + ingest~~ — channel connected, 12 hosts / 20 findings ingested | Installer | ✅ |
-| ~~Scheduled reboot policy — daemon reconnects via systemd~~ — verified: reconnects in ~2 s after a restart, and on boot. **Except when the channel parks** (DMI-155) | Installer / docs | ✅ |
+| ~~Scheduled reboot policy — daemon reconnects via systemd~~ — verified: reconnects in ~2 s after a restart, and on boot. A parked channel retries **once per hour** and the daemon stays up (DMI-155, ADR-011 amendment 2026-09-16) | Installer / docs | ✅ |
 
 Track spend against ADR-001 budget (R$ 1.250 BOM). The September E2E has shipped — see [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md).
 

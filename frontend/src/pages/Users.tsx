@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import ConfirmDialog from '@/components/ConfirmDialog'
 import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { revokeInvite } from '@/api/invites'
@@ -9,7 +10,6 @@ import { useToast } from '@/hooks/useToast'
 import DirectoryTable from '@/pages/users/DirectoryTable'
 import InviteDialog from '@/pages/users/InviteDialog'
 import RemoveMemberDialog from '@/pages/users/RemoveMemberDialog'
-import RevokeDialog from '@/pages/users/RevokeDialog'
 import RoleChangeDialog from '@/pages/users/RoleChangeDialog'
 import { ROLE_NOUN, type Role } from '@/lib/directory'
 
@@ -146,7 +146,7 @@ function Users() {
         />
       )}
       {pendingRevoke && (
-        <RevokeDialog
+        <ConfirmDialog
           open
           onOpenChange={(open) => {
             if (!open) {
@@ -154,9 +154,13 @@ function Users() {
               setRevokeError(null)
             }
           }}
-          email={pendingRevoke.email}
+          title={`Revoke the invite to ${pendingRevoke.email}?`}
+          description="Their link stops working immediately. You can invite them again later."
+          confirmLabel="Revoke"
+          pendingLabel="Revoking…"
           onConfirm={handleRevokeConfirm}
           error={revokeError}
+          testId="revoke"
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -150,6 +151,7 @@ def build_client(
 async def drive(
     client: CommandChannelClient,
     on_connected: Any = None,
+    on_parked: Any = None,
 ) -> list[AgentCommand]:
     commands: list[AgentCommand] = []
 
@@ -157,7 +159,7 @@ async def drive(
         commands.append(command)
 
     with contextlib.suppress(Halt):
-        await client.run(record, on_connected)
+        await client.run(record, on_connected, on_parked)
     return commands
 
 
@@ -404,63 +406,217 @@ class TestBackoff:
 
         assert sleeper.delays == [1.0, 2.0]
 
-
-class TestClassification:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "outcome",
-        [
-            rejected(403),
-            closed(4000, "replaced"),
-            closed(4001, "device revoked"),
-        ],
-    )
-    async def test_permanent_failures_park_without_redialing(
-        self, outcome: BaseException
-    ) -> None:
-        dialer = Dialer(outcome)
+    async def test_successful_reconnect_after_park_uses_short_backoff(self) -> None:
+        dialer = Dialer(rejected(403), [])
         sleeper = Sleeper()
         client = build_client(dialer, sleeper)
 
         await drive(client)
 
-        assert client.parked_reason is not None
-        assert len(dialer.calls) == 1
+        assert sleeper.delays == [3600.0, 1.0]
+
+
+class TestClassification:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("outcome", "reason"),
+        [
+            (rejected(403), "refused"),
+            (closed(4000, "replaced"), "replaced"),
+            (closed(4001, "device revoked"), "revoked"),
+            (closed(4999, "policy"), "refused"),
+        ],
+    )
+    async def test_refusals_park_hourly_then_redial(
+        self,
+        outcome: BaseException,
+        reason: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        dialer = Dialer(outcome, rejected(403))
+        sleeper = Sleeper()
+        client = build_client(dialer, sleeper)
+        parked: list[None] = []
+
+        async def on_parked() -> None:
+            parked.append(None)
+
+        before = datetime.now(UTC) + timedelta(seconds=3599)
+        with caplog.at_level(logging.ERROR):
+            await drive(client, on_parked=on_parked)
+        after = datetime.now(UTC) + timedelta(seconds=3601)
+
+        assert client.parked_reason is None
+        assert len(dialer.calls) == 3
+        assert sleeper.delays == [3600.0, 3600.0]
+        assert parked == [None, None]
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.getMessage().startswith("command channel parked")
+        ]
+        assert f"command channel parked ({reason}); next attempt at " in messages[0]
+        assert "command channel parked (refused); next attempt at " in messages[1]
+        for message in messages:
+            timestamp = datetime.fromisoformat(message.rsplit(" ", 1)[-1])
+            assert before <= timestamp <= after
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "reason", ["revoked", "replaced", "refused", "upload_refused"]
+    )
+    async def test_every_park_reason_uses_the_hourly_policy(
+        self, reason: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        dialer = Dialer([])
+        sleeper = Sleeper()
+        client = build_client(dialer, sleeper)
+
+        await client.park(reason)
+        with caplog.at_level(logging.ERROR):
+            await drive(client)
+
+        assert sleeper.delays[0] == 3600.0
+        assert len(dialer.calls) == 2
+        assert f"command channel parked ({reason}); next attempt at " in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_on_parked_completes_before_hourly_wait(self) -> None:
+        events: list[Any] = []
+
+        async def sleep(delay: float) -> None:
+            events.append(("sleep", delay))
+            raise Halt()
+
+        async def on_parked() -> None:
+            events.append("parked-start")
+            await asyncio.sleep(0)
+            events.append("parked-end")
+
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(), sleep=sleep
+        )
+        await client.park("upload_refused")
+
+        await drive(client, on_parked=on_parked)
+
+        assert events == ["parked-start", "parked-end", ("sleep", 3600.0)]
+
+    @pytest.mark.asyncio
+    async def test_upload_refusal_during_live_session_closes_socket(self) -> None:
+        dialer = Dialer([])
+        client = build_client(dialer)
+
+        async def on_connected() -> None:
+            await client.park("upload_refused")
+            raise Halt()
+
+        await drive(client, on_connected=on_connected)
+
+        assert client.parked_reason == "upload_refused"
+        assert dialer.sockets[0].closed is True
+
+    @pytest.mark.asyncio
+    async def test_intentional_park_does_not_log_channel_lost(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        dialer = Dialer([])
+        client = build_client(dialer)
+
+        async def on_connected() -> None:
+            await client.park("upload_refused")
+
+        with caplog.at_level(logging.WARNING):
+            await drive(client, on_connected=on_connected)
+
+        assert "command channel lost" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_close_before_park_wait_skips_sleep(self) -> None:
+        sleeper = Sleeper()
+        client = build_client(Dialer(), sleeper)
+        await client.park("revoked")
+        await client.close()
+
+        await client._wait_out_park()
+
         assert sleeper.delays == []
 
     @pytest.mark.asyncio
-    async def test_permanent_close_mid_session_parks(self) -> None:
-        dialer = Dialer([closed(4000, "replaced")])
-        client = build_client(dialer)
+    async def test_close_interrupts_the_hourly_wait(self) -> None:
+        waiting = asyncio.Event()
 
-        await drive(client)
+        async def sleep_forever(delay: float) -> None:
+            waiting.set()
+            await asyncio.Event().wait()
 
-        assert client.parked_reason is not None
-        assert len(dialer.calls) == 1
-        assert dialer.sockets[0].closed is True
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(rejected(403)), sleep=sleep_forever
+        )
+        running = asyncio.create_task(drive(client))
+        await asyncio.wait_for(waiting.wait(), 5.0)
+
+        await client.close()
+
+        await asyncio.wait_for(running, 5.0)
+
+    @pytest.mark.asyncio
+    async def test_outer_cancel_during_park_wait_cleans_child_tasks(self) -> None:
+        entered = asyncio.Event()
+
+        async def sleep(delay: float) -> None:
+            entered.set()
+            await asyncio.Event().wait()
+
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(rejected(403)), sleep=sleep
+        )
+        await client.park("revoked")
+
+        wait_task = asyncio.create_task(client._wait_out_park())
+        await asyncio.wait_for(entered.wait(), 5.0)
+        wait_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await wait_task
+
+    @pytest.mark.asyncio
+    async def test_cancellation_propagates_during_hourly_wait(self) -> None:
+        async def cancel(delay: float) -> None:
+            assert delay == 3600.0
+            raise asyncio.CancelledError()
+
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(rejected(403)), sleep=cancel
+        )
+
+        with pytest.raises(asyncio.CancelledError):
+            await drive(client)
 
     @pytest.mark.asyncio
     async def test_unauthorized_retries_with_a_completely_fresh_proof(self) -> None:
         dialer = Dialer(rejected(401), [])
-        client = build_client(dialer)
+        sleeper = Sleeper()
+        client = build_client(dialer, sleeper)
 
         await drive(client)
 
         assert client.parked_reason is None
         assert len(dialer.calls) >= 2
+        assert sleeper.delays == [1.0, 1.0]
         first, second = dialer.headers[0], dialer.headers[1]
         for name in ("X-Nonce", "X-Signature"):
             assert first[name] != second[name]
 
     @pytest.mark.asyncio
-    async def test_close_parks_and_stops_the_loop(self) -> None:
+    async def test_close_stops_without_parking(self) -> None:
         dialer = Dialer([])
         client = build_client(dialer)
-        await client.close("shutting down")
+        await client.close()
 
         await drive(client)
 
-        assert client.parked_reason == "shutting down"
+        assert client.parked_reason is None
         assert dialer.calls == []
 
 

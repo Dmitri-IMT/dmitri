@@ -69,10 +69,14 @@ interaction in implementation before it has passed through that sequence.
   **Read `active_command_id` on mount** so the pill survives navigation and reloads during a
   ~10-minute scan. See [`ui/FLOWS.md`](../ui/FLOWS.md#b4--scan-now-command-flow)
   and [`BACKEND.md` B6](BACKEND.md#b6--pi-command-channel-).
+- **Device revocation:** DMI-155 adds admin revoke/restore on Device detail. Both roles see
+  **Revoked** with its timestamp; a revoked device has no scan or network-change action. Restore
+  leaves it Offline until the Pi's next hourly attempt.
 - **Host inventory:** discovered machines → **`/hosts`** (renamed from `/devices` in B7; the read model is `hosts[]` / `host_id` / `host_ip` throughout) — not the same as scanner **agents**.
 - **Real-time:** poll `GET /commands/{id}` for `queued` → `delivered` → `running` → `uploading` → `done`.
 - **UI status:** Login, Home, public auth, Settings change-password + Activity disclosure,
-  Users & Invites, DMI-88 scan/host read surfaces, and **DMI-89 Agents scan trigger** are built.
+  Users & Invites, DMI-88 scan/host read surfaces, **DMI-89 Agents scan trigger**, and DMI-155
+  device revoke/restore are built.
   Screen copy still lives in [`ui/SCREENS.md`](../ui/SCREENS.md).
 - **Contract asks — 1 of the original 8 still open.** C4 is closed: the published backend contract
   now has member list, pending-invite list, role change, revoke, and account-removal operations,
