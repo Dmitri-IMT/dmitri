@@ -76,7 +76,8 @@ A second POST while `pending`/`processing`/`completed` raises `AIAnalysisAlready
 - Worker boot: [`worker_main.main`](/backend/api.md) starts the AI thread, then enrichment
   ([services](/backend/services.md)).
 - Settings: `AI_*` including `AI_AUTO_ANALYSIS` on [`Settings`](/backend/api.md).
-- SPA: [scan-ai](/frontend/scan-ai.md), [context-ai](/frontend/context-ai.md),
+- SPA: [scan-ai](/frontend/scan-ai.md) (overview jobs), [context-ai](/frontend/context-ai.md)
+  (`/ai/chat` on scan/host routes plus `/explain` one-shots in `FindingPanel` and `HostDetail`),
   [ai-usage](/frontend/ai-usage.md), [home-ai-overview](/frontend/home-ai-overview.md).
 - Decision record: [ADR-020](../../docs/adr/ADR-020-ai-scan-analysis.md).
 

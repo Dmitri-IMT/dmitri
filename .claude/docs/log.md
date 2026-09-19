@@ -11,7 +11,9 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `backend/ai.md`, `backend/routers.md`, `backend/api.md`, `backend/schemas.md`, `backend/models.md`,
   `backend/services.md`, `backend/migrations.md`, `backend/index.md`, `frontend/scan-ai.md`,
   `frontend/context-ai.md`, `frontend/ai-usage.md`, `frontend/home-ai-overview.md`, `frontend/api.md`,
-  `frontend/screens.md`, `frontend/index.md`.
+  `frontend/screens.md`, `frontend/index.md`. Follow-up: `context-ai.md` documents finding/host
+  `explain*` in `FindingPanel` / `HostAIExplanation` (not missing from the SPA); only `/ai/chat` with
+  `scope: finding` is unused on the client.
 
 ## 2026-09-15
 

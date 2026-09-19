@@ -38,7 +38,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
 * [devices-screen](./devices-screen.md) — Devices lists every box; DeviceDetail owns subnet choice, scan-type tabs and useScanCommand; trigger() posts the selected ScanMode and invalidates read caches on done.
 * [scan-ai](./scan-ai.md) — Scan Detail overview card: request, poll, and render the structured Groq analysis.
-* [context-ai](./context-ai.md) — Floating Assistente IA on scan and host detail; ContextChat against `/ai/chat`.
+* [context-ai](./context-ai.md) — Multi-turn `/ai/chat` via GlobalAssistant; finding/host one-shot explains via `/explain` in FindingPanel and HostDetail.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
