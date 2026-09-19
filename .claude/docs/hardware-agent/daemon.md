@@ -16,8 +16,8 @@ existed: the [command channel](/hardware-agent/command-channel.md) that carries 
 [headless scan](/hardware-agent/cli.md) + [ingest client](/hardware-agent/transport.md) that do the
 work and send results back. Bare `dmitri agent` starts it.
 
-It adds **no** scan pipeline. It calls `run_headless_scan` exactly as the one-shot CLI does, with no
-new runner parameter, and applies the backend's `scan_id` only at the existing ingest override.
+It adds **no** scan pipeline. It calls `run_headless_scan` as the one-shot CLI does, adding only the
+`bind_cancel` hook that lets parking stop the scan, and applies the backend's `scan_id` only at the existing ingest override.
 
 ## Key classes / functions
 
@@ -25,9 +25,10 @@ new runner parameter, and applies the backend's `scan_id` only at the existing i
 |------|--------------|-----|
 | `CommandRecord` | Ledger entry: `status`, optional `error_code`, and `pending` — whether that status still needs delivery after a disconnect. | `daemon.py:32` |
 | `AgentDaemon(client, ingest, *, run_scan=run_headless_scan)` | The coordinator. `run_scan` is the injectable headless runner, which is why no literal `run_headless_scan(` call appears in this module. | `daemon.py:38` |
-| `.run()` | Wires `handle_command`, `replay_pending`, and `_cancel_active` into the client loop; closes the socket and owned ingest client in `finally`. | `daemon.py:51` |
-| `.close()` | Cancels and awaits the owned asyncio task, then closes both clients. A worker already running in `asyncio.to_thread` cannot be interrupted. | `daemon.py:59` |
-| `._cancel_active()` | Cancels and awaits the active asyncio task. If the scan worker has not returned, its later result never reaches ingest. If ingest has started, its return is ignored and no later status is reported. | `daemon.py:64` |
+| `.run()` | Wires `handle_command`, `replay_pending`, and `_cancel_active` into the client loop; closes the socket and owned ingest client in `finally`. | `daemon.py:75` |
+| `.close()` | Stops and awaits the active command, then closes both clients. | `daemon.py:83` |
+| `._cancel_active()` | Requests the command's `_ScanStop`, which calls `ScanRunner.request_cancel` (sets the cancel event and terminates the active nmap), then awaits the task so `_active` clears only after the worker returns. A stopped scan never reaches ingest; an upload already in progress finishes, but its return is ignored and no later status is reported. | `daemon.py:88` |
+| `_ScanStop` | Per-command, thread-safe stop latch. `bind()` runs on the worker with the runner's cancel function; `request()` runs on the loop. Whichever comes second fires the cancel, so a stop requested before the runner exists still lands. | `daemon.py:36` |
 | `.handle_command(command)` | The `on_command` callback: park guard, duplicate replay, busy rejection, then start the one owned task. | `daemon.py:72` |
 | `.replay_pending()` | The `on_connected` seam — resends pending status after hello, before any new command is acted on. | `daemon.py:86` |
 | `._execute(command)` | Owns the scan task; converts any exception to `failed` and clears `_active` in `finally`. | `daemon.py:91` |
@@ -95,7 +96,7 @@ every intermediate row in command history.
   and the backend's disconnect grace + stale sweep own the eventual `failed`. Commands are never
   queued locally while disconnected.
 * A socket drop does **not** cancel a running scan. Status changes are recorded pending and replayed
-  on reconnect. DMI-66 adds no cancellation parameter to `ScanRunner` or `run_headless_scan`.
+  on reconnect. Only parking (and shutdown) stops a scan, through `run_headless_scan(bind_cancel=...)`.
 * Ingest `forbidden` records `failed/ingest_failed`, makes one best-effort status send, then calls
   `park("upload_refused")`. The shared command-channel policy drops the socket, waits one hour, and
   redials; no new scan starts while parked.
@@ -107,10 +108,10 @@ every intermediate row in command history.
 * Exit code `20` is overloaded on the bare-agent path: missing nmap and an invalid ingest
   configuration both exit `20`, distinguishable only by their stderr text.
 * Scan preemption, command/daemon generation leases, and late-work fencing are **out of scope** —
-  DMI-101 owns them. Every park reason now retries hourly. Parking cancels the scan task at its
-  `await` boundary, but `asyncio.to_thread` cannot stop the worker thread, so a scan may still be
-  mid-nmap or mid-upload while the daemon remains parked. A later scan result never reaches ingest;
-  an ingest request already in progress may finish, but its return is ignored.
+  DMI-101 owns them. Every park reason now retries hourly. Parking stops the running scan (nmap is
+  terminated) and waits for the worker before it clears `_active`, so no second command can start
+  beside it after the hourly redial. An ingest request already in progress may finish, but its
+  return is ignored.
 
 # Citations
 

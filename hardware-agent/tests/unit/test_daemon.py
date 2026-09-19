@@ -50,14 +50,22 @@ class FakeScan:
         self.calls: list[tuple[str, str, str | None]] = []
         self.threads: list[int] = []
         self.started = threading.Event()
+        self.cancelled = threading.Event()
         self._results = list(results) or [scan_result()]
         self._gate = gate
 
     def __call__(
-        self, mode: str, subnet: str, *, nspi_submode: str | None = None
+        self,
+        mode: str,
+        subnet: str,
+        *,
+        nspi_submode: str | None = None,
+        bind_cancel: Any = None,
     ) -> HeadlessScanResult:
         self.calls.append((mode, subnet, nspi_submode))
         self.threads.append(threading.get_ident())
+        if bind_cancel is not None:
+            bind_cancel(self._cancel)
         self.started.set()
         if self._gate is not None:
             self._gate.wait(TIMEOUT)
@@ -65,6 +73,11 @@ class FakeScan:
         if isinstance(result, BaseException):
             raise result
         return result
+
+    def _cancel(self) -> None:
+        self.cancelled.set()
+        if self._gate is not None:
+            self._gate.set()
 
 
 class FakeIngest:
@@ -486,6 +499,8 @@ class TestForbiddenIngest:
             gate.set()
 
         assert client.parked_reason == "revoked"
+        assert scan.cancelled.is_set()
+        assert daemon._active is None
         assert client.frames(subject) == [("running", None)]
         assert ingest.calls == []
 
@@ -497,6 +512,7 @@ class TestForbiddenIngest:
 
         async def wait_until_started() -> None:
             await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+            asyncio.get_running_loop().call_later(0.05, gate.set)
 
         daemon, client, _, _ = build(
             ingest=ingest,
@@ -509,6 +525,7 @@ class TestForbiddenIngest:
             gate.set()
 
         assert client.parked_reason == "revoked"
+        assert daemon._active is None
         assert client.frames(subject) == [
             ("running", None),
             ("uploading", None),
