@@ -533,6 +533,24 @@ class TestClassification:
         assert "command channel lost" not in caplog.text
 
     @pytest.mark.asyncio
+    async def test_close_interrupts_the_hourly_wait(self) -> None:
+        waiting = asyncio.Event()
+
+        async def sleep_forever(delay: float) -> None:
+            waiting.set()
+            await asyncio.Event().wait()
+
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(rejected(403)), sleep=sleep_forever
+        )
+        running = asyncio.create_task(drive(client))
+        await asyncio.wait_for(waiting.wait(), 5.0)
+
+        await client.close()
+
+        await asyncio.wait_for(running, 5.0)
+
+    @pytest.mark.asyncio
     async def test_cancellation_propagates_during_hourly_wait(self) -> None:
         async def cancel(delay: float) -> None:
             assert delay == 3600.0

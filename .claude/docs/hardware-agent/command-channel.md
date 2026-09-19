@@ -35,12 +35,12 @@ ingest. That split is the contract, not an implementation detail.
 | `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:92` |
 | `AgentStatus` | `type="status"`, `command_id`, `status`, nullable `error_code`. | `command_channel.py:109` |
 | `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:155` |
-| `.run(on_command, on_connected=None, on_parked=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:189` |
+| `.run(on_command, on_connected=None, on_parked=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:190` |
 | `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:223` |
-| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets the terminal `_closed` flag without parking. | `command_channel.py:233`, `:237` |
+| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets the terminal `_closed` flag without parking and cancels any hourly park wait, so shutdown never waits out a park. | `command_channel.py:232`, `:236` |
 | `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:125` |
 | `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:134` |
-| `_wait_out_park()` | Logs the typed reason and next UTC attempt, sleeps through the injected sleeper for 3600 seconds, then clears the reason. | `command_channel.py:294` |
+| `_wait_out_park()` | Logs the typed reason and next UTC attempt, sleeps through the injected sleeper for 3600 seconds, then clears the reason. `close()` interrupts the sleep; any other sleeper error, including cancellation, propagates. | `command_channel.py:295` |
 | `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:308` |
 
 ### The upgrade envelope

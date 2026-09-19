@@ -176,6 +176,7 @@ class CommandChannelClient:
         self._socket: Any = None
         self._parked_reason: ParkReason | None = None
         self._closed = False
+        self._park_wait: asyncio.Future[None] | None = None
         self._ready = False
 
     @property
@@ -204,11 +205,9 @@ class CommandChannelClient:
             try:
                 await self._serve_once(on_command, on_connected)
             except _TRANSPORT_ERRORS as exc:
-                if self._parked_reason is not None:
-                    pass
-                elif reason := _park_reason(exc):
+                if reason := _park_reason(exc):
                     self._set_parked(reason)
-                else:
+                elif self._parked_reason is None:
                     LOGGER.warning("command channel lost: %s", _describe(exc))
             finally:
                 await self._drop_socket()
@@ -236,6 +235,8 @@ class CommandChannelClient:
 
     async def close(self) -> None:
         self._closed = True
+        if self._park_wait is not None:
+            self._park_wait.cancel()
         await self._drop_socket()
 
     async def _serve_once(
@@ -301,7 +302,16 @@ class CommandChannelClient:
             reason,
             next_attempt.isoformat(timespec="seconds"),
         )
-        await self._sleep(_PARK_RETRY_SECONDS)
+        wait = asyncio.ensure_future(self._sleep(_PARK_RETRY_SECONDS))
+        self._park_wait = wait
+        try:
+            await asyncio.wait({wait})
+        finally:
+            wait.cancel()
+            self._park_wait = None
+        if self._closed:
+            return
+        wait.result()
         self._parked_reason = None
 
 
