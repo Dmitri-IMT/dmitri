@@ -18,7 +18,7 @@ legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
 [hosts/scans/findings routers](/backend/routers.md) actually return (plus the `ScanSortBy`,
 `HostSortBy` and `SortOrder` literal aliases that type the scan-list and host-list sort params).
-`schemas/ai.py` holds the **AI analysis wire models**: `ScanAIAnalysis` and the status-keyed `ScanAIAnalysisResponse` union. `schemas/__init__.py` re-exports
+`schemas/ai.py` holds **AI wire models**: scan analysis (`ScanAIAnalysis`, `ScanAIAnalysisResponse`), chat (`AIChatRequest`, `AIChatResponse`, `AIChatHistoryResponse`), contextual chat (`AIContextChatRequest`), and usage (`AIUsageResponse`, `AIUsageSummary`, `AIUsageEntry`). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)
@@ -52,6 +52,8 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. Also `industrial_services` and `unreadable_fields`. | `backend/src/api/schemas/read.py:45` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
 | `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). | `backend/src/api/schemas/ai.py:86` |
+| `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. | `backend/src/api/schemas/ai.py` |
+| `AIUsageResponse` | `GET /ai/usage` summary + `data` entries. | `backend/src/api/schemas/ai.py` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
 | `HostDetailResponse` | `GET /hosts/{host_id}`: **subclasses `HostSummary`** (identity, `machine_type`, `vulnerability_count`) and adds durable `HostPort[]`, `industrial_services` from the latest scan, and `scan_history`. Flat on the wire. | `backend/src/api/schemas/read.py:177` |

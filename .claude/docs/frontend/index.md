@@ -37,7 +37,10 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
 * [devices-screen](./devices-screen.md) — Devices lists every box; DeviceDetail owns subnet choice, scan-type tabs and useScanCommand; trigger() posts the selected ScanMode and invalidates read caches on done.
-* [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
+* [scan-ai](./scan-ai.md) — Scan Detail overview card: request, poll, and render the structured Groq analysis.
+* [context-ai](./context-ai.md) — Floating Assistente IA on scan and host detail; ContextChat against `/ai/chat`.
+* [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
+* [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 * [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.

@@ -3,6 +3,16 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-19
+
+* **Update**: `feature/ai-improving` — contextual Groq chat (`/ai/chat`, scoped history,
+  host/finding explain routes), `ai_usage` telemetry, `AI_AUTO_ANALYSIS` enqueue from enrichment,
+  Settings usage panel, Home analysis teaser, and `GlobalAssistant` on scan/host detail. Touched:
+  `backend/ai.md`, `backend/routers.md`, `backend/api.md`, `backend/schemas.md`, `backend/models.md`,
+  `backend/services.md`, `backend/migrations.md`, `backend/index.md`, `frontend/scan-ai.md`,
+  `frontend/context-ai.md`, `frontend/ai-usage.md`, `frontend/home-ai-overview.md`, `frontend/api.md`,
+  `frontend/screens.md`, `frontend/index.md`.
+
 ## 2026-09-15
 
 * **Update**: DMI-171 on PR-147. `deliver()` now fails the command at once when the frame send
