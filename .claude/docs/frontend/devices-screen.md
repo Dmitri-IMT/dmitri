@@ -4,7 +4,7 @@ title: Devices list, detail, scan and revocation
 description: Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
 resource: frontend/src/pages/Devices.tsx
 tags: [frontend, agents, devices, commands, tanstack-query]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 
 # Devices list, detail, scan and revocation
@@ -18,7 +18,8 @@ and invalidates read caches on `done`. Revoked devices replace presence with the
 hide scan/network-change controls, and expose admin revoke/restore actions. `readAgentPresence()` is
 the single revoked/online/offline mode decision; the detail parent derives interactivity from it and
 children never inspect lifecycle fields. Screen-specific pieces live under `pages/agents/`; pure
-subnet labelling lives in `subnetLabel.ts`; scan-mode labels and defaults live in `lib/scanModes.ts`.
+subnet labelling lives in `subnetLabel.ts`; watched-network display strings for list and detail live
+in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanModes.ts`.
 
 ## Key classes / functions
 
@@ -37,7 +38,9 @@ subnet labelling lives in `subnetLabel.ts`; scan-mode labels and defaults live i
 | `useScanCommand(agent)` | Latches `followedCommandId` (never cleared on terminal — only replaced by a newer id). Polls `GET /commands/{id}` every 5s until [command-status](./command-status.md)'s `isTerminalCommandStatus`. On `done`, invalidates `scans`, `hosts`, `findings`, and `agents.detail` once per command id. `trigger(scanMode)` posts `{ scan_mode, subnet }` and resolves to **one** `TriggerOutcome`. | `frontend/src/hooks/useScanCommand.ts:24` |
 | `TriggerOutcome` | `'followed' \| 'subnet-stale' \| 'refused'` — the hook's whole answer to one press. | `frontend/src/hooks/useScanCommand.ts:15` |
 | `subnetLabel()` / `subnetOptionSuffix()` / `findAvailableSubnet()` | Pure interface→label mapping plus the internet-route suffix. No React. | `frontend/src/lib/subnetLabel.ts:15` |
-| `TargetSubnetSection` | Watched-network read line plus `[Change]`; it reads `readAgentPresence(agent)` itself and renders neither `[Change]` nor the chooser for a revoked device. Its `AdminOnly` chooser PATCHes and updates query data. | `frontend/src/pages/agents/TargetSubnetSection.tsx:49` |
+| `WatchedNetworkReadOnly` | Read-only watched-network line for the revoked detail tree. No chooser, no `[Change]`, no presence checks. | `frontend/src/pages/agents/WatchedNetworkReadOnly.tsx:10` |
+| `watchedNetworkLabel()` / `resolveWatchedNetwork()` | Shared CIDR plus interface label and subnet lookup for read-only and live collapsed rows. | `frontend/src/pages/agents/watchedNetworkLabel.ts:7` |
+| `TargetSubnetSection` | Live detail only. Collapsed read line plus admin `[Change]`; open state drives the `AdminOnly` chooser PATCH. | `frontend/src/pages/agents/TargetSubnetSection.tsx:42` |
 | `ScanControl` | One slot: `[Scan now]` or `CommandStatus`. Trigger stays visible when offline; disabled only while POST in flight. Dispatches the `TriggerOutcome` and passes `selectedMode` into `trigger()`. | `frontend/src/pages/agents/ScanControl.tsx:11` |
 | `CommandStatus` | **One** `role="status"` root that stays mounted from `Starting…` through every fetched state. Renders `commandStatusLabel` text — no pill chrome. Terminal next steps unchanged (`[View scan]`, failure sentence, expired copy + `[Retry]` for admin). | `frontend/src/pages/agents/CommandStatus.tsx:12` |
 | `FirstScanCta` / `FirstScanNote` | Admin link to `/devices` and viewer line for Home/Scans/Network blank states. | `frontend/src/components/FirstScanCta.tsx:6` |

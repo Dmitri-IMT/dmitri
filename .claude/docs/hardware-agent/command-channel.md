@@ -4,7 +4,7 @@ title: command-channel — the signed WebSocket client and shared signer
 description: "The signed device WebSocket: strict frames, short transient backoff, and hourly recovery from a typed parked state."
 resource: hardware-agent/src/agent/transport/command_channel.py
 tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-09-19T00:00:00Z
 ---
 
 # command-channel — the signed WebSocket client
@@ -37,11 +37,11 @@ ingest. That split is the contract, not an implementation detail.
 | `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:155` |
 | `.run(on_command, on_connected=None, on_parked=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:190` |
 | `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:223` |
-| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets the terminal `_closed` flag without parking and cancels any hourly park wait, so shutdown never waits out a park. | `command_channel.py:232`, `:236` |
+| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:232`, `:236` |
 | `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:125` |
 | `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:134` |
-| `_wait_out_park()` | Logs the typed reason and next UTC attempt, sleeps through the injected sleeper for 3600 seconds, then clears the reason. `close()` interrupts the sleep; any other sleeper error, including cancellation, propagates. | `command_channel.py:295` |
-| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:308` |
+| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:294` |
+| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:329` |
 
 ### The upgrade envelope
 
@@ -108,6 +108,9 @@ The process stays alive throughout.
   the hourly wait. Only the closed `ParkReason` literals reach that log line.
 * `park()` deliberately drops the socket. The receive-loop exception is ignored when a park reason
   is already set, so operators do not see a false `command channel lost` warning for that action.
+* `_shutdown` is a persistent `asyncio.Event` set by `close()`. Park wait checks `_closed` before
+  sleeping and races sleep against that event so daemon shutdown cannot miss the window between
+  entering the parked branch and starting the hourly wait.
 * The module reads `ConnectionClosed.code` / `.reason`, which `websockets` 17 deprecates in favour
   of `.rcvd.code` / `.rcvd.reason`. The deprecated accessors are the *correct* ones here — they fold
   the `rcvd is None` case into `1006`, which the reconnect classifier depends on. Any future

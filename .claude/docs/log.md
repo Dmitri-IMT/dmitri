@@ -3,6 +3,13 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-19
+
+* **Update**: PR-149 review follow-up. Device detail splits revoked vs live network UI:
+  `WatchedNetworkReadOnly` plus `watchedNetworkLabel.ts`; `TargetSubnetSection` is live-only. Pi
+  park wait races injected sleep against a persistent `_shutdown` event so `close()` cannot miss the
+  pre-wait race. Touched: `frontend/devices-screen.md`, `hardware-agent/command-channel.md`.
+
 ## 2026-09-17
 
 * **Creation**: `ConfirmDialog` now owns the shared single-click confirm state for invite and device
