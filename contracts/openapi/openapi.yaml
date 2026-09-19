@@ -499,6 +499,34 @@ paths:
         '502':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/v1/ai/usage:
+    get:
+      tags:
+        - ai
+      summary: Get AI provider usage
+      description: Returns organization-scoped operational usage metadata without prompts or model responses.
+      operationId: getAIUsage
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: AI usage summary and recent requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIUsageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/ai/chat/history:
     get:
       tags:
@@ -4670,6 +4698,86 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AIChatHistoryEntry'
+    AIUsageEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+        - provider
+        - model
+        - status
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - latency_ms
+        - http_status
+        - request_id
+        - error_code
+        - scan_id
+        - created_at
+      properties:
+        operation:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+        input_tokens:
+          type: integer
+          nullable: true
+        output_tokens:
+          type: integer
+          nullable: true
+        total_tokens:
+          type: integer
+          nullable: true
+        latency_ms:
+          type: integer
+          nullable: true
+        http_status:
+          type: integer
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    AIUsageSummary:
+      type: object
+      additionalProperties: false
+      required: [requests, input_tokens, output_tokens, total_tokens, errors]
+      properties:
+        requests:
+          type: integer
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        errors:
+          type: integer
+    AIUsageResponse:
+      type: object
+      additionalProperties: false
+      required: [summary, data]
+      properties:
+        summary:
+          $ref: '#/components/schemas/AIUsageSummary'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIUsageEntry'
     ScanAIAnalysisUnavailable:
       type: object
       additionalProperties: false

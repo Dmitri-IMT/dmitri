@@ -6,6 +6,7 @@ import Disclosure from '@/components/Disclosure'
 import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import PasswordDialog from '@/pages/settings/PasswordDialog'
+import AIUsagePanel from '@/pages/settings/AIUsagePanel'
 
 const LAST_ADMIN_ERROR =
   "You're the only admin. Make someone else an admin first, then you can leave."
@@ -97,6 +98,7 @@ function Settings() {
           </Disclosure>
         </div>
       </section>
+      <AIUsagePanel />
       <hr className="border-border" />
       <section data-testid="settings-leave" className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">

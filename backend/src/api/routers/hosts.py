@@ -25,6 +25,7 @@ from api.services.ai.chat import (
 )
 from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
 from api.services.ai.orchestrator import AIOrchestrator
+from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.read import (
     DEFAULT_PAGE,
     DEFAULT_PER_PAGE,
@@ -87,6 +88,13 @@ def explain_host(
             question=payload.question,
             finding_references=finding_reference_map(findings, payload.question),
         )
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=host.scan_history[0].scan_id if host.scan_history else None,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         latest_scan_id = host.scan_history[0].scan_id if host.scan_history else None
         if latest_scan_id is not None:
             save_chat_message(
@@ -100,6 +108,13 @@ def explain_host(
         )
         return response
     except AIProviderError as exc:
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=host.scan_history[0].scan_id if host.scan_history else None,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         if exc.code == "provider_rate_limited":
             wait_seconds = exc.retry_after_seconds or 60
             raise ApiError(

@@ -5,6 +5,14 @@ export type AIContextScope = 'scan' | 'host' | 'finding'
 export type AIChatResponse = components['schemas']['AIChatResponse']
 export type AIChatHistoryResponse =
   components['schemas']['AIChatHistoryResponse']
+export type AIUsageResponse = components['schemas']['AIUsageResponse']
+
+export async function getAIUsage(limit = 50): Promise<AIUsageResponse> {
+  const response = await apiClient.get<AIUsageResponse>('/ai/usage', {
+    params: { limit },
+  })
+  return response.data
+}
 
 /** Shared entry point for the contextual assistant used by future global UI. */
 export async function askContextAI(

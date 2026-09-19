@@ -71,7 +71,8 @@ def test_groq_provider_requests_strict_structured_output():
             },
         )
 
-    result = _provider(handler).analyze_scan(context)
+    provider = _provider(handler)
+    result = provider.analyze_scan(context)
 
     assert result == _analysis()
     assert captured["authorization"] == f"Bearer {TEST_TOKEN}"
@@ -86,6 +87,36 @@ def test_groq_provider_requests_strict_structured_output():
     assert TEST_TOKEN not in json.dumps(payload)
     assert '"context_version":"2"' in payload["messages"][1]["content"]
     assert "scan_id" not in payload["messages"][1]["content"]
+    usage = provider.drain_usage_events()
+    assert usage[0].operation == "scan_analysis"
+    assert usage[0].input_tokens is None
+
+
+def test_groq_provider_records_usage_without_prompt_content():
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            headers={"x-request-id": "req-test"},
+            json={
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 7,
+                    "total_tokens": 19,
+                },
+                "choices": [
+                    {"message": {"content": _analysis().model_dump_json()}}
+                ],
+            },
+        )
+    )
+
+    provider.analyze_scan(_context())
+    event = provider.drain_usage_events()[0]
+    assert event.input_tokens == 12
+    assert event.output_tokens == 7
+    assert event.total_tokens == 19
+    assert event.request_id == "req-test"
+    assert event.latency_ms is not None
 
 
 def test_system_prompt_requests_english_prose():

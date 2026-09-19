@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
+from dataclasses import dataclass
 
 import httpx
 from pydantic import ValidationError
@@ -54,6 +56,20 @@ class AIProviderError(RuntimeError):
         self.retry_after_seconds = retry_after_seconds
 
 
+@dataclass(frozen=True, slots=True)
+class GroqUsageEvent:
+    operation: str
+    model: str
+    status: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    latency_ms: int | None = None
+    http_status: int | None = None
+    request_id: str | None = None
+    error_code: str | None = None
+
+
 class GroqProvider:
     def __init__(
         self,
@@ -73,12 +89,18 @@ class GroqProvider:
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
         self.client = client
+        self._usage_events: list[GroqUsageEvent] = []
+
+    def drain_usage_events(self) -> list[GroqUsageEvent]:
+        events, self._usage_events = self._usage_events, []
+        return events
 
     def analyze_scan(self, context: ScanAIContext) -> ProviderScanAIAnalysis:
         return self._analyze(
             context,
             USER_PROMPT.format(context_json=context.model_dump_json()),
             ProviderScanAIAnalysis,
+            operation="scan_analysis",
         )
 
     def analyze_chunk(self, context: ScanAIContext) -> ProviderScanAIChildAnalysis:
@@ -91,6 +113,7 @@ CHUNK_CONTEXT_JSON:
 {context_json}
 """.format(context_json=context.model_dump_json()),
             ProviderScanAIChildAnalysis,
+            operation="finding_chunk",
         )
 
     def repair_analysis(
@@ -110,6 +133,7 @@ SCAN_CONTEXT_JSON:
                 context_json=context.model_dump_json(),
             ),
             ProviderScanAIAnalysis,
+            operation="analysis_repair",
         )
 
     def repair_chunk(
@@ -130,6 +154,7 @@ CHUNK_CONTEXT_JSON:
                 context_json=context.model_dump_json(),
             ),
             ProviderScanAIChildAnalysis,
+            operation="chunk_repair",
         )
 
     def synthesize_scan(
@@ -162,6 +187,7 @@ SYNTHESIS_CONTEXT_JSON:
                 context_json=json.dumps(synthesis_context, separators=(",", ":"))
             ),
             ProviderScanAIAnalysis,
+            operation="analysis_synthesis",
         )
 
     def answer_question(
@@ -195,6 +221,8 @@ SCAN_CONTEXT_JSON:
         context: ScanAIContext,
         user_prompt: str,
         response_schema: type[ProviderScanAIAnalysis | ProviderScanAIChildAnalysis],
+        *,
+        operation: str,
     ) -> ProviderScanAIAnalysis | ProviderScanAIChildAnalysis:
         payload = {
             "model": self.model,
@@ -223,7 +251,7 @@ SCAN_CONTEXT_JSON:
             "include_reasoning": False,
         }
         try:
-            response = self._post(payload)
+            response = self._post(payload, operation=operation)
         except httpx.TimeoutException as exc:
             raise AIProviderError("provider_timeout", retryable=True) from exc
         except httpx.RequestError as exc:
@@ -274,7 +302,7 @@ SCAN_CONTEXT_JSON:
             "include_reasoning": False,
         }
         try:
-            response = self._post(payload)
+            response = self._post(payload, operation="chat")
         except httpx.TimeoutException as exc:
             raise AIProviderError("provider_timeout", retryable=True) from exc
         except httpx.RequestError as exc:
@@ -293,18 +321,81 @@ SCAN_CONTEXT_JSON:
         ) as exc:
             raise AIProviderError("invalid_provider_response", retryable=True) from exc
 
-    def _post(self, payload: dict[str, object]) -> httpx.Response:
+    def _post(self, payload: dict[str, object], *, operation: str) -> httpx.Response:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         url = f"{self.base_url}/chat/completions"
-        if self.client is not None:
-            return self.client.post(
-                url, headers=headers, json=payload, timeout=self.timeout_seconds
+        started = time.perf_counter()
+        try:
+            if self.client is not None:
+                response = self.client.post(
+                    url, headers=headers, json=payload, timeout=self.timeout_seconds
+                )
+            else:
+                with httpx.Client(timeout=self.timeout_seconds) as client:
+                    response = client.post(url, headers=headers, json=payload)
+        except httpx.TimeoutException:
+            self._usage_events.append(
+                GroqUsageEvent(
+                    operation,
+                    self.model,
+                    "error",
+                    latency_ms=_elapsed_ms(started),
+                    error_code="provider_timeout",
+                )
             )
-        with httpx.Client(timeout=self.timeout_seconds) as client:
-            return client.post(url, headers=headers, json=payload)
+            raise
+        except httpx.RequestError:
+            self._usage_events.append(
+                GroqUsageEvent(
+                    operation,
+                    self.model,
+                    "error",
+                    latency_ms=_elapsed_ms(started),
+                    error_code="provider_unavailable",
+                )
+            )
+            raise
+        try:
+            response_body = response.json() if response.content else {}
+        except ValueError:
+            response_body = {}
+        usage = (
+            response_body.get("usage", {})
+            if isinstance(response_body, dict)
+            else {}
+        )
+        self._usage_events.append(
+            GroqUsageEvent(
+                operation,
+                self.model,
+                "success" if response.status_code < 400 else "error",
+                _int_or_none(usage.get("prompt_tokens")),
+                _int_or_none(usage.get("completion_tokens")),
+                _int_or_none(usage.get("total_tokens")),
+                _elapsed_ms(started),
+                response.status_code,
+                response.headers.get("x-request-id")
+                or response.headers.get("request-id")
+                or (
+                    response_body.get("id")
+                    if isinstance(response_body.get("id"), str)
+                    else None
+                ),
+                None if response.status_code < 400 else f"http_{response.status_code}",
+            )
+        )
+        return response
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, round((time.perf_counter() - started) * 1000))
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) else None
 
 
 def _http_error(response: httpx.Response) -> AIProviderError:

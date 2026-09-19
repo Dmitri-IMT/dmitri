@@ -1,5 +1,6 @@
 from api.core.config import get_settings
 from api.main import app
+from api.models.persistence import AIUsageRecord
 from api.schemas.ai import ProviderAIChatResponse
 from api.services.ai.groq import AIProviderError
 from read_factories import seed_read_graph
@@ -36,6 +37,59 @@ def _enable_ai(monkeypatch):
         update=settings_update
     )
     app.dependency_overrides[get_settings] = lambda: settings
+
+
+def test_ai_usage_is_scoped_and_exposes_only_metadata(
+    client, administrative_session, actor_headers
+):
+    seeded = seed_read_graph(administrative_session)
+    administrative_session.add_all(
+        [
+            AIUsageRecord(
+                org_id=seeded["org"].id,
+                scan_id=seeded["scan"].scan_id,
+                operation="chat",
+                provider="groq",
+                model="test-model",
+                status="success",
+                input_tokens=12,
+                output_tokens=7,
+                total_tokens=19,
+                latency_ms=23,
+                http_status=200,
+                request_id="req-test",
+            ),
+            AIUsageRecord(
+                org_id=seeded["org"].id,
+                operation="scan_analysis",
+                provider="groq",
+                model="test-model",
+                status="error",
+                error_code="provider_rate_limited",
+                http_status=429,
+            ),
+        ]
+    )
+    administrative_session.commit()
+
+    response = client.get(
+        "/api/v1/ai/usage?limit=2",
+        headers=actor_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"] == {
+        "requests": 2,
+        "input_tokens": 12,
+        "output_tokens": 7,
+        "total_tokens": 19,
+        "errors": 1,
+    }
+    assert len(body["data"]) == 2
+    success = next(item for item in body["data"] if item["status"] == "success")
+    assert success["request_id"] == "req-test"
+    assert all("prompt" not in item for item in body["data"])
 
 
 def test_scan_chat_returns_grounded_response_without_calling_groq(

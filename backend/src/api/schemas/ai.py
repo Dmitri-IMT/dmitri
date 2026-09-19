@@ -44,6 +44,43 @@ class AIChatHistoryResponse(BaseModel):
     data: list[AIChatHistoryEntry]
 
 
+class AIUsageEntry(BaseModel):
+    """Non-sensitive provider usage metadata for an organization dashboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation: str
+    provider: str
+    model: str
+    status: str
+    input_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    latency_ms: int | None
+    http_status: int | None
+    request_id: str | None
+    error_code: str | None
+    scan_id: UUID | None
+    created_at: datetime
+
+
+class AIUsageSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    errors: int
+
+
+class AIUsageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: AIUsageSummary
+    data: list[AIUsageEntry]
+
+
 class ProviderAIChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

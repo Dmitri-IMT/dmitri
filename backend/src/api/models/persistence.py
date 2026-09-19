@@ -44,6 +44,31 @@ class ScanRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
+class AIUsageRecord(SQLModel, table=True):
+    """Provider usage metadata; prompts and responses are deliberately not stored."""
+
+    __tablename__ = "ai_usage"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    org_id: UUID | None = Field(default=None, index=True, foreign_key="orgs.id")
+    scan_id: UUID | None = Field(default=None, index=True, foreign_key="scans.scan_id")
+    user_id: UUID | None = Field(default=None, index=True, foreign_key="users.id")
+    operation: str
+    provider: str
+    model: str
+    status: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    latency_ms: int | None = None
+    http_status: int | None = None
+    request_id: str | None = None
+    error_code: str | None = None
+    created_at: datetime = Field(
+        default_factory=utc_now, sa_type=UTC_TIMESTAMP, index=True
+    )
+
+
 class ScanHostRecord(SQLModel, table=True):
     __tablename__ = "scan_hosts"
     __table_args__ = (UniqueConstraint("scan_id", "ip"),)

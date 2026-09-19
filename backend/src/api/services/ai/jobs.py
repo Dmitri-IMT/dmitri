@@ -38,6 +38,7 @@ from api.services.ai.groq import (
     AIProviderError,
     GroqProvider,
 )
+from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
     sanitize_scan_ai_analysis,
     validate_provider_analysis,
@@ -294,6 +295,13 @@ def _process_claimed_analysis(
     now: datetime,
 ) -> None:
     def fail(code: str, retryable: bool) -> None:
+        failed_scan = session.get(ScanRecord, record.scan_id)
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=record.scan_id,
+            org_id=failed_scan.org_id if failed_scan else None,
+        )
         retry_or_fail(
             record,
             error=code,
@@ -346,8 +354,15 @@ def _process_claimed_analysis(
         return fail("internal_error", False)
     if context is None or analysis is None:
         return fail("scan_unavailable", False)
-    if not _is_grounded(context, analysis):
-        return fail("invalid_analysis", False)
+        if not _is_grounded(context, analysis):
+            return fail("invalid_analysis", False)
+
+    persist_usage_events(
+        session,
+        drain_provider_usage(provider),
+        scan_id=record.scan_id,
+        org_id=scan.org_id,
+    )
 
     record.status = "completed"
     record.analysis_json = analysis.model_dump(mode="json")

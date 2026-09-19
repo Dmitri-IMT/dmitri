@@ -20,6 +20,7 @@ from api.services.ai.chat import (
 )
 from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
 from api.services.ai.orchestrator import AIOrchestrator
+from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.read import get_finding_detail, list_findings
 
 router = APIRouter()
@@ -73,6 +74,13 @@ def explain_finding(
             question=payload.question,
             finding_references=finding_reference_map([finding], payload.question),
         )
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=finding.scan_id,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         save_chat_message(
             session,
             scan_id=finding.scan_id,
@@ -84,6 +92,13 @@ def explain_finding(
         )
         return response
     except AIProviderError as exc:
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=finding.scan_id,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         if exc.code == "provider_rate_limited":
             wait_seconds = exc.retry_after_seconds or 60
             raise ApiError(

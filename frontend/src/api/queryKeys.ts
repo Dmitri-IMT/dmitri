@@ -23,6 +23,9 @@ export const queryKeys = {
     detail: (scanId: string) => ['scans', 'detail', scanId] as const,
     analysis: (scanId: string) => ['scans', 'analysis', scanId] as const,
   },
+  ai: {
+    usage: (limit: number) => ['ai', 'usage', limit] as const,
+  },
   hosts: {
     all: ['hosts'] as const,
     list: (params: HostListParams) => ['hosts', 'list', params] as const,

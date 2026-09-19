@@ -45,6 +45,7 @@ from api.services.ai.jobs import (
     request_scan_ai_analysis,
 )
 from api.services.ai.orchestrator import AIOrchestrator
+from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 from api.services.report_pdf import render_scan_report_pdf
@@ -242,6 +243,13 @@ def ask_scan_ai(
                 payload.question,
             ),
         )
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=scan_id,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         save_chat_message(
             session,
             scan_id=scan_id,
@@ -251,6 +259,13 @@ def ask_scan_ai(
         )
         return response
     except (AIProviderError, ValueError) as exc:
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=scan_id,
+            org_id=caller.org_id,
+            user_id=caller.sub,
+        )
         if (
             isinstance(exc, AIProviderError)
             and exc.code == "provider_context_too_large"

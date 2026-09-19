@@ -168,6 +168,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI provider usage
+         * @description Returns organization-scoped operational usage metadata without prompts or model responses.
+         */
+        get: operations["getAIUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/chat/history": {
         parameters: {
             query?: never;
@@ -1388,6 +1408,34 @@ export interface components {
         AIChatHistoryResponse: {
             data: components["schemas"]["AIChatHistoryEntry"][];
         };
+        AIUsageEntry: {
+            operation: string;
+            provider: string;
+            model: string;
+            status: string;
+            input_tokens: number | null;
+            output_tokens: number | null;
+            total_tokens: number | null;
+            latency_ms: number | null;
+            http_status: number | null;
+            request_id: string | null;
+            error_code: string | null;
+            /** Format: uuid */
+            scan_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AIUsageSummary: {
+            requests: number;
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            errors: number;
+        };
+        AIUsageResponse: {
+            summary: components["schemas"]["AIUsageSummary"];
+            data: components["schemas"]["AIUsageEntry"][];
+        };
         ScanAIAnalysisUnavailable: {
             /** Format: uuid */
             scan_id: string;
@@ -2384,6 +2432,29 @@ export interface operations {
                 };
             };
             502: components["responses"]["InternalServerError"];
+        };
+    };
+    getAIUsage: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI usage summary and recent requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIUsageResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listContextAIChat: {
