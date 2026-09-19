@@ -81,6 +81,9 @@ export type MessageKey =
   | 'ai.thisScan'
   | 'ai.thisHost'
   | 'ai.askAbout'
+  | 'ai.askAboutScan'
+  | 'ai.viewFinding'
+  | 'ai.genericError'
   | 'ai.overview'
   | 'ai.overviewDescription'
   | 'ai.reloadOverview'
@@ -95,6 +98,7 @@ export type MessageKey =
   | 'ai.recordedVulnerability'
   | 'ai.recommendedAction'
   | 'ai.showDetails'
+  | 'ai.showOverview'
   | 'ai.cannotConfirm'
   | 'ai.priorityImmediate'
   | 'ai.priorityHigh'
@@ -242,6 +246,9 @@ const en: Catalog = {
   'ai.thisScan': 'this scan',
   'ai.thisHost': 'this machine',
   'ai.askAbout': ({ label }) => 'Ask about ' + label,
+  'ai.askAboutScan': 'Ask about this scan',
+  'ai.viewFinding': ({ index }) => 'View finding ' + index,
+  'ai.genericError': 'Unable to get an answer right now. Try again.',
   'ai.overview': 'AI overview',
   'ai.overviewDescription': 'Get a plain-language overview of this scan.',
   'ai.reloadOverview': 'Reload overview',
@@ -258,6 +265,7 @@ const en: Catalog = {
   'ai.recordedVulnerability': 'Recorded vulnerability',
   'ai.recommendedAction': 'Recommended action:',
   'ai.showDetails': 'Show assessment details and limitations',
+  'ai.showOverview': 'Show AI summary',
   'ai.cannotConfirm': 'What this scan cannot confirm',
   'ai.priorityImmediate': 'Immediate',
   'ai.priorityHigh': 'High priority',
@@ -410,6 +418,10 @@ const pt: Catalog = {
   'ai.thisScan': 'esta varredura',
   'ai.thisHost': 'este equipamento',
   'ai.askAbout': ({ label }) => 'Pergunte sobre ' + label,
+  'ai.askAboutScan': 'Pergunte sobre esta varredura',
+  'ai.viewFinding': ({ index }) => 'Ver achado ' + index,
+  'ai.genericError':
+    'Não foi possível obter uma resposta agora. Tente novamente.',
   'ai.overview': 'Resumo da IA',
   'ai.overviewDescription':
     'Obtenha um resumo desta varredura em linguagem simples.',
@@ -429,6 +441,7 @@ const pt: Catalog = {
   'ai.recordedVulnerability': 'Vulnerabilidade registrada',
   'ai.recommendedAction': 'Ação recomendada:',
   'ai.showDetails': 'Mostrar detalhes da avaliação e limitações',
+  'ai.showOverview': 'Mostrar resumo da IA',
   'ai.cannotConfirm': 'O que esta varredura não pode confirmar',
   'ai.priorityImmediate': 'Imediata',
   'ai.priorityHigh': 'Alta prioridade',
@@ -579,6 +592,9 @@ const ru: Catalog = {
   'ai.thisScan': 'это сканирование',
   'ai.thisHost': 'это устройство',
   'ai.askAbout': ({ label }) => 'Спросить об объекте: ' + label,
+  'ai.askAboutScan': 'Спросить об этом сканировании',
+  'ai.viewFinding': ({ index }) => 'Открыть находку ' + index,
+  'ai.genericError': 'Не удалось получить ответ. Попробуйте снова.',
   'ai.overview': 'Обзор ИИ',
   'ai.overviewDescription': 'Получите обзор этого сканирования простым языком.',
   'ai.reloadOverview': 'Обновить обзор',
@@ -596,6 +612,7 @@ const ru: Catalog = {
   'ai.recordedVulnerability': 'Зафиксированная уязвимость',
   'ai.recommendedAction': 'Рекомендуемое действие:',
   'ai.showDetails': 'Показать детали оценки и ограничения',
+  'ai.showOverview': 'Показать сводку ИИ',
   'ai.cannotConfirm': 'Что нельзя подтвердить этим сканированием',
   'ai.priorityImmediate': 'Немедленно',
   'ai.priorityHigh': 'Высокий приоритет',

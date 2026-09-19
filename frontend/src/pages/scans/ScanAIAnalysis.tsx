@@ -182,93 +182,106 @@ function ScanAIAnalysis({
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
-            <div className="flex max-w-prose flex-col gap-2">
-              <p className="text-title-xs">{analysis.executive_summary}</p>
-              <p className="text-body-md">{analysis.plain_language_summary}</p>
-            </div>
-
-            {analysis.priority_actions.length > 0 && (
-              <section
-                className="flex flex-col gap-3"
-                aria-labelledby="scan-ai-actions-title"
-              >
-                <h3 id="scan-ai-actions-title" className="text-title-xs">
-                  {t('ai.whatToDoFirst')}
-                </h3>
-                <ol className="flex max-w-prose list-decimal flex-col gap-4 pl-6">
-                  {analysis.priority_actions.map((action, index) => (
-                    <li
-                      key={`${action.priority}-${index}`}
-                      className="text-body-md"
-                    >
-                      <p className="font-semibold">{action.title}</p>
-                      <p>{action.description}</p>
-                      <p className="text-caption-md text-muted-foreground">
-                        {t(
-                          `ai.priority${action.priority[0].toUpperCase()}${action.priority.slice(1)}` as
-                            | 'ai.priorityImmediate'
-                            | 'ai.priorityHigh'
-                            | 'ai.priorityMedium'
-                            | 'ai.priorityLow',
-                        )}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-
-            {analysis.important_findings.length > 0 && (
-              <section
-                className="flex flex-col gap-3"
-                aria-labelledby="scan-ai-findings-title"
-              >
-                <h3 id="scan-ai-findings-title" className="text-title-xs">
-                  {t('ai.whyVulnerabilities')}
-                </h3>
-                <div className="flex max-w-prose flex-col gap-4">
-                  {analysis.important_findings.map((finding) => (
-                    <div
-                      key={finding.finding_id}
-                      className="flex flex-col gap-2 border-t border-rule pt-4 first:border-t-0 first:pt-0"
-                    >
-                      <p className="font-semibold">
-                        {findingTitles.get(finding.finding_id) ??
-                          t('ai.recordedVulnerability')}
-                      </p>
-                      <p className="text-body-md">
-                        {finding.plain_language_explanation}
-                      </p>
-                      <p className="text-body-md">{finding.why_it_matters}</p>
-                      <p className="text-body-md">
-                        <span className="font-semibold">
-                          {t('ai.recommendedAction')}{' '}
-                        </span>
-                        {finding.recommendation}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
             <Disclosure
-              label={t('ai.showDetails')}
-              testId="scan-ai-details-toggle"
-              caretTestId="scan-ai-details-caret"
+              label={t('ai.showOverview')}
+              testId="scan-ai-overview-toggle"
+              caretTestId="scan-ai-overview-caret"
+              defaultOpen
             >
-              <div className="flex max-w-prose flex-col gap-4 pt-3 text-body-md">
-                <p>{analysis.overall_assessment}</p>
-                {analysis.uncertainties.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <p className="font-semibold">{t('ai.cannotConfirm')}</p>
-                    <ul className="list-disc pl-6">
-                      {analysis.uncertainties.map((uncertainty, index) => (
-                        <li key={index}>{uncertainty}</li>
-                      ))}
-                    </ul>
-                  </div>
+              <div className="flex flex-col gap-6 pt-3">
+                <div className="flex max-w-prose flex-col gap-2 pt-3">
+                  <p className="text-title-xs">{analysis.executive_summary}</p>
+                  <p className="text-body-md">
+                    {analysis.plain_language_summary}
+                  </p>
+                </div>
+
+                {analysis.priority_actions.length > 0 && (
+                  <Disclosure
+                    label={t('ai.whatToDoFirst')}
+                    testId="scan-ai-actions-toggle"
+                    caretTestId="scan-ai-actions-caret"
+                  >
+                    <section className="flex flex-col gap-3 pt-3">
+                      <ol className="flex max-w-prose list-decimal flex-col gap-4 pl-6">
+                        {analysis.priority_actions.map((action, index) => (
+                          <li
+                            key={`${action.priority}-${index}`}
+                            className="text-body-md"
+                          >
+                            <p className="font-semibold">{action.title}</p>
+                            <p>{action.description}</p>
+                            <p className="text-caption-md text-muted-foreground">
+                              {t(
+                                `ai.priority${action.priority[0].toUpperCase()}${action.priority.slice(1)}` as
+                                  | 'ai.priorityImmediate'
+                                  | 'ai.priorityHigh'
+                                  | 'ai.priorityMedium'
+                                  | 'ai.priorityLow',
+                              )}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                  </Disclosure>
                 )}
+
+                {analysis.important_findings.length > 0 && (
+                  <section
+                    className="flex flex-col gap-3"
+                    aria-labelledby="scan-ai-findings-title"
+                  >
+                    <h3 id="scan-ai-findings-title" className="text-title-xs">
+                      {t('ai.whyVulnerabilities')}
+                    </h3>
+                    <div className="flex max-w-prose flex-col gap-4">
+                      {analysis.important_findings.map((finding) => (
+                        <div
+                          key={finding.finding_id}
+                          className="flex flex-col gap-2 border-t border-rule pt-4 first:border-t-0 first:pt-0"
+                        >
+                          <p className="font-semibold">
+                            {findingTitles.get(finding.finding_id) ??
+                              t('ai.recordedVulnerability')}
+                          </p>
+                          <p className="text-body-md">
+                            {finding.plain_language_explanation}
+                          </p>
+                          <p className="text-body-md">
+                            {finding.why_it_matters}
+                          </p>
+                          <p className="text-body-md">
+                            <span className="font-semibold">
+                              {t('ai.recommendedAction')}{' '}
+                            </span>
+                            {finding.recommendation}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <Disclosure
+                  label={t('ai.showDetails')}
+                  testId="scan-ai-details-toggle"
+                  caretTestId="scan-ai-details-caret"
+                >
+                  <div className="flex max-w-prose flex-col gap-4 pt-3 text-body-md">
+                    <p>{analysis.overall_assessment}</p>
+                    {analysis.uncertainties.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <p className="font-semibold">{t('ai.cannotConfirm')}</p>
+                        <ul className="list-disc pl-6">
+                          {analysis.uncertainties.map((uncertainty, index) => (
+                            <li key={index}>{uncertainty}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </Disclosure>
               </div>
             </Disclosure>
           </CardContent>
