@@ -36,7 +36,7 @@ describe('ScanChat', () => {
     expect(getScanAIChat).not.toHaveBeenCalled()
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: 'Mostrar histórico' }))
+      .click(screen.getByRole('button', { name: 'Show history' }))
     expect(await screen.findByText('Qual host devo priorizar?')).toBeVisible()
     expect(screen.getByText('Priorize o host 192.168.1.10.')).toBeVisible()
     expect(getScanAIChat).toHaveBeenCalledWith('scan-1')
@@ -51,11 +51,11 @@ describe('ScanChat', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanChat scanId="scan-1" />)
 
-    await user.type(screen.getByLabelText('Sua pergunta'), 'O que corrigir?')
-    await user.click(screen.getByRole('button', { name: 'Perguntar' }))
+    await user.type(screen.getByLabelText('Your question'), 'O que corrigir?')
+    await user.click(screen.getByRole('button', { name: 'Ask' }))
 
     expect(
-      await screen.findByRole('link', { name: 'Ver achado 1' }),
+      await screen.findByRole('link', { name: 'View finding 1' }),
     ).toHaveAttribute('href', '/scans/scan-1?finding=finding-1')
   })
 
@@ -69,10 +69,10 @@ describe('ScanChat', () => {
     renderWithProviders(<ScanChat scanId="scan-1" />)
 
     await user.type(
-      screen.getByLabelText('Sua pergunta'),
+      screen.getByLabelText('Your question'),
       'O que devo corrigir primeiro?',
     )
-    await user.click(screen.getByRole('button', { name: 'Perguntar' }))
+    await user.click(screen.getByRole('button', { name: 'Ask' }))
 
     expect(askScanAI).toHaveBeenCalledWith(
       'scan-1',
@@ -101,8 +101,8 @@ describe('ScanChat', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanChat scanId="scan-1" />)
 
-    await user.type(screen.getByLabelText('Sua pergunta'), 'O que aconteceu?')
-    await user.click(screen.getByRole('button', { name: 'Perguntar' }))
+    await user.type(screen.getByLabelText('Your question'), 'O que aconteceu?')
+    await user.click(screen.getByRole('button', { name: 'Ask' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Limite de tokens da IA atingido. Tente novamente em aproximadamente 8 segundos.',
