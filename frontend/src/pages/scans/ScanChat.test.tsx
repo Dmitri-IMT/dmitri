@@ -77,6 +77,7 @@ describe('ScanChat', () => {
     expect(askScanAI).toHaveBeenCalledWith(
       'scan-1',
       'O que devo corrigir primeiro?',
+      'en',
     )
     expect(
       await screen.findByText('Priorize a atualização do serviço exposto.'),

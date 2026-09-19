@@ -90,10 +90,11 @@ export async function requestScanAnalysis(
 export async function askScanAI(
   scanId: string,
   question: string,
+  language: AILanguage = 'en',
 ): Promise<AIChatResponse> {
   const response = await apiClient.post<AIChatResponse>(
     `/scans/${scanId}/chat`,
-    { question },
+    { question, language },
   )
   return response.data
 }

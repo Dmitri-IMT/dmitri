@@ -13,8 +13,10 @@ import HostIdentity from '@/pages/hosts/HostIdentity'
 import IndustrialServices from '@/pages/hosts/IndustrialServices'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
+import useI18n from '@/i18n/useI18n'
 
 function HostDetail() {
+  const { t } = useI18n()
   const { hostId = '' } = useParams()
 
   const query = useQuery({
@@ -26,9 +28,9 @@ function HostDetail() {
   return (
     <ReadDetailGate
       testId="host-detail"
-      title="Machine"
-      notFoundMessage="That machine doesn't exist."
-      errorMessage="Couldn't load this machine."
+      title={t('common.machine')}
+      notFoundMessage={t('common.machineNotFound')}
+      errorMessage={t('common.machineLoadError')}
       backTo="/network"
       backLabel="Back to the network"
       detail={readDetailState(hostId, query)}
@@ -40,7 +42,7 @@ function HostDetail() {
             <HostAIExplanation hostId={host.host_id} />
             <Card>
               <CardHeader>
-                <h2 className="text-title-sm">Vulnerabilities</h2>
+                <h2 className="text-title-sm">{t('common.vulnerabilities')}</h2>
               </CardHeader>
               <CardContent>
                 <HostFindings hostId={host.host_id} />
@@ -49,7 +51,7 @@ function HostDetail() {
             <Card>
               <CardHeader>
                 <h2 className="text-title-sm">
-                  Services running on this machine
+                  {t('common.servicesRunning')}
                 </h2>
               </CardHeader>
               <CardContent>
@@ -58,7 +60,7 @@ function HostDetail() {
             </Card>
             <Card>
               <CardHeader>
-                <h2 className="text-title-sm">Industrial services</h2>
+                <h2 className="text-title-sm">{t('common.industrialServices')}</h2>
               </CardHeader>
               <CardContent>
                 <IndustrialServices services={host.industrial_services} />
@@ -66,7 +68,7 @@ function HostDetail() {
             </Card>
             <Card>
               <CardHeader>
-                <h2 className="text-title-sm">Scan history</h2>
+                <h2 className="text-title-sm">{t('common.scanHistory')}</h2>
               </CardHeader>
               <CardContent>
                 <HostScanHistoryTable history={host.scan_history} />
@@ -80,6 +82,7 @@ function HostDetail() {
 }
 
 function HostAIExplanation({ hostId }: { hostId: string }) {
+  const { t } = useI18n()
   const [answer, setAnswer] = useState<AIChatResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -98,7 +101,7 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
       setError(
         message?.code === 'ai_rate_limited' && message.message
           ? message.message
-          : 'Não foi possível obter uma explicação agora. Tente novamente.',
+          : t('ai.explanationUnavailable'),
       )
     } finally {
       setLoading(false)
@@ -108,7 +111,7 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-title-sm">Entenda este equipamento</h2>
+        <h2 className="text-title-sm">{t('ai.askAbout', { label: t('common.machine') })}</h2>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <Button
@@ -117,15 +120,14 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
           onClick={() => void explain()}
           disabled={loading}
         >
-          {loading ? 'Analisando...' : 'Explicar com IA'}
+          {loading ? t('ai.explainMachineLoading') : t('ai.explainMachine')}
         </Button>
         {answer && (
           <div aria-live="polite">
             <p className="text-body-md">{answer.answer}</p>
             {answer.referenced_finding_ids.length > 0 && (
               <p className="mt-2 text-body-sm text-muted-foreground">
-                A resposta considerou {answer.referenced_finding_ids.length}{' '}
-                vulnerabilidade(s) deste equipamento.
+                {t('ai.answerConsidered', { count: answer.referenced_finding_ids.length })}
               </p>
             )}
             {answer.uncertainties.length > 0 && (

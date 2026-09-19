@@ -316,22 +316,24 @@ def save_chat_message(
 def list_chat_messages(
     session: Session,
     *,
-    scan_id: UUID,
+    scan_id: UUID | None,
     org_id: UUID,
     scope_type: str = "scan",
     scope_id: UUID | None = None,
     limit: int = MAX_CHAT_HISTORY,
 ) -> list[AIChatHistoryEntry]:
     limit = min(limit, MAX_CHAT_HISTORY)
+    filters = [
+        ScanRecord.org_id == org_id,
+        AIChatMessageRecord.scope_type == scope_type,
+        AIChatMessageRecord.scope_id == (scope_id or scan_id),
+    ]
+    if scan_id is not None and scope_type != "host":
+        filters.append(AIChatMessageRecord.scan_id == scan_id)
     statement = (
         select(AIChatMessageRecord)
         .join(ScanRecord, ScanRecord.scan_id == AIChatMessageRecord.scan_id)
-        .where(
-            AIChatMessageRecord.scan_id == scan_id,
-            ScanRecord.org_id == org_id,
-            AIChatMessageRecord.scope_type == scope_type,
-            AIChatMessageRecord.scope_id == (scope_id or scan_id),
-        )
+        .where(*filters)
         .order_by(AIChatMessageRecord.created_at.desc())
         .limit(limit)
     )

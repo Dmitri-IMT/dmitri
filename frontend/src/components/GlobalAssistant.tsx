@@ -56,6 +56,7 @@ function GlobalAssistant() {
         </DialogHeader>
         {context ? (
           <ContextChat
+            key={`${context.scope}:${context.contextId}`}
             scope={context.scope}
             contextId={context.contextId}
             title={t('ai.askAbout', { label: context.label })}

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import useI18n from '@/i18n/useI18n'
 
 function ScanChat({ scanId }: { scanId: string }) {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<AIChatHistoryResponse['data']>([])
   const [isHistoryVisible, setIsHistoryVisible] = useState(false)
@@ -43,7 +43,7 @@ function ScanChat({ scanId }: { scanId: string }) {
     setIsSending(true)
     setError(null)
     try {
-      const response = await askScanAI(scanId, trimmed)
+      const response = await askScanAI(scanId, trimmed, language)
       setMessages((current) => [
         ...current,
         {

@@ -25,5 +25,30 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(LANGUAGE_UNIQUE, TABLE, type_="unique")
+    # A scan can have one row per language after this migration. Keep the
+    # canonical English row (or the oldest row when English is unavailable)
+    # before restoring the legacy one-row-per-scan constraint.
+    connection = op.get_bind()
+    connection.execute(
+        sa.text(
+            f"""
+            DELETE FROM {TABLE}
+            WHERE analysis_id IN (
+                SELECT analysis_id
+                FROM (
+                    SELECT analysis_id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY scan_id
+                               ORDER BY CASE WHEN language = 'en' THEN 0 ELSE 1 END,
+                                        created_at,
+                                        analysis_id
+                           ) AS row_number
+                    FROM {TABLE}
+                ) ranked
+                WHERE row_number > 1
+            )
+            """
+        )
+    )
     op.create_unique_constraint(OLD_UNIQUE, TABLE, ["scan_id"])
     op.drop_column(TABLE, "language")

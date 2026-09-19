@@ -37,7 +37,11 @@ from api.services.read import (
 router = APIRouter()
 
 
-@router.get("/api/v1/hosts/{host_id}/explain", response_model=AIChatHistoryResponse)
+@router.get(
+    "/api/v1/hosts/{host_id}/explain",
+    response_model=AIChatHistoryResponse,
+    operation_id="listHostAIHistory",
+)
 def host_ai_history(
     host_id: UUID,
     session: Session = Depends(get_session),
@@ -46,13 +50,12 @@ def host_ai_history(
     host = get_host_detail(session, host_id, org_id=caller.org_id)
     if host is None:
         raise HTTPException(status_code=404, detail="Host not found")
-    latest_scan_id = host.scan_history[0].scan_id if host.scan_history else None
-    if latest_scan_id is None:
+    if not host.scan_history:
         return AIChatHistoryResponse(data=[])
     return AIChatHistoryResponse(
         data=list_chat_messages(
             session,
-            scan_id=latest_scan_id,
+            scan_id=None,
             org_id=caller.org_id,
             scope_type="host",
             scope_id=host_id,

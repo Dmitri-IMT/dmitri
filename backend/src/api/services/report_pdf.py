@@ -77,7 +77,10 @@ def _register_unicode_fonts() -> tuple[str, str]:
                 pdfmetrics.registerFont(TTFont("DmitriUnicode", str(regular_path)))
                 pdfmetrics.registerFont(TTFont("DmitriUnicode-Bold", str(bold_path)))
             return "DmitriUnicode", "DmitriUnicode-Bold"
-    return "Helvetica", "Helvetica-Bold"
+    raise RuntimeError(
+        "A Unicode font is required to render scan reports. "
+        "Install Arial, DejaVu Sans, or Liberation Sans on the report worker."
+    )
 
 
 def _append_explained(story: list[Any], sections: dict[str, Any], styles: Any, copy: dict[str, str], language: AILanguage) -> None:

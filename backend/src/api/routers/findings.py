@@ -29,6 +29,7 @@ router = APIRouter()
 @router.get(
     "/api/v1/findings/{finding_id}/explain",
     response_model=AIChatHistoryResponse,
+    operation_id="listFindingAIHistory",
 )
 def finding_ai_history(
     finding_id: UUID,

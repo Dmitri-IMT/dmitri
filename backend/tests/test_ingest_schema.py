@@ -374,7 +374,7 @@ def test_ingest_accepted_response_rejects_non_accepted_status():
         ScanIngestAcceptedResponse.model_validate(payload)
 
 
-def test_ingest_rejects_removed_modbus_process_fields() -> None:
+def test_ingest_accepts_legacy_modbus_process_fields() -> None:
     payload = _base_payload(findings=[])
     payload["hosts"][0]["industrial_services"] = [
         {
@@ -400,8 +400,12 @@ def test_ingest_rejects_removed_modbus_process_fields() -> None:
         }
     ]
 
-    with pytest.raises(pydantic.ValidationError):
-        ScanIngestRequest.model_validate(payload)
+    result = ScanIngestRequest.model_validate(payload)
+
+    assert (
+        result.hosts[0].industrial_services[0].units[0].address_ranges[0].status
+        == "readable"
+    )
 
 
 def test_example_payload_validates_against_tightened_model():

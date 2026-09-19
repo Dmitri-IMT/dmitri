@@ -2,13 +2,15 @@ import type { DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
 import type { components } from '@/types/openapi'
+import type { MessageKey } from '@/i18n/messages'
 
 type HostPort = components['schemas']['HostPort']
 
-export const portColumns: DataTableColumn<HostPort>[] = [
+export function portColumns(t: (key: MessageKey) => string): DataTableColumn<HostPort>[] {
+ return [
   {
     key: 'service',
-    label: 'Service',
+    label: t('common.service'),
     width: 'w-17/50',
     render: (port) => (
       <>
@@ -23,13 +25,13 @@ export const portColumns: DataTableColumn<HostPort>[] = [
   },
   {
     key: 'protocol',
-    label: 'Protocol',
+    label: t('common.protocol'),
     width: 'w-7/50',
     render: (port) => port.protocol,
   },
   {
     key: 'version',
-    label: 'Version',
+    label: t('common.version'),
     width: 'w-3/10',
     render: (port) =>
       port.version ? (
@@ -42,8 +44,9 @@ export const portColumns: DataTableColumn<HostPort>[] = [
   },
   {
     key: 'last_seen_at',
-    label: 'Last seen',
+    label: t('common.lastSeen'),
     width: 'w-11/50',
     render: (port) => <Timestamp value={port.last_seen_at} />,
   },
-]
+ ]
+}
