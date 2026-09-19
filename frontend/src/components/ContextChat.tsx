@@ -8,6 +8,7 @@ import type { AIChatHistoryResponse } from '@/api/ai'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import useI18n from '@/i18n/useI18n'
 
 type Props = {
   scope: AIContextScope
@@ -19,9 +20,12 @@ type Props = {
 export default function ContextChat({
   scope,
   contextId,
-  title = 'Pergunte sobre este contexto',
-  questionPlaceholder = 'O que devo corrigir primeiro?',
+  title,
+  questionPlaceholder,
 }: Props) {
+  const { language, t } = useI18n()
+  const resolvedTitle = title ?? t('ai.askContext')
+  const resolvedPlaceholder = questionPlaceholder ?? t('ai.placeholder')
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<AIChatHistoryResponse['data']>([])
   const [historyVisible, setHistoryVisible] = useState(false)
@@ -55,7 +59,7 @@ export default function ContextChat({
     setSending(true)
     setError(null)
     try {
-      const response = await askContextAI(scope, contextId, trimmed)
+      const response = await askContextAI(scope, contextId, trimmed, language)
       setMessages((current) => [
         ...current,
         {
@@ -78,9 +82,9 @@ export default function ContextChat({
   return (
     <Card data-testid="context-chat">
       <CardHeader>
-        <h2 className="text-title-sm">{title}</h2>
+        <h2 className="text-title-sm">{resolvedTitle}</h2>
         <p className="text-body-sm text-muted-foreground">
-          A resposta usa somente as evidências disponíveis neste contexto.
+          {t('ai.contextHint')}
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -94,17 +98,17 @@ export default function ContextChat({
             setHistoryVisible((visible) => !visible)
           }}
         >
-          {historyVisible ? 'Ocultar histórico' : 'Mostrar histórico'}
+          {historyVisible ? t('ai.hideHistory') : t('ai.showHistory')}
         </Button>
         <form className="flex flex-col gap-3" onSubmit={submit}>
           <label className="text-body-sm" htmlFor={`${scope}-context-question`}>
-            Sua pergunta
+            {t('ai.question')}
           </label>
           <Textarea
             id={`${scope}-context-question`}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder={questionPlaceholder}
+            placeholder={resolvedPlaceholder}
             maxLength={1000}
           />
           <Button
@@ -112,12 +116,12 @@ export default function ContextChat({
             size="sm"
             disabled={sending || question.trim().length < 3}
           >
-            {sending ? 'Analisando...' : 'Perguntar'}
+            {sending ? t('ai.asking') : t('ai.ask')}
           </Button>
         </form>
         {historyVisible && loadingHistory && (
           <p className="text-body-sm text-muted-foreground">
-            Carregando histórico...
+            {t('ai.loadingHistory')}
           </p>
         )}
         {visibleMessages.map((message) => (
@@ -126,16 +130,16 @@ export default function ContextChat({
             key={message.message_id}
           >
             <div>
-              <p className="text-body-sm font-medium">Sua pergunta</p>
+              <p className="text-body-sm font-medium">{t('ai.question')}</p>
               <p className="text-body-md">{message.question}</p>
             </div>
             <div>
-              <p className="text-body-sm font-medium">Resposta</p>
+              <p className="text-body-sm font-medium">{t('ai.answer')}</p>
               <p className="text-body-md">{message.answer}</p>
             </div>
             {message.uncertainties.length > 0 && (
               <div className="text-body-sm text-muted-foreground">
-                <p className="font-medium">Limitações</p>
+                <p className="font-medium">{t('ai.limitations')}</p>
                 <ul className="list-disc pl-4">
                   {message.uncertainties.map((item) => (
                     <li key={item}>{item}</li>

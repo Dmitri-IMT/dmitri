@@ -1392,6 +1392,8 @@ export interface components {
         };
         AIChatRequest: {
             question: string;
+            /** @default en */
+            language?: "en" | "pt-BR" | "ru";
         };
         AIChatResponse: {
             answer: string;

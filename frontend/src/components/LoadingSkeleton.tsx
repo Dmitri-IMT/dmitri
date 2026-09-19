@@ -1,5 +1,7 @@
 import { useSkeletonDelay } from '@/hooks/useSkeletonDelay'
 import { cn } from '@/lib/utils'
+import { UI_COPY } from '@/lib/copy'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 type LoadingSkeletonProps = {
   rows: number
@@ -12,9 +14,15 @@ const BAR_WIDTHS = ['w-3/4', 'w-2/3', 'w-4/5'] as const
 
 function LoadingSkeleton({ rows, columns, id, testId }: LoadingSkeletonProps) {
   const isVisible = useSkeletonDelay()
+  const { language } = useLanguage()
 
   return (
-    <tbody id={id} data-testid={testId}>
+    <tbody
+      id={id}
+      data-testid={testId}
+      aria-label={UI_COPY[language].loadingData}
+      aria-busy={!isVisible}
+    >
       {isVisible &&
         Array.from({ length: rows }, (_, row) => (
           <tr key={row} className="h-row border-t border-border">

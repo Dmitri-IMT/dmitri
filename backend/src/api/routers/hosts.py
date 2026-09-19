@@ -86,6 +86,7 @@ def explain_host(
         response = AIOrchestrator(provider).answer_question(
             context=build_host_context(host, findings),
             question=payload.question,
+            language=payload.language,
             finding_references=finding_reference_map(findings, payload.question),
         )
         persist_usage_events(

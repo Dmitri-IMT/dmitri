@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import { Collapsible } from 'radix-ui'
 import { queryKeys } from '@/api/queryKeys'
 import { getScan } from '@/api/scans'
 import ReadDetailGate from '@/components/ReadDetailGate'
@@ -84,25 +85,49 @@ function ScanDetail() {
                   </p>
                 ) : (
                   <div className="flex flex-col gap-8">
-                    {groups.map((group) => (
-                      <Card key={group.severity}>
-                        <CardHeader>
-                          <h2 className="text-title-sm">
-                            <SeverityWord severity={group.severity} />
-                          </h2>
-                        </CardHeader>
-                        <CardContent>
-                          <FindingsTable
-                            findings={group.findings}
-                            variant="scan"
-                            testId={`findings-${group.severity}`}
-                            caption={`${group.severity} vulnerabilities in this scan`}
-                            openFindingId={openFindingId}
-                            onOpenFindingChange={setOpenFindingId}
-                          />
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {groups.map((group) => {
+                      const opensForDeepLink = group.findings.some(
+                        (finding) => finding.finding_id === openFindingId,
+                      )
+                      return (
+                        <Collapsible.Root
+                          key={group.severity}
+                          defaultOpen={opensForDeepLink}
+                          asChild
+                        >
+                          <Card>
+                            <CardHeader className="p-0">
+                              <Collapsible.Trigger
+                                className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                                aria-label={`Toggle ${group.severity} vulnerabilities`}
+                              >
+                                <h2 className="text-title-sm">
+                                  <SeverityWord severity={group.severity} />
+                                </h2>
+                                <span
+                                  aria-hidden="true"
+                                  className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90"
+                                >
+                                  ›
+                                </span>
+                              </Collapsible.Trigger>
+                            </CardHeader>
+                            <Collapsible.Content forceMount asChild>
+                              <CardContent className="data-[state=closed]:hidden">
+                                <FindingsTable
+                                  findings={group.findings}
+                                  variant="scan"
+                                  testId={`findings-${group.severity}`}
+                                  caption={`${group.severity} vulnerabilities in this scan`}
+                                  openFindingId={openFindingId}
+                                  onOpenFindingChange={setOpenFindingId}
+                                />
+                              </CardContent>
+                            </Collapsible.Content>
+                          </Card>
+                        </Collapsible.Root>
+                      )
+                    })}
                   </div>
                 )}
                 {scan.hosts.some(

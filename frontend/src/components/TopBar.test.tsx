@@ -68,9 +68,9 @@ describe('TopBar', () => {
       expect(
         screen.queryByRole('button', { name: 'Log out' }),
       ).not.toBeInTheDocument()
-      expect(
-        await screen.findByRole('button', { name: profile.email }),
-      ).toBeInTheDocument()
+      expect(await screen.findByTestId('user-identity')).toHaveTextContent(
+        profile.email,
+      )
     },
   )
 
@@ -88,7 +88,7 @@ describe('TopBar', () => {
     expect(frame?.children.item(0)).toBe(wordmark)
     expect(frame?.children.item(1)).toBe(nav)
     expect(frame?.children.item(2)).toContainElement(identity)
-    expect(identity).toHaveAttribute('data-variant', 'ghost')
+    expect(identity).toHaveAttribute('title', adminProfile.email)
     expect(
       screen.queryByRole('button', { name: 'Log out' }),
     ).not.toBeInTheDocument()
@@ -158,8 +158,7 @@ describe('TopBar', () => {
 
     const identity = await screen.findByTestId('user-identity')
     expect(identity).toHaveTextContent(adminProfile.email)
-    expect(identity).toHaveAttribute('title', adminProfile.email)
-    expect(identity).toHaveAccessibleName(adminProfile.email)
+    expect(identity).toHaveAttribute('data-testid', 'user-identity')
   })
 
   it.each([
@@ -189,24 +188,50 @@ describe('TopBar', () => {
     expect(mutedLink).not.toHaveAttribute('aria-current')
   })
 
+  it('opens the compact navigation with an accessible toggle', async () => {
+    const user = userEvent.setup()
+    renderTopBarAs(viewerProfile)
+
+    const toggle = await screen.findByTestId('mobile-menu-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('mobile-navigation')).not.toBeInTheDocument()
+
+    await user.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAttribute('aria-controls', 'mobile-navigation')
+    expect(screen.getByTestId('mobile-navigation')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('mobile-navigation')).getByRole('link', {
+        name: 'Scans',
+      }),
+    ).toHaveAttribute('href', '/scans')
+  })
+
+  it('groups theme, language, account and logout in the options menu', async () => {
+    const user = userEvent.setup()
+    renderTopBarAs(adminProfile)
+
+    await user.click(await screen.findByTestId('options-menu-toggle'))
+
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByTitle('Modo noturno')).toBeInTheDocument()
+    expect(
+      within(menu).getByRole('combobox', { name: 'Idioma' }),
+    ).toBeInTheDocument()
+    expect(within(menu).getByText(adminProfile.email)).toBeInTheDocument()
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Log out' }),
+    ).toBeInTheDocument()
+  })
+
   it('the Log out control calls signOut', async () => {
     const user = userEvent.setup()
     renderWithProviders(<TopBar />)
     await screen.findByTestId('nav-users')
     expect(getAccessToken()).not.toBeNull()
 
-    const identity = screen.getByTestId('user-identity')
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    await user.tab()
-    expect(identity).toHaveFocus()
-
-    await user.keyboard('{Enter}')
+    await user.click(screen.getByTestId('options-menu-toggle'))
     const logOut = await screen.findByRole('menuitem', { name: 'Log out' })
     expect(logOut).toHaveAttribute('data-testid', 'log-out')
     await user.click(logOut)

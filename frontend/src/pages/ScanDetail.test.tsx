@@ -155,6 +155,21 @@ function expectNoScanTables() {
 }
 
 describe('ScanDetail', () => {
+  it('starts severity groups collapsed and opens one on demand', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const criticalToggle = await screen.findByRole('button', {
+      name: 'Toggle critical vulnerabilities',
+    })
+    expect(criticalToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(criticalToggle)
+    expect(criticalToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('findings-critical')).not.toHaveAttribute('hidden')
+  })
+
   it('splits a shuffled payload into one table per severity, worst card first', async () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)

@@ -4650,6 +4650,10 @@ components:
           type: string
           minLength: 3
           maxLength: 1000
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
+          default: en
     AIChatResponse:
       type: object
       additionalProperties: false

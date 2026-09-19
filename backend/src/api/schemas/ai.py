@@ -9,12 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 AIText = Annotated[str, Field(min_length=3, max_length=4000)]
 AIShortText = Annotated[str, Field(min_length=3, max_length=2000)]
 FindingReference = Annotated[str, Field(pattern=r"^finding_[1-9][0-9]*$")]
+AILanguage = Literal["en", "pt-BR", "ru"]
 
 
 class AIChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: Annotated[str, Field(min_length=3, max_length=1000)]
+    language: AILanguage = "en"
 
 
 class AIContextChatRequest(AIChatRequest):

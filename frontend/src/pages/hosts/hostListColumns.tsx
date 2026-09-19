@@ -6,10 +6,16 @@ import Timestamp from '@/components/Timestamp'
 import { weeksSinceLastSeen } from '@/lib/hostLastSeen'
 import { MACHINE_TYPE_LABELS } from '@/lib/machineType'
 import type { components } from '@/types/openapi'
+import { getMessage, type MessageKey } from '@/i18n/messages'
 
 type HostSummary = components['schemas']['HostSummary']
 
-function machineCell(host: HostSummary, now: Date, quiet: boolean) {
+function machineCell(
+  host: HostSummary,
+  now: Date,
+  quiet: boolean,
+  t: (key: MessageKey, variables?: Record<string, string | number>) => string,
+) {
   const weeks = quiet ? weeksSinceLastSeen(host.last_seen_at, now) : 0
   return (
     <>
@@ -24,12 +30,15 @@ function machineCell(host: HostSummary, now: Date, quiet: boolean) {
       )}
       {!host.hostname && (
         <span className="block truncate text-muted-foreground">
-          No name yet
+          {t('common.noName')}
         </span>
       )}
       {quiet && (
         <span className="block truncate text-muted-foreground">
-          Not seen for {weeks} {weeks === 1 ? 'week' : 'weeks'}
+          {t('common.notSeenFor', {
+            count: weeks,
+            unit: t(weeks === 1 ? 'common.week' : 'common.weeks'),
+          })}
         </span>
       )}
     </>
@@ -39,18 +48,20 @@ function machineCell(host: HostSummary, now: Date, quiet: boolean) {
 export function hostListColumns(
   now: Date,
   quiet: boolean,
+  t?: (key: MessageKey, variables?: Record<string, string | number>) => string,
 ): DataTableColumn<HostSummary, HostSortBy>[] {
+  const translate = t ?? ((key, variables) => getMessage('en', key, variables))
   return [
     {
       key: 'hostname',
-      label: 'Machine',
+      label: translate('home.machine'),
       width: 'w-13/50',
       sortable: true,
-      render: (host) => machineCell(host, now, quiet),
+      render: (host) => machineCell(host, now, quiet, translate),
     },
     {
       key: 'ip',
-      label: 'Address',
+      label: translate('common.address'),
       width: 'w-8/50',
       sortable: true,
       render: (host) => (
@@ -61,7 +72,7 @@ export function hostListColumns(
     },
     {
       key: 'machine_type',
-      label: 'Type',
+      label: translate('common.type'),
       width: 'w-8/50',
       render: (host) => {
         const label = MACHINE_TYPE_LABELS[host.machine_type]
@@ -74,7 +85,7 @@ export function hostListColumns(
     },
     {
       key: 'vulnerability_count',
-      label: 'Vulnerabilities',
+      label: translate('common.vulnerabilities'),
       width: 'w-5/50',
       sortable: true,
       render: (host) => (
@@ -83,13 +94,13 @@ export function hostListColumns(
     },
     {
       key: 'highest_severity',
-      label: 'Severity',
+      label: translate('home.severity'),
       width: 'w-8/50',
       render: (host) => <SeverityWord severity={host.highest_severity} />,
     },
     {
       key: 'last_seen_at',
-      label: 'Last seen',
+      label: translate('common.lastSeen'),
       width: 'w-8/50',
       sortable: true,
       render: (host) => <Timestamp value={host.last_seen_at} now={now} />,

@@ -4,9 +4,11 @@ import { queryKeys } from '@/api/queryKeys'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
 import { deviceListColumns } from '@/pages/agents/deviceListColumns'
+import useI18n from '@/i18n/useI18n'
 
 function Devices() {
   const now = new Date()
+  const { t } = useI18n()
   const query = useQuery({
     queryKey: queryKeys.agents.list(),
     queryFn: listAgents,
@@ -15,7 +17,7 @@ function Devices() {
   return (
     <div data-testid="devices-page" className="flex flex-col gap-12">
       <PageHeader
-        title="Devices"
+        title={t('nav.devices')}
         subtitle="The Dmitri boxes reporting to this organisation."
       />
       <ListSurface

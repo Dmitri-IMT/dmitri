@@ -238,6 +238,7 @@ def ask_scan_ai(
         response = AIOrchestrator(provider).answer_question(
             context=build_chat_context(detail, risk, analysis, payload.question),
             question=payload.question,
+            language=payload.language,
             finding_references=finding_reference_map(
                 detail.findings if payload.question else risk.top_findings,
                 payload.question,

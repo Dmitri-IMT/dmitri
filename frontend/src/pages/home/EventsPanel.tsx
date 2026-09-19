@@ -1,6 +1,7 @@
 import { HOME_EVENTS_PER_PAGE } from '@/api/home'
 import HomeFeedPanel from '@/pages/home/HomeFeedPanel'
 import type { components } from '@/types/openapi'
+import useI18n from '@/i18n/useI18n'
 
 type HomeEvent = components['schemas']['HomeEvent']
 
@@ -12,17 +13,18 @@ type EventsPanelProps = {
 }
 
 function EventsPanel({ data, total, page, onPageChange }: EventsPanelProps) {
+  const { t } = useI18n()
   return (
     <HomeFeedPanel
       testId="home-events"
-      title="Events"
-      emptyText="Nothing to report right now."
+      title={t('home.events')}
+      emptyText={t('home.eventsEmpty')}
       isBlank={data.length === 0}
       total={total}
       page={page}
       perPage={HOME_EVENTS_PER_PAGE}
       onPageChange={onPageChange}
-      label="Events pages"
+      label={t('home.eventsPages')}
     >
       {data.map((event, index) => (
         <li

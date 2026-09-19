@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type { components } from '../types/openapi'
 
 export type AIContextScope = 'scan' | 'host' | 'finding'
+export type AILanguage = 'en' | 'pt-BR' | 'ru'
 export type AIChatResponse = components['schemas']['AIChatResponse']
 export type AIChatHistoryResponse =
   components['schemas']['AIChatHistoryResponse']
@@ -19,11 +20,13 @@ export async function askContextAI(
   scope: AIContextScope,
   contextId: string,
   question: string,
+  language: AILanguage = 'en',
 ): Promise<AIChatResponse> {
   const response = await apiClient.post<AIChatResponse>('/ai/chat', {
     scope,
     context_id: contextId,
     question,
+    language,
   })
   return response.data
 }

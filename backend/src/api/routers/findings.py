@@ -72,6 +72,7 @@ def explain_finding(
         response = AIOrchestrator(provider).answer_question(
             context=build_finding_context(finding),
             question=payload.question,
+            language=payload.language,
             finding_references=finding_reference_map([finding], payload.question),
         )
         persist_usage_events(

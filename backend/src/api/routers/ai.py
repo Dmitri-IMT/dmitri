@@ -152,6 +152,7 @@ def ask_context_chat(
         response = AIOrchestrator(provider).answer_question(
             context=context,
             question=payload.question,
+            language=payload.language,
             finding_references=finding_reference_map(findings, payload.question),
         )
         persist_usage_events(

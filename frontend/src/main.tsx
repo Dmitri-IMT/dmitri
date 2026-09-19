@@ -7,6 +7,7 @@ import '@fontsource-variable/geist-mono'
 import './index.css'
 import App from './App.tsx'
 import { SessionProvider } from '@/auth/SessionProvider'
+import { LanguageProvider } from '@/i18n/LanguageProvider'
 
 const storedTheme = localStorage.getItem('dmitri-theme')
 document.documentElement.classList.toggle('dmitri-dark', storedTheme === 'dark')
@@ -18,7 +19,9 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          <App />
+          <LanguageProvider>
+            <App />
+          </LanguageProvider>
         </SessionProvider>
       </QueryClientProvider>
     </BrowserRouter>

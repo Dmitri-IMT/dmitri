@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import PasswordDialog from '@/pages/settings/PasswordDialog'
 import AIUsagePanel from '@/pages/settings/AIUsagePanel'
+import useI18n from '@/i18n/useI18n'
 
 const LAST_ADMIN_ERROR =
   "You're the only admin. Make someone else an admin first, then you can leave."
@@ -18,6 +19,7 @@ function ValuePlaceholder() {
 
 function Settings() {
   const { user, deleteAccount } = useSession()
+  const { t } = useI18n()
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
   const [isLeaveOpen, setIsLeaveOpen] = useState(false)
@@ -41,7 +43,7 @@ function Settings() {
 
   return (
     <div data-testid="settings-idle" className="flex flex-col gap-8">
-      <PageHeader title="Settings" />
+      <PageHeader title={t('nav.settings')} />
       <section data-testid="settings-details" className="flex flex-col gap-4">
         <h2 className="text-title-sm">Your account</h2>
         <dl className="flex flex-col gap-2 text-body-md">
