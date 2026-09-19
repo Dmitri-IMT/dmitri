@@ -4,7 +4,8 @@ import type { components, operations } from '../types/openapi'
 type Severity = components['schemas']['Severity']
 type FindingListResponse = components['schemas']['FindingListResponse']
 export type AIChatResponse = components['schemas']['AIChatResponse']
-export type AIChatHistoryResponse = components['schemas']['AIChatHistoryResponse']
+export type AIChatHistoryResponse =
+  components['schemas']['AIChatHistoryResponse']
 type ListFindingsQuery = NonNullable<
   operations['listFindings']['parameters']['query']
 >

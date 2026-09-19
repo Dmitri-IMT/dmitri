@@ -45,9 +45,7 @@ describe('HomeAIOverview', () => {
       ),
     )
 
-    renderWithProviders(
-      <HomeAIOverview latestScan={latestSuccessfulScan} />,
-    )
+    renderWithProviders(<HomeAIOverview latestScan={latestSuccessfulScan} />)
 
     expect(await screen.findByTestId('home-ai-overview')).toHaveTextContent(
       'A rede precisa de atenção.',
@@ -68,9 +66,7 @@ describe('HomeAIOverview', () => {
       ),
     )
 
-    renderWithProviders(
-      <HomeAIOverview latestScan={latestSuccessfulScan} />,
-    )
+    renderWithProviders(<HomeAIOverview latestScan={latestSuccessfulScan} />)
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(screen.queryByTestId('home-ai-overview')).not.toBeInTheDocument()

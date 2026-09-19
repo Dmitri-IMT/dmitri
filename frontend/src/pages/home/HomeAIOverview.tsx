@@ -54,8 +54,8 @@ function HomeAIOverview({
         </CardHeader>
         <CardContent>
           <p className="text-body-md text-muted-foreground">
-            A explicação está sendo preparada. Você pode acompanhar o
-            progresso na página da varredura.
+            A explicação está sendo preparada. Você pode acompanhar o progresso
+            na página da varredura.
           </p>
         </CardContent>
       </Card>
@@ -70,8 +70,8 @@ function HomeAIOverview({
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-body-md text-muted-foreground">
-            Não foi possível preparar a explicação agora. Os resultados
-            técnicos continuam disponíveis.
+            Não foi possível preparar a explicação agora. Os resultados técnicos
+            continuam disponíveis.
           </p>
           <Link to={scanLink}>
             <Button type="button" variant="outline" size="sm">

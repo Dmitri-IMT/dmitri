@@ -13,8 +13,7 @@ function ScanChat({ scanId }: { scanId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const visibleMessages = messages.filter(
-    (message) =>
-      isHistoryVisible || message.message_id.startsWith('local-'),
+    (message) => isHistoryVisible || message.message_id.startsWith('local-'),
   )
 
   useEffect(() => {

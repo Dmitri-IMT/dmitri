@@ -28,7 +28,11 @@ function GlobalAssistant() {
     }
     const hostMatch = location.pathname.match(/^\/network\/([^/]+)$/)
     if (hostMatch) {
-      return { scope: 'host', contextId: hostMatch[1], label: 'este equipamento' }
+      return {
+        scope: 'host',
+        contextId: hostMatch[1],
+        label: 'este equipamento',
+      }
     }
     return null
   }, [location.pathname])

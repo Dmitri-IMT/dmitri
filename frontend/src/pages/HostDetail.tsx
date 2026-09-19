@@ -111,7 +111,12 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
         <h2 className="text-title-sm">Entenda este equipamento</h2>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <Button type="button" size="sm" onClick={() => void explain()} disabled={loading}>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void explain()}
+          disabled={loading}
+        >
           {loading ? 'Analisando...' : 'Explicar com IA'}
         </Button>
         {answer && (
@@ -132,7 +137,11 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
             )}
           </div>
         )}
-        {error && <p className="text-body-sm text-destructive" role="alert">{error}</p>}
+        {error && (
+          <p className="text-body-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   )

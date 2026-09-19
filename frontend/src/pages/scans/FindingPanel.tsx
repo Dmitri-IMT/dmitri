@@ -60,7 +60,12 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
     >
       <dl className="flex min-w-0 flex-1 flex-col gap-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" size="sm" onClick={() => void handleExplain()} disabled={isExplaining}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void handleExplain()}
+            disabled={isExplaining}
+          >
             {isExplaining ? 'Explicando...' : 'Explicar com IA'}
           </Button>
           {explanationError && (
@@ -70,7 +75,10 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           )}
         </div>
         {explanation && (
-          <div className="rounded-md border border-border p-4" aria-live="polite">
+          <div
+            className="rounded-md border border-border p-4"
+            aria-live="polite"
+          >
             <p className="text-body-sm font-medium">Explicação da IA</p>
             <p className="text-body-md">{explanation.answer}</p>
             {explanation.referenced_finding_ids.length > 0 && (
@@ -199,7 +207,9 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
 
 function readExplanationError(error: unknown): string {
   const message = (
-    error as { response?: { data?: { error?: { code?: string; message?: string } } } }
+    error as {
+      response?: { data?: { error?: { code?: string; message?: string } } }
+    }
   ).response?.data?.error
   if (message?.code === 'ai_rate_limited' && message.message) {
     return message.message

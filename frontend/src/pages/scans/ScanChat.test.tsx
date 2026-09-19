@@ -34,9 +34,9 @@ describe('ScanChat', () => {
     renderWithProviders(<ScanChat scanId="scan-1" />)
 
     expect(getScanAIChat).not.toHaveBeenCalled()
-    await userEvent.setup().click(
-      screen.getByRole('button', { name: 'Mostrar histórico' }),
-    )
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Mostrar histórico' }))
     expect(await screen.findByText('Qual host devo priorizar?')).toBeVisible()
     expect(screen.getByText('Priorize o host 192.168.1.10.')).toBeVisible()
     expect(getScanAIChat).toHaveBeenCalledWith('scan-1')
@@ -54,10 +54,9 @@ describe('ScanChat', () => {
     await user.type(screen.getByLabelText('Sua pergunta'), 'O que corrigir?')
     await user.click(screen.getByRole('button', { name: 'Perguntar' }))
 
-    expect(await screen.findByRole('link', { name: 'Ver achado 1' })).toHaveAttribute(
-      'href',
-      '/scans/scan-1?finding=finding-1',
-    )
+    expect(
+      await screen.findByRole('link', { name: 'Ver achado 1' }),
+    ).toHaveAttribute('href', '/scans/scan-1?finding=finding-1')
   })
 
   it('sends a question and renders the grounded answer', async () => {

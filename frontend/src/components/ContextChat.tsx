@@ -28,7 +28,9 @@ export default function ContextChat({
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const visibleMessages = historyVisible ? messages : messages.filter((m) => m.message_id.startsWith('local-'))
+  const visibleMessages = historyVisible
+    ? messages
+    : messages.filter((m) => m.message_id.startsWith('local-'))
 
   useEffect(() => {
     if (!historyVisible) return
@@ -105,15 +107,24 @@ export default function ContextChat({
             placeholder={questionPlaceholder}
             maxLength={1000}
           />
-          <Button type="submit" size="sm" disabled={sending || question.trim().length < 3}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={sending || question.trim().length < 3}
+          >
             {sending ? 'Analisando...' : 'Perguntar'}
           </Button>
         </form>
         {historyVisible && loadingHistory && (
-          <p className="text-body-sm text-muted-foreground">Carregando histórico...</p>
+          <p className="text-body-sm text-muted-foreground">
+            Carregando histórico...
+          </p>
         )}
         {visibleMessages.map((message) => (
-          <div className="flex flex-col gap-3 rounded-md border border-border p-4" key={message.message_id}>
+          <div
+            className="flex flex-col gap-3 rounded-md border border-border p-4"
+            key={message.message_id}
+          >
             <div>
               <p className="text-body-sm font-medium">Sua pergunta</p>
               <p className="text-body-md">{message.question}</p>
@@ -126,21 +137,36 @@ export default function ContextChat({
               <div className="text-body-sm text-muted-foreground">
                 <p className="font-medium">Limitações</p>
                 <ul className="list-disc pl-4">
-                  {message.uncertainties.map((item) => <li key={item}>{item}</li>)}
+                  {message.uncertainties.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
                 </ul>
               </div>
             )}
           </div>
         ))}
-        {error && <p className="text-body-sm text-destructive" role="alert">{error}</p>}
+        {error && (
+          <p className="text-body-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
       </CardContent>
     </Card>
   )
 }
 
 function readContextChatError(error: unknown): string {
-  const response = (error as { response?: { data?: { error?: { code?: string; message?: string } } } }).response
-  if (response?.data?.error?.message && ['ai_rate_limited', 'ai_context_too_large'].includes(response.data.error.code ?? '')) {
+  const response = (
+    error as {
+      response?: { data?: { error?: { code?: string; message?: string } } }
+    }
+  ).response
+  if (
+    response?.data?.error?.message &&
+    ['ai_rate_limited', 'ai_context_too_large'].includes(
+      response.data.error.code ?? '',
+    )
+  ) {
     return response.data.error.message
   }
   return 'Não foi possível obter uma resposta agora. Tente novamente.'

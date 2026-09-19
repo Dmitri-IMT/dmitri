@@ -3,7 +3,8 @@ import type { components } from '../types/openapi'
 
 export type AIContextScope = 'scan' | 'host' | 'finding'
 export type AIChatResponse = components['schemas']['AIChatResponse']
-export type AIChatHistoryResponse = components['schemas']['AIChatHistoryResponse']
+export type AIChatHistoryResponse =
+  components['schemas']['AIChatHistoryResponse']
 
 /** Shared entry point for the contextual assistant used by future global UI. */
 export async function askContextAI(
@@ -23,8 +24,11 @@ export async function getContextAIHistory(
   scope: AIContextScope,
   contextId: string,
 ): Promise<AIChatHistoryResponse> {
-  const response = await apiClient.get<AIChatHistoryResponse>('/ai/chat/history', {
-    params: { scope, context_id: contextId },
-  })
+  const response = await apiClient.get<AIChatHistoryResponse>(
+    '/ai/chat/history',
+    {
+      params: { scope, context_id: contextId },
+    },
+  )
   return response.data
 }

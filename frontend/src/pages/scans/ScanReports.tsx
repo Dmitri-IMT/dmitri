@@ -91,7 +91,10 @@ function ScanReports({ scanId }: { scanId: string }) {
           </p>
         )}
       </CardContent>
-      <Dialog open={preview !== null} onOpenChange={(open) => !open && closePreview()}>
+      <Dialog
+        open={preview !== null}
+        onOpenChange={(open) => !open && closePreview()}
+      >
         <DialogContent
           className="h-screen w-full max-w-5xl p-4 sm:max-w-5xl"
           style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}

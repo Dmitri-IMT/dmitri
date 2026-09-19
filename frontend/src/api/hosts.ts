@@ -2,7 +2,8 @@ import { apiClient } from './client'
 import type { components, operations } from '../types/openapi'
 
 export type AIChatResponse = components['schemas']['AIChatResponse']
-export type AIChatHistoryResponse = components['schemas']['AIChatHistoryResponse']
+export type AIChatHistoryResponse =
+  components['schemas']['AIChatHistoryResponse']
 
 type HostListResponse = components['schemas']['HostListResponse']
 type HostDetailResponse = components['schemas']['HostDetailResponse']
