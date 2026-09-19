@@ -30,7 +30,7 @@ class _ScopedFakeProvider:
 def _enable_ai(monkeypatch):
     settings_update = {
         "ai_enabled": True,
-        "ai_api_key": "test-key",  # pragma: allowlist secret - deterministic test fixture
+        "ai_api_key": "test-key",  # pragma: allowlist secret
     }
     settings = get_settings().model_copy(
         update=settings_update
