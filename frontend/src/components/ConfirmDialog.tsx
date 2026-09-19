@@ -3,28 +3,34 @@ import { Dialog } from 'radix-ui'
 import DialogShell from '@/components/DialogShell'
 import { Button } from '@/components/ui/button'
 
-type RevokeDialogProps = {
+type ConfirmDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  email: string
+  title: string
+  description: string
+  confirmLabel: string
+  pendingLabel: string
   onConfirm: () => Promise<void>
   error?: string | null
+  testId: string
 }
 
-function RevokeDialog({
+function ConfirmDialog({
   open,
   onOpenChange,
-  email,
+  title,
+  description,
+  confirmLabel,
+  pendingLabel,
   onConfirm,
   error = null,
-}: RevokeDialogProps) {
+  testId,
+}: ConfirmDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   async function handleConfirm() {
-    if (isSubmitting) {
-      return
-    }
+    if (isSubmitting) return
     setIsSubmitting(true)
     try {
       await onConfirm()
@@ -37,19 +43,17 @@ function RevokeDialog({
     <DialogShell
       open={open}
       onOpenChange={onOpenChange}
-      testId="revoke-dialog"
+      testId={`${testId}-dialog`}
       locked={isSubmitting}
       initialFocusRef={confirmRef}
     >
-      <Dialog.Title className="text-title-sm">
-        Revoke the invite to {email}?
-      </Dialog.Title>
+      <Dialog.Title className="text-title-sm">{title}</Dialog.Title>
       <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
-        Their link stops working immediately. You can invite them again later.
+        {description}
       </Dialog.Description>
       <p
         role="alert"
-        data-testid="revoke-error"
+        data-testid={`${testId}-error`}
         className="text-body-sm text-ink"
       >
         {error}
@@ -57,7 +61,11 @@ function RevokeDialog({
       <div className="flex justify-end gap-2">
         {!isSubmitting && (
           <Dialog.Close asChild>
-            <Button type="button" variant="outline">
+            <Button
+              type="button"
+              variant="outline"
+              data-testid={`${testId}-cancel`}
+            >
               Cancel
             </Button>
           </Dialog.Close>
@@ -65,15 +73,15 @@ function RevokeDialog({
         <Button
           ref={confirmRef}
           type="button"
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          data-testid="revoke-confirm"
+          data-testid={`${testId}-confirm`}
         >
-          {isSubmitting ? 'Revoking…' : 'Revoke'}
+          {isSubmitting ? pendingLabel : confirmLabel}
         </Button>
       </div>
     </DialogShell>
   )
 }
 
-export default RevokeDialog
+export default ConfirmDialog

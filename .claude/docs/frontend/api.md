@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # frontend API layer
@@ -48,7 +48,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
 | `getHome(pages)` | `GET /home` with the three page integers. Page sizes are server constants mirrored as `HOME_*_PER_PAGE`. | `frontend/src/api/home.ts:16` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Host-detail findings still load one severity at a time; Home no longer uses this list. | `frontend/src/api/findings.ts:19` |
-| `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list for the devices table and Home's first-agent read; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with caller-chosen `scan_mode` and the agent's `target_subnet`. | `frontend/src/api/agents.ts:10` |
+| `listAgents()` / `getAgent()` / `updateAgentTargetSubnet()` / `revokeAgent()` / `restoreAgent()` / `createScanCommand()` | Agents resource module. Revoke/restore are bodyless POSTs returning `AgentDetail`; all shapes come from generated OpenAPI types. | `frontend/src/api/agents.ts:10` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
 | `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, and `commands`. `home.snapshot(pages)` includes the three page integers. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |

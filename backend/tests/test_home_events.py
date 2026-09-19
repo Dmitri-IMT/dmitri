@@ -156,6 +156,22 @@ def test_live_box_with_stale_db_last_seen_yields_no_offline_event(
     assert events == []
 
 
+def test_revoked_box_yields_no_offline_event(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Revoked Box")
+    agent = _agent(
+        administrative_session,
+        org.id,
+        last_seen_at=NOW - timedelta(days=BOX_OFFLINE_DAYS + 1),
+    )
+    agent.revoked_at = NOW
+    administrative_session.add(agent)
+    administrative_session.commit()
+
+    assert _derive(administrative_session, org.id) == []
+
+
 def test_member_idle_when_last_login_is_stale(
     administrative_session: Session,
 ) -> None:

@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-13T20:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -134,10 +134,10 @@ command has none. The published contract was amended to drop it from `required` 
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `AgentSummary` | One `GET /agents` row: `agent_id`, `display_name`, `online`, `last_seen_at`, `target_subnet` (`SubnetCIDR \| None`), `active_command_id`. No `available_subnets` — the list never carries the reported networks. | `backend/src/api/schemas/agents.py:12` |
-| `AgentDetail` | `GET`/`PATCH /agents/{agent_id}` — `AgentSummary`'s fields plus `available_subnets: list[AvailableSubnet]`, reusing the frame model rather than declaring a second subnet type. | `backend/src/api/schemas/agents.py:23` |
-| `AgentListResponse` | `{data: AgentSummary[]}`. | `backend/src/api/schemas/agents.py:35` |
-| `UpdateAgentTargetSubnetRequest` | The PATCH body — one required `target_subnet` (`SubnetCIDR`). `extra="forbid"`, so an unknown key is a `422 validation_error`. | `backend/src/api/schemas/agents.py:41` |
+| `AgentSummary` | One `GET /agents` row: identity, `online`, `last_seen_at`, required nullable `revoked_at`, target subnet and active command. No reported subnet list. | `backend/src/api/schemas/agents.py:12` |
+| `AgentDetail` | Agent reads and admin writes: summary fields plus `available_subnets: list[AvailableSubnet]`. | `backend/src/api/schemas/agents.py:24` |
+| `AgentListResponse` | `{data: AgentSummary[]}`. | `backend/src/api/schemas/agents.py:37` |
+| `UpdateAgentTargetSubnetRequest` | The PATCH body — one required `target_subnet` (`SubnetCIDR`). `extra="forbid"`, so an unknown key is a `422 validation_error`. | `backend/src/api/schemas/agents.py:43` |
 
 All four use `extra="forbid"` and reuse `SubnetCIDR` from `schemas/scan.py`. `target_subnet` and
 `active_command_id` default to `None` and stay **out** of the contract's `required` lists.

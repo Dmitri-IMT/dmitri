@@ -702,12 +702,13 @@ paths:
         |------|---------|---------------|
         | `1012` | Backend restarting (deploy). | Redial promptly with backoff. |
         | `1000` | Normal closure. | Redial with backoff. |
-        | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Stay down.** Redialling makes the two connections evict each other. |
-        | `4001` `revoked` | The device is revoked; the backend will not accept it again. | **Stay down.** |
+        | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Park; retry once per hour.** |
+        | `4001` `revoked` | The device is revoked. | **Park; retry once per hour.** An admin restore lets the next attempt in. |
 
         A `403` on the upgrade means the device is revoked **or** `{agent_id}` is not a well-formed
-        UUID; both are permanent without human intervention. A `401` is retryable only after fixing
-        the signature envelope (clock skew, fresh nonce).
+        UUID. The Pi parks and retries once per hour. An admin restore
+        (`POST /api/v1/agents/{agent_id}/restore`) lets the next attempt in. A `401` is retryable
+        only after fixing the signature envelope (clock skew, fresh nonce).
       operationId: connectAgentCommandsWebSocket
       security:
         - AgentSignatureAuth: []
@@ -846,6 +847,60 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/agents/{agent_id}/revoke:
+    post:
+      tags:
+        - agents
+      summary: Revoke a scanner agent
+      description: Revokes the device and closes its live command channel, if connected.
+      operationId: revokeAgent
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Revoked agent detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/agents/{agent_id}/restore:
+    post:
+      tags:
+        - agents
+      summary: Restore a revoked scanner agent
+      description: Clears revocation; the Pi can reconnect on its next hourly attempt.
+      operationId: restoreAgent
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Restored agent detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/commands/{command_id}:
     get:
@@ -3468,6 +3523,7 @@ components:
         - display_name
         - online
         - last_seen_at
+        - revoked_at
         - available_subnets
       properties:
         agent_id:
@@ -3478,6 +3534,11 @@ components:
         online:
           type: boolean
         last_seen_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        revoked_at:
           type:
             - string
             - 'null'
@@ -3505,6 +3566,7 @@ components:
         - display_name
         - online
         - last_seen_at
+        - revoked_at
       properties:
         agent_id:
           type: string
@@ -3514,6 +3576,11 @@ components:
         online:
           type: boolean
         last_seen_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        revoked_at:
           type:
             - string
             - 'null'

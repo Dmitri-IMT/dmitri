@@ -106,7 +106,7 @@ def derive_home_events(
 ) -> list[HomeEvent]:
     box_offline: list[HomeEvent] = []
     for agent in session.exec(select(Agent).where(Agent.org_id == org_id)).all():
-        if agent_connections.is_online(agent.id):
+        if agent.revoked_at is not None or agent_connections.is_online(agent.id):
             continue
         last_seen = agent_connections.last_seen_at(agent.id) or agent.last_seen_at
         if last_seen is None:
