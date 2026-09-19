@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-13T16:40:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # frontend API layer
@@ -42,16 +42,20 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:40` |
 | `listScans(params)` | `GET /scans` with required `page`, `per_page`, `sort_by`, `sort_order`. The scan list always sends `SCAN_LIST_SORT` (`timestamp`/`desc`) plus `SCANS_PER_PAGE` 20. | `frontend/src/api/scans.ts:48` |
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:58` |
-| `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis`. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:63`, `:72` |
+| `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis`. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:66`, `:75` |
+| `askScanAI` / `getScanAIChat` | Legacy scan-scoped chat on `/scans/{id}/chat`. Used by `ScanChat` tests only; live UI uses [context-ai](./context-ai.md). | `frontend/src/api/scans.ts:84`, `:95` |
+| `getAIUsage` / `askContextAI` / `getContextAIHistory` | Usage dashboard and unified contextual chat. See [ai-usage](./ai-usage.md) and [context-ai](./context-ai.md). | `frontend/src/api/ai.ts:10`, `:18`, `:31` |
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort/`group` params (`HostGroup`; `HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` starts `vulnerability_count` and `last_seen_at` at `desc`, text columns at `asc`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts` |
+| `explainHost` / `getHostAIHistory` | POST/GET `/hosts/{id}/explain` — `HostAIExplanation` on host detail; multi-turn chat on the same page uses [context-ai](./context-ai.md). | `frontend/src/api/hosts.ts:48`, `:59` |
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
+| `explainFinding` / `getFindingAIHistory` | POST/GET `/findings/{id}/explain` — used by [FindingPanel](./screens.md), not `ContextChat`. | `frontend/src/api/findings.ts:38`, `:49` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
 | `getHome(pages)` | `GET /home` with the three page integers. Page sizes are server constants mirrored as `HOME_*_PER_PAGE`. | `frontend/src/api/home.ts:16` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Host-detail findings still load one severity at a time; Home no longer uses this list. | `frontend/src/api/findings.ts:19` |
-| `listAgents()` / `getAgent(agentId)` / `updateAgentTargetSubnet(agentId, body)` / `createScanCommand(agentId, body)` | Agents resource module: list for the devices table and Home's first-agent read; PATCH returns full `AgentDetail` (written with `setQueryData`, not refetched); POST creates a scan command with caller-chosen `scan_mode` and the agent's `target_subnet`. | `frontend/src/api/agents.ts:10` |
+| `listAgents()` / `getAgent()` / `updateAgentTargetSubnet()` / `revokeAgent()` / `restoreAgent()` / `createScanCommand()` | Agents resource module. Revoke/restore are bodyless POSTs returning `AgentDetail`; all shapes come from generated OpenAPI types. | `frontend/src/api/agents.ts:10` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
-| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, and `commands`. `home.snapshot(pages)` includes the three page integers. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:7` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:8` |
 
 ## How it connects
 

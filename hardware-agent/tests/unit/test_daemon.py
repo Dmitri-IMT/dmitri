@@ -50,14 +50,22 @@ class FakeScan:
         self.calls: list[tuple[str, str, str | None]] = []
         self.threads: list[int] = []
         self.started = threading.Event()
+        self.cancelled = threading.Event()
         self._results = list(results) or [scan_result()]
         self._gate = gate
 
     def __call__(
-        self, mode: str, subnet: str, *, nspi_submode: str | None = None
+        self,
+        mode: str,
+        subnet: str,
+        *,
+        nspi_submode: str | None = None,
+        bind_cancel: Any = None,
     ) -> HeadlessScanResult:
         self.calls.append((mode, subnet, nspi_submode))
         self.threads.append(threading.get_ident())
+        if bind_cancel is not None:
+            bind_cancel(self._cancel)
         self.started.set()
         if self._gate is not None:
             self._gate.wait(TIMEOUT)
@@ -65,6 +73,11 @@ class FakeScan:
         if isinstance(result, BaseException):
             raise result
         return result
+
+    def _cancel(self) -> None:
+        self.cancelled.set()
+        if self._gate is not None:
+            self._gate.set()
 
 
 class FakeIngest:
@@ -114,7 +127,9 @@ class FakeClient:
         self.connected = True
         self._script = list(script or [])
 
-    async def run(self, on_command: Any, on_connected: Any = None) -> None:
+    async def run(
+        self, on_command: Any, on_connected: Any = None, on_parked: Any = None
+    ) -> None:
         for step in self._script:
             if self.parked_reason is not None:
                 return
@@ -124,6 +139,11 @@ class FakeClient:
                     await on_connected()
             elif step == "drop":
                 self.connected = False
+            elif step == "park":
+                self.parked_reason = "revoked"
+                self.connected = False
+                if on_parked is not None:
+                    await on_parked()
             elif callable(step):
                 await step()
             else:
@@ -136,11 +156,14 @@ class FakeClient:
         self.delivered.append(status)
         return True
 
-    async def close(self, reason: str = "closed") -> None:
-        self.closed = True
-        self.connected = False
+    async def park(self, reason: str) -> None:
         if self.parked_reason is None:
             self.parked_reason = reason
+        self.connected = False
+
+    async def close(self) -> None:
+        self.closed = True
+        self.connected = False
 
     def frames(self, subject: AgentCommand) -> list[tuple[str, str | None]]:
         return [
@@ -452,10 +475,62 @@ class TestForbiddenIngest:
             ("uploading", None),
             ("failed", "ingest_failed"),
         ]
-        assert client.closed is True
-        assert client.parked_reason is not None
+        assert client.closed is False
+        assert client.parked_reason == "upload_refused"
         assert client.frames(later) == []
         assert len(scan.calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_park_cancels_the_active_scan_before_upload(self) -> None:
+        gate = threading.Event()
+        scan = FakeScan(gate=gate)
+        subject = command()
+
+        async def wait_until_started() -> None:
+            await asyncio.to_thread(scan.started.wait, TIMEOUT)
+
+        daemon, client, _, ingest = build(
+            scan=scan, script=["connect", subject, wait_until_started, "park"]
+        )
+
+        try:
+            await daemon.run()
+        finally:
+            gate.set()
+
+        assert client.parked_reason == "revoked"
+        assert scan.cancelled.is_set()
+        assert daemon._active is None
+        assert client.frames(subject) == [("running", None)]
+        assert ingest.calls == []
+
+    @pytest.mark.asyncio
+    async def test_park_discards_an_in_flight_ingest_result(self) -> None:
+        gate = threading.Event()
+        ingest = FakeIngest(gate=gate)
+        subject = command()
+
+        async def wait_until_started() -> None:
+            await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+            asyncio.get_running_loop().call_later(0.05, gate.set)
+
+        daemon, client, _, _ = build(
+            ingest=ingest,
+            script=["connect", subject, wait_until_started, "park"],
+        )
+
+        try:
+            await daemon.run()
+        finally:
+            gate.set()
+
+        assert client.parked_reason == "revoked"
+        assert daemon._active is None
+        assert client.frames(subject) == [
+            ("running", None),
+            ("uploading", None),
+        ]
+        assert len(ingest.calls) == 1
 
 
 class TestShutdown:

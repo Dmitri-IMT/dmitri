@@ -439,12 +439,13 @@ export interface paths {
          *     |------|---------|---------------|
          *     | `1012` | Backend restarting (deploy). | Redial promptly with backoff. |
          *     | `1000` | Normal closure. | Redial with backoff. |
-         *     | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Stay down.** Redialling makes the two connections evict each other. |
-         *     | `4001` `revoked` | The device is revoked; the backend will not accept it again. | **Stay down.** |
+         *     | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Park; retry once per hour.** |
+         *     | `4001` `revoked` | The device is revoked. | **Park; retry once per hour.** An admin restore lets the next attempt in. |
          *
          *     A `403` on the upgrade means the device is revoked **or** `{agent_id}` is not a well-formed
-         *     UUID; both are permanent without human intervention. A `401` is retryable only after fixing
-         *     the signature envelope (clock skew, fresh nonce).
+         *     UUID. The Pi parks and retries once per hour. An admin restore
+         *     (`POST /api/v1/agents/{agent_id}/restore`) lets the next attempt in. A `401` is retryable
+         *     only after fixing the signature envelope (clock skew, fresh nonce).
          */
         get: operations["connectAgentCommandsWebSocket"];
         put?: never;
@@ -484,6 +485,46 @@ export interface paths {
          * @description Chooses, from the networks the connected Pi reported, the one its scans use.
          */
         patch: operations["updateAgentTargetSubnet"];
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a scanner agent
+         * @description Revokes the device and closes its live command channel, if connected.
+         */
+        post: operations["revokeAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a revoked scanner agent
+         * @description Clears revocation; the Pi can reconnect on its next hourly attempt.
+         */
+        post: operations["restoreAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/commands/{command_id}": {
@@ -1112,6 +1153,8 @@ export interface components {
             online: boolean;
             /** Format: date-time */
             last_seen_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
             available_subnets: components["schemas"]["AvailableSubnet"][];
             target_subnet?: string | null;
             /** Format: uuid */
@@ -1124,6 +1167,8 @@ export interface components {
             online: boolean;
             /** Format: date-time */
             last_seen_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
             target_subnet?: string | null;
             /** Format: uuid */
             active_command_id?: string | null;
@@ -3142,6 +3187,60 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["AgentOfflineConflict"];
             422: components["responses"]["TargetSubnetNotReported"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    revokeAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked agent detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    restoreAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored agent detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

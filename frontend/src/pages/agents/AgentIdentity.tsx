@@ -1,4 +1,5 @@
 import Timestamp from '@/components/Timestamp'
+import AgentPresence from '@/pages/agents/AgentPresence'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
@@ -11,9 +12,10 @@ function AgentIdentity({ agent }: { agent: AgentDetail }) {
       </h2>
       <p
         data-testid="agents-presence"
+        tabIndex={-1}
         className="text-body-md text-muted-foreground"
       >
-        {agent.online ? 'Online' : 'Offline'} ·{' '}
+        <AgentPresence agent={agent} /> ·{' '}
         {agent.last_seen_at ? (
           <>
             last report <Timestamp value={agent.last_seen_at} />

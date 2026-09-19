@@ -509,6 +509,18 @@ def test_delete_user_operations_are_published(
             "updateAgentTargetSubnet",
             {"200", "401", "403", "404", "409", "422", "500"},
         ),
+        (
+            "/api/v1/agents/{agent_id}/revoke",
+            "post",
+            "revokeAgent",
+            {"200", "401", "403", "404", "500"},
+        ),
+        (
+            "/api/v1/agents/{agent_id}/restore",
+            "post",
+            "restoreAgent",
+            {"200", "401", "403", "404", "500"},
+        ),
     ],
 )
 def test_admin_operations_are_published(
@@ -654,4 +666,5 @@ def test_agent_websocket_close_code_table_publishes_revoked():
     ]
     assert len(rows) == 1
     assert "`revoked`" in rows[0]
-    assert "Stay down" in rows[0]
+    assert "Park; retry once per hour" in rows[0]
+    assert "admin restore" in rows[0]

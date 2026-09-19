@@ -68,6 +68,7 @@ export const defaultAgent: AgentDetail = {
   display_name: 'DMITRI-NSPI-01',
   online: true,
   last_seen_at: minutesAgo(1),
+  revoked_at: null,
   available_subnets: [
     { interface: 'eth0', cidr: '192.168.0.0/24', is_default_route: false },
     { interface: 'wlan0', cidr: '10.12.0.0/16', is_default_route: true },
@@ -82,6 +83,7 @@ const secondAgentDetail: AgentDetail = {
   display_name: 'Reception spare',
   online: true,
   last_seen_at: minutesAgo(10),
+  revoked_at: null,
   available_subnets: [
     { interface: 'eth0', cidr: '192.168.0.0/24', is_default_route: true },
   ],
@@ -94,6 +96,7 @@ const thirdAgentDetail: AgentDetail = {
   display_name: 'Old office',
   online: false,
   last_seen_at: weeksAgo(4),
+  revoked_at: null,
   available_subnets: [
     { interface: 'eth0', cidr: '172.16.0.0/24', is_default_route: true },
   ],
@@ -107,6 +110,7 @@ export const agentSummaries: AgentSummary[] = [
     display_name: defaultAgent.display_name,
     online: defaultAgent.online,
     last_seen_at: defaultAgent.last_seen_at,
+    revoked_at: defaultAgent.revoked_at,
     target_subnet: defaultAgent.target_subnet,
     active_command_id: defaultAgent.active_command_id,
   },
@@ -115,6 +119,7 @@ export const agentSummaries: AgentSummary[] = [
     display_name: secondAgentDetail.display_name,
     online: secondAgentDetail.online,
     last_seen_at: secondAgentDetail.last_seen_at,
+    revoked_at: secondAgentDetail.revoked_at,
     target_subnet: secondAgentDetail.target_subnet,
     active_command_id: secondAgentDetail.active_command_id,
   },
@@ -123,6 +128,7 @@ export const agentSummaries: AgentSummary[] = [
     display_name: thirdAgentDetail.display_name,
     online: thirdAgentDetail.online,
     last_seen_at: thirdAgentDetail.last_seen_at,
+    revoked_at: thirdAgentDetail.revoked_at,
     target_subnet: thirdAgentDetail.target_subnet,
     active_command_id: thirdAgentDetail.active_command_id,
   },
@@ -558,6 +564,16 @@ export const handlers = [
       ...agent,
       target_subnet: body.target_subnet,
     })
+  }),
+  http.post(`${baseURL}/agents/:agentId/revoke`, ({ params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json({ ...agent, revoked_at: new Date().toISOString() })
+  }),
+  http.post(`${baseURL}/agents/:agentId/restore`, ({ params }) => {
+    const agent = agentById(params.agentId as string)
+    if (!agent) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json({ ...agent, revoked_at: null })
   }),
   http.post(`${baseURL}/agents/:agentId/commands`, () =>
     HttpResponse.json(

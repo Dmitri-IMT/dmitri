@@ -1,7 +1,7 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
+description: The Alembic env and revisions through AI chat scopes, usage telemetry, and analysis coverage columns. Head is `20260919_31`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
 timestamp: 2026-09-13T20:00:00Z
@@ -24,7 +24,9 @@ columns replaced by a plaintext `public_key`. Each DDL-only step is followed by 
 Row-Level-Security hardening and grants to a dedicated `dmitri_runtime` login role where it touches a
 new table. Merge revisions join the activity, OS-inventory, and machine-inventory heads; industrial
 observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_24` adds
-`ai_scan_analyses`; `20260912_25` adds enrichment retry columns; `20260912_26` adds AI retry columns. Head is `20260912_26`.
+`ai_scan_analyses`; `20260912_25` adds enrichment retry columns; `20260912_26` adds AI retry columns;
+`20260917_27`–`29` add writing-skill version, analysis coverage, and `ai_chat_messages`;
+`20260918_30` adds chat `scope_type`/`scope_id`; `20260919_31` adds `ai_usage`. Head is `20260919_31`.
 
 ## Key classes / functions
 

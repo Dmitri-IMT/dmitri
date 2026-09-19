@@ -30,6 +30,7 @@ SUMMARY_KEYS = {
     "display_name",
     "online",
     "last_seen_at",
+    "revoked_at",
     "target_subnet",
     "active_command_id",
 }
@@ -105,7 +106,27 @@ def test_list_agents_returns_org_rows_with_exact_keys(
     assert rows[0]["agent_id"] == str(provisioned_agent.id)
     assert rows[0]["display_name"] == provisioned_agent.display_name
     assert rows[0]["online"] is False
+    assert rows[0]["revoked_at"] is None
     assert rows[0]["target_subnet"] is None
+
+
+def test_list_and_detail_surface_revocation_time(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    provisioned_agent.revoked_at = T0
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+    headers = bearer_headers(seeded_org.id, "admin")
+
+    listed = client.get(AGENTS_PATH, headers=headers).json()["data"][0]
+    detail = client.get(_detail_path(provisioned_agent.id), headers=headers).json()
+
+    assert datetime.fromisoformat(listed["revoked_at"]) == T0
+    assert detail["revoked_at"] == listed["revoked_at"]
 
 
 def test_list_agents_excludes_other_orgs(

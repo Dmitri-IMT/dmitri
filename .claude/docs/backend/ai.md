@@ -1,27 +1,35 @@
 ---
 type: Module
-title: Backend AI scan analysis
-description: On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
+title: Backend AI — scan analysis, contextual chat, usage telemetry
+description: Groq-backed scan overviews (on-demand or auto after enrichment), scoped Q&A on scans/hosts/findings, and org-scoped provider usage rows without storing prompts or answers in ai_usage.
 resource: backend/src/api/services/ai/jobs.py
-tags: [backend, ai, groq, worker, scans]
-timestamp: 2026-09-13T20:00:00Z
+tags: [backend, ai, groq, worker, scans, chat, telemetry]
+timestamp: 2026-09-19T18:20:00Z
 ---
 
-# Backend AI scan analysis
+# Backend AI — scan analysis, contextual chat, usage telemetry
 
 ## Purpose
 
-`services/ai/` turns a **completed** scan into a structured English overview. Nothing in ingest or
-`run_worker_once` starts a job. A signed-in member of any role calls
-`POST /api/v1/scans/{scan_id}/analysis`. The API inserts (or, after `failed`, resets) one
-`ai_scan_analyses` row at `pending`. The **worker process** (`worker_main`) starts
-`run_ai_worker_loop` in a **daemon thread** only when `ai_is_available` (`AI_ENABLED` and a
-non-empty `AI_API_KEY`). That loop is outside the enrichment loop. It claims **at most one**
-requested row per tick, and only when the scan has **no** `enrichment_jobs` in `pending` or
-`running`. Groq is the only provider (`GROQ_PROVIDER_ID = "groq"`). There is no `AI_PROVIDER`
-setting.
+`services/ai/` is the Groq integration layer. Three product surfaces share one provider (`GROQ_PROVIDER_ID =
+"groq"`; no `AI_PROVIDER` setting):
 
-Read status on the wire (`ScanAIAnalysisResponse.status`):
+1. **Scan analysis** — a structured English overview for a **completed** scan (`ai_scan_analyses`).
+   Members POST to request it, or the enrichment worker may enqueue one automatically when
+   `AI_AUTO_ANALYSIS=true` and all enrichment jobs for that scan are terminal. The **worker process**
+   (`worker_main`) runs `run_ai_worker_loop` in a daemon thread when `ai_is_available` (`AI_ENABLED`
+   plus a non-empty `AI_API_KEY`). That loop is separate from enrichment; it claims at most one
+   analysis row per tick and only when no `enrichment_jobs` for that scan are `pending` or `running`.
+
+2. **Contextual chat** — read-only Q&A grounded in org-scoped scan/host/finding evidence. Routes live
+   on `routers/ai.py` (`/api/v1/ai/chat`, `/api/v1/ai/chat/history`) and on legacy per-resource paths
+   (`/scans/{id}/chat`, `/hosts/{id}/explain`, `/findings/{id}/explain`). Answers are Brazilian
+   Portuguese on the wire; history is capped at 10 messages per `(scope_type, scope_id)`.
+
+3. **Usage telemetry** — each provider call appends operational metadata to `ai_usage` via
+   `drain_provider_usage` / `persist_usage_events`. Prompts and model text are **not** stored there.
+
+Read status for scan analysis (`ScanAIAnalysisResponse.status`):
 
 | Status | Meaning |
 |--------|---------|
@@ -32,55 +40,60 @@ Read status on the wire (`ScanAIAnalysisResponse.status`):
 | `failed` | Terminal error; the same POST may reset the row to `pending`. |
 
 A second POST while `pending`/`processing`/`completed` raises `AIAnalysisAlreadyRequestedError`
-(router `409`). Concurrent first inserts rely on the unique `scan_id` constraint; the loser is
-also `409`.
+(router `409`). Concurrent first inserts rely on the unique `scan_id` constraint; the loser is also
+`409`.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ai_is_available()` | `AI_ENABLED` and a stripped non-empty `AI_API_KEY`. | `backend/src/api/services/ai/groq.py` |
-| `build_ai_provider()` | Builds `GroqProvider` or `None`. | `backend/src/api/services/ai/groq.py` |
-| `GroqProvider.analyze_scan()` / `repair_analysis()` | OpenAI-compatible HTTP to `AI_API_BASE_URL` (Groq). Structured placeholder-only provider analysis; one style repair gets codes and the original context, never rejected prose. Errors raise `AIProviderError(code, retryable=...)`. | `backend/src/api/services/ai/groq.py` |
-| `AI_PROMPT_VERSION` / `SYSTEM_PROMPT` | Prompt version `"3"`. English prose only; context is untrusted evidence and includes the writing skill. | `backend/src/api/services/ai/groq.py` |
-| `lint_provider_analysis()` | Deterministically enforces the versioned writing skill after structural validation. A second violation is terminal `style_violation`. | `backend/src/api/services/ai/writing.py` |
-| `run_bounded_analysis()` | Splits the placeholder context into independent chunks, validates each child result, and sends only validated child records plus aggregate counts to the synthesizer. | `backend/src/api/services/ai/analyzer.py` |
-| `request_scan_ai_analysis()` | Org-scoped scan; `unavailable` if AI off or scan not completed; insert/`failed`→`pending`; else already-requested. | `backend/src/api/services/ai/jobs.py:102` |
-| `get_scan_ai_analysis()` | `unavailable` / `not_requested` / row status. Foreign scan → `None` (404). | `backend/src/api/services/ai/jobs.py:72` |
-| `scan_ai_analysis_response()` | Picks the response variant from `record.status`. | `backend/src/api/services/ai/jobs.py:47` |
-| `claim_ai_analyses()` | Calls the shared [`claim_jobs`](/backend/services.md) with running status `processing` and an extra filter: no `enrichment_jobs` in `pending`/`running` for that `scan_id`. | `backend/src/api/services/ai/jobs.py:197` |
-| `process_ready_ai_analyses()` | Claim, build context, run bounded child tasks plus synthesis, materialise placeholders locally, check grounding, persist coverage, then `completed` or one `retry_or_fail`. | `backend/src/api/services/ai/jobs.py:165` |
-| `_check_grounded()` | Every finding id in explanations and actions must be in the context; no duplicate explanations. Failure → `invalid_analysis`, not retried. | `backend/src/api/services/ai/jobs.py:279` |
-| `build_scan_ai_context()` | Loads `ScanRecord` (not Scan Detail) plus `get_scan_risk_summary`, a host count and EPSS/KEV. Caps findings at `AI_MAX_FINDINGS` (default 10, max 15). Raises `ScanAINotReadyError` if the scan is not completed. | `backend/src/api/services/ai/context.py:82` |
-| `ScanAIContext` / `AIFindingContext` | Provider context with public facts and request-local placeholders only. | `backend/src/api/services/ai/context.py` |
-| `materialize_scan_ai_analysis()` | Rejects unknown placeholders, maps valid finding placeholders to persisted IDs and replaces display placeholders before storage. | `backend/src/api/services/ai/context.py` |
-| `run_ai_worker_loop()` / `run_ai_worker_once()` | In `services/worker.py`. Own session and `AI_POLL_INTERVAL_SECONDS` (default 5); batch size 1; no command sweep. | `backend/src/api/services/worker.py:46`, `:57` |
-| `ScanAIAnalysis` | Wire body of a completed analysis. | `backend/src/api/schemas/ai.py:33` |
-| `ScanAIAnalysisResponse` | HTTP union keyed on `status`: `Unavailable` / `NotRequested` (`scan_id`, `status` only), `Queued` (`pending`/`processing`, job fields), `Failed` (+`completed_at`), `Completed` (+`completed_at`, `analysis`). | `backend/src/api/schemas/ai.py:86` |
-| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; unique `scan_id`; records prompt/context/writing-skill versions and analyzed/failed/total finding coverage; completed requires `analysis_json`; `next_attempt_at` and `last_error` like `enrichment_jobs`. | `backend/src/api/models/persistence.py` |
+| `ai_is_available()` / `build_ai_provider()` | Gate and construct `GroqProvider`. | `backend/src/api/services/ai/groq.py:438`, `:446` |
+| `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Scan path: `analyze_scan`, chunked `analyze_chunk`, `repair_*`, `synthesize_scan`. Chat: `answer_question`. Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py:94` |
+| `drain_provider_usage()` / `persist_usage_events()` | Move provider events into `AIUsageRecord` rows (org/scan/user when known). | `backend/src/api/services/ai/telemetry.py:12`, `:17` |
+| `AIOrchestrator.answer_question()` | Thin coordinator; `materialize_chat_response` maps provider finding refs to UUIDs. | `backend/src/api/services/ai/orchestrator.py:25` |
+| `build_chat_context()` / `build_host_context()` / `build_finding_context()` | Bounded JSON contexts for chat; scan context can include a clipped completed overview. | `backend/src/api/services/ai/chat.py:21`, `:157`, `:130` |
+| `save_chat_message()` / `list_chat_messages()` | Persist Q&A under `scope_type` + `scope_id`; trim to `MAX_CHAT_HISTORY` (10). | `backend/src/api/services/ai/chat.py:275`, `:316` |
+| `lint_provider_analysis()` | Versioned writing skill after structural validation. | `backend/src/api/services/ai/writing.py` |
+| `run_bounded_analysis()` | Chunked scan analysis pipeline. | `backend/src/api/services/ai/analyzer.py` |
+| `request_scan_ai_analysis()` / `get_scan_ai_analysis()` | On-demand analysis request and read. | `backend/src/api/services/ai/jobs.py:118`, `:88` |
+| `enqueue_auto_scan_analysis()` | After enrichment completes: insert pending row when `AI_AUTO_ANALYSIS` + `AI_ENABLED` + key; no-op if enrichment still active or row already exists. | `backend/src/api/services/ai/jobs.py:182` |
+| `_enqueue_auto_analysis_safely()` | Called from enrichment job completion paths; logs and swallows enqueue failures. | `backend/src/api/services/enrichment.py:115` |
+| `claim_ai_analyses()` / `process_ready_ai_analyses()` | Worker claim (enrichment gate) and processing. | `backend/src/api/services/ai/jobs.py:258`, `:226` |
+| `run_ai_worker_loop()` / `run_ai_worker_once()` | Dedicated poll loop in `services/worker.py`. | `backend/src/api/services/worker.py:46`, `:57` |
+| `get_ai_usage()` / `list_context_chat()` / `ask_context_chat()` | Org usage dashboard and unified chat API. | `backend/src/api/routers/ai.py:50`, `:112`, `:137` |
+| `read_scan_ai_chat()` / `ask_scan_ai()` | Scan-scoped chat (scope `scan`). | `backend/src/api/routers/scans.py:62`, `:213` |
+| `AIScanAnalysisRecord` | Table `ai_scan_analyses`; coverage + writing-skill versions. | `backend/src/api/models/persistence.py` |
+| `AIChatMessageRecord` | Table `ai_chat_messages`; `scope_type` + `scope_id` index the thread. | `backend/src/api/models/persistence.py:404` |
+| `AIUsageRecord` | Table `ai_usage`; token/latency metadata only. | `backend/src/api/models/persistence.py:47` |
+| `ScanAIAnalysis` / `ScanAIAnalysisResponse` / `AIChatResponse` | Wire models in `schemas/ai.py`. | `backend/src/api/schemas/ai.py` |
 
 ## How it connects
 
-- HTTP: [routers](/backend/routers.md) `read_scan_ai_analysis` / `request_scan_ai_analysis_route`
-  (`require_user`).
-- Worker boot: [`worker_main.main`](/backend/api.md) starts the AI thread, then
-  `run_worker_loop` ([services](/backend/services.md)) for enrichment only.
-- Settings: `AI_*` on [`Settings`](/backend/api.md). The API and the worker both need
-  `AI_ENABLED` + `AI_API_KEY` or GET stays `unavailable` even if jobs exist.
-- SPA: [scan-ai](/frontend/scan-ai.md).
+- Analysis HTTP: [routers](/backend/routers.md) on `scans.py` (`read_scan_ai_analysis`,
+  `request_scan_ai_analysis_route`).
+- Chat HTTP: `ai.router` plus `scans.py`, `hosts.py`, and `findings.py` explain/chat routes —
+  mounted from [`main.py`](/backend/api.md) (`app.include_router(ai.router)` at `:170`).
+- Worker boot: [`worker_main.main`](/backend/api.md) starts the AI thread, then enrichment
+  ([services](/backend/services.md)).
+- Settings: `AI_*` including `AI_AUTO_ANALYSIS` on [`Settings`](/backend/api.md).
+- SPA: [scan-ai](/frontend/scan-ai.md) (overview jobs), [context-ai](/frontend/context-ai.md)
+  (`/ai/chat` on scan/host routes plus `/explain` one-shots in `FindingPanel` and `HostDetail`),
+  [ai-usage](/frontend/ai-usage.md), [home-ai-overview](/frontend/home-ai-overview.md).
 - Decision record: [ADR-020](../../docs/adr/ADR-020-ai-scan-analysis.md).
 
 ## Notes / gotchas
 
-- **Enrichment blocks claim, not the POST.** A Samba/NSPi scan can leave hundreds of
-  `nvd_cve` jobs. NVD is paced (`NVD_MIN_REQUEST_INTERVAL_SECONDS`, default 6). The card stays
-  `pending` until those jobs leave `pending`/`running`.
-- **Completing a scan never writes `ai_scan_analyses`.** There is no `enqueue_ready_ai_analyses`.
-- **Retries** use `next_attempt_at = now + AI_RETRY_DELAY_SECONDS` through the shared `retry_or_fail`. Only retryable `AIProviderError`s retry, up to `AI_MAX_ATTEMPTS`.
-- **Failed POST retry** is the same button: status `failed` → POST 202 → `pending`, `attempts=0`.
+- **Enrichment blocks analysis claim, not the POST or auto-enqueue check.** Auto-enqueue runs only when
+  no enrichment jobs remain active for that scan.
+- **Completing a scan never writes `ai_scan_analyses` by itself** unless `AI_AUTO_ANALYSIS` is on and
+  enrichment later finishes.
+- **Chat errors** — `ai_unavailable` (503), `ai_rate_limited` (429, Portuguese body), `ai_context_too_large`
+  (413), `ai_provider_error` (502). Scan chat adds `scan_not_ready` (409) when the scan is not
+  `completed`.
+- **Usage rows** may omit `user_id` on worker-driven scan analysis; interactive chat sets org, scan,
+  and user when persisting events.
 - **Do not set `DATABASE_URL_DIRECT` on Railway.** Migrations stay operator-run.
 
 # Citations
 
 [1] [docs/adr/ADR-020-ai-scan-analysis.md](../../../docs/adr/ADR-020-ai-scan-analysis.md)
-[2] [specs/047-pr-144-review-remediation/ARCHITECTURE.md](../../../specs/047-pr-144-review-remediation/ARCHITECTURE.md)

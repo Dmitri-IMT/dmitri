@@ -74,6 +74,37 @@ describe('Devices', () => {
     expect(within(row).getByText('Offline')).toBeInTheDocument()
   })
 
+  it('distinguishes a revoked device from an offline device', async () => {
+    const revokedAt = new Date().toISOString()
+    server.use(
+      http.get(`${baseURL}/agents`, () =>
+        HttpResponse.json({
+          data: [
+            { ...onlineWithNetwork, online: true, revoked_at: revokedAt },
+            offlineAgent,
+          ],
+        }),
+      ),
+    )
+    renderWithProviders(<Devices />, { route: '/devices' })
+
+    const revokedStatus = await screen.findByTestId(
+      `devices-status-${onlineWithNetwork.agent_id}`,
+    )
+    expect(revokedStatus).toHaveTextContent('Revoked')
+    expect(revokedStatus).toHaveClass('truncate')
+    expect(revokedStatus).toHaveAttribute(
+      'title',
+      `Revoked ${new Date(revokedAt).toLocaleString()}`,
+    )
+    expect(
+      screen.getByTestId(`devices-status-${offlineAgent.agent_id}`),
+    ).toHaveTextContent('Offline')
+    expect(
+      screen.getByTestId(`devices-table-row-${onlineWithNetwork.agent_id}`),
+    ).toHaveAttribute('data-tone', 'muted')
+  })
+
   it('navigates to the box detail when a row is activated', async () => {
     const user = userEvent.setup()
     renderWithProviders(
