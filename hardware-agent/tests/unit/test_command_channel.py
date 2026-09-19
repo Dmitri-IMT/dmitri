@@ -533,6 +533,17 @@ class TestClassification:
         assert "command channel lost" not in caplog.text
 
     @pytest.mark.asyncio
+    async def test_close_before_park_wait_skips_sleep(self) -> None:
+        sleeper = Sleeper()
+        client = build_client(Dialer(), sleeper)
+        await client.park("revoked")
+        await client.close()
+
+        await client._wait_out_park()
+
+        assert sleeper.delays == []
+
+    @pytest.mark.asyncio
     async def test_close_interrupts_the_hourly_wait(self) -> None:
         waiting = asyncio.Event()
 

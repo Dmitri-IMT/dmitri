@@ -17,6 +17,7 @@ import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
 import ScanControl from '@/pages/agents/ScanControl'
 import ScanTypeTabs, { ScanTypeReadOnly } from '@/pages/agents/ScanTypeTabs'
 import TargetSubnetSection from '@/pages/agents/TargetSubnetSection'
+import WatchedNetworkReadOnly from '@/pages/agents/WatchedNetworkReadOnly'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
@@ -31,12 +32,7 @@ function focusPresence() {
 function RevokedDeviceSections({ agent }: { agent: AgentDetail }) {
   return (
     <>
-      <TargetSubnetSection
-        agent={agent}
-        open={false}
-        onOpenChange={() => {}}
-        onSaved={() => {}}
-      />
+      <WatchedNetworkReadOnly agent={agent} />
       <DeviceRestore agent={agent} onRestored={focusPresence} />
       <DeviceScanHistory agentId={agent.agent_id} />
     </>

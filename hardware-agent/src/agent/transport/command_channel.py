@@ -176,7 +176,7 @@ class CommandChannelClient:
         self._socket: Any = None
         self._parked_reason: ParkReason | None = None
         self._closed = False
-        self._park_wait: asyncio.Future[None] | None = None
+        self._shutdown = asyncio.Event()
         self._ready = False
 
     @property
@@ -235,8 +235,7 @@ class CommandChannelClient:
 
     async def close(self) -> None:
         self._closed = True
-        if self._park_wait is not None:
-            self._park_wait.cancel()
+        self._shutdown.set()
         await self._drop_socket()
 
     async def _serve_once(
@@ -294,7 +293,7 @@ class CommandChannelClient:
 
     async def _wait_out_park(self) -> None:
         reason = self._parked_reason
-        if reason is None:
+        if reason is None or self._closed:
             return
         next_attempt = datetime.now(UTC) + timedelta(seconds=_PARK_RETRY_SECONDS)
         LOGGER.error(
@@ -302,16 +301,28 @@ class CommandChannelClient:
             reason,
             next_attempt.isoformat(timespec="seconds"),
         )
-        wait = asyncio.ensure_future(self._sleep(_PARK_RETRY_SECONDS))
-        self._park_wait = wait
-        try:
-            await asyncio.wait({wait})
-        finally:
-            wait.cancel()
-            self._park_wait = None
+        sleep_task = asyncio.create_task(self._sleep(_PARK_RETRY_SECONDS))
+        shutdown_task = asyncio.create_task(self._shutdown.wait())
+        done, pending = await asyncio.wait(
+            {sleep_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if shutdown_task in done:
+            for task in pending:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            return
+        for task in pending:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        if sleep_task.cancelled():
+            raise asyncio.CancelledError()
+        exc = sleep_task.exception()
+        if exc is not None:
+            raise exc
         if self._closed:
             return
-        wait.result()
         self._parked_reason = None
 
 
