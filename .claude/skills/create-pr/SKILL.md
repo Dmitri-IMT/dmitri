@@ -132,6 +132,37 @@ Parse file changes to determine:
 - **Change type**: Feature (new files), Bugfix (modified files), Refactor (structure changes), Docs
 - **Files summary**: Group files by component
 
+### 4b. Assess Alembic upgrade need
+
+Decide from the PR diff alone whether operators must run `alembic upgrade head` after merge.
+Do not ask the user; infer from git.
+
+```bash
+MIGRATION_FILES=$(git diff --name-only "$TARGET_BRANCH".."$CURRENT_BRANCH" -- 'backend/alembic/versions/*.py')
+```
+
+**Migration required** when any of the following is true:
+- A **new** file under `backend/alembic/versions/` (new revision)
+- An **edited** existing revision under `backend/alembic/versions/`
+
+**Migration not required** when the diff has no such files — including backend-only PRs that only
+touch routers, services, schemas, or tests, or that change SQLAlchemy models without a matching
+Alembic revision in this branch.
+
+Set `ALEMBIC_UPGRADE_NEEDED=true` or `false` and keep the list of migration paths for the PR body.
+
+When `ALEMBIC_UPGRADE_NEEDED=true`, the generated description **must** include a **Database**
+subsection (see step 6) that names the revision file(s) and says explicitly:
+
+> **Alembic upgrade required** after merge: run `alembic upgrade head` on the target database.
+> @rontho14 — please run the migration.
+
+Use a real `@rontho14` mention in the markdown body so GitHub notifies them. `@rontho14` is already
+the default reviewer; this callout is for the post-merge migration step, not a substitute for review.
+
+When `ALEMBIC_UPGRADE_NEEDED=false`, add one line under **Database**: `No Alembic upgrade required
+for this PR.`
+
 ### 5. Generate PR Title
 
 If user didn't provide a title, generate one from commits and files:
@@ -194,12 +225,17 @@ How to test these changes:
 - Step-by-step instructions
 - Or: "See test files added in this PR"
 
+## Database
+<If ALEMBIC_UPGRADE_NEEDED: list migration revision file(s), alembic upgrade required, @rontho14 please run the migration>
+<Else: No Alembic upgrade required for this PR.>
+
 ## Checklist
 - [ ] My code follows the project's code style
 - [ ] I have updated relevant documentation
 - [ ] I have added tests for new functionality (if applicable)
 - [ ] All tests pass locally
 - [ ] I have reviewed the CONTRIBUTING guidelines
+<If ALEMBIC_UPGRADE_NEEDED: - [ ] @rontho14 ran `alembic upgrade head` on the target environment after merge>
 
 ## Additional Notes
 [Any other context or notes]

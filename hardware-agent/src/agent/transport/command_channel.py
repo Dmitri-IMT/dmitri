@@ -303,26 +303,25 @@ class CommandChannelClient:
         )
         sleep_task = asyncio.create_task(self._sleep(_PARK_RETRY_SECONDS))
         shutdown_task = asyncio.create_task(self._shutdown.wait())
-        done, pending = await asyncio.wait(
-            {sleep_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
-        )
-        if shutdown_task in done:
-            for task in pending:
-                task.cancel()
+        shutdown_won = False
+        try:
+            done, _pending = await asyncio.wait(
+                {sleep_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            shutdown_won = shutdown_task in done
+        finally:
+            for task in (sleep_task, shutdown_task):
+                if not task.done():
+                    task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+        if shutdown_won or self._closed:
             return
-        for task in pending:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
         if sleep_task.cancelled():
             raise asyncio.CancelledError()
         exc = sleep_task.exception()
         if exc is not None:
             raise exc
-        if self._closed:
-            return
         self._parked_reason = None
 
 

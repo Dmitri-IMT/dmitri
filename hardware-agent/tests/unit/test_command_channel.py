@@ -562,6 +562,25 @@ class TestClassification:
         await asyncio.wait_for(running, 5.0)
 
     @pytest.mark.asyncio
+    async def test_outer_cancel_during_park_wait_cleans_child_tasks(self) -> None:
+        entered = asyncio.Event()
+
+        async def sleep(delay: float) -> None:
+            entered.set()
+            await asyncio.Event().wait()
+
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(rejected(403)), sleep=sleep
+        )
+        await client.park("revoked")
+
+        wait_task = asyncio.create_task(client._wait_out_park())
+        await asyncio.wait_for(entered.wait(), 5.0)
+        wait_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await wait_task
+
+    @pytest.mark.asyncio
     async def test_cancellation_propagates_during_hourly_wait(self) -> None:
         async def cancel(delay: float) -> None:
             assert delay == 3600.0

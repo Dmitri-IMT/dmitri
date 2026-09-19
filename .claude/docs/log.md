@@ -8,7 +8,9 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 * **Update**: PR-149 review follow-up. Device detail splits revoked vs live network UI:
   `WatchedNetworkReadOnly` plus `watchedNetworkLabel.ts`; `TargetSubnetSection` is live-only. Pi
   park wait races injected sleep against a persistent `_shutdown` event so `close()` cannot miss the
-  pre-wait race. Touched: `frontend/devices-screen.md`, `hardware-agent/command-channel.md`.
+  pre-wait race; `_wait_out_park()` `finally` cancels and awaits both child tasks so outer
+  cancellation cannot leave the hourly sleeper pending. Touched: `frontend/devices-screen.md`,
+  `hardware-agent/command-channel.md`.
 
 ## 2026-09-17
 

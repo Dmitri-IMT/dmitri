@@ -40,7 +40,7 @@ ingest. That split is the contract, not an implementation detail.
 | `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:232`, `:236` |
 | `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:125` |
 | `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:134` |
-| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:294` |
+| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. A `finally` always cancels and awaits both child tasks so outer cancellation or `close()` cannot leave the hourly sleeper pending. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:294` |
 | `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:329` |
 
 ### The upgrade envelope
@@ -110,7 +110,9 @@ The process stays alive throughout.
   is already set, so operators do not see a false `command channel lost` warning for that action.
 * `_shutdown` is a persistent `asyncio.Event` set by `close()`. Park wait checks `_closed` before
   sleeping and races sleep against that event so daemon shutdown cannot miss the window between
-  entering the parked branch and starting the hourly wait.
+  entering the parked branch and starting the hourly wait. The race uses two child tasks; their
+  `finally` cleanup is what keeps daemon shutdown from leaving a stray hourly sleeper when the
+  outer `run()` task is cancelled mid-wait.
 * The module reads `ConnectionClosed.code` / `.reason`, which `websockets` 17 deprecates in favour
   of `.rcvd.code` / `.rcvd.reason`. The deprecated accessors are the *correct* ones here — they fold
   the `rcvd is None` case into `1006`, which the reconnect classifier depends on. Any future
