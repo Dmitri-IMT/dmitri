@@ -4,7 +4,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from sqlmodel import Session
-from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent_ws
@@ -109,18 +108,11 @@ async def revoke_agent_route(
     caller: CallerIdentity = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> AgentDetail:
-    detail = await run_in_threadpool(
-        revoke_agent,
-        session,
-        agent_id=agent_id,
-        org_id=caller.org_id,
-        now=utc_now(),
+    detail = await revoke_agent(
+        session, agent_id=agent_id, org_id=caller.org_id, now=utc_now()
     )
     if detail is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    socket = agent_connections.get_socket(agent_id)
-    if socket is not None:
-        await agent_connections.close_revoked(socket)
     return detail
 
 
