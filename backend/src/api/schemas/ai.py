@@ -192,6 +192,7 @@ class _ScanAIAnalysisJob(BaseModel):
     analysis_id: UUID
     provider: str
     model: str
+    language: AILanguage = "en"
     context_version: str
     prompt_version: str
     created_at: datetime

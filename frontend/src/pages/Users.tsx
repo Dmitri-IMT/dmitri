@@ -104,7 +104,7 @@ function Users() {
             onClick={() => setInviteOpen(true)}
             data-testid="invite-open"
           >
-            Invite a user
+            {t('users.invite')}
           </Button>
         </div>
       )}

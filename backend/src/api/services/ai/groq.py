@@ -19,7 +19,7 @@ from api.services.ai.context import ScanAIContext
 from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "3"
+AI_PROMPT_VERSION = "4"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied
@@ -29,7 +29,7 @@ firmware, patches, CVSS, EPSS, KEV status, severity, confidence, or risk scores.
 When evidence is insufficient, state that explicitly as uncertainty. Explain the
 result clearly for a non-specialist, keep recommendations defensive and high-level,
 and return exactly the requested structured schema.
-Write all explanatory prose in English.
+Write all explanatory prose in {language_name}.
 {writing_skill_instructions}
 """
 
@@ -95,15 +95,20 @@ class GroqProvider:
         events, self._usage_events = self._usage_events, []
         return events
 
-    def analyze_scan(self, context: ScanAIContext) -> ProviderScanAIAnalysis:
+    def analyze_scan(
+        self, context: ScanAIContext, *, language: str = "en"
+    ) -> ProviderScanAIAnalysis:
         return self._analyze(
             context,
             USER_PROMPT.format(context_json=context.model_dump_json()),
             ProviderScanAIAnalysis,
             operation="scan_analysis",
+            language=language,
         )
 
-    def analyze_chunk(self, context: ScanAIContext) -> ProviderScanAIChildAnalysis:
+    def analyze_chunk(
+        self, context: ScanAIContext, *, language: str = "en"
+    ) -> ProviderScanAIChildAnalysis:
         return self._analyze(
             context,
             """Analyze only the bounded finding chunk in the JSON context.
@@ -114,12 +119,15 @@ CHUNK_CONTEXT_JSON:
 """.format(context_json=context.model_dump_json()),
             ProviderScanAIChildAnalysis,
             operation="finding_chunk",
+            language=language,
         )
 
     def repair_analysis(
         self,
         context: ScanAIContext,
         violation_codes: tuple[str, ...],
+        *,
+        language: str = "en",
     ) -> ProviderScanAIAnalysis:
         return self._analyze(
             context,
@@ -134,12 +142,15 @@ SCAN_CONTEXT_JSON:
             ),
             ProviderScanAIAnalysis,
             operation="analysis_repair",
+            language=language,
         )
 
     def repair_chunk(
         self,
         context: ScanAIContext,
         violation_codes: tuple[str, ...],
+        *,
+        language: str = "en",
     ) -> ProviderScanAIChildAnalysis:
         return self._analyze(
             context,
@@ -155,6 +166,7 @@ CHUNK_CONTEXT_JSON:
             ),
             ProviderScanAIChildAnalysis,
             operation="chunk_repair",
+            language=language,
         )
 
     def synthesize_scan(
@@ -162,6 +174,8 @@ CHUNK_CONTEXT_JSON:
         context: ScanAIContext,
         child_results: list[dict[str, object]],
         failed_refs: tuple[str, ...],
+        *,
+        language: str = "en",
     ) -> ProviderScanAIAnalysis:
         synthesis_context = {
             "aggregate": {
@@ -188,6 +202,7 @@ SYNTHESIS_CONTEXT_JSON:
             ),
             ProviderScanAIAnalysis,
             operation="analysis_synthesis",
+            language=language,
         )
 
     def answer_question(
@@ -225,6 +240,7 @@ SCAN_CONTEXT_JSON:
         response_schema: type[ProviderScanAIAnalysis | ProviderScanAIChildAnalysis],
         *,
         operation: str,
+        language: str = "en",
     ) -> ProviderScanAIAnalysis | ProviderScanAIChildAnalysis:
         payload = {
             "model": self.model,
@@ -232,7 +248,8 @@ SCAN_CONTEXT_JSON:
                 {
                     "role": "system",
                     "content": SYSTEM_PROMPT.format(
-                        writing_skill_instructions=WRITING_SKILL_INSTRUCTIONS
+                        writing_skill_instructions=WRITING_SKILL_INSTRUCTIONS,
+                        language_name=_language_name(language),
                     ),
                 },
                 {

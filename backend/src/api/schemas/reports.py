@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from api.schemas.ai import AILanguage
+
 ReportKind = Literal["explained", "technical"]
 
 
@@ -14,6 +16,7 @@ class ScanReportResponse(BaseModel):
 
     scan_id: UUID
     kind: ReportKind
+    language: AILanguage = "en"
     generated_at: datetime
     filename: str
     content_type: Literal["application/pdf"]

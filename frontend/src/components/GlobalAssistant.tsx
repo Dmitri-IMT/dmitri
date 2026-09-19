@@ -58,7 +58,7 @@ function GlobalAssistant() {
           <ContextChat
             scope={context.scope}
             contextId={context.contextId}
-            title={`Pergunte sobre ${context.label}`}
+            title={t('ai.askAbout', { label: context.label })}
           />
         ) : (
           <div className="flex flex-col gap-4">

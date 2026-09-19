@@ -15,6 +15,7 @@ from api.schemas.ai import (
     AIChatHistoryResponse,
     AIChatRequest,
     AIChatResponse,
+    AILanguage,
     ScanAIAnalysisResponse,
 )
 from api.schemas.read import (
@@ -158,6 +159,7 @@ def read_scan_risk_summary(
 )
 def read_scan_ai_analysis(
     scan_id: UUID,
+    language: AILanguage = Query("en"),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
@@ -167,6 +169,7 @@ def read_scan_ai_analysis(
         scan_id,
         org_id=caller.org_id,
         ai_enabled=ai_is_available(settings),
+        language=language,
     )
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -181,6 +184,7 @@ def read_scan_ai_analysis(
 )
 def request_scan_ai_analysis_route(
     scan_id: UUID,
+    language: AILanguage = Query("en"),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
@@ -193,6 +197,7 @@ def request_scan_ai_analysis_route(
             ai_enabled=ai_is_available(settings),
             provider_name=GROQ_PROVIDER_ID,
             model=settings.ai_model,
+            language=language,
         )
     except AIAnalysisAlreadyRequestedError as exc:
         raise ApiError(
@@ -303,6 +308,7 @@ def read_scan_report(
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
+    language: AILanguage = Query("en"),
 ) -> ScanReportResponse:
     try:
         report = build_scan_report(
@@ -310,6 +316,7 @@ def read_scan_report(
             scan_id,
             org_id=caller.org_id,
             kind=kind,
+            language=language,
             ai_enabled=ai_is_available(settings),
         )
     except ReportNotReadyError as exc:
@@ -334,8 +341,11 @@ def download_scan_report(
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
+    language: AILanguage = Query("en"),
 ) -> Response:
-    report = read_scan_report(scan_id, kind, session, caller, settings)
+    report = read_scan_report(
+        scan_id, kind, session, caller, settings, language=language
+    )
     return Response(
         content=render_scan_report_pdf(report),
         media_type=report.content_type,

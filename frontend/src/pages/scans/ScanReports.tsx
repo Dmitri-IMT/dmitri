@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import useI18n from '@/i18n/useI18n'
 
 type Preview = {
   kind: ScanReportKind
@@ -17,6 +18,7 @@ type Preview = {
 }
 
 function ScanReports({ scanId }: { scanId: string }) {
+  const { language, t } = useI18n()
   const [preparing, setPreparing] = useState<ScanReportKind | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [error, setError] = useState(false)
@@ -31,7 +33,7 @@ function ScanReports({ scanId }: { scanId: string }) {
     setPreparing(kind)
     setError(false)
     try {
-      const blob = await downloadScanReport(scanId, kind)
+      const blob = await downloadScanReport(scanId, kind, language)
       const url = URL.createObjectURL(blob)
       setPreview((current) => {
         if (current) URL.revokeObjectURL(current.url)
@@ -63,9 +65,9 @@ function ScanReports({ scanId }: { scanId: string }) {
   return (
     <Card data-testid="scan-reports">
       <CardHeader>
-        <h2 className="text-title-sm">Scan reports</h2>
+        <h2 className="text-title-sm">{t('reports.title')}</h2>
         <p className="text-body-sm text-muted-foreground">
-          Escolha qual tipo de relatório você quer fazer o download.
+          {t('reports.description')}
         </p>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3">
@@ -79,15 +81,15 @@ function ScanReports({ scanId }: { scanId: string }) {
             onClick={() => void openPreview(kind)}
           >
             {preparing === kind
-              ? 'Preparando relatório...'
+              ? t('reports.preparing')
               : kind === 'explained'
-                ? 'Baixar relatório explicado'
-                : 'Baixar relatório técnico'}
+                ? t('reports.downloadExplained')
+                : t('reports.downloadTechnical')}
           </Button>
         ))}
         {error && (
           <p className="basis-full text-body-sm text-destructive" role="alert">
-            Não foi possível preparar o relatório. Tente novamente.
+            {t('reports.error')}
           </p>
         )}
       </CardContent>
@@ -102,23 +104,23 @@ function ScanReports({ scanId }: { scanId: string }) {
           <DialogHeader>
             <DialogTitle>
               {preview?.kind === 'technical'
-                ? 'Prévia do relatório técnico'
-                : 'Prévia do relatório explicado'}
+                ? t('reports.previewTechnical')
+                : t('reports.previewExplained')}
             </DialogTitle>
           </DialogHeader>
           {preview && (
             <iframe
-              title="Prévia do relatório PDF"
+              title={t('reports.previewTitle')}
               src={preview.url}
               className="min-h-0 w-full flex-1 rounded border border-border bg-white"
             />
           )}
           <DialogFooter className="flex-row justify-end">
             <Button type="button" variant="outline" onClick={closePreview}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button type="button" onClick={confirmDownload}>
-              Confirmar download
+              {t('common.confirmDownload')}
             </Button>
           </DialogFooter>
         </DialogContent>

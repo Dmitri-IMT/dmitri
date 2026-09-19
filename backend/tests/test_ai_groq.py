@@ -119,9 +119,29 @@ def test_groq_provider_records_usage_without_prompt_content():
     assert event.latency_ms is not None
 
 
-def test_system_prompt_requests_english_prose():
-    assert "English" in SYSTEM_PROMPT
-    assert "Portuguese" not in SYSTEM_PROMPT
+def test_system_prompt_uses_a_language_placeholder():
+    assert "{language_name}" in SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [("en", "English"), ("pt-BR", "Brazilian Portuguese"), ("ru", "Russian")],
+)
+def test_groq_provider_sends_requested_analysis_language(language, expected):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": _analysis().model_dump_json()}}]},
+        )
+
+    _provider(handler).analyze_scan(_context(), language=language)
+
+    assert f"Write all explanatory prose in {expected}." in captured["payload"][
+        "messages"
+    ][0]["content"]
 
 
 def test_groq_provider_repair_sends_codes_not_rejected_prose():

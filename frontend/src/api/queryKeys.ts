@@ -21,7 +21,8 @@ export const queryKeys = {
     latest: (scope: 'any' | 'completed') => ['scans', 'latest', scope] as const,
     list: (params: ScanListParams) => ['scans', 'list', params] as const,
     detail: (scanId: string) => ['scans', 'detail', scanId] as const,
-    analysis: (scanId: string) => ['scans', 'analysis', scanId] as const,
+    analysis: (scanId: string, language: string) =>
+      ['scans', 'analysis', scanId, language] as const,
   },
   ai: {
     usage: (limit: number) => ['ai', 'usage', limit] as const,

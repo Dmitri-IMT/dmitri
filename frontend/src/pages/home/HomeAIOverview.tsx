@@ -5,15 +5,17 @@ import { queryKeys } from '@/api/queryKeys'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { HomeSnapshot } from '@/api/home'
+import useI18n from '@/i18n/useI18n'
 
 function HomeAIOverview({
   latestScan,
 }: {
   latestScan: HomeSnapshot['latest_successful_scan']
 }) {
+  const { language } = useI18n()
   const query = useQuery({
-    queryKey: queryKeys.scans.analysis(latestScan?.scan_id ?? ''),
-    queryFn: () => getScanAnalysis(latestScan!.scan_id),
+    queryKey: queryKeys.scans.analysis(latestScan?.scan_id ?? '', language),
+    queryFn: () => getScanAnalysis(latestScan!.scan_id, language),
     enabled: latestScan !== null,
     retry: false,
   })

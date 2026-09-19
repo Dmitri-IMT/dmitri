@@ -337,6 +337,14 @@ paths:
         - FrontendBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ScanId'
+        - name: language
+          in: query
+          required: false
+          description: Language used to generate and retrieve this persisted analysis.
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '200':
           description: AI analysis state scoped to the caller's organisation.
@@ -367,6 +375,14 @@ paths:
         - FrontendBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ScanId'
+        - name: language
+          in: query
+          required: false
+          description: Language used to generate and retrieve this persisted analysis.
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '202':
           description: AI analysis request state scoped to the caller's organisation.
@@ -416,6 +432,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/ReportKind'
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '200':
           description: Report scoped to the caller's organisation.
@@ -615,6 +638,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/ReportKind'
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '200':
           description: Downloadable PDF report.
@@ -4607,6 +4637,7 @@ components:
       required:
         - scan_id
         - kind
+        - language
         - generated_at
         - filename
         - content_type
@@ -4617,6 +4648,9 @@ components:
           format: uuid
         kind:
           $ref: '#/components/schemas/ReportKind'
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         generated_at:
           type: string
           format: date-time
@@ -4817,6 +4851,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4832,6 +4867,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:
@@ -4854,6 +4892,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4870,6 +4909,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:
@@ -4895,6 +4937,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4912,6 +4955,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:

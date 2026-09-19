@@ -360,7 +360,9 @@ class RiskSnapshotRecord(SQLModel, table=True):
 class AIScanAnalysisRecord(SQLModel, table=True):
     __tablename__ = "ai_scan_analyses"
     __table_args__ = (
-        UniqueConstraint("scan_id"),
+        UniqueConstraint(
+            "scan_id", "language", name="uq_ai_scan_analyses_scan_language"
+        ),
         CheckConstraint(_AI_ANALYSIS_STATUS_CHECK, name="ck_ai_scan_analyses_status"),
         CheckConstraint(
             "status != 'completed' OR analysis_json IS NOT NULL",
@@ -374,6 +376,7 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
     provider: str
     model: str
+    language: str = "en"
     status: str = Field(default="pending", index=True)
     analysis_json: dict[str, Any] | None = Field(
         default=None,

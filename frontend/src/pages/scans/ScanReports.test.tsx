@@ -29,21 +29,17 @@ describe('ScanReports', () => {
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
     await user.click(
-      screen.getByRole('button', { name: 'Baixar relatório explicado' }),
+      screen.getByRole('button', { name: 'Download explained report' }),
     )
 
+    expect(await screen.findByTitle('PDF report preview')).toBeInTheDocument()
     expect(
-      await screen.findByTitle('Prévia do relatório PDF'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Confirmar download' }),
+      screen.getByRole('button', { name: 'Confirm download' }),
     ).toBeVisible()
-    expect(downloadScanReport).toHaveBeenCalledWith('scan-1', 'explained')
+    expect(downloadScanReport).toHaveBeenCalledWith('scan-1', 'explained', 'en')
 
-    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
-    expect(
-      screen.queryByTitle('Prévia do relatório PDF'),
-    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTitle('PDF report preview')).not.toBeInTheDocument()
   })
 
   it('supports the technical report confirmation flow', async () => {
@@ -51,13 +47,13 @@ describe('ScanReports', () => {
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
     await user.click(
-      screen.getByRole('button', { name: 'Baixar relatório técnico' }),
+      screen.getByRole('button', { name: 'Download technical report' }),
     )
-    expect(await screen.findByText('Prévia do relatório técnico')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Confirmar download' }))
+    expect(await screen.findByText('Technical report preview')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirm download' }))
 
     expect(
-      screen.queryByText('Prévia do relatório técnico'),
+      screen.queryByText('Technical report preview'),
     ).not.toBeInTheDocument()
   })
 })

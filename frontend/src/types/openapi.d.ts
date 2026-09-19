@@ -1375,6 +1375,8 @@ export interface components {
             /** Format: uuid */
             scan_id: string;
             kind: components["schemas"]["ReportKind"];
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             /** Format: date-time */
             generated_at: string;
             filename: string;
@@ -1392,8 +1394,11 @@ export interface components {
         };
         AIChatRequest: {
             question: string;
-            /** @default en */
-            language?: "en" | "pt-BR" | "ru";
+            /**
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
         };
         AIChatResponse: {
             answer: string;
@@ -1463,6 +1468,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -1482,6 +1489,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -1503,6 +1512,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -2257,7 +2268,10 @@ export interface operations {
     };
     getScanAIAnalysis: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language used to generate and retrieve this persisted analysis. */
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */
@@ -2284,7 +2298,10 @@ export interface operations {
     };
     requestScanAIAnalysis: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language used to generate and retrieve this persisted analysis. */
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */
@@ -2335,7 +2352,9 @@ export interface operations {
     };
     getScanReport: {
         parameters: {
-            query?: never;
+            query?: {
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */
@@ -2531,7 +2550,9 @@ export interface operations {
     };
     downloadScanReport: {
         parameters: {
-            query?: never;
+            query?: {
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */

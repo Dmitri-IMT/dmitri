@@ -67,6 +67,7 @@ def scan_ai_analysis_response(
         "status": record.status,
         "provider": record.provider,
         "model": record.model,
+        "language": record.language,
         "context_version": record.context_version,
         "prompt_version": record.prompt_version,
         "created_at": record.created_at,
@@ -91,6 +92,7 @@ def get_scan_ai_analysis(
     *,
     org_id: UUID,
     ai_enabled: bool,
+    language: str = "en",
 ) -> ScanAIAnalysisResponse | None:
     scan = session.exec(
         select(ScanRecord).where(
@@ -106,7 +108,8 @@ def get_scan_ai_analysis(
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
-            AIScanAnalysisRecord.scan_id == scan_id
+            AIScanAnalysisRecord.scan_id == scan_id,
+            AIScanAnalysisRecord.language == language,
         )
     ).first()
     if record is None:
@@ -123,6 +126,7 @@ def request_scan_ai_analysis(
     ai_enabled: bool,
     provider_name: str,
     model: str,
+    language: str = "en",
     now: datetime | None = None,
 ) -> ScanAIAnalysisResponse | None:
     scan = session.exec(
@@ -138,7 +142,8 @@ def request_scan_ai_analysis(
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
-            AIScanAnalysisRecord.scan_id == scan_id
+            AIScanAnalysisRecord.scan_id == scan_id,
+            AIScanAnalysisRecord.language == language,
         )
     ).first()
     current_time = now or datetime.now(timezone.utc)
@@ -162,6 +167,7 @@ def request_scan_ai_analysis(
         scan_id=scan_id,
         provider=provider_name,
         model=model,
+        language=language,
         status="pending",
         context_version=AI_CONTEXT_VERSION,
         prompt_version=AI_PROMPT_VERSION,
@@ -210,6 +216,7 @@ def enqueue_auto_scan_analysis(
             ai_enabled=True,
             provider_name=GROQ_PROVIDER_ID,
             model=resolved_settings.ai_model,
+            language="en",
         )
     except AIAnalysisAlreadyRequestedError:
         return False
@@ -324,14 +331,21 @@ def _process_claimed_analysis(
         provider_analysis = None
         coverage = AnalysisCoverage(0, 0, 0)
         if context is not None:
-            provider_analysis, coverage = run_bounded_analysis(provider, context)
+            provider_analysis, coverage = run_bounded_analysis(
+                provider, context, language=record.language
+            )
             try:
                 provider_analysis = validate_provider_analysis(
                     context, provider_analysis
                 )
                 lint_provider_analysis(provider_analysis)
             except WritingStyleViolation as exc:
-                provider_analysis = provider.repair_analysis(context, exc.codes)
+                provider_analysis = _call_with_language(
+                    provider.repair_analysis,
+                    context,
+                    exc.codes,
+                    language=record.language,
+                )
                 provider_analysis = validate_provider_analysis(
                     context, provider_analysis
                 )
@@ -354,8 +368,8 @@ def _process_claimed_analysis(
         return fail("internal_error", False)
     if context is None or analysis is None:
         return fail("scan_unavailable", False)
-        if not _is_grounded(context, analysis):
-            return fail("invalid_analysis", False)
+    if not _is_grounded(context, analysis):
+        return fail("invalid_analysis", False)
 
     persist_usage_events(
         session,
@@ -382,6 +396,16 @@ def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
         *(action.related_finding_ids for action in analysis.priority_actions)
     )
     return referenced <= allowed and len(explained) == len(set(explained))
+
+
+def _call_with_language(method, *args, language: str):
+    """Preserve compatibility with provider test doubles during the transition."""
+    try:
+        return method(*args, language=language)
+    except TypeError as exc:
+        if "language" not in str(exc):
+            raise
+        return method(*args)
 
 
 def _context_hash(context: ScanAIContext) -> str:

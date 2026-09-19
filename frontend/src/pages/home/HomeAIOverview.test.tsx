@@ -15,6 +15,7 @@ const completedAnalysis = {
   status: 'completed' as const,
   provider: 'groq',
   model: 'openai/gpt-oss-120b',
+  language: 'en',
   context_version: '1',
   prompt_version: '1',
   created_at: '2026-09-12T12:00:00Z',

@@ -25,7 +25,11 @@ function Settings() {
   const [isLeaveOpen, setIsLeaveOpen] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
 
-  const roleLabel = user ? (user.role === 'admin' ? 'Admin' : 'Viewer') : null
+  const roleLabel = user
+    ? user.role === 'admin'
+      ? t('settings.admin')
+      : t('settings.viewer')
+    : null
 
   async function handleLeave() {
     setLeaveError(null)
@@ -45,10 +49,12 @@ function Settings() {
     <div data-testid="settings-idle" className="flex flex-col gap-8">
       <PageHeader title={t('nav.settings')} />
       <section data-testid="settings-details" className="flex flex-col gap-4">
-        <h2 className="text-title-sm">Your account</h2>
+        <h2 className="text-title-sm">{t('settings.account')}</h2>
         <dl className="flex flex-col gap-2 text-body-md">
           <div className="flex min-w-0 gap-2">
-            <dt className="shrink-0 text-muted-foreground">Email</dt>
+            <dt className="shrink-0 text-muted-foreground">
+              {t('settings.email')}
+            </dt>
             <dd
               data-testid="settings-details-email"
               className="min-w-0 break-words"
@@ -57,7 +63,9 @@ function Settings() {
             </dd>
           </div>
           <div className="flex min-w-0 gap-2">
-            <dt className="shrink-0 text-muted-foreground">Role</dt>
+            <dt className="shrink-0 text-muted-foreground">
+              {t('settings.role')}
+            </dt>
             <dd data-testid="settings-details-role" className="min-w-0">
               {roleLabel ?? <ValuePlaceholder />}
             </dd>
@@ -72,7 +80,7 @@ function Settings() {
             }}
             data-testid="settings-password-trigger"
           >
-            Change password
+            {t('settings.changePassword')}
           </Button>
           <p
             role="status"
@@ -84,7 +92,7 @@ function Settings() {
         </div>
         <div data-testid="settings-activity">
           <Disclosure
-            label="What's recorded about me?"
+            label={t('settings.recordedAbout')}
             testId="settings-activity-disclosure"
             caretTestId="settings-activity-caret"
           >
@@ -92,10 +100,7 @@ function Settings() {
               data-testid="settings-activity-note"
               className="max-w-prose text-body-md text-muted-foreground"
             >
-              Everyone in your organization can see when you last signed in, and
-              a log of changes to the organization: scans, machines that join
-              the network, invitations, role changes, and members joining or
-              leaving. We don&apos;t record what you viewed.
+              {t('settings.activityDescription')}
             </p>
           </Disclosure>
         </div>
@@ -104,15 +109,12 @@ function Settings() {
       <hr className="border-border" />
       <section data-testid="settings-leave" className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <h2 className="text-title-sm">Leave this organisation</h2>
+          <h2 className="text-title-sm">{t('settings.leaveOrganisation')}</h2>
           <p
             data-testid="settings-leave-body"
             className="max-w-prose text-body-md text-muted-foreground"
           >
-            Your account is deleted and you lose access to this
-            organisation&apos;s scans, network and vulnerabilities straight
-            away. This can&apos;t be undone — an admin would have to invite you
-            again.
+            {t('settings.leaveDescription')}
           </p>
         </div>
         <Button
@@ -123,13 +125,13 @@ function Settings() {
           onClick={() => setIsLeaveOpen(true)}
           data-testid="settings-leave-trigger"
         >
-          Delete my account
+          {t('settings.deleteAccount')}
         </Button>
       </section>
       <PasswordDialog
         open={isPasswordOpen}
         onOpenChange={setIsPasswordOpen}
-        onSuccess={() => setPasswordSuccess('Password changed.')}
+        onSuccess={() => setPasswordSuccess(t('settings.passwordChanged'))}
       />
       {user && (
         <ConfirmByTyping
@@ -140,10 +142,10 @@ function Settings() {
               setLeaveError(null)
             }
           }}
-          heading="Delete your account?"
-          body="Your account is deleted and you lose access straight away. This can't be undone."
+          heading={t('settings.deleteAccountQuestion')}
+          body={t('settings.deleteAccountBody')}
           expectedValue={user.email}
-          confirmLabel="Delete my account"
+          confirmLabel={t('settings.deleteAccount')}
           confirmPendingLabel="Deleting…"
           onConfirm={handleLeave}
           error={leaveError}
