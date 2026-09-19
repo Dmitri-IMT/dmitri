@@ -287,7 +287,7 @@ const en: Catalog = {
   'settings.role': 'Role',
   'settings.admin': 'Admin',
   'settings.viewer': 'Viewer',
-  'settings.changePassword': 'Change password',
+  'settings.changePassword': 'Change password', // pragma: allowlist secret
   'settings.recordedAbout': "What's recorded about me?",
   'settings.activityDescription':
     "Everyone in your organization can see when you last signed in, and a log of changes to the organization: scans, machines that join the network, invitations, role changes, and members joining or leaving. We don't record what you viewed.",
@@ -298,7 +298,7 @@ const en: Catalog = {
   'settings.deleteAccountQuestion': 'Delete your account?',
   'settings.deleteAccountBody':
     "Your account is deleted and you lose access straight away. This can't be undone.",
-  'settings.passwordChanged': 'Password changed.',
+  'settings.passwordChanged': 'Password changed.', // pragma: allowlist secret
   'devices.subtitle': 'The Dmitri boxes reporting to this organisation.',
   'devices.caption': 'Dmitri boxes',
   'devices.error': "Couldn't load your devices.",
@@ -463,7 +463,7 @@ const pt: Catalog = {
   'settings.role': 'Função',
   'settings.admin': 'Administrador',
   'settings.viewer': 'Visualizador',
-  'settings.changePassword': 'Alterar senha',
+  'settings.changePassword': 'Alterar senha', // pragma: allowlist secret
   'settings.recordedAbout': 'O que é registrado sobre mim?',
   'settings.activityDescription':
     'Todos na sua organização podem ver quando você entrou pela última vez e um registro das alterações na organização: varreduras, equipamentos que entram na rede, convites, mudanças de função e entradas ou saídas de membros. Não registramos o que você visualizou.',
@@ -474,7 +474,7 @@ const pt: Catalog = {
   'settings.deleteAccountQuestion': 'Excluir sua conta?',
   'settings.deleteAccountBody':
     'Sua conta será excluída e você perderá o acesso imediatamente. Isso não pode ser desfeito.',
-  'settings.passwordChanged': 'Senha alterada.',
+  'settings.passwordChanged': 'Senha alterada.', // pragma: allowlist secret
   'devices.subtitle': 'As caixas Dmitri que reportam para esta organização.',
   'devices.caption': 'Caixas Dmitri',
   'devices.error': 'Não foi possível carregar seus dispositivos.',

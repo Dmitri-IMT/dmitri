@@ -167,7 +167,9 @@ describe('ScanDetail', () => {
 
     await user.click(criticalToggle)
     expect(criticalToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('findings-critical')).not.toHaveAttribute('hidden')
+    expect(screen.getByTestId('findings-critical')).not.toHaveAttribute(
+      'hidden',
+    )
   })
 
   it('splits a shuffled payload into one table per severity, worst card first', async () => {
