@@ -11,8 +11,9 @@ import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
 import { readAgentPresence } from '@/lib/agentPresence'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
+import DeviceRestore from '@/pages/agents/DeviceRestore'
+import DeviceRevoke from '@/pages/agents/DeviceRevoke'
 import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
-import DeviceRevocation from '@/pages/agents/DeviceRevocation'
 import ScanControl from '@/pages/agents/ScanControl'
 import ScanTypeTabs, { ScanTypeReadOnly } from '@/pages/agents/ScanTypeTabs'
 import TargetSubnetSection from '@/pages/agents/TargetSubnetSection'
@@ -21,47 +22,48 @@ import type { components } from '@/types/openapi'
 type AgentDetail = components['schemas']['AgentDetail']
 type ScanMode = components['schemas']['ScanMode']
 
-function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
+function focusPresence() {
+  document
+    .querySelector<HTMLElement>('[data-testid="agents-presence"]')
+    ?.focus()
+}
+
+function RevokedDeviceSections({ agent }: { agent: AgentDetail }) {
+  return (
+    <>
+      <TargetSubnetSection
+        agent={agent}
+        open={false}
+        onOpenChange={() => {}}
+        onSaved={() => {}}
+      />
+      <DeviceRestore agent={agent} onRestored={focusPresence} />
+      <DeviceScanHistory agentId={agent.agent_id} />
+    </>
+  )
+}
+
+function LiveDeviceSections({ agent }: { agent: AgentDetail }) {
   const { user } = useSession()
   const [savedTargetSubnet, setSavedTargetSubnet] = useState(false)
   const [selectedMode, setSelectedMode] = useState<ScanMode>(DEFAULT_SCAN_MODE)
   const scanCommand = useScanCommand(agent)
   const isAdmin = user?.role === 'admin'
-  const interactive = readAgentPresence(agent).kind !== 'revoked'
-  const needsNetworkChoice =
-    interactive && isAdmin && agent.target_subnet == null
+  const needsNetworkChoice = isAdmin && agent.target_subnet == null
   const [chooserEditing, setChooserEditing] = useState(false)
-  const chooserOpen = interactive && (needsNetworkChoice || chooserEditing)
+  const chooserOpen = needsNetworkChoice || chooserEditing
 
   const showScanSection =
-    interactive &&
-    !chooserOpen &&
-    (agent.target_subnet != null || scanCommand.following)
-
-  function focusPresence() {
-    document
-      .querySelector<HTMLElement>('[data-testid="agents-presence"]')
-      ?.focus()
-  }
+    !chooserOpen && (agent.target_subnet != null || scanCommand.following)
 
   return (
-    <div className="flex flex-col gap-12">
-      <BackLink fallback="/devices" testId="device-detail-back" />
-      <AgentIdentity agent={agent} />
+    <>
       <TargetSubnetSection
         agent={agent}
-        interactive={interactive}
         open={chooserOpen}
         onOpenChange={setChooserEditing}
         onSaved={() => setSavedTargetSubnet(true)}
       />
-      {!interactive && (
-        <DeviceRevocation
-          agent={agent}
-          mode="restore"
-          onChanged={focusPresence}
-        />
-      )}
       {showScanSection && (
         <div className="flex flex-col gap-4">
           {agent.target_subnet != null &&
@@ -84,12 +86,20 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
         </div>
       )}
       <DeviceScanHistory agentId={agent.agent_id} />
-      {interactive && (
-        <DeviceRevocation
-          agent={agent}
-          mode="revoke"
-          onChanged={focusPresence}
-        />
+      <DeviceRevoke agent={agent} onRevoked={focusPresence} />
+    </>
+  )
+}
+
+function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
+  return (
+    <div className="flex flex-col gap-12">
+      <BackLink fallback="/devices" testId="device-detail-back" />
+      <AgentIdentity agent={agent} />
+      {readAgentPresence(agent).kind === 'revoked' ? (
+        <RevokedDeviceSections agent={agent} />
+      ) : (
+        <LiveDeviceSections agent={agent} />
       )}
     </div>
   )

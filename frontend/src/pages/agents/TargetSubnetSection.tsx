@@ -2,6 +2,7 @@ import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 import { useUpdateTargetSubnet } from '@/hooks/useUpdateTargetSubnet'
 import { useSession } from '@/auth/useSession'
+import { readAgentPresence } from '@/lib/agentPresence'
 import { findAvailableSubnet } from '@/lib/subnetLabel'
 import SubnetChooser from './SubnetChooser'
 import type { components } from '@/types/openapi'
@@ -11,7 +12,6 @@ type AvailableSubnet = components['schemas']['AvailableSubnet']
 
 type Props = {
   agent: AgentDetail
-  interactive: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => void
@@ -46,14 +46,9 @@ function ChooserSession({ agent, onSaved }: ChooserSessionProps) {
   )
 }
 
-function TargetSubnetSection({
-  agent,
-  interactive,
-  open,
-  onOpenChange,
-  onSaved,
-}: Props) {
+function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
   const { user } = useSession()
+  const editable = readAgentPresence(agent).kind !== 'revoked'
   const target = agent.target_subnet
     ? findAvailableSubnet(agent.available_subnets, agent.target_subnet)
     : null
@@ -73,7 +68,7 @@ function TargetSubnetSection({
                 ? 'No network chosen yet. Ask your admin to choose one.'
                 : 'No network chosen yet.'}
           </p>
-          {interactive && agent.target_subnet && (
+          {editable && agent.target_subnet && (
             <AdminOnly>
               <Button
                 type="button"
@@ -87,7 +82,7 @@ function TargetSubnetSection({
           )}
         </div>
       )}
-      {interactive && open && (
+      {editable && open && (
         <AdminOnly>
           <ChooserSession
             agent={agent}
