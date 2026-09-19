@@ -11,7 +11,6 @@ import { SEVERITY_ORDER } from '@/lib/severity'
 import FindingsTable from '@/pages/scans/FindingsTable'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
 import ScanReports from '@/pages/scans/ScanReports'
-import ScanChat from '@/pages/scans/ScanChat'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -78,7 +77,6 @@ function ScanDetail() {
                   findings={scan.findings}
                 />
                 <ScanReports scanId={scan.scan_id} />
-                <ScanChat scanId={scan.scan_id} />
                 {groups.length === 0 ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     No vulnerabilities. Every machine in this scan came back

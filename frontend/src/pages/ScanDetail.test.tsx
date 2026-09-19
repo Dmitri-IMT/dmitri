@@ -182,7 +182,7 @@ describe('ScanDetail', () => {
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(['Critical', 'High', 'Medium', 'Low', 'Machines seen'])
+    ).toEqual(['Scan reports', 'Critical', 'High', 'Medium', 'Low', 'Machines seen'])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
   })
 

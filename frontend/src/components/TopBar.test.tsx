@@ -87,7 +87,7 @@ describe('TopBar', () => {
     expect(frame?.children).toHaveLength(3)
     expect(frame?.children.item(0)).toBe(wordmark)
     expect(frame?.children.item(1)).toBe(nav)
-    expect(frame?.children.item(2)).toBe(identity)
+    expect(frame?.children.item(2)).toContainElement(identity)
     expect(identity).toHaveAttribute('data-variant', 'ghost')
     expect(
       screen.queryByRole('button', { name: 'Log out' }),
@@ -196,6 +196,7 @@ describe('TopBar', () => {
     expect(getAccessToken()).not.toBeNull()
 
     const identity = screen.getByTestId('user-identity')
+    await user.tab()
     await user.tab()
     await user.tab()
     await user.tab()

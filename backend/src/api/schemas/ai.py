@@ -17,6 +17,13 @@ class AIChatRequest(BaseModel):
     question: Annotated[str, Field(min_length=3, max_length=1000)]
 
 
+class AIContextChatRequest(AIChatRequest):
+    """Question addressed to a reusable UI context (scan, host or finding)."""
+
+    scope: Literal["scan", "host", "finding"]
+    context_id: UUID
+
+
 class AIChatResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

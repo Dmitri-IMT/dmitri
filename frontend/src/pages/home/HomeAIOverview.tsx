@@ -110,7 +110,7 @@ function HomeAIOverview({
         )}
         <Link to={scanLink}>
           <Button type="button" variant="outline" size="sm">
-            Ver detalhes e perguntar à IA
+            Ver mais detalhes
           </Button>
         </Link>
       </CardContent>

@@ -2,6 +2,7 @@ import { NavLink } from 'react-router'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/auth/useSession'
 import AdminOnly from '@/components/AdminOnly'
+import ThemeToggle from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -61,29 +62,32 @@ function TopBar() {
             Settings
           </NavLink>
         </nav>
-        {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                title={user.email}
-                data-testid="user-identity"
-                className="min-w-0 max-w-full justify-self-end truncate px-2 font-normal text-muted-foreground"
-              >
-                {user.email}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem
-                data-testid="log-out"
-                onSelect={() => void signOut()}
-              >
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <div className="flex items-center justify-self-end">
+          <ThemeToggle />
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  title={user.email}
+                  data-testid="user-identity"
+                  className="min-w-0 max-w-full truncate px-2 font-normal text-muted-foreground"
+                >
+                  {user.email}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  data-testid="log-out"
+                  onSelect={() => void signOut()}
+                >
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
     </header>
   )

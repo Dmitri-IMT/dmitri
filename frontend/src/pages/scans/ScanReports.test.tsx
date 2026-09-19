@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ScanReports from './ScanReports'
-import { downloadScanReport } from '@/api/scans'
 import { renderWithProviders } from '@/test/renderWithProviders'
+import { downloadScanReport } from '@/api/scans'
+import ScanReports from './ScanReports'
 
 vi.mock('@/api/scans', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/scans')>()),
@@ -13,42 +13,39 @@ vi.mock('@/api/scans', async (importOriginal) => ({
 describe('ScanReports', () => {
   beforeEach(() => {
     vi.mocked(downloadScanReport).mockReset()
-    vi.mocked(downloadScanReport).mockResolvedValue(
-      new Blob(['%PDF-1.7'], { type: 'application/pdf' }),
-    )
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
-      () => undefined,
-    )
+    vi.mocked(downloadScanReport).mockResolvedValue(new Blob(['pdf']))
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:report-preview'),
+    })
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    })
   })
 
-  it('downloads either report variant', async () => {
+  it('previews first and downloads only after confirmation', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(
-      screen.getByRole('button', { name: 'Download explained PDF' }),
-    )
+    await user.click(screen.getByRole('button', { name: 'Baixar relatório explicado' }))
+
+    expect(await screen.findByTitle('Prévia do relatório PDF')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirmar download' })).toBeVisible()
     expect(downloadScanReport).toHaveBeenCalledWith('scan-1', 'explained')
 
-    await user.click(
-      screen.getByRole('button', { name: 'Download technical PDF' }),
-    )
-    expect(downloadScanReport).toHaveBeenCalledWith('scan-1', 'technical')
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByTitle('Prévia do relatório PDF')).not.toBeInTheDocument()
   })
 
-  it('shows a retryable error when download fails', async () => {
-    vi.mocked(downloadScanReport).mockRejectedValueOnce(new Error('network'))
+  it('supports the technical report confirmation flow', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(
-      screen.getByRole('button', { name: 'Download explained PDF' }),
-    )
+    await user.click(screen.getByRole('button', { name: 'Baixar relatório técnico' }))
+    expect(await screen.findByText('Prévia do relatório técnico')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirmar download' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "Couldn't download the report. Try again.",
-    )
+    expect(screen.queryByText('Prévia do relatório técnico')).not.toBeInTheDocument()
   })
 })

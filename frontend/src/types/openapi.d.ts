@@ -168,6 +168,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/chat/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List contextual AI chat history */
+        get: operations["listContextAIChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the contextual AI assistant */
+        post: operations["askContextAI"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scans/{scan_id}/reports/{kind}/download": {
         parameters: {
             query?: never;
@@ -1330,6 +1364,12 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        AIContextChatRequest: components["schemas"]["AIChatRequest"] & {
+            /** @enum {string} */
+            scope: "scan" | "host" | "finding";
+            /** Format: uuid */
+            context_id: string;
+        };
         AIChatRequest: {
             question: string;
         };
@@ -2336,6 +2376,76 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description The scan is not ready for questions. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            502: components["responses"]["InternalServerError"];
+        };
+    };
+    listContextAIChat: {
+        parameters: {
+            query: {
+                scope: "scan" | "host" | "finding";
+                context_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Last ten questions for the selected context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatHistoryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    askContextAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIContextChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Grounded answer for the selected context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Context exceeds the provider limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI provider rate limit reached. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

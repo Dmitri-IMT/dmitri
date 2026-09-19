@@ -35,6 +35,8 @@ tags:
     description: Finding query endpoints for the frontend.
   - name: home
     description: Home snapshot - attention, derived events, and the activity log.
+  - name: ai
+    description: Contextual AI assistant shared by frontend surfaces.
   - name: health
     description: Liveness and readiness endpoint.
 servers:
@@ -490,6 +492,78 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: The scan is not ready for questions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/ai/chat/history:
+    get:
+      tags:
+        - ai
+      summary: List contextual AI chat history
+      operationId: listContextAIChat
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [scan, host, finding]
+        - name: context_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Last ten questions for the selected context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/ai/chat:
+    post:
+      tags:
+        - ai
+      summary: Ask the contextual AI assistant
+      operationId: askContextAI
+      security:
+        - FrontendBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIContextChatRequest'
+      responses:
+        '200':
+          description: Grounded answer for the selected context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Context exceeds the provider limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: AI provider rate limit reached.
           content:
             application/json:
               schema:
@@ -4526,6 +4600,19 @@ components:
         sections:
           type: object
           additionalProperties: true
+    AIContextChatRequest:
+      allOf:
+        - $ref: '#/components/schemas/AIChatRequest'
+        - type: object
+          additionalProperties: false
+          required: [scope, context_id]
+          properties:
+            scope:
+              type: string
+              enum: [scan, host, finding]
+            context_id:
+              type: string
+              format: uuid
     AIChatRequest:
       type: object
       additionalProperties: false

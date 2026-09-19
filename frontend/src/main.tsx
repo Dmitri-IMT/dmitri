@@ -8,6 +8,12 @@ import './index.css'
 import App from './App.tsx'
 import { SessionProvider } from '@/auth/SessionProvider'
 
+const storedTheme = localStorage.getItem('dmitri-theme')
+document.documentElement.classList.toggle(
+  'dmitri-dark',
+  storedTheme === 'dark',
+)
+
 const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')!).render(

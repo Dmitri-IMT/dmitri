@@ -1,7 +1,5 @@
 @import 'tailwindcss';
-/* Not a dark-mode hook: the ancestor class below is never applied, keeping
-   the pre-existing dark: utilities in ui/button.tsx and ui/input.tsx inert. */
-@custom-variant dark (&:is(.dmitri-dark-unused *));
+@custom-variant dark (&:is(.dmitri-dark *));
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
@@ -13,9 +11,9 @@
   --ink-muted: #475569;
   --rule: #e2e8f0;
   --edge: #64748b;
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-active: #3730a3;
+  --accent: #600bb5;
+  --accent-hover: #500997;
+  --accent-active: #400779;
   --accent-foreground: #ffffff;
   --background: var(--canvas);
   --foreground: var(--ink);
@@ -36,6 +34,33 @@
   --duration-fast: 125ms;
   --duration-base: 180ms;
   --duration-slow: 300ms;
+}
+
+:root.dmitri-dark {
+  color-scheme: dark;
+  --canvas: #121017;
+  --card: #1c1822;
+  --ink: #f5effa;
+  --ink-muted: #c6bbcf;
+  --rule: #3b3245;
+  --edge: #a99bb5;
+  --accent: #a85ce8;
+  --accent-hover: #be7df0;
+  --accent-active: #8c3dcc;
+  --secondary: #272130;
+  --secondary-foreground: #f5effa;
+  --muted: #272130;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card-foreground: var(--ink);
+  --popover: var(--card);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: #1a0829;
+  --muted-foreground: var(--ink-muted);
+  --border: var(--rule);
+  --input: var(--edge);
+  --ring: var(--accent);
 }
 
 body {
