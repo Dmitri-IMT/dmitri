@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import useI18n from '@/i18n/useI18n'
+import { readAiAskError } from '@/api/readAiAskError'
 
 type Props = {
   scope: AIContextScope
@@ -73,7 +74,7 @@ export default function ContextChat({
       ])
       setQuestion('')
     } catch (caught) {
-      setError(readContextChatError(caught))
+      setError(readAiAskError(caught, t('ai.genericError')))
     } finally {
       setSending(false)
     }
@@ -157,21 +158,4 @@ export default function ContextChat({
       </CardContent>
     </Card>
   )
-}
-
-function readContextChatError(error: unknown): string {
-  const response = (
-    error as {
-      response?: { data?: { error?: { code?: string; message?: string } } }
-    }
-  ).response
-  if (
-    response?.data?.error?.message &&
-    ['ai_rate_limited', 'ai_context_too_large'].includes(
-      response.data.error.code ?? '',
-    )
-  ) {
-    return response.data.error.message
-  }
-  return 'Não foi possível obter uma resposta agora. Tente novamente.'
 }

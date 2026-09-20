@@ -15,6 +15,7 @@ import IndustrialServices from '@/pages/hosts/IndustrialServices'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
 import useI18n from '@/i18n/useI18n'
+import { readAiAskError } from '@/api/readAiAskError'
 
 function HostDetail() {
   const { t } = useI18n()
@@ -101,15 +102,8 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
         ),
       )
     } catch (caughtError) {
-      const message = (
-        caughtError as {
-          response?: { data?: { error?: { code?: string; message?: string } } }
-        }
-      ).response?.data?.error
       setError(
-        message?.code === 'ai_rate_limited' && message.message
-          ? message.message
-          : t('ai.explanationUnavailable'),
+        readAiAskError(caughtError, t('ai.explanationUnavailable')),
       )
     } finally {
       setLoading(false)

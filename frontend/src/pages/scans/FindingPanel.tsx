@@ -3,6 +3,7 @@ import { askContextAI } from '@/api/ai'
 import type { AIChatResponse } from '@/api/ai'
 import { Button } from '@/components/ui/button'
 import useI18n from '@/i18n/useI18n'
+import { readAiAskError } from '@/api/readAiAskError'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
@@ -55,7 +56,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
       setExplanation(response)
     } catch (caughtError) {
       setExplanationError(
-        readExplanationError(caughtError, t('ai.explanationUnavailable')),
+        readAiAskError(caughtError, t('ai.explanationUnavailable')),
       )
     } finally {
       setIsExplaining(false)
@@ -216,18 +217,6 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
       )}
     </div>
   )
-}
-
-function readExplanationError(error: unknown, fallback: string): string {
-  const message = (
-    error as {
-      response?: { data?: { error?: { code?: string; message?: string } } }
-    }
-  ).response?.data?.error
-  if (message?.code === 'ai_rate_limited' && message.message) {
-    return message.message
-  }
-  return fallback
 }
 
 export default FindingPanel
