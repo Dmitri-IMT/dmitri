@@ -16,7 +16,7 @@ from api.schemas.ai import (
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
-from api.services.ai.context import ScanAIContext
+from api.services.ai.context import AIChatContext, ScanAIContext
 from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
@@ -48,6 +48,31 @@ USER_CHUNK_PROMPT = """Analyze only the bounded finding chunk in the JSON contex
 Return actions, explanations, and limitations for these findings only.
 
 CHUNK_CONTEXT_JSON:
+{context_json}
+"""
+
+USER_REPAIR_SCAN_PROMPT = """Write the analysis again using the same JSON context.
+The previous draft violated these writing rules: {violation_codes}.
+Return the requested schema only.
+
+SCAN_CONTEXT_JSON:
+{context_json}
+"""
+
+USER_REPAIR_CHUNK_PROMPT = """Rewrite this bounded finding chunk using only the JSON
+context. The previous draft violated these writing rules: {violation_codes}.
+Return the requested child schema only.
+
+CHUNK_CONTEXT_JSON:
+{context_json}
+"""
+
+USER_SYNTHESIS_PROMPT = """Synthesize one scan analysis from the validated child
+results below. Do not add facts that are absent from those results. Mention failed
+finding refs as uncertain limitations when present. Return the requested scan schema
+only.
+
+SYNTHESIS_CONTEXT_JSON:
 {context_json}
 """
 
@@ -123,25 +148,21 @@ class GroqProvider:
     def analyze_scan(
         self, context: ScanAIContext, *, language: str = "en"
     ) -> ProviderScanAIAnalysis:
-        return self._analyze(
-            _system_prompt(language),
+        return self._complete(
             USER_SCAN_PROMPT.format(context_json=context.model_dump_json()),
             ProviderScanAIAnalysis,
             operation="scan_analysis",
-            schema_name="scan_ai_analysis",
-            max_tokens=self.max_output_tokens,
+            language=language,
         )
 
     def analyze_chunk(
         self, context: ScanAIContext, *, language: str = "en"
     ) -> ProviderScanAIChildAnalysis:
-        return self._analyze(
-            _system_prompt(language),
+        return self._complete(
             USER_CHUNK_PROMPT.format(context_json=context.model_dump_json()),
             ProviderScanAIChildAnalysis,
             operation="finding_chunk",
-            schema_name="scan_ai_analysis",
-            max_tokens=self.max_output_tokens,
+            language=language,
         )
 
     def repair_analysis(
@@ -151,21 +172,14 @@ class GroqProvider:
         *,
         language: str = "en",
     ) -> ProviderScanAIAnalysis:
-        return self._analyze(
-            _system_prompt(language),
-            """Write the analysis again using the same JSON context. The previous draft
-violated these writing rules: {violation_codes}. Return the requested schema only.
-
-SCAN_CONTEXT_JSON:
-{context_json}
-""".format(
+        return self._complete(
+            USER_REPAIR_SCAN_PROMPT.format(
                 violation_codes=", ".join(violation_codes),
                 context_json=context.model_dump_json(),
             ),
             ProviderScanAIAnalysis,
             operation="analysis_repair",
-            schema_name="scan_ai_analysis",
-            max_tokens=self.max_output_tokens,
+            language=language,
         )
 
     def repair_chunk(
@@ -175,22 +189,14 @@ SCAN_CONTEXT_JSON:
         *,
         language: str = "en",
     ) -> ProviderScanAIChildAnalysis:
-        return self._analyze(
-            _system_prompt(language),
-            """Rewrite this bounded finding chunk using only the JSON context.
-The previous draft violated these writing rules: {violation_codes}.
-Return the requested child schema only.
-
-CHUNK_CONTEXT_JSON:
-{context_json}
-""".format(
+        return self._complete(
+            USER_REPAIR_CHUNK_PROMPT.format(
                 violation_codes=", ".join(violation_codes),
                 context_json=context.model_dump_json(),
             ),
             ProviderScanAIChildAnalysis,
             operation="chunk_repair",
-            schema_name="scan_ai_analysis",
-            max_tokens=self.max_output_tokens,
+            language=language,
         )
 
     def synthesize_scan(
@@ -213,54 +219,43 @@ CHUNK_CONTEXT_JSON:
             "validated_child_results": child_results,
             "failed_finding_refs": list(failed_refs),
         }
-        return self._analyze(
-            _system_prompt(language),
-            """Synthesize one scan analysis from the validated child results below.
-Do not add facts that are absent from those results. Mention failed finding refs as
-uncertain limitations when present. Return the requested scan schema only.
-
-SYNTHESIS_CONTEXT_JSON:
-{context_json}
-""".format(
+        return self._complete(
+            USER_SYNTHESIS_PROMPT.format(
                 context_json=json.dumps(synthesis_context, separators=(",", ":"))
             ),
             ProviderScanAIAnalysis,
             operation="analysis_synthesis",
-            schema_name="scan_ai_analysis",
-            max_tokens=self.max_output_tokens,
+            language=language,
         )
 
     def answer_question(
-        self, context: dict[str, object], question: str, *, language: str = "en"
+        self, context: AIChatContext, question: str, *, language: str = "en"
     ) -> ProviderAIChatResponse:
-        return self._analyze(
-            _system_prompt(language),
+        return self._complete(
             USER_CHAT_PROMPT.format(
-                question=question,
-                context_json=json.dumps(
-                    context, ensure_ascii=True, separators=(",", ":")
-                ),
+                question=question, context_json=context.model_dump_json()
             ),
             ProviderAIChatResponse,
             operation="chat",
+            language=language,
             schema_name="scan_ai_chat",
             max_tokens=min(self.max_output_tokens, 1200),
         )
 
-    def _analyze(
+    def _complete(
         self,
-        system_prompt: str,
         user_prompt: str,
         response_schema: type[_ProviderResponseT],
         *,
         operation: str,
-        schema_name: str,
-        max_tokens: int,
+        language: str,
+        schema_name: str = "scan_ai_analysis",
+        max_tokens: int | None = None,
     ) -> _ProviderResponseT:
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": _system_prompt(language)},
                 {"role": "user", "content": user_prompt},
             ],
             "response_format": {
@@ -271,7 +266,7 @@ SYNTHESIS_CONTEXT_JSON:
                     "schema": response_schema.model_json_schema(),
                 },
             },
-            "max_completion_tokens": max_tokens,
+            "max_completion_tokens": max_tokens or self.max_output_tokens,
             "reasoning_effort": self.reasoning_effort,
             "include_reasoning": False,
         }

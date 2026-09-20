@@ -117,10 +117,7 @@ def _run_child(
         child = validate_provider_child_analysis(context, child)
         lint_provider_child_analysis(child)
     except WritingStyleViolation as exc:
-        repair = getattr(provider, "repair_chunk", None)
-        if not callable(repair):
-            raise
-        child = repair(context, exc.codes, language=language)
+        child = provider.repair_chunk(context, exc.codes, language=language)
         if not isinstance(child, ProviderScanAIChildAnalysis):
             child = ProviderScanAIChildAnalysis.model_validate(child)
         child = validate_provider_child_analysis(context, child)

@@ -6,7 +6,11 @@ import httpx
 import pytest
 from api.schemas.ai import ProviderAIChatResponse, ProviderScanAIAnalysis
 from api.schemas.read import SeverityBreakdown
-from api.services.ai.context import ScanAIContext
+from api.services.ai.context import (
+    AIFindingContext,
+    FindingChatContext,
+    ScanAIContext,
+)
 from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
 
 TEST_TOKEN = "test-token"
@@ -276,7 +280,22 @@ def test_groq_provider_answers_chat_with_bounded_structured_schema():
         )
 
     result = _provider(handler).answer_question(
-        {"top_findings": [{"finding_ref": "finding_1"}]},
+        FindingChatContext(
+            finding=AIFindingContext(
+                finding_ref="finding_1",
+                machine_ref=None,
+                cve_id=None,
+                cvss_score=None,
+                severity="high",
+                confidence=None,
+                risk_score=None,
+                exploitability=None,
+                epss_score=None,
+                epss_percentile=None,
+                is_kev=False,
+                known_ransomware=False,
+            )
+        ),
         "O que devo corrigir primeiro?",
     )
 

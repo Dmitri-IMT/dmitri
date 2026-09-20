@@ -93,15 +93,33 @@ def test_split_context_preserves_private_reference_maps():
     assert set(chunks[1]._finding_ids_by_ref) == {"finding_2"}
 
 
+class _BoundedProvider:
+    """Satisfies BoundedScanAnalysisProvider; subclasses override what they exercise."""
+
+    def analyze_scan(self, context, *, language="en"):
+        raise AssertionError("the bounded pipeline must not call analyze_scan")
+
+    def analyze_chunk(self, context, *, language="en"):
+        raise NotImplementedError
+
+    def repair_chunk(self, context, violation_codes, *, language="en"):
+        raise AssertionError("no writing violation was expected")
+
+    def synthesize_scan(self, context, child_results, failed_refs, *, language="en"):
+        raise NotImplementedError
+
+
 def test_bounded_pipeline_synthesizes_validated_children():
     received = []
 
-    class Provider:
-        def analyze_chunk(self, context, language="en"):
+    class Provider(_BoundedProvider):
+        def analyze_chunk(self, context, *, language="en"):
             received.append(context.top_findings[0].finding_ref)
             return _child(context.top_findings[0].finding_ref)
 
-        def synthesize_scan(self, context, child_results, failed_refs, language="en"):
+        def synthesize_scan(
+            self, context, child_results, failed_refs, *, language="en"
+        ):
             assert len(child_results) == 2
             assert failed_refs == ()
             return _synthesis()
@@ -118,13 +136,15 @@ def test_bounded_pipeline_synthesizes_validated_children():
 def test_child_failure_is_reported_to_synthesizer():
     captured = {}
 
-    class Provider:
-        def analyze_chunk(self, context, language="en"):
+    class Provider(_BoundedProvider):
+        def analyze_chunk(self, context, *, language="en"):
             if context.top_findings[0].finding_ref == "finding_1":
                 raise AIProviderError("provider_timeout", retryable=True)
             return _child("finding_2")
 
-        def synthesize_scan(self, context, child_results, failed_refs, language="en"):
+        def synthesize_scan(
+            self, context, child_results, failed_refs, *, language="en"
+        ):
             captured["children"] = child_results
             captured["failed"] = failed_refs
             return _synthesis()

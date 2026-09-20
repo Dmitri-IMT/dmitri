@@ -22,6 +22,14 @@ class BoundedScanAnalysisProvider(ScanAnalysisProvider, Protocol):
         self, context: ScanAIContext, *, language: str = "en"
     ) -> ProviderScanAIChildAnalysis: ...
 
+    def repair_chunk(
+        self,
+        context: ScanAIContext,
+        violation_codes: tuple[str, ...],
+        *,
+        language: str = "en",
+    ) -> ProviderScanAIChildAnalysis: ...
+
     def synthesize_scan(
         self,
         context: ScanAIContext,
@@ -33,6 +41,4 @@ class BoundedScanAnalysisProvider(ScanAnalysisProvider, Protocol):
 
 
 def supports_bounded_scan_analysis(provider: object) -> bool:
-    analyze_chunk = getattr(provider, "analyze_chunk", None)
-    synthesize_scan = getattr(provider, "synthesize_scan", None)
-    return callable(analyze_chunk) and callable(synthesize_scan)
+    return isinstance(provider, BoundedScanAnalysisProvider)
