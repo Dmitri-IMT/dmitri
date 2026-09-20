@@ -11,13 +11,7 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
 from api.models.persistence import utc_now
-from api.schemas.ai import (
-    AIChatHistoryResponse,
-    AIChatRequest,
-    AIChatResponse,
-    AILanguage,
-    ScanAIAnalysisResponse,
-)
+from api.schemas.ai import AILanguage, ScanAIAnalysisResponse
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -28,49 +22,18 @@ from api.schemas.read import (
 )
 from api.schemas.reports import ReportKind, ScanReportResponse
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
-from api.services.ai.chat import (
-    build_chat_context,
-    finding_reference_map,
-    list_chat_messages,
-    save_chat_message,
-)
-from api.services.ai.groq import (
-    GROQ_PROVIDER_ID,
-    AIProviderError,
-    ai_is_available,
-    build_ai_provider,
-)
+from api.services.ai.groq import GROQ_PROVIDER_ID, ai_is_available
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
     get_scan_ai_analysis,
     request_scan_ai_analysis,
 )
-from api.services.ai.orchestrator import AIOrchestrator
-from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 from api.services.report_pdf import render_scan_report_pdf
 from api.services.reports import ReportNotReadyError, build_scan_report
 
 router = APIRouter()
-
-
-@router.get(
-    "/api/v1/scans/{scan_id}/chat",
-    response_model=AIChatHistoryResponse,
-    operation_id="listScanAIChat",
-)
-def read_scan_ai_chat(
-    scan_id: UUID,
-    session: Session = Depends(get_session),
-    caller: CallerIdentity = Depends(require_user),
-) -> AIChatHistoryResponse:
-    detail = get_scan_detail(session, scan_id, org_id=caller.org_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return AIChatHistoryResponse(
-        data=list_chat_messages(session, scan_id=scan_id, org_id=caller.org_id)
-    )
 
 
 @router.post(
@@ -208,93 +171,6 @@ def request_scan_ai_analysis_route(
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return analysis
-
-
-@router.post(
-    "/api/v1/scans/{scan_id}/chat",
-    response_model=AIChatResponse,
-    operation_id="askScanAI",
-)
-def ask_scan_ai(
-    scan_id: UUID,
-    payload: AIChatRequest,
-    session: Session = Depends(get_session),
-    caller: CallerIdentity = Depends(require_user),
-    settings: Settings = Depends(get_settings),
-) -> AIChatResponse:
-    if not ai_is_available(settings):
-        raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
-    detail = get_scan_detail(session, scan_id, org_id=caller.org_id)
-    if detail is None:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    if detail.status != "completed":
-        raise ApiError(
-            409, "The scan is not ready for questions.", code="scan_not_ready"
-        )
-    risk = get_scan_risk_summary(session, scan_id, org_id=caller.org_id)
-    if risk is None:
-        raise ApiError(409, "Risk summary is not available.", code="scan_not_ready")
-    analysis = get_scan_ai_analysis(
-        session, scan_id, org_id=caller.org_id, ai_enabled=True
-    )
-    provider = build_ai_provider(settings)
-    assert provider is not None
-    try:
-        response = AIOrchestrator(provider).answer_question(
-            context=build_chat_context(detail, risk, analysis, payload.question),
-            question=payload.question,
-            language=payload.language,
-            finding_references=finding_reference_map(
-                detail.findings if payload.question else risk.top_findings,
-                payload.question,
-            ),
-        )
-        persist_usage_events(
-            session,
-            drain_provider_usage(provider),
-            scan_id=scan_id,
-            org_id=caller.org_id,
-            user_id=caller.sub,
-        )
-        save_chat_message(
-            session,
-            scan_id=scan_id,
-            user_id=caller.sub,
-            question=payload.question,
-            response=response,
-        )
-        return response
-    except (AIProviderError, ValueError) as exc:
-        persist_usage_events(
-            session,
-            drain_provider_usage(provider),
-            scan_id=scan_id,
-            org_id=caller.org_id,
-            user_id=caller.sub,
-        )
-        if (
-            isinstance(exc, AIProviderError)
-            and exc.code == "provider_context_too_large"
-        ):
-            raise ApiError(
-                413,
-                "O contexto deste scan é grande demais para uma pergunta. "
-                "Tente uma pergunta mais específica.",
-                code="ai_context_too_large",
-            ) from exc
-        if isinstance(exc, AIProviderError) and exc.code == "provider_rate_limited":
-            wait_seconds = exc.retry_after_seconds or 60
-            raise ApiError(
-                429,
-                "Limite temporário de tokens da IA atingido. "
-                f"Tente novamente em aproximadamente {wait_seconds} segundos.",
-                code="ai_rate_limited",
-            ) from exc
-        raise ApiError(
-            502,
-            "The AI assistant could not answer this question.",
-            code="ai_provider_error",
-        ) from exc
 
 
 @router.get(

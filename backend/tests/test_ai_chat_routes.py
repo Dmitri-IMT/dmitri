@@ -7,7 +7,7 @@ from read_factories import seed_read_graph
 
 
 class _FakeProvider:
-    def answer_question(self, context, question):
+    def answer_question(self, context, question, language="en"):
         assert question == "o que devo corrigir?"
         assert context["top_findings"]
         return ProviderAIChatResponse(
@@ -18,7 +18,7 @@ class _FakeProvider:
 
 
 class _ScopedFakeProvider:
-    def answer_question(self, context, question):
+    def answer_question(self, context, question, language="en"):
         assert question == "explique este contexto"
         assert "finding" in context or "host" in context
         return ProviderAIChatResponse(
@@ -92,19 +92,23 @@ def test_ai_usage_is_scoped_and_exposes_only_metadata(
     assert all("prompt" not in item for item in body["data"])
 
 
-def test_scan_chat_returns_grounded_response_without_calling_groq(
-    client, administrative_session, bearer_headers, monkeypatch
+def test_context_chat_scan_returns_grounded_response_without_calling_groq(
+    client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
     _enable_ai(monkeypatch)
     monkeypatch.setattr(
-        "api.routers.scans.build_ai_provider", lambda settings: _FakeProvider()
+        "api.routers.ai.build_ai_provider", lambda settings: _FakeProvider()
     )
     try:
         response = client.post(
-            f"/api/v1/scans/{seeded['scan'].scan_id}/chat",
-            json={"question": "o que devo corrigir?"},
-            headers=bearer_headers(seeded["org"].id, "viewer"),
+            "/api/v1/ai/chat",
+            json={
+                "question": "o que devo corrigir?",
+                "scope": "scan",
+                "context_id": str(seeded["scan"].scan_id),
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -114,27 +118,31 @@ def test_scan_chat_returns_grounded_response_without_calling_groq(
     assert len(response.json()["referenced_finding_ids"]) == 1
 
 
-def test_scan_chat_maps_provider_rate_limit_to_api_error(
-    client, administrative_session, bearer_headers, monkeypatch
+def test_context_chat_scan_maps_provider_rate_limit_to_api_error(
+    client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
     _enable_ai(monkeypatch)
 
     class _RateLimitedProvider:
-        def answer_question(self, context, question):
+        def answer_question(self, context, question, language="en"):
             raise AIProviderError(
                 "provider_rate_limited", retryable=True, retry_after_seconds=42
             )
 
     monkeypatch.setattr(
-        "api.routers.scans.build_ai_provider",
+        "api.routers.ai.build_ai_provider",
         lambda settings: _RateLimitedProvider(),
     )
     try:
         response = client.post(
-            f"/api/v1/scans/{seeded['scan'].scan_id}/chat",
-            json={"question": "o que devo corrigir?"},
-            headers=bearer_headers(seeded["org"].id, "viewer"),
+            "/api/v1/ai/chat",
+            json={
+                "question": "o que devo corrigir?",
+                "scope": "scan",
+                "context_id": str(seeded["scan"].scan_id),
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -144,20 +152,24 @@ def test_scan_chat_maps_provider_rate_limit_to_api_error(
     assert "42 segundos" in response.json()["error"]["message"]
 
 
-def test_finding_explain_returns_grounded_response(
-    client, administrative_session, bearer_headers, monkeypatch
+def test_context_chat_finding_returns_grounded_response(
+    client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
     _enable_ai(monkeypatch)
     monkeypatch.setattr(
-        "api.routers.findings.build_ai_provider",
+        "api.routers.ai.build_ai_provider",
         lambda settings: _ScopedFakeProvider(),
     )
     try:
         response = client.post(
-            f"/api/v1/findings/{seeded['finding'].finding_id}/explain",
-            json={"question": "explique este contexto"},
-            headers=bearer_headers(seeded["org"].id, "viewer"),
+            "/api/v1/ai/chat",
+            json={
+                "question": "explique este contexto",
+                "scope": "finding",
+                "context_id": str(seeded["finding"].finding_id),
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -166,20 +178,24 @@ def test_finding_explain_returns_grounded_response(
     assert response.json()["answer"] == "Explicação fundamentada."
 
 
-def test_host_explain_returns_grounded_response(
-    client, administrative_session, bearer_headers, monkeypatch
+def test_context_chat_host_returns_grounded_response(
+    client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
     _enable_ai(monkeypatch)
     monkeypatch.setattr(
-        "api.routers.hosts.build_ai_provider",
+        "api.routers.ai.build_ai_provider",
         lambda settings: _ScopedFakeProvider(),
     )
     try:
         response = client.post(
-            f"/api/v1/hosts/{seeded['host'].id}/explain",
-            json={"question": "explique este contexto"},
-            headers=bearer_headers(seeded["org"].id, "viewer"),
+            "/api/v1/ai/chat",
+            json={
+                "question": "explique este contexto",
+                "scope": "host",
+                "context_id": str(seeded["host"].id),
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -188,16 +204,20 @@ def test_host_explain_returns_grounded_response(
     assert response.json()["answer"] == "Explicação fundamentada."
 
 
-def test_finding_explain_unknown_finding_returns_404(
-    client, administrative_session, bearer_headers, monkeypatch
+def test_context_chat_finding_unknown_finding_returns_404(
+    client, administrative_session, actor_headers, monkeypatch
 ):
     seeded = seed_read_graph(administrative_session)
     _enable_ai(monkeypatch)
     try:
         response = client.post(
-            "/api/v1/findings/00000000-0000-4000-8000-000000000000/explain",
-            json={"question": "explique este contexto"},
-            headers=bearer_headers(seeded["org"].id, "viewer"),
+            "/api/v1/ai/chat",
+            json={
+                "question": "explique este contexto",
+                "scope": "finding",
+                "context_id": "00000000-0000-4000-8000-000000000000",
+            },
+            headers=actor_headers(seeded["org"].id, "viewer"),
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
