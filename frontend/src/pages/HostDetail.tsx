@@ -1,7 +1,8 @@
 import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { explainHost, getHost } from '@/api/hosts'
-import type { AIChatResponse } from '@/api/hosts'
+import { getHost } from '@/api/hosts'
+import { askContextAI } from '@/api/ai'
+import type { AIChatResponse } from '@/api/ai'
 import { useState } from 'react'
 import { queryKeys } from '@/api/queryKeys'
 import ReadDetailGate from '@/components/ReadDetailGate'
@@ -82,7 +83,7 @@ function HostDetail() {
 }
 
 function HostAIExplanation({ hostId }: { hostId: string }) {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const [answer, setAnswer] = useState<AIChatResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -91,7 +92,14 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
     setLoading(true)
     setError(null)
     try {
-      setAnswer(await explainHost(hostId))
+      setAnswer(
+        await askContextAI(
+          'host',
+          hostId,
+          t('ai.defaultMachineQuestion'),
+          language,
+        ),
+      )
     } catch (caughtError) {
       const message = (
         caughtError as {

@@ -6,9 +6,6 @@ type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 export type ScanAIAnalysisResponse =
   components['schemas']['ScanAIAnalysisResponse']
-export type AIChatResponse = components['schemas']['AIChatResponse']
-export type AIChatHistoryResponse =
-  components['schemas']['AIChatHistoryResponse']
 export type AILanguage = 'en' | 'pt-BR' | 'ru'
 type ListScansQuery = NonNullable<
   operations['listScans']['parameters']['query']
@@ -83,27 +80,6 @@ export async function requestScanAnalysis(
     `/scans/${scanId}/analysis`,
     undefined,
     { params: { language } },
-  )
-  return response.data
-}
-
-export async function askScanAI(
-  scanId: string,
-  question: string,
-  language: AILanguage = 'en',
-): Promise<AIChatResponse> {
-  const response = await apiClient.post<AIChatResponse>(
-    `/scans/${scanId}/chat`,
-    { question, language },
-  )
-  return response.data
-}
-
-export async function getScanAIChat(
-  scanId: string,
-): Promise<AIChatHistoryResponse> {
-  const response = await apiClient.get<AIChatHistoryResponse>(
-    `/scans/${scanId}/chat`,
   )
   return response.data
 }

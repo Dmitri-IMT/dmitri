@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { explainFinding } from '@/api/findings'
-import type { AIChatResponse } from '@/api/findings'
+import { askContextAI } from '@/api/ai'
+import type { AIChatResponse } from '@/api/ai'
 import { Button } from '@/components/ui/button'
+import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
@@ -31,6 +32,7 @@ function Label({ children }: { children: string }) {
 }
 
 function FindingPanel({ finding }: { finding: FindingRecord }) {
+  const { language, t } = useI18n()
   const [explanation, setExplanation] = useState<AIChatResponse | null>(null)
   const [explanationError, setExplanationError] = useState<string | null>(null)
   const [isExplaining, setIsExplaining] = useState(false)
@@ -44,10 +46,17 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
     setIsExplaining(true)
     setExplanationError(null)
     try {
-      const response = await explainFinding(finding.finding_id)
+      const response = await askContextAI(
+        'finding',
+        finding.finding_id,
+        t('ai.defaultFindingQuestion'),
+        language,
+      )
       setExplanation(response)
     } catch (caughtError) {
-      setExplanationError(readExplanationError(caughtError))
+      setExplanationError(
+        readExplanationError(caughtError, t('ai.explanationUnavailable')),
+      )
     } finally {
       setIsExplaining(false)
     }
@@ -66,7 +75,9 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
             onClick={() => void handleExplain()}
             disabled={isExplaining}
           >
-            {isExplaining ? 'Explicando...' : 'Explicar com IA'}
+            {isExplaining
+              ? t('ai.explainFindingLoading')
+              : t('ai.explainFinding')}
           </Button>
           {explanationError && (
             <p className="text-body-sm text-destructive" role="alert">
@@ -79,14 +90,16 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
             className="rounded-md border border-border p-4"
             aria-live="polite"
           >
-            <p className="text-body-sm font-medium">Explicação da IA</p>
+            <p className="text-body-sm font-medium">
+              {t('ai.findingExplanation')}
+            </p>
             <p className="text-body-md">{explanation.answer}</p>
             {explanation.referenced_finding_ids.length > 0 && (
               <a
                 className="mt-2 inline-block text-body-sm text-primary underline"
                 href={`/scans/${finding.scan_id}?finding=${explanation.referenced_finding_ids[0]}`}
               >
-                Ver achado relacionado
+                {t('ai.viewRelatedFinding')}
               </a>
             )}
             {explanation.uncertainties.length > 0 && (
@@ -205,7 +218,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
   )
 }
 
-function readExplanationError(error: unknown): string {
+function readExplanationError(error: unknown, fallback: string): string {
   const message = (
     error as {
       response?: { data?: { error?: { code?: string; message?: string } } }
@@ -214,7 +227,7 @@ function readExplanationError(error: unknown): string {
   if (message?.code === 'ai_rate_limited' && message.message) {
     return message.message
   }
-  return 'Não foi possível obter uma explicação agora. Tente novamente.'
+  return fallback
 }
 
 export default FindingPanel

@@ -100,6 +100,12 @@ export type MessageKey =
   | 'ai.explainMachine'
   | 'ai.explainMachineLoading'
   | 'ai.explanationUnavailable'
+  | 'ai.explainFinding'
+  | 'ai.explainFindingLoading'
+  | 'ai.findingExplanation'
+  | 'ai.viewRelatedFinding'
+  | 'ai.defaultFindingQuestion'
+  | 'ai.defaultMachineQuestion'
   | 'ai.answerConsidered'
   | 'ai.contextHint'
   | 'ai.showHistory'
@@ -308,6 +314,14 @@ const en: Catalog = {
   'ai.explainMachineLoading': 'Analyzing...',
   'ai.explanationUnavailable':
     'Unable to get an explanation right now. Try again.',
+  'ai.explainFinding': 'Explain with AI',
+  'ai.explainFindingLoading': 'Explaining...',
+  'ai.findingExplanation': 'AI explanation',
+  'ai.viewRelatedFinding': 'View related finding',
+  'ai.defaultFindingQuestion':
+    'Explain this vulnerability in plain language and tell me what to do.',
+  'ai.defaultMachineQuestion':
+    'Explain the security state of this machine and what I should prioritise.',
   'ai.answerConsidered': ({ count }) =>
     `The answer considered ${count} vulnerability${count === 1 ? '' : 'ies'} on this machine.`,
   'ai.contextHint':
@@ -528,6 +542,14 @@ const pt: Catalog = {
   'ai.explainMachineLoading': 'Analisando...',
   'ai.explanationUnavailable':
     'N\u00e3o foi poss\u00edvel obter uma explica\u00e7\u00e3o agora. Tente novamente.',
+  'ai.explainFinding': 'Explicar com IA',
+  'ai.explainFindingLoading': 'Explicando...',
+  'ai.findingExplanation': 'Explica\u00e7\u00e3o da IA',
+  'ai.viewRelatedFinding': 'Ver achado relacionado',
+  'ai.defaultFindingQuestion':
+    'Explique esta vulnerabilidade em linguagem simples e diga o que devo fazer.',
+  'ai.defaultMachineQuestion':
+    'Explique o estado de seguran\u00e7a deste equipamento e o que devo priorizar.',
   'ai.answerConsidered': ({ count }) =>
     `A resposta considerou ${count} vulnerabilidade${count === 1 ? '' : 's'} deste equipamento.`,
   'ai.contextHint':
@@ -745,6 +767,14 @@ const ru: Catalog = {
   'ai.explainMachineLoading': 'Анализ...',
   'ai.explanationUnavailable':
     'Не удалось получить объяснение. Попробуйте ещё раз.',
+  'ai.explainFinding': 'Объяснить с помощью ИИ',
+  'ai.explainFindingLoading': 'Объясняю...',
+  'ai.findingExplanation': 'Объяснение ИИ',
+  'ai.viewRelatedFinding': 'Открыть связанную находку',
+  'ai.defaultFindingQuestion':
+    'Объясните эту уязвимость простыми словами и скажите, что делать.',
+  'ai.defaultMachineQuestion':
+    'Объясните состояние безопасности этого устройства и что приоритезировать.',
   'ai.answerConsidered': ({ count }) =>
     `Ответ учитывает уязвимостей: ${count}.`,
   'ai.contextHint':

@@ -3,9 +3,6 @@ import type { components, operations } from '../types/openapi'
 
 type Severity = components['schemas']['Severity']
 type FindingListResponse = components['schemas']['FindingListResponse']
-export type AIChatResponse = components['schemas']['AIChatResponse']
-export type AIChatHistoryResponse =
-  components['schemas']['AIChatHistoryResponse']
 type ListFindingsQuery = NonNullable<
   operations['listFindings']['parameters']['query']
 >
@@ -35,22 +32,3 @@ export async function listFindings(
   return response.data
 }
 
-export async function explainFinding(
-  findingId: string,
-  question = 'Explique esta vulnerabilidade em linguagem simples e diga o que devo fazer.',
-): Promise<AIChatResponse> {
-  const response = await apiClient.post<AIChatResponse>(
-    `/findings/${findingId}/explain`,
-    { question },
-  )
-  return response.data
-}
-
-export async function getFindingAIHistory(
-  findingId: string,
-): Promise<AIChatHistoryResponse> {
-  const response = await apiClient.get<AIChatHistoryResponse>(
-    `/findings/${findingId}/explain`,
-  )
-  return response.data
-}
