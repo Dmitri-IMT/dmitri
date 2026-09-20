@@ -31,4 +31,3 @@ export async function listFindings(
   })
   return response.data
 }
-

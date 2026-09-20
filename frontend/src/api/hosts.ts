@@ -40,4 +40,3 @@ export async function getHost(hostId: string): Promise<HostDetailResponse> {
   const response = await apiClient.get<HostDetailResponse>(`/hosts/${hostId}`)
   return response.data
 }
-
