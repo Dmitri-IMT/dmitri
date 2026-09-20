@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-19T18:25:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -30,8 +30,10 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
 | `read_scan_ai_chat()` / `ask_scan_ai()` | `GET`/`POST /api/v1/scans/{scan_id}/chat` (`listScanAIChat`, `askScanAI`). Completed scan only for POST; persists scoped chat + usage. | `backend/src/api/routers/scans.py:62`, `:213` |
-| `read_scan_ai_analysis()` | `GET /api/v1/scans/{scan_id}/analysis` (`getScanAIAnalysis`) behind `require_user`. See [ai](/backend/ai.md). | `backend/src/api/routers/scans.py:159` |
-| `request_scan_ai_analysis_route()` | `POST /api/v1/scans/{scan_id}/analysis` (`requestScanAIAnalysis`, 202). `409` if already requested. | `backend/src/api/routers/scans.py:182` |
+| `read_scan_ai_analysis()` | `GET /api/v1/scans/{scan_id}/analysis` (`getScanAIAnalysis`) behind `require_user`; `?language=` (`en`/`pt-BR`/`ru`, default `en`) selects the row. See [ai](/backend/ai.md). | `backend/src/api/routers/scans.py:160` |
+| `request_scan_ai_analysis_route()` | `POST /api/v1/scans/{scan_id}/analysis` (`requestScanAIAnalysis`, 202), same `?language=`. `409` if already requested for that language. | `backend/src/api/routers/scans.py:185` |
+| `read_scan_report()` / `download_scan_report()` | `GET /api/v1/scans/{scan_id}/reports/{kind}` and `/download` (PDF), both with `?language=`. | `backend/src/api/routers/scans.py:305`, `:338` |
+| `host_ai_history()` / `finding_ai_history()` | `GET /hosts/{id}/explain` (`listHostAIHistory`) and `GET /findings/{id}/explain` (`listFindingAIHistory`). Host history is not limited to the latest scan. | `backend/src/api/routers/hosts.py:45`, `backend/src/api/routers/findings.py` |
 | `get_ai_usage()` | `GET /api/v1/ai/usage` (`getAIUsage`) — org-scoped summary + recent rows. | `backend/src/api/routers/ai.py:50` |
 | `list_context_chat()` / `ask_context_chat()` | `GET`/`POST /api/v1/ai/chat/history` and `/api/v1/ai/chat` with `scope` `scan`/`host`/`finding`. | `backend/src/api/routers/ai.py:112`, `:137` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |

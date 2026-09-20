@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -41,7 +41,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 |------|--------------|-----|
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError`, else fill it. | `backend/src/api/services/persistence.py:35` |
-| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan (`scan_mode`, `status`), persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, persists industrial observations, upserts each agent finding (including `modbus_unit_id`), calls `upsert_hosts_for_scan`, then `reconcile_scan_inventory`, then enqueues enrichment jobs — all in **one transaction with a single commit point**. | `backend/src/api/services/persistence.py:82` |
+| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan (`scan_mode`, `status`), persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, persists industrial observations, upserts each agent finding (including `modbus_unit_id`), calls `upsert_hosts_for_scan`, then `reconcile_scan_inventory`, then enqueues enrichment jobs and — when `AI_AUTO_ANALYSIS` is on — the `en` AI analysis row (`enqueue_auto_scan_analysis(commit=False)`) — all in **one transaction with a single commit point**. | `backend/src/api/services/persistence.py:84` |
 | `persist_industrial_services()` | Load existing services and units for the scan host once, upsert in memory, flush after services then after units. | `backend/src/api/services/industrial.py:42` |
 | `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
 | `finding_dedupe_key()` | `ip|protocol|port|unit_id or na|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |

@@ -4,7 +4,7 @@ title: frontend contextual AI assistant
 description: Floating Assistente IA on scan and host detail routes; ContextChat uses /ai/chat with multi-turn history. Finding and host one-shot explains use separate /explain endpoints in FindingPanel and HostDetail.
 resource: frontend/src/components/ContextChat.tsx
 tags: [frontend, ai, chat, dialog]
-timestamp: 2026-09-19T18:30:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # frontend contextual AI assistant
@@ -33,13 +33,13 @@ The product has **two SPA patterns** for interactive AI:
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `askContextAI` / `getContextAIHistory` | POST `/ai/chat` and GET `/ai/chat/history` with `scope` + `context_id`. | `frontend/src/api/ai.ts:18`, `:31` |
+| `askContextAI` / `getContextAIHistory` | POST `/ai/chat` (body adds `language`, default `en`) and GET `/ai/chat/history` with `scope` + `context_id`. | `frontend/src/api/ai.ts:19`, `:34` |
 | `explainFinding` / `getFindingAIHistory` | Finding one-shot + history on `/findings/{id}/explain`. | `frontend/src/api/findings.ts:38`, `:49` |
 | `explainHost` / `getHostAIHistory` | Host one-shot + history on `/hosts/{id}/explain`. | `frontend/src/api/hosts.ts:48`, `:59` |
-| `ContextChat` | Multi-turn UI; server history loads only when the user expands history. Optimistic rows use `message_id` prefix `local-`. | `frontend/src/components/ContextChat.tsx:19` |
-| `GlobalAssistant` | Path regex for scan and host only; other routes prompt to pick a scan. | `frontend/src/components/GlobalAssistant.tsx:20` |
+| `ContextChat` | Multi-turn UI; sends the [`useI18n`](./i18n.md) language with each question. Server history loads only when the user expands history. Optimistic rows use `message_id` prefix `local-`. | `frontend/src/components/ContextChat.tsx:20` |
+| `GlobalAssistant` | Path regex for scan and host only; other routes prompt to pick a scan. | `frontend/src/components/GlobalAssistant.tsx:21` |
 | `FindingPanel` | `Explicar com IA` button; shows answer inline, no `ContextChat`. | `frontend/src/pages/scans/FindingPanel.tsx:33` |
-| `HostAIExplanation` | Host-level explain card on network machine detail. | `frontend/src/pages/HostDetail.tsx:82` |
+| `HostAIExplanation` | Host-level explain card on network machine detail. | `frontend/src/pages/HostDetail.tsx:84` |
 
 ## How it connects
 
@@ -51,5 +51,8 @@ The product has **two SPA patterns** for interactive AI:
 - All paths require AI enabled on the API (`AI_ENABLED` + `AI_API_KEY`); failures are inline copy, not
   route guards.
 - `ContextChat` history fetch failures are non-fatal; the user can still send a new question.
+- **Finding and host one-shots do not send `language`.** `explainFinding` / `explainHost` post no
+  `language`, so the backend default `en` applies whatever the UI language is. `ContextChat` and
+  `ScanChat` do send it.
 - Finding/host explain UIs do not surface `getFindingAIHistory` / `getHostAIHistory` today — only the
   POST path is wired in the panel components.

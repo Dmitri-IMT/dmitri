@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # frontend API layer
@@ -42,7 +42,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getLatestScan()` / `getLatestSuccessfulScan()` | Two distinct reads (`LATEST_SCAN_QUERY`, and the same plus `status: 'completed'`), each `per_page: 1`. Return `null` on `{ data: [], total: 0 }`; a `404` is **not** treated as "no scans" and propagates as an error. | `frontend/src/api/scans.ts:40` |
 | `listScans(params)` | `GET /scans` with required `page`, `per_page`, `sort_by`, `sort_order`. The scan list always sends `SCAN_LIST_SORT` (`timestamp`/`desc`) plus `SCANS_PER_PAGE` 20. | `frontend/src/api/scans.ts:48` |
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:58` |
-| `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis`. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:66`, `:75` |
+| `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis` with `?language=` (`AILanguage`, default `en`). `askScanAI` and `downloadScanReport` take the same argument. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:67`, `:78` |
 | `askScanAI` / `getScanAIChat` | Legacy scan-scoped chat on `/scans/{id}/chat`. Used by `ScanChat` tests only; live UI uses [context-ai](./context-ai.md). | `frontend/src/api/scans.ts:84`, `:95` |
 | `getAIUsage` / `askContextAI` / `getContextAIHistory` | Usage dashboard and unified contextual chat. See [ai-usage](./ai-usage.md) and [context-ai](./context-ai.md). | `frontend/src/api/ai.ts:10`, `:18`, `:31` |
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort/`group` params (`HostGroup`; `HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` starts `vulnerability_count` and `last_seen_at` at `desc`, text columns at `asc`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts` |
@@ -55,7 +55,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `listAgents()` / `getAgent()` / `updateAgentTargetSubnet()` / `revokeAgent()` / `restoreAgent()` / `createScanCommand()` | Agents resource module. Revoke/restore are bodyless POSTs returning `AgentDetail`; all shapes come from generated OpenAPI types. | `frontend/src/api/agents.ts:10` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail`. Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
-| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:8` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done`. | `frontend/src/api/queryKeys.ts:8` |
 
 ## How it connects
 

@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through AI chat scopes, usage telemetry, and analysis coverage columns. Head is `20260919_31`.
+description: The Alembic env and revisions through AI chat scopes, usage telemetry, analysis coverage columns, and per-language analyses. Head is `20260919_32`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-09-13T20:00:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # Backend database migrations
@@ -26,7 +26,9 @@ new table. Merge revisions join the activity, OS-inventory, and machine-inventor
 observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_24` adds
 `ai_scan_analyses`; `20260912_25` adds enrichment retry columns; `20260912_26` adds AI retry columns;
 `20260917_27`–`29` add writing-skill version, analysis coverage, and `ai_chat_messages`;
-`20260918_30` adds chat `scope_type`/`scope_id`; `20260919_31` adds `ai_usage`. Head is `20260919_31`.
+`20260918_30` adds chat `scope_type`/`scope_id`; `20260919_31` adds `ai_usage`; `20260919_32` adds
+`ai_scan_analyses.language` and replaces the unique `scan_id` with unique `(scan_id, language)` (its
+downgrade deletes all but one row per scan, keeping `en` first). Head is `20260919_32`.
 
 ## Key classes / functions
 

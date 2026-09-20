@@ -4,7 +4,7 @@ title: frontend screens, shells and shared components
 description: The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, Settings with AI usage, floating contextual assistant, password reveal fields, and shared presentation and interaction components.
 resource: frontend/src/pages/
 tags: [frontend, ui, screens, react, accessibility]
-timestamp: 2026-09-19T18:25:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # frontend screens, shells and shared components
@@ -23,9 +23,9 @@ the no-device Devices blank is the one blank state with no action.
 |------|--------------|-----|
 | `AuthShell` | Outside-shell frame: wordmark + one centred card in the named 24rem `max-w-form` column. No top bar, no ornament. | `frontend/src/components/AuthShell.tsx:3` |
 | `AppShell` | Inside-shell frame: `<TopBar />` + `<Outlet />` + [`GlobalAssistant`](./context-ai.md) in the fluid named 70rem `max-w-frame` column. **No sidebar.** | `frontend/src/components/AppShell.tsx:5` |
-| `TopBar` | Wordmark left, the nav centred on the 70rem frame, signed-in email + `[Log out]` right through a `1fr auto 1fr` grid. Home uses `end`; Scans, Network and Devices omit `end` so a detail route keeps the parent item active. Nav order: Home · Scans · Network · Devices · Users (admin) · Settings. Test ids: `nav-network`, `nav-devices`. | `frontend/src/components/TopBar.tsx:13` |
+| `TopBar` | Wordmark left, the nav centred on the 70rem frame, and a preferences menu right (`options-menu-toggle`): theme (`ThemeToggle`), language ([`LanguageSelect`](./i18n.md)), the signed-in email, and `log-out`. The email is also in an `sr-only` `user-identity` span. At `xl` and up the grid is `grid-cols-bar` (`1fr auto 1fr`) with the inline nav; below `xl` it is `grid-cols-topbar` (`auto 1fr auto`), the inline nav is hidden, and `mobile-menu-toggle` opens a dropdown nav (`mobile-navigation`) that closes on link click. Labels come from `t('nav.*')`. Home uses `end`; Scans, Network and Devices omit `end` so a detail route keeps the parent item active. Nav order: Home · Scans · Network · Devices · Users (admin) · Settings. Test ids: `nav-network`, `nav-devices`. | `frontend/src/components/TopBar.tsx:24` |
 | `AdminOnly` | Renders `children` for an admin and `null` for anyone else. Props are `{ children }` — no `fallback`, no `disabled`; the missing props are what make "absent, not disabled" unbypassable. Pairs with [auth](./auth.md)'s `RequireAdmin`, which closes the route the hidden link would have led to. | `frontend/src/components/AdminOnly.tsx:4` |
-| `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination; the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:7` |
+| `navLinkClass` | The one active/muted `NavLink` className callback shared by every nav destination (inline and mobile); the dedicated `text-nav` size stays on the label spans. | `frontend/src/components/TopBar.tsx:18` |
 | `Login` | Real `<form>` in `AuthShell`; labelled email plus `PasswordInput`, email autofocused, Enter submits from either field. Carries the `Forgot password?` link and renders the transient arrival note. In-flight the button reads `Signing in…` and is `disabled`. | `frontend/src/pages/Login.tsx:11` |
 | `arrival` | The router state snapshotted once at mount as `'passwordReset' \| 'accountDeleted' \| null`, switching the copy of the **single** `role="status"` region (`data-testid="login-success"`). One region, two notes — a second status element would break `getByRole('status')`. The same Effect that focuses the note runs `navigate(location.pathname, { replace: true })`, so neither note survives a reload. | `frontend/src/pages/Login.tsx:19` |
 | `ForgotPassword` | The recovery request form in `AuthShell`. A `204` **replaces** the form with a confirmation that is byte-for-byte identical for known and unknown addresses — the anti-enumeration boundary. Posts exactly `{ email }`. | `frontend/src/pages/ForgotPassword.tsx:10` |
@@ -45,7 +45,7 @@ the no-device Devices blank is the one blank state with no action.
 | `Scans` | SCAN LIST at `/scans`. `page` in component state (not the URL). Always sends `sort_by=timestamp&sort_order=desc`. Owns the query, columns and copy; the error → skeleton → blank → table+pagination ladder is `ListSurface`'s (see [tables](./tables.md)). Unfinished/failed rows dash Hosts/Findings/Highest; completed rows show the neutral Completed pill. Blank state carries `FirstScanCta` + `FirstScanNote`. Headings are not sortable. | `frontend/src/pages/Scans.tsx:9` |
 | `scanListColumns` / `hostListColumns` | Column defs for the run log and the inventory; `hostListColumns` is typed `DataTableColumn<HostSummary, HostSortBy>`, so only real API sort keys can be marked sortable. Network column label for `highest_severity` is `Severity`. Unfinished count hiding lives in [scan-status](./scan-status.md). | `frontend/src/pages/scans/scanListColumns.tsx:42`, `frontend/src/pages/hosts/hostListColumns.tsx:39` |
 | `scanFindingColumns()` / `hostFindingColumns()` / `portColumns` | Shared column builders. Findings name the machine by `host_hostname`, then address, and show `first_seen_at`. Ports are typed `HostPort` with `Last seen`. | `frontend/src/pages/scans/findingColumns.tsx`, `frontend/src/pages/hosts/portColumns.tsx` |
-| `ScanDetail` | One `getScan` read through `readDetailState` handed straight to `ReadDetailGate`. Completed scans mount [ScanAIAnalysis](./scan-ai.md) above findings. `?finding=` seeds the open row. | `frontend/src/pages/ScanDetail.tsx:28` |
+| `ScanDetail` | One `getScan` read through `readDetailState` handed straight to `ReadDetailGate`. While the status is unfinished the query refetches every 2 s (also in a background tab), and `ScanUnfinishedNotice` shows live counts (machines, services, industrial services, …) from the scan payload. Completed scans mount [ScanAIAnalysis](./scan-ai.md) above findings. Each severity group is a Radix `Collapsible`, closed by default; `?finding=` seeds the open row and opens the group that holds it. | `frontend/src/pages/ScanDetail.tsx:31` |
 | `FindingPanel` | In-place finding body plus **Explicar com IA** (`explainFinding` → `/findings/{id}/explain`). Risk displays as a rounded integer `N of 100` (null → `Not calculated`). Default export reused by host detail. | `frontend/src/pages/scans/FindingPanel.tsx:33` |
 | `IndustrialServices` | Types `IndustrialServiceView` / `ModbusUnitView`. Shows unit `identification`, not process values. | `frontend/src/pages/hosts/IndustrialServices.tsx:1` |
 | `FindingsTable` | The **one** findings surface. `variant: 'scan' | 'host'` picks the column set: `'scan'` has a Machine column and no Severity; `'host'` has Severity and no Machine. No `hosts` prop. `isPending` renders the skeleton body ahead of the empty check, so a pending section never claims "No findings"; `testId` / `caption` carry the per-screen strings. Sorts worst-first and opens `FindingPanel` in an expand row. | `frontend/src/pages/scans/FindingsTable.tsx:22` |
@@ -101,9 +101,9 @@ the no-device Devices blank is the one blank state with no action.
   **tables** still use [tables](./tables.md)'s `LoadingSkeleton`
   under live headings.
 - **Blank and all-clear are distinct states** and are never collapsed.
-- **Navigation is permanently centred on the frame, not in leftover space.** `TopBar` uses the
-  named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and Log out widths cannot
-  move the nav off the frame's centre line.
+- **Navigation is permanently centred on the frame, not in leftover space.** At `xl` and up `TopBar`
+  uses the named `grid-cols-bar` utility (`1fr auto 1fr`), so unequal wordmark and menu widths
+  cannot move the nav off the frame's centre line. Below `xl` the nav moves into the mobile menu.
 - **Buttons carry an explicit `cursor-pointer`.** Tailwind v4's preflight sets `cursor: default` on
   `<button>` (changed from v3), so without it every button in the app shows an arrow. The class is
   a local addition to the vendored shadcn `buttonVariants` base and would be lost if the shadcn CLI

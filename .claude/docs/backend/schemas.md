@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # Backend wire schemas
@@ -18,7 +18,7 @@ legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
 [hosts/scans/findings routers](/backend/routers.md) actually return (plus the `ScanSortBy`,
 `HostSortBy` and `SortOrder` literal aliases that type the scan-list and host-list sort params).
-`schemas/ai.py` holds **AI wire models**: scan analysis (`ScanAIAnalysis`, `ScanAIAnalysisResponse`), chat (`AIChatRequest`, `AIChatResponse`, `AIChatHistoryResponse`), contextual chat (`AIContextChatRequest`), and usage (`AIUsageResponse`, `AIUsageSummary`, `AIUsageEntry`). `schemas/__init__.py` re-exports
+`schemas/ai.py` holds **AI wire models**: the `AILanguage` literal (`en`, `pt-BR`, `ru`) used by chat requests, analysis job rows and reports; scan analysis (`ScanAIAnalysis`, `ScanAIAnalysisResponse`), chat (`AIChatRequest`, `AIChatResponse`, `AIChatHistoryResponse`), contextual chat (`AIContextChatRequest`), and usage (`AIUsageResponse`, `AIUsageSummary`, `AIUsageEntry`). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)
@@ -35,6 +35,9 @@ the ingest input plus the main persisted projections.
 
 `schemas/industrial.py` is the Modbus ingest models (`ModbusTcpServicePayload` and units). Read
 views (`IndustrialServiceView`, `ModbusUnitView`, `unreadable_fields`) live in `read.py`.
+Unlike the `scan.py` models below, `ModbusAddressRangePayload` and `ModbusUnitPayload` use
+`extra="ignore"`, so extra keys from older agents (for example `value_sha256`, `nonzero_count`) are
+dropped instead of rejecting the whole industrial observation.
 
 **All five carry `model_config = ConfigDict(extra="forbid")`** — DMI-63 pushed it to *every* ingest
 depth, not just the top level. Before that only `ScanResult` forbade extras, so `hosts[0].os = "linux"`
@@ -51,8 +54,9 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HostPort` | Durable service on a machine: port/protocol/service, optional `version`, `first_seen_at`/`last_seen_at`. **No `state`.** | `backend/src/api/schemas/read.py:40` |
 | `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. Also `industrial_services` and `unreadable_fields`. | `backend/src/api/schemas/read.py:45` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
-| `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). | `backend/src/api/schemas/ai.py:86` |
-| `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. | `backend/src/api/schemas/ai.py` |
+| `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). Every job variant carries `language`. | `backend/src/api/schemas/ai.py` |
+| `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. The request `AIChatRequest` takes `question` plus optional `language` (default `en`). | `backend/src/api/schemas/ai.py` |
+| `ScanReportResponse` | Report JSON; carries `kind` and `language`. | `backend/src/api/schemas/reports.py` |
 | `AIUsageResponse` | `GET /ai/usage` summary + `data` entries. | `backend/src/api/schemas/ai.py` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |

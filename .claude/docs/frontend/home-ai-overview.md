@@ -4,7 +4,7 @@ title: frontend Home AI overview teaser
 description: Home card for the latest successful scan's analysis status — links to Scan Detail when overview is missing, pending, or ready.
 resource: frontend/src/pages/home/HomeAIOverview.tsx
 tags: [frontend, ai, home]
-timestamp: 2026-09-19T18:20:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # frontend Home AI overview teaser
@@ -12,9 +12,10 @@ timestamp: 2026-09-19T18:20:00Z
 ## Purpose
 
 When `GET /home` includes `latest_successful_scan`, `Home` mounts `HomeAIOverview` above the attention
-column. The component reuses `getScanAnalysis` and `queryKeys.scans.analysis(scanId)`. It renders
+column. The component reuses `getScanAnalysis` and `queryKeys.scans.analysis(scanId, language)`, so it reads
+the analysis row for the current UI language. It renders
 nothing while loading, on error, or when status is `unavailable`. Other statuses show a compact card
-(`data-testid="home-ai-overview"`) with Portuguese copy and a link to the scan — including a CTA when
+(`data-testid="home-ai-overview"`) with hard-coded Portuguese copy (not yet moved to [i18n](./i18n.md)) and a link to the scan — including a CTA when
 analysis was never requested.
 
 ## Key classes / functions

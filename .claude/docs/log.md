@@ -5,6 +5,20 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-19
 
+* **Creation**: `frontend/i18n.md` — `LanguageProvider` / `useI18n` / typed `messages.ts` catalog
+  (`en`, `pt-BR`, `ru`), `LanguageSelect`, and the `UI_COPY` table.
+* **Update**: AI output language and UI localization (commits after `5a06d81`). Analyses are one row
+  per `(scan_id, language)` (migration `20260919_32`, new head); chat bodies and analysis/report
+  routes take `language`; `AI_PROMPT_VERSION` is `4`; `persist_scan` now auto-enqueues the `en`
+  analysis at ingest; host AI history spans all scans; Modbus unit/range ingest ignores extra keys;
+  PDF reports need a Unicode system font. SPA: `TopBar` preferences and mobile menus, live Scan
+  Detail polling with collapsible severity groups, severity pills. `linting.md` corrected:
+  `no-dark-variant` is switched off. Touched: `backend/ai.md`, `backend/schemas.md`,
+  `backend/models.md`, `backend/migrations.md`, `backend/index.md`, `backend/routers.md`,
+  `backend/services.md`, `frontend/scan-ai.md`, `frontend/context-ai.md`,
+  `frontend/home-ai-overview.md`, `frontend/api.md`, `frontend/app.md`, `frontend/screens.md`,
+  `frontend/tables.md`, `frontend/linting.md`, `frontend/index.md`.
+
 * **Update**: `feature/ai-improving` — contextual Groq chat (`/ai/chat`, scoped history,
   host/finding explain routes), `ai_usage` telemetry, `AI_AUTO_ANALYSIS` enqueue from enrichment,
   Settings usage panel, Home analysis teaser, and `GlobalAssistant` on scan/host detail. Touched:
