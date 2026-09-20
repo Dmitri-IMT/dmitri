@@ -461,66 +461,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/v1/scans/{scan_id}/chat:
-    get:
-      tags:
-        - scans
-      summary: List the scan AI chat history
-      operationId: listScanAIChat
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/ScanId'
-      responses:
-        '200':
-          description: Previously answered questions for the selected scan.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatHistoryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      tags:
-        - scans
-      summary: Ask the scan AI assistant
-      description: Answers one bounded question using only the selected completed scan.
-      operationId: askScanAI
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/ScanId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AIChatRequest'
-      responses:
-        '200':
-          description: Grounded answer for the selected scan.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: The scan is not ready for questions.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/ai/usage:
     get:
@@ -779,65 +719,6 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
-  /api/v1/hosts/{host_id}/explain:
-    get:
-      tags:
-        - hosts
-      summary: List host AI explanation history
-      operationId: listHostAIHistory
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HostId'
-      responses:
-        '200':
-          description: Persisted host-scoped AI conversation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatHistoryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      tags:
-        - hosts
-      summary: Explain a host with AI
-      operationId: explainHostWithAI
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HostId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AIChatRequest'
-      responses:
-        '200':
-          description: Grounded explanation for the host.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          description: The AI provider rate limit was reached.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/findings:
     get:
@@ -930,65 +811,6 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
-  /api/v1/findings/{finding_id}/explain:
-    get:
-      tags:
-        - findings
-      summary: List finding AI explanation history
-      operationId: listFindingAIHistory
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FindingId'
-      responses:
-        '200':
-          description: Persisted finding-scoped AI conversation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatHistoryResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      tags:
-        - findings
-      summary: Explain a finding with AI
-      operationId: explainFindingWithAI
-      security:
-        - FrontendBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FindingId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AIChatRequest'
-      responses:
-        '200':
-          description: Grounded explanation for the finding.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AIChatResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          description: The AI provider rate limit was reached.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/home:
     get:
@@ -4730,22 +4552,9 @@ components:
           type: object
           additionalProperties: true
     AIContextChatRequest:
-      allOf:
-        - $ref: '#/components/schemas/AIChatRequest'
-        - type: object
-          additionalProperties: false
-          required: [scope, context_id]
-          properties:
-            scope:
-              type: string
-              enum: [scan, host, finding]
-            context_id:
-              type: string
-              format: uuid
-    AIChatRequest:
       type: object
       additionalProperties: false
-      required: [question]
+      required: [question, scope, context_id]
       properties:
         question:
           type: string
@@ -4755,6 +4564,12 @@ components:
           type: string
           enum: [en, pt-BR, ru]
           default: en
+        scope:
+          type: string
+          enum: [scan, host, finding]
+        context_id:
+          type: string
+          format: uuid
     AIChatResponse:
       type: object
       additionalProperties: false
