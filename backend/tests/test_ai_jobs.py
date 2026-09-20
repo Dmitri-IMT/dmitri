@@ -102,7 +102,7 @@ def test_completed_scan_without_request_does_not_create_job(administrative_sessi
     make_scan(administrative_session, org.id)
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("provider must not run without a request")
 
     assert (
@@ -125,7 +125,7 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return _analysis()
 
@@ -159,7 +159,7 @@ def test_grounded_analysis_completes(administrative_session):
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return expected
 
@@ -189,7 +189,7 @@ def test_ungrounded_analysis_fails(administrative_session, defect):
         analysis.important_findings.append(analysis.important_findings[0])
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             return analysis
 
     now = datetime.now(timezone.utc)
@@ -222,7 +222,7 @@ def test_unbuildable_context_fails(
         monkeypatch.setattr("api.services.ai.jobs.build_scan_ai_context", crash)
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             return _grounded_analysis()
 
     now = datetime.now(timezone.utc)
@@ -257,7 +257,7 @@ def test_ai_job_waits_for_active_enrichment(administrative_session):
     administrative_session.commit()
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("provider must not run before enrichment")
 
     assert (
@@ -279,7 +279,7 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     _pending_analysis(administrative_session, scan)
 
     class TimeoutProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AIProviderError("provider_timeout", retryable=True)
 
     now = datetime.now(timezone.utc)
@@ -313,10 +313,10 @@ def test_style_violation_is_repaired_once(administrative_session):
     received_codes = []
 
     class RepairingProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             return rejected
 
-        def repair_analysis(self, context, violation_codes):
+        def repair_analysis(self, context, violation_codes, language="en"):
             received_codes.extend(violation_codes)
             return repaired
 
@@ -340,10 +340,10 @@ def test_second_style_violation_fails_the_job(administrative_session):
     rejected.executive_summary = "Your network is safe."
 
     class InvalidRepairProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             return rejected
 
-        def repair_analysis(self, context, violation_codes):
+        def repair_analysis(self, context, violation_codes, language="en"):
             return rejected
 
     assert (
@@ -365,7 +365,7 @@ def test_retry_waits_for_configured_delay(administrative_session):
     _pending_analysis(administrative_session, scan)
 
     class TimeoutProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AIProviderError("provider_timeout", retryable=True)
 
     now = datetime.now(timezone.utc)
@@ -418,7 +418,7 @@ def test_stale_exhausted_job_becomes_failed(administrative_session):
     administrative_session.commit()
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("exhausted job must not run")
 
     assert _run(administrative_session, FakeProvider(), now=now) == 0
@@ -441,7 +441,7 @@ def test_run_ai_worker_once_processes_one_requested_row(
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return _analysis()
 

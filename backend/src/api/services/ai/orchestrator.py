@@ -12,7 +12,7 @@ class AIQuestionProvider(Protocol):
     """Small provider contract used by interactive, read-only AI features."""
 
     def answer_question(
-        self, context: Mapping[str, object], question: str, language: str = "en"
+        self, context: Mapping[str, object], question: str, language: str
     ) -> object: ...
 
 
@@ -30,12 +30,7 @@ class AIOrchestrator:
         finding_references: Mapping[str, UUID],
         language: str = "en",
     ) -> AIChatResponse:
-        try:
-            provider_response = self._provider.answer_question(
-                context, question, language=language
-            )
-        except TypeError as exc:
-            if "language" not in str(exc):
-                raise
-            provider_response = self._provider.answer_question(context, question)
+        provider_response = self._provider.answer_question(
+            context, question, language=language
+        )
         return materialize_chat_response(provider_response, finding_references)

@@ -10,7 +10,7 @@ class FakeQuestionProvider:
         self.question: str | None = None
 
     def answer_question(
-        self, context: dict[str, object], question: str
+        self, context: dict[str, object], question: str, language: str = "en"
     ) -> ProviderAIChatResponse:
         self.context = context
         self.question = question

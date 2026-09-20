@@ -345,11 +345,8 @@ def _process_claimed_analysis(
                 )
                 lint_provider_analysis(provider_analysis)
             except WritingStyleViolation as exc:
-                provider_analysis = _call_with_language(
-                    provider.repair_analysis,
-                    context,
-                    exc.codes,
-                    language=record.language,
+                provider_analysis = provider.repair_analysis(
+                    context, exc.codes, language=record.language
                 )
                 provider_analysis = validate_provider_analysis(
                     context, provider_analysis
@@ -401,16 +398,6 @@ def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
         *(action.related_finding_ids for action in analysis.priority_actions)
     )
     return referenced <= allowed and len(explained) == len(set(explained))
-
-
-def _call_with_language(method, *args, language: str):
-    """Preserve compatibility with provider test doubles during the transition."""
-    try:
-        return method(*args, language=language)
-    except TypeError as exc:
-        if "language" not in str(exc):
-            raise
-        return method(*args)
 
 
 def _context_hash(context: ScanAIContext) -> str:

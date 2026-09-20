@@ -37,9 +37,7 @@ def run_bounded_analysis(
         raise ValueError("child_findings must be positive")
     chunks = split_context(context, child_findings)
     if not hasattr(provider, "analyze_chunk"):
-        analysis = _call_with_language(
-            provider.analyze_scan, context, language=language
-        )
+        analysis = provider.analyze_scan(context, language=language)
         return analysis, AnalysisCoverage(
             analyzed_findings=len(context.top_findings),
             failed_findings=0,
@@ -61,12 +59,8 @@ def run_bounded_analysis(
 
     if not hasattr(provider, "synthesize_scan"):
         raise AIProviderError("invalid_provider_response", retryable=False)
-    synthesis = _call_with_language(
-        provider.synthesize_scan,
-        context,
-        children,
-        tuple(failed_refs),
-        language=language,
+    synthesis = provider.synthesize_scan(
+        context, children, tuple(failed_refs), language=language
     )
     return synthesis, AnalysisCoverage(
         analyzed_findings=analyzed,
@@ -111,7 +105,7 @@ def split_context(
 def _run_child(
     provider: Any, context: ScanAIContext, *, language: str
 ) -> ProviderScanAIChildAnalysis:
-    child = _call_with_language(provider.analyze_chunk, context, language=language)
+    child = provider.analyze_chunk(context, language=language)
     if not isinstance(child, ProviderScanAIChildAnalysis):
         child = ProviderScanAIChildAnalysis.model_validate(child)
     try:
@@ -120,21 +114,9 @@ def _run_child(
     except WritingStyleViolation as exc:
         if not hasattr(provider, "repair_chunk"):
             raise
-        child = _call_with_language(
-            provider.repair_chunk, context, exc.codes, language=language
-        )
+        child = provider.repair_chunk(context, exc.codes, language=language)
         if not isinstance(child, ProviderScanAIChildAnalysis):
             child = ProviderScanAIChildAnalysis.model_validate(child)
         child = validate_provider_child_analysis(context, child)
         lint_provider_child_analysis(child)
     return child
-
-
-def _call_with_language(method: Any, *args: Any, language: str) -> Any:
-    """Use the language-aware provider contract without breaking test doubles."""
-    try:
-        return method(*args, language=language)
-    except TypeError as exc:
-        if "language" not in str(exc):
-            raise
-        return method(*args)

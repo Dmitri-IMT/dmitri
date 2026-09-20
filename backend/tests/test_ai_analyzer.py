@@ -97,11 +97,11 @@ def test_bounded_pipeline_synthesizes_validated_children():
     received = []
 
     class Provider:
-        def analyze_chunk(self, context):
+        def analyze_chunk(self, context, language="en"):
             received.append(context.top_findings[0].finding_ref)
             return _child(context.top_findings[0].finding_ref)
 
-        def synthesize_scan(self, context, child_results, failed_refs):
+        def synthesize_scan(self, context, child_results, failed_refs, language="en"):
             assert len(child_results) == 2
             assert failed_refs == ()
             return _synthesis()
@@ -119,12 +119,12 @@ def test_child_failure_is_reported_to_synthesizer():
     captured = {}
 
     class Provider:
-        def analyze_chunk(self, context):
+        def analyze_chunk(self, context, language="en"):
             if context.top_findings[0].finding_ref == "finding_1":
                 raise AIProviderError("provider_timeout", retryable=True)
             return _child("finding_2")
 
-        def synthesize_scan(self, context, child_results, failed_refs):
+        def synthesize_scan(self, context, child_results, failed_refs, language="en"):
             captured["children"] = child_results
             captured["failed"] = failed_refs
             return _synthesis()
