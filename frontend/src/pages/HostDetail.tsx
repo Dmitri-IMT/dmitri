@@ -102,9 +102,7 @@ function HostAIExplanation({ hostId }: { hostId: string }) {
         ),
       )
     } catch (caughtError) {
-      setError(
-        readAiAskError(caughtError, t('ai.explanationUnavailable')),
-      )
+      setError(readAiAskError(caughtError, t('ai.explanationUnavailable')))
     } finally {
       setLoading(false)
     }

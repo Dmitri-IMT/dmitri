@@ -1,7 +1,7 @@
 import type { Catalog } from './catalog.types'
 
 export const catalog: Catalog = {
-'nav.home': 'Home',
+  'nav.home': 'Home',
   'nav.scans': 'Scans',
   'nav.network': 'Network',
   'nav.devices': 'Devices',
