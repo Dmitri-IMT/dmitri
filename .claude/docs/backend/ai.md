@@ -63,8 +63,8 @@ Each language is a separate job and a separate provider run.
 | `ai_is_available()` / `build_ai_provider()` | Gate and construct `GroqProvider`. Accept `AI_API_KEY` as a `SecretStr` or a plain string. | `backend/src/api/services/ai/groq.py:466`, `:479` |
 | `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Scan path: `analyze_scan`, chunked `analyze_chunk`, `repair_*`, `synthesize_scan`. Chat: `answer_question`. Every method takes keyword `language`; `_language_name()` maps it to English / Brazilian Portuguese / Russian in the system prompt. `AI_PROMPT_VERSION` is `"4"`. Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py:73`, `:419`, `:22` |
 | `drain_provider_usage()` / `persist_usage_events()` | Move provider events into `AIUsageRecord` rows (org/scan/user when known). | `backend/src/api/services/ai/telemetry.py:12`, `:17` |
-| `AIOrchestrator.answer_question()` | Thin coordinator; passes `language` to the provider (falls back to a call without it on a `TypeError` naming `language`); `materialize_chat_response` maps provider finding refs to UUIDs. | `backend/src/api/services/ai/orchestrator.py:25` |
-| `build_chat_context()` / `build_host_context()` / `build_finding_context()` | Bounded JSON contexts for chat; scan context can include a clipped completed overview. | `backend/src/api/services/ai/chat.py:21`, `:157`, `:130` |
+| `answer_interactive_question()` | Calls `GroqProvider.answer_question`, then `materialize_chat_response` (finding refs to UUIDs and placeholder text to display values). | `backend/src/api/services/ai/chat.py` |
+| `build_scan_chat_bundle()` / `build_host_chat_bundle()` / `build_finding_chat_bundle()` | Placeholder-only JSON for chat (`finding_N`, `machine_N`, `service_N`); no subnet, UUIDs, or raw evidence to Groq. | `backend/src/api/services/ai/chat.py` |
 | `save_chat_message()` / `list_chat_messages()` | Persist Q&A under `scope_type` + `scope_id`; trim to `MAX_CHAT_HISTORY` (10). `list_chat_messages` takes `scan_id=None`; it filters on `scan_id` only for non-host scopes. | `backend/src/api/services/ai/chat.py:275`, `:316` |
 | `lint_provider_analysis()` | Versioned writing skill after structural validation. | `backend/src/api/services/ai/writing.py` |
 | `run_bounded_analysis()` | Chunked scan analysis pipeline; threads `language` to every provider call through `_call_with_language`. | `backend/src/api/services/ai/analyzer.py:28`, `:133` |
@@ -102,14 +102,12 @@ Each language is a separate job and a separate provider run.
   no enrichment jobs remain active for that scan.
 - **Ingest can write `ai_scan_analyses`.** With `AI_AUTO_ANALYSIS` on, `persist_scan` enqueues the
   `en` row in the same transaction. Other languages are only ever created by a member POST.
-- **`_call_with_language` exists twice** (`analyzer.py:133`, `jobs.py:406`) and in
-  `AIOrchestrator`: each retries a provider call without `language` when the `TypeError` names it, so
-  older test doubles keep working.
+- **`supports_bounded_scan_analysis()`** gates the chunked scan pipeline on `analyze_chunk` + `synthesize_scan` (`providers.py`).
 - **PDF rendering needs a Unicode TTF on the host.** `_register_unicode_fonts()`
   (`report_pdf.py:68`) looks only at fixed paths — Windows Arial, Linux DejaVu Sans, Linux Liberation
   Sans — and raises `RuntimeError` when none exists. macOS keeps Arial at another path, so a local PDF
   download fails there.
-- **Chat errors** — `ai_unavailable` (503), `ai_rate_limited` (429, Portuguese body), `ai_context_too_large`
+- **Chat errors** — `ai_unavailable` (503), `ai_rate_limited` (429, localized body from `chat_api_error_message`), `ai_context_too_large`
   (413), `ai_provider_error` (502). Scan chat adds `scan_not_ready` (409) when the scan is not
   `completed`.
 - **Usage rows** may omit `user_id` on worker-driven scan analysis; interactive chat sets org, scan,

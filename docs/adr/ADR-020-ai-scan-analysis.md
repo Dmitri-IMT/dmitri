@@ -4,19 +4,12 @@
 > **Extends:** [ADR-005](ADR-005-security-model.md) for `AI_API_KEY` handling.
 > **Does not supersede:** ADR-005's JWT and device-signature rules.
 
-> **Amendment 2026-09-20 (chat boundary still open):** §6's data boundary binds the
-> scan-analysis path only — `analyze_scan`, `analyze_chunk`, the repairs and the synthesis,
-> all of which send `ScanAIContext` placeholders. The interactive assistant
-> (`POST /api/v1/ai/chat`, scopes `scan`, `host` and `finding`) does **not** use that model.
-> It sends real identifiers: subnet, `host_ip`, `host_hostname`, `finding_id`, vendor, the
-> port/service map and clipped evidence, and the prompt asks the model to name the host.
-> That is deliberate — an operator asking "which machine is worst" needs an answer with a
-> name in it — and it is not a violation, because **Planned changes** below states that
-> chat is not decided.
-> It is not yet a decision either. **Decide this boundary before the first deployment
-> outside the test period**, in a new ADR: either extend the placeholder contract to chat
-> and substitute display names locally after the model returns, or record on purpose that
-> chat sends identifiers and say which ones.
+> **Amendment 2026-09-20 (chat uses the same placeholder contract):** Interactive chat
+> (`POST /api/v1/ai/chat`, scopes `scan`, `host` and `finding`) now builds the same
+> request-local `finding_N` / `machine_N` / `service_N` context as scan analysis. Groq never
+> receives subnet, UUIDs, hostnames, IPs, vendor, ports, or raw evidence strings. The backend
+> substitutes local display values in answers before persistence or API response, matching
+> `materialize_scan_ai_analysis`.
 
 ## Context
 
