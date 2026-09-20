@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlmodel import Session, select
 
@@ -13,6 +15,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import FindingPayload
+from api.services.ai.jobs import enqueue_auto_scan_analysis
 from api.services.epss import EpssClient, upsert_epss_record
 from api.services.inventory import reconcile_scan_host_inventory
 from api.services.jobs import claim_jobs, retry_or_fail
@@ -20,6 +23,8 @@ from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
 from api.services.risk import refresh_risk_snapshot
+
+logger = logging.getLogger(__name__)
 
 
 def claim_pending_enrichment_jobs(
@@ -67,6 +72,7 @@ def process_claimed_enrichment_job(
         job.last_error = None
         session.add(job)
         session.commit()
+        _enqueue_auto_analysis_safely(session, job.scan_id)
     except NvdTemporaryError as exc:
         session.rollback()
         managed_job = session.get(EnrichmentJobRecord, job.id)
@@ -86,6 +92,7 @@ def process_claimed_enrichment_job(
         )
         session.add(managed_job)
         session.commit()
+        _enqueue_auto_analysis_safely(session, managed_job.scan_id)
     except Exception as exc:
         session.rollback()
         managed_job = session.get(EnrichmentJobRecord, job.id)
@@ -102,7 +109,14 @@ def process_claimed_enrichment_job(
         )
         session.add(managed_job)
         session.commit()
+        _enqueue_auto_analysis_safely(session, managed_job.scan_id)
 
+
+def _enqueue_auto_analysis_safely(session: Session, scan_id: UUID) -> None:
+    try:
+        enqueue_auto_scan_analysis(session, scan_id)
+    except Exception:
+        logger.exception("automatic AI analysis enqueue failed scan_id=%s", scan_id)
 
 def process_pending_enrichment_jobs(
     session: Session,

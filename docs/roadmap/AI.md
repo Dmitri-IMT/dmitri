@@ -10,16 +10,37 @@
 ## Merged in PR #144
 
 Scan Detail has an on-demand plain-language overview. Groq with `openai/gpt-oss-120b`
-is the merged provider. A member presses **Explain this scan**. That is the only
-trigger. The worker AI loop is separate from enrichment. Output is English.
+is the provider. A member presses **Explain this scan**. That is the only trigger.
+The worker AI loop is separate from enrichment. Output is English.
 `AI_ENABLED` and `AI_API_KEY` are the operator switch. Failure never hides scan
 results.
 
 Epic [DMI-161](https://linear.app/peirce/issue/DMI-161) owns later targets: OpenAI
-Luna (DMI-163), placeholder context (DMI-162), injection containment (DMI-167),
+Luna (DMI-163), injection containment (DMI-167),
 writing skill (DMI-168), research assistant (DMI-169), card design (DMI-170).
 
-Chat, downloadable reports and a Home summary are **not decided**.
+Scan, host and finding chat are available, and Home now surfaces the latest persisted
+summary when one exists. A persistent cross-page assistant and automatic summary
+generation remain future work. Downloadable reports are implemented as explained and
+technical PDF exports from Scan Detail.
+
+DMI-162 is complete: the provider receives only aggregate counts, public
+vulnerability facts and request-local placeholders. The backend validates those
+placeholders and restores local IDs and display values before persistence.
+
+DMI-167 is complete: generated text is normalized before storage and before display,
+while action priority and KEV coverage are checked deterministically in the backend.
+
+DMI-168 is complete: a versioned English writing skill is included in each Groq
+request and a backend linter enforces prose limits, safe vocabulary, plain-text
+rendering, and no unsupported safety claims. One repair attempt receives only
+violation codes and the original bounded context; a second violation fails safely.
+
+DMI-166 is complete: large bounded contexts can be split into independent finding
+chunks, validated child results can be synthesized by Groq, and each job persists
+analyzed, failed, and total finding coverage. The public contract remains one
+analysis per scan.
+
 
 ## Product decision
 
@@ -31,11 +52,10 @@ KEV, or CVEs.
 Technical depth remains available for verification and for sharing with a professional,
 but it must not be the entry point for a non-expert user.
 
-Surfaces that are **not decided** (do not treat as committed work):
+Surfaces that remain future work (do not treat as committed work):
 
-1. an automatic plain-language summary of the latest completed scan on Home
-2. a contextual assistant available from Home, scan, host, and finding views
-3. two downloadable reports per completed scan: explained and technical
+1. automatic generation of a plain-language summary immediately after enrichment
+2. a persistent contextual assistant available from Home, scan, host, and finding views
 
 ## Product principles
 
@@ -66,8 +86,9 @@ scan completes
     -> the card polls until completed or failed
 ```
 
-Home chat, Home summary and reports stay in the undecided list above. A failed AI job
-must never hide the deterministic scan results.
+Home summary reuses the persisted scan analysis and links to the complete scan detail;
+it never triggers a provider call by itself. Home chat remains future work. A failed AI
+job must never hide the deterministic scan results.
 
 ## Home: latest scan summary
 
@@ -282,7 +303,7 @@ Manual retry remains available when the provider fails.
 
 ## Model-provider boundary
 
-The initial provider is Groq with `openai/gpt-oss-120b`, selected for the first scan
+The provider is OpenAI Responses API with `gpt-5.6-luna`, selected for the first scan
 summary pilot. The backend keeps it behind a small adapter for:
 
 - message generation and streaming;
@@ -321,7 +342,11 @@ scan context builder; strict provider-neutral input/output schemas and validatio
 versioned `ai_scan_analyses` persistence model; and the read-only
 `GET /api/v1/scans/{scan_id}/analysis` contract. The Groq adapter and asynchronous,
 post-enrichment scan-analysis lifecycle are also implemented on the feature branch.
-UI surfaces, chat, reports, and operational usage telemetry remain pending.
+Scan, host and finding AI surfaces, chat, and PDF reports are implemented. Home now
+shows a persisted latest-scan summary when available; automatic generation, the
+cross-page assistant, and operational usage telemetry remain pending.
+Interactive scan, host and finding routes now share a provider-neutral
+`AIOrchestrator`; Groq remains the configured provider implementation.
 
 1. **Grounded reads** — finding detail and bounded scan risk summary.
 2. **Provider-neutral tools** — allowlisted, read-only tool service with organisation
@@ -330,9 +355,9 @@ UI surfaces, chat, reports, and operational usage telemetry remain pending.
 4. **Provider adapter** — one configurable LLM integration with timeouts, retries, usage,
    and test doubles.
 5. **Automatic scan summary** — post-enrichment job, cache/versioning, Home API.
-6. **Home experience** — latest summary, priority actions, suggested questions.
-7. **Contextual chat** — page-aware panel, streaming, citations, technical-detail toggle.
-8. **Reports** — explained and technical artifacts with deterministic appendices.
+6. **Home experience** — latest persisted summary and first priority action are implemented; automatic generation and suggested questions remain.
+7. **Contextual chat** — scan, host and finding panels are implemented; a persistent page-aware drawer, streaming and technical-detail toggle remain.
+8. **Reports** — explained and technical PDF artifacts with deterministic appendices are implemented.
 9. **Evaluation and operations** — groundedness tests, non-expert comprehension review,
    cost/latency metrics, retention, and failure recovery.
 

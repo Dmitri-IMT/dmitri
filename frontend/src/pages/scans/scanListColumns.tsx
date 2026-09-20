@@ -9,6 +9,7 @@ import {
 } from '@/pages/scans/scanCells'
 import { hidesCounts, scanStatusLabel } from '@/lib/scanStatus'
 import type { components } from '@/types/openapi'
+import type { MessageKey } from '@/i18n/messages'
 
 type ScanSummary = components['schemas']['ScanSummary']
 
@@ -38,57 +39,65 @@ function boxCell(scan: ScanSummary): ReactNode {
   )
 }
 
-export const scanListColumns: DataTableColumn<ScanSummary>[] = [
-  {
-    key: 'timestamp',
-    label: 'When',
-    width: 'w-9/50',
-    render: scanWhenCell,
-  },
-  {
-    key: 'box_name',
-    label: 'Box',
-    width: 'w-7/50',
-    render: boxCell,
-  },
-  {
-    key: 'scan_mode',
-    label: 'Mode',
-    width: 'w-1/10',
-    render: scanModeCell,
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    width: 'w-1/10',
-    render: statusCell,
-  },
-  {
-    key: 'duration',
-    label: 'Duration',
-    width: 'w-1/12',
-    align: 'right',
-    render: (scan) => scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
-  },
-  {
-    key: 'host_count',
-    label: 'Machines',
-    width: 'w-1/10',
-    align: 'right',
-    render: (scan) => countCell(scan, scan.host_count),
-  },
-  {
-    key: 'finding_count',
-    label: 'Vulnerabilities',
-    width: 'w-3/25',
-    align: 'right',
-    render: (scan) =>
-      countCell(scan, scan.finding_count === 0 ? 'None' : scan.finding_count),
-  },
-  {
-    key: 'highest_severity',
-    label: 'Highest severity',
-    width: 'w-9/50',
-    render: highestCell,
-  },
-]
+export function scanListColumns(
+  t: (key: MessageKey, variables?: Record<string, string | number>) => string,
+): DataTableColumn<ScanSummary>[] {
+  return [
+    {
+      key: 'timestamp',
+      label: t('common.when'),
+      width: 'w-9/50',
+      render: scanWhenCell,
+    },
+    {
+      key: 'box_name',
+      label: t('common.box'),
+      width: 'w-7/50',
+      render: boxCell,
+    },
+    {
+      key: 'scan_mode',
+      label: t('common.mode'),
+      width: 'w-1/10',
+      render: scanModeCell,
+    },
+    {
+      key: 'status',
+      label: t('common.status'),
+      width: 'w-1/10',
+      render: statusCell,
+    },
+    {
+      key: 'duration',
+      label: t('common.duration'),
+      width: 'w-1/12',
+      align: 'right',
+      render: (scan) =>
+        scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
+    },
+    {
+      key: 'host_count',
+      label: t('common.machines'),
+      width: 'w-1/10',
+      align: 'right',
+      render: (scan) => countCell(scan, scan.host_count),
+    },
+    {
+      key: 'finding_count',
+      label: t('common.vulnerabilities'),
+      width: 'w-3/25',
+      align: 'right',
+      render: (scan) =>
+        countCell(
+          scan,
+          scan.finding_count === 0 ? t('common.none') : scan.finding_count,
+        ),
+    },
+    {
+      key: 'highest_severity',
+      label: t('common.highestSeverity'),
+      width: 'w-9/50',
+      render: highestCell,
+    },
+  ]
+}

@@ -24,9 +24,9 @@
 
 | Item | Value |
 | --- | --- |
-| Themes shipped | **Light only.** No toggle, no `prefers-color-scheme` branch. |
-| `dark:` variants | Never authored. The `dark` variant is neutralised in `index.css`; leave the neutraliser alone. |
-| Viewport | **Desktop only, fluid within.** Target 1440px, minimum 1280px. No tablet or mobile layouts. |
+| Themes shipped | **Light and dark.** The user's choice persists locally and both themes use the same semantic colour tokens. |
+| `dark:` variants | Use only when a semantic token cannot express the needed state. Theme values belong in `index.css`. |
+| Viewport | **Desktop first, fluid within.** Target 1440px; preserve usable navigation and readable content from 1024px upward. |
 | Horizontal scroll | The page body never scrolls sideways. Wide content scrolls inside its own `overflow-x: auto` container. |
 
 ## Type
@@ -60,9 +60,9 @@ not scale tokens even when the pixels match.
 | `--ink-muted` | `#475569` | secondary text, timestamps, helper copy, silent-machine rows | 7.58 on white |
 | `--rule` | `#E2E8F0` | decorative separators, table row lines | non-text |
 | `--edge` | `#64748B` | control boundaries: input, select, button outlines | 4.76 on white (3:1 floor) |
-| `--accent` | `#4F46E5` | primary button, active nav item, focus ring | 6.29 on white |
-| `--accent-hover` | `#4338CA` | hover on accent controls (indigo-700) | — |
-| `--accent-active` | `#3730A3` | pressed accent (indigo-800) | — |
+| `--accent` | `#600BB5` | primary button, active nav item, focus ring | 8.02 on white |
+| `--accent-hover` | `#500997` | hover on accent controls | — |
+| `--accent-active` | `#400779` | pressed accent controls | — |
 | `--accent-foreground` | `#FFFFFF` | text on the accent | — |
 
 - `#64748B` is the **hard floor for any text**. Nothing lighter.
@@ -71,7 +71,7 @@ not scale tokens even when the pixels match.
 - The `outline` button variant uses `border-border` (`--rule`, `#E2E8F0`, ~1.2:1 against white)
   where §Color assigns `--edge` (`#64748B`) to control boundaries. That is a pre-existing mismatch
   that spreads once the outlined button becomes the card-footer control.
-- **One accent, never severity.** Indigo never carries severity, and severity never borrows it.
+- **One accent, never severity.** Purple never carries severity, and severity never borrows it.
 - **Severity has no hue.** `Critical` / `High` / `Medium` / `Low` are set as a **bold `--ink`
   word** — in a table cell and as a section heading alike. No chip, pill, tag, dot, badge,
   coloured text, coloured side bar or coloured card edge, anywhere. The API `Severity` union has

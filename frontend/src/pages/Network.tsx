@@ -17,11 +17,13 @@ import Timestamp from '@/components/Timestamp'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
 import QuietMachineGroup from '@/pages/hosts/QuietMachineGroup'
 import type { components } from '@/types/openapi'
+import useI18n from '@/i18n/useI18n'
 
 type HostSummary = components['schemas']['HostSummary']
 
 function Network() {
   const now = new Date()
+  const { t } = useI18n()
   const [page, setPage] = useState(1)
   const [quietPage, setQuietPage] = useState(1)
   const [isQuietOpen, setIsQuietOpen] = useState(false)
@@ -65,7 +67,7 @@ function Network() {
   return (
     <div data-testid="network-page" className="flex flex-col gap-12">
       <PageHeader
-        title="Network"
+        title={t('network.title')}
         subtitle={
           total === undefined ? undefined : (
             <>
@@ -83,13 +85,13 @@ function Network() {
       <ListSurface<HostSummary, HostSortBy>
         testId="network"
         query={query}
-        columns={hostListColumns(now, false)}
+        columns={hostListColumns(now, false, t)}
         rowId={(host) => host.host_id}
-        caption="Machines on your network"
-        errorMessage="Couldn't load your network."
+        caption={t('network.caption')}
+        errorMessage={t('network.error')}
         empty={{
-          heading: 'No machines yet',
-          body: 'Your first scan finds the machines on your network and what needs fixing.',
+          heading: t('network.emptyHeading'),
+          body: t('network.emptyBody'),
           action: <FirstScanCta />,
           note: <FirstScanNote />,
         }}
@@ -99,12 +101,12 @@ function Network() {
             data-testid="network-no-active"
             className="text-muted-foreground"
           >
-            No machines seen in the last 7 days.
+            {t('network.emptyActive')}
           </span>
         }
         collapsedGroup={{
           count: quietTotal,
-          label: (count) => `Not seen recently (${count})`,
+          label: (count) => t('network.quiet', { count }),
           testId: 'network-quiet',
           isOpen: isQuietOpen,
           onOpenChange: (isOpen) => {
@@ -125,14 +127,15 @@ function Network() {
         rowAction={{
           kind: 'link',
           to: (host) => `/network/${host.host_id}`,
-          label: (host) => `Open ${host.hostname || host.ip}`,
+          label: (host) =>
+            t('network.open', { host: host.hostname || host.ip }),
         }}
         pagination={{
           page,
           perPage: HOSTS_PER_PAGE,
           total: query.data?.total ?? 0,
           onPageChange: setPage,
-          label: 'Machine pages',
+          label: t('network.pages'),
         }}
       />
     </div>

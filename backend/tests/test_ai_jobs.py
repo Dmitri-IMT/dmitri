@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import api.services.worker as worker_module
 import pytest
 from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord
-from api.schemas.ai import AIFindingExplanation, AIRecommendedAction, ScanAIAnalysis
+from api.schemas.ai import (
+    AIProviderFindingExplanation,
+    AIProviderRecommendedAction,
+    ProviderScanAIAnalysis,
+)
 from api.services.ai.groq import AIProviderError
 from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.worker import run_ai_worker_once
@@ -21,8 +24,8 @@ from read_factories import (
 from sqlmodel import select
 
 
-def _analysis() -> ScanAIAnalysis:
-    return ScanAIAnalysis(
+def _analysis() -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
         executive_summary="Nenhum risco prioritário foi identificado.",
         overall_assessment="O scan não apresentou findings para priorização.",
         plain_language_summary="Nada urgente apareceu neste resultado.",
@@ -32,22 +35,22 @@ def _analysis() -> ScanAIAnalysis:
     )
 
 
-def _grounded_analysis(finding_id) -> ScanAIAnalysis:
-    return ScanAIAnalysis(
-        executive_summary="One important issue needs attention.",
+def _grounded_analysis(finding_ref: str = "finding_1") -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
+        executive_summary="One vulnerability needs attention.",
         overall_assessment="The observed risk is high but limited in scope.",
         plain_language_summary="One exposed service should be reviewed soon.",
         priority_actions=[
-            AIRecommendedAction(
+            AIProviderRecommendedAction(
                 priority="high",
                 title="Review the affected service",
                 description="Ask a qualified professional to validate the service.",
-                related_finding_ids=[finding_id],
+                related_finding_refs=[finding_ref],
             )
         ],
         important_findings=[
-            AIFindingExplanation(
-                finding_id=finding_id,
+            AIProviderFindingExplanation(
+                finding_ref=finding_ref,
                 why_it_matters="The service is exposed and has a high risk score.",
                 plain_language_explanation="An exposed service may need an update.",
                 recommendation="Have a professional validate and update it.",
@@ -99,7 +102,7 @@ def test_completed_scan_without_request_does_not_create_job(administrative_sessi
     make_scan(administrative_session, org.id)
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("provider must not run without a request")
 
     assert (
@@ -122,7 +125,7 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return _analysis()
 
@@ -133,8 +136,18 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.scan_id == scan.scan_id
     assert record.status == "completed"
-    assert record.analysis_json == _analysis().model_dump(mode="json")
+    assert record.analysis_json == {
+        "executive_summary": _analysis().executive_summary,
+        "overall_assessment": _analysis().overall_assessment,
+        "plain_language_summary": _analysis().plain_language_summary,
+        "priority_actions": [],
+        "important_findings": [],
+        "uncertainties": _analysis().uncertainties,
+    }
     assert record.context_hash is not None and len(record.context_hash) == 64
+    assert record.analyzed_findings == 0
+    assert record.failed_findings == 0
+    assert record.total_findings == 0
     assert record.attempts == 1
     assert len(received) == 1
 
@@ -142,11 +155,11 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
 def test_grounded_analysis_completes(administrative_session):
     scan, finding = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
-    expected = _grounded_analysis(finding.finding_id)
+    expected = _grounded_analysis()
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return expected
 
@@ -155,10 +168,10 @@ def test_grounded_analysis_completes(administrative_session):
 
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "completed"
-    assert record.analysis_json == expected.model_dump(mode="json")
-    assert [item.finding_id for item in received[0].top_findings] == [
+    assert record.analysis_json["important_findings"][0]["finding_id"] == str(
         finding.finding_id
-    ]
+    )
+    assert received[0].top_findings[0].finding_ref == "finding_1"
 
 
 @pytest.mark.parametrize(
@@ -167,16 +180,16 @@ def test_grounded_analysis_completes(administrative_session):
 def test_ungrounded_analysis_fails(administrative_session, defect):
     scan, finding = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
-    analysis = _grounded_analysis(finding.finding_id)
+    analysis = _grounded_analysis()
     if defect == "invented_explanation":
-        analysis.important_findings[0].finding_id = uuid4()
+        analysis.important_findings[0].finding_ref = "finding_99"
     elif defect == "invented_action":
-        analysis.priority_actions[0].related_finding_ids = [uuid4()]
+        analysis.priority_actions[0].related_finding_refs = ["finding_99"]
     else:
         analysis.important_findings.append(analysis.important_findings[0])
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             return analysis
 
     now = datetime.now(timezone.utc)
@@ -209,8 +222,8 @@ def test_unbuildable_context_fails(
         monkeypatch.setattr("api.services.ai.jobs.build_scan_ai_context", crash)
 
     class FakeProvider:
-        def analyze_scan(self, context):
-            return _grounded_analysis(finding.finding_id)
+        def analyze_scan(self, context, language="en"):
+            return _grounded_analysis()
 
     now = datetime.now(timezone.utc)
     assert _run(administrative_session, FakeProvider(), now=now) == 1
@@ -222,11 +235,11 @@ def test_unbuildable_context_fails(
 
 
 def test_analysis_schema_forbids_unknown_fields():
-    payload = _grounded_analysis(uuid4()).model_dump()
+    payload = _grounded_analysis().model_dump()
     payload["invented_score"] = 100
 
     with pytest.raises(ValidationError):
-        ScanAIAnalysis.model_validate(payload)
+        ProviderScanAIAnalysis.model_validate(payload)
 
 
 def test_ai_job_waits_for_active_enrichment(administrative_session):
@@ -244,7 +257,7 @@ def test_ai_job_waits_for_active_enrichment(administrative_session):
     administrative_session.commit()
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("provider must not run before enrichment")
 
     assert (
@@ -266,7 +279,7 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     _pending_analysis(administrative_session, scan)
 
     class TimeoutProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AIProviderError("provider_timeout", retryable=True)
 
     now = datetime.now(timezone.utc)
@@ -291,13 +304,68 @@ def test_retryable_provider_failure_is_bounded(administrative_session):
     assert record.completed_at is not None
 
 
+def test_style_violation_is_repaired_once(administrative_session):
+    scan, _ = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    rejected = _grounded_analysis()
+    rejected.executive_summary = "Your network is safe."
+    repaired = _grounded_analysis()
+    received_codes = []
+
+    class RepairingProvider:
+        def analyze_scan(self, context, language="en"):
+            return rejected
+
+        def repair_analysis(self, context, violation_codes, language="en"):
+            received_codes.extend(violation_codes)
+            return repaired
+
+    assert (
+        _run(
+            administrative_session,
+            RepairingProvider(),
+            now=datetime.now(timezone.utc),
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert "executive_summary:safety_certification" in received_codes
+
+
+def test_second_style_violation_fails_the_job(administrative_session):
+    scan, _ = _scan_with_finding(administrative_session)
+    _pending_analysis(administrative_session, scan)
+    rejected = _grounded_analysis()
+    rejected.executive_summary = "Your network is safe."
+
+    class InvalidRepairProvider:
+        def analyze_scan(self, context, language="en"):
+            return rejected
+
+        def repair_analysis(self, context, violation_codes, language="en"):
+            return rejected
+
+    assert (
+        _run(
+            administrative_session,
+            InvalidRepairProvider(),
+            now=datetime.now(timezone.utc),
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "failed"
+    assert record.last_error == "style_violation"
+
+
 def test_retry_waits_for_configured_delay(administrative_session):
     org = make_org(administrative_session, "Backoff Org")
     scan = make_scan(administrative_session, org.id)
     _pending_analysis(administrative_session, scan)
 
     class TimeoutProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AIProviderError("provider_timeout", retryable=True)
 
     now = datetime.now(timezone.utc)
@@ -350,7 +418,7 @@ def test_stale_exhausted_job_becomes_failed(administrative_session):
     administrative_session.commit()
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             raise AssertionError("exhausted job must not run")
 
     assert _run(administrative_session, FakeProvider(), now=now) == 0
@@ -373,7 +441,7 @@ def test_run_ai_worker_once_processes_one_requested_row(
     received = []
 
     class FakeProvider:
-        def analyze_scan(self, context):
+        def analyze_scan(self, context, language="en"):
             received.append(context)
             return _analysis()
 

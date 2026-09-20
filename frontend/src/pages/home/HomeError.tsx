@@ -1,10 +1,12 @@
 import { Button } from '@/components/ui/button'
+import useI18n from '@/i18n/useI18n'
 
 function HomeError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n()
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <p data-testid="home-error" className="text-title-md">
-        Couldn&apos;t load what needs your attention.
+        {t('home.error')}
       </p>
       <Button
         type="button"
@@ -12,7 +14,7 @@ function HomeError({ onRetry }: { onRetry: () => void }) {
         data-testid="home-retry"
         onClick={onRetry}
       >
-        Try again
+        {t('home.retry')}
       </Button>
     </div>
   )

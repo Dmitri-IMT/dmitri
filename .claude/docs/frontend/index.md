@@ -22,11 +22,12 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 
 ## Engineering guardrails
 
-* [frontend authored-source guardrails](./linting.md) — The local ESLint plugin that enforces named Tailwind tokens, spacing scale, shared interactive primitives, and bans raw hex and dark variants in authored application source.
+* [frontend authored-source guardrails](./linting.md) — The local ESLint plugin that enforces named Tailwind tokens, spacing scale, shared interactive primitives, and bans raw hex in authored application source; no-dark-variant is exported but switched off.
 
 ## Session & routing
 
 * [auth](./auth.md) — The SessionProvider (boot refresh modelled as a query), the shared post-authentication sequence, account deletion, the useSession accessor, and the RequireSession and RequireAdmin route guards.
+* [i18n](./i18n.md) — LanguageProvider stores the chosen UI language (en, pt-BR, ru) in localStorage; useI18n returns it with a typed t(key) over one in-code message catalog; the same language is sent to the AI and report endpoints.
 * [app](./app.md) — The React root's provider nest and App's route table — the four public auth routes, the guarded shell (Home, scans, network, devices, Settings), nested admin-only Users, and a catch-all that renders rather than redirects.
 
 ## Domain & screens
@@ -37,7 +38,10 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
 * [devices-screen](./devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
-* [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
+* [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
+* [context-ai](./context-ai.md) — Multi-turn `/ai/chat` via GlobalAssistant; finding/host one-shot explains post to the same route from FindingPanel and HostDetail.
+* [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
+* [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 * [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.

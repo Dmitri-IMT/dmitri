@@ -11,3 +11,20 @@ export const PASSWORD_POLICY_ERROR =
 export const PASSWORD_MISMATCH_ERROR = "Those two passwords don't match."
 
 export const SERVICE_ERROR = "Couldn't reach Dmitri. Try again in a moment."
+
+// Shared product-state labels. Keep these in one place while page-specific
+// messages are migrated journey by journey.
+export const UI_COPY = {
+  en: {
+    retry: 'Retry',
+    loadingData: 'Loading data',
+  },
+  'pt-BR': {
+    retry: 'Tentar novamente',
+    loadingData: 'Carregando dados',
+  },
+  ru: {
+    retry: 'Повторить',
+    loadingData: 'Загрузка данных',
+  },
+} as const

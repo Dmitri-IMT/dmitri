@@ -25,6 +25,7 @@ def normalize_postgres_url(value: str, variable: str = "DATABASE_URL") -> str:
 class Settings(BaseSettings):
     database_url: SecretStr = Field(alias="DATABASE_URL")
     ai_enabled: bool = Field(default=False, alias="AI_ENABLED")
+    ai_auto_analysis: bool = Field(default=False, alias="AI_AUTO_ANALYSIS")
     ai_model: str = Field(default="openai/gpt-oss-120b", alias="AI_MODEL")
     ai_api_key: SecretStr | None = Field(default=None, alias="AI_API_KEY")
     ai_api_base_url: str = Field(

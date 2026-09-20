@@ -22,8 +22,20 @@ type AgentDetail = components['schemas']['AgentDetail']
 type AgentSummary = components['schemas']['AgentSummary']
 type CommandDetail = components['schemas']['CommandDetail']
 type HomeSnapshot = components['schemas']['HomeSnapshot']
+type AIUsageResponse = components['schemas']['AIUsageResponse']
 
 const baseURL = 'http://localhost:8000/api/v1'
+
+const emptyAIUsage: AIUsageResponse = {
+  summary: {
+    requests: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    errors: 0,
+  },
+  data: [],
+}
 
 const NOW_MS = Date.now()
 function minutesAgo(minutes: number): string {
@@ -502,6 +514,7 @@ export const handlers = [
   http.get(`${baseURL}/users`, () =>
     HttpResponse.json({ data: [selfMember, otherMember] }),
   ),
+  http.get(`${baseURL}/ai/usage`, () => HttpResponse.json(emptyAIUsage)),
   http.post(`${baseURL}/invites`, () =>
     HttpResponse.json(createdInvite, { status: 201 }),
   ),
@@ -630,6 +643,7 @@ export const handlers = [
         status: 'pending',
         provider: 'groq',
         model: 'openai/gpt-oss-120b',
+        language: 'en',
         context_version: '1',
         prompt_version: '1',
         created_at: '2026-09-12T12:00:00Z',

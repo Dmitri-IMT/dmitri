@@ -209,6 +209,7 @@ APP_BASE_URL=http://localhost:5173
 # Optional AI overview (Groq). Off by default. Needs a key on the worker to run jobs,
 # and the same pair on the API or Scan Detail returns unavailable.
 # AI_ENABLED=true
+# AI_AUTO_ANALYSIS=false
 # AI_API_KEY=
 # AI_MODEL=openai/gpt-oss-120b
 # AI_POLL_INTERVAL_SECONDS=5
@@ -430,6 +431,11 @@ Each of these has cost someone an afternoon:
   run DDL in transaction mode.
 - **Running a formatter.** `uv run ruff format` rewrites ~32 backend files that have
   nothing to do with your change.
+- **PDF report download fails on macOS.** The report renderer looks for a Unicode font only
+  at fixed paths: Windows Arial, or DejaVu Sans / Liberation Sans under
+  `/usr/share/fonts/truetype/` on Linux. macOS has none of these, so a report download
+  raises `A Unicode font is required to render scan reports` and returns a 500. The rest of
+  the app works. On Linux, install `fonts-dejavu-core` (Debian/Ubuntu) to fix it.
 
 ---
 

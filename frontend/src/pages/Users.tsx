@@ -12,6 +12,7 @@ import InviteDialog from '@/pages/users/InviteDialog'
 import RemoveMemberDialog from '@/pages/users/RemoveMemberDialog'
 import RoleChangeDialog from '@/pages/users/RoleChangeDialog'
 import { ROLE_NOUN, type Role } from '@/lib/directory'
+import useI18n from '@/i18n/useI18n'
 
 type PendingRoleChange = { id: string; email: string; nextRole: Role }
 
@@ -21,6 +22,7 @@ const REVOKE_ERROR = "Couldn't revoke that invite."
 
 function Users() {
   const directory = useOrgDirectory()
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const { show } = useToast()
   const [pendingRole, setPendingRole] = useState<PendingRoleChange | null>(null)
@@ -85,7 +87,7 @@ function Users() {
 
   return (
     <div className="flex flex-col gap-12">
-      <PageHeader title="Users" />
+      <PageHeader title={t('nav.users')} />
       <DirectoryTable
         directory={directory}
         onRoleChange={(row, next) =>
@@ -102,7 +104,7 @@ function Users() {
             onClick={() => setInviteOpen(true)}
             data-testid="invite-open"
           >
-            Invite a user
+            {t('users.invite')}
           </Button>
         </div>
       )}

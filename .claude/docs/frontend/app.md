@@ -4,7 +4,7 @@ title: frontend app root & routing
 description: The React root's provider nest and App's route table — the four public auth routes, the guarded shell (Home, scans, network, devices, Settings), nested admin-only Users, and a catch-all that renders rather than redirects.
 resource: frontend/src/App.tsx
 tags: [frontend, react, entrypoint, router]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-19T21:00:00Z
 ---
 
 # frontend app root & routing
@@ -19,7 +19,7 @@ contains no `useEffect`, no refresh call and no session state at all.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `main.tsx` root | Mounts `<StrictMode>` → `BrowserRouter` → `QueryClientProvider` → `SessionProvider` → `App`. The router must sit outside the session provider, which navigates. | `frontend/src/main.tsx:11` |
+| `main.tsx` root | Mounts `<StrictMode>` → `BrowserRouter` → `QueryClientProvider` → `SessionProvider` → [`LanguageProvider`](./i18n.md) → `App`. The router must sit outside the session provider, which navigates. | `frontend/src/main.tsx:11` |
 | `App` | The route table only: four public routes — `/login` → `Login`, `/forgot-password` → `ForgotPassword`, `/reset-password` → `ResetPassword`, `/invite` → `AcceptInvite`; then a `RequireSession`/`AppShell` branch holding `/` → `Home`, `/scans` → `Scans`, `/scans/:scanId` → `ScanDetail`, `/network` → `Network`, `/network/:hostId` → `HostDetail`, `/devices` → `Devices`, `/devices/:agentId` → `DeviceDetail`, `/settings` → `Settings`, a nested `RequireAdmin` segment holding `/users` → `Users`, and `*` → `NotFound`. Scan/network/device routes sit **outside** `RequireAdmin` and **above** `*`. | `frontend/src/App.tsx:20` |
 
 ## How it connects

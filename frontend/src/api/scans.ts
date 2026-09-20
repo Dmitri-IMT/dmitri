@@ -6,6 +6,7 @@ type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 export type ScanAIAnalysisResponse =
   components['schemas']['ScanAIAnalysisResponse']
+export type AILanguage = 'en' | 'pt-BR' | 'ru'
 type ListScansQuery = NonNullable<
   operations['listScans']['parameters']['query']
 >
@@ -62,18 +63,37 @@ export async function getScan(scanId: string): Promise<ScanDetailResponse> {
 
 export async function getScanAnalysis(
   scanId: string,
+  language: AILanguage = 'en',
 ): Promise<ScanAIAnalysisResponse> {
   const response = await apiClient.get<ScanAIAnalysisResponse>(
     `/scans/${scanId}/analysis`,
+    { params: { language } },
   )
   return response.data
 }
 
 export async function requestScanAnalysis(
   scanId: string,
+  language: AILanguage = 'en',
 ): Promise<ScanAIAnalysisResponse> {
   const response = await apiClient.post<ScanAIAnalysisResponse>(
     `/scans/${scanId}/analysis`,
+    undefined,
+    { params: { language } },
+  )
+  return response.data
+}
+
+export type ScanReportKind = 'explained' | 'technical'
+
+export async function downloadScanReport(
+  scanId: string,
+  kind: ScanReportKind,
+  language: AILanguage = 'en',
+): Promise<Blob> {
+  const response = await apiClient.get<Blob>(
+    `/scans/${scanId}/reports/${kind}/download`,
+    { params: { language }, responseType: 'blob' },
   )
   return response.data
 }

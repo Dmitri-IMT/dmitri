@@ -13,27 +13,28 @@ const SEVERITIES: [Severity, string][] = [
 ]
 
 describe('SeverityWord', () => {
-  it.each(SEVERITIES)('renders %s as the bare word %s', (severity, word) => {
-    render(<SeverityWord severity={severity} />)
-
-    const rendered = screen.getByText(word)
-    expect(rendered).toBeVisible()
-    expect(rendered).toHaveTextContent(new RegExp(`^${word}$`))
-    expect(rendered.outerHTML).toMatch(
-      new RegExp(`^<span[^>]*>${word}</span>$`),
-    )
-    expect(document.body.textContent).toBe(word)
-  })
-
-  it('presents all four severities identically apart from the word', () => {
-    const shapes = SEVERITIES.map(([severity, word]) => {
+  it.each(SEVERITIES)(
+    'renders %s with its semantic color',
+    (severity, word) => {
       render(<SeverityWord severity={severity} />)
-      const markup = document.body.innerHTML.replace(word, '')
+
+      const rendered = screen.getByText(word)
+      expect(rendered).toBeVisible()
+      expect(rendered).toHaveTextContent(new RegExp(`^${word}$`))
+      expect(rendered).toHaveClass('rounded-full', 'border')
+      expect(document.body.textContent).toBe(word)
+    },
+  )
+
+  it('uses a different color class for each severity', () => {
+    const classes = SEVERITIES.map(([severity, word]) => {
+      render(<SeverityWord severity={severity} />)
+      const className = screen.getByText(word).className
       cleanup()
-      return markup
+      return className
     })
 
-    expect(new Set(shapes).size).toBe(1)
+    expect(new Set(classes).size).toBe(4)
   })
 
   it.each([[null], [undefined]])(

@@ -127,6 +127,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scans/{scan_id}/reports/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a scan report
+         * @description Returns a deterministic explained or technical report for a completed scan.
+         */
+        get: operations["getScanReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI provider usage
+         * @description Returns organization-scoped operational usage metadata without prompts or model responses.
+         */
+        get: operations["getAIUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List contextual AI chat history */
+        get: operations["listContextAIChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the contextual AI assistant */
+        post: operations["askContextAI"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scans/{scan_id}/reports/{kind}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a scan report
+         * @description Downloads the explained or technical report as a PDF.
+         */
+        get: operations["downloadScanReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hosts": {
         parameters: {
             query?: never;
@@ -1263,6 +1357,78 @@ export interface components {
             uncertainties: string[];
         };
         ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
+        /** @enum {string} */
+        ReportKind: "explained" | "technical";
+        ScanReportResponse: {
+            /** Format: uuid */
+            scan_id: string;
+            kind: components["schemas"]["ReportKind"];
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
+            /** Format: date-time */
+            generated_at: string;
+            filename: string;
+            /** @enum {string} */
+            content_type: "application/pdf";
+            sections: {
+                [key: string]: unknown;
+            };
+        };
+        AIContextChatRequest: {
+            question: string;
+            /**
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+            /** @enum {string} */
+            scope: "scan" | "host" | "finding";
+            /** Format: uuid */
+            context_id: string;
+        };
+        AIChatResponse: {
+            answer: string;
+            uncertainties: string[];
+            referenced_finding_ids: string[];
+        };
+        AIChatHistoryEntry: components["schemas"]["AIChatResponse"] & {
+            /** Format: uuid */
+            message_id: string;
+            question: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AIChatHistoryResponse: {
+            data: components["schemas"]["AIChatHistoryEntry"][];
+        };
+        AIUsageEntry: {
+            operation: string;
+            provider: string;
+            model: string;
+            status: string;
+            input_tokens: number | null;
+            output_tokens: number | null;
+            total_tokens: number | null;
+            latency_ms: number | null;
+            http_status: number | null;
+            request_id: string | null;
+            error_code: string | null;
+            /** Format: uuid */
+            scan_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AIUsageSummary: {
+            requests: number;
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            errors: number;
+        };
+        AIUsageResponse: {
+            summary: components["schemas"]["AIUsageSummary"];
+            data: components["schemas"]["AIUsageEntry"][];
+        };
         ScanAIAnalysisUnavailable: {
             /** Format: uuid */
             scan_id: string;
@@ -1288,6 +1454,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -1307,6 +1475,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -1328,6 +1498,8 @@ export interface components {
             analysis_id: string;
             provider: string;
             model: string;
+            /** @enum {string} */
+            language: "en" | "pt-BR" | "ru";
             context_version: string;
             prompt_version: string;
             /** Format: date-time */
@@ -2082,7 +2254,10 @@ export interface operations {
     };
     getScanAIAnalysis: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language used to generate and retrieve this persisted analysis. */
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */
@@ -2109,7 +2284,10 @@ export interface operations {
     };
     requestScanAIAnalysis: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language used to generate and retrieve this persisted analysis. */
+                language?: "en" | "pt-BR" | "ru";
+            };
             header?: never;
             path: {
                 /** @description Backend identifier of the scan. */
@@ -2156,6 +2334,178 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    getScanReport: {
+        parameters: {
+            query?: {
+                language?: "en" | "pt-BR" | "ru";
+            };
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+                kind: components["schemas"]["ReportKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report scoped to the caller's organisation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanReportResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The scan is not ready for a report. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAIUsage: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI usage summary and recent requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIUsageResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listContextAIChat: {
+        parameters: {
+            query: {
+                scope: "scan" | "host" | "finding";
+                context_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Last ten questions for the selected context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatHistoryResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    askContextAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIContextChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Grounded answer for the selected context. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Context exceeds the provider limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description AI provider rate limit reached. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            502: components["responses"]["InternalServerError"];
+        };
+    };
+    downloadScanReport: {
+        parameters: {
+            query?: {
+                language?: "en" | "pt-BR" | "ru";
+            };
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+                kind: components["schemas"]["ReportKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Downloadable PDF report. */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The scan is not ready for a report. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalServerError"];
         };
     };
     listHosts: {

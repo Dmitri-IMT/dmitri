@@ -19,6 +19,7 @@ from api.models.persistence import (
 )
 from api.schemas.scan import FindingPayload, HostPayload, PortPayload, ScanIngestRequest
 from api.services.activity import append_scan_activity
+from api.services.ai.jobs import enqueue_auto_scan_analysis
 from api.services.command_lifecycle import is_terminal
 from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
@@ -182,6 +183,9 @@ def persist_scan(
     )
 
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
+    # Enrichment workers call this again when their jobs finish. Calling it
+    # here also covers scans that produce no enrichment jobs at all.
+    enqueue_auto_scan_analysis(session, scan.scan_id, commit=False)
 
     if command is None:
         session.commit()
