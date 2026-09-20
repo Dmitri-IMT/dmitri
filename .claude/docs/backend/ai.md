@@ -24,12 +24,15 @@ timestamp: 2026-09-19T21:00:00Z
    plus a non-empty `AI_API_KEY`). That loop is separate from enrichment; it claims at most one
    analysis row per tick and only when no `enrichment_jobs` for that scan are `pending` or `running`.
 
-2. **Contextual chat** — read-only Q&A grounded in org-scoped scan/host/finding evidence. Routes live
-   on `routers/ai.py` (`/api/v1/ai/chat`, `/api/v1/ai/chat/history`) and on legacy per-resource paths
-   (`/scans/{id}/chat`, `/hosts/{id}/explain`, `/findings/{id}/explain`). Every chat request body
-   takes optional `language` (default `en`); the provider writes the answer in that language. History
-   is capped at 10 messages per `(scope_type, scope_id)`. Host history (`GET /hosts/{id}/explain`)
-   spans all scans of that host, not only the latest one.
+2. **Contextual chat** — read-only Q&A grounded in org-scoped scan/host/finding evidence. Two
+   routes, both on `routers/ai.py`: `POST /api/v1/ai/chat` and `GET /api/v1/ai/chat/history`, each
+   taking `scope` (`scan`/`host`/`finding`) plus `context_id`. The per-resource paths
+   (`/scans/{id}/chat`, `/hosts/{id}/explain`, `/findings/{id}/explain`) were deleted in PR #151.
+   Every chat request body takes optional `language` (default `en`); the provider writes the answer
+   in that language. History is capped at 10 messages per `(scope_type, scope_id)`. Host history
+   spans all scans of that host, not only the latest one. A successful POST writes the usage rows
+   and the transcript in one commit; when the provider fails, the usage rows are committed alone,
+   because the tokens were spent.
 
 3. **Usage telemetry** — each provider call appends operational metadata to `ai_usage` via
    `drain_provider_usage` / `persist_usage_events`. Prompts and model text are **not** stored there.
@@ -88,7 +91,8 @@ Each language is a separate job and a separate provider run.
   ([services](/backend/services.md)).
 - Settings: `AI_*` including `AI_AUTO_ANALYSIS` on [`Settings`](/backend/api.md).
 - SPA: [scan-ai](/frontend/scan-ai.md) (overview jobs), [context-ai](/frontend/context-ai.md)
-  (`/ai/chat` on scan/host routes plus `/explain` one-shots in `FindingPanel` and `HostDetail`),
+  (`/ai/chat` everywhere: the floating assistant plus the one-shot cards in `FindingPanel`
+  and `HostDetail`),
   [ai-usage](/frontend/ai-usage.md), [home-ai-overview](/frontend/home-ai-overview.md).
 - Decision record: [ADR-020](../../docs/adr/ADR-020-ai-scan-analysis.md).
 
