@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from api.schemas.ai import (
     ProviderScanAIAnalysis,
@@ -9,6 +8,11 @@ from api.schemas.ai import (
 )
 from api.services.ai.context import ScanAIContext
 from api.services.ai.groq import AIProviderError
+from api.services.ai.providers import (
+    BoundedScanAnalysisProvider,
+    ScanAnalysisProvider,
+    supports_bounded_scan_analysis,
+)
 from api.services.ai.validation import validate_provider_child_analysis
 from api.services.ai.writing import (
     WritingStyleViolation,
@@ -26,7 +30,7 @@ class AnalysisCoverage:
 
 
 def run_bounded_analysis(
-    provider: Any,
+    provider: ScanAnalysisProvider,
     context: ScanAIContext,
     *,
     child_findings: int = DEFAULT_CHILD_FINDINGS,
@@ -35,8 +39,7 @@ def run_bounded_analysis(
     """Run isolated finding chunks, then synthesize only validated child output."""
     if child_findings < 1:
         raise ValueError("child_findings must be positive")
-    chunks = split_context(context, child_findings)
-    if not hasattr(provider, "analyze_chunk"):
+    if not supports_bounded_scan_analysis(provider):
         analysis = provider.analyze_scan(context, language=language)
         return analysis, AnalysisCoverage(
             analyzed_findings=len(context.top_findings),
@@ -44,7 +47,8 @@ def run_bounded_analysis(
             total_findings=len(context.top_findings),
         )
 
-    children: list[dict[str, Any]] = []
+    chunks = split_context(context, child_findings)
+    children: list[dict[str, object]] = []
     failed_refs: list[str] = []
     analyzed = 0
     for chunk in chunks:
@@ -57,8 +61,6 @@ def run_bounded_analysis(
         children.append(child.model_dump(mode="json"))
         analyzed += len(refs)
 
-    if not hasattr(provider, "synthesize_scan"):
-        raise AIProviderError("invalid_provider_response", retryable=False)
     synthesis = provider.synthesize_scan(
         context, children, tuple(failed_refs), language=language
     )
@@ -103,7 +105,10 @@ def split_context(
 
 
 def _run_child(
-    provider: Any, context: ScanAIContext, *, language: str
+    provider: BoundedScanAnalysisProvider,
+    context: ScanAIContext,
+    *,
+    language: str,
 ) -> ProviderScanAIChildAnalysis:
     child = provider.analyze_chunk(context, language=language)
     if not isinstance(child, ProviderScanAIChildAnalysis):
@@ -112,9 +117,10 @@ def _run_child(
         child = validate_provider_child_analysis(context, child)
         lint_provider_child_analysis(child)
     except WritingStyleViolation as exc:
-        if not hasattr(provider, "repair_chunk"):
+        repair = getattr(provider, "repair_chunk", None)
+        if not callable(repair):
             raise
-        child = provider.repair_chunk(context, exc.codes, language=language)
+        child = repair(context, exc.codes, language=language)
         if not isinstance(child, ProviderScanAIChildAnalysis):
             child = ProviderScanAIChildAnalysis.model_validate(child)
         child = validate_provider_child_analysis(context, child)

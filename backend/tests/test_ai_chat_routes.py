@@ -20,7 +20,7 @@ class _FakeProvider:
 class _ScopedFakeProvider:
     def answer_question(self, context, question, language="en"):
         assert question == "explique este contexto"
-        assert "finding" in context or "host" in context
+        assert "finding" in context or "machine_ref" in context
         return ProviderAIChatResponse(
             answer="Explicação fundamentada.",
             uncertainties=[],
@@ -141,6 +141,7 @@ def test_context_chat_scan_maps_provider_rate_limit_to_api_error(
                 "question": "o que devo corrigir?",
                 "scope": "scan",
                 "context_id": str(seeded["scan"].scan_id),
+                "language": "pt-BR",
             },
             headers=actor_headers(seeded["org"].id, "viewer"),
         )

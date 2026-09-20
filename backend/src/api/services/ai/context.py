@@ -291,10 +291,20 @@ def _text_values(analysis: ProviderScanAIAnalysis) -> list[str]:
     return values
 
 
-def _replace_references(value: str, display_values_by_ref: dict[str, str]) -> str:
+def replace_ai_references(value: str, display_values_by_ref: dict[str, str]) -> str:
     return _REFERENCE_PATTERN.sub(
         lambda match: display_values_by_ref[match.group(0)], value
     )
+
+
+def assign_machine_ref(
+    machine_refs: dict[UUID | None, str], host_id: UUID | None
+) -> str | None:
+    return _machine_ref(machine_refs, host_id)
+
+
+def _replace_references(value: str, display_values_by_ref: dict[str, str]) -> str:
+    return replace_ai_references(value, display_values_by_ref)
 
 
 def _epss_by_cve(session: Session, cve_ids: set[str]) -> dict[str, EpssRecord]:

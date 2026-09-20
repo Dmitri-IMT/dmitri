@@ -20,16 +20,16 @@ from api.schemas.ai import (
     AIUsageSummary,
 )
 from api.services.ai.chat import (
-    build_chat_context,
-    build_finding_context,
-    build_host_context,
-    finding_reference_map,
+    AIChatContextBundle,
+    answer_interactive_question,
+    build_finding_chat_bundle,
+    build_host_chat_bundle,
+    build_scan_chat_bundle,
     list_chat_messages,
     save_chat_message,
 )
+from api.services.ai.chat_errors import chat_api_error_message
 from api.services.ai.groq import AIProviderError, ai_is_available, build_ai_provider
-from api.services.ai.jobs import get_scan_ai_analysis
-from api.services.ai.orchestrator import AIOrchestrator
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.read import (
     get_finding_detail,
@@ -145,15 +145,15 @@ def ask_context_chat(
     resolved = _build_context(session, payload.scope, payload.context_id, caller.org_id)
     if resolved is None:
         raise HTTPException(status_code=404, detail="Context not found")
-    context, scan_id, findings = resolved
+    bundle, scan_id = resolved
     provider = build_ai_provider(settings)
     assert provider is not None
     try:
-        response = AIOrchestrator(provider).answer_question(
-            context=context,
+        response = answer_interactive_question(
+            provider,
+            bundle,
             question=payload.question,
             language=payload.language,
-            finding_references=finding_reference_map(findings, payload.question),
         )
         persist_usage_events(
             session,
@@ -189,14 +189,19 @@ def ask_context_chat(
             wait_seconds = exc.retry_after_seconds or 60
             raise ApiError(
                 429,
-                "Limite temporário de tokens da IA atingido. "
-                f"Tente novamente em aproximadamente {wait_seconds} segundos.",
+                chat_api_error_message(
+                    "ai_rate_limited",
+                    language=payload.language,
+                    seconds=wait_seconds,
+                ),
                 code="ai_rate_limited",
             ) from exc
         if exc.code == "provider_context_too_large":
             raise ApiError(
                 413,
-                "O contexto é grande demais. Tente uma pergunta mais específica.",
+                chat_api_error_message(
+                    "ai_context_too_large", language=payload.language
+                ),
                 code="ai_context_too_large",
             ) from exc
         raise ApiError(
@@ -215,7 +220,7 @@ def _resolve_scan_id(
 
 def _build_context(
     session: Session, scope: str, context_id: UUID, org_id: UUID
-) -> tuple[dict[str, object], UUID, list[object]] | None:
+) -> tuple[AIChatContextBundle, UUID] | None:
     if scope == "scan":
         detail = get_scan_detail(session, context_id, org_id=org_id)
         if detail is None or detail.status != "completed":
@@ -223,11 +228,7 @@ def _build_context(
         risk = get_scan_risk_summary(session, context_id, org_id=org_id)
         if risk is None:
             return None
-        analysis = get_scan_ai_analysis(
-            session, context_id, org_id=org_id, ai_enabled=True
-        )
-        findings = list(detail.findings)
-        return build_chat_context(detail, risk, analysis), context_id, findings
+        return build_scan_chat_bundle(detail, risk), context_id
     if scope == "host":
         host = get_host_detail(session, context_id, org_id=org_id)
         if host is None or not host.scan_history:
@@ -235,12 +236,8 @@ def _build_context(
         findings = list_findings(
             session, org_id=org_id, host_id=context_id, per_page=100
         ).data
-        return (
-            build_host_context(host, findings),
-            host.scan_history[0].scan_id,
-            findings,
-        )
+        return build_host_chat_bundle(host, findings), host.scan_history[0].scan_id
     finding = get_finding_detail(session, context_id, org_id=org_id)
     if finding is None:
         return None
-    return build_finding_context(finding), finding.scan_id, [finding]
+    return build_finding_chat_bundle(finding), finding.scan_id

@@ -1,19 +1,13 @@
 from uuid import uuid4
 
 from api.schemas.ai import ProviderAIChatResponse
-from api.services.ai.orchestrator import AIOrchestrator
+from api.services.ai.chat import AIChatContextBundle, answer_interactive_question
 
 
 class FakeQuestionProvider:
-    def __init__(self) -> None:
-        self.context: dict[str, object] | None = None
-        self.question: str | None = None
-
     def answer_question(
         self, context: dict[str, object], question: str, language: str = "en"
     ) -> ProviderAIChatResponse:
-        self.context = context
-        self.question = question
         return ProviderAIChatResponse(
             answer="Explanação baseada na evidência.",
             uncertainties=[],
@@ -21,17 +15,18 @@ class FakeQuestionProvider:
         )
 
 
-def test_orchestrator_delegates_and_materializes_references() -> None:
-    provider = FakeQuestionProvider()
+def test_answer_interactive_question_materializes_references() -> None:
     finding_id = uuid4()
-
-    response = AIOrchestrator(provider).answer_question(
-        context={"scan": {"finding_count": 1}},
-        question="O que devo corrigir primeiro?",
-        finding_references={"finding_1": finding_id},
+    bundle = AIChatContextBundle(
+        provider_context={"scope": "scan", "top_findings": []},
+        finding_ids_by_ref={"finding_1": finding_id},
+        display_values_by_ref={"finding_1": "OpenSSH issue"},
     )
 
-    assert provider.question == "O que devo corrigir primeiro?"
-    assert provider.context == {"scan": {"finding_count": 1}}
-    assert response.referenced_finding_ids == [finding_id]
+    response = answer_interactive_question(
+        FakeQuestionProvider(),
+        bundle,
+        question="O que devo corrigir primeiro?",
+    )
 
+    assert response.referenced_finding_ids == [finding_id]

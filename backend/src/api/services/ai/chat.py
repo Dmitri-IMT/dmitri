@@ -2,110 +2,260 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from sqlmodel import Session, select
 
 from api.models.persistence import AIChatMessageRecord, ScanRecord
-from api.schemas.ai import AIChatHistoryEntry, AIChatResponse, ProviderAIChatResponse
+from api.schemas.ai import (
+    AIChatHistoryEntry,
+    AIChatResponse,
+    ProviderAIChatResponse,
+)
 from api.schemas.read import (
     FindingRead,
     HostDetailResponse,
     ScanDetailResponse,
     ScanRiskSummaryResponse,
 )
+from api.services.ai.context import (
+    AI_CONTEXT_VERSION,
+    AIFindingContext,
+    assign_machine_ref,
+    replace_ai_references,
+)
 
 MAX_CHAT_HISTORY = 10
 
 
-def build_chat_context(
+@dataclass(frozen=True)
+class AIChatContextBundle:
+    provider_context: dict[str, object]
+    finding_ids_by_ref: dict[str, UUID]
+    display_values_by_ref: dict[str, str]
+
+
+def build_scan_chat_bundle(
     detail: ScanDetailResponse,
     risk: ScanRiskSummaryResponse,
-    analysis: object | None,
     question: str | None = None,
-) -> dict[str, object]:
-    """Build a bounded, read-only context for one scan question."""
-    completed_analysis = getattr(analysis, "analysis", None)
-    analysis_context = None
-    if completed_analysis is not None:
-        analysis_context = {
-            "plain_language_summary": _clip(
-                completed_analysis.plain_language_summary, 1200
-            ),
-            "overall_assessment": _clip(completed_analysis.overall_assessment, 1200),
-            "priority_actions": [
-                {
-                    "priority": action.priority,
-                    "title": _clip(action.title, 180),
-                    "description": _clip(action.description, 400),
-                }
-                for action in completed_analysis.priority_actions[:5]
-            ],
-            "uncertainties": [
-                _clip(item, 400) for item in completed_analysis.uncertainties[:5]
-            ],
-        }
-
-    candidates = detail.findings if question else risk.top_findings
-    if not candidates:
-        candidates = risk.top_findings
-    selected_findings = _select_findings(candidates, question)
-    return {
-        "scan": {
-            "scan_id": str(detail.scan_id),
-            "timestamp": detail.timestamp.isoformat(),
-            "subnet": detail.subnet,
+) -> AIChatContextBundle:
+    """Build a placeholder-only scan context for interactive questions."""
+    machine_refs = _collect_machine_refs(detail.findings)
+    contexts, finding_ids_by_ref, display_values_by_ref = _finding_context_bundle(
+        _select_findings(list(detail.findings), question),
+        machine_refs,
+    )
+    _seed_machine_display_values(detail.findings, machine_refs, display_values_by_ref)
+    return AIChatContextBundle(
+        provider_context={
+            "context_version": AI_CONTEXT_VERSION,
+            "scope": "scan",
             "scan_mode": detail.scan_mode,
             "status": detail.status,
             "host_count": detail.host_count,
-            "finding_count": detail.finding_count,
+            "aggregate": {
+                "total_findings": risk.total_findings,
+                "scored_findings": risk.scored_findings,
+                "confirmed_findings": risk.confirmed_findings,
+                "kev_findings": risk.kev_findings,
+                "average_risk_score": risk.average_risk_score,
+                "max_risk_score": risk.max_risk_score,
+                "severity": risk.severity.model_dump(mode="json"),
+            },
+            "top_findings": [item.model_dump(mode="json") for item in contexts],
+            "machine_vulnerability_summary": _machine_vulnerability_summary(
+                detail.findings, machine_refs
+            ),
         },
-        "risk_summary": {
-            "total_findings": risk.total_findings,
-            "scored_findings": risk.scored_findings,
-            "confirmed_findings": risk.confirmed_findings,
-            "kev_findings": risk.kev_findings,
-            "average_risk_score": risk.average_risk_score,
-            "max_risk_score": risk.max_risk_score,
-            "severity": risk.severity.model_dump(mode="json"),
+        finding_ids_by_ref=finding_ids_by_ref,
+        display_values_by_ref=display_values_by_ref,
+    )
+
+
+def build_finding_chat_bundle(finding: FindingRead) -> AIChatContextBundle:
+    machine_refs: dict[UUID | None, str] = {}
+    machine_ref = assign_machine_ref(machine_refs, finding.host_id)
+    finding_ref = "finding_1"
+    finding_ids_by_ref = {finding_ref: finding.finding_id}
+    display_values_by_ref = {finding_ref: finding.title}
+    if machine_ref is not None:
+        display_values_by_ref[machine_ref] = (
+            finding.host_hostname
+            or str(finding.host_ip)
+            or "the affected machine"
+        )
+    context = AIFindingContext(
+        finding_ref=finding_ref,
+        machine_ref=machine_ref,
+        cve_id=finding.cve_id,
+        cvss_score=finding.cvss_score,
+        severity=finding.severity,
+        confidence=finding.confidence,
+        risk_score=finding.risk_score,
+        exploitability=finding.exploitability,
+        epss_score=None,
+        epss_percentile=None,
+        is_kev=False,
+        known_ransomware=False,
+    )
+    return AIChatContextBundle(
+        provider_context={
+            "context_version": AI_CONTEXT_VERSION,
+            "scope": "finding",
+            "finding": context.model_dump(mode="json"),
         },
-        "host_vulnerability_summary": _host_vulnerability_summary(
-            detail.findings
-        ),
-        "top_findings": [
-            {
-                "finding_ref": f"finding_{index}",
-                "finding_id": str(finding.finding_id),
-                "title": _clip(finding.title, 180),
-                "description": _clip(finding.description, 500),
-                "recommendation": _clip(finding.recommendation, 500),
-                "severity": finding.severity,
-                "cve_id": finding.cve_id,
-                "cvss_score": finding.cvss_score,
-                "risk_score": finding.risk_score,
-                "host_ip": str(finding.host_ip) if finding.host_ip else None,
-                "host_hostname": finding.host_hostname,
-                "port": finding.port,
-                "service": finding.service,
-            }
-            for index, finding in enumerate(selected_findings, start=1)
-        ],
-        "existing_ai_analysis": analysis_context,
+        finding_ids_by_ref=finding_ids_by_ref,
+        display_values_by_ref=display_values_by_ref,
+    )
+
+
+def build_host_chat_bundle(
+    host: HostDetailResponse, findings: list[FindingRead]
+) -> AIChatContextBundle:
+    machine_refs: dict[UUID | None, str] = {}
+    machine_ref = assign_machine_ref(machine_refs, host.host_id)
+    if machine_ref is None:
+        machine_ref = "machine_1"
+        machine_refs[host.host_id] = machine_ref
+    display_values_by_ref = {
+        machine_ref: host.hostname or str(host.ip) or "the affected machine"
     }
-
-
-def _host_vulnerability_summary(findings: list[object]) -> list[dict[str, object]]:
-    """Provide deterministic per-host totals for questions about equipment."""
-    hosts: dict[str, dict[str, object]] = {}
-    for finding in findings:
-        ip = str(getattr(finding, "host_ip", "") or "")
-        hostname = str(getattr(finding, "host_hostname", "") or "")
-        key = ip or hostname or "unknown"
-        entry = hosts.setdefault(
-            key,
+    contexts, finding_ids_by_ref, finding_display = _finding_context_bundle(
+        findings[:10], machine_refs
+    )
+    display_values_by_ref.update(finding_display)
+    service_refs: dict[int, str] = {}
+    services = []
+    for port in host.ports[:20]:
+        service_ref = f"service_{len(service_refs) + 1}"
+        service_refs[port.port] = service_ref
+        display_values_by_ref[service_ref] = (
+            f"{port.port}/{port.protocol} {port.service or 'unknown'}"
+        )
+        services.append(
             {
-                "host_ip": ip or None,
-                "host_hostname": hostname or None,
+                "service_ref": service_ref,
+                "protocol": port.protocol,
+                "service": port.service,
+            }
+        )
+    return AIChatContextBundle(
+        provider_context={
+            "context_version": AI_CONTEXT_VERSION,
+            "scope": "host",
+            "machine_ref": machine_ref,
+            "machine_type": host.machine_type,
+            "vulnerability_count": host.vulnerability_count,
+            "highest_severity": host.highest_severity,
+            "open_ports_count": host.open_ports_count,
+            "services": services,
+            "findings": [item.model_dump(mode="json") for item in contexts],
+        },
+        finding_ids_by_ref=finding_ids_by_ref,
+        display_values_by_ref=display_values_by_ref,
+    )
+
+
+def answer_interactive_question(
+    provider: Any,
+    bundle: AIChatContextBundle,
+    *,
+    question: str,
+    language: str = "en",
+) -> AIChatResponse:
+    provider_response = provider.answer_question(
+        bundle.provider_context, question, language=language
+    )
+    if not isinstance(provider_response, ProviderAIChatResponse):
+        provider_response = ProviderAIChatResponse.model_validate(provider_response)
+    return materialize_chat_response(
+        provider_response,
+        bundle.finding_ids_by_ref,
+        bundle.display_values_by_ref,
+    )
+
+
+def _collect_machine_refs(findings: list[object]) -> dict[UUID | None, str]:
+    machine_refs: dict[UUID | None, str] = {}
+    for finding in findings:
+        assign_machine_ref(machine_refs, getattr(finding, "host_id", None))
+    return machine_refs
+
+
+def _seed_machine_display_values(
+    findings: list[object],
+    machine_refs: dict[UUID | None, str],
+    display_values_by_ref: dict[str, str],
+) -> None:
+    for finding in findings:
+        host_id = getattr(finding, "host_id", None)
+        machine_ref = machine_refs.get(host_id)
+        if machine_ref is None or machine_ref in display_values_by_ref:
+            continue
+        display_values_by_ref[machine_ref] = (
+            getattr(finding, "host_hostname", None)
+            or str(getattr(finding, "host_ip", "") or "")
+            or "the affected machine"
+        )
+
+
+def _finding_context_bundle(
+    findings: list[object],
+    machine_refs: dict[UUID | None, str],
+) -> tuple[list[AIFindingContext], dict[str, UUID], dict[str, str]]:
+    finding_ids_by_ref: dict[str, UUID] = {}
+    display_values_by_ref: dict[str, str] = {}
+    contexts: list[AIFindingContext] = []
+    for index, finding in enumerate(findings, start=1):
+        finding_ref = f"finding_{index}"
+        host_id = getattr(finding, "host_id", None)
+        machine_ref = machine_refs.get(host_id)
+        if machine_ref is None and host_id is not None:
+            machine_ref = assign_machine_ref(machine_refs, host_id)
+        finding_ids_by_ref[finding_ref] = finding.finding_id
+        display_values_by_ref[finding_ref] = finding.title
+        if machine_ref is not None:
+            display_values_by_ref[machine_ref] = (
+                getattr(finding, "host_hostname", None)
+                or str(getattr(finding, "host_ip", "") or "")
+                or "the affected machine"
+            )
+        contexts.append(
+            AIFindingContext(
+                finding_ref=finding_ref,
+                machine_ref=machine_ref,
+                cve_id=getattr(finding, "cve_id", None),
+                cvss_score=getattr(finding, "cvss_score", None),
+                severity=getattr(finding, "severity", "medium"),
+                confidence=getattr(finding, "confidence", None),
+                risk_score=getattr(finding, "risk_score", None),
+                exploitability=getattr(finding, "exploitability", None),
+                epss_score=None,
+                epss_percentile=None,
+                is_kev=False,
+                known_ransomware=False,
+            )
+        )
+    return contexts, finding_ids_by_ref, display_values_by_ref
+
+
+def _machine_vulnerability_summary(
+    findings: list[object],
+    machine_refs: dict[UUID | None, str],
+) -> list[dict[str, object]]:
+    machines: dict[str, dict[str, object]] = {}
+    for finding in findings:
+        host_id = getattr(finding, "host_id", None)
+        machine_ref = machine_refs.get(host_id)
+        if machine_ref is None:
+            continue
+        entry = machines.setdefault(
+            machine_ref,
+            {
+                "machine_ref": machine_ref,
                 "finding_count": 0,
                 "severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
                 "max_risk_score": None,
@@ -122,76 +272,9 @@ def _host_vulnerability_summary(findings: list[object]) -> list[dict[str, object
         ):
             entry["max_risk_score"] = risk_score
     return sorted(
-        hosts.values(),
-        key=lambda host: (-int(host["finding_count"]), str(host["host_ip"] or "")),
+        machines.values(),
+        key=lambda host: (-int(host["finding_count"]), str(host["machine_ref"])),
     )[:20]
-
-
-def build_finding_context(finding: object) -> dict[str, object]:
-    """Build a bounded context for a future finding-specific explanation."""
-    return {
-        "finding": {
-            "finding_ref": "finding_1",
-            "finding_id": str(getattr(finding, "finding_id", "")),
-            "title": _clip(str(getattr(finding, "title", "") or ""), 240),
-            "description": _clip(
-                str(getattr(finding, "description", "") or ""), 1200
-            ),
-            "recommendation": _clip(
-                str(getattr(finding, "recommendation", "") or ""), 800
-            ),
-            "evidence": _clip(str(getattr(finding, "evidence", "") or ""), 800),
-            "severity": getattr(finding, "severity", None),
-            "risk_score": getattr(finding, "risk_score", None),
-            "confidence": getattr(finding, "confidence", None),
-            "cve_id": getattr(finding, "cve_id", None),
-            "cvss_score": getattr(finding, "cvss_score", None),
-            "host_ip": str(getattr(finding, "host_ip", "") or "") or None,
-            "host_hostname": getattr(finding, "host_hostname", None),
-            "service": getattr(finding, "service", None),
-            "port": getattr(finding, "port", None),
-        }
-    }
-
-
-def build_host_context(
-    host: HostDetailResponse, findings: list[FindingRead]
-) -> dict[str, object]:
-    """Build a bounded context for a host-specific explanation."""
-    return {
-        "host": {
-            "host_id": str(host.host_id),
-            "ip": str(host.ip),
-            "hostname": host.hostname,
-            "vendor": host.vendor,
-            "machine_type": host.machine_type,
-            "vulnerability_count": host.vulnerability_count,
-            "highest_severity": host.highest_severity,
-            "open_ports_count": host.open_ports_count,
-            "services": [
-                {
-                    "port": port.port,
-                    "protocol": port.protocol,
-                    "service": port.service,
-                    "version": port.version,
-                }
-                for port in host.ports[:20]
-            ],
-        },
-        "findings": [
-            {
-                "finding_ref": f"finding_{index}",
-                "finding_id": str(finding.finding_id),
-                "title": _clip(finding.title, 180),
-                "severity": finding.severity,
-                "risk_score": finding.risk_score,
-                "service": finding.service,
-                "cve_id": finding.cve_id,
-                "recommendation": _clip(finding.recommendation, 400),
-            }
-            for index, finding in enumerate(findings[:10], start=1)
-        ],
-    }
 
 
 _QUESTION_STOPWORDS = {
@@ -241,21 +324,20 @@ def _question_terms(value: str) -> list[str]:
     ]
 
 
-def _clip(value: str, limit: int) -> str:
-    compact = " ".join(value.split())
-    return compact if len(compact) <= limit else f"{compact[: limit - 1]}…"
-
-
 def materialize_chat_response(
     response: ProviderAIChatResponse,
     finding_ids_by_ref: dict[str, UUID],
+    display_values_by_ref: dict[str, str],
 ) -> AIChatResponse:
     unknown = set(response.referenced_finding_refs) - set(finding_ids_by_ref)
     if unknown:
         raise ValueError("chat response contains an unknown finding reference")
     return AIChatResponse(
-        answer=response.answer,
-        uncertainties=response.uncertainties,
+        answer=replace_ai_references(response.answer, display_values_by_ref),
+        uncertainties=[
+            replace_ai_references(item, display_values_by_ref)
+            for item in response.uncertainties
+        ],
         referenced_finding_ids=[
             finding_ids_by_ref[reference]
             for reference in response.referenced_finding_refs
@@ -266,10 +348,11 @@ def materialize_chat_response(
 def finding_reference_map(
     findings: list[object], question: str | None = None
 ) -> dict[str, UUID]:
-    return {
-        f"finding_{index}": finding.finding_id
-        for index, finding in enumerate(_select_findings(findings, question), start=1)
-    }
+    machine_refs = _collect_machine_refs(findings)
+    _, finding_ids_by_ref, _ = _finding_context_bundle(
+        _select_findings(findings, question), machine_refs
+    )
+    return finding_ids_by_ref
 
 
 def save_chat_message(
