@@ -8,7 +8,7 @@ from api.core.config import get_settings
 from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Agent
 from api.models.identity import Org
-from api.models.persistence import EnrichmentJobRecord
+from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord
 from api.schemas.scan import HostPayload, PortPayload, ScanIngestRequest
 from api.services.enrichment import (
     claim_pending_enrichment_jobs,
@@ -97,6 +97,42 @@ def test_nvd_rate_limit_requeues_job_for_later(
     assert job.next_attempt_at >= before + timedelta(seconds=45)
 
     assert claim_pending_enrichment_jobs(runtime_session, batch_size=1) == []
+    get_settings.cache_clear()
+
+
+def test_terminal_enrichment_can_enqueue_one_auto_analysis(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    monkeypatch.setenv("AI_ENABLED", "true")
+    monkeypatch.setenv("AI_AUTO_ANALYSIS", "true")
+    monkeypatch.setenv("AI_API_KEY", "test-key")
+    get_settings.cache_clear()
+    job = _one_nvd_job(
+        runtime_session,
+        org=seeded_org,
+        agent=provisioned_agent,
+    )
+    claimed = claim_pending_enrichment_jobs(runtime_session, batch_size=1)
+
+    class _EmptyClient:
+        def query_by_cpe(self, session: Session, cpe: str) -> dict:
+            return {"vulnerabilities": []}
+
+    process_claimed_enrichment_job(
+        runtime_session,
+        claimed[0],
+        client=_EmptyClient(),  # type: ignore[arg-type]
+    )
+
+    analysis = runtime_session.exec(
+        select(AIScanAnalysisRecord).where(
+            AIScanAnalysisRecord.scan_id == job.scan_id
+        )
+    ).one()
+    assert analysis.status == "pending"
     get_settings.cache_clear()
 
 

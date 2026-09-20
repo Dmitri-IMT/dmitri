@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate hold list- and detail-page state machines; Pagination, EmptyState, SeverityWord, and LoadingSkeleton.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # frontend shared tables
@@ -33,8 +33,8 @@ directory table.
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>`, `backTo`, and `backLabel`; owns notFound → error → loading with a placeholder `PageHeader` in non-ready states. Calls `children(data)` only when ready. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it. | `frontend/src/components/EmptyMark.tsx:2` |
 | `Pagination` | Required `label` becomes the nav `aria-label` (for example `Scan pages`, `Attention pages`). Previous/Next stay icon-only. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:20` |
-| `EmptyState` | Centred heading, body, optional `action` and `note` slots — no ornament. Devices blank is the one list blank with `note` only and no `action`. | `frontend/src/components/EmptyState.tsx:11` |
-| `SeverityWord` | Severity as semibold text (`Critical` / `High` / …). Null severity renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:13` |
+| `EmptyState` | Centred heading, body, optional `action` and `note` slots — no ornament. The root has `role="status"` and the heading id is `${testId}-heading`. Devices blank is the one list blank with `note` only and no `action`. | `frontend/src/components/EmptyState.tsx:11` |
+| `SeverityWord` | Severity as a semibold rounded pill with a per-level colour (red, orange, amber, emerald Tailwind palette classes, with `dark:` pairs) (`Critical` / `High` / …). Null severity renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:22` |
 | `AttentionWord` | Exposure attention as semantic text (`Informational`, `Review`, `Priority`); deliberately separate from vulnerability severity. | `frontend/src/components/AttentionWord.tsx:11` |
 | `LoadingSkeleton` | `rows × columns` bars using `bg-border`, inside one `<tbody>`. Rendered by a pending `DataTable`, Home loading and `QuietMachineGroup`. Bars mount only after `useSkeletonDelay` (250 ms) so a fast read never flashes. | `frontend/src/components/LoadingSkeleton.tsx:13` |
 | `useSkeletonDelay` | `false` until 250 ms after mount, then `true`. Shared by `LoadingSkeleton`, Home loading, and Users `SkeletonRows`. | `frontend/src/hooks/useSkeletonDelay.ts:6` |

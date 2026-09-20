@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlmodel import Session
 
 from api.core.config import Settings, get_settings
@@ -11,7 +11,7 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent
 from api.dependencies.auth import CallerIdentity, require_user
 from api.errors import ApiError
 from api.models.persistence import utc_now
-from api.schemas.ai import ScanAIAnalysisResponse
+from api.schemas.ai import AILanguage, ScanAIAnalysisResponse
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -20,6 +20,7 @@ from api.schemas.read import (
     ScanStatus,
     SortOrder,
 )
+from api.schemas.reports import ReportKind, ScanReportResponse
 from api.schemas.scan import ScanIngestAcceptedResponse, ScanIngestRequest
 from api.services.ai.groq import GROQ_PROVIDER_ID, ai_is_available
 from api.services.ai.jobs import (
@@ -29,6 +30,8 @@ from api.services.ai.jobs import (
 )
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
+from api.services.report_pdf import render_scan_report_pdf
+from api.services.reports import ReportNotReadyError, build_scan_report
 
 router = APIRouter()
 
@@ -119,6 +122,7 @@ def read_scan_risk_summary(
 )
 def read_scan_ai_analysis(
     scan_id: UUID,
+    language: AILanguage = Query("en"),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
@@ -128,6 +132,7 @@ def read_scan_ai_analysis(
         scan_id,
         org_id=caller.org_id,
         ai_enabled=ai_is_available(settings),
+        language=language,
     )
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -142,6 +147,7 @@ def read_scan_ai_analysis(
 )
 def request_scan_ai_analysis_route(
     scan_id: UUID,
+    language: AILanguage = Query("en"),
     session: Session = Depends(get_session),
     caller: CallerIdentity = Depends(require_user),
     settings: Settings = Depends(get_settings),
@@ -154,6 +160,7 @@ def request_scan_ai_analysis_route(
             ai_enabled=ai_is_available(settings),
             provider_name=GROQ_PROVIDER_ID,
             model=settings.ai_model,
+            language=language,
         )
     except AIAnalysisAlreadyRequestedError as exc:
         raise ApiError(
@@ -164,3 +171,61 @@ def request_scan_ai_analysis_route(
     if analysis is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return analysis
+
+
+@router.get(
+    "/api/v1/scans/{scan_id}/reports/{kind}",
+    response_model=ScanReportResponse,
+    operation_id="getScanReport",
+)
+def read_scan_report(
+    scan_id: UUID,
+    kind: ReportKind,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    language: AILanguage = Query("en"),
+) -> ScanReportResponse:
+    try:
+        report = build_scan_report(
+            session,
+            scan_id,
+            org_id=caller.org_id,
+            kind=kind,
+            language=language,
+            ai_enabled=ai_is_available(settings),
+        )
+    except ReportNotReadyError as exc:
+        raise ApiError(
+            409,
+            "The scan is not ready for a report.",
+            code="report_not_ready",
+        ) from exc
+    if report is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return report
+
+
+@router.get(
+    "/api/v1/scans/{scan_id}/reports/{kind}/download",
+    response_class=Response,
+    operation_id="downloadScanReport",
+)
+def download_scan_report(
+    scan_id: UUID,
+    kind: ReportKind,
+    session: Session = Depends(get_session),
+    caller: CallerIdentity = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+    language: AILanguage = Query("en"),
+) -> Response:
+    report = read_scan_report(
+        scan_id, kind, session, caller, settings, language=language
+    )
+    return Response(
+        content=render_scan_report_pdf(report),
+        media_type=report.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{report.filename}"'
+        },
+    )

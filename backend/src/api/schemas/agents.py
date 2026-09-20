@@ -16,6 +16,7 @@ class AgentSummary(BaseModel):
     display_name: str
     online: bool
     last_seen_at: datetime | None
+    revoked_at: datetime | None
     target_subnet: SubnetCIDR | None = None
     active_command_id: UUID | None = None
 
@@ -27,6 +28,7 @@ class AgentDetail(BaseModel):
     display_name: str
     online: bool
     last_seen_at: datetime | None
+    revoked_at: datetime | None
     available_subnets: list[AvailableSubnet]
     target_subnet: SubnetCIDR | None = None
     active_command_id: UUID | None = None

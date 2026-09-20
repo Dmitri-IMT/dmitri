@@ -2,9 +2,11 @@ import { ArrowLeft } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { resolveBackTo } from '@/lib/navFrom'
+import useI18n from '@/i18n/useI18n'
 
 function BackLink({ fallback, testId }: { fallback: string; testId?: string }) {
   const location = useLocation()
+  const { t } = useI18n()
 
   return (
     <Button
@@ -14,7 +16,7 @@ function BackLink({ fallback, testId }: { fallback: string; testId?: string }) {
     >
       <Link to={resolveBackTo(location, fallback)} data-testid={testId}>
         <ArrowLeft aria-hidden="true" className="size-4" />
-        Back
+        {t('common.back')}
       </Link>
     </Button>
   )

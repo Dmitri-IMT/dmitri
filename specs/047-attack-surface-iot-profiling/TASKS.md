@@ -120,7 +120,7 @@ Execution is sequential. Every task passes through implementation, independent t
 - `backend/src/api/schemas/__init__.py`
 - `backend/src/api/models/persistence.py`
 - `backend/src/api/models/__init__.py`
-- `backend/alembic/versions/20260915_27_attack_surface_profiles.py`
+- `backend/alembic/versions/20260920_33_attack_surface_profiles.py`
 - `backend/src/api/services/persistence.py`
 - `backend/tests/test_ingest_schema.py`
 - `backend/tests/test_ingest_scan.py`
@@ -130,7 +130,7 @@ Execution is sequential. Every task passes through implementation, independent t
 **Success Criteria:**
 
 - OpenAPI, agent, and backend ingest models agree on exact enums, fields, limits, defaults, and current-versus-legacy cardinality/reference invariants; the canonical example validates in both Python layers.
-- Migration revision `20260915_27` depends on `20260912_26`, is additive/no-backfill, creates the specified nullable snapshots and `exposures` table constraints/indexes/FKs, enables RLS, and grants only runtime SELECT/INSERT/UPDATE with a correct downgrade.
+- Migration revision `20260920_33` depends on `20260919_32`, is additive/no-backfill, creates the specified nullable snapshots and `exposures` table constraints/indexes/FKs, enables RLS, and grants only runtime SELECT/INSERT/UPDATE with a correct downgrade.
 - Ingest resolves each exposure to its scan-host/open-port row and persists version, profile, type, evidence, and relationships atomically/idempotently without changing finding aggregates.
 - Legacy payloads remain accepted and an invalid current payload returns validation failure before persistence.
 - Focused backend schema, persistence, migration, and contract-fidelity tests pass; backend Ruff passes for changed files.

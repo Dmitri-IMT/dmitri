@@ -36,7 +36,11 @@ class ModbusDeviceIdentificationPayload(BaseModel):
 
 
 class ModbusAddressRangePayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Older NSPi agents emitted additional read summaries (for example
+    # ``value_sha256`` and ``nonzero_count``). They are not required for the
+    # current UI, but must not cause the complete industrial observation to be
+    # discarded during ingest.
+    model_config = ConfigDict(extra="ignore")
 
     address_space: Literal[
         "coil", "discrete_input", "holding_register", "input_register"
@@ -58,7 +62,10 @@ class ModbusAddressRangePayload(BaseModel):
 
 
 class ModbusUnitPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Older agents included optional validation metadata on Modbus units.
+    # Keep ingest backwards-compatible while retaining the typed fields used
+    # by the current API and persistence layer.
+    model_config = ConfigDict(extra="ignore")
 
     unit_id: Annotated[int, Field(ge=0, le=255)]
     status: Literal["responding", "exception", "timeout", "error", "skipped"]

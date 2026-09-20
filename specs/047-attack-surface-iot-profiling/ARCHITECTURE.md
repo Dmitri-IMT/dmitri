@@ -220,8 +220,8 @@ stable ordering above.
 
 ### Persistence model
 
-The Alembic revision `20260915_27_attack_surface_profiles` has revision id `20260915_27` and
-follows the current single Alembic head `20260912_26`, and adds:
+The Alembic revision `20260920_33_attack_surface_profiles` has revision id `20260920_33` and
+follows the current single Alembic head `20260919_32`, and adds:
 
 - nullable `scans.assessment_policy_version`;
 - nullable `scan_hosts.machine_type`, nullable JSON `scan_hosts.device_profile_json`, nullable
@@ -326,7 +326,7 @@ Every file expected to be created or touched by implementation is fixed here.
 | Schema exports | `backend/src/api/schemas/__init__.py` | Export ingest assessment models. |
 | ORM | `backend/src/api/models/persistence.py` | `ExposureRecord`; policy/profile columns and enum check constraints. |
 | Model registration | `backend/src/api/models/__init__.py` | Existing persistence import registers `ExposureRecord`; update module description only if needed. |
-| Migration | `backend/alembic/versions/20260915_27_attack_surface_profiles.py` | Revision `20260915_27`, down revision `20260912_26`; add nullable/versioned snapshots and secured `exposures` table with no backfill. |
+| Migration | `backend/alembic/versions/20260920_33_attack_surface_profiles.py` | Revision `20260920_33`, down revision `20260919_32`; add nullable/versioned snapshots and secured `exposures` table with no backfill. |
 | Ingest | `backend/src/api/services/persistence.py` | Persist version/profiles/exposures after endpoint resolution in the scan transaction. |
 | Inventory reconciliation | `backend/src/api/services/inventory.py` | Extend PR #143's latest-scan reconciliation: current assessment copies type/profile/version; a newer legacy snapshot uses the existing classifier and clears the current profile projection; an older scan changes neither. |
 | Read service | `backend/src/api/services/read.py` | Org-scoped exposure/profile reads, availability mapping, related finding link and stable ordering. |

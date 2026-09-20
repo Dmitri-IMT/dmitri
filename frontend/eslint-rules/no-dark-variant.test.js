@@ -69,9 +69,9 @@ describe('the src/components/ui exemption', () => {
     expect(config.rules['local/no-dark-variant']).toBeUndefined()
   })
 
-  it('keeps the rule on for an application screen', async () => {
+  it('leaves the rule off while the application supports a dark theme', async () => {
     const config = await eslint.calculateConfigForFile('src/pages/Hosts.tsx')
 
-    expect(config.rules['local/no-dark-variant']).toEqual([2])
+    expect(config.rules['local/no-dark-variant']).toBeUndefined()
   })
 })

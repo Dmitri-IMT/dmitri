@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from api.core.config import Settings, get_settings
 from api.models.persistence import (
     AIScanAnalysisRecord,
     EnrichmentJobRecord,
@@ -23,13 +24,30 @@ from api.schemas.ai import (
     ScanAIAnalysisResponse,
     ScanAIAnalysisUnavailable,
 )
+from api.services.ai.analyzer import AnalysisCoverage, run_bounded_analysis
 from api.services.ai.context import (
     AI_CONTEXT_VERSION,
     ScanAIContext,
     ScanAINotReadyError,
     build_scan_ai_context,
+    materialize_scan_ai_analysis,
 )
-from api.services.ai.groq import AI_PROMPT_VERSION, AIProviderError, GroqProvider
+from api.services.ai.groq import (
+    AI_PROMPT_VERSION,
+    GROQ_PROVIDER_ID,
+    AIProviderError,
+    GroqProvider,
+)
+from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
+from api.services.ai.validation import (
+    sanitize_scan_ai_analysis,
+    validate_provider_analysis,
+)
+from api.services.ai.writing import (
+    WRITING_SKILL_VERSION,
+    WritingStyleViolation,
+    lint_provider_analysis,
+)
 from api.services.jobs import claim_jobs, retry_or_fail
 
 logger = logging.getLogger(__name__)
@@ -49,6 +67,7 @@ def scan_ai_analysis_response(
         "status": record.status,
         "provider": record.provider,
         "model": record.model,
+        "language": record.language,
         "context_version": record.context_version,
         "prompt_version": record.prompt_version,
         "created_at": record.created_at,
@@ -58,7 +77,9 @@ def scan_ai_analysis_response(
         return ScanAIAnalysisCompleted(
             **fields,
             completed_at=record.completed_at,
-            analysis=ScanAIAnalysis.model_validate(record.analysis_json),
+            analysis=sanitize_scan_ai_analysis(
+                ScanAIAnalysis.model_validate(record.analysis_json)
+            ),
         )
     if record.status == "failed":
         return ScanAIAnalysisFailed(**fields, completed_at=record.completed_at)
@@ -71,6 +92,7 @@ def get_scan_ai_analysis(
     *,
     org_id: UUID,
     ai_enabled: bool,
+    language: str = "en",
 ) -> ScanAIAnalysisResponse | None:
     scan = session.exec(
         select(ScanRecord).where(
@@ -86,7 +108,8 @@ def get_scan_ai_analysis(
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
-            AIScanAnalysisRecord.scan_id == scan_id
+            AIScanAnalysisRecord.scan_id == scan_id,
+            AIScanAnalysisRecord.language == language,
         )
     ).first()
     if record is None:
@@ -103,7 +126,9 @@ def request_scan_ai_analysis(
     ai_enabled: bool,
     provider_name: str,
     model: str,
+    language: str = "en",
     now: datetime | None = None,
+    commit: bool = True,
 ) -> ScanAIAnalysisResponse | None:
     scan = session.exec(
         select(ScanRecord).where(
@@ -118,7 +143,8 @@ def request_scan_ai_analysis(
 
     record = session.exec(
         select(AIScanAnalysisRecord).where(
-            AIScanAnalysisRecord.scan_id == scan_id
+            AIScanAnalysisRecord.scan_id == scan_id,
+            AIScanAnalysisRecord.language == language,
         )
     ).first()
     current_time = now or datetime.now(timezone.utc)
@@ -134,28 +160,79 @@ def request_scan_ai_analysis(
         record.started_at = None
         record.completed_at = None
         session.add(record)
-        session.commit()
-        session.refresh(record)
+        if commit:
+            session.commit()
+            session.refresh(record)
         return scan_ai_analysis_response(record)
 
     record = AIScanAnalysisRecord(
         scan_id=scan_id,
         provider=provider_name,
         model=model,
+        language=language,
         status="pending",
         context_version=AI_CONTEXT_VERSION,
         prompt_version=AI_PROMPT_VERSION,
+        writing_skill_version=WRITING_SKILL_VERSION,
         created_at=current_time,
         updated_at=current_time,
     )
     session.add(record)
-    try:
-        session.commit()
-    except IntegrityError as exc:
-        session.rollback()
-        raise AIAnalysisAlreadyRequestedError from exc
-    session.refresh(record)
+    if commit:
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise AIAnalysisAlreadyRequestedError from exc
+        session.refresh(record)
     return scan_ai_analysis_response(record)
+
+
+def enqueue_auto_scan_analysis(
+    session: Session,
+    scan_id: UUID,
+    *,
+    settings: Settings | None = None,
+    commit: bool = True,
+) -> bool:
+    """Create one analysis job after all enrichment jobs reach a terminal state."""
+    resolved_settings = settings or get_settings()
+    if not resolved_settings.ai_auto_analysis or not resolved_settings.ai_enabled:
+        return False
+    if (
+        resolved_settings.ai_api_key is None
+        or not resolved_settings.ai_api_key.get_secret_value().strip()
+    ):
+        return False
+    active_enrichment = session.exec(
+        select(EnrichmentJobRecord.id).where(
+            EnrichmentJobRecord.scan_id == scan_id,
+            EnrichmentJobRecord.status.in_(ACTIVE_ENRICHMENT_STATUSES),
+        )
+    ).first()
+    if active_enrichment is not None:
+        return False
+    try:
+        request_scan_ai_analysis(
+            session,
+            scan_id,
+            org_id=_scan_org_id(session, scan_id),
+            ai_enabled=True,
+            provider_name=GROQ_PROVIDER_ID,
+            model=resolved_settings.ai_model,
+            language="en",
+            commit=commit,
+        )
+    except AIAnalysisAlreadyRequestedError:
+        return False
+    return True
+
+
+def _scan_org_id(session: Session, scan_id: UUID) -> UUID:
+    scan = session.get(ScanRecord, scan_id)
+    if scan is None:
+        raise ValueError("scan not found")
+    return scan.org_id
 
 
 def process_ready_ai_analyses(
@@ -230,6 +307,13 @@ def _process_claimed_analysis(
     now: datetime,
 ) -> None:
     def fail(code: str, retryable: bool) -> None:
+        failed_scan = session.get(ScanRecord, record.scan_id)
+        persist_usage_events(
+            session,
+            drain_provider_usage(provider),
+            scan_id=record.scan_id,
+            org_id=failed_scan.org_id if failed_scan else None,
+        )
         retry_or_fail(
             record,
             error=code,
@@ -249,10 +333,37 @@ def _process_claimed_analysis(
         context = build_scan_ai_context(
             session, scan, max_findings=max_findings
         )
-        analysis = None if context is None else provider.analyze_scan(context)
+        provider_analysis = None
+        coverage = AnalysisCoverage(0, 0, 0)
+        if context is not None:
+            provider_analysis, coverage = run_bounded_analysis(
+                provider, context, language=record.language
+            )
+            try:
+                provider_analysis = validate_provider_analysis(
+                    context, provider_analysis
+                )
+                lint_provider_analysis(provider_analysis)
+            except WritingStyleViolation as exc:
+                provider_analysis = provider.repair_analysis(
+                    context, exc.codes, language=record.language
+                )
+                provider_analysis = validate_provider_analysis(
+                    context, provider_analysis
+                )
+                lint_provider_analysis(provider_analysis)
+        analysis = (
+            None
+            if context is None or provider_analysis is None
+            else materialize_scan_ai_analysis(context, provider_analysis)
+        )
     except AIProviderError as exc:
         return fail(exc.code, exc.retryable)
+    except WritingStyleViolation:
+        return fail("style_violation", False)
     except ScanAINotReadyError:
+        return fail("invalid_analysis", False)
+    except ValueError:
         return fail("invalid_analysis", False)
     except Exception:
         logger.exception("AI analysis job failed scan_id=%s", record.scan_id)
@@ -262,8 +373,18 @@ def _process_claimed_analysis(
     if not _is_grounded(context, analysis):
         return fail("invalid_analysis", False)
 
+    persist_usage_events(
+        session,
+        drain_provider_usage(provider),
+        scan_id=record.scan_id,
+        org_id=scan.org_id,
+    )
+
     record.status = "completed"
     record.analysis_json = analysis.model_dump(mode="json")
+    record.analyzed_findings = coverage.analyzed_findings
+    record.failed_findings = coverage.failed_findings
+    record.total_findings = coverage.total_findings
     record.context_hash = _context_hash(context)
     record.completed_at = now
     session.add(record)
@@ -271,7 +392,7 @@ def _process_claimed_analysis(
 
 
 def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
-    allowed = {finding.finding_id for finding in context.top_findings}
+    allowed = set(context._finding_ids_by_ref.values())
     explained = [item.finding_id for item in analysis.important_findings]
     referenced = set(explained).union(
         *(action.related_finding_ids for action in analysis.priority_actions)

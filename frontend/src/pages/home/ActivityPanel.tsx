@@ -2,6 +2,7 @@ import Timestamp from '@/components/Timestamp'
 import { HOME_ACTIVITY_PER_PAGE } from '@/api/home'
 import HomeFeedPanel from '@/pages/home/HomeFeedPanel'
 import type { components } from '@/types/openapi'
+import useI18n from '@/i18n/useI18n'
 
 type HomeActivityItem = components['schemas']['HomeActivityItem']
 
@@ -20,17 +21,18 @@ function ActivityPanel({
   onPageChange,
   now,
 }: ActivityPanelProps) {
+  const { t } = useI18n()
   return (
     <HomeFeedPanel
       testId="home-activity"
-      title="Activity"
-      emptyText="Nothing has been recorded yet."
+      title={t('home.activity')}
+      emptyText={t('home.activityEmpty')}
       isBlank={data.length === 0}
       total={total}
       page={page}
       perPage={HOME_ACTIVITY_PER_PAGE}
       onPageChange={onPageChange}
-      label="Activity pages"
+      label={t('home.activityPages')}
     >
       {data.map((item, index) => (
         <li

@@ -39,15 +39,15 @@
 The scan pipeline, headless command daemon, and signed ingest client run in software, and a
 **physical Pi 4 appliance is provisioned and online** against the hosted `nspi` stack since
 2026-09-11 — see [`../tests/pi4-baseline-2026-09/results.md`](../tests/pi4-baseline-2026-09/results.md). The FastAPI backend serves data reads, auth, identity administration, the
-command channel, and ingest. The web app has login → Home, public auth, Settings, Users & Invites, and the DMI-88 scan/host
-read surfaces plus the Agents scan trigger (DMI-89). Still missing is the LLM explainer. Invite/reset email now sends and delivers from the verified
+command channel, and ingest. The web app has login → Home, public auth, Settings, Users & Invites, the DMI-88 scan/host
+read surfaces, the Agents scan trigger (DMI-89), and device revoke/restore (DMI-155). Still missing is the LLM explainer. Invite/reset email now sends and delivers from the verified
 `mail.peirce.dev`; what remains there is sender reputation, not code.
 
 ## Cross-layer milestone sequencing
 
 These layers are coupled; build in roughly this order so each layer has something real to talk to:
 
-1. **Pi provisioning** (PI): the board is a **Pi 4 Model B 4 GB**, matching ADR-001; flashed, agent installed at `/opt/dmitri-agent`, scans `completed` on real hardware. The memory question is settled — 134 MiB peak, network-bound not memory-bound. Remaining: register the device's public key with the backend, then enable `dmitri-agent.service`
+1. **Pi provisioning** (PI): the board is a **Pi 4 Model B 4 GB**, matching ADR-001; flashed, public key registered, agent installed at `/opt/dmitri-agent`, and `dmitri-agent.service` enabled. Scans complete on real hardware. The memory question is settled — 134 MiB peak, network-bound not memory-bound.
 2. **Hosted stack** (BACKEND B4/B5): Supabase + Railway for NSPi — [`epics/EPICS.md`](../epics/EPICS.md)
 3. **Auth Phase 1** — implement [`AUTH.md`](AUTH.md) (roadmap ✅)
 4. **ADR-011 + OpenAPI** — ✅ [`ADR-011`](../adr/ADR-011-pi-command-channel.md); implement `contracts/openapi/` in backend/Pi

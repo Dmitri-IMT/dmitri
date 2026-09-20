@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -25,14 +25,35 @@ LOGGER = logging.getLogger(__name__)
 
 CommandStatus = Literal["running", "uploading", "done", "failed"]
 
-_FORBIDDEN_PARK = "backend refused the upload; not reconnecting"
-
 
 @dataclass(slots=True)
 class CommandRecord:
     status: CommandStatus
     error_code: str | None = None
     pending: bool = True
+
+
+class _ScanStop:
+    """Stops one command's scan from the event loop, before or after it binds."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._cancel: Callable[[], None] | None = None
+        self.requested = False
+
+    def bind(self, cancel: Callable[[], None]) -> None:
+        with self._lock:
+            self._cancel = cancel
+            requested = self.requested
+        if requested:
+            cancel()
+
+    def request(self) -> None:
+        with self._lock:
+            self.requested = True
+            cancel = self._cancel
+        if cancel is not None:
+            cancel()
 
 
 class AgentDaemon:
@@ -49,10 +70,13 @@ class AgentDaemon:
         self.ledger: dict[UUID, CommandRecord] = {}
         self._active: UUID | None = None
         self._task: asyncio.Task[None] | None = None
+        self._stop = _ScanStop()
 
     async def run(self) -> None:
         try:
-            await self._client.run(self.handle_command, self.replay_pending)
+            await self._client.run(
+                self.handle_command, self.replay_pending, self._cancel_active
+            )
         finally:
             await self.close()
 
@@ -65,9 +89,8 @@ class AgentDaemon:
         task, self._task = self._task, None
         if task is None or task.done():
             return
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        self._stop.request()
+        await task
 
     async def handle_command(self, command: AgentCommand) -> None:
         if self._client.parked_reason is not None:
@@ -80,6 +103,7 @@ class AgentDaemon:
             await self._update(command.command_id, "failed", "device_busy")
             return
         self._active = command.command_id
+        self._stop = _ScanStop()
         await self._update(command.command_id, "running")
         self._task = asyncio.create_task(self._execute(command))
 
@@ -98,6 +122,7 @@ class AgentDaemon:
             self._active = None
 
     async def _run_command(self, command: AgentCommand) -> None:
+        stop = self._stop
         try:
             result = await asyncio.to_thread(
                 self._run_scan,
@@ -108,9 +133,12 @@ class AgentDaemon:
                     if command.nspi_options is not None
                     else None
                 ),
+                bind_cancel=stop.bind,
             )
         except InvalidScanInput:
             await self._update(command.command_id, "failed", "invalid_command")
+            return
+        if stop.requested:
             return
         if result.payload is None:
             await self._update(command.command_id, "failed", "scan_failed")
@@ -125,6 +153,8 @@ class AgentDaemon:
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
         )
+        if stop.requested:
+            return
         if submission.outcome == "accepted":
             LOGGER.info(
                 "scan upload accepted: command=%s scan=%s status=%s",
@@ -144,7 +174,7 @@ class AgentDaemon:
         )
         await self._update(command.command_id, "failed", "ingest_failed")
         if submission.outcome == "forbidden":
-            await self._client.close(_FORBIDDEN_PARK)
+            await self._client.park("upload_refused")
 
     async def _update(
         self, command_id: UUID, status: CommandStatus, error_code: str | None = None

@@ -119,9 +119,21 @@ def test_analysis_request_creates_one_pending_job(
 
     assert response.status_code == 202
     assert response.json()["status"] == "pending"
+    assert response.json()["language"] == "en"
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.scan_id == seeded["scan"].scan_id
     assert record.status == "pending"
+    assert record.writing_skill_version == "1"
+
+    portuguese = client.post(f"{url}?language=pt-BR", headers=headers)
+    assert portuguese.status_code == 202
+    assert portuguese.json()["language"] == "pt-BR"
+
+    records = administrative_session.exec(select(AIScanAnalysisRecord)).all()
+    assert {(record.scan_id, record.language) for record in records} == {
+        (seeded["scan"].scan_id, "en"),
+        (seeded["scan"].scan_id, "pt-BR"),
+    }
 
     repeated = client.post(url, headers=headers)
     assert repeated.status_code == 409

@@ -1,6 +1,7 @@
 import EmptyMark from '@/components/EmptyMark'
 import type { DataTableColumn } from '@/components/DataTable'
 import Timestamp from '@/components/Timestamp'
+import AgentPresence from '@/pages/agents/AgentPresence'
 import type { components } from '@/types/openapi'
 
 type AgentSummary = components['schemas']['AgentSummary']
@@ -20,7 +21,7 @@ export function deviceListColumns(now: Date): DataTableColumn<AgentSummary>[] {
     {
       key: 'target_subnet',
       label: 'Network',
-      width: 'w-3/10',
+      width: 'w-1/4',
       render: (agent) =>
         agent.target_subnet ? (
           <span
@@ -38,8 +39,15 @@ export function deviceListColumns(now: Date): DataTableColumn<AgentSummary>[] {
     {
       key: 'online',
       label: 'Status',
-      width: 'w-3/20',
-      render: (agent) => (agent.online ? 'Online' : 'Offline'),
+      width: 'w-1/5',
+      render: (agent) => (
+        <AgentPresence
+          agent={agent}
+          now={now}
+          truncate
+          testId={`devices-status-${agent.agent_id}`}
+        />
+      ),
     },
     {
       key: 'last_seen_at',

@@ -11,6 +11,7 @@ import HomeBlank from '@/pages/home/HomeBlank'
 import HomeError from '@/pages/home/HomeError'
 import { HOME_PANEL_CHROME } from '@/pages/home/HomeFeedPanel'
 import HomeSidePanels from '@/pages/home/HomeSidePanels'
+import HomeAIOverview from '@/pages/home/HomeAIOverview'
 
 function HomeLoading() {
   const isVisible = useSkeletonDelay()
@@ -98,6 +99,7 @@ function Home() {
   return (
     <div data-testid="home-page" className="flex flex-col gap-12">
       {attention}
+      <HomeAIOverview latestScan={snapshot.latest_successful_scan} />
       <HomeSidePanels
         events={snapshot.events}
         activity={snapshot.activity}

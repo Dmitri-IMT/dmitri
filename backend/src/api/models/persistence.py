@@ -50,6 +50,31 @@ class ScanRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
+class AIUsageRecord(SQLModel, table=True):
+    """Provider usage metadata; prompts and responses are deliberately not stored."""
+
+    __tablename__ = "ai_usage"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    org_id: UUID | None = Field(default=None, index=True, foreign_key="orgs.id")
+    scan_id: UUID | None = Field(default=None, index=True, foreign_key="scans.scan_id")
+    user_id: UUID | None = Field(default=None, index=True, foreign_key="users.id")
+    operation: str
+    provider: str
+    model: str
+    status: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    latency_ms: int | None = None
+    http_status: int | None = None
+    request_id: str | None = None
+    error_code: str | None = None
+    created_at: datetime = Field(
+        default_factory=utc_now, sa_type=UTC_TIMESTAMP, index=True
+    )
+
+
 class ScanHostRecord(SQLModel, table=True):
     __tablename__ = "scan_hosts"
     __table_args__ = (
@@ -393,7 +418,9 @@ class RiskSnapshotRecord(SQLModel, table=True):
 class AIScanAnalysisRecord(SQLModel, table=True):
     __tablename__ = "ai_scan_analyses"
     __table_args__ = (
-        UniqueConstraint("scan_id"),
+        UniqueConstraint(
+            "scan_id", "language", name="uq_ai_scan_analyses_scan_language"
+        ),
         CheckConstraint(_AI_ANALYSIS_STATUS_CHECK, name="ck_ai_scan_analyses_status"),
         CheckConstraint(
             "status != 'completed' OR analysis_json IS NOT NULL",
@@ -407,6 +434,7 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
     provider: str
     model: str
+    language: str = "en"
     status: str = Field(default="pending", index=True)
     analysis_json: dict[str, Any] | None = Field(
         default=None,
@@ -414,6 +442,10 @@ class AIScanAnalysisRecord(SQLModel, table=True):
     )
     context_version: str
     prompt_version: str
+    writing_skill_version: str = "1"
+    analyzed_findings: int = 0
+    failed_findings: int = 0
+    total_findings: int = 0
     context_hash: str | None = None
     attempts: int = 0
     last_error: str | None = None
@@ -428,3 +460,20 @@ class AIScanAnalysisRecord(SQLModel, table=True):
         sa_type=UTC_TIMESTAMP,
         sa_column_kwargs={"onupdate": utc_now},
     )
+
+
+class AIChatMessageRecord(SQLModel, table=True):
+    __tablename__ = "ai_chat_messages"
+
+    message_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    user_id: UUID = Field(index=True, foreign_key="users.id")
+    scope_type: str = Field(default="scan", index=True)
+    scope_id: UUID = Field(index=True)
+    question: str
+    answer: str
+    uncertainties_json: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    referenced_finding_ids_json: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

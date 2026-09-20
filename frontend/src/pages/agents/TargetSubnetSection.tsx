@@ -2,12 +2,14 @@ import AdminOnly from '@/components/AdminOnly'
 import { Button } from '@/components/ui/button'
 import { useUpdateTargetSubnet } from '@/hooks/useUpdateTargetSubnet'
 import { useSession } from '@/auth/useSession'
-import { findAvailableSubnet } from '@/lib/subnetLabel'
+import {
+  resolveWatchedNetwork,
+  watchedNetworkLabel,
+} from '@/pages/agents/watchedNetworkLabel'
 import SubnetChooser from './SubnetChooser'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
-type AvailableSubnet = components['schemas']['AvailableSubnet']
 
 type Props = {
   agent: AgentDetail
@@ -19,14 +21,6 @@ type Props = {
 type ChooserSessionProps = {
   agent: AgentDetail
   onSaved: () => void
-}
-
-function watchedNetworkLabel(
-  cidr: string,
-  subnet: AvailableSubnet | null,
-): string {
-  if (subnet) return `${subnet.cidr} (${subnet.interface})`
-  return cidr
 }
 
 function ChooserSession({ agent, onSaved }: ChooserSessionProps) {
@@ -47,9 +41,7 @@ function ChooserSession({ agent, onSaved }: ChooserSessionProps) {
 
 function TargetSubnetSection({ agent, open, onOpenChange, onSaved }: Props) {
   const { user } = useSession()
-  const target = agent.target_subnet
-    ? findAvailableSubnet(agent.available_subnets, agent.target_subnet)
-    : null
+  const target = resolveWatchedNetwork(agent)
 
   return (
     <div className="flex flex-col gap-2">

@@ -71,11 +71,15 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 
 **Binding (C1):** Pi authenticates with `agent_id` + **Ed25519 signature** only. `org_id` is set on the `agents` row at provisioning time; backend resolves tenant from DB lookup — Pi does not carry `org_id`.
 
-**Agent admin (D1):** both roles may view agent state; only org **`admin`** may trigger scans.
-Creating/revoking agent rows and public-key registration by the installer is **vendor/installer ops** in
-September (not a self-serve admin UI flow). The viewer UI omits the trigger rather than disabling it.
+**Agent admin (D1):** both roles may view agent state; only org **`admin`** may trigger scans or
+revoke/restore a device. Creating agent rows and public-key registration remain
+**vendor/installer ops** in September (not a self-serve admin UI flow). The viewer UI omits these
+actions rather than disabling them.
 
-**Rotation (E1):** no rotate/revoke UX in September; `revoked_at` column may exist. Rotation = new keypair on the Pi + replace the stored public key (no confidential secret to invalidate). Rotation + revoke + re-pair UX → Phase 2.
+**Rotation (E1):** revoke/restore UX ships with **DMI-155** (spec 048): admin-only
+`POST /api/v1/agents/{id}/revoke` and `/restore`, with Revoked shown on the device list and detail.
+A restored Pi reconnects on its next hourly attempt (ADR-011 amendment 2026-09-16). Rotation still
+has no UX: rotation = a new keypair on the Pi + replace the stored public key (no confidential secret to invalidate). Rotation + re-pair UX → Phase 2.
 
 **Phase 2+:** optional self-service pairing if customers deploy Pis without vendor on-site; installer playbook remains the secure default.
 
@@ -191,7 +195,7 @@ Per ADR-005 pattern (Bearer on business APIs; refresh on `/auth/*` only).
 | **Users** | Second org on same stack; `org_id` isolation tested |
 | **Sessions** | Logout everywhere (all devices), optional idle timeout |
 | **Authorization** | Finer permissions matrix; document role semantics |
-| **Agent** | Key **rotation + revoke** story; optional self-service pairing if no on-site installer |
+| **Agent** | Key **rotation** and re-pair story (revoke/restore shipped in DMI-155); optional self-service pairing if no on-site installer |
 | **Ops** | JWT signing key in managed secrets (not plain Railway env for prod). Device auth no longer needs a stored secret — backend holds only public keys (ADR-005 Ed25519). |
 | **Audit** | Who triggered scans (minimum trail), and who removed whom. **"Who logged in" partly ships in September** — `last_login_at` / `last_seen_at` land with Account removal above; what remains here is the *trail* (an append-only record), which a mutable column on `users` cannot provide. Removal leaves no trace of itself by design ([`ADR-017`](../adr/ADR-017-account-removal.md)), so this needs its own table. `requested_by` on commands **must** be nullable / `ON DELETE SET NULL` to survive member removal. |
 

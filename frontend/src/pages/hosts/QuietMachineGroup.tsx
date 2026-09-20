@@ -13,6 +13,7 @@ import Pagination from '@/components/Pagination'
 import { Button } from '@/components/ui/button'
 import { hostListColumns } from '@/pages/hosts/hostListColumns'
 import type { components } from '@/types/openapi'
+import useI18n from '@/i18n/useI18n'
 
 type HostSummary = components['schemas']['HostSummary']
 
@@ -40,6 +41,7 @@ function QuietMachineGroup({
   page,
   onPageChange,
 }: QuietMachineGroupProps): ReactElement {
+  const { t } = useI18n()
   const params: HostListParams = {
     page,
     per_page: HOSTS_PER_PAGE,
@@ -93,7 +95,7 @@ function QuietMachineGroup({
 
   return (
     <tbody id={body.id}>
-      {body.renderRows(query.data.data, hostListColumns(now, true), 'muted')}
+      {body.renderRows(query.data.data, hostListColumns(now, true, t), 'muted')}
       {body.spanningRow(
         <Pagination
           page={page}

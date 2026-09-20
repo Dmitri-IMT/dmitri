@@ -238,6 +238,23 @@ describe('ScanDetail', () => {
     )
   })
 
+  it('starts severity groups collapsed and opens one on demand', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const criticalToggle = await screen.findByRole('button', {
+      name: 'Toggle critical vulnerabilities',
+    })
+    expect(criticalToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(criticalToggle)
+    expect(criticalToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('findings-critical')).not.toHaveAttribute(
+      'hidden',
+    )
+  })
+
   it('splits a shuffled payload into one table per severity, worst card first', async () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)
@@ -265,12 +282,15 @@ describe('ScanDetail', () => {
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(['Machines seen', 'Attack surface', 'Vulnerabilities'])
-    expect(
-      screen
-        .getAllByRole('heading', { level: 3 })
-        .map((heading) => heading.textContent),
-    ).toEqual(['Critical', 'High', 'Medium', 'Low'])
+    ).toEqual([
+      'Scan reports',
+      'Critical',
+      'High',
+      'Medium',
+      'Low',
+      'Attack surface',
+      'Machines seen',
+    ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
   })
 
@@ -697,7 +717,8 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-no-findings')).not.toBeInTheDocument()
   })
 
-  it('says a processing scan is still running, re-reads on Check again, and does not poll', async () => {
+
+  it('shows live progress for a processing scan and re-reads on Check again', async () => {
     const user = userEvent.setup()
     const running = completedScan({
       status: 'processing',
@@ -718,7 +739,7 @@ describe('ScanDetail', () => {
       'This scan is still running.',
     )
     expect(screen.getByTestId('scan-unfinished')).toHaveTextContent(
-      "Vulnerabilities appear here when it finishes. This page doesn't update on its own.",
+      'Progress updates automatically while the scan is running.',
     )
     expectNoScanTables()
 

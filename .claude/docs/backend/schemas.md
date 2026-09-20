@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -18,7 +18,7 @@ legacy read/output side: `Persisted*` projections used
 mainly by tests. `read.py` is the **wired read path**: the eleven response models the
 [hosts/scans/findings routers](/backend/routers.md) actually return (plus the `ScanSortBy`,
 `HostSortBy` and `SortOrder` literal aliases that type the scan-list and host-list sort params).
-`schemas/ai.py` holds the **AI analysis wire models**: `ScanAIAnalysis` and the status-keyed `ScanAIAnalysisResponse` union. `schemas/__init__.py` re-exports
+`schemas/ai.py` holds **AI wire models**: the `AILanguage` literal (`en`, `pt-BR`, `ru`) used by chat requests, analysis job rows and reports; scan analysis (`ScanAIAnalysis`, `ScanAIAnalysisResponse`), chat (`AIChatRequest`, `AIChatResponse`, `AIChatHistoryResponse`), contextual chat (`AIContextChatRequest`), and usage (`AIUsageResponse`, `AIUsageSummary`, `AIUsageEntry`). `schemas/__init__.py` re-exports
 the ingest input plus the main persisted projections.
 
 ## Key classes / functions — `scan.py` (ingest input)
@@ -36,6 +36,9 @@ the ingest input plus the main persisted projections.
 
 `schemas/industrial.py` is the Modbus ingest models (`ModbusTcpServicePayload` and units). Read
 views (`IndustrialServiceView`, `ModbusUnitView`, `unreadable_fields`) live in `read.py`.
+Unlike the `scan.py` models below, `ModbusAddressRangePayload` and `ModbusUnitPayload` use
+`extra="ignore"`, so extra keys from older agents (for example `value_sha256`, `nonzero_count`) are
+dropped instead of rejecting the whole industrial observation.
 
 **All five carry `model_config = ConfigDict(extra="forbid")`** — DMI-63 pushed it to *every* ingest
 depth, not just the top level. Before that only `ScanResult` forbade extras, so `hosts[0].os = "linux"`
@@ -53,8 +56,11 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `ScanHostView` | Per-scan host with required durable `host_id`, ports/industrial data, and nullable `machine_type` / `device_profile` when assessment is unavailable. | `backend/src/api/schemas/read.py:104` |
 | `ExposureRead` | Read projection of the stored endpoint exposure, including stable id, host id, endpoint, role, attention, confidence, reason, and evidence. | `backend/src/api/schemas/read.py:162` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
-| `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). | `backend/src/api/schemas/ai.py:86` |
-| `HostSummary` | List-view durable identity including the latest accepted machine type and optional full device profile; legacy fallback may supply only the type. | `backend/src/api/schemas/read.py:184` |
+| `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). Every job variant carries `language`. | `backend/src/api/schemas/ai.py` |
+| `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. The request `AIChatRequest` takes `question` plus optional `language` (default `en`). | `backend/src/api/schemas/ai.py` |
+| `ScanReportResponse` | Report JSON; carries `kind` and `language`. | `backend/src/api/schemas/reports.py` |
+| `AIUsageResponse` | `GET /ai/usage` summary + `data` entries. | `backend/src/api/schemas/ai.py` |
+| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. Also carries the optional full device profile; legacy rows may supply only the type. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
 | `HostDetailResponse` | Host summary plus assessment status/version, latest-scan exposures, durable ports, latest industrial data, and scan history. | `backend/src/api/schemas/read.py:214` |
 | `ScanDetailResponse` assessment fields | `assessment_status`, nullable policy version, and stored `ExposureRead[]` distinguish current assessment from legacy unavailable data; exposure attention never changes finding counts. | `backend/src/api/schemas/read.py:225` |
@@ -137,10 +143,10 @@ command has none. The published contract was amended to drop it from `required` 
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `AgentSummary` | One `GET /agents` row: `agent_id`, `display_name`, `online`, `last_seen_at`, `target_subnet` (`SubnetCIDR \| None`), `active_command_id`. No `available_subnets` — the list never carries the reported networks. | `backend/src/api/schemas/agents.py:12` |
-| `AgentDetail` | `GET`/`PATCH /agents/{agent_id}` — `AgentSummary`'s fields plus `available_subnets: list[AvailableSubnet]`, reusing the frame model rather than declaring a second subnet type. | `backend/src/api/schemas/agents.py:23` |
-| `AgentListResponse` | `{data: AgentSummary[]}`. | `backend/src/api/schemas/agents.py:35` |
-| `UpdateAgentTargetSubnetRequest` | The PATCH body — one required `target_subnet` (`SubnetCIDR`). `extra="forbid"`, so an unknown key is a `422 validation_error`. | `backend/src/api/schemas/agents.py:41` |
+| `AgentSummary` | One `GET /agents` row: identity, `online`, `last_seen_at`, required nullable `revoked_at`, target subnet and active command. No reported subnet list. | `backend/src/api/schemas/agents.py:12` |
+| `AgentDetail` | Agent reads and admin writes: summary fields plus `available_subnets: list[AvailableSubnet]`. | `backend/src/api/schemas/agents.py:24` |
+| `AgentListResponse` | `{data: AgentSummary[]}`. | `backend/src/api/schemas/agents.py:37` |
+| `UpdateAgentTargetSubnetRequest` | The PATCH body — one required `target_subnet` (`SubnetCIDR`). `extra="forbid"`, so an unknown key is a `422 validation_error`. | `backend/src/api/schemas/agents.py:43` |
 
 All four use `extra="forbid"` and reuse `SubnetCIDR` from `schemas/scan.py`. `target_subnet` and
 `active_command_id` default to `None` and stay **out** of the contract's `required` lists.

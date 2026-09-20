@@ -85,6 +85,7 @@ describe('HostDetail', () => {
     ).toEqual([
       'Machine profile',
       'Attack surface',
+      'Ask about Machine',
       'Vulnerabilities',
       'Services running on this machine',
       'Industrial services',

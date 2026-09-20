@@ -89,8 +89,8 @@ organization-scoped through their resolved scan or host.
 ## Compatibility and rollout
 
 1. Merge PR #143 / spec 046 first.
-2. Merge OpenAPI, backend schemas/models, Alembic revision `20260915_27` (down revision
-   `20260912_26`), persistence/read logic,
+2. Merge OpenAPI, backend schemas/models, Alembic revision `20260920_33` (down revision
+   `20260919_32`), persistence/read logic,
    PR-143 reconciliation extension, and legacy tests.
 3. Deploy the backend and verify an old payload still returns `202` and reads as assessment
    unavailable while retaining its PR-143 `machine_type` fallback.

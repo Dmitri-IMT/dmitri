@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from uuid import uuid4
 
 import httpx
 import pytest
-from api.schemas.ai import ScanAIAnalysis
+from api.schemas.ai import ProviderAIChatResponse, ProviderScanAIAnalysis
 from api.schemas.read import SeverityBreakdown
-from api.services.ai.context import ScanAIContext
+from api.services.ai.context import (
+    AIFindingContext,
+    FindingChatContext,
+    ScanAIContext,
+)
 from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
 
 TEST_TOKEN = "test-token"
@@ -16,9 +18,6 @@ TEST_TOKEN = "test-token"
 
 def _context() -> ScanAIContext:
     return ScanAIContext(
-        scan_id=uuid4(),
-        timestamp=datetime.now(timezone.utc),
-        subnet="192.168.1.0/24",
         scan_mode="quick",
         duration_seconds=10,
         host_count=1,
@@ -33,8 +32,8 @@ def _context() -> ScanAIContext:
     )
 
 
-def _analysis() -> ScanAIAnalysis:
-    return ScanAIAnalysis(
+def _analysis() -> ProviderScanAIAnalysis:
+    return ProviderScanAIAnalysis(
         executive_summary="Nenhum risco prioritário foi identificado.",
         overall_assessment="O scan não apresentou findings para priorização.",
         plain_language_summary="Nada urgente apareceu neste resultado.",
@@ -69,16 +68,15 @@ def test_groq_provider_requests_strict_structured_output():
                 "choices": [
                     {
                         "message": {
-                            "content": json.dumps(
-                                _analysis().model_dump(mode="json")
-                            )
+                            "content": _analysis().model_dump_json(),
                         }
                     }
                 ]
             },
         )
 
-    result = _provider(handler).analyze_scan(context)
+    provider = _provider(handler)
+    result = provider.analyze_scan(context)
 
     assert result == _analysis()
     assert captured["authorization"] == f"Bearer {TEST_TOKEN}"
@@ -89,14 +87,93 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["include_reasoning"] is False
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
+    assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert str(context.scan_id) in payload["messages"][1]["content"]
+    assert '"context_version":"2"' in payload["messages"][1]["content"]
+    assert "scan_id" not in payload["messages"][1]["content"]
+    usage = provider.drain_usage_events()
+    assert usage[0].operation == "scan_analysis"
+    assert usage[0].input_tokens is None
 
 
-def test_system_prompt_requests_english_prose():
-    assert "English" in SYSTEM_PROMPT
-    assert "Portuguese" not in SYSTEM_PROMPT
-    assert "Brazilian Portuguese" not in SYSTEM_PROMPT
+def test_groq_provider_records_usage_without_prompt_content():
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            headers={"x-request-id": "req-test"},
+            json={
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 7,
+                    "total_tokens": 19,
+                },
+                "choices": [
+                    {"message": {"content": _analysis().model_dump_json()}}
+                ],
+            },
+        )
+    )
+
+    provider.analyze_scan(_context())
+    event = provider.drain_usage_events()[0]
+    assert event.input_tokens == 12
+    assert event.output_tokens == 7
+    assert event.total_tokens == 19
+    assert event.request_id == "req-test"
+    assert event.latency_ms is not None
+
+
+def test_system_prompt_uses_a_language_placeholder():
+    assert "{language_name}" in SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [("en", "English"), ("pt-BR", "Brazilian Portuguese"), ("ru", "Russian")],
+)
+def test_groq_provider_sends_requested_analysis_language(language, expected):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": _analysis().model_dump_json()}}]},
+        )
+
+    _provider(handler).analyze_scan(_context(), language=language)
+
+    assert f"Write all explanatory prose in {expected}." in captured["payload"][
+        "messages"
+    ][0]["content"]
+
+
+def test_groq_provider_repair_sends_codes_not_rejected_prose():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": _analysis().model_dump_json(),
+                        }
+                    }
+                ]
+            },
+        )
+
+    _provider(handler).repair_analysis(
+        _context(),
+        ("executive_summary:safety_certification",),
+    )
+
+    repair_prompt = captured["payload"]["messages"][1]["content"]
+    assert "executive_summary:safety_certification" in repair_prompt
+    assert "Your network is safe." not in repair_prompt
 
 
 def test_groq_provider_maps_timeout_without_leaking_details():
@@ -131,6 +208,38 @@ def test_groq_provider_maps_http_errors(status, code, retryable):
     assert "secret" not in str(captured.value)
 
 
+def test_groq_provider_classifies_oversized_context_without_retry_wait():
+    provider = _provider(
+        lambda request: httpx.Response(
+            413,
+            headers={"x-ratelimit-reset-tokens": "7.66s"},
+            json={"error": {"message": "request too large"}},
+        )
+    )
+
+    with pytest.raises(AIProviderError) as captured:
+        provider.analyze_scan(_context())
+
+    assert captured.value.code == "provider_context_too_large"
+    assert captured.value.retryable is False
+
+
+def test_groq_provider_exposes_rate_limit_wait_time():
+    provider = _provider(
+        lambda request: httpx.Response(
+            429,
+            headers={"x-ratelimit-reset-tokens": "7.66s"},
+            json={"error": {"message": "rate limited"}},
+        )
+    )
+
+    with pytest.raises(AIProviderError) as captured:
+        provider.analyze_scan(_context())
+
+    assert captured.value.code == "provider_rate_limited"
+    assert captured.value.retry_after_seconds == 8
+
+
 def test_groq_provider_rejects_invalid_payload():
     provider = _provider(
         lambda request: httpx.Response(
@@ -144,3 +253,54 @@ def test_groq_provider_rejects_invalid_payload():
 
     assert captured.value.code == "invalid_provider_response"
     assert captured.value.retryable is True
+
+
+def test_groq_provider_answers_chat_with_bounded_structured_schema():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": ProviderAIChatResponse(
+                                answer="Priorize a atualização do serviço exposto.",
+                                uncertainties=[
+                                    "O scan não confirma exploração ativa."
+                                ],
+                                referenced_finding_refs=["finding_1"],
+                            ).model_dump_json(),
+                        }
+                    }
+                ]
+            },
+        )
+
+    result = _provider(handler).answer_question(
+        FindingChatContext(
+            finding=AIFindingContext(
+                finding_ref="finding_1",
+                machine_ref=None,
+                cve_id=None,
+                cvss_score=None,
+                severity="high",
+                confidence=None,
+                risk_score=None,
+                exploitability=None,
+                epss_score=None,
+                epss_percentile=None,
+                is_kev=False,
+                known_ransomware=False,
+            )
+        ),
+        "O que devo corrigir primeiro?",
+    )
+
+    assert result.answer.startswith("Priorize")
+    payload = captured["payload"]
+    assert payload["response_format"]["json_schema"]["strict"] is True
+    assert payload["max_completion_tokens"] == 1024
+    assert "O que devo corrigir primeiro?" in payload["messages"][1]["content"]

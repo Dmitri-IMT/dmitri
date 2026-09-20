@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, and agent revocation enforcement on live connections.
+description: Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -28,9 +28,8 @@ so the worker process can reason about it without reading the API's memory.
 `POST /api/v1/scans` ([routers](/backend/routers.md)) alongside the read path, the
 [auth routes](/backend/auth.md) and the command routes; the enrichment worker is still driven by the
 poll loop rather than a live agent.
-`agents.py` (DMI-78) is the read surface over the fleet: it joins the persisted `agents` row with the
-in-memory connection registry to answer the agent list and detail routes, and owns the admin write
-that stores an agent's chosen `target_subnet`.
+`agents.py` joins the persisted `agents` row with the in-memory connection registry for list/detail,
+stores the chosen `target_subnet`, and owns the idempotent admin revoke/restore writes.
 `users.py` owns account removal plus member listing and role changes. `org_lock.py` supplies the
 transaction-scoped per-org advisory lock that serializes admin-reducing role changes.
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
@@ -42,7 +41,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 |------|--------------|-----|
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError`, else fill it. | `backend/src/api/services/persistence.py:35` |
-| `persist_scan()` | Persists the assessment policy version, per-scan profiles, and endpoint exposures alongside original observations and findings in the existing single transaction. Each exposure must resolve to that scan's host and exact port. | `backend/src/api/services/persistence.py:90` |
+| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan (`scan_mode`, `status`), persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, persists industrial observations, upserts each agent finding (including `modbus_unit_id`), calls `upsert_hosts_for_scan`, then `reconcile_scan_inventory`, then enqueues enrichment jobs and — when `AI_AUTO_ANALYSIS` is on — the `en` AI analysis row (`enqueue_auto_scan_analysis(commit=False)`) — all in **one transaction with a single commit point**. Also persists the assessment policy version, per-scan device profiles, and endpoint exposures; each exposure must resolve to that scan's host and exact port. | `backend/src/api/services/persistence.py:84` |
 | `persist_industrial_services()` | Load existing services and units for the scan host once, upsert in memory, flush after services then after units. | `backend/src/api/services/industrial.py:42` |
 | `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
 | `finding_dedupe_key()` | `ip|protocol|port|unit_id or na|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |
@@ -60,12 +59,13 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `activity_text()` | Admin/viewer sentence matrix. Scan and machine rows are identical across roles. | `backend/src/api/services/activity.py:45` |
 | `read_home_snapshot()` | Attention page, notices, review state, paged activity, derived events. | `backend/src/api/services/home.py:219` |
 | `page_attention()` | Latest-scan findings with `host_hostname` from current `HostRecord.hostname`. Starts from `read.finding_read_query()` and adds only the attention filters and sort. | `backend/src/api/services/home.py:47` |
-| `derive_home_events()` | Current-state box-offline, member-idle, and new-machine facts. Member idle is one SQL predicate over `users` (`last_login_at IS NULL OR last_login_at < cutoff`), ordered by `coalesce(last_login_at, created_at)` so longest-idle comes first; box offline stays a Python loop because it needs the registry overlay. Never stored. | `backend/src/api/services/home.py:101` |
+| `derive_home_events()` | Current-state box-offline, member-idle, and new-machine facts. Revoked agents are deliberately excluded from box-offline events. Member idle is one SQL predicate over `users`; box offline stays a Python loop because it needs the registry overlay. Never stored. | `backend/src/api/services/home.py:104` |
 | `ORG_ADMIN_LOCK_NAMESPACE` / `lock_org_admins()` | Namespace `8818`; executes two-key `pg_advisory_xact_lock(namespace, hashtext(org_id))`, released automatically on commit or rollback. | `backend/src/api/services/org_lock.py:8` |
-| `_fields()` | The single builder behind both agent shapes: `agent_id`/`display_name` from the row, `online` from `agent_connections.is_online`, `last_seen_at` from `agent_connections.last_seen_at(id) or row.last_seen_at`, `target_subnet` from the row, `active_command_id` from `active_command_for`. `list_agents` and `_detail` both spread it, so list and detail cannot drift. | `backend/src/api/services/agents.py:17` |
-| `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:29` |
-| `get_agent_detail()` / `_detail()` | `AgentSummary`'s fields plus `available_subnets`, read only from `agent_connections.get_hello(...)`; `None` (offline, or connected before `hello`) renders `[]`. Unknown or foreign id → `None`, which the router turns into 404. | `backend/src/api/services/agents.py:52`, `:44` |
-| `set_target_subnet()` | Admin write. Foreign/unknown row → `None`; no `hello` → `AgentOfflineError`; a value outside `{entry.cidr for entry in reported}` → `SubnetNotReportedError`; else assign, commit, and return the same `_detail(...)` the GET returns. | `backend/src/api/services/agents.py:61` |
+| `_fields()` | The single builder behind both agent shapes, including persisted `revoked_at`, registry-derived `online`/`last_seen_at`, target subnet, and active command. | `backend/src/api/services/agents.py:18` |
+| `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:31` |
+| `get_agent_detail()` / `_detail()` | Summary fields plus `available_subnets` from `agent_connections.get_hello(...)`; unknown or foreign id → `None`. | `backend/src/api/services/agents.py:54`, `:46` |
+| `set_target_subnet()` | Admin write. Foreign/unknown row → `None`; no `hello` → `AgentOfflineError`; an unreported value → `SubnetNotReportedError`; else commit and return detail. | `backend/src/api/services/agents.py:63` |
+| `revoke_agent()` / `restore_agent()` / `_set_revoked_at()` | Org-scoped idempotent writes through one `_set_revoked_at` helper. Revoke keeps the first timestamp and is async: it commits in a threadpool, then closes any registered socket with `4001 revoked`, so the write and the socket kill have one owner (the same shape as `deliver()`). Restore clears the timestamp. Both preserve identity, name and target subnet and return the same detail shape as GET. | `backend/src/api/services/agents.py:94`, `:111`, `:81` |
 | `AgentOfflineError` | "Cannot choose a network for a Pi that is reporting none" — router maps it to `409 device_offline`. Lives here, unlike `SubnetNotReportedError`. | `backend/src/api/services/agents.py:13` |
 | `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:44` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
@@ -84,7 +84,8 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `run_ai_worker_loop()` / `run_ai_worker_once()` | AI tick on its own thread and session, also through `_poll_forever`. Documented in [ai](/backend/ai.md). Enrichment `run_worker_once` does not call them. | `backend/src/api/services/worker.py:46`, `:57` |
 | `claim_jobs()` / `retry_or_fail()` | Shared job runtime for `enrichment_jobs` and `ai_scan_analyses`. `claim_jobs` fails stale jobs out of attempts, then selects `pending` (due `next_attempt_at`) or stale running jobs by `created_at,id` with `FOR UPDATE SKIP LOCKED` on Postgres, and bumps `attempts`. `retry_or_fail` sets `pending` + `next_attempt_at`, or `failed` + `completed_at`. | `backend/src/api/services/jobs.py:10`, `:72` |
 | `claim_pending_enrichment_jobs()` | `claim_jobs` with running status `running` and exhausted error `enrichment_attempts_exhausted`. | `backend/src/api/services/enrichment.py:25` |
-| `process_claimed_enrichment_job()` | Dispatches by `job_type` to `_process_cpe/cve/kev/epss_job`; success → `completed`; exception → rollback + `failed` with `last_error`. | `backend/src/api/services/enrichment.py:44` |
+| `process_claimed_enrichment_job()` | Dispatches by `job_type` to `_process_cpe/cve/kev/epss_job`; success → `completed`; exception → rollback + `failed` with `last_error`. After each terminal path commits, calls `_enqueue_auto_analysis_safely` for that scan. | `backend/src/api/services/enrichment.py:44` |
+| `_enqueue_auto_analysis_safely()` | Best-effort `enqueue_auto_scan_analysis` when `AI_AUTO_ANALYSIS` is on; logs failures, never fails enrichment. | `backend/src/api/services/enrichment.py:115` |
 | `_process_cpe_job()` | NVD-by-CPE → one new finding per match (source `nvd_enrichment`, confidence `probable`) via `upsert_finding`, then `reconcile_scan_host_inventory` before commit so enrichment-created findings land in `host_findings`. | `backend/src/api/services/enrichment.py:116` |
 | `_process_cve_job()` | NVD-by-CVE → **upgrades** the existing finding to `confirmed`, refreshes cvss/severity/references, adds the `nvd` label + evidence, re-runs risk. | `backend/src/api/services/enrichment.py:167` |
 | `_process_kev_job()` / `_process_epss_job()` | Fetch + `upsert_kev_record`/`upsert_epss_record`, tag the finding with the `kev`/`epss` label + evidence, re-run risk. | `backend/src/api/services/enrichment.py:199` |
@@ -260,16 +261,10 @@ ML/AI scoring is future work.
   quick 10800, standard 28800, extensive 57600, nspi 21600, max 93600 seconds (see [api](/backend/api.md)).
   `command_disconnect_grace_seconds` (default 900) is a deliberately generous placeholder until DMI-66 pins
   the Pi's reconnect backoff.
-- **Revocation is pull-based, and that is deliberate.** DMI-97 re-checks `agents.revoked_at` on
-  every inbound frame and on every delivery attempt, rather than pushing a disconnect at the moment
-  of revocation. Nothing in the codebase *writes* `revoked_at` yet (it is a manual `UPDATE`), so
-  there is no event to hook — but the pattern is also the standard one: OCSP and `sshd`'s
-  `RevokedKeys` work the same way, and deployed push systems are slower than intuition suggests
-  (AWS IoT promises "within a few minutes"; Entra CAE up to 15). The residual gap is a revoked agent
-  that is **idle** — it never speaks and is never sent a command, so neither gate fires and it holds
-  a dead-weight socket. It cannot *act* through that socket, which is what the control requires.
-  Bounding that window would need a periodic sweep; see
-  [revocation-on-live-connections](../../../docs/research/revocation-on-live-connections.md).
+- **Revocation now has both push and pull enforcement.** DMI-155 writes `revoked_at` through the
+  admin route and closes the current socket immediately. The DMI-97 inbound-frame and delivery
+  checks remain the race-safe backstop. Restore only clears the row; the parked Pi reconnects on its
+  next hourly attempt.
 - **`agent_connections` is process-local; `agents.connected_at` is its durable shadow.** The registry
   lives in the API process, but the sweeper runs in the **worker** — a separate Railway service. So the
   API writes the projection and the worker reads it in SQL. `last_seen_at` alone could not substitute:
@@ -296,3 +291,4 @@ ML/AI scoring is future work.
 [10] [specs/029-account-removal-api](../../../specs/029-account-removal-api/TRUTH.md)
 [11] [specs/030-users-invites-admin-api](../../../specs/030-users-invites-admin-api/TRUTH.md)
 [12] [specs/031-agents-read-surface-target-subnet](../../../specs/031-agents-read-surface-target-subnet/TRUTH.md)
+[13] [specs/048-parked-channel-recovery](../../../specs/048-parked-channel-recovery/TRUTH.md)

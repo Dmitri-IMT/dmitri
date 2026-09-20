@@ -1,4 +1,5 @@
 import type { components } from '@/types/openapi'
+import useI18n from '@/i18n/useI18n'
 
 type IndustrialService = components['schemas']['IndustrialServiceView']
 type ModbusUnit = components['schemas']['ModbusUnitView']
@@ -33,7 +34,13 @@ function rangeSummary(range: AddressRange): string {
     : `${words(range.status)} (exception ${range.exception_code})`
 }
 
-function Unit({ unit }: { unit: ModbusUnit }) {
+function Unit({
+  unit,
+  t,
+}: {
+  unit: ModbusUnit
+  t: ReturnType<typeof useI18n>['t']
+}) {
   const identity = identification(unit)
 
   return (
@@ -42,7 +49,9 @@ function Unit({ unit }: { unit: ModbusUnit }) {
       className="flex flex-col gap-3 border-t border-dashed border-border pt-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-body-md font-medium">Unit {unit.unit_id}</h4>
+        <h4 className="text-body-md font-medium">
+          {t('common.unit', { id: unit.unit_id })}
+        </h4>
         <span className="text-caption-md uppercase text-muted-foreground">
           {words(unit.status)}
         </span>
@@ -55,19 +64,19 @@ function Unit({ unit }: { unit: ModbusUnit }) {
 
       {unit.address_ranges.length === 0 ? (
         <p className="text-caption-md text-muted-foreground">
-          No address ranges were mapped.
+          {t('common.noAddressRanges')}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-left text-caption-md">
-            <caption className="sr-only">
-              Address ranges mapped for Modbus unit {unit.unit_id}
-            </caption>
+            <caption className="sr-only">{t('common.addressSpace')}</caption>
             <thead>
               <tr className="border-b border-dashed border-border text-muted-foreground uppercase">
-                <th className="w-1/3 pr-4 font-normal">Address space</th>
-                <th className="w-1/4 pr-4 font-normal">Range</th>
-                <th className="font-normal">Result</th>
+                <th className="w-1/3 pr-4 font-normal">
+                  {t('common.addressSpace')}
+                </th>
+                <th className="w-1/4 pr-4 font-normal">{t('common.range')}</th>
+                <th className="font-normal">{t('common.result')}</th>
               </tr>
             </thead>
             <tbody>
@@ -93,10 +102,11 @@ function Unit({ unit }: { unit: ModbusUnit }) {
 }
 
 function IndustrialServices({ services }: { services: IndustrialService[] }) {
+  const { t } = useI18n()
   if (services.length === 0) {
     return (
       <p data-testid="no-industrial-services" className="text-body-md">
-        No industrial services were detected on this machine.
+        {t('common.noIndustrialServices')}
       </p>
     )
   }
@@ -118,11 +128,13 @@ function IndustrialServices({ services }: { services: IndustrialService[] }) {
 
           <dl className="grid gap-2 text-caption-md sm:grid-cols-2">
             <div>
-              <dt className="text-muted-foreground">Evidence</dt>
+              <dt className="text-muted-foreground">{t('common.evidence')}</dt>
               <dd>{service.evidence_sources.join(', ') || 'Not reported'}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Mapping source</dt>
+              <dt className="text-muted-foreground">
+                {t('common.mappingSource')}
+              </dt>
               <dd>
                 {service.mapping_source
                   ? words(service.mapping_source)
@@ -136,7 +148,9 @@ function IndustrialServices({ services }: { services: IndustrialService[] }) {
               No Modbus units responded.
             </p>
           ) : (
-            service.units.map((unit) => <Unit key={unit.unit_id} unit={unit} />)
+            service.units.map((unit) => (
+              <Unit key={unit.unit_id} unit={unit} t={t} />
+            ))
           )}
         </article>
       ))}

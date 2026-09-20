@@ -55,22 +55,26 @@ describe('Settings', () => {
     expect(screen.getByTestId('confirm-by-typing-dialog')).toBeInTheDocument()
   })
 
-  it('carries two headed groups: Your account, then Leave this organisation', async () => {
+  it('carries account, AI usage and organisation groups in order', async () => {
     renderSettings()
 
     const details = await screen.findByTestId('settings-details')
     const page = screen.getByTestId('settings-idle')
     const leave = screen.getByTestId('settings-leave')
+    const usage = screen.getByTestId('settings-ai-usage')
 
     const headings = screen.getAllByRole('heading', { level: 2 })
     expect(headings.map((heading) => heading.textContent)).toEqual([
       'Your account',
+      'AI usage',
       'Leave this organisation',
     ])
     expect(details).toContainElement(headings[0])
-    expect(leave).toContainElement(headings[1])
+    expect(usage).toContainElement(headings[1])
+    expect(leave).toContainElement(headings[2])
     expect(Array.from(page.querySelectorAll('section'))).toEqual([
       details,
+      usage,
       leave,
     ])
     expect(details).toContainElement(
@@ -121,7 +125,7 @@ describe('Settings', () => {
       ),
     )
     expect(screen.getByTestId('settings-leave-trigger')).toBeEnabled()
-    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(2)
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3)
   })
 
   it.each([

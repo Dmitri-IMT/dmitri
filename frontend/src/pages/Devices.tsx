@@ -3,10 +3,13 @@ import { listAgents } from '@/api/agents'
 import { queryKeys } from '@/api/queryKeys'
 import ListSurface from '@/components/ListSurface'
 import PageHeader from '@/components/PageHeader'
+import { readAgentPresence } from '@/lib/agentPresence'
 import { deviceListColumns } from '@/pages/agents/deviceListColumns'
+import useI18n from '@/i18n/useI18n'
 
 function Devices() {
   const now = new Date()
+  const { t } = useI18n()
   const query = useQuery({
     queryKey: queryKeys.agents.list(),
     queryFn: listAgents,
@@ -14,35 +17,34 @@ function Devices() {
 
   return (
     <div data-testid="devices-page" className="flex flex-col gap-12">
-      <PageHeader
-        title="Devices"
-        subtitle="The Dmitri boxes reporting to this organisation."
-      />
+      <PageHeader title={t('nav.devices')} subtitle={t('devices.subtitle')} />
       <ListSurface
         testId="devices"
         query={query}
         columns={deviceListColumns(now)}
         rowId={(agent) => agent.agent_id}
-        caption="Dmitri boxes"
-        errorMessage="Couldn't load your devices."
+        caption={t('devices.caption')}
+        errorMessage={t('devices.error')}
         empty={{
-          heading: 'No box connected yet',
-          body: 'Your installer connects the box on site; it appears here once it comes online.',
+          heading: t('devices.emptyHeading'),
+          body: t('devices.emptyBody'),
           note: (
             <p
               data-testid="devices-blank-note"
               className="text-body-sm text-muted-foreground"
             >
-              Contact whoever installed Dmitri if you were expecting one.
+              {t('devices.emptyNote')}
             </p>
           ),
         }}
         rowAction={{
           kind: 'link',
           to: (agent) => `/devices/${agent.agent_id}`,
-          label: (agent) => `Open ${agent.display_name}`,
+          label: (agent) => t('devices.open', { name: agent.display_name }),
         }}
-        rowTone={(agent) => (agent.online ? undefined : 'muted')}
+        rowTone={(agent) =>
+          readAgentPresence(agent).kind === 'online' ? undefined : 'muted'
+        }
       />
     </div>
   )

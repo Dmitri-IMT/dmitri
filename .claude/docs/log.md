@@ -3,18 +3,72 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
-## 2026-09-18
+## 2026-09-20
 
 * **Creation**: `hardware-agent/assessment.md` maps the versioned, deterministic local policy that
   produces conservative device profiles and one attack-surface exposure per open endpoint.
 * **Update**: spec 047 attack-surface and IoT profiling. Documented the assessment normalization
   substep, payload compatibility, local TUI summary/detail path, persisted assessment snapshots and
   exposures, latest-scan reconciliation, scan/host read surfaces, React presentation, OpenAPI
-  contract, and Alembic head `20260915_27`. Touched: `hardware-agent/index.md`,
+  contract, and Alembic head `20260920_33`. Touched: `hardware-agent/index.md`,
   `hardware-agent/normalize.md`, `hardware-agent/scanner/runner.md`,
   `hardware-agent/scanner/stages.md`, `hardware-agent/tui.md`, `backend/models.md`,
   `backend/schemas.md`, `backend/services.md`, `backend/migrations.md`, `backend/index.md`,
   `contracts.md`, `frontend/screens.md`, `frontend/host-detail.md`, and `frontend/tables.md`.
+
+## 2026-09-19
+
+* **Creation**: `frontend/i18n.md` — `LanguageProvider` / `useI18n` / typed `messages.ts` catalog
+  (`en`, `pt-BR`, `ru`), `LanguageSelect`, and the `UI_COPY` table.
+* **Update**: AI output language and UI localization (commits after `5a06d81`). Analyses are one row
+  per `(scan_id, language)` (migration `20260919_32`, new head); chat bodies and analysis/report
+  routes take `language`; `AI_PROMPT_VERSION` is `4`; `persist_scan` now auto-enqueues the `en`
+  analysis at ingest; host AI history spans all scans; Modbus unit/range ingest ignores extra keys;
+  PDF reports need a Unicode system font. SPA: `TopBar` preferences and mobile menus, live Scan
+  Detail polling with collapsible severity groups, severity pills. `linting.md` corrected:
+  `no-dark-variant` is switched off. Touched: `backend/ai.md`, `backend/schemas.md`,
+  `backend/models.md`, `backend/migrations.md`, `backend/index.md`, `backend/routers.md`,
+  `backend/services.md`, `frontend/scan-ai.md`, `frontend/context-ai.md`,
+  `frontend/home-ai-overview.md`, `frontend/api.md`, `frontend/app.md`, `frontend/screens.md`,
+  `frontend/tables.md`, `frontend/linting.md`, `frontend/index.md`.
+
+* **Update**: `feature/ai-improving` — contextual Groq chat (`/ai/chat`, scoped history,
+  host/finding explain routes), `ai_usage` telemetry, `AI_AUTO_ANALYSIS` enqueue from enrichment,
+  Settings usage panel, Home analysis teaser, and `GlobalAssistant` on scan/host detail. Touched:
+  `backend/ai.md`, `backend/routers.md`, `backend/api.md`, `backend/schemas.md`, `backend/models.md`,
+  `backend/services.md`, `backend/migrations.md`, `backend/index.md`, `frontend/scan-ai.md`,
+  `frontend/context-ai.md`, `frontend/ai-usage.md`, `frontend/home-ai-overview.md`, `frontend/api.md`,
+  `frontend/screens.md`, `frontend/index.md`. Follow-up: `context-ai.md` documents finding/host
+  `explain*` in `FindingPanel` / `HostAIExplanation` (not missing from the SPA); only `/ai/chat` with
+  `scope: finding` is unused on the client.
+
+* **Update**: PR-149 review follow-up. Device detail splits revoked vs live network UI:
+  `WatchedNetworkReadOnly` plus `watchedNetworkLabel.ts`; `TargetSubnetSection` is live-only. Pi
+  park wait races injected sleep against a persistent `_shutdown` event so `close()` cannot miss the
+  pre-wait race; `_wait_out_park()` `finally` cancels and awaits both child tasks so outer
+  cancellation cannot leave the hourly sleeper pending. Touched: `frontend/devices-screen.md`,
+  `hardware-agent/command-channel.md`.
+
+## 2026-09-17
+
+* **Creation**: `ConfirmDialog` now owns the shared single-click confirm state for invite and device
+  revocation. Device presence is one discriminated mode through
+  `readAgentPresence`/`AgentPresence`, and `DeviceDetailBody` alone converts that mode to child
+  interactivity.
+* **Deletion**: The bespoke users `RevokeDialog` was replaced by `ConfirmDialog`.
+* **Update**: Intentional command-channel parking no longer logs a false transport loss. Touched:
+  `frontend/screens.md`, `frontend/devices-screen.md`, `hardware-agent/command-channel.md`, and
+  `hardware-agent/daemon.md`.
+
+## 2026-09-16
+
+* **Update**: DMI-155/spec 048. The Pi command channel keeps parked daemons alive and retries all
+  typed park reasons hourly; the daemon cancels active scan work on park. Backend agent reads expose
+  `revoked_at`, admin revoke/restore writes are idempotent and revoke closes the live socket, and
+  Home omits revoked devices from long-offline events. Device list/detail render Revoked first and
+  provide the admin actions. Touched: `hardware-agent/command-channel.md`, `hardware-agent/daemon.md`,
+  `backend/routers.md`, `backend/services.md`, `backend/schemas.md`, `frontend/api.md`,
+  `frontend/devices-screen.md`, and `contracts.md`.
 
 ## 2026-09-15
 

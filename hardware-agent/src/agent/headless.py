@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -93,6 +94,7 @@ def run_headless_scan(
     reporter: ScanReporter | None = None,
     runner: NmapRunner | None = None,
     nspi_submode: NspiSubmode | None = None,
+    bind_cancel: Callable[[Callable[[], None]], None] | None = None,
 ) -> HeadlessScanResult:
     validate_inputs(mode, subnet, nspi_submode)
 
@@ -125,6 +127,8 @@ def run_headless_scan(
         runner=runner,
         nspi_submode=nspi_submode or "inventory",
     )
+    if bind_cancel is not None:
+        bind_cancel(scan_runner.request_cancel)
     scan_runner.run_blocking()
 
     if captured_payload is not None:

@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button'
+import { UI_COPY } from '@/lib/copy'
+import { useLanguage } from '@/i18n/LanguageProvider'
 
 type ErrorRetryProps = {
   message: string
@@ -7,8 +9,14 @@ type ErrorRetryProps = {
 }
 
 function ErrorRetry({ message, testId, onRetry }: ErrorRetryProps) {
+  const { language } = useLanguage()
+
   return (
-    <div className="flex flex-col items-center gap-6 py-16 text-center">
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="flex flex-col items-center gap-6 px-4 py-16 text-center"
+    >
       <p data-testid={testId} className="text-title-sm">
         {message}
       </p>
@@ -18,7 +26,7 @@ function ErrorRetry({ message, testId, onRetry }: ErrorRetryProps) {
         data-testid={`${testId}-retry`}
         onClick={onRetry}
       >
-        Retry
+        {UI_COPY[language].retry}
       </Button>
     </div>
   )

@@ -35,6 +35,8 @@ tags:
     description: Finding query endpoints for the frontend.
   - name: home
     description: Home snapshot - attention, derived events, and the activity log.
+  - name: ai
+    description: Contextual AI assistant shared by frontend surfaces.
   - name: health
     description: Liveness and readiness endpoint.
 servers:
@@ -335,6 +337,14 @@ paths:
         - FrontendBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ScanId'
+        - name: language
+          in: query
+          required: false
+          description: Language used to generate and retrieve this persisted analysis.
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '200':
           description: AI analysis state scoped to the caller's organisation.
@@ -365,6 +375,14 @@ paths:
         - FrontendBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ScanId'
+        - name: language
+          in: query
+          required: false
+          description: Language used to generate and retrieve this persisted analysis.
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
       responses:
         '202':
           description: AI analysis request state scoped to the caller's organisation.
@@ -397,6 +415,202 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/scans/{scan_id}/reports/{kind}:
+    get:
+      tags:
+        - scans
+      summary: Read a scan report
+      description: Returns a deterministic explained or technical report for a completed scan.
+      operationId: getScanReport
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportKind'
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
+      responses:
+        '200':
+          description: Report scoped to the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The scan is not ready for a report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+  /api/v1/ai/usage:
+    get:
+      tags:
+        - ai
+      summary: Get AI provider usage
+      description: Returns organization-scoped operational usage metadata without prompts or model responses.
+      operationId: getAIUsage
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: AI usage summary and recent requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIUsageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/ai/chat/history:
+    get:
+      tags:
+        - ai
+      summary: List contextual AI chat history
+      operationId: listContextAIChat
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [scan, host, finding]
+        - name: context_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Last ten questions for the selected context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatHistoryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/ai/chat:
+    post:
+      tags:
+        - ai
+      summary: Ask the contextual AI assistant
+      operationId: askContextAI
+      security:
+        - FrontendBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIContextChatRequest'
+      responses:
+        '200':
+          description: Grounded answer for the selected context.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Context exceeds the provider limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: AI provider rate limit reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/scans/{scan_id}/reports/{kind}/download:
+    get:
+      tags:
+        - scans
+      summary: Download a scan report
+      description: Downloads the explained or technical report as a PDF.
+      operationId: downloadScanReport
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ReportKind'
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, pt-BR, ru]
+            default: en
+      responses:
+        '200':
+          description: Downloadable PDF report.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The scan is not ready for a report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/hosts:
     get:
@@ -505,6 +719,7 @@ paths:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
 
+
   /api/v1/findings:
     get:
       tags:
@@ -595,6 +810,7 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
 
   /api/v1/home:
     get:
@@ -702,12 +918,13 @@ paths:
         |------|---------|---------------|
         | `1012` | Backend restarting (deploy). | Redial promptly with backoff. |
         | `1000` | Normal closure. | Redial with backoff. |
-        | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Stay down.** Redialling makes the two connections evict each other. |
-        | `4001` `revoked` | The device is revoked; the backend will not accept it again. | **Stay down.** |
+        | `4000` `replaced` | Another connection for this `agent_id` took the slot; at most one live socket per agent. | **Park; retry once per hour.** |
+        | `4001` `revoked` | The device is revoked. | **Park; retry once per hour.** An admin restore lets the next attempt in. |
 
         A `403` on the upgrade means the device is revoked **or** `{agent_id}` is not a well-formed
-        UUID; both are permanent without human intervention. A `401` is retryable only after fixing
-        the signature envelope (clock skew, fresh nonce).
+        UUID. The Pi parks and retries once per hour. An admin restore
+        (`POST /api/v1/agents/{agent_id}/restore`) lets the next attempt in. A `401` is retryable
+        only after fixing the signature envelope (clock skew, fresh nonce).
       operationId: connectAgentCommandsWebSocket
       security:
         - AgentSignatureAuth: []
@@ -846,6 +1063,60 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/agents/{agent_id}/revoke:
+    post:
+      tags:
+        - agents
+      summary: Revoke a scanner agent
+      description: Revokes the device and closes its live command channel, if connected.
+      operationId: revokeAgent
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Revoked agent detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/agents/{agent_id}/restore:
+    post:
+      tags:
+        - agents
+      summary: Restore a revoked scanner agent
+      description: Clears revocation; the Pi can reconnect on its next hourly attempt.
+      operationId: restoreAgent
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Restored agent detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/commands/{command_id}:
     get:
@@ -3742,6 +4013,7 @@ components:
         - display_name
         - online
         - last_seen_at
+        - revoked_at
         - available_subnets
       properties:
         agent_id:
@@ -3752,6 +4024,11 @@ components:
         online:
           type: boolean
         last_seen_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        revoked_at:
           type:
             - string
             - 'null'
@@ -3779,6 +4056,7 @@ components:
         - display_name
         - online
         - last_seen_at
+        - revoked_at
       properties:
         agent_id:
           type: string
@@ -3788,6 +4066,11 @@ components:
         online:
           type: boolean
         last_seen_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        revoked_at:
           type:
             - string
             - 'null'
@@ -4508,6 +4791,187 @@ components:
           processing: '#/components/schemas/ScanAIAnalysisQueued'
           failed: '#/components/schemas/ScanAIAnalysisFailed'
           completed: '#/components/schemas/ScanAIAnalysisCompleted'
+    ReportKind:
+      type: string
+      enum: [explained, technical]
+    ScanReportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scan_id
+        - kind
+        - language
+        - generated_at
+        - filename
+        - content_type
+        - sections
+      properties:
+        scan_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/ReportKind'
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
+        generated_at:
+          type: string
+          format: date-time
+        filename:
+          type: string
+        content_type:
+          type: string
+          enum: [application/pdf]
+        sections:
+          type: object
+          additionalProperties: true
+    AIContextChatRequest:
+      type: object
+      additionalProperties: false
+      required: [question, scope, context_id]
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 1000
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
+          default: en
+        scope:
+          type: string
+          enum: [scan, host, finding]
+        context_id:
+          type: string
+          format: uuid
+    AIChatResponse:
+      type: object
+      additionalProperties: false
+      required: [answer, uncertainties, referenced_finding_ids]
+      properties:
+        answer:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        uncertainties:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            minLength: 3
+            maxLength: 2000
+        referenced_finding_ids:
+          type: array
+          maxItems: 15
+          items:
+            type: string
+            format: uuid
+    AIChatHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/AIChatResponse'
+        - type: object
+          additionalProperties: false
+          required: [message_id, question, created_at]
+          properties:
+            message_id:
+              type: string
+              format: uuid
+            question:
+              type: string
+              minLength: 3
+              maxLength: 2000
+            created_at:
+              type: string
+              format: date-time
+    AIChatHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIChatHistoryEntry'
+    AIUsageEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - operation
+        - provider
+        - model
+        - status
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - latency_ms
+        - http_status
+        - request_id
+        - error_code
+        - scan_id
+        - created_at
+      properties:
+        operation:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+        input_tokens:
+          type: integer
+          nullable: true
+        output_tokens:
+          type: integer
+          nullable: true
+        total_tokens:
+          type: integer
+          nullable: true
+        latency_ms:
+          type: integer
+          nullable: true
+        http_status:
+          type: integer
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        scan_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    AIUsageSummary:
+      type: object
+      additionalProperties: false
+      required: [requests, input_tokens, output_tokens, total_tokens, errors]
+      properties:
+        requests:
+          type: integer
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        errors:
+          type: integer
+    AIUsageResponse:
+      type: object
+      additionalProperties: false
+      required: [summary, data]
+      properties:
+        summary:
+          $ref: '#/components/schemas/AIUsageSummary'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIUsageEntry'
     ScanAIAnalysisUnavailable:
       type: object
       additionalProperties: false
@@ -4543,6 +5007,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4558,6 +5023,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:
@@ -4580,6 +5048,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4596,6 +5065,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:
@@ -4621,6 +5093,7 @@ components:
         - status
         - provider
         - model
+        - language
         - context_version
         - prompt_version
         - created_at
@@ -4638,6 +5111,9 @@ components:
           type: string
         model:
           type: string
+        language:
+          type: string
+          enum: [en, pt-BR, ru]
         context_version:
           type: string
         prompt_version:

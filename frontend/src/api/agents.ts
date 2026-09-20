@@ -17,6 +17,20 @@ export async function getAgent(agentId: string): Promise<AgentDetail> {
   return response.data
 }
 
+export async function revokeAgent(agentId: string): Promise<AgentDetail> {
+  const response = await apiClient.post<AgentDetail>(
+    `/agents/${agentId}/revoke`,
+  )
+  return response.data
+}
+
+export async function restoreAgent(agentId: string): Promise<AgentDetail> {
+  const response = await apiClient.post<AgentDetail>(
+    `/agents/${agentId}/restore`,
+  )
+  return response.data
+}
+
 export async function updateAgentTargetSubnet(
   agentId: string,
   body: UpdateAgentTargetSubnetRequest,

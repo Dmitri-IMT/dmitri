@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlmodel import Session, select
+from starlette.concurrency import run_in_threadpool
 
 from api.models.command import Agent
 from api.schemas.agents import AgentDetail, AgentSummary
@@ -21,6 +23,7 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
         "display_name": agent.display_name,
         "online": agent_connections.is_online(agent.id),
         "last_seen_at": agent_connections.last_seen_at(agent.id) or agent.last_seen_at,
+        "revoked_at": agent.revoked_at,
         "target_subnet": agent.target_subnet,
         "active_command_id": None if active is None else active.id,
     }
@@ -73,3 +76,39 @@ def set_target_subnet(
     session.add(agent)
     session.commit()
     return _detail(session, agent)
+
+
+def _set_revoked_at(
+    session: Session, *, agent_id: UUID, org_id: UUID, revoked_at: datetime | None
+) -> AgentDetail | None:
+    agent = _agent(session, agent_id, org_id)
+    if agent is None:
+        return None
+    if (agent.revoked_at is None) != (revoked_at is None):
+        agent.revoked_at = revoked_at
+        session.add(agent)
+        session.commit()
+    return _detail(session, agent)
+
+
+async def revoke_agent(
+    session: Session, *, agent_id: UUID, org_id: UUID, now: datetime
+) -> AgentDetail | None:
+    """Mark the agent revoked, keeping the first timestamp, then drop its socket.
+
+    The write commits before the close, so the Pi cannot reconnect in between.
+    """
+    detail = await run_in_threadpool(
+        _set_revoked_at, session, agent_id=agent_id, org_id=org_id, revoked_at=now
+    )
+    if detail is not None:
+        socket = agent_connections.get_socket(agent_id)
+        if socket is not None:
+            await agent_connections.close_revoked(socket)
+    return detail
+
+
+def restore_agent(
+    session: Session, *, agent_id: UUID, org_id: UUID
+) -> AgentDetail | None:
+    return _set_revoked_at(session, agent_id=agent_id, org_id=org_id, revoked_at=None)

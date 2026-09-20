@@ -28,6 +28,7 @@ from api.middleware import (
 )
 from api.routers import (
     agents,
+    ai,
     auth,
     commands,
     findings,
@@ -166,3 +167,4 @@ app.include_router(scans.router)
 app.include_router(findings.router)
 app.include_router(home.router)
 app.include_router(invites.router)
+app.include_router(ai.router)

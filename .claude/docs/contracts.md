@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # Shared contracts
@@ -38,13 +38,16 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   `503 device_offline`. **Wired** (DMI-64).
 - `GET /api/v1/agents` (`listAgents`) and `GET /api/v1/agents/{agent_id}` — the fleet read surface;
   any authenticated caller, org-scoped. `AgentSummary` carries `online`/`last_seen_at`/
-  `target_subnet`/`active_command_id`; `AgentDetail` adds the Pi's currently reported
+  required nullable `revoked_at`/`target_subnet`/`active_command_id`; `AgentDetail` adds the Pi's currently reported
   `available_subnets`. **Wired** (DMI-78) — the detail path was published earlier but unimplemented
   until then.
 - `PATCH /api/v1/agents/{agent_id}` (`updateAgentTargetSubnet`) — admin-only choice of the network a
   Pi will scan; returns the full `AgentDetail`. `409 device_offline` (`AgentOfflineConflict`) when
   the Pi is reporting nothing, `422 subnet_not_reported` (`TargetSubnetNotReported`) for a network it
   did not report, `404` for an unknown or foreign agent. **Wired** (DMI-78).
+- `POST /api/v1/agents/{agent_id}/revoke` (`revokeAgent`) and `/restore` (`restoreAgent`) are
+  idempotent admin actions returning `AgentDetail`. Revoke commits before closing the socket;
+  restore lets the Pi's next hourly attempt connect. **Wired** (DMI-155).
 - `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
   on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
   `error_code` is optional `ScanErrorCode | null` (DMI-75 / spec 032): eight published values;
@@ -55,6 +58,7 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   ([command-channel](/hardware-agent/command-channel.md)). `AvailableSubnet` gained a **required**
   `is_default_route` in DMI-66, so a hello that omits it is an invalid frame on every side:
   contract, backend Pydantic model, and generated frontend type.
+  Private close codes and upgrade `403` now park the Pi for one hour instead of ending the daemon.
 - `GET /api/v1/users` (`listOrgUsers`) — admin-only member list, ordered by recent activity;
   `OrgMember` exposes `last_seen_at` but no login history or status.
 - `PATCH /api/v1/users/{user_id}` (`updateUserRole`) — admin-only role change; `409 self_target`

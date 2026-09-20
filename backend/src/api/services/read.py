@@ -161,7 +161,11 @@ def get_host_detail(
         .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
         .where(ScanHostRecord.host_id == host_id)
         .where(ScanRecord.org_id == org_id)
-        .order_by(ScanRecord.timestamp.desc(), ScanRecord.scan_id.desc())
+        .order_by(
+            ScanRecord.timestamp.desc(),
+            ScanRecord.created_at.desc(),
+            ScanRecord.scan_id.desc(),
+        )
     ).first()
     latest_scan_host = latest_snapshot[0] if latest_snapshot else None
     latest_scan = latest_snapshot[1] if latest_snapshot else None

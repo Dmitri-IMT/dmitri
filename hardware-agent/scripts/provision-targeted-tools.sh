@@ -400,9 +400,10 @@ check_capabilities() {
 }
 
 run_local_smoke_tests() {
-  command -v uv >/dev/null 2>&1 || die "uv is required for local targeted-tool smoke tests"
+  local venv_python="${AGENT_DIR}/.venv/bin/python"
+  [[ -x "$venv_python" ]] || die "${venv_python} is required for local targeted-tool smoke tests; run uv sync --extra dev"
   info "Running offline targeted parser and fake-listener smoke tests"
-  (cd "$AGENT_DIR" && uv run --offline pytest -q \
+  (cd "$AGENT_DIR" && "$venv_python" -m pytest -q \
     tests/unit/test_targeted_web.py \
     tests/unit/test_targeted_tls.py \
     tests/unit/test_targeted_smb.py \

@@ -14,8 +14,8 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIOUS_REVISION = "20260912_26"
-REVISION = "20260915_27"
+PREVIOUS_REVISION = "20260919_32"
+REVISION = "20260920_33"
 TABLE = "exposures"
 NEW_COLUMNS = {
     "scans": {"assessment_policy_version"},
@@ -52,7 +52,7 @@ TABLE_PRIVILEGES = (
 
 
 def _load_migration():
-    path = ROOT / "alembic/versions/20260915_27_attack_surface_profiles.py"
+    path = ROOT / "alembic/versions/20260920_33_attack_surface_profiles.py"
     spec = importlib.util.spec_from_file_location("attack_surface_migration", path)
     assert spec is not None
     assert spec.loader is not None

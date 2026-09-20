@@ -18,6 +18,8 @@ describe('EmptyState', () => {
       screen.getByRole('button', { name: 'Do something' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Additional context.')).toBeInTheDocument()
+    expect(screen.getByTestId('blank')).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('heading')).toHaveAttribute('id', 'blank-heading')
   })
 
   it('renders an action without requiring a note', () => {

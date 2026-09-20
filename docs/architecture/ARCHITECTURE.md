@@ -241,6 +241,9 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
   - `POST /api/v1/auth/change-password`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password` → Troca e redefinição de senha
   - `GET /api/v1/users/me`, `DELETE /api/v1/users/me` → Perfil e remoção da própria conta
   - `GET /api/v1/users`, `PATCH /api/v1/users/{user_id}`, `DELETE /api/v1/users/{user_id}` → Administração de membros da organização (admin)
+  - `GET /api/v1/agents`, `GET /api/v1/agents/{agent_id}` → Lista e detalhe dos dispositivos, incluindo estado de revogação
+  - `PATCH /api/v1/agents/{agent_id}` → Escolher a rede observada pelo dispositivo (admin)
+  - `POST /api/v1/agents/{agent_id}/revoke`, `POST /api/v1/agents/{agent_id}/restore` → Revogar e restaurar um dispositivo (admin)
   - `POST /api/v1/agents/{agent_id}/commands` → Disparar um scan (**Scan now**)
   - `GET /api/v1/commands/{command_id}` → Ciclo de vida do comando enfileirado
 - **Formato**: JSON completo (request e response)

@@ -4,11 +4,13 @@ import { HOST_FINDINGS_PER_PAGE, listFindings } from '@/api/findings'
 import { queryKeys } from '@/api/queryKeys'
 import ErrorRetry from '@/components/ErrorRetry'
 import FindingsTable from '@/pages/scans/FindingsTable'
+import useI18n from '@/i18n/useI18n'
 
 // The vulnerabilities of a machine are a second request, so this section owns
 // its three states. A failed or pending read never takes down the identity,
 // services and history that already answer "what does this thing expose".
 function HostFindings({ hostId }: { hostId: string }) {
+  const { t } = useI18n()
   const [openFindingId, setOpenFindingId] = useState<string | null>(null)
   const params = { host_id: hostId, per_page: HOST_FINDINGS_PER_PAGE }
   const query = useQuery({
@@ -20,7 +22,7 @@ function HostFindings({ hostId }: { hostId: string }) {
     return (
       <ErrorRetry
         testId="host-findings-error"
-        message="Couldn't load this machine's vulnerabilities."
+        message={t('common.findingsLoadError')}
         onRetry={() => {
           void query.refetch()
         }}
@@ -31,7 +33,7 @@ function HostFindings({ hostId }: { hostId: string }) {
   if (!query.isPending && query.data.data.length === 0) {
     return (
       <p data-testid="host-no-findings" className="text-body-md">
-        No confirmed vulnerabilities were found on this machine.
+        {t('common.noVulnerabilities')}
       </p>
     )
   }
@@ -42,7 +44,7 @@ function HostFindings({ hostId }: { hostId: string }) {
       variant="host"
       isPending={query.isPending}
       testId="host-findings-table"
-      caption="Vulnerabilities on this machine"
+      caption={t('common.vulnerabilitiesOnMachine')}
       openFindingId={openFindingId}
       onOpenFindingChange={setOpenFindingId}
     />
