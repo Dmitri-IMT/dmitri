@@ -16,6 +16,7 @@ WorkingDirectory=/opt/dmitri-agent
 EnvironmentFile=/etc/dmitri/agent.env
 # Keep scan results out of /root, which ProtectHome hides from the service.
 Environment=XDG_DATA_HOME=/var/lib/dmitri
+Environment=PATH=/opt/dmitri-agent/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/opt/dmitri-agent/.venv/bin/dmitri agent
 Restart=always
 RestartSec=10s

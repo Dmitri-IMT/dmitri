@@ -448,7 +448,10 @@ def test_agent_models_emit_no_field_the_contract_forbids() -> None:
     for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
         assert schema["additionalProperties"] is False
-        unknown = set(model.model_fields) - set(schema["properties"])
+        emitted_fields = {
+            name for name, field in model.model_fields.items() if not field.exclude
+        }
+        unknown = emitted_fields - set(schema["properties"])
         assert not unknown, f"{schema_name} would reject {sorted(unknown)}"
 
 

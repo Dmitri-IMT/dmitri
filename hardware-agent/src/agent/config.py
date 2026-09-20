@@ -8,12 +8,38 @@ from typing import Literal
 from agent.scanner.errors import UnsupportedScanDepth
 
 SCAN_MODES: tuple[str, ...] = ("quick", "standard", "extensive", "nspi", "max")
+TARGETED_MODES: tuple[str, ...] = ("extensive", "max", "nspi")
 NSPI_SUBMODES: tuple[str, ...] = (
     "inventory",
     "read_only_mapping",
     "active_validation",
 )
 NspiSubmode = Literal["inventory", "read_only_mapping", "active_validation"]
+
+TARGETED_STAGE_TIMEOUT_S: dict[str, float] = {
+    "extensive": 1800.0,
+    "max": 3600.0,
+    "nspi": 1800.0,
+}
+TARGETED_UNIT_TIMEOUT_S: dict[str, float] = {
+    "ffuf": 480.0,
+    "nikto": 180.0,
+    "testssl.sh": 300.0,
+    "enum4linux-ng": 180.0,
+    "ssh-audit": 60.0,
+    "ftp-check": 15.0,
+    "telnet-check": 10.0,
+}
+TARGETED_MAX_UNITS = 96
+TARGETED_STDIO_LIMIT_BYTES = 131_072
+TARGETED_REPORT_LIMIT_BYTES = 2_097_152
+TARGETED_EVIDENCE_LIMIT_CHARS = 4_096
+TARGETED_DIAGNOSTIC_LIMIT_CHARS = 512
+TARGETED_MAX_ISSUES_PER_UNIT = 128
+TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT = 32
+TARGETED_COVERAGE_LIMIT_CHARS = 2_048
+TARGETED_WORDLIST_MAX_BYTES = 1_048_576
+TARGETED_WORDLIST_MAX_ENTRIES = 10_000
 
 
 @dataclass(slots=True)

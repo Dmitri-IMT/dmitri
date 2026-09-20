@@ -13,6 +13,7 @@ from uuid import uuid4
 from agent.assessment import assess_hosts
 from agent.assessment.policy import LOCAL_ASSESSMENT_POLICY_VERSION
 from agent.config import (
+    TARGETED_MODES,
     AgentSettings,
     NspiSubmode,
     min_cvss_for_mode,
@@ -34,6 +35,9 @@ from agent.scanner.errors import (
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.scanner.stages import OtInspectionResult
+from agent.targeted.executor import TargetedExecutor
+from agent.targeted.models import TargetedStageSummary
+from agent.targeted.stage import run_targeted_stage
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
@@ -67,6 +71,8 @@ class ScanRunner:
         self._runner_lock = threading.Lock()
         self._active_runner: NmapRunner | None = None
         self._modbus_controller = ModbusClientController()
+        self._targeted_executor = TargetedExecutor()
+        self._targeted_summary: TargetedStageSummary | None = None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -81,6 +87,7 @@ class ScanRunner:
             runner = self._active_runner
         if runner is not None:
             runner.terminate_active()
+        self._targeted_executor.terminate_active()
         self._modbus_controller.cancel()
 
     @property
@@ -112,6 +119,7 @@ class ScanRunner:
         interrupted_stage: str | None,
         terminated_by: str,
         ot_inspection: OtInspectionResult | None = None,
+        targeted_summary: TargetedStageSummary | None = None,
     ) -> ScanPayload:
         findings = extract_findings(hosts)
         assessment = assess_hosts(hosts)
@@ -145,6 +153,7 @@ class ScanRunner:
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary or self._targeted_summary,
             ),
         )
 
@@ -161,6 +170,7 @@ class ScanRunner:
         terminated_by: str,
         message: str,
         ot_inspection: OtInspectionResult | None = None,
+        targeted_summary: TargetedStageSummary | None = None,
     ) -> None:
         if (
             runner is None
@@ -182,6 +192,7 @@ class ScanRunner:
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary or self._targeted_summary,
             )
         except Exception as exc:
             self._emit(ScanEvent(kind="failed", message=message))
@@ -308,12 +319,39 @@ class ScanRunner:
                     self._check_cancel()
                     self._check_deadline(deadline)
 
+
+            if self.scan_mode in TARGETED_MODES:
+                interrupted_stage = "targeted_assessment"
+                stages.set_runner_stage(runner, "targeted")
+                self._targeted_summary = run_targeted_stage(
+                    hosts,
+                    scan_mode=self.scan_mode,
+                    reporter=self._reporter,
+                    cancel_event=self._cancel_event,
+                    executor=self._targeted_executor,
+                    overall_deadline=deadline,
+                    scan_id=str(scan_id),
+                )
+                self._check_cancel()
+                self._check_deadline(deadline)
+
             interrupted_stage = "normalize"
             self._emit(
                 ScanEvent(kind="normalize_started", message="Generating results…")
             )
             self._check_cancel()
-            partial_result = port_units_skipped > 0 or deep_units_skipped > 0
+            targeted_gaps = bool(
+                self._targeted_summary
+                and (
+                    self._targeted_summary.omitted
+                    or self._targeted_summary.failed
+                    or self._targeted_summary.timed_out
+                    or self._targeted_summary.skipped
+                )
+            )
+            partial_result = (
+                port_units_skipped > 0 or deep_units_skipped > 0 or targeted_gaps
+            )
             payload = self._build_payload(
                 scan_id=scan_id,
                 settings=settings,
@@ -325,6 +363,7 @@ class ScanRunner:
                 interrupted_stage=None,
                 terminated_by="completed",
                 ot_inspection=ot_inspection,
+                targeted_summary=self._targeted_summary,
             )
 
             self._check_cancel()

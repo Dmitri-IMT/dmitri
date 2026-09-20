@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-
 from datetime import datetime, timezone
 
 from agent.normalize.findings import extract_findings
 from agent.ot.modbus.models import ModbusAddressRange, ModbusService, ModbusUnit
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, PortInfo, ScriptResult, ServiceInfo
+from agent.targeted.models import (
+    TargetedGapReason,
+    TargetedIssue,
+    TargetedObservation,
+    TargetedOutcome,
+    TargetedTool,
+    TargetedUnit,
+    TargetedUnitResult,
+)
 from agent.utils.nmap_xml import parse_host_scripts, parse_ports
 
 
@@ -567,3 +575,236 @@ def test_modbus_read_findings_emit_one_finding_per_readable_unit() -> None:
 
     assert len(modbus_findings) == 2
     assert sorted(finding.unit_id for finding in modbus_findings) == [1, 2]
+
+
+def _targeted_result(
+    *,
+    issue: TargetedIssue | None = None,
+    outcome: TargetedOutcome = TargetedOutcome.COMPLETED,
+    reason_code: TargetedGapReason | None = None,
+) -> TargetedUnitResult:
+    unit = TargetedUnit(
+        ip="192.168.10.40",
+        port=443,
+        protocol="tcp",
+        service="https",
+        tool=TargetedTool.TESTSSL,
+    )
+    return TargetedUnitResult(
+        unit,
+        outcome,
+        issues=[issue] if issue is not None else [],
+        reason_code=reason_code,
+    )
+
+
+def test_targeted_issue_maps_to_existing_finding_contract() -> None:
+    issue = TargetedIssue(
+        issue_key="tls:weak-cipher:rc4",
+        title="RC4 cipher accepted",
+        description="The endpoint accepts RC4.",
+        severity="high",
+        recommendation="Disable RC4.",
+        evidence="TLS_RSA_WITH_RC4_128_SHA",
+        cve_id="CVE-2013-2566",
+        cvss_score=7.5,
+        references=["https://example.test/advisory"],
+    )
+    host = HostInfo(
+        ip="192.168.10.40",
+        hostname="tls-host",
+        ports=[
+            PortInfo(
+                port=443,
+                service=ServiceInfo(name="https"),
+            )
+        ],
+        targeted_results=[_targeted_result(issue=issue)],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.source == "targeted_service_assessment"
+    assert finding.source_script == "testssl.sh"
+    assert str(finding.ip) == host.ip
+    assert finding.port == 443
+    assert finding.title == issue.title
+    assert finding.description == issue.description
+    assert finding.recommendation == issue.recommendation
+    assert finding.evidence == issue.evidence
+    assert finding.cve_id == issue.cve_id
+    assert finding.cvss_score == issue.cvss_score
+    assert finding.references == issue.references
+
+
+def test_targeted_gaps_and_benign_inventory_do_not_become_findings() -> None:
+    unit = TargetedUnit(
+        ip="192.168.10.41",
+        port=445,
+        protocol="tcp",
+        service="microsoft-ds",
+        tool=TargetedTool.ENUM4LINUX,
+    )
+    host = HostInfo(
+        ip="192.168.10.41",
+        hostname="fileserver",
+        ports=[PortInfo(port=445, service=ServiceInfo(name="microsoft-ds"))],
+        targeted_results=[
+            TargetedUnitResult(
+                unit,
+                TargetedOutcome.COMPLETED,
+                observations=[
+                    TargetedObservation(
+                        "smb:inventory",
+                        "service_identity",
+                        "Samba file server",
+                        "service=samba",
+                    )
+                ],
+            ),
+            TargetedUnitResult(
+                unit,
+                TargetedOutcome.SKIPPED,
+                reason_code=TargetedGapReason.TOOL_UNAVAILABLE,
+            ),
+        ],
+    )
+
+    assert extract_findings([host]) == []
+
+
+def test_targeted_finding_precedes_nse_duplicate_and_merges_corroboration() -> None:
+    host_element = ET.fromstring(
+        """
+        <host>
+          <ports>
+            <port protocol="tcp" portid="21">
+              <state state="open" />
+              <service name="ftp" />
+              <script
+                id="ftp-anon"
+                output="Anonymous FTP login allowed (FTP code 230)"
+              />
+            </port>
+          </ports>
+        </host>
+        """
+    )
+    issue = TargetedIssue(
+        issue_key="ftp:anonymous-login",
+        title="Anonymous FTP login allowed",
+        description="Targeted probe confirmed anonymous login.",
+        severity="high",
+        recommendation="Disable anonymous access.",
+        evidence="220 FTP banner; anonymous login accepted",
+        references=["https://example.test/ftp"],
+    )
+    host = HostInfo(
+        ip="192.168.10.42",
+        hostname="ftp-host",
+        ports=parse_ports(host_element),
+        targeted_results=[
+            TargetedUnitResult(
+                TargetedUnit(
+                    "192.168.10.42", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
+                ),
+                TargetedOutcome.COMPLETED,
+                issues=[issue],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.source == "targeted_service_assessment"
+    assert finding.description == issue.description
+    assert finding.recommendation == issue.recommendation
+    assert finding.references == ["https://example.test/ftp"]
+    assert "corroborated by nmap_nse" in finding.evidence
+
+
+def test_highest_severity_wins_but_targeted_remediation_is_retained() -> None:
+    host = HostInfo(
+        ip="192.168.10.43",
+        hostname="ftp-host",
+        ports=[
+            PortInfo(
+                port=21,
+                service=ServiceInfo(name="ftp"),
+                scripts=[
+                    ScriptResult(
+                        script_id="ftp-anon",
+                        output="Anonymous FTP login allowed (FTP code 230)",
+                    )
+                ],
+            )
+        ],
+        targeted_results=[
+            TargetedUnitResult(
+                TargetedUnit(
+                    "192.168.10.43", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
+                ),
+                TargetedOutcome.COMPLETED,
+                issues=[
+                    TargetedIssue(
+                        issue_key="ftp:anonymous-login",
+                        title="Targeted anonymous FTP result",
+                        description="Targeted probe confirmed anonymous login.",
+                        severity="medium",
+                        recommendation="Disable anonymous access immediately.",
+                        evidence="anonymous login accepted",
+                    )
+                ],
+            )
+        ],
+    )
+
+    findings = extract_findings([host])
+
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].description == "Targeted probe confirmed anonymous login."
+    assert findings[0].recommendation == "Disable anonymous access immediately."
+
+
+def test_targeted_issue_key_is_used_for_cross_source_identity() -> None:
+    host = HostInfo(
+        ip="192.168.10.44",
+        hostname="ftp-host",
+        ports=[
+            PortInfo(
+                port=21,
+                service=ServiceInfo(name="ftp"),
+                scripts=[
+                    ScriptResult(
+                        script_id="ftp-anon",
+                        output="Anonymous FTP login allowed (FTP code 230)",
+                    )
+                ],
+            )
+        ],
+        targeted_results=[
+            TargetedUnitResult(
+                TargetedUnit(
+                    "192.168.10.44", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
+                ),
+                TargetedOutcome.COMPLETED,
+                issues=[
+                    TargetedIssue(
+                        issue_key="ftp:anonymous-login",
+                        title="Tool-specific title that must not affect identity",
+                        description="Targeted probe confirmed anonymous login.",
+                        severity="high",
+                        recommendation="Disable anonymous access.",
+                        evidence="anonymous login accepted",
+                    )
+                ],
+            )
+        ],
+    )
+
+    assert len(extract_findings([host])) == 1

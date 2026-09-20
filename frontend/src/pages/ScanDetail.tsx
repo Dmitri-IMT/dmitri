@@ -20,6 +20,7 @@ import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
+import ServiceTargetedFindings from '@/pages/scans/ServiceTargetedFindings'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import SeverityWord from '@/components/SeverityWord'
 import type { components } from '@/types/openapi'
@@ -87,6 +88,11 @@ function ScanDetail() {
           ),
         })).filter((group) => group.findings.length > 0)
         const metadata = scan.metadata ?? {}
+        const hasTargetedStage =
+          ['extensive', 'max', 'nspi'].includes(scan.scan_mode) ||
+          scan.findings.some(
+            (finding) => finding.source === 'targeted_service_assessment',
+          )
         const partial = metadata.partial_result === true
         const completedPartial =
           partial && metadata.terminated_by === 'completed'
@@ -253,6 +259,20 @@ function ScanDetail() {
                           />
                         </section>
                       ))}
+                    </CardContent>
+                  </Card>
+                )}
+                {hasTargetedStage && (
+                  <Card>
+                    <CardHeader>
+                      <h2 className="text-title-sm">Service Targeted Tools</h2>
+                    </CardHeader>
+                    <CardContent>
+                      <ServiceTargetedFindings
+                        findings={scan.findings}
+                        openFindingId={openFindingId}
+                        onOpenFindingChange={setOpenFindingId}
+                      />
                     </CardContent>
                   </Card>
                 )}

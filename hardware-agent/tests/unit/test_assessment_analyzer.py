@@ -21,6 +21,13 @@ from agent.scanner.models import (
     ScriptResult,
     ServiceInfo,
 )
+from agent.targeted.models import (
+    TargetedObservation,
+    TargetedOutcome,
+    TargetedTool,
+    TargetedUnit,
+    TargetedUnitResult,
+)
 from agent.utils.nmap_xml import parse_ports
 
 
@@ -1498,3 +1505,106 @@ def test_assessment_is_deterministic_and_does_not_perform_io(monkeypatch) -> Non
     assert [str(item.ip) for item in first.exposures] == sorted(
         str(item.ip) for item in first.exposures
     )
+
+
+def _targeted_observation_host(
+    observations: list[TargetedObservation],
+) -> HostInfo:
+    return HostInfo(
+        ip="192.168.1.90",
+        hostname="gateway",
+        ports=[_port(8080, "http")],
+        targeted_results=[
+            TargetedUnitResult(
+                TargetedUnit(
+                    "192.168.1.90", 8080, "tcp", "http", TargetedTool.FFUF
+                ),
+                TargetedOutcome.COMPLETED,
+                observations=observations,
+            )
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "rule", "expected_role"),
+    [
+        ("administration", "WEB-ADMIN-001", "administration"),
+        ("api_surface", "WEB-API-DOCS-001", "api"),
+    ],
+)
+def test_targeted_web_observation_enriches_one_existing_exposure(
+    kind: str, rule: str, expected_role: str
+) -> None:
+    observation = TargetedObservation(
+        observation_key=f"web:{rule.lower()}",
+        kind=kind,  # type: ignore[arg-type]
+        summary="Validated web surface",
+        evidence=f"2026-09-15.1:{rule}; path=/admin",
+    )
+    host = _targeted_observation_host([observation])
+
+    result = assess_hosts([host])
+
+    assert len(result.exposures) == 1
+    exposure = result.exposures[0]
+    assert exposure.role == expected_role
+    assert exposure.confidence == "high"
+    assert any(
+        item.kind == "web_path"
+        and item.source == f"ffuf:{rule}@2026-09-15.1"
+        and item.value == "/admin"
+        for item in exposure.evidence
+    )
+
+
+def test_targeted_device_identity_updates_supported_profile_evidence_only() -> None:
+    observation = TargetedObservation(
+        observation_key="modbus:device-id",
+        kind="device_identity",
+        summary="Acme PLC-42",
+        evidence="vendor=Acme; model=PLC-42",
+    )
+    host = HostInfo(
+        ip="192.168.1.91",
+        hostname="controller",
+        ports=[_port(502, "modbus")],
+        targeted_results=[
+            TargetedUnitResult(
+                TargetedUnit(
+                    "192.168.1.91", 502, "tcp", "modbus", TargetedTool.TESTSSL
+                ),
+                TargetedOutcome.COMPLETED,
+                observations=[observation],
+            )
+        ],
+    )
+
+    result = assess_hosts([host])
+
+    profile = result.device_profiles[host.ip]
+    assert profile.product_family == "Acme PLC-42"
+    assert any(
+        item.kind == "industrial"
+        and item.source == "targeted:modbus:device-id"
+        and item.value == "Acme PLC-42"
+        for item in profile.evidence
+    )
+    assert len(result.exposures) == 1
+
+
+def test_targeted_observations_do_not_change_finding_counts() -> None:
+    host = _targeted_observation_host(
+        [
+            TargetedObservation(
+                "web:admin",
+                "administration",
+                "Admin console",
+                "2026-09-15.1:WEB-ADMIN-001; path=/admin",
+            )
+        ]
+    )
+
+    from agent.normalize.findings import extract_findings
+
+    assert extract_findings([host]) == []

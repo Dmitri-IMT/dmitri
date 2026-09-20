@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-LOCAL_ASSESSMENT_POLICY_VERSION = "2026-09-15.1"
+LOCAL_ASSESSMENT_POLICY_VERSION = "2026-09-15.2"
 
 MachineType = Literal[
     "router",

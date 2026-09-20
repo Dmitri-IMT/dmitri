@@ -15,6 +15,7 @@ from agent.normalize.contracts import (
 )
 from agent.ot.modbus.models import ModbusService
 from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.targeted.models import TargetedObservation
 
 from .policy import (
     AMBIGUOUS_VENDOR_NAMES,
@@ -316,6 +317,29 @@ def _profile_host(host: HostInfo) -> tuple[MachineType, DeviceProfilePayload]:
     product_values: list[_ProductFact] = []
     model_values: list[tuple[str, str]] = []
     supplemental_evidence: list[AssessmentEvidencePayload] = []
+
+    for observation in host.targeted_results:
+        for item in observation.observations:
+            if item.kind == "service_identity":
+                evidence = _evidence(
+                    "service", f"targeted:{item.observation_key}", item.summary
+                )
+                if evidence:
+                    supplemental_evidence.append(evidence)
+            elif item.kind == "device_identity":
+                evidence = _evidence(
+                    "industrial", f"targeted:{item.observation_key}", item.summary
+                )
+                if evidence:
+                    supplemental_evidence.append(evidence)
+                    product_values.append(
+                        _ProductFact(
+                            f"targeted:{item.observation_key}",
+                            item.summary,
+                            "industrial",
+                            frozenset(),
+                        )
+                    )
 
     if locally_administered:
         limitations.append(
@@ -809,8 +833,55 @@ def _has_cleartext_control_evidence(host: HostInfo, port: PortInfo) -> bool:
     )
 
 
+def _targeted_endpoint_observations(
+    host: HostInfo, port: PortInfo
+) -> list[TargetedObservation]:
+    return [
+        observation
+        for result in host.targeted_results
+        if result.unit.ip == host.ip
+        and result.unit.port == port.port
+        and result.unit.protocol == port.protocol
+        for observation in result.observations
+    ]
+
+
+def _targeted_web_evidence(
+    observation: TargetedObservation,
+) -> AssessmentEvidencePayload | None:
+    if observation.kind not in {"administration", "api_surface"}:
+        return None
+    match = re.search(r"(?:^|;\s*)path=([^;\s]+)", observation.evidence)
+    path = match.group(1) if match else observation.observation_key.rsplit(":", 1)[-1]
+    rule_match = re.search(r"(?:^|:)((?:WEB)-[A-Z0-9-]+);", observation.evidence)
+    rule_id = rule_match.group(1) if rule_match else observation.observation_key
+    version_match = re.match(r"([^:;]+):", observation.evidence)
+    version = version_match.group(1) if version_match else "unknown"
+    return _evidence(
+        "web_path",
+        f"ffuf:{rule_id}@{version}",
+        path,
+    )
+
+
 def _exposure_for(host: HostInfo, port: PortInfo) -> ExposurePayload:
     role, confidence, basis = _select_role(host, port)
+    targeted_observations = _targeted_endpoint_observations(host, port)
+    targeted_roles = {
+        "administration"
+        if item.kind == "administration"
+        else "api"
+        for item in targeted_observations
+        if item.kind in {"administration", "api_surface"}
+    }
+    if len(targeted_roles) == 1:
+        role = next(iter(targeted_roles))  # type: ignore[assignment]
+        confidence = "high"
+        basis = "validated targeted web-surface observation"
+    elif len(targeted_roles) > 1:
+        role = "unknown"
+        confidence = "high"
+        basis = "contradictory targeted web-surface observations"
     observed_service = (
         _safe_text(port.service.name, MAX_EVIDENCE_VALUE_CHARS) or "unknown"
     )
@@ -888,6 +959,10 @@ def _exposure_for(host: HostInfo, port: PortInfo) -> ExposurePayload:
             evidence.append(item)
     for _service in _confirmed_industrial_services_for_endpoint(host, port):
         item = _evidence("industrial", endpoint, "confirmed Modbus TCP identity")
+        if item:
+            evidence.append(item)
+    for observation in targeted_observations:
+        item = _targeted_web_evidence(observation)
         if item:
             evidence.append(item)
 

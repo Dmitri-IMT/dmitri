@@ -171,6 +171,73 @@ function expectNoScanTables() {
 }
 
 describe('ScanDetail', () => {
+  it('groups service-targeted findings by tool family without mixing NSE findings', async () => {
+    const web = finding({
+      finding_id: '44444444-aaaa-4aaa-8aaa-444444444444',
+      severity: 'high',
+      title: 'Exposed environment configuration',
+      source: 'targeted_service_assessment',
+      source_script: 'ffuf',
+    })
+    const ssl = finding({
+      finding_id: '55555555-aaaa-4aaa-8aaa-555555555555',
+      severity: 'medium',
+      title: 'Weak TLS cipher',
+      source: 'targeted_service_assessment',
+      source_script: 'testssl.sh',
+    })
+    const smb = finding({
+      finding_id: '66666666-aaaa-4aaa-8aaa-666666666666',
+      severity: 'medium',
+      title: 'SMB guest session is available',
+      source: 'targeted_service_assessment',
+      source_script: 'enum4linux-ng',
+    })
+    scanDetail(
+      completedScan({
+        scan_mode: 'extensive',
+        findings: [phpCgiFinding, web, ssl, smb],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Service Targeted Tools' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-web-row-${web.finding_id}`),
+    ).toBeInTheDocument()
+    expect(screen.getByText('ffuf')).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-ssl-row-${ssl.finding_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-smb-row-${smb.finding_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`findings-critical-row-${phpCgiFinding.finding_id}`),
+    ).toBeInTheDocument()
+  })
+
+  it('does not describe absent targeted findings as clean coverage', async () => {
+    scanDetail(
+      completedScan({ scan_mode: 'extensive', findings: [phpCgiFinding] }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    expect(screen.getByTestId('scan-no-targeted-findings')).toHaveTextContent(
+      'This does not mean every tool ran.',
+    )
+  })
+
   it('splits a shuffled payload into one table per severity, worst card first', async () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)

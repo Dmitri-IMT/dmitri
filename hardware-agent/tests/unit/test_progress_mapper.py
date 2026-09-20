@@ -16,6 +16,27 @@ def _weights(mode: str):
 
 
 class TestStageWeightsTable:
+    def test_rows_match_approved_weights_exactly(self) -> None:
+        expected = {
+            "quick": (15, 50, 30, 0, 0, 5),
+            "standard": (10, 50, 35, 0, 0, 5),
+            "extensive": (5, 50, 30, 0, 10, 5),
+            "nspi": (10, 35, 30, 10, 10, 5),
+            "max": (5, 50, 30, 0, 10, 5),
+        }
+        actual = {
+            mode: (
+                weights.discovery,
+                weights.port_scan,
+                weights.deep_inspection,
+                weights.ot_inspection,
+                weights.targeted_assessment,
+                weights.normalize,
+            )
+            for mode, weights in STAGE_WEIGHTS.items()
+        }
+        assert actual == expected
+
     @pytest.mark.parametrize("mode", ALL_MODES)
     def test_row_sums_to_100(self, mode: str) -> None:
         w = _weights(mode)
@@ -24,6 +45,7 @@ class TestStageWeightsTable:
             + w.port_scan
             + w.deep_inspection
             + w.ot_inspection
+            + w.targeted_assessment
             + w.normalize
             == 100
         )
@@ -61,6 +83,7 @@ class TestBandBoundaries:
         mapper = ProgressMapper(mode)
         expected = float(
             w.discovery + w.port_scan + w.deep_inspection + w.ot_inspection
+            + w.targeted_assessment
         )
         assert mapper.update(ScanEvent(kind="normalize_started")) == expected
 
@@ -80,6 +103,34 @@ class TestMidStageInterpolation:
             ScanEvent(kind="port_batch_done", batches_done=2, batches_total=4)
         )
         assert result == expected
+
+    @pytest.mark.parametrize("mode", ["extensive", "max", "nspi"])
+    def test_targeted_stage_band_and_interpolation(self, mode: str) -> None:
+        w = _weights(mode)
+        mapper = ProgressMapper(mode)
+        floor = w.discovery + w.port_scan + w.deep_inspection + w.ot_inspection
+        assert mapper.update(
+            ScanEvent(kind="targeted_stage_started", units_total=4)
+        ) == floor
+        assert mapper.update(
+            ScanEvent(
+                kind="targeted_unit_done",
+                units_done=2,
+                units_total=4,
+                outcome="completed",
+            )
+        ) == floor + w.targeted_assessment / 2
+        assert mapper.update(
+            ScanEvent(kind="targeted_stage_done", units_total=4, units_completed=4)
+        ) == floor + w.targeted_assessment
+
+    @pytest.mark.parametrize("mode", ["extensive", "max", "nspi"])
+    def test_targeted_zero_total_stays_at_band_floor(self, mode: str) -> None:
+        w = _weights(mode)
+        floor = w.discovery + w.port_scan + w.deep_inspection + w.ot_inspection
+        assert target_pct(
+            ScanEvent(kind="targeted_unit_done", units_total=0), w
+        ) == floor
 
     @pytest.mark.parametrize("mode", ALL_MODES)
     def test_host_inspected_quarter_done(self, mode: str) -> None:
@@ -116,6 +167,26 @@ class TestMonotonic:
         ):
             seen.append(mapper.update(ScanEvent(kind=kind)))
         assert seen == sorted(seen)
+
+    @pytest.mark.parametrize("mode", ["extensive", "nspi", "max"])
+    def test_targeted_out_of_order_events_never_regress(self, mode: str) -> None:
+        mapper = ProgressMapper(mode)
+        high = mapper.update(
+            ScanEvent(
+                kind="targeted_unit_done",
+                units_done=4,
+                units_total=4,
+                outcome="completed",
+            )
+        )
+        assert mapper.update(
+            ScanEvent(
+                kind="targeted_unit_done",
+                units_done=1,
+                units_total=4,
+                outcome="failed",
+            )
+        ) == high
 
 
 class TestHonestFailure:

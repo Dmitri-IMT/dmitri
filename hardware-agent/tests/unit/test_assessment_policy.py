@@ -18,7 +18,7 @@ from agent.assessment.policy import (
 
 
 def test_policy_version_is_frozen() -> None:
-    assert LOCAL_ASSESSMENT_POLICY_VERSION == "2026-09-15.1"
+    assert LOCAL_ASSESSMENT_POLICY_VERSION == "2026-09-15.2"
 
 
 def test_signal_weights_and_output_bounds_are_exact() -> None:

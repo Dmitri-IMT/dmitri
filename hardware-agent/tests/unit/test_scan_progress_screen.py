@@ -265,7 +265,7 @@ class TestActivityLog:
             text = _log_text(screen)
             assert "Inventoried 192.168.1.30 (1/1)" in text
             assert "1 Modbus hosts inventoried" in text
-            assert screen._target_pct == 95.0
+            assert screen._target_pct == 85.0
 
 
 class TestProgressTarget:
@@ -275,7 +275,7 @@ class TestProgressTarget:
         async with _Harness(screen).run_test() as pilot:
             await pilot.pause()
             await _post(pilot, screen, ScanEvent(kind="port_stage_done", ports_open=7))
-            assert screen._target_pct == 60.0
+            assert screen._target_pct == 55.0
 
     @pytest.mark.asyncio
     async def test_target_pct_after_port_stage_done_quick(self) -> None:
@@ -284,6 +284,161 @@ class TestProgressTarget:
             await pilot.pause()
             await _post(pilot, screen, ScanEvent(kind="port_stage_done", ports_open=2))
             assert screen._target_pct == 65.0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mode", ["quick", "standard"])
+    async def test_ineligible_modes_ignore_targeted_events(self, mode: str) -> None:
+        screen = _make_screen(scan_mode=mode)
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(pilot, screen, ScanEvent(kind="port_stage_done"))
+            before = screen._target_pct
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="targeted_stage_started", units_total=2),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_unit_done",
+                    units_done=1,
+                    units_total=2,
+                    outcome="completed",
+                ),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_stage_done",
+                    units_total=2,
+                    units_completed=2,
+                ),
+            )
+            assert screen._target_pct == before
+            assert "Assessing services" not in _log_text(screen)
+            assert "Targeted checks" not in _log_text(screen)
+
+    @pytest.mark.asyncio
+    async def test_eligible_zero_target_reaches_normalize_floor(self) -> None:
+        screen = _make_screen(scan_mode="max")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="targeted_stage_started", units_total=0),
+            )
+            assert screen._target_pct == 85.0
+            assert "No supported services found" in _log_text(screen)
+            assert "targeted" not in screen._active_stages
+            await _post(pilot, screen, ScanEvent(kind="normalize_started"))
+            assert screen._target_pct == 95.0
+
+    @pytest.mark.asyncio
+    async def test_targeted_full_summary_precedes_normalize(self) -> None:
+        screen = _make_screen(scan_mode="extensive")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="targeted_stage_started", units_total=2),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_unit_done",
+                    units_done=2,
+                    units_total=2,
+                    outcome="completed",
+                ),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_stage_done",
+                    units_total=2,
+                    units_completed=2,
+                ),
+            )
+            await _post(pilot, screen, ScanEvent(kind="normalize_started"))
+            text = _log_text(screen)
+            assert "Targeted checks completed: 2" in text
+            assert "Generating results" in text
+            assert text.index("Targeted checks completed: 2") < text.index(
+                "Generating results"
+            )
+            assert screen._target_pct == 95.0
+
+    @pytest.mark.asyncio
+    async def test_targeted_degraded_summary_keeps_counters_through_normalize(
+        self,
+    ) -> None:
+        screen = _make_screen(scan_mode="max")
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="targeted_stage_started", units_total=4),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_stage_done",
+                    units_total=4,
+                    units_completed=1,
+                    units_failed=1,
+                    units_timed_out=1,
+                    units_skipped=1,
+                ),
+            )
+            await _post(pilot, screen, ScanEvent(kind="normalize_started"))
+            text = _log_text(screen)
+            expected = (
+                "Targeted checks: 1 completed, 1 failed, "
+                "1 timed out, 1 skipped"
+            )
+            assert expected in text
+            assert "Generating results" in text
+            assert not screen.query_one("#scan-badge", Static).display
+
+    @pytest.mark.asyncio
+    async def test_targeted_interruption_uses_stage_copy_and_holds_bar(self) -> None:
+        screen = _make_screen(scan_mode="nspi")
+        payload = _make_partial_payload(
+            2, 1, "timeout", "targeted_assessment"
+        )
+        async with _Harness(screen).run_test() as pilot:
+            await pilot.pause()
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(kind="targeted_stage_started", units_total=4),
+            )
+            await _post(
+                pilot,
+                screen,
+                ScanEvent(
+                    kind="targeted_unit_done",
+                    units_done=1,
+                    units_total=4,
+                    outcome="completed",
+                ),
+            )
+            before = screen._target_pct
+            screen._handle_complete(payload)
+            await pilot.pause()
+            assert before < 95.0
+            assert screen._target_pct == before
+            assert "Stopped during targeted service assessment" in _log_text(screen)
+            assert "STOPPED" in _badge_text(screen)
 
 
 class TestCompletion:

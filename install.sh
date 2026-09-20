@@ -10,6 +10,7 @@ SKIP_VERIFY=0
 INSTALL_HOOKS=0
 INFRA_OK=0
 FRONTEND_OK=0
+TARGETED_TOOLS_OK=0
 
 # Read the project id and port from config.toml rather than hardcoding them, so this
 # keeps working if either is changed there. Same parse as database.sh.
@@ -185,6 +186,39 @@ sync_python_deps() {
   if [[ "$AGENT_ONLY" -eq 0 ]]; then
     info "Syncing backend dependencies (with dev extras)..."
     (cd "${REPO_ROOT}/backend" && uv sync --extra dev)
+  fi
+}
+
+provision_targeted_tools() {
+  # The external targeted tools are a Pi runtime concern. Keep the general
+  # developer install portable and make failures non-fatal with clear guidance.
+  if [[ "$AGENT_ONLY" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    note "Targeted-tool provisioning is supported on Raspberry Pi Linux only; use the Pi provisioner on armhf/arm64."
+    return 0
+  fi
+
+  local provisioner="${REPO_ROOT}/hardware-agent/scripts/provision-targeted-tools.sh"
+  if [[ ! -x "$provisioner" ]]; then
+    warn "Targeted-tool provisioner is missing or not executable: ${provisioner}"
+    return 0
+  fi
+
+  info "Provisioning pinned service-targeted tools (Raspberry Pi Linux)..."
+  if [[ "${EUID}" -eq 0 ]]; then
+    if "$provisioner"; then
+      TARGETED_TOOLS_OK=1
+    else
+      warn "Targeted-tool provisioning failed; scans will report targeted coverage gaps."
+    fi
+  elif ! command -v sudo >/dev/null 2>&1; then
+    warn "Targeted-tool provisioning needs root/network access; run: sudo ${provisioner}"
+  elif sudo "$provisioner"; then
+    TARGETED_TOOLS_OK=1
+  else
+    warn "Targeted-tool provisioning failed; scans will report targeted coverage gaps."
   fi
 }
 
@@ -504,6 +538,15 @@ Finish setup manually — see backend/README.md and docs/cloud/supabase/SETUP.md
 EOF
   fi
 
+  if [[ "$AGENT_ONLY" -eq 1 ]]; then
+    if [[ "$TARGETED_TOOLS_OK" -eq 1 ]]; then
+      note "Targeted service tools: provisioned and verified."
+    else
+      warn "Targeted service tools are not ready. Run: sudo hardware-agent/scripts/provision-targeted-tools.sh"
+      note "Use --verify-only to check an existing Pi installation."
+    fi
+  fi
+
   if [[ "$INSTALL_HOOKS" -eq 0 ]]; then
     note "Optional: ./install.sh --hooks  (pre-commit pre-push)"
   fi
@@ -518,6 +561,7 @@ main() {
   ensure_uv
   ensure_nmap
   sync_python_deps
+  provision_targeted_tools
   install_dmitri_cli
   seed_backend_env
   setup_frontend

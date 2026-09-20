@@ -7,10 +7,12 @@ import pytest
 from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
 from agent.ot.modbus.models import ModbusService, ModbusUnit
+from agent.scanner import stages
 from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.scanner.runner import ScanRunner
+from agent.targeted.models import TargetedStageSummary
 from agent.utils.network import LocalNetworkInfo
 
 
@@ -111,7 +113,7 @@ def test_build_payload_assesses_each_mode_once_and_preserves_raw_inventory(
     )
 
     assert calls == 1
-    assert payload.assessment_policy_version == "2026-09-15.1"
+    assert payload.assessment_policy_version == "2026-09-15.2"
     assert payload.hosts[0].machine_type is not None
     assert payload.hosts[0].device_profile is not None
     assert [(str(item.ip), item.protocol, item.port) for item in payload.exposures] == [
@@ -289,6 +291,181 @@ class TestScanRunnerSuccess:
         kinds = _kinds(reporter.events)
         assert "port_stage_started" not in kinds
         assert "deep_stage_started" not in kinds
+
+    def test_eligible_zero_host_scan_runs_zero_targeted_stage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.check_network_connectivity", lambda: None
+        )
+        calls: list[list[HostInfo]] = []
+
+        def targeted_stage(hosts, *, reporter=None, **kwargs):
+            calls.append(hosts)
+            reporter.emit(ScanEvent(kind="targeted_stage_started", units_total=0))
+            reporter.emit(ScanEvent(kind="targeted_stage_done", units_total=0))
+            return TargetedStageSummary()
+
+        monkeypatch.setattr("agent.scanner.runner.run_targeted_stage", targeted_stage)
+        reporter = _FakeReporter()
+        completed: list[ScanPayload] = []
+        ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode="extensive",
+            reporter=reporter,
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        ).run_blocking()
+
+        assert calls == [[]]
+        kinds = _kinds(reporter.events)
+        assert kinds.index("targeted_stage_started") < kinds.index("normalize_started")
+        assert kinds.index("targeted_stage_done") < kinds.index("normalize_started")
+        assert completed[0].metadata["targeted_units_eligible"] == 0
+        assert completed[0].metadata["targeted_units_planned"] == 0
+
+    @pytest.mark.parametrize("scan_mode", ["extensive", "max", "nspi"])
+    def test_targeted_stage_is_last_probe_before_normalization(
+        self, monkeypatch: pytest.MonkeyPatch, scan_mode: str
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.check_network_connectivity", lambda: None
+        )
+        host = HostInfo(ip="192.168.1.10", hostname="target")
+        monkeypatch.setattr(
+            "agent.scanner.runner.discover_hosts",
+            lambda runner, subnet, timeout=None: [host],
+        )
+        order: list[str] = []
+
+        def port_stage(*args, **kwargs):
+            order.append("ports")
+            return 0
+
+        def deep_stage(*args, **kwargs):
+            order.append("deep")
+            return 0
+
+        def ot_stage(*args, **kwargs):
+            order.append("ot")
+            return stages.OtInspectionResult()
+
+        def targeted_stage(hosts, *, reporter=None, **kwargs):
+            order.append("targeted")
+            assert kwargs["scan_mode"] == scan_mode
+            assert reporter is not None
+            reporter.emit(ScanEvent(kind="targeted_stage_started", units_total=0))
+            reporter.emit(
+                ScanEvent(
+                    kind="targeted_stage_done",
+                    units_total=0,
+                )
+            )
+            return TargetedStageSummary()
+
+        monkeypatch.setattr(stages, "run_port_stage", port_stage)
+        monkeypatch.setattr(stages, "run_deep_inspection_stage", deep_stage)
+        monkeypatch.setattr(stages, "run_ot_inspection_stage", ot_stage)
+        monkeypatch.setattr("agent.scanner.runner.run_targeted_stage", targeted_stage)
+        reporter = _FakeReporter()
+        completed: list[ScanPayload] = []
+        runner = ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode=scan_mode,  # type: ignore[arg-type]
+            reporter=reporter,
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        )
+
+        runner.run_blocking()
+
+        expected_order = (
+            ["ports", "deep", "ot", "targeted"]
+            if scan_mode == "nspi"
+            else ["ports", "deep", "targeted"]
+        )
+        assert order == expected_order
+        kinds = _kinds(reporter.events)
+        targeted_index = kinds.index("targeted_stage_started")
+        assert kinds.index("normalize_started") > targeted_index
+        assert kinds.index("targeted_stage_done") < kinds.index("normalize_started")
+        assert completed[0].metadata["targeted_units_eligible"] == 0
+
+    @pytest.mark.parametrize("scan_mode", ["quick", "standard"])
+    def test_quick_and_standard_never_call_or_emit_targeted_stage(
+        self, monkeypatch: pytest.MonkeyPatch, scan_mode: str
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.check_network_connectivity", lambda: None
+        )
+        monkeypatch.setattr(
+            "agent.scanner.runner.discover_hosts",
+            lambda runner, subnet, timeout=None: [
+                HostInfo(ip="192.168.1.10", hostname="target")
+            ],
+        )
+        monkeypatch.setattr(stages, "run_port_stage", lambda *args, **kwargs: 0)
+        monkeypatch.setattr(
+            stages, "run_deep_inspection_stage", lambda *args, **kwargs: 0
+        )
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError("Quick/Standard called targeted stage")
+
+        monkeypatch.setattr("agent.scanner.runner.run_targeted_stage", forbidden)
+        reporter = _FakeReporter()
+        completed: list[ScanPayload] = []
+        ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode=scan_mode,  # type: ignore[arg-type]
+            reporter=reporter,
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        ).run_blocking()
+
+        assert "targeted_stage_started" not in _kinds(reporter.events)
+        assert "targeted_unit_done" not in _kinds(reporter.events)
+        assert "targeted_stage_done" not in _kinds(reporter.events)
+        assert completed[0].metadata["partial_result"] is False
+
+    def test_completed_targeted_gaps_are_partial_without_interrupted_stage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.check_network_connectivity", lambda: None
+        )
+        monkeypatch.setattr(
+            "agent.scanner.runner.discover_hosts",
+            lambda runner, subnet, timeout=None: [
+                HostInfo(ip="192.168.1.10", hostname="target")
+            ],
+        )
+        monkeypatch.setattr(stages, "run_port_stage", lambda *args, **kwargs: 0)
+        monkeypatch.setattr(
+            stages, "run_deep_inspection_stage", lambda *args, **kwargs: 0
+        )
+        summary = TargetedStageSummary(
+            eligible=2,
+            planned=2,
+            failed=1,
+        )
+        monkeypatch.setattr(
+            "agent.scanner.runner.run_targeted_stage",
+            lambda *args, **kwargs: summary,
+        )
+        completed: list[ScanPayload] = []
+        ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode="extensive",
+            on_complete=completed.append,
+            runner=_FakeRunner(),
+        ).run_blocking()
+
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is True
+        assert metadata["terminated_by"] == "completed"
+        assert "interrupted_stage" not in metadata
+        assert metadata["targeted_units_failed"] == 1
 
 
 class TestScanRunnerFailure:

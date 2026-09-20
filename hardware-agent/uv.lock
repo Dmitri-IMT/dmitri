@@ -140,6 +140,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pymodbus" },
+    { name = "ssh-audit" },
     { name = "textual" },
     { name = "websockets" },
 ]
@@ -163,6 +164,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pyyaml", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
+    { name = "ssh-audit", specifier = "==3.9.0" },
     { name = "textual", specifier = ">=0.80.0" },
     { name = "websockets", specifier = ">=15.0" },
 ]
@@ -498,6 +500,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/f9/0ae446942c846b8266059ad8a30702a35afae55f5cdc54c5adf8d7afdc27/ruff-0.15.12-py3-none-win32.whl", hash = "sha256:d0185894e038d7043ba8fd6aee7499ece6462dc0ea9f1e260c7451807c714c20", size = 10657277, upload-time = "2026-04-24T18:17:18.591Z" },
     { url = "https://files.pythonhosted.org/packages/33/f1/9614e03e1cdcbf9437570b5400ced8a720b5db22b28d8e0f1bda429f660d/ruff-0.15.12-py3-none-win_amd64.whl", hash = "sha256:c87a162d61ab3adca47c03f7f717c68672edec7d1b5499e652331780fe74950d", size = 11837758, upload-time = "2026-04-24T18:17:00.113Z" },
     { url = "https://files.pythonhosted.org/packages/c0/98/6beb4b351e472e5f4c4613f7c35a5290b8be2497e183825310c4c3a3984b/ruff-0.15.12-py3-none-win_arm64.whl", hash = "sha256:a538f7a82d061cee7be55542aca1d86d1393d55d81d4fcc314370f4340930d4f", size = 11120821, upload-time = "2026-04-24T18:16:57.979Z" },
+]
+
+[[package]]
+name = "ssh-audit"
+version = "3.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/95/0dc036428ef8d76e2c812cbec9e69c2020230da32ea0e699908735894a2f/ssh_audit-3.9.0.tar.gz", hash = "sha256:f1225d0364b3cb61c7dfb1f5065a6958dbb814d98b2c1dd2a779ba2cdef41f61", size = 133244, upload-time = "2026-07-04T21:57:10.445Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/79/ce022332cf59f0eb2e1b8ff6cdab3f80502449fdf3c053f05191a5a87326/ssh_audit-3.9.0-py3-none-any.whl", hash = "sha256:3dad48d4678e0de31f6332cc7674f9d7dd1805f86babf3796f41c2fd879cb812", size = 131886, upload-time = "2026-07-04T21:57:06.076Z" },
 ]
 
 [[package]]
