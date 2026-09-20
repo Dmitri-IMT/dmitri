@@ -281,6 +281,7 @@ def save_chat_message(
     response: AIChatResponse,
     scope_type: str = "scan",
     scope_id: UUID | None = None,
+    commit: bool = True,
 ) -> AIChatHistoryEntry:
     record = AIChatMessageRecord(
         scan_id=scan_id,
@@ -295,7 +296,7 @@ def save_chat_message(
         ],
     )
     session.add(record)
-    session.commit()
+    session.flush()
     session.refresh(record)
     older_records = session.exec(
         select(AIChatMessageRecord)
@@ -308,7 +309,7 @@ def save_chat_message(
     ).all()
     for older_record in older_records:
         session.delete(older_record)
-    if older_records:
+    if commit:
         session.commit()
     return _history_entry(record)
 

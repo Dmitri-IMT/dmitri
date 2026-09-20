@@ -161,6 +161,7 @@ def ask_context_chat(
             scan_id=scan_id,
             org_id=caller.org_id,
             user_id=caller.sub,
+            commit=False,
         )
         save_chat_message(
             session,
@@ -170,9 +171,13 @@ def ask_context_chat(
             response=response,
             scope_type=payload.scope,
             scope_id=payload.context_id,
+            commit=False,
         )
+        session.commit()
         return response
     except AIProviderError as exc:
+        # The tokens were spent even though the answer failed, so the usage rows
+        # are committed on their own. There is no transcript to pair them with.
         persist_usage_events(
             session,
             drain_provider_usage(provider),

@@ -21,6 +21,7 @@ def persist_usage_events(
     scan_id: UUID | None = None,
     org_id: UUID | None = None,
     user_id: UUID | None = None,
+    commit: bool = True,
 ) -> None:
     """Persist only operational usage metadata, never prompts or model output."""
     rows = [
@@ -44,4 +45,5 @@ def persist_usage_events(
     ]
     if rows:
         session.add_all(rows)
-        session.commit()
+        if commit:
+            session.commit()
