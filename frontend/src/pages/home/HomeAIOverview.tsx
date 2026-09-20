@@ -12,7 +12,7 @@ function HomeAIOverview({
 }: {
   latestScan: HomeSnapshot['latest_successful_scan']
 }) {
-  const { language } = useI18n()
+  const { language, t } = useI18n()
   const query = useQuery({
     queryKey: queryKeys.scans.analysis(latestScan?.scan_id ?? '', language),
     queryFn: () => getScanAnalysis(latestScan!.scan_id, language),
@@ -31,16 +31,15 @@ function HomeAIOverview({
     return (
       <Card data-testid="home-ai-overview">
         <CardHeader>
-          <h2 className="text-title-sm">Resumo da última varredura</h2>
+          <h2 className="text-title-sm">{t('home.latestScanOverview')}</h2>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-body-md text-muted-foreground">
-            Ainda não há uma explicação em linguagem simples para esta
-            varredura.
+            {t('home.noOverviewYet')}
           </p>
           <Link to={scanLink}>
             <Button type="button" variant="outline" size="sm">
-              Ver e explicar esta varredura
+              {t('home.viewAndExplainScan')}
             </Button>
           </Link>
         </CardContent>
@@ -52,12 +51,11 @@ function HomeAIOverview({
     return (
       <Card data-testid="home-ai-overview" aria-live="polite">
         <CardHeader>
-          <h2 className="text-title-sm">Resumo da última varredura</h2>
+          <h2 className="text-title-sm">{t('home.latestScanOverview')}</h2>
         </CardHeader>
         <CardContent>
           <p className="text-body-md text-muted-foreground">
-            A explicação está sendo preparada. Você pode acompanhar o progresso
-            na página da varredura.
+            {t('home.preparingOverview')}
           </p>
         </CardContent>
       </Card>
@@ -68,16 +66,15 @@ function HomeAIOverview({
     return (
       <Card data-testid="home-ai-overview">
         <CardHeader>
-          <h2 className="text-title-sm">Resumo da última varredura</h2>
+          <h2 className="text-title-sm">{t('home.latestScanOverview')}</h2>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-body-md text-muted-foreground">
-            Não foi possível preparar a explicação agora. Os resultados técnicos
-            continuam disponíveis.
+            {t('ai.failedOverview')}
           </p>
           <Link to={scanLink}>
             <Button type="button" variant="outline" size="sm">
-              Abrir resultados
+              {t('home.openResults')}
             </Button>
           </Link>
         </CardContent>
@@ -90,9 +87,9 @@ function HomeAIOverview({
   return (
     <Card data-testid="home-ai-overview">
       <CardHeader>
-        <h2 className="text-title-sm">Resumo da última varredura</h2>
+        <h2 className="text-title-sm">{t('home.latestScanOverview')}</h2>
         <p className="text-body-sm text-muted-foreground">
-          Uma leitura simples baseada somente nas evidências registradas.
+          {t('ai.completedDescription')}
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -103,7 +100,7 @@ function HomeAIOverview({
         {analysis.analysis.priority_actions.length > 0 && (
           <section aria-labelledby="home-ai-actions-title">
             <h3 id="home-ai-actions-title" className="text-title-xs">
-              Primeiro passo recomendado
+              {t('ai.whatToDoFirst')}
             </h3>
             <p className="mt-2 max-w-prose text-body-md">
               {analysis.analysis.priority_actions[0].description}
@@ -112,7 +109,7 @@ function HomeAIOverview({
         )}
         <Link to={scanLink}>
           <Button type="button" variant="outline" size="sm">
-            Ver mais detalhes
+            {t('home.viewMoreDetails')}
           </Button>
         </Link>
       </CardContent>
