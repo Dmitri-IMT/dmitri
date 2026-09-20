@@ -1374,19 +1374,17 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        AIContextChatRequest: components["schemas"]["AIChatRequest"] & {
-            /** @enum {string} */
-            scope: "scan" | "host" | "finding";
-            /** Format: uuid */
-            context_id: string;
-        };
-        AIChatRequest: {
+        AIContextChatRequest: {
             question: string;
             /**
              * @default en
              * @enum {string}
              */
             language: "en" | "pt-BR" | "ru";
+            /** @enum {string} */
+            scope: "scan" | "host" | "finding";
+            /** Format: uuid */
+            context_id: string;
         };
         AIChatResponse: {
             answer: string;
