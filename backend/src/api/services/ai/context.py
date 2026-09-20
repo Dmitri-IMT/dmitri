@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -21,7 +23,13 @@ from api.schemas.ai import (
     ProviderScanAIAnalysis,
     ScanAIAnalysis,
 )
-from api.schemas.read import ScanMode, SeverityBreakdown
+from api.schemas.read import (
+    FindingRead,
+    MachineType,
+    ScanMode,
+    ScanStatus,
+    SeverityBreakdown,
+)
 from api.services.read import get_scan_risk_summary
 
 AI_CONTEXT_VERSION = "2"
@@ -69,8 +77,119 @@ class ScanAIContext(BaseModel):
     _display_values_by_ref: dict[str, str] = PrivateAttr(default_factory=dict)
 
 
+class ChatAggregate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total_findings: Annotated[int, Field(ge=0)]
+    scored_findings: Annotated[int, Field(ge=0)]
+    confirmed_findings: Annotated[int, Field(ge=0)]
+    kev_findings: Annotated[int, Field(ge=0)]
+    average_risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    max_risk_score: Annotated[float | None, Field(ge=0, le=100)]
+    severity: SeverityBreakdown
+
+
+class MachineVulnerabilityCount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
+    finding_count: Annotated[int, Field(ge=0)]
+    severity: SeverityBreakdown
+    max_risk_score: Annotated[float | None, Field(ge=0, le=100)] = None
+
+
+class ScanChatContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    scope: Literal["scan"] = "scan"
+    scan_mode: ScanMode
+    status: ScanStatus
+    host_count: Annotated[int, Field(ge=0)]
+    aggregate: ChatAggregate
+    top_findings: list[AIFindingContext]
+    machine_vulnerability_summary: list[MachineVulnerabilityCount]
+
+
+class FindingChatContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    scope: Literal["finding"] = "finding"
+    finding: AIFindingContext
+
+
+class HostChatContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    scope: Literal["host"] = "host"
+    machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
+    machine_type: MachineType
+    vulnerability_count: Annotated[int, Field(ge=0)]
+    highest_severity: Severity | None
+    open_ports_count: Annotated[int, Field(ge=0)]
+    findings: list[AIFindingContext]
+
+
+AIChatContext = ScanChatContext | FindingChatContext | HostChatContext
+
+
 class ScanAINotReadyError(ValueError):
     pass
+
+
+@dataclass
+class FindingContextBundle:
+    """Placeholder-only finding rows plus the local maps that resolve them."""
+
+    contexts: list[AIFindingContext] = field(default_factory=list)
+    finding_ids_by_ref: dict[str, UUID] = field(default_factory=dict)
+    display_values_by_ref: dict[str, str] = field(default_factory=dict)
+
+
+def build_finding_contexts(
+    findings: Sequence[FindingRead],
+    *,
+    machine_refs: dict[UUID | None, str],
+    epss_by_cve: dict[str, EpssRecord] | None = None,
+    kev_by_cve: dict[str, KevRecord] | None = None,
+) -> FindingContextBundle:
+    """Turn findings into `finding_N` context rows and their display maps."""
+    bundle = FindingContextBundle()
+    for index, finding in enumerate(findings, start=1):
+        cve_id = finding.cve_id.upper() if finding.cve_id is not None else None
+        epss = (epss_by_cve or {}).get(cve_id) if cve_id is not None else None
+        kev = (kev_by_cve or {}).get(cve_id) if cve_id is not None else None
+        finding_ref = f"finding_{index}"
+        machine_ref = assign_machine_ref(machine_refs, finding.host_id)
+        bundle.finding_ids_by_ref[finding_ref] = finding.finding_id
+        bundle.display_values_by_ref[finding_ref] = finding.title
+        if machine_ref is not None:
+            bundle.display_values_by_ref[machine_ref] = machine_display_value(
+                finding.host_hostname, finding.host_ip
+            )
+        bundle.contexts.append(
+            AIFindingContext(
+                finding_ref=finding_ref,
+                machine_ref=machine_ref,
+                cve_id=finding.cve_id,
+                cvss_score=finding.cvss_score,
+                severity=finding.severity,
+                confidence=finding.confidence,
+                risk_score=finding.risk_score,
+                exploitability=finding.exploitability,
+                epss_score=epss.epss_score if epss is not None else None,
+                epss_percentile=epss.percentile if epss is not None else None,
+                is_kev=kev is not None,
+                known_ransomware=kev.known_ransomware if kev is not None else False,
+            )
+        )
+    return bundle
+
+
+def machine_display_value(hostname: str | None, ip: object | None) -> str:
+    return hostname or str(ip or "") or "the affected machine"
 
 
 def build_scan_ai_context(
@@ -109,40 +228,13 @@ def build_scan_ai_context(
     epss_by_cve = _epss_by_cve(session, cve_ids)
     kev_by_cve = _kev_by_cve(session, cve_ids)
 
-    findings = []
-    finding_ids_by_ref: dict[str, UUID] = {}
-    display_values_by_ref: dict[str, str] = {}
     machine_refs: dict[UUID | None, str] = {}
-    for index, finding in enumerate(risk.top_findings, start=1):
-        cve_id = finding.cve_id.upper() if finding.cve_id is not None else None
-        epss = epss_by_cve.get(cve_id) if cve_id is not None else None
-        kev = kev_by_cve.get(cve_id) if cve_id is not None else None
-        finding_ref = f"finding_{index}"
-        machine_ref = _machine_ref(machine_refs, finding.host_id)
-        finding_ids_by_ref[finding_ref] = finding.finding_id
-        display_values_by_ref[finding_ref] = finding.title
-        if machine_ref is not None:
-            display_values_by_ref[machine_ref] = (
-                finding.host_hostname
-                or str(finding.host_ip)
-                or "the affected machine"
-            )
-        findings.append(
-            AIFindingContext(
-                finding_ref=finding_ref,
-                machine_ref=machine_ref,
-                cve_id=finding.cve_id,
-                cvss_score=finding.cvss_score,
-                severity=finding.severity,
-                confidence=finding.confidence,
-                risk_score=finding.risk_score,
-                exploitability=finding.exploitability,
-                epss_score=epss.epss_score if epss is not None else None,
-                epss_percentile=epss.percentile if epss is not None else None,
-                is_kev=kev is not None,
-                known_ransomware=kev.known_ransomware if kev is not None else False,
-            )
-        )
+    bundle = build_finding_contexts(
+        risk.top_findings,
+        machine_refs=machine_refs,
+        epss_by_cve=epss_by_cve,
+        kev_by_cve=kev_by_cve,
+    )
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
@@ -155,10 +247,10 @@ def build_scan_ai_context(
         average_risk_score=risk.average_risk_score,
         max_risk_score=risk.max_risk_score,
         severity=risk.severity,
-        top_findings=findings,
+        top_findings=bundle.contexts,
     )
-    context._finding_ids_by_ref = finding_ids_by_ref
-    context._display_values_by_ref = display_values_by_ref
+    context._finding_ids_by_ref = bundle.finding_ids_by_ref
+    context._display_values_by_ref = bundle.display_values_by_ref
     return context
 
 
@@ -178,22 +270,22 @@ def materialize_scan_ai_analysis(
         explanations.append(
             AIFindingExplanation(
                 finding_id=context._finding_ids_by_ref[item.finding_ref],
-                why_it_matters=_replace_references(
+                why_it_matters=replace_ai_references(
                     item.why_it_matters, context._display_values_by_ref
                 ),
-                plain_language_explanation=_replace_references(
+                plain_language_explanation=replace_ai_references(
                     item.plain_language_explanation,
                     context._display_values_by_ref,
                 ),
-                recommendation=_replace_references(
+                recommendation=replace_ai_references(
                     item.recommendation, context._display_values_by_ref
                 ),
                 evidence_used=[
-                    _replace_references(value, context._display_values_by_ref)
+                    replace_ai_references(value, context._display_values_by_ref)
                     for value in item.evidence_used
                 ],
                 uncertainty=(
-                    _replace_references(
+                    replace_ai_references(
                         item.uncertainty, context._display_values_by_ref
                     )
                     if item.uncertainty is not None
@@ -206,8 +298,8 @@ def materialize_scan_ai_analysis(
         actions.append(
             AIRecommendedAction(
                 priority=item.priority,
-                title=_replace_references(item.title, context._display_values_by_ref),
-                description=_replace_references(
+                title=replace_ai_references(item.title, context._display_values_by_ref),
+                description=replace_ai_references(
                     item.description, context._display_values_by_ref
                 ),
                 related_finding_ids=[
@@ -217,25 +309,25 @@ def materialize_scan_ai_analysis(
             )
         )
     return ScanAIAnalysis(
-        executive_summary=_replace_references(
+        executive_summary=replace_ai_references(
             analysis.executive_summary, context._display_values_by_ref
         ),
-        overall_assessment=_replace_references(
+        overall_assessment=replace_ai_references(
             analysis.overall_assessment, context._display_values_by_ref
         ),
-        plain_language_summary=_replace_references(
+        plain_language_summary=replace_ai_references(
             analysis.plain_language_summary, context._display_values_by_ref
         ),
         priority_actions=actions,
         important_findings=explanations,
         uncertainties=[
-            _replace_references(value, context._display_values_by_ref)
+            replace_ai_references(value, context._display_values_by_ref)
             for value in analysis.uncertainties
         ],
     )
 
 
-def _machine_ref(
+def assign_machine_ref(
     machine_refs: dict[UUID | None, str], host_id: UUID | None
 ) -> str | None:
     if host_id is None:
@@ -291,20 +383,15 @@ def _text_values(analysis: ProviderScanAIAnalysis) -> list[str]:
     return values
 
 
+def reference_names(value: str) -> list[str]:
+    """Return every `finding_N` / `machine_N` placeholder in the text."""
+    return _REFERENCE_PATTERN.findall(value)
+
+
 def replace_ai_references(value: str, display_values_by_ref: dict[str, str]) -> str:
     return _REFERENCE_PATTERN.sub(
         lambda match: display_values_by_ref[match.group(0)], value
     )
-
-
-def assign_machine_ref(
-    machine_refs: dict[UUID | None, str], host_id: UUID | None
-) -> str | None:
-    return _machine_ref(machine_refs, host_id)
-
-
-def _replace_references(value: str, display_values_by_ref: dict[str, str]) -> str:
-    return replace_ai_references(value, display_values_by_ref)
 
 
 def _epss_by_cve(session: Session, cve_ids: set[str]) -> dict[str, EpssRecord]:

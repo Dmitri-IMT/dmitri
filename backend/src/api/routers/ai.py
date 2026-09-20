@@ -142,7 +142,13 @@ def ask_context_chat(
 ) -> AIChatResponse:
     if not ai_is_available(settings):
         raise ApiError(503, "The AI assistant is unavailable.", code="ai_unavailable")
-    resolved = _build_context(session, payload.scope, payload.context_id, caller.org_id)
+    resolved = _build_context(
+        session,
+        payload.scope,
+        payload.context_id,
+        caller.org_id,
+        question=payload.question,
+    )
     if resolved is None:
         raise HTTPException(status_code=404, detail="Context not found")
     bundle, scan_id = resolved
@@ -214,12 +220,26 @@ def ask_context_chat(
 def _resolve_scan_id(
     session: Session, scope: str, context_id: UUID, org_id: UUID
 ) -> UUID | None:
-    resolved = _build_context(session, scope, context_id, org_id)
-    return resolved[1] if resolved else None
+    """Check the context exists and name its scan, without building a prompt."""
+    if scope == "scan":
+        detail = get_scan_detail(session, context_id, org_id=org_id)
+        return context_id if detail is not None else None
+    if scope == "host":
+        host = get_host_detail(session, context_id, org_id=org_id)
+        if host is None or not host.scan_history:
+            return None
+        return host.scan_history[0].scan_id
+    finding = get_finding_detail(session, context_id, org_id=org_id)
+    return finding.scan_id if finding is not None else None
 
 
 def _build_context(
-    session: Session, scope: str, context_id: UUID, org_id: UUID
+    session: Session,
+    scope: str,
+    context_id: UUID,
+    org_id: UUID,
+    *,
+    question: str,
 ) -> tuple[AIChatContextBundle, UUID] | None:
     if scope == "scan":
         detail = get_scan_detail(session, context_id, org_id=org_id)
@@ -228,7 +248,7 @@ def _build_context(
         risk = get_scan_risk_summary(session, context_id, org_id=org_id)
         if risk is None:
             return None
-        return build_scan_chat_bundle(detail, risk), context_id
+        return build_scan_chat_bundle(detail, risk, question), context_id
     if scope == "host":
         host = get_host_detail(session, context_id, org_id=org_id)
         if host is None or not host.scan_history:

@@ -2,14 +2,15 @@ from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIUsageRecord
 from api.schemas.ai import ProviderAIChatResponse
+from api.services.ai.context import FindingChatContext, HostChatContext
 from api.services.ai.groq import AIProviderError
 from read_factories import seed_read_graph
 
 
 class _FakeProvider:
-    def answer_question(self, context, question, language="en"):
+    def answer_question(self, context, question, *, language="en"):
         assert question == "o que devo corrigir?"
-        assert context["top_findings"]
+        assert context.top_findings
         return ProviderAIChatResponse(
             answer="Revise o achado prioritário.",
             uncertainties=[],
@@ -18,9 +19,9 @@ class _FakeProvider:
 
 
 class _ScopedFakeProvider:
-    def answer_question(self, context, question, language="en"):
+    def answer_question(self, context, question, *, language="en"):
         assert question == "explique este contexto"
-        assert "finding" in context or "machine_ref" in context
+        assert isinstance(context, FindingChatContext | HostChatContext)
         return ProviderAIChatResponse(
             answer="Explicação fundamentada.",
             uncertainties=[],
@@ -125,7 +126,7 @@ def test_context_chat_scan_maps_provider_rate_limit_to_api_error(
     _enable_ai(monkeypatch)
 
     class _RateLimitedProvider:
-        def answer_question(self, context, question, language="en"):
+        def answer_question(self, context, question, *, language="en"):
             raise AIProviderError(
                 "provider_rate_limited", retryable=True, retry_after_seconds=42
             )
