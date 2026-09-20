@@ -64,6 +64,7 @@ export const catalog: Catalog = {
   'common.when': 'Когда',
   'common.box': 'Агент',
   'common.mode': 'Режим',
+  'common.status': 'Статус',
   'common.duration': 'Длительность',
   'common.machines': 'Устройства',
   'common.vulnerabilities': 'Уязвимости',
@@ -111,18 +112,13 @@ export const catalog: Catalog = {
   'common.openScan': ({ id }) => 'Открыть сканирование ' + id,
   'ai.explainMachine': 'Объяснить с помощью ИИ',
   'ai.explainMachineLoading': 'Анализ...',
-  'ai.explanationUnavailable':
-    'Не удалось получить объяснение. Попробуйте ещё раз.',
   'ai.explainFinding': 'Объяснить с помощью ИИ',
   'ai.explainFindingLoading': 'Объясняю...',
   'ai.findingExplanation': 'Объяснение ИИ',
-  'ai.viewRelatedFinding': 'Открыть связанную находку',
   'ai.defaultFindingQuestion':
     'Объясните эту уязвимость простыми словами и скажите, что делать.',
   'ai.defaultMachineQuestion':
     'Объясните состояние безопасности этого устройства и что приоритезировать.',
-  'ai.answerConsidered': ({ count }) =>
-    `Ответ учитывает уязвимостей: ${count}.`,
   'ai.contextHint':
     'Ответ использует только доступные сведения из этого контекста.',
   'ai.showHistory': 'Показать историю',

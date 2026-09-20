@@ -65,6 +65,7 @@ export const catalog: Catalog = {
   'common.when': 'Quando',
   'common.box': 'Agente',
   'common.mode': 'Modo',
+  'common.status': 'Status',
   'common.duration': 'Duração',
   'common.machines': 'Equipamentos',
   'common.vulnerabilities': 'Vulnerabilidades',
@@ -119,18 +120,13 @@ export const catalog: Catalog = {
   'common.openScan': ({ id }) => 'Abrir varredura ' + id,
   'ai.explainMachine': 'Explicar com IA',
   'ai.explainMachineLoading': 'Analisando...',
-  'ai.explanationUnavailable':
-    'N\u00e3o foi poss\u00edvel obter uma explica\u00e7\u00e3o agora. Tente novamente.',
   'ai.explainFinding': 'Explicar com IA',
   'ai.explainFindingLoading': 'Explicando...',
   'ai.findingExplanation': 'Explica\u00e7\u00e3o da IA',
-  'ai.viewRelatedFinding': 'Ver achado relacionado',
   'ai.defaultFindingQuestion':
     'Explique esta vulnerabilidade em linguagem simples e diga o que devo fazer.',
   'ai.defaultMachineQuestion':
     'Explique o estado de seguran\u00e7a deste equipamento e o que devo priorizar.',
-  'ai.answerConsidered': ({ count }) =>
-    `A resposta considerou ${count} vulnerabilidade${count === 1 ? '' : 's'} deste equipamento.`,
   'ai.contextHint':
     'A resposta usa somente as evidências disponíveis neste contexto.',
   'ai.showHistory': 'Mostrar histórico',

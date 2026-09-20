@@ -16,6 +16,10 @@ type Props = {
   contextId: string
   title?: string
   questionPlaceholder?: string
+  /** Renders a single ask button for this question instead of the free-text form. */
+  presetQuestion?: string
+  askLabel?: string
+  askingLabel?: string
 }
 
 export default function ContextChat({
@@ -23,8 +27,12 @@ export default function ContextChat({
   contextId,
   title,
   questionPlaceholder,
+  presetQuestion,
+  askLabel,
+  askingLabel,
 }: Props) {
   const { language, t } = useI18n()
+  const oneShot = presetQuestion !== undefined
   const resolvedTitle = title ?? t('ai.askContext')
   const resolvedPlaceholder = questionPlaceholder ?? t('ai.placeholder')
   const [question, setQuestion] = useState('')
@@ -53,19 +61,17 @@ export default function ContextChat({
     }
   }, [contextId, historyVisible, scope])
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const trimmed = question.trim()
-    if (trimmed.length < 3 || sending) return
+  async function ask(asked: string) {
+    if (asked.length < 3 || sending) return
     setSending(true)
     setError(null)
     try {
-      const response = await askContextAI(scope, contextId, trimmed, language)
+      const response = await askContextAI(scope, contextId, asked, language)
       setMessages((current) => [
         ...current,
         {
           message_id: `local-${Date.now()}`,
-          question: trimmed,
+          question: asked,
           answer: response.answer,
           uncertainties: response.uncertainties,
           referenced_finding_ids: response.referenced_finding_ids,
@@ -80,6 +86,11 @@ export default function ContextChat({
     }
   }
 
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void ask(question.trim())
+  }
+
   return (
     <Card data-testid="context-chat">
       <CardHeader>
@@ -89,37 +100,55 @@ export default function ContextChat({
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-expanded={historyVisible}
-          onClick={() => {
-            if (!historyVisible) setLoadingHistory(true)
-            setHistoryVisible((visible) => !visible)
-          }}
-        >
-          {historyVisible ? t('ai.hideHistory') : t('ai.showHistory')}
-        </Button>
-        <form className="flex flex-col gap-3" onSubmit={submit}>
-          <label className="text-body-sm" htmlFor={`${scope}-context-question`}>
-            {t('ai.question')}
-          </label>
-          <Textarea
-            id={`${scope}-context-question`}
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder={resolvedPlaceholder}
-            maxLength={1000}
-          />
+        {!oneShot && (
           <Button
-            type="submit"
+            type="button"
+            variant="outline"
             size="sm"
-            disabled={sending || question.trim().length < 3}
+            aria-expanded={historyVisible}
+            onClick={() => {
+              if (!historyVisible) setLoadingHistory(true)
+              setHistoryVisible((visible) => !visible)
+            }}
           >
-            {sending ? t('ai.asking') : t('ai.ask')}
+            {historyVisible ? t('ai.hideHistory') : t('ai.showHistory')}
           </Button>
-        </form>
+        )}
+        {oneShot ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void ask(presetQuestion)}
+            disabled={sending}
+          >
+            {sending
+              ? (askingLabel ?? t('ai.asking'))
+              : (askLabel ?? t('ai.ask'))}
+          </Button>
+        ) : (
+          <form className="flex flex-col gap-3" onSubmit={submit}>
+            <label
+              className="text-body-sm"
+              htmlFor={`${scope}-context-question`}
+            >
+              {t('ai.question')}
+            </label>
+            <Textarea
+              id={`${scope}-context-question`}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder={resolvedPlaceholder}
+              maxLength={1000}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={sending || question.trim().length < 3}
+            >
+              {sending ? t('ai.asking') : t('ai.ask')}
+            </Button>
+          </form>
+        )}
         {historyVisible && loadingHistory && (
           <p className="text-body-sm text-muted-foreground">
             {t('ai.loadingHistory')}
@@ -128,12 +157,15 @@ export default function ContextChat({
         {visibleMessages.map((message) => (
           <div
             className="flex flex-col gap-3 rounded-md border border-border p-4"
+            aria-live="polite"
             key={message.message_id}
           >
-            <div>
-              <p className="text-body-sm font-medium">{t('ai.question')}</p>
-              <p className="text-body-md">{message.question}</p>
-            </div>
+            {!oneShot && (
+              <div>
+                <p className="text-body-sm font-medium">{t('ai.question')}</p>
+                <p className="text-body-md">{message.question}</p>
+              </div>
+            )}
             <div>
               <p className="text-body-sm font-medium">{t('ai.answer')}</p>
               <p className="text-body-md">{message.answer}</p>

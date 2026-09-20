@@ -1,6 +1,6 @@
-import type { Catalog } from './catalog.types'
+import type { Value } from './catalog.types'
 
-export const catalog: Catalog = {
+export const catalog = {
   'nav.home': 'Home',
   'nav.scans': 'Scans',
   'nav.network': 'Network',
@@ -116,18 +116,13 @@ export const catalog: Catalog = {
   'common.openScan': ({ id }) => 'Open scan ' + id,
   'ai.explainMachine': 'Explain with AI',
   'ai.explainMachineLoading': 'Analyzing...',
-  'ai.explanationUnavailable':
-    'Unable to get an explanation right now. Try again.',
   'ai.explainFinding': 'Explain with AI',
   'ai.explainFindingLoading': 'Explaining...',
   'ai.findingExplanation': 'AI explanation',
-  'ai.viewRelatedFinding': 'View related finding',
   'ai.defaultFindingQuestion':
     'Explain this vulnerability in plain language and tell me what to do.',
   'ai.defaultMachineQuestion':
     'Explain the security state of this machine and what I should prioritise.',
-  'ai.answerConsidered': ({ count }) =>
-    `The answer considered ${count} vulnerability${count === 1 ? '' : 'ies'} on this machine.`,
   'ai.contextHint':
     'The answer uses only the evidence available in this context.',
   'ai.showHistory': 'Show history',
@@ -230,4 +225,4 @@ export const catalog: Catalog = {
   'settings.tokens': 'Tokens',
   'settings.latency': 'Latency',
   'settings.noRequests': 'No AI requests recorded yet.',
-}
+} satisfies Record<string, Value>

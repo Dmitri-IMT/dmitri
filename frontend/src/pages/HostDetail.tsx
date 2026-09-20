@@ -1,13 +1,10 @@
 import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getHost } from '@/api/hosts'
-import { askContextAI } from '@/api/ai'
-import type { AIChatResponse } from '@/api/ai'
-import { useState } from 'react'
 import { queryKeys } from '@/api/queryKeys'
+import ContextChat from '@/components/ContextChat'
 import ReadDetailGate from '@/components/ReadDetailGate'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { readDetailState } from '@/lib/detailState'
 import HostFindings from '@/pages/hosts/HostFindings'
 import HostIdentity from '@/pages/hosts/HostIdentity'
@@ -15,7 +12,6 @@ import IndustrialServices from '@/pages/hosts/IndustrialServices'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
 import useI18n from '@/i18n/useI18n'
-import { readAiAskError } from '@/api/readAiAskError'
 
 function HostDetail() {
   const { t } = useI18n()
@@ -41,7 +37,14 @@ function HostDetail() {
         <>
           <HostIdentity host={host} />
           <div className="flex flex-col gap-8">
-            <HostAIExplanation hostId={host.host_id} />
+            <ContextChat
+              scope="host"
+              contextId={host.host_id}
+              title={t('ai.askAbout', { label: t('common.machine') })}
+              presetQuestion={t('ai.defaultMachineQuestion')}
+              askLabel={t('ai.explainMachine')}
+              askingLabel={t('ai.explainMachineLoading')}
+            />
             <Card>
               <CardHeader>
                 <h2 className="text-title-sm">{t('common.vulnerabilities')}</h2>
@@ -80,76 +83,6 @@ function HostDetail() {
         </>
       )}
     </ReadDetailGate>
-  )
-}
-
-function HostAIExplanation({ hostId }: { hostId: string }) {
-  const { language, t } = useI18n()
-  const [answer, setAnswer] = useState<AIChatResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  async function explain() {
-    setLoading(true)
-    setError(null)
-    try {
-      setAnswer(
-        await askContextAI(
-          'host',
-          hostId,
-          t('ai.defaultMachineQuestion'),
-          language,
-        ),
-      )
-    } catch (caughtError) {
-      setError(readAiAskError(caughtError, t('ai.explanationUnavailable')))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <h2 className="text-title-sm">
-          {t('ai.askAbout', { label: t('common.machine') })}
-        </h2>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void explain()}
-          disabled={loading}
-        >
-          {loading ? t('ai.explainMachineLoading') : t('ai.explainMachine')}
-        </Button>
-        {answer && (
-          <div aria-live="polite">
-            <p className="text-body-md">{answer.answer}</p>
-            {answer.referenced_finding_ids.length > 0 && (
-              <p className="mt-2 text-body-sm text-muted-foreground">
-                {t('ai.answerConsidered', {
-                  count: answer.referenced_finding_ids.length,
-                })}
-              </p>
-            )}
-            {answer.uncertainties.length > 0 && (
-              <ul className="mt-2 list-disc pl-4 text-body-sm text-muted-foreground">
-                {answer.uncertainties.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        {error && (
-          <p className="text-body-sm text-destructive" role="alert">
-            {error}
-          </p>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 
