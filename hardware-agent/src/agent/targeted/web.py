@@ -45,54 +45,6 @@ NIKTO_DB_TESTS_PATH = Path("/opt/dmitri/tools/nikto-2.6.0/program/databases/db_t
 NIKTO_DB_TESTS_SHA256 = (
     "e221b0ab6db1b3dec26a11674a68216fc6ee690b8b20f07056d4e4ae33ed30a2"
 )
-WEB_SEED_PATHS = (
-    ".env",
-    ".env.bak",
-    ".env.old",
-    ".git/HEAD",
-    ".git/config",
-    ".svn/entries",
-    ".svn/wc.db",
-    "actuator/configprops",
-    "actuator/env",
-    "actuator/heapdump",
-    "admin",
-    "administrator",
-    "adminer.php",
-    "api-docs",
-    "application.properties",
-    "application.yml",
-    "backup.tar.gz",
-    "backup.zip",
-    "config.json",
-    "config.php.bak",
-    "database.sql",
-    "database.sqlite",
-    "debug.log",
-    "error.log",
-    "host-manager/html",
-    "id_rsa",
-    "manager/html",
-    "metrics",
-    "nginx_status",
-    "openapi.json",
-    "openapi.yaml",
-    "phpinfo.php",
-    "phpmyadmin",
-    "private.key",
-    "prometheus",
-    "server-info",
-    "server-status",
-    "server.key",
-    "swagger",
-    "swagger-ui",
-    "web.config.bak",
-    "wp-admin",
-)
-# Public name used by policy fixtures and provisioning checks.
-WEB_RESULT_SEEDS = WEB_SEED_PATHS
-
-
 _CONFIG_STEMS = {
     ".env",
     "config.php",
@@ -137,9 +89,24 @@ class WebRule:
     matches_path: Callable[[str, str], bool] | None = None
     proof: str | None = None
     matches_body: Callable[[str, str, bytes], bool] | None = None
+    seeds: tuple[str, ...] = ()
 
 
 WEB_RESULT_RULES: dict[str, WebRule] = {
+    "WEB-DIRLIST-001": WebRule(
+        "WEB-DIRLIST-001",
+        "directory-listing",
+        "medium",
+        "Directory listing enabled",
+        "Disable directory indexing on the web server.",
+        matches_path=lambda path, base: path.endswith("/"),
+        proof="directory-index-structure",
+        matches_body=lambda base, text, body: re.search(
+            r"(?i)<title>\s*index of|parent directory", text
+        )
+        is not None
+        and len(re.findall(r"href\s*=", text.casefold())) >= 1,
+    ),
     "WEB-VCS-GIT-001": WebRule(
         "WEB-VCS-GIT-001",
         "git",
@@ -156,6 +123,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             )
             or (base == "config" and re.search(r"(?m)^\s*\[[^\]]+\]", text))
         ),
+        seeds=(".git/HEAD", ".git/config"),
     ),
     "WEB-VCS-SVN-001": WebRule(
         "WEB-VCS-SVN-001",
@@ -177,6 +145,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             )
             or (base == "wc.db" and body.startswith(b"SQLite format 3"))
         ),
+        seeds=(".svn/entries", ".svn/wc.db"),
     ),
     "WEB-SECRET-ENV-001": WebRule(
         "WEB-SECRET-ENV-001",
@@ -190,6 +159,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)
         )
         >= 2,
+        seeds=(".env", ".env.bak", ".env.old"),
     ),
     "WEB-SECRET-KEY-001": WebRule(
         "WEB-SECRET-KEY-001",
@@ -205,6 +175,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             text,
         )
         is not None,
+        seeds=("id_rsa", "private.key", "server.key"),
     ),
     "WEB-CONFIG-001": WebRule(
         "WEB-CONFIG-001",
@@ -220,6 +191,13 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         )
         is not None
         and ("{" in text or "=" in text or ":" in text or "[" in text),
+        seeds=(
+            "application.properties",
+            "application.yml",
+            "config.json",
+            "config.php.bak",
+            "web.config.bak",
+        ),
     ),
     "WEB-BACKUP-001": WebRule(
         "WEB-BACKUP-001",
@@ -234,6 +212,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         )
         or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
         is not None,
+        seeds=("backup.tar.gz", "backup.zip"),
     ),
     "WEB-DUMP-001": WebRule(
         "WEB-DUMP-001",
@@ -249,6 +228,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text
         )
         is not None,
+        seeds=("database.sql", "database.sqlite"),
     ),
     "WEB-LOG-001": WebRule(
         "WEB-LOG-001",
@@ -265,6 +245,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         >= 2
         or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
         is not None,
+        seeds=("debug.log", "error.log"),
     ),
     "WEB-DIAG-PHP-001": WebRule(
         "WEB-DIAG-PHP-001",
@@ -276,6 +257,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         proof="phpinfo-structure",
         matches_body=lambda base, text, body: "php version" in text.casefold()
         and ("phpinfo" in text.casefold() or "configuration" in text.casefold()),
+        seeds=("phpinfo.php",),
     ),
     "WEB-DIAG-SERVER-001": WebRule(
         "WEB-DIAG-SERVER-001",
@@ -289,6 +271,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         matches_body=lambda base, text, body: "server status" in text.casefold()
         or "server-info" in text.casefold()
         or "stub_status" in text.casefold(),
+        seeds=("nginx_status", "server-info", "server-status"),
     ),
     "WEB-DIAG-ACTUATOR-001": WebRule(
         "WEB-DIAG-ACTUATOR-001",
@@ -310,19 +293,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
                 or "activeprofiles" in text.casefold()
             )
         ),
-    ),
-    "WEB-DIRLIST-001": WebRule(
-        "WEB-DIRLIST-001",
-        "directory-listing",
-        "medium",
-        "Directory listing enabled",
-        "Disable directory indexing on the web server.",
-        proof="directory-index-structure",
-        matches_body=lambda base, text, body: re.search(
-            r"(?i)<title>\s*index of|parent directory", text
-        )
-        is not None
-        and len(re.findall(r"href\s*=", text.casefold())) >= 1,
+        seeds=("actuator/configprops", "actuator/env", "actuator/heapdump"),
     ),
     "WEB-METRICS-001": WebRule(
         "WEB-METRICS-001",
@@ -337,6 +308,7 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         )
         or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", text.casefold())
         is not None,
+        seeds=("metrics", "prometheus"),
     ),
     "WEB-ADMIN-001": WebRule(
         "WEB-ADMIN-001",
@@ -374,6 +346,15 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
             )
             and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
         ),
+        seeds=(
+            "admin",
+            "administrator",
+            "adminer.php",
+            "host-manager/html",
+            "manager/html",
+            "phpmyadmin",
+            "wp-admin",
+        ),
     ),
     "WEB-API-DOCS-001": WebRule(
         "WEB-API-DOCS-001",
@@ -391,8 +372,14 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         )
         or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
         is not None,
+        seeds=("api-docs", "openapi.json", "openapi.yaml", "swagger", "swagger-ui"),
     ),
 }
+
+WEB_SEED_PATHS = tuple(
+    seed for rule in WEB_RESULT_RULES.values() for seed in rule.seeds
+)
+WEB_RESULT_SEEDS = WEB_SEED_PATHS
 
 # A provisioned Nikto tree supplies the authoritative rows at runtime.  An ID
 # not resolved from that pinned database cannot become a finding.  Tests and
@@ -531,8 +518,6 @@ def parse_ffuf_json(
 
 def classify_ffuf_candidate(candidate: WebCandidate | str) -> WebRule | None:
     path = candidate.path if isinstance(candidate, WebCandidate) else candidate
-    if isinstance(candidate, WebCandidate) and candidate.path.endswith("/"):
-        return WEB_RESULT_RULES["WEB-DIRLIST-001"]
     return _rule_for_path(path)
 
 
@@ -669,15 +654,7 @@ def validate_web_candidate(
         return None
     signature = _signature(rule, candidate.path, result.body)
     if signature is None:
-        # Directory indexing can be discovered at an arbitrary enumerated path.
-        if _normal_path(candidate.path).endswith("/") and re.search(
-            r"(?i)<title>\s*index of|parent directory",
-            result.body.decode("utf-8", "replace"),
-        ):
-            rule = WEB_RESULT_RULES["WEB-DIRLIST-001"]
-            signature = "directory-index-structure"
-        else:
-            return None
+        return None
     path = _normal_path(candidate.path)
     evidence = sanitize_evidence(
         f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={path}; status={result.status}; content_type={result.content_type or 'unknown'}; length={result.length}; signature={signature}"

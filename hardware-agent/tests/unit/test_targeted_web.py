@@ -185,6 +185,14 @@ def test_policy_seeds_are_frozen_and_normalized() -> None:
     assert len(WEB_RESULT_SEEDS) == len(set(WEB_RESULT_SEEDS))
     assert all("/" not in seed[:1] for seed in WEB_RESULT_SEEDS)
     assert set(WEB_RESULT_SEEDS) >= {".env", ".git/HEAD", "openapi.json", "wp-admin"}
+    assert WEB_RESULT_SEEDS == tuple(
+        seed for rule in WEB_RESULT_RULES.values() for seed in rule.seeds
+    )
+    for rule in WEB_RESULT_RULES.values():
+        for seed in rule.seeds:
+            classified = classify_ffuf_candidate(f"/{seed}")
+            assert classified is not None
+            assert classified.rule_id == rule.rule_id
 
 
 def test_ffuf_parser_rejects_foreign_target_and_deduplicates() -> None:
