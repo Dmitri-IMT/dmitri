@@ -93,6 +93,39 @@ WEB_SEED_PATHS = (
 WEB_RESULT_SEEDS = WEB_SEED_PATHS
 
 
+_CONFIG_STEMS = {
+    ".env",
+    "config.php",
+    "web.config",
+    "httpd.conf",
+    "nginx.conf",
+    "application.properties",
+    "application.yml",
+    "application.yaml",
+    "config.json",
+}
+_BACKUP_SUFFIXES = (
+    ".bak",
+    ".backup",
+    ".old",
+    ".orig",
+    ".save",
+    "~",
+    ".zip",
+    ".tar",
+    ".tar.gz",
+    ".tgz",
+    ".gz",
+)
+
+
+def _config_stem(base: str) -> str:
+    stem = base
+    while stem.endswith((".bak", ".backup", ".old", ".orig", ".save", "~")):
+        stem = stem[:-1] if stem.endswith("~") else stem.rsplit(".", 1)[0]
+    return stem
+
+
 @dataclass(frozen=True, slots=True)
 class WebRule:
     rule_id: str
@@ -101,6 +134,9 @@ class WebRule:
     title: str
     remediation: str
     observation: str | None = None
+    matches_path: Callable[[str, str], bool] | None = None
+    proof: str | None = None
+    matches_body: Callable[[str, str, bytes], bool] | None = None
 
 
 WEB_RESULT_RULES: dict[str, WebRule] = {
@@ -110,6 +146,16 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed Git repository metadata",
         "Remove repository metadata from the web root.",
+        matches_path=lambda path, base: path in {"/.git/head", "/.git/config"}
+        or path.startswith("/.git/"),
+        proof="git-ref-or-config",
+        matches_body=lambda base, text, body: (
+            (
+                base == "head"
+                and re.search(r"(?:ref:\s+refs/|\b[0-9a-f]{40}\b)", text, re.I)
+            )
+            or (base == "config" and re.search(r"(?m)^\s*\[[^\]]+\]", text))
+        ),
     ),
     "WEB-VCS-SVN-001": WebRule(
         "WEB-VCS-SVN-001",
@@ -117,6 +163,20 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed Subversion repository metadata",
         "Remove Subversion metadata from the web root.",
+        matches_path=lambda path, base: path in {"/.svn/entries", "/.svn/wc.db"}
+        or path.startswith("/.svn/"),
+        proof="svn-entries-or-sqlite",
+        matches_body=lambda base, text, body: (
+            (
+                base == "entries"
+                and (
+                    "dircvs-log" in text.casefold()
+                    or "<?xml" in text.casefold()
+                    or "svn" in text.casefold()
+                )
+            )
+            or (base == "wc.db" and body.startswith(b"SQLite format 3"))
+        ),
     ),
     "WEB-SECRET-ENV-001": WebRule(
         "WEB-SECRET-ENV-001",
@@ -124,6 +184,12 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed environment configuration",
         "Remove environment configuration from public web paths.",
+        matches_path=lambda path, base: base == ".env" or base.startswith(".env."),
+        proof="environment-assignments",
+        matches_body=lambda base, text, body: len(
+            re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)
+        )
+        >= 2,
     ),
     "WEB-SECRET-KEY-001": WebRule(
         "WEB-SECRET-KEY-001",
@@ -131,6 +197,14 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "critical",
         "Exposed private key material",
         "Remove the private key and rotate any affected credentials.",
+        matches_path=lambda path, base: base == "id_rsa"
+        or base.endswith((".key", ".pem")),
+        proof="private-key-header",
+        matches_body=lambda base, text, body: re.search(
+            r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----",
+            text,
+        )
+        is not None,
     ),
     "WEB-CONFIG-001": WebRule(
         "WEB-CONFIG-001",
@@ -138,6 +212,14 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed application or server configuration",
         "Remove configuration files from the public web root.",
+        matches_path=lambda path, base: _config_stem(base) in _CONFIG_STEMS,
+        proof="reviewed-config-setting",
+        matches_body=lambda base, text, body: re.search(
+            r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)",
+            text,
+        )
+        is not None
+        and ("{" in text or "=" in text or ":" in text or "[" in text),
     ),
     "WEB-BACKUP-001": WebRule(
         "WEB-BACKUP-001",
@@ -145,6 +227,13 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed backup or source artifact",
         "Remove backups and source artifacts from the web root.",
+        matches_path=lambda path, base: base.endswith(_BACKUP_SUFFIXES),
+        proof="archive-or-source-signature",
+        matches_body=lambda base, text, body: body.startswith(
+            (b"PK\x03\x04", b"\x1f\x8b", b"ustar")
+        )
+        or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
+        is not None,
     ),
     "WEB-DUMP-001": WebRule(
         "WEB-DUMP-001",
@@ -152,6 +241,14 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed database artifact",
         "Remove database dumps from the web root and rotate exposed secrets.",
+        matches_path=lambda path, base: base.endswith((".sql", ".db", ".sqlite"))
+        or base in {"database", "dump"},
+        proof="database-dump-signature",
+        matches_body=lambda base, text, body: body.startswith(b"SQLite format 3")
+        or re.search(
+            r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text
+        )
+        is not None,
     ),
     "WEB-LOG-001": WebRule(
         "WEB-LOG-001",
@@ -159,6 +256,15 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Exposed application or server log",
         "Remove logs from public paths and review disclosed information.",
+        matches_path=lambda path, base: base.endswith(".log")
+        or base in {"debug.log", "error.log"},
+        proof="log-structure",
+        matches_body=lambda base, text, body: len(
+            re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)
+        )
+        >= 2
+        or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
+        is not None,
     ),
     "WEB-DIAG-PHP-001": WebRule(
         "WEB-DIAG-PHP-001",
@@ -166,6 +272,10 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Exposed PHP diagnostic page",
         "Remove or restrict PHP diagnostic pages.",
+        matches_path=lambda path, base: base == "phpinfo.php" or "phpinfo" in base,
+        proof="phpinfo-structure",
+        matches_body=lambda base, text, body: "php version" in text.casefold()
+        and ("phpinfo" in text.casefold() or "configuration" in text.casefold()),
     ),
     "WEB-DIAG-SERVER-001": WebRule(
         "WEB-DIAG-SERVER-001",
@@ -173,6 +283,12 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Exposed web-server diagnostic endpoint",
         "Disable or restrict web-server diagnostic endpoints.",
+        matches_path=lambda path, base: path
+        in {"/server-status", "/server-info", "/nginx_status"},
+        proof="server-diagnostic-structure",
+        matches_body=lambda base, text, body: "server status" in text.casefold()
+        or "server-info" in text.casefold()
+        or "stub_status" in text.casefold(),
     ),
     "WEB-DIAG-ACTUATOR-001": WebRule(
         "WEB-DIAG-ACTUATOR-001",
@@ -180,6 +296,20 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed sensitive application diagnostic endpoint",
         "Restrict application diagnostic endpoints and sensitive actuator data.",
+        matches_path=lambda path, base: path.startswith("/actuator/"),
+        proof="actuator-sensitive-data",
+        matches_body=lambda base, text, body: (
+            base == "heapdump"
+            and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))
+        )
+        or (
+            base != "heapdump"
+            and (
+                "environment" in text.casefold()
+                or "propertysources" in text.casefold()
+                or "activeprofiles" in text.casefold()
+            )
+        ),
     ),
     "WEB-DIRLIST-001": WebRule(
         "WEB-DIRLIST-001",
@@ -187,6 +317,12 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Directory listing enabled",
         "Disable directory indexing on the web server.",
+        proof="directory-index-structure",
+        matches_body=lambda base, text, body: re.search(
+            r"(?i)<title>\s*index of|parent directory", text
+        )
+        is not None
+        and len(re.findall(r"href\s*=", text.casefold())) >= 1,
     ),
     "WEB-METRICS-001": WebRule(
         "WEB-METRICS-001",
@@ -194,6 +330,13 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Operational metrics exposed",
         "Restrict operational metrics endpoints to authorized users.",
+        matches_path=lambda path, base: path in {"/metrics", "/prometheus"},
+        proof="prometheus-exposition",
+        matches_body=lambda base, text, body: (
+            "# help " in text.casefold() and "# type " in text.casefold()
+        )
+        or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", text.casefold())
+        is not None,
     ),
     "WEB-ADMIN-001": WebRule(
         "WEB-ADMIN-001",
@@ -202,6 +345,35 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Administrative interface reachable",
         "Restrict administrative interfaces to authorized operators.",
         "administration",
+        matches_path=lambda path, base: path
+        in {
+            "/admin",
+            "/administrator",
+            "/manager/html",
+            "/host-manager/html",
+            "/phpmyadmin",
+            "/adminer.php",
+            "/wp-admin",
+        },
+        proof="administrative-login-surface",
+        matches_body=lambda base, text, body: re.search(
+            r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b",
+            text,
+        )
+        is not None
+        or re.search(
+            r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']",
+            text,
+        )
+        is not None
+        or (
+            re.search(r"(?i)<form\b", text)
+            and re.search(
+                r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))",
+                text,
+            )
+            and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
+        ),
     ),
     "WEB-API-DOCS-001": WebRule(
         "WEB-API-DOCS-001",
@@ -210,6 +382,15 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "API documentation reachable",
         "Restrict API documentation and review its disclosed surface.",
         "api_surface",
+        matches_path=lambda path, base: path
+        in {"/swagger", "/swagger-ui", "/api-docs", "/openapi.json", "/openapi.yaml"},
+        proof="api-documentation-structure",
+        matches_body=lambda base, text, body: (
+            re.search(r'(?i)["\']openapi["\']\s*:', text) is not None
+            and "paths" in text.casefold()
+        )
+        or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
+        is not None,
     ),
 }
 
@@ -289,197 +470,18 @@ def _basename(path: str) -> str:
 def _rule_for_path(path: str) -> WebRule | None:
     path = _normal_path(path).casefold()
     base = _basename(path)
-    if path in {"/.git/head", "/.git/config"} or path.startswith("/.git/"):
-        return WEB_RESULT_RULES["WEB-VCS-GIT-001"]
-    if path in {"/.svn/entries", "/.svn/wc.db"} or path.startswith("/.svn/"):
-        return WEB_RESULT_RULES["WEB-VCS-SVN-001"]
-    if base == ".env" or base.startswith(".env."):
-        return WEB_RESULT_RULES["WEB-SECRET-ENV-001"]
-    if base == "id_rsa" or base.endswith((".key", ".pem")):
-        return WEB_RESULT_RULES["WEB-SECRET-KEY-001"]
-    config_bases = {
-        ".env",
-        "config.php",
-        "web.config",
-        "httpd.conf",
-        "nginx.conf",
-        "application.properties",
-        "application.yml",
-        "application.yaml",
-        "config.json",
-    }
-    config_base = base
-    while config_base.endswith((".bak", ".backup", ".old", ".orig", ".save", "~")):
-        config_base = (
-            config_base[:-1]
-            if config_base.endswith("~")
-            else config_base.rsplit(".", 1)[0]
-        )
-    if config_base in config_bases:
-        return WEB_RESULT_RULES["WEB-CONFIG-001"]
-    if base.endswith(
-        (
-            ".bak",
-            ".backup",
-            ".old",
-            ".orig",
-            ".save",
-            "~",
-            ".zip",
-            ".tar",
-            ".tar.gz",
-            ".tgz",
-            ".gz",
-        )
-    ):
-        return WEB_RESULT_RULES["WEB-BACKUP-001"]
-    if base.endswith((".sql", ".db", ".sqlite")) or base in {"database", "dump"}:
-        return WEB_RESULT_RULES["WEB-DUMP-001"]
-    if base.endswith(".log") or base in {"debug.log", "error.log"}:
-        return WEB_RESULT_RULES["WEB-LOG-001"]
-    if base == "phpinfo.php" or "phpinfo" in base:
-        return WEB_RESULT_RULES["WEB-DIAG-PHP-001"]
-    if path in {"/server-status", "/server-info", "/nginx_status"}:
-        return WEB_RESULT_RULES["WEB-DIAG-SERVER-001"]
-    if path.startswith("/actuator/"):
-        return WEB_RESULT_RULES["WEB-DIAG-ACTUATOR-001"]
-    if path in {"/metrics", "/prometheus"}:
-        return WEB_RESULT_RULES["WEB-METRICS-001"]
-    if path in {
-        "/admin",
-        "/administrator",
-        "/manager/html",
-        "/host-manager/html",
-        "/phpmyadmin",
-        "/adminer.php",
-        "/wp-admin",
-    }:
-        return WEB_RESULT_RULES["WEB-ADMIN-001"]
-    if path in {
-        "/swagger",
-        "/swagger-ui",
-        "/api-docs",
-        "/openapi.json",
-        "/openapi.yaml",
-    }:
-        return WEB_RESULT_RULES["WEB-API-DOCS-001"]
+    for rule in WEB_RESULT_RULES.values():
+        if rule.matches_path is not None and rule.matches_path(path, base):
+            return rule
     return None
 
 
 def _signature(rule: WebRule, path: str, body: bytes) -> str | None:
+    if rule.matches_body is None or rule.proof is None:
+        return None
     text = body.decode("utf-8", "replace")
-    lower = text.casefold()
-    base = _basename(path)
-    if rule.rule_id == "WEB-VCS-GIT-001" and (
-        (base == "head" and re.search(r"(?:ref:\s+refs/|\b[0-9a-f]{40}\b)", text, re.I))
-        or (base == "config" and re.search(r"(?m)^\s*\[[^\]]+\]", text))
-    ):
-        return "git-ref-or-config"
-    if rule.rule_id == "WEB-VCS-SVN-001" and (
-        (
-            base == "entries"
-            and ("dircvs-log" in lower or "<?xml" in lower or "svn" in lower)
-        )
-        or (base == "wc.db" and body.startswith(b"SQLite format 3"))
-    ):
-        return "svn-entries-or-sqlite"
-    if (
-        rule.rule_id == "WEB-SECRET-ENV-001"
-        and len(re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)) >= 2
-    ):
-        return "environment-assignments"
-    if rule.rule_id == "WEB-SECRET-KEY-001" and re.search(
-        r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----",
-        text,
-    ):
-        return "private-key-header"
-    if (
-        rule.rule_id == "WEB-CONFIG-001"
-        and re.search(
-            r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)",
-            text,
-        )
-        and ("{" in text or "=" in text or ":" in text or "[" in text)
-    ):
-        return "reviewed-config-setting"
-    if rule.rule_id == "WEB-BACKUP-001" and (
-        body.startswith((b"PK\x03\x04", b"\x1f\x8b", b"ustar"))
-        or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
-    ):
-        return "archive-or-source-signature"
-    if rule.rule_id == "WEB-DUMP-001" and (
-        body.startswith(b"SQLite format 3")
-        or re.search(
-            r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text
-        )
-    ):
-        return "database-dump-signature"
-    if rule.rule_id == "WEB-LOG-001" and (
-        len(re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)) >= 2
-        or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
-    ):
-        return "log-structure"
-    if (
-        rule.rule_id == "WEB-DIAG-PHP-001"
-        and "php version" in lower
-        and ("phpinfo" in lower or "configuration" in lower)
-    ):
-        return "phpinfo-structure"
-    if rule.rule_id == "WEB-DIAG-SERVER-001" and (
-        "server status" in lower or "server-info" in lower or "stub_status" in lower
-    ):
-        return "server-diagnostic-structure"
-    if rule.rule_id == "WEB-DIAG-ACTUATOR-001" and (
-        (
-            base == "heapdump"
-            and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))
-        )
-        or (
-            base != "heapdump"
-            and (
-                "environment" in lower
-                or "propertysources" in lower
-                or "activeprofiles" in lower
-            )
-        )
-    ):
-        return "actuator-sensitive-data"
-    if (
-        rule.rule_id == "WEB-DIRLIST-001"
-        and re.search(r"(?i)<title>\s*index of|parent directory", text)
-        and len(re.findall(r"href\s*=", lower)) >= 1
-    ):
-        return "directory-index-structure"
-    if rule.rule_id == "WEB-METRICS-001" and (
-        "# help " in lower
-        and "# type " in lower
-        or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", lower)
-    ):
-        return "prometheus-exposition"
-    if rule.rule_id == "WEB-ADMIN-001" and (
-        re.search(
-            r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b",
-            text,
-        )
-        or re.search(
-            r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']",
-            text,
-        )
-        or (
-            re.search(r"(?i)<form\b", text)
-            and re.search(
-                r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))",
-                text,
-            )
-            and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
-        )
-    ):
-        return "administrative-login-surface"
-    if rule.rule_id == "WEB-API-DOCS-001" and (
-        (re.search(r'(?i)["\']openapi["\']\s*:', text) and "paths" in lower)
-        or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
-    ):
-        return "api-documentation-structure"
+    if rule.matches_body(_basename(path), text, body):
+        return rule.proof
     return None
 
 
@@ -487,24 +489,12 @@ def _class_of(rule: WebRule) -> int:
     return {"critical": 0, "high": 1, "medium": 2, None: 3}.get(rule.severity, 3)
 
 
-def _candidate_args(first: Any, second: Any = None) -> tuple[Any, Any]:
-    if isinstance(first, TargetedUnit):
-        return second, first
-    return first, second
-
-
 def parse_ffuf_json(
-    report: bytes | str | Mapping[str, Any] | TargetedUnit,
-    unit: TargetedUnit | bytes | str | Mapping[str, Any] | None = None,
+    report: bytes | str | Mapping[str, Any],
+    unit: TargetedUnit | None = None,
 ) -> list[WebCandidate]:
     """Parse only bounded native ffuf JSON result records."""
-    if isinstance(report, TargetedUnit):
-        report, unit = unit, report
-    if isinstance(unit, TargetedUnit):
-        target_unit = unit
-    else:
-        target_unit = None
-    payload = parse_json_payload(report) if report is not None else None
+    payload = parse_json_payload(report)
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         return []
     output: dict[tuple[str, int], WebCandidate] = {}
@@ -516,9 +506,9 @@ def parse_ffuf_json(
         status = _int(raw.get("status"))
         if status is None or not parsed.scheme or not parsed.netloc:
             continue
-        if target_unit is not None and (
-            (parsed.hostname or "") != target_unit.ip
-            or (parsed.port or target_unit.port) != target_unit.port
+        if unit is not None and (
+            (parsed.hostname or "") != unit.ip
+            or (parsed.port or unit.port) != unit.port
         ):
             continue
         path = _normal_path(parsed.path)
@@ -1035,23 +1025,18 @@ def _parse_nikto_issues(
 
 
 def parse_nikto_json(
-    report: bytes | str | Mapping[str, Any] | TargetedUnit,
-    unit: TargetedUnit | bytes | str | Mapping[str, Any] | None = None,
+    report: bytes | str | Mapping[str, Any],
+    unit: TargetedUnit | None = None,
     *,
     policy: Mapping[str, str] | str | Path | None = None,
 ) -> list[TargetedIssue]:
-    if isinstance(report, TargetedUnit):
-        report, unit = unit, report
-    target_unit = unit if isinstance(unit, TargetedUnit) else None
-    payload = parse_json_payload(report) if report is not None else None
+    payload = parse_json_payload(report)
     if not isinstance(payload, dict) or not isinstance(
         payload.get("vulnerabilities"), list
     ):
         return []
     policies = _load_nikto_policy(policy)
-    return _parse_nikto_issues(
-        payload, target_unit, policies, TARGETED_MAX_ISSUES_PER_UNIT
-    )[0]
+    return _parse_nikto_issues(payload, unit, policies, TARGETED_MAX_ISSUES_PER_UNIT)[0]
 
 
 def run_nikto(
