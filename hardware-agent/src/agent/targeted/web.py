@@ -42,21 +42,53 @@ from agent.targeted.models import (
 WEB_RESULT_POLICY_VERSION = "2026-09-15.1"
 WEB_MAX_BODY_BYTES = 65_536
 WEB_MAX_REDIRECTS = 2
-NIKTO_DB_TESTS_PATH = Path(
-    "/opt/dmitri/tools/nikto-2.6.0/program/databases/db_tests"
-)
+NIKTO_DB_TESTS_PATH = Path("/opt/dmitri/tools/nikto-2.6.0/program/databases/db_tests")
 NIKTO_DB_TESTS_SHA256 = (
     "e221b0ab6db1b3dec26a11674a68216fc6ee690b8b20f07056d4e4ae33ed30a2"
 )
 WEB_SEED_PATHS = (
-    ".env", ".env.bak", ".env.old", ".git/HEAD", ".git/config", ".svn/entries",
-    ".svn/wc.db", "actuator/configprops", "actuator/env", "actuator/heapdump",
-    "admin", "administrator", "adminer.php", "api-docs", "application.properties",
-    "application.yml", "backup.tar.gz", "backup.zip", "config.json", "config.php.bak",
-    "database.sql", "database.sqlite", "debug.log", "error.log", "host-manager/html",
-    "id_rsa", "manager/html", "metrics", "nginx_status", "openapi.json", "openapi.yaml",
-    "phpinfo.php", "phpmyadmin", "private.key", "prometheus", "server-info", "server-status",
-    "server.key", "swagger", "swagger-ui", "web.config.bak", "wp-admin",
+    ".env",
+    ".env.bak",
+    ".env.old",
+    ".git/HEAD",
+    ".git/config",
+    ".svn/entries",
+    ".svn/wc.db",
+    "actuator/configprops",
+    "actuator/env",
+    "actuator/heapdump",
+    "admin",
+    "administrator",
+    "adminer.php",
+    "api-docs",
+    "application.properties",
+    "application.yml",
+    "backup.tar.gz",
+    "backup.zip",
+    "config.json",
+    "config.php.bak",
+    "database.sql",
+    "database.sqlite",
+    "debug.log",
+    "error.log",
+    "host-manager/html",
+    "id_rsa",
+    "manager/html",
+    "metrics",
+    "nginx_status",
+    "openapi.json",
+    "openapi.yaml",
+    "phpinfo.php",
+    "phpmyadmin",
+    "private.key",
+    "prometheus",
+    "server-info",
+    "server-status",
+    "server.key",
+    "swagger",
+    "swagger-ui",
+    "web.config.bak",
+    "wp-admin",
 )
 # Public name used by policy fixtures and provisioning checks.
 WEB_RESULT_SEEDS = WEB_SEED_PATHS
@@ -73,21 +105,113 @@ class WebRule:
 
 
 WEB_RESULT_RULES: dict[str, WebRule] = {
-    "WEB-VCS-GIT-001": WebRule("WEB-VCS-GIT-001", "git", "high", "Exposed Git repository metadata", "Remove repository metadata from the web root."),
-    "WEB-VCS-SVN-001": WebRule("WEB-VCS-SVN-001", "svn", "high", "Exposed Subversion repository metadata", "Remove Subversion metadata from the web root."),
-    "WEB-SECRET-ENV-001": WebRule("WEB-SECRET-ENV-001", "env", "high", "Exposed environment configuration", "Remove environment configuration from public web paths."),
-    "WEB-SECRET-KEY-001": WebRule("WEB-SECRET-KEY-001", "key", "critical", "Exposed private key material", "Remove the private key and rotate any affected credentials."),
-    "WEB-CONFIG-001": WebRule("WEB-CONFIG-001", "config", "high", "Exposed application or server configuration", "Remove configuration files from the public web root."),
-    "WEB-BACKUP-001": WebRule("WEB-BACKUP-001", "backup", "high", "Exposed backup or source artifact", "Remove backups and source artifacts from the web root."),
-    "WEB-DUMP-001": WebRule("WEB-DUMP-001", "dump", "high", "Exposed database artifact", "Remove database dumps from the web root and rotate exposed secrets."),
-    "WEB-LOG-001": WebRule("WEB-LOG-001", "log", "medium", "Exposed application or server log", "Remove logs from public paths and review disclosed information."),
-    "WEB-DIAG-PHP-001": WebRule("WEB-DIAG-PHP-001", "phpinfo", "medium", "Exposed PHP diagnostic page", "Remove or restrict PHP diagnostic pages."),
-    "WEB-DIAG-SERVER-001": WebRule("WEB-DIAG-SERVER-001", "server-diagnostic", "medium", "Exposed web-server diagnostic endpoint", "Disable or restrict web-server diagnostic endpoints."),
-    "WEB-DIAG-ACTUATOR-001": WebRule("WEB-DIAG-ACTUATOR-001", "actuator", "high", "Exposed sensitive application diagnostic endpoint", "Restrict application diagnostic endpoints and sensitive actuator data."),
-    "WEB-DIRLIST-001": WebRule("WEB-DIRLIST-001", "directory-listing", "medium", "Directory listing enabled", "Disable directory indexing on the web server."),
-    "WEB-METRICS-001": WebRule("WEB-METRICS-001", "metrics", "medium", "Operational metrics exposed", "Restrict operational metrics endpoints to authorized users."),
-    "WEB-ADMIN-001": WebRule("WEB-ADMIN-001", "admin", None, "Administrative interface reachable", "Restrict administrative interfaces to authorized operators.", "administration"),
-    "WEB-API-DOCS-001": WebRule("WEB-API-DOCS-001", "api-docs", None, "API documentation reachable", "Restrict API documentation and review its disclosed surface.", "api_surface"),
+    "WEB-VCS-GIT-001": WebRule(
+        "WEB-VCS-GIT-001",
+        "git",
+        "high",
+        "Exposed Git repository metadata",
+        "Remove repository metadata from the web root.",
+    ),
+    "WEB-VCS-SVN-001": WebRule(
+        "WEB-VCS-SVN-001",
+        "svn",
+        "high",
+        "Exposed Subversion repository metadata",
+        "Remove Subversion metadata from the web root.",
+    ),
+    "WEB-SECRET-ENV-001": WebRule(
+        "WEB-SECRET-ENV-001",
+        "env",
+        "high",
+        "Exposed environment configuration",
+        "Remove environment configuration from public web paths.",
+    ),
+    "WEB-SECRET-KEY-001": WebRule(
+        "WEB-SECRET-KEY-001",
+        "key",
+        "critical",
+        "Exposed private key material",
+        "Remove the private key and rotate any affected credentials.",
+    ),
+    "WEB-CONFIG-001": WebRule(
+        "WEB-CONFIG-001",
+        "config",
+        "high",
+        "Exposed application or server configuration",
+        "Remove configuration files from the public web root.",
+    ),
+    "WEB-BACKUP-001": WebRule(
+        "WEB-BACKUP-001",
+        "backup",
+        "high",
+        "Exposed backup or source artifact",
+        "Remove backups and source artifacts from the web root.",
+    ),
+    "WEB-DUMP-001": WebRule(
+        "WEB-DUMP-001",
+        "dump",
+        "high",
+        "Exposed database artifact",
+        "Remove database dumps from the web root and rotate exposed secrets.",
+    ),
+    "WEB-LOG-001": WebRule(
+        "WEB-LOG-001",
+        "log",
+        "medium",
+        "Exposed application or server log",
+        "Remove logs from public paths and review disclosed information.",
+    ),
+    "WEB-DIAG-PHP-001": WebRule(
+        "WEB-DIAG-PHP-001",
+        "phpinfo",
+        "medium",
+        "Exposed PHP diagnostic page",
+        "Remove or restrict PHP diagnostic pages.",
+    ),
+    "WEB-DIAG-SERVER-001": WebRule(
+        "WEB-DIAG-SERVER-001",
+        "server-diagnostic",
+        "medium",
+        "Exposed web-server diagnostic endpoint",
+        "Disable or restrict web-server diagnostic endpoints.",
+    ),
+    "WEB-DIAG-ACTUATOR-001": WebRule(
+        "WEB-DIAG-ACTUATOR-001",
+        "actuator",
+        "high",
+        "Exposed sensitive application diagnostic endpoint",
+        "Restrict application diagnostic endpoints and sensitive actuator data.",
+    ),
+    "WEB-DIRLIST-001": WebRule(
+        "WEB-DIRLIST-001",
+        "directory-listing",
+        "medium",
+        "Directory listing enabled",
+        "Disable directory indexing on the web server.",
+    ),
+    "WEB-METRICS-001": WebRule(
+        "WEB-METRICS-001",
+        "metrics",
+        "medium",
+        "Operational metrics exposed",
+        "Restrict operational metrics endpoints to authorized users.",
+    ),
+    "WEB-ADMIN-001": WebRule(
+        "WEB-ADMIN-001",
+        "admin",
+        None,
+        "Administrative interface reachable",
+        "Restrict administrative interfaces to authorized operators.",
+        "administration",
+    ),
+    "WEB-API-DOCS-001": WebRule(
+        "WEB-API-DOCS-001",
+        "api-docs",
+        None,
+        "API documentation reachable",
+        "Restrict API documentation and review its disclosed surface.",
+        "api_surface",
+    ),
 }
 
 # A provisioned Nikto tree supplies the authoritative rows at runtime.  An ID
@@ -140,14 +264,20 @@ class WebResponse:
 
 
 def _text(value: Any, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    value = re.sub(r"(?i)(authorization|cookie|password|passwd|token|secret|api[_-]?key)\s*[:=]\s*[^,;\s]+", r"\1=[REDACTED]", str(value))
+    value = re.sub(
+        r"(?i)(authorization|cookie|password|passwd|token|secret|api[_-]?key)\s*[:=]\s*[^,;\s]+",
+        r"\1=[REDACTED]",
+        str(value),
+    )
     value = re.sub(r"(?i)(https?://[^/?#\s]+)(?:[/?#][^\s]*)", r"\1/[REDACTED]", value)
     value = " ".join(value.split())
     return value[:limit]
 
 
 def _normal_path(path: str) -> str:
-    raw = urlsplit(path).path if "://" in path else path.split("?", 1)[0].split("#", 1)[0]
+    raw = (
+        urlsplit(path).path if "://" in path else path.split("?", 1)[0].split("#", 1)[0]
+    )
     decoded = unquote(unquote(raw or "/"))
     trailing_slash = decoded.endswith("/")
     parts: list[str] = []
@@ -193,10 +323,28 @@ def _rule_for_path(path: str) -> WebRule | None:
     }
     config_base = base
     while config_base.endswith((".bak", ".backup", ".old", ".orig", ".save", "~")):
-        config_base = config_base[:-1] if config_base.endswith("~") else config_base.rsplit(".", 1)[0]
+        config_base = (
+            config_base[:-1]
+            if config_base.endswith("~")
+            else config_base.rsplit(".", 1)[0]
+        )
     if config_base in config_bases:
         return WEB_RESULT_RULES["WEB-CONFIG-001"]
-    if base.endswith((".bak", ".backup", ".old", ".orig", ".save", "~", ".zip", ".tar", ".tar.gz", ".tgz", ".gz")):
+    if base.endswith(
+        (
+            ".bak",
+            ".backup",
+            ".old",
+            ".orig",
+            ".save",
+            "~",
+            ".zip",
+            ".tar",
+            ".tar.gz",
+            ".tgz",
+            ".gz",
+        )
+    ):
         return WEB_RESULT_RULES["WEB-BACKUP-001"]
     if base.endswith((".sql", ".db", ".sqlite")) or base in {"database", "dump"}:
         return WEB_RESULT_RULES["WEB-DUMP-001"]
@@ -210,9 +358,23 @@ def _rule_for_path(path: str) -> WebRule | None:
         return WEB_RESULT_RULES["WEB-DIAG-ACTUATOR-001"]
     if path in {"/metrics", "/prometheus"}:
         return WEB_RESULT_RULES["WEB-METRICS-001"]
-    if path in {"/admin", "/administrator", "/manager/html", "/host-manager/html", "/phpmyadmin", "/adminer.php", "/wp-admin"}:
+    if path in {
+        "/admin",
+        "/administrator",
+        "/manager/html",
+        "/host-manager/html",
+        "/phpmyadmin",
+        "/adminer.php",
+        "/wp-admin",
+    }:
         return WEB_RESULT_RULES["WEB-ADMIN-001"]
-    if path in {"/swagger", "/swagger-ui", "/api-docs", "/openapi.json", "/openapi.yaml"}:
+    if path in {
+        "/swagger",
+        "/swagger-ui",
+        "/api-docs",
+        "/openapi.json",
+        "/openapi.yaml",
+    }:
         return WEB_RESULT_RULES["WEB-API-DOCS-001"]
     return None
 
@@ -221,29 +383,116 @@ def _signature(rule: WebRule, path: str, body: bytes) -> str | None:
     text = body.decode("utf-8", "replace")
     lower = text.casefold()
     base = _basename(path)
-    if rule.rule_id == "WEB-VCS-GIT-001" and ((base == "head" and re.search(r"(?:ref:\s+refs/|\b[0-9a-f]{40}\b)", text, re.I)) or (base == "config" and re.search(r"(?m)^\s*\[[^\]]+\]", text))): return "git-ref-or-config"
-    if rule.rule_id == "WEB-VCS-SVN-001" and ((base == "entries" and ("dircvs-log" in lower or "<?xml" in lower or "svn" in lower)) or (base == "wc.db" and body.startswith(b"SQLite format 3"))): return "svn-entries-or-sqlite"
-    if rule.rule_id == "WEB-SECRET-ENV-001" and len(re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)) >= 2: return "environment-assignments"
-    if rule.rule_id == "WEB-SECRET-KEY-001" and re.search(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----", text): return "private-key-header"
-    if rule.rule_id == "WEB-CONFIG-001" and re.search(r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)", text) and ("{" in text or "=" in text or ":" in text or "[" in text): return "reviewed-config-setting"
-    if rule.rule_id == "WEB-BACKUP-001" and (body.startswith((b"PK\x03\x04", b"\x1f\x8b", b"ustar")) or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)): return "archive-or-source-signature"
-    if rule.rule_id == "WEB-DUMP-001" and (body.startswith(b"SQLite format 3") or re.search(r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text)): return "database-dump-signature"
-    if rule.rule_id == "WEB-LOG-001" and (len(re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)) >= 2 or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)): return "log-structure"
-    if rule.rule_id == "WEB-DIAG-PHP-001" and "php version" in lower and ("phpinfo" in lower or "configuration" in lower): return "phpinfo-structure"
-    if rule.rule_id == "WEB-DIAG-SERVER-001" and ("server status" in lower or "server-info" in lower or "stub_status" in lower): return "server-diagnostic-structure"
-    if rule.rule_id == "WEB-DIAG-ACTUATOR-001" and ((base == "heapdump" and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))) or (base != "heapdump" and ("environment" in lower or "propertysources" in lower or "activeprofiles" in lower))): return "actuator-sensitive-data"
-    if rule.rule_id == "WEB-DIRLIST-001" and re.search(r"(?i)<title>\s*index of|parent directory", text) and len(re.findall(r"href\s*=", lower)) >= 1: return "directory-index-structure"
-    if rule.rule_id == "WEB-METRICS-001" and ("# help " in lower and "# type " in lower or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", lower)): return "prometheus-exposition"
+    if rule.rule_id == "WEB-VCS-GIT-001" and (
+        (base == "head" and re.search(r"(?:ref:\s+refs/|\b[0-9a-f]{40}\b)", text, re.I))
+        or (base == "config" and re.search(r"(?m)^\s*\[[^\]]+\]", text))
+    ):
+        return "git-ref-or-config"
+    if rule.rule_id == "WEB-VCS-SVN-001" and (
+        (
+            base == "entries"
+            and ("dircvs-log" in lower or "<?xml" in lower or "svn" in lower)
+        )
+        or (base == "wc.db" and body.startswith(b"SQLite format 3"))
+    ):
+        return "svn-entries-or-sqlite"
+    if (
+        rule.rule_id == "WEB-SECRET-ENV-001"
+        and len(re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)) >= 2
+    ):
+        return "environment-assignments"
+    if rule.rule_id == "WEB-SECRET-KEY-001" and re.search(
+        r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----",
+        text,
+    ):
+        return "private-key-header"
+    if (
+        rule.rule_id == "WEB-CONFIG-001"
+        and re.search(
+            r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)",
+            text,
+        )
+        and ("{" in text or "=" in text or ":" in text or "[" in text)
+    ):
+        return "reviewed-config-setting"
+    if rule.rule_id == "WEB-BACKUP-001" and (
+        body.startswith((b"PK\x03\x04", b"\x1f\x8b", b"ustar"))
+        or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
+    ):
+        return "archive-or-source-signature"
+    if rule.rule_id == "WEB-DUMP-001" and (
+        body.startswith(b"SQLite format 3")
+        or re.search(
+            r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text
+        )
+    ):
+        return "database-dump-signature"
+    if rule.rule_id == "WEB-LOG-001" and (
+        len(re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)) >= 2
+        or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
+    ):
+        return "log-structure"
+    if (
+        rule.rule_id == "WEB-DIAG-PHP-001"
+        and "php version" in lower
+        and ("phpinfo" in lower or "configuration" in lower)
+    ):
+        return "phpinfo-structure"
+    if rule.rule_id == "WEB-DIAG-SERVER-001" and (
+        "server status" in lower or "server-info" in lower or "stub_status" in lower
+    ):
+        return "server-diagnostic-structure"
+    if rule.rule_id == "WEB-DIAG-ACTUATOR-001" and (
+        (
+            base == "heapdump"
+            and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))
+        )
+        or (
+            base != "heapdump"
+            and (
+                "environment" in lower
+                or "propertysources" in lower
+                or "activeprofiles" in lower
+            )
+        )
+    ):
+        return "actuator-sensitive-data"
+    if (
+        rule.rule_id == "WEB-DIRLIST-001"
+        and re.search(r"(?i)<title>\s*index of|parent directory", text)
+        and len(re.findall(r"href\s*=", lower)) >= 1
+    ):
+        return "directory-index-structure"
+    if rule.rule_id == "WEB-METRICS-001" and (
+        "# help " in lower
+        and "# type " in lower
+        or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", lower)
+    ):
+        return "prometheus-exposition"
     if rule.rule_id == "WEB-ADMIN-001" and (
-        re.search(r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b", text)
-        or re.search(r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']", text)
+        re.search(
+            r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b",
+            text,
+        )
+        or re.search(
+            r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']",
+            text,
+        )
         or (
             re.search(r"(?i)<form\b", text)
-            and re.search(r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))", text)
+            and re.search(
+                r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))",
+                text,
+            )
             and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
         )
-    ): return "administrative-login-surface"
-    if rule.rule_id == "WEB-API-DOCS-001" and ((re.search(r'(?i)["\']openapi["\']\s*:', text) and "paths" in lower) or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)): return "api-documentation-structure"
+    ):
+        return "administrative-login-surface"
+    if rule.rule_id == "WEB-API-DOCS-001" and (
+        (re.search(r'(?i)["\']openapi["\']\s*:', text) and "paths" in lower)
+        or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
+    ):
+        return "api-documentation-structure"
     return None
 
 
@@ -271,23 +520,42 @@ def parse_ffuf_json(
     if isinstance(report, Mapping):
         payload = report
     else:
-        try: payload = json.loads(report.decode("utf-8") if isinstance(report, bytes) else report)
-        except (UnicodeDecodeError, json.JSONDecodeError): return []
-    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list): return []
+        try:
+            payload = json.loads(
+                report.decode("utf-8") if isinstance(report, bytes) else report
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return []
+    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+        return []
     output: dict[tuple[str, int], WebCandidate] = {}
-    for raw in payload["results"][:TARGETED_MAX_ISSUES_PER_UNIT * 4]:
-        if not isinstance(raw, dict) or not isinstance(raw.get("url"), str): continue
+    for raw in payload["results"][: TARGETED_MAX_ISSUES_PER_UNIT * 4]:
+        if not isinstance(raw, dict) or not isinstance(raw.get("url"), str):
+            continue
         url = raw["url"]
         parsed = urlsplit(url)
         status = _int(raw.get("status"))
-        if status is None or not parsed.scheme or not parsed.netloc: continue
+        if status is None or not parsed.scheme or not parsed.netloc:
+            continue
         if target_unit is not None and (
             (parsed.hostname or "") != target_unit.ip
             or (parsed.port or target_unit.port) != target_unit.port
         ):
             continue
         path = _normal_path(parsed.path)
-        candidate = WebCandidate(url, path, status, _int(raw.get("length")), _int(raw.get("words")), _int(raw.get("lines")), raw.get("redirectlocation") if isinstance(raw.get("redirectlocation"), str) else None)
+        candidate = WebCandidate(
+            url,
+            path,
+            status,
+            _int(raw.get("length")),
+            _int(raw.get("words")),
+            _int(raw.get("lines")),
+            (
+                raw.get("redirectlocation")
+                if isinstance(raw.get("redirectlocation"), str)
+                else None
+            ),
+        )
         output[(path.casefold(), status)] = candidate
     return list(output.values())
 
@@ -300,8 +568,10 @@ def classify_ffuf_candidate(candidate: WebCandidate | str) -> WebRule | None:
 
 
 def _int(value: Any) -> int | None:
-    try: return int(value)
-    except (TypeError, ValueError): return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _body_digest(body: bytes) -> str:
@@ -309,11 +579,32 @@ def _body_digest(body: bytes) -> str:
 
 
 def _baseline(response: WebResponse) -> WebBaseline:
-    return WebBaseline(response.status, response.content_type, response.length, response.words, response.lines, _body_digest(response.body))
+    return WebBaseline(
+        response.status,
+        response.content_type,
+        response.length,
+        response.words,
+        response.lines,
+        _body_digest(response.body),
+    )
 
 
 def _same_as_baseline(response: WebResponse, baseline: WebBaseline) -> bool:
-    return (response.status, response.content_type, response.length, response.words, response.lines, _body_digest(response.body)) == (baseline.status, baseline.content_type, baseline.length, baseline.words, baseline.lines, baseline.body_digest)
+    return (
+        response.status,
+        response.content_type,
+        response.length,
+        response.words,
+        response.lines,
+        _body_digest(response.body),
+    ) == (
+        baseline.status,
+        baseline.content_type,
+        baseline.length,
+        baseline.words,
+        baseline.lines,
+        baseline.body_digest,
+    )
 
 
 def _origin(url: str) -> tuple[str, str, int | None]:
@@ -329,12 +620,16 @@ class _NoRedirectHandler(HTTPRedirectHandler):
         return None
 
 
-def _fetch(url: str, *, timeout: float = 5.0, opener: Callable[..., Any] | None = None) -> WebResponse:
+def _fetch(
+    url: str, *, timeout: float = 5.0, opener: Callable[..., Any] | None = None
+) -> WebResponse:
     current = url
     original_origin = _origin(url)
     open_url = opener or build_opener(_NoRedirectHandler()).open
     for redirect_count in range(WEB_MAX_REDIRECTS + 1):
-        request = Request(current, method="GET", headers={"User-Agent": "Dmitri-targeted/1"})
+        request = Request(
+            current, method="GET", headers={"User-Agent": "Dmitri-targeted/1"}
+        )
         try:
             response = open_url(request, timeout=timeout)
         except HTTPError as error:
@@ -350,10 +645,17 @@ def _fetch(url: str, *, timeout: float = 5.0, opener: Callable[..., Any] | None 
                     raise URLError("external redirect rejected")
                 current = destination
                 continue
-            content_type = str(response.headers.get("Content-Type", "")).split(";", 1)[0].strip().casefold()
+            content_type = (
+                str(response.headers.get("Content-Type", ""))
+                .split(";", 1)[0]
+                .strip()
+                .casefold()
+            )
             body = response.read(WEB_MAX_BODY_BYTES + 1)
             truncated = len(body) > WEB_MAX_BODY_BYTES
-            return WebResponse(status, content_type, body[:WEB_MAX_BODY_BYTES], current, truncated)
+            return WebResponse(
+                status, content_type, body[:WEB_MAX_BODY_BYTES], current, truncated
+            )
         finally:
             close = getattr(response, "close", None)
             if callable(close):
@@ -361,58 +663,133 @@ def _fetch(url: str, *, timeout: float = 5.0, opener: Callable[..., Any] | None 
     raise URLError("redirect limit exceeded")
 
 
-def validate_web_candidate(candidate: WebCandidate, baseline: WebBaseline | None = None, *, fetcher: Callable[[str], WebResponse] | None = None, response: WebResponse | None = None) -> TargetedIssue | TargetedObservation | None:
+def validate_web_candidate(
+    candidate: WebCandidate,
+    baseline: WebBaseline | None = None,
+    *,
+    fetcher: Callable[[str], WebResponse] | None = None,
+    response: WebResponse | None = None,
+) -> TargetedIssue | TargetedObservation | None:
     """Validate one candidate without retaining its response body or secrets."""
     rule = classify_ffuf_candidate(candidate)
-    if rule is None: return None
-    try: result = response or (fetcher or _fetch)(candidate.url)
-    except Exception: return None
+    if rule is None:
+        return None
+    try:
+        result = response or (fetcher or _fetch)(candidate.url)
+    except Exception:
+        return None
     if result.url:
         if _origin(candidate.url) != _origin(result.url):
             return None
-    if baseline is not None and _same_as_baseline(result, baseline): return None
+    if baseline is not None and _same_as_baseline(result, baseline):
+        return None
     if result.status in {401, 403, 407}:
         if rule.observation:
-            return TargetedObservation(f"web:{rule.observation}:{_normal_path(candidate.path)}", rule.observation, rule.title, f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={_normal_path(candidate.path)}; status={result.status}; protected surface")
+            normal_path = _normal_path(candidate.path)
+            return TargetedObservation(
+                f"web:{rule.observation}:{normal_path}",
+                rule.observation,
+                rule.title,
+                f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={normal_path}; status={result.status}; protected surface",
+                path=normal_path,
+                rule_id=rule.rule_id,
+                policy_version=WEB_RESULT_POLICY_VERSION,
+            )
         return None
-    if not 200 <= result.status <= 299 or result.truncated: return None
+    if not 200 <= result.status <= 299 or result.truncated:
+        return None
     signature = _signature(rule, candidate.path, result.body)
     if signature is None:
         # Directory indexing can be discovered at an arbitrary enumerated path.
-        if _normal_path(candidate.path).endswith("/") and re.search(r"(?i)<title>\s*index of|parent directory", result.body.decode("utf-8", "replace")):
+        if _normal_path(candidate.path).endswith("/") and re.search(
+            r"(?i)<title>\s*index of|parent directory",
+            result.body.decode("utf-8", "replace"),
+        ):
             rule = WEB_RESULT_RULES["WEB-DIRLIST-001"]
             signature = "directory-index-structure"
-        else: return None
+        else:
+            return None
     path = _normal_path(candidate.path)
-    evidence = _text(f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={path}; status={result.status}; content_type={result.content_type or 'unknown'}; length={result.length}; signature={signature}")
+    evidence = _text(
+        f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={path}; status={result.status}; content_type={result.content_type or 'unknown'}; length={result.length}; signature={signature}"
+    )
     if rule.observation:
-        return TargetedObservation(f"web:{rule.observation}:{path}", rule.observation, rule.title, evidence)
-    return TargetedIssue(f"web.sensitive-path:{path}", rule.title, f"The endpoint exposed content matching the {rule.rule_id} policy rule.", rule.severity or "medium", rule.remediation, evidence, references=[f"policy:{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}"])
+        return TargetedObservation(
+            f"web:{rule.observation}:{path}",
+            rule.observation,
+            rule.title,
+            evidence,
+            path=path,
+            rule_id=rule.rule_id,
+            policy_version=WEB_RESULT_POLICY_VERSION,
+        )
+    return TargetedIssue(
+        f"web.sensitive-path:{path}",
+        rule.title,
+        f"The endpoint exposed content matching the {rule.rule_id} policy rule.",
+        rule.severity or "medium",
+        rule.remediation,
+        evidence,
+        references=[f"policy:{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}"],
+    )
 
 
-def _result_from_execution(unit: TargetedUnit, execution: ToolExecution) -> TargetedUnitResult:
-    return TargetedUnitResult(unit, execution.outcome, exit_code=execution.exit_code, reason_code=execution.reason_code, diagnostic=execution.diagnostic)
+def _result_from_execution(
+    unit: TargetedUnit, execution: ToolExecution
+) -> TargetedUnitResult:
+    return TargetedUnitResult(
+        unit,
+        execution.outcome,
+        exit_code=execution.exit_code,
+        reason_code=execution.reason_code,
+        diagnostic=execution.diagnostic,
+    )
 
 
 def _wordlist(path: str | Path | None) -> tuple[Path | None, TargetedGapReason | None]:
-    candidates = [Path(path)] if path else [Path("/usr/share/wordlists/dirb/common.txt"), Path("/usr/share/dirb/wordlists/common.txt")]
+    candidates = (
+        [Path(path)]
+        if path
+        else [
+            Path("/usr/share/wordlists/dirb/common.txt"),
+            Path("/usr/share/dirb/wordlists/common.txt"),
+        ]
+    )
     for candidate in candidates:
         try:
-            if not candidate.is_file() or candidate.stat().st_size > TARGETED_WORDLIST_MAX_BYTES: continue
-            entries = [line.strip() for line in candidate.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
-            if 4_000 <= len(entries) <= TARGETED_WORDLIST_MAX_ENTRIES: return candidate, None
-        except (OSError, UnicodeError): continue
+            if (
+                not candidate.is_file()
+                or candidate.stat().st_size > TARGETED_WORDLIST_MAX_BYTES
+            ):
+                continue
+            entries = [
+                line.strip()
+                for line in candidate.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            if 4_000 <= len(entries) <= TARGETED_WORDLIST_MAX_ENTRIES:
+                return candidate, None
+        except (OSError, UnicodeError):
+            continue
     return None, TargetedGapReason.WORDLIST_UNAVAILABLE
 
 
 def _effective_wordlist(base: Path) -> Path:
-    handle = tempfile.NamedTemporaryFile(prefix="dmitri-web-", suffix=".txt", delete=False, mode="w", encoding="utf-8")
+    handle = tempfile.NamedTemporaryFile(
+        prefix="dmitri-web-", suffix=".txt", delete=False, mode="w", encoding="utf-8"
+    )
     try:
-        entries = {line.strip() for line in base.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")}
+        entries = {
+            line.strip()
+            for line in base.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
         entries.update(WEB_SEED_PATHS)
-        for entry in sorted(entries): handle.write(entry + "\n")
+        for entry in sorted(entries):
+            handle.write(entry + "\n")
         return Path(handle.name)
-    finally: handle.close()
+    finally:
+        handle.close()
 
 
 def run_ffuf(
@@ -425,41 +802,114 @@ def run_ffuf(
     **deadline: Any,
 ) -> TargetedUnitResult:
     base, reason = _wordlist(wordlist)
-    if base is None: return TargetedUnitResult(unit, TargetedOutcome.SKIPPED, reason_code=reason)
+    if base is None:
+        return TargetedUnitResult(unit, TargetedOutcome.SKIPPED, reason_code=reason)
     effective = _effective_wordlist(base)
     try:
         url = f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/FUZZ"
-        command = ToolCommand(TargetedTool.FFUF, ["ffuf", "-u", url, "-w", str(effective), "-of", "json", "-o", "REPORT", "-noninteractive", "-s", "-ac", "-t", "2", "-rate", "20", "-timeout", "5", "-maxtime", "300"], "file", 8)
+        command = ToolCommand(
+            TargetedTool.FFUF,
+            [
+                "ffuf",
+                "-u",
+                url,
+                "-w",
+                str(effective),
+                "-of",
+                "json",
+                "-o",
+                "REPORT",
+                "-noninteractive",
+                "-s",
+                "-ac",
+                "-t",
+                "2",
+                "-rate",
+                "20",
+                "-timeout",
+                "5",
+                "-maxtime",
+                "300",
+            ],
+            "file",
+            8,
+        )
         execution = executor.execute(command, **deadline)
-        if execution.outcome != TargetedOutcome.COMPLETED: return _result_from_execution(unit, execution)
-        if not execution.report_present: return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
+        if execution.outcome != TargetedOutcome.COMPLETED:
+            return _result_from_execution(unit, execution)
+        if not execution.report_present:
+            return TargetedUnitResult(
+                unit,
+                TargetedOutcome.FAILED,
+                exit_code=execution.exit_code,
+                reason_code=TargetedGapReason.MALFORMED_REPORT,
+            )
         payload = _json(execution.report)
-        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
-            return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("results"), list
+        ):
+            return TargetedUnitResult(
+                unit,
+                TargetedOutcome.FAILED,
+                exit_code=execution.exit_code,
+                reason_code=TargetedGapReason.MALFORMED_REPORT,
+            )
         candidates = parse_ffuf_json(execution.report, unit)
         candidates = [c for c in candidates if classify_ffuf_candidate(c)]
-        candidates.sort(key=lambda c: (_class_of(classify_ffuf_candidate(c)), classify_ffuf_candidate(c).rule_id, c.path.casefold()))
-        result = TargetedUnitResult(unit, TargetedOutcome.COMPLETED, exit_code=execution.exit_code)
+        candidates.sort(
+            key=lambda c: (
+                _class_of(classify_ffuf_candidate(c)),
+                classify_ffuf_candidate(c).rule_id,
+                c.path.casefold(),
+            )
+        )
+        result = TargetedUnitResult(
+            unit, TargetedOutcome.COMPLETED, exit_code=execution.exit_code
+        )
         if candidates:
-            synthetic = hashlib.sha256(f"{scan_id}|{unit.ip}|{unit.port}".encode()).hexdigest()[:16]
-            baseline_response = (fetcher or _fetch)(f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/.dmitri-not-found-{synthetic}")
+            synthetic = hashlib.sha256(
+                f"{scan_id}|{unit.ip}|{unit.port}".encode()
+            ).hexdigest()[:16]
+            baseline_response = (fetcher or _fetch)(
+                f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/.dmitri-not-found-{synthetic}"
+            )
             if baseline_response.truncated:
-                return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.BASELINE_UNAVAILABLE)
+                return TargetedUnitResult(
+                    unit,
+                    TargetedOutcome.FAILED,
+                    exit_code=execution.exit_code,
+                    reason_code=TargetedGapReason.BASELINE_UNAVAILABLE,
+                )
             baseline = _baseline(baseline_response)
             for candidate in candidates[:TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT]:
                 validated = validate_web_candidate(candidate, baseline, fetcher=fetcher)
-                if isinstance(validated, TargetedIssue) and len(result.issues) < TARGETED_MAX_ISSUES_PER_UNIT: result.issues.append(validated)
-                elif isinstance(validated, TargetedObservation): result.observations.append(validated)
+                if (
+                    isinstance(validated, TargetedIssue)
+                    and len(result.issues) < TARGETED_MAX_ISSUES_PER_UNIT
+                ):
+                    result.issues.append(validated)
+                elif isinstance(validated, TargetedObservation):
+                    result.observations.append(validated)
             if len(candidates) > TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT:
-                result.outcome, result.reason_code = TargetedOutcome.FAILED, TargetedGapReason.VALIDATION_LIMIT
+                result.outcome, result.reason_code = (
+                    TargetedOutcome.FAILED,
+                    TargetedGapReason.VALIDATION_LIMIT,
+                )
         return result
     except Exception as exc:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, reason_code=TargetedGapReason.BASELINE_UNAVAILABLE, diagnostic=_text(exc, 512))
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            reason_code=TargetedGapReason.BASELINE_UNAVAILABLE,
+            diagnostic=_text(exc, 512),
+        )
     finally:
         effective.unlink(missing_ok=True)
 
 
-def _load_nikto_policy(source: Mapping[str, str] | str | Path | None) -> Mapping[str, str]:
+def _load_nikto_policy(
+    source: Mapping[str, str] | str | Path | None,
+) -> Mapping[str, str]:
     if source is None and NIKTO_TUNING_POLICY:
         return NIKTO_TUNING_POLICY
     if isinstance(source, Mapping):
@@ -478,11 +928,27 @@ def _load_nikto_policy(source: Mapping[str, str] | str | Path | None) -> Mapping
             output: dict[str, str] = {}
             for row in rows:
                 normalized = {str(key).casefold(): value for key, value in row.items()}
-                identifier = next((normalized.get(k) for k in ("id", "testid", "test_id", "osvdb") if normalized.get(k)), None)
-                category = next((normalized.get(k) for k in ("tuning", "category", "categories") if normalized.get(k)), None)
-                if identifier and category: output[re.sub(r"\D", "", identifier).zfill(6)] = category.casefold()
+                identifier = next(
+                    (
+                        normalized.get(k)
+                        for k in ("id", "testid", "test_id", "osvdb")
+                        if normalized.get(k)
+                    ),
+                    None,
+                )
+                category = next(
+                    (
+                        normalized.get(k)
+                        for k in ("tuning", "category", "categories")
+                        if normalized.get(k)
+                    ),
+                    None,
+                )
+                if identifier and category:
+                    output[re.sub(r"\D", "", identifier).zfill(6)] = category.casefold()
             return output
-    except (OSError, UnicodeError): return {}
+    except (OSError, UnicodeError):
+        return {}
 
 
 def _nikto_policy_available(source: Mapping[str, str] | str | Path | None) -> bool:
@@ -493,9 +959,12 @@ def _nikto_policy_available(source: Mapping[str, str] | str | Path | None) -> bo
 
 def _nikto_severity(categories: str) -> str | None:
     categories = categories.casefold()
-    if any(c in categories for c in ("8", "c")): return "critical"
-    if any(c in categories for c in ("4", "5", "7", "9", "a", "f")): return "high"
-    if any(c in categories for c in ("2", "3")): return "medium"
+    if any(c in categories for c in ("8", "c")):
+        return "critical"
+    if any(c in categories for c in ("4", "5", "7", "9", "a", "f")):
+        return "high"
+    if any(c in categories for c in ("2", "3")):
+        return "medium"
     return None
 
 
@@ -534,36 +1003,57 @@ def _parse_nikto_issues(
     issues: list[TargetedIssue] = []
     supported_count = 0
     for row in rows:
-        if not isinstance(row, dict): continue
+        if not isinstance(row, dict):
+            continue
         identifier = row.get("id", row.get("testid", row.get("test_id")))
-        if not re.fullmatch(r"\d{1,6}", str(identifier or "")): continue
+        if not re.fullmatch(r"\d{1,6}", str(identifier or "")):
+            continue
         identifier = str(identifier).zfill(6)
         categories = policies.get(identifier)
-        if categories is None: continue
+        if categories is None:
+            continue
         severity = _nikto_severity(str(categories))
-        if severity is None: continue
+        if severity is None:
+            continue
         uri = row.get("uri", row.get("url", row.get("path", "/")))
         message = row.get("msg", row.get("message", row.get("description", "")))
-        if not isinstance(uri, str) or not isinstance(message, str): continue
-        if target_unit is not None and isinstance(row.get("host"), str) and row["host"] not in {target_unit.ip, ""}: continue
-        if target_unit is not None and row.get("port") not in (None, "", target_unit.port, str(target_unit.port)): continue
+        if not isinstance(uri, str) or not isinstance(message, str):
+            continue
+        if (
+            target_unit is not None
+            and isinstance(row.get("host"), str)
+            and row["host"] not in {target_unit.ip, ""}
+        ):
+            continue
+        if target_unit is not None and row.get("port") not in (
+            None,
+            "",
+            target_unit.port,
+            str(target_unit.port),
+        ):
+            continue
         supported_count += 1
-        if limit is not None and len(issues) >= limit: continue
+        if limit is not None and len(issues) >= limit:
+            continue
         path = _normal_path(uri)
         method = row.get("method", "")
         method_text = _text(method) if isinstance(method, str) else ""
         references, cve_id = _safe_nikto_references(row)
-        evidence = _text(f"{WEB_RESULT_POLICY_VERSION}:nikto:{identifier}; method={method_text or 'unknown'}; path={path}; {_text(message)}")
-        issues.append(TargetedIssue(
-            f"nikto:{identifier}:{path}",
-            f"Nikto web security issue {identifier}",
-            _text(message),
-            severity,
-            "Apply the vendor or web-server remediation for this issue and restrict the affected endpoint.",
-            evidence,
-            cve_id=cve_id,
-            references=references,
-        ))
+        evidence = _text(
+            f"{WEB_RESULT_POLICY_VERSION}:nikto:{identifier}; method={method_text or 'unknown'}; path={path}; {_text(message)}"
+        )
+        issues.append(
+            TargetedIssue(
+                f"nikto:{identifier}:{path}",
+                f"Nikto web security issue {identifier}",
+                _text(message),
+                severity,
+                "Apply the vendor or web-server remediation for this issue and restrict the affected endpoint.",
+                evidence,
+                cve_id=cve_id,
+                references=references,
+            )
+        )
     return issues, supported_count > (limit or supported_count)
 
 
@@ -576,13 +1066,23 @@ def parse_nikto_json(
     if isinstance(report, TargetedUnit):
         report, unit = unit, report
     target_unit = unit if isinstance(unit, TargetedUnit) else None
-    if isinstance(report, Mapping): payload = report
+    if isinstance(report, Mapping):
+        payload = report
     else:
-        try: payload = json.loads(report.decode("utf-8") if isinstance(report, bytes) else report)
-        except (UnicodeDecodeError, json.JSONDecodeError): return []
-    if not isinstance(payload, dict) or not isinstance(payload.get("vulnerabilities"), list): return []
+        try:
+            payload = json.loads(
+                report.decode("utf-8") if isinstance(report, bytes) else report
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return []
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("vulnerabilities"), list
+    ):
+        return []
     policies = _load_nikto_policy(policy)
-    return _parse_nikto_issues(payload, target_unit, policies, TARGETED_MAX_ISSUES_PER_UNIT)[0]
+    return _parse_nikto_issues(
+        payload, target_unit, policies, TARGETED_MAX_ISSUES_PER_UNIT
+    )[0]
 
 
 def run_nikto(
@@ -592,17 +1092,60 @@ def run_nikto(
     **deadline: Any,
 ) -> TargetedUnitResult:
     url = f"{unit.transport or 'http'}://{unit.ip}:{unit.port}"
-    argv = ["nikto", "-h", url, "-nointeractive", "-nolookup", "-nocheck", "-nocookies", "-Tuning", "2345789acf", "-timeout", "5", "-maxtime", "150s", "-Pause", "0.2", "-Format", "json", "-output", "REPORT"]
-    execution = executor.execute(ToolCommand(TargetedTool.NIKTO, argv, "file", 18), **deadline)
-    if execution.outcome != TargetedOutcome.COMPLETED: return _result_from_execution(unit, execution)
-    if not execution.report_present: return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
+    argv = [
+        "nikto",
+        "-h",
+        url,
+        "-nointeractive",
+        "-nolookup",
+        "-nocheck",
+        "-nocookies",
+        "-Tuning",
+        "2345789acf",
+        "-timeout",
+        "5",
+        "-maxtime",
+        "150s",
+        "-Pause",
+        "0.2",
+        "-Format",
+        "json",
+        "-output",
+        "REPORT",
+    ]
+    execution = executor.execute(
+        ToolCommand(TargetedTool.NIKTO, argv, "file", 18), **deadline
+    )
+    if execution.outcome != TargetedOutcome.COMPLETED:
+        return _result_from_execution(unit, execution)
+    if not execution.report_present:
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.MALFORMED_REPORT,
+        )
     payload = _json(execution.report)
-    if not isinstance(payload, dict) or not isinstance(payload.get("vulnerabilities"), list):
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("vulnerabilities"), list
+    ):
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.MALFORMED_REPORT,
+        )
     if not _nikto_policy_available(policy):
-        return TargetedUnitResult(unit, TargetedOutcome.SKIPPED, exit_code=execution.exit_code, reason_code=TargetedGapReason.POLICY_UNAVAILABLE)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.SKIPPED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.POLICY_UNAVAILABLE,
+        )
     policies = _load_nikto_policy(policy)
-    issues, exceeded = _parse_nikto_issues(payload, unit, policies, TARGETED_MAX_ISSUES_PER_UNIT)
+    issues, exceeded = _parse_nikto_issues(
+        payload, unit, policies, TARGETED_MAX_ISSUES_PER_UNIT
+    )
     if exceeded:
         return TargetedUnitResult(
             unit,
@@ -611,9 +1154,13 @@ def run_nikto(
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.ISSUE_LIMIT,
         )
-    return TargetedUnitResult(unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code)
+    return TargetedUnitResult(
+        unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
+    )
 
 
 def _json(report: bytes) -> Any:
-    try: return json.loads(report.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError): return None
+    try:
+        return json.loads(report.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None

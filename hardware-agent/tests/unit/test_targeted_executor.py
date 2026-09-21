@@ -14,9 +14,13 @@ import pytest
 from agent.targeted.executor import TargetedExecutor, ToolCommand
 from agent.targeted.models import TargetedGapReason, TargetedOutcome, TargetedTool
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "linux", reason="targeted subprocess runtime requires Linux"
-)
+
+@pytest.fixture(autouse=True)
+def _require_linux_runtime(request: pytest.FixtureRequest) -> None:
+    if request.node.name.startswith("test_report_limit_hit"):
+        return
+    if sys.platform != "linux":
+        pytest.skip("targeted subprocess runtime requires Linux")
 
 
 def _file_command(script: str) -> ToolCommand:
@@ -570,7 +574,7 @@ def test_posix_report_at_exact_rlimit_ceiling_is_not_marked_truncated(
     assert result.report_truncated is False
 
 
-def test_posix_exact_rlimit_ceiling_with_unrelated_nonzero_exit_is_not_output_limit(
+def test_posix_exact_rlimit_ceiling_with_nonzero_exit_stays_completed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if os.name != "posix":
@@ -584,9 +588,30 @@ def test_posix_exact_rlimit_ceiling_with_unrelated_nonzero_exit_is_not_output_li
     result = TargetedExecutor().execute(command)
 
     assert result.outcome is TargetedOutcome.COMPLETED
+    assert result.reason_code is None
     assert result.exit_code == 7
     assert result.report == b"x" * 128
     assert result.report_truncated is False
+
+
+def test_report_limit_hit_exact_size_is_not_truncated(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(executor_module, "TARGETED_REPORT_LIMIT_BYTES", 128)
+    path = tmp_path / "report"
+    path.write_bytes(b"x" * 128)
+
+    assert TargetedExecutor._report_limit_hit(path) is False
+
+
+def test_report_limit_hit_over_limit_is_truncated(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(executor_module, "TARGETED_REPORT_LIMIT_BYTES", 128)
+    path = tmp_path / "report"
+    path.write_bytes(b"x" * 129)
+
+    assert TargetedExecutor._report_limit_hit(path) is True
 
 
 def test_malformed_nonempty_file_report_is_retained_for_adapter_parsing() -> None:

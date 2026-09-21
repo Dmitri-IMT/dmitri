@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import shutil
 
@@ -8,7 +7,7 @@ import shutil
 from collections.abc import Mapping
 from typing import Any, Iterable
 
-from agent.config import TARGETED_EVIDENCE_LIMIT_CHARS, TARGETED_MAX_ISSUES_PER_UNIT
+from agent.config import TARGETED_MAX_ISSUES_PER_UNIT
 from agent.targeted.executor import TargetedExecutor, ToolCommand, ToolExecution
 from agent.targeted.models import (
     TargetedGapReason,
@@ -17,6 +16,11 @@ from agent.targeted.models import (
     TargetedTool,
     TargetedUnit,
     TargetedUnitResult,
+)
+from agent.targeted.report import (
+    parse_json_payload,
+    sanitize_evidence,
+    target_value_matches,
 )
 
 _SEVERITIES = {"low", "medium", "high", "critical"}
@@ -43,15 +47,6 @@ _SUPPORTED_ID_WORDS = (
 )
 
 
-def _payload(report: bytes | str | Mapping[str, Any]) -> Any:
-    if isinstance(report, Mapping):
-        return report
-    try:
-        return json.loads(report.decode("utf-8") if isinstance(report, bytes) else report)
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        return None
-
-
 def _walk(value: Any, depth: int = 0) -> Iterable[Mapping[str, Any]]:
     if depth > 32:
         return
@@ -62,13 +57,6 @@ def _walk(value: Any, depth: int = 0) -> Iterable[Mapping[str, Any]]:
     elif isinstance(value, list):
         for child in value[:4096]:
             yield from _walk(child, depth + 1)
-
-
-def _text(value: Any, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    value = " ".join(str(value).split())
-    value = "".join(character for character in value if character.isprintable())
-    value = re.sub(r"(?i)(password|passwd|token|secret|authorization)\s*[=:]\s*\S+", r"\1=[REDACTED]", value)
-    return value[:limit]
 
 
 def _slug(value: str) -> str:
@@ -103,28 +91,12 @@ def _number(value: Any) -> float | None:
     return number if 0 <= number <= 10 else None
 
 
-def _target_value_matches(value: Any, unit: TargetedUnit) -> bool:
-    """Match a report endpoint without accepting an address substring."""
-
-    text = str(value).strip().casefold()
-    host = unit.ip.casefold()
-    if text == host:
-        return True
-    if text.startswith("[") and "]" in text:
-        report_host, separator, report_port = text[1:].partition("]")
-        if report_host != host:
-            return False
-        return not report_port or report_port.removeprefix(":") == str(unit.port)
-    if text.count(":") == 1:
-        report_host, report_port = text.rsplit(":", 1)
-        return report_host == host and report_port == str(unit.port)
-    return False
-
-
 def _target_matches(row: Mapping[str, Any], unit: TargetedUnit) -> bool:
-    host_values = [row.get(key) for key in ("ip", "host", "hostname", "fqdn", "target", "node")]
+    host_values = [
+        row.get(key) for key in ("ip", "host", "hostname", "fqdn", "target", "node")
+    ]
     hosts = [value for value in host_values if value not in (None, "")]
-    if hosts and not all(_target_value_matches(value, unit) for value in hosts):
+    if hosts and not all(target_value_matches(value, unit) for value in hosts):
         return False
     port = row.get("port")
     if port not in (None, ""):
@@ -137,7 +109,9 @@ def _target_matches(row: Mapping[str, Any], unit: TargetedUnit) -> bool:
     return True
 
 
-def _records(payload: Any, unit: TargetedUnit | None) -> tuple[list[Mapping[str, Any]], bool]:
+def _records(
+    payload: Any, unit: TargetedUnit | None
+) -> tuple[list[Mapping[str, Any]], bool]:
     if not isinstance(payload, (Mapping, list)):
         return [], False
     if isinstance(payload, list) and not payload:
@@ -151,10 +125,14 @@ def _records(payload: Any, unit: TargetedUnit | None) -> tuple[list[Mapping[str,
     records: list[Mapping[str, Any]] = []
     saw_target_conflict = False
     for row in _walk(payload):
-        if unit is not None and any(
-            row.get(key) not in (None, "")
-            for key in ("ip", "host", "hostname", "fqdn", "target", "node")
-        ) and not _target_matches(row, unit):
+        if (
+            unit is not None
+            and any(
+                row.get(key) not in (None, "")
+                for key in ("ip", "host", "hostname", "fqdn", "target", "node")
+            )
+            and not _target_matches(row, unit)
+        ):
             saw_target_conflict = True
         if not {"id", "severity", "finding"}.issubset(row):
             continue
@@ -177,7 +155,7 @@ def _cve(value: Any) -> str | None:
 
 def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
     identifier = str(row.get("id", "")).strip()
-    finding = _text(row.get("finding", ""))
+    finding = sanitize_evidence(row.get("finding", ""))
     severity = str(row.get("severity", "")).casefold().strip()
     identifier_lower = identifier.casefold()
     finding_lower = finding.casefold()
@@ -185,9 +163,35 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
         return None
     if finding_lower in _IGNORED_FINDINGS or finding_lower.startswith(("not ", "no ")):
         return None
-    if not any(word in identifier_lower or word in finding_lower for word in _SUPPORTED_ID_WORDS):
+    if not any(
+        word in identifier_lower or word in finding_lower
+        for word in _SUPPORTED_ID_WORDS
+    ):
         return None
-    kind = "certificate" if any(word in identifier_lower or word in finding_lower for word in ("cert", "x509")) else "protocol" if any(word in identifier_lower or word in finding_lower for word in ("protocol", "tls", "ssl")) else "cipher" if "cipher" in identifier_lower or "cipher" in finding_lower or any(word in identifier_lower for word in ("rc4", "3des", "des", "null", "export")) else "weakness"
+    kind = (
+        "certificate"
+        if any(
+            word in identifier_lower or word in finding_lower
+            for word in ("cert", "x509")
+        )
+        else (
+            "protocol"
+            if any(
+                word in identifier_lower or word in finding_lower
+                for word in ("protocol", "tls", "ssl")
+            )
+            else (
+                "cipher"
+                if "cipher" in identifier_lower
+                or "cipher" in finding_lower
+                or any(
+                    word in identifier_lower
+                    for word in ("rc4", "3des", "des", "null", "export")
+                )
+                else "weakness"
+            )
+        )
+    )
     value = _issue_value(identifier, finding, kind)
     issue_key = f"tls.{kind}:{value}"
     cve_id = _cve(row.get("cve", row.get("cve_id", finding)))
@@ -196,9 +200,13 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
         raw = row.get(key)
         values = raw if isinstance(raw, list) else [raw]
         references.extend(
-            _text(item, 256)
+            sanitize_evidence(item, 256)
             for item in values
-            if isinstance(item, str) and (item.casefold().startswith("http://") or item.casefold().startswith("https://"))
+            if isinstance(item, str)
+            and (
+                item.casefold().startswith("http://")
+                or item.casefold().startswith("https://")
+            )
         )
     return TargetedIssue(
         issue_key,
@@ -206,7 +214,9 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
         finding,
         severity,
         "Disable the affected TLS protocol or primitive and apply the vendor remediation.",
-        _text(f"testssl:{identifier}; severity={severity}; finding={finding}"),
+        sanitize_evidence(
+            f"testssl:{identifier}; severity={severity}; finding={finding}"
+        ),
         cve_id=cve_id,
         cvss_score=_number(row.get("cvss", row.get("cvss_score"))),
         references=list(dict.fromkeys(references))[:8],
@@ -220,7 +230,7 @@ def parse_testssl_json(
     if isinstance(report, TargetedUnit):
         report, unit = unit, report
     target = unit if isinstance(unit, TargetedUnit) else None
-    payload = _payload(report)
+    payload = parse_json_payload(report)
     records, valid = _records(payload, target)
     if not valid:
         return []
@@ -233,14 +243,35 @@ def parse_testssl_json(
 
 
 def _result(unit: TargetedUnit, execution: ToolExecution) -> TargetedUnitResult:
-    return TargetedUnitResult(unit, execution.outcome, exit_code=execution.exit_code, reason_code=execution.reason_code, diagnostic=execution.diagnostic)
+    return TargetedUnitResult(
+        unit,
+        execution.outcome,
+        exit_code=execution.exit_code,
+        reason_code=execution.reason_code,
+        diagnostic=execution.diagnostic,
+    )
 
 
-def run_testssl(unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any) -> TargetedUnitResult:
+def run_testssl(
+    unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any
+) -> TargetedUnitResult:
     executable = shutil.which("testssl") or shutil.which("testssl.sh") or "testssl"
     command = ToolCommand(
         TargetedTool.TESTSSL,
-        [executable, "--warnings", "batch", "--color", "0", "--socket-timeout", "5", "--openssl-timeout", "5", "--jsonfile-pretty", "REPORT", f"{unit.ip}:{unit.port}"],
+        [
+            executable,
+            "--warnings",
+            "batch",
+            "--color",
+            "0",
+            "--socket-timeout",
+            "5",
+            "--openssl-timeout",
+            "5",
+            "--jsonfile-pretty",
+            "REPORT",
+            f"{unit.ip}:{unit.port}",
+        ],
         "file",
         10,
     )
@@ -248,19 +279,58 @@ def run_testssl(unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any)
     if execution.outcome != TargetedOutcome.COMPLETED:
         return _result(unit, execution)
     if execution.report_truncated:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.OUTPUT_LIMIT)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.OUTPUT_LIMIT,
+        )
     if not execution.report_present:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
-    payload = _payload(execution.report)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.MALFORMED_REPORT,
+        )
+    payload = parse_json_payload(execution.report)
     records, valid = _records(payload, unit)
     if not valid:
-        malformed_scan_result = isinstance(payload, Mapping) and isinstance(payload.get("scanResult"), list) and any(
-            not isinstance(row, Mapping) or not {"id", "severity", "finding"}.issubset(row)
-            for row in payload["scanResult"]
+        malformed_scan_result = (
+            isinstance(payload, Mapping)
+            and isinstance(payload.get("scanResult"), list)
+            and any(
+                not isinstance(row, Mapping)
+                or not {"id", "severity", "finding"}.issubset(row)
+                for row in payload["scanResult"]
+            )
         )
-        reason = TargetedGapReason.MALFORMED_REPORT if malformed_scan_result else TargetedGapReason.WRONG_TARGET if isinstance(payload, (Mapping, list)) else TargetedGapReason.MALFORMED_REPORT
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=reason)
+        reason = (
+            TargetedGapReason.MALFORMED_REPORT
+            if malformed_scan_result
+            else (
+                TargetedGapReason.WRONG_TARGET
+                if isinstance(payload, (Mapping, list))
+                else TargetedGapReason.MALFORMED_REPORT
+            )
+        )
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=reason,
+        )
     issues = parse_testssl_json(execution.report, unit)
-    if len([row for row in records if _issue(row) is not None]) > TARGETED_MAX_ISSUES_PER_UNIT:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, issues=issues, exit_code=execution.exit_code, reason_code=TargetedGapReason.ISSUE_LIMIT)
-    return TargetedUnitResult(unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code)
+    if (
+        len([row for row in records if _issue(row) is not None])
+        > TARGETED_MAX_ISSUES_PER_UNIT
+    ):
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            issues=issues,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.ISSUE_LIMIT,
+        )
+    return TargetedUnitResult(
+        unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
+    )

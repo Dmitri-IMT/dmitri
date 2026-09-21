@@ -21,6 +21,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import Literal
 
+try:
+    import resource
+except ImportError:
+    resource = None
+
 from agent.config import (
     TARGETED_DIAGNOSTIC_LIMIT_CHARS,
     TARGETED_REPORT_LIMIT_BYTES,
@@ -277,9 +282,7 @@ class TargetedExecutor:
 
         stdout = _CappedBuffer(TARGETED_STDIO_LIMIT_BYTES)
         stderr = _CappedBuffer(TARGETED_STDIO_LIMIT_BYTES)
-        streamed_report = (
-            None
-        )
+        streamed_report = None
         try:
             if report_mode == "stdout":
                 streamed_report = _CappedReport(
@@ -336,7 +339,7 @@ class TargetedExecutor:
                     self._terminate_process_group(process)
                     outcome, reason = self._deadline_outcome(deadline_scope)
                     break
-                if report_limit_hit.is_set() or self._file_too_large(report_path):
+                if report_limit_hit.is_set() or self._report_limit_hit(report_path):
                     self._terminate_process_group(process)
                     outcome, reason = (
                         TargetedOutcome.FAILED,
@@ -364,7 +367,7 @@ class TargetedExecutor:
             outcome, reason = TargetedOutcome.SKIPPED, TargetedGapReason.STAGE_BUDGET
         if outcome is None and completed_at is not None and completed_at >= deadline:
             outcome, reason = self._deadline_outcome(deadline_scope)
-        if report_mode == "file" and self._report_limit_hit(report_path, process):
+        if report_mode == "file" and self._report_limit_hit(report_path):
             report_truncated = True
             if outcome is None:
                 outcome, reason = TargetedOutcome.FAILED, TargetedGapReason.OUTPUT_LIMIT
@@ -437,26 +440,12 @@ class TargetedExecutor:
         )
 
     @staticmethod
-    def _file_too_large(path: Path) -> bool:
-        try:
-            return path.stat().st_size > TARGETED_REPORT_LIMIT_BYTES
-        except FileNotFoundError:
-            return False
-
-    @staticmethod
-    def _report_limit_hit(path: Path, process: subprocess.Popen[bytes]) -> bool:
+    def _report_limit_hit(path: Path) -> bool:
         try:
             size = path.stat().st_size
         except FileNotFoundError:
             return False
-        if size > TARGETED_REPORT_LIMIT_BYTES:
-            return True
-        # RLIMIT_FSIZE reports exactly at the ceiling. A subsequent write causes
-        # SIGXFSZ/EFBIG and a non-zero process status; an exact successful write
-        # remains valid and is not marked truncated.
-        return size == TARGETED_REPORT_LIMIT_BYTES and process.returncode == -getattr(
-            signal, "SIGXFSZ", 25
-        )
+        return size > TARGETED_REPORT_LIMIT_BYTES
 
     def _pre_spawn_status(
         self,
@@ -480,12 +469,10 @@ class TargetedExecutor:
 
     @staticmethod
     def _set_report_size_limit() -> None:
-        import resource
-
-        resource.setrlimit(
-            resource.RLIMIT_FSIZE,
-            (TARGETED_REPORT_LIMIT_BYTES, TARGETED_REPORT_LIMIT_BYTES),
-        )
+        if resource is None:
+            return
+        ceiling = TARGETED_REPORT_LIMIT_BYTES + 1
+        resource.setrlimit(resource.RLIMIT_FSIZE, (ceiling, ceiling))
 
     @staticmethod
     def _report_argv(command: ToolCommand, report_path: Path) -> list[str] | None:

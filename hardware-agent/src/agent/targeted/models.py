@@ -97,6 +97,9 @@ class TargetedObservation:
     kind: TargetedObservationKind
     summary: str
     evidence: str
+    path: str | None = None
+    rule_id: str | None = None
+    policy_version: str | None = None
 
 
 @dataclass(slots=True)

@@ -1541,6 +1541,9 @@ def test_targeted_web_observation_enriches_one_existing_exposure(
         kind=kind,  # type: ignore[arg-type]
         summary="Validated web surface",
         evidence=f"2026-09-15.1:{rule}; path=/admin",
+        path="/admin",
+        rule_id=rule,
+        policy_version="2026-09-15.1",
     )
     host = _targeted_observation_host([observation])
 
@@ -1553,6 +1556,29 @@ def test_targeted_web_observation_enriches_one_existing_exposure(
     assert any(
         item.kind == "web_path"
         and item.source == f"ffuf:{rule}@2026-09-15.1"
+        and item.value == "/admin"
+        for item in exposure.evidence
+    )
+
+
+def test_targeted_web_observation_uses_structured_fields_not_evidence_blob() -> None:
+    observation = TargetedObservation(
+        observation_key="web:administration:/admin",
+        kind="administration",
+        summary="Validated web surface",
+        evidence="unrelated blob without path= or rule markers",
+        path="/admin",
+        rule_id="WEB-ADMIN-001",
+        policy_version="2026-09-15.1",
+    )
+    host = _targeted_observation_host([observation])
+
+    result = assess_hosts([host])
+
+    exposure = result.exposures[0]
+    assert any(
+        item.kind == "web_path"
+        and item.source == "ffuf:WEB-ADMIN-001@2026-09-15.1"
         and item.value == "/admin"
         for item in exposure.evidence
     )
@@ -1601,6 +1627,9 @@ def test_targeted_observations_do_not_change_finding_counts() -> None:
                 "administration",
                 "Admin console",
                 "2026-09-15.1:WEB-ADMIN-001; path=/admin",
+                path="/admin",
+                rule_id="WEB-ADMIN-001",
+                policy_version="2026-09-15.1",
             )
         ]
     )

@@ -40,6 +40,7 @@ STAGE_LABELS = {
     "normalize": "Results generation",
 }
 
+
 def format_duration(seconds: float) -> str:
     total = round(seconds)
     hours, remainder = divmod(total, 3600)

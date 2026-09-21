@@ -121,16 +121,10 @@ class DeviceDetailScreen(DmitriScreen):
             self._host.machine_type or "unknown", "Unknown"
         )
         lines.append(f"Machine type: {machine}")
-        manufacturer = (
-            safe(profile.manufacturer)
-            if profile.manufacturer
-            else "Unknown"
-        )
+        manufacturer = safe(profile.manufacturer) if profile.manufacturer else "Unknown"
         lines.append(f"Manufacturer: {manufacturer}")
         if profile.product_family and profile.model:
-            product = (
-                f"{safe(profile.product_family)} · {safe(profile.model)}"
-            )
+            product = f"{safe(profile.product_family)} · {safe(profile.model)}"
         elif profile.product_family:
             product = f"{safe(profile.product_family)}; exact model unknown"
         elif profile.model:
@@ -144,8 +138,7 @@ class DeviceDetailScreen(DmitriScreen):
             lines.append(f"Based on: {evidence}")
         for conflict in profile.conflicts:
             lines.append(
-                "[yellow]⚠ Conflicting evidence:[/yellow] "
-                f"{safe(conflict)}"
+                "[yellow]⚠ Conflicting evidence:[/yellow] " f"{safe(conflict)}"
             )
         for limitation in profile.limitations:
             lines.append(f"Limitation: {safe(limitation)}")
@@ -225,9 +218,7 @@ class DeviceDetailScreen(DmitriScreen):
             lines.append(f"  Observed service: {observed}")
             lines.append(f"  Why it matters: {safe(exposure.reason)}")
             if exposure.evidence:
-                evidence = "; ".join(
-                    safe(item.value) for item in exposure.evidence
-                )
+                evidence = "; ".join(safe(item.value) for item in exposure.evidence)
                 lines.append(f"  Evidence: {evidence}")
             related = self._related_findings(exposure.port, exposure.protocol)
             for finding in related:

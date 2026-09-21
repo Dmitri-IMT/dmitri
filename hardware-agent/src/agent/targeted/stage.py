@@ -194,10 +194,7 @@ def run_targeted_stage(
             message=f"Checked {unit.ip}:{unit.port} with {unit.tool.value}",
             units_total=summary.eligible,
             units_done=(
-                summary.completed
-                + summary.failed
-                + summary.timed_out
-                + summary.skipped
+                summary.completed + summary.failed + summary.timed_out + summary.skipped
             ),
             outcome=result.outcome.value,
             ip=unit.ip,

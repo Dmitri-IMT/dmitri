@@ -80,9 +80,7 @@ def _is_cleartext_telnet(port: PortInfo) -> bool:
     if _tunnel_name(port) == "ssl":
         return False
     name = _service_name(port)
-    return name == "telnet" or (
-        not _has_conclusive_service(port) and port.port == 23
-    )
+    return name == "telnet" or (not _has_conclusive_service(port) and port.port == 23)
 
 
 def _unit(

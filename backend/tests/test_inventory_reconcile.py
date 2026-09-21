@@ -303,6 +303,70 @@ def test_vulnerability_count_equals_the_open_host_findings(
     assert machine.vulnerability_count == len(open_keys)
 
 
+def _scan_and_reconcile_id(
+    session: Session,
+    identity: AgentIdentity,
+    *,
+    scan_id: UUID,
+    ts: datetime,
+    hosts: list[HostPayload],
+    findings: list[FindingPayload] | None = None,
+) -> ScanRecord:
+    scan_record = ingest_scan(
+        session,
+        ScanIngestRequest(
+            scan_id=scan_id,
+            timestamp=ts,
+            subnet="10.0.0.0/24",
+            scan_mode="standard",
+            hosts=hosts,
+            findings=findings or [],
+        ),
+        identity=identity,
+        now=ts,
+    )
+    reconcile_scan_inventory(session, scan_record)
+    session.flush()
+    return scan_record
+
+
+def test_same_timestamp_later_scan_id_stays_latest_after_older_id_reconcile(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    ts = T2
+    winner_id = UUID("ffffffff-ffff-4fff-8fff-ffffffffffff")
+    loser_id = UUID("11111111-1111-4111-8111-111111111111")
+    _scan_and_reconcile_id(
+        runtime_session,
+        identity,
+        scan_id=winner_id,
+        ts=ts,
+        hosts=[_host(vendor="Hikvision", ports=[_port(554, "rtsp")])],
+    )
+    _scan_and_reconcile_id(
+        runtime_session,
+        identity,
+        scan_id=loser_id,
+        ts=ts,
+        hosts=[_host(vendor="Generic Co", ports=[_port(22, "ssh")])],
+    )
+    for scan_id in (winner_id, loser_id):
+        row = runtime_session.get(ScanRecord, scan_id)
+        assert row is not None
+        row.created_at = ts
+        runtime_session.add(row)
+    runtime_session.flush()
+    runtime_session.expire_all()
+    reconcile_scan_inventory(
+        runtime_session, runtime_session.get(ScanRecord, winner_id)
+    )
+    reconcile_scan_inventory(
+        runtime_session, runtime_session.get(ScanRecord, loser_id)
+    )
+    assert _machine(runtime_session).machine_type == "camera"
+
+
 def test_out_of_order_older_scan_lowers_first_seen_and_nothing_else(
     runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:

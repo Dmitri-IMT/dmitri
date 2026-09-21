@@ -63,6 +63,7 @@ from api.schemas.scan import DeviceProfilePayload
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
+from api.services.inventory import latest_scan_host_for_host
 
 logger = logging.getLogger(__name__)
 
@@ -156,19 +157,9 @@ def get_host_detail(
             .order_by(HostPortRecord.port.asc())
         ).all()
     ]
-    latest_snapshot = session.exec(
-        select(ScanHostRecord, ScanRecord)
-        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanHostRecord.host_id == host_id)
-        .where(ScanRecord.org_id == org_id)
-        .order_by(
-            ScanRecord.timestamp.desc(),
-            ScanRecord.created_at.desc(),
-            ScanRecord.scan_id.desc(),
-        )
-    ).first()
-    latest_scan_host = latest_snapshot[0] if latest_snapshot else None
-    latest_scan = latest_snapshot[1] if latest_snapshot else None
+    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
+    latest_scan_host = latest_pair[0] if latest_pair else None
+    latest_scan = latest_pair[1] if latest_pair else None
     industrial_services = (
         _industrial_service_views(session, latest_scan_host.id, unreadable)
         if latest_scan_host
@@ -206,6 +197,11 @@ def get_host_detail(
         latest_scan is not None
         and latest_scan.assessment_policy_version is not None
     )
+    if assessment_available and latest_scan_host is not None:
+        payload["machine_type"] = latest_scan_host.machine_type or "unknown"
+        payload["device_profile"] = _device_profile(
+            latest_scan_host.device_profile_json
+        )
     return HostDetailResponse(
         **payload,
         assessment_status=(

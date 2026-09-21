@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import re
 
 # ruff: noqa: E501
 from collections.abc import Mapping
 from typing import Any, Iterable
 
-from agent.config import TARGETED_EVIDENCE_LIMIT_CHARS, TARGETED_MAX_ISSUES_PER_UNIT
+from agent.config import TARGETED_MAX_ISSUES_PER_UNIT
 from agent.targeted.executor import TargetedExecutor, ToolCommand, ToolExecution
 from agent.targeted.models import (
     TargetedGapReason,
@@ -17,41 +16,23 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
+from agent.targeted.report import (
+    parse_json_payload,
+    sanitize_evidence,
+    target_value_matches,
+)
 
 _PQ_WARNING = "does not provide protection against post-quantum attacks"
-_SECTIONS = {"protocol": "protocol", "kex": "kex", "key": "host-key", "host-key": "host-key", "host_key": "host-key", "enc": "cipher", "cipher": "cipher", "mac": "mac"}
-
-
-def _payload(report: bytes | str | Mapping[str, Any]) -> Any:
-    if isinstance(report, Mapping):
-        return report
-    try:
-        return json.loads(report.decode("utf-8") if isinstance(report, bytes) else report)
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
-        return None
-
-
-def _text(value: Any, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    value = " ".join(str(value).split())
-    value = "".join(character for character in value if character.isprintable())
-    value = re.sub(r"(?i)(password|passwd|token|secret|authorization)\s*[=:]\s*\S+", r"\1=[REDACTED]", value)
-    return value[:limit]
-
-
-def _target_value_matches(value: Any, unit: TargetedUnit) -> bool:
-    text = str(value).strip().casefold()
-    host = unit.ip.casefold()
-    if text == host:
-        return True
-    if text.startswith("[") and "]" in text:
-        report_host, _, report_port = text[1:].partition("]")
-        return report_host == host and (
-            not report_port or report_port.removeprefix(":") == str(unit.port)
-        )
-    if text.count(":") == 1:
-        report_host, report_port = text.rsplit(":", 1)
-        return report_host == host and report_port == str(unit.port)
-    return False
+_SECTIONS = {
+    "protocol": "protocol",
+    "kex": "kex",
+    "key": "host-key",
+    "host-key": "host-key",
+    "host_key": "host-key",
+    "enc": "cipher",
+    "cipher": "cipher",
+    "mac": "mac",
+}
 
 
 def _target_ok(payload: Any, unit: TargetedUnit) -> bool:
@@ -61,12 +42,12 @@ def _target_ok(payload: Any, unit: TargetedUnit) -> bool:
     if isinstance(target, Mapping):
         host = target.get("host", target.get("ip"))
         port = target.get("port")
-        if host not in (None, "") and not _target_value_matches(host, unit):
+        if host not in (None, "") and not target_value_matches(host, unit):
             return False
         if port not in (None, "") and str(port) != str(unit.port):
             return False
     elif target not in (None, ""):
-        if not _target_value_matches(target, unit):
+        if not target_value_matches(target, unit):
             return False
     return True
 
@@ -85,10 +66,16 @@ def _notes(value: Any) -> tuple[list[str], list[str]]:
     elif not isinstance(warns, list):
         warns = []
     clean_fail = [
-        text for item in fails if isinstance(item, str) and item.strip() if (text := _text(item))
+        text
+        for item in fails
+        if isinstance(item, str) and item.strip()
+        if (text := sanitize_evidence(item))
     ]
     clean_warn = [
-        text for item in warns if isinstance(item, str) and item.strip() if (text := _text(item))
+        text
+        for item in warns
+        if isinstance(item, str) and item.strip()
+        if (text := sanitize_evidence(item))
     ]
     clean_fail = [item for item in clean_fail if item.casefold() != _PQ_WARNING]
     clean_warn = [item for item in clean_warn if item.casefold() != _PQ_WARNING]
@@ -120,7 +107,9 @@ def _cve(value: Any) -> str | None:
     return match.group(0).upper() if match else None
 
 
-def _iter_algorithms(value: Any, section: str, name: str = "", depth: int = 0) -> Iterable[tuple[str, str, list[str], list[str], Mapping[str, Any]]]:
+def _iter_algorithms(
+    value: Any, section: str, name: str = "", depth: int = 0
+) -> Iterable[tuple[str, str, list[str], list[str], Mapping[str, Any]]]:
     if depth > 32:
         return
     if not isinstance(value, Mapping):
@@ -136,7 +125,15 @@ def _iter_algorithms(value: Any, section: str, name: str = "", depth: int = 0) -
     if fails or warns:
         yield section, name or section, fails, warns, value
     for key, child in value.items():
-        if str(key).casefold() in {"fail", "warn", "info", "notes", "cve", "cvss", "recommendations"}:
+        if str(key).casefold() in {
+            "fail",
+            "warn",
+            "info",
+            "notes",
+            "cve",
+            "cvss",
+            "recommendations",
+        }:
             continue
         if isinstance(child, Mapping):
             yield from _iter_algorithms(child, section, str(key), depth + 1)
@@ -152,7 +149,11 @@ def _parse(payload: Any, unit: TargetedUnit) -> tuple[list[TargetedIssue], bool]
         section = _SECTIONS.get(str(key).casefold())
         if section is not None and not isinstance(payload[key], Mapping):
             return [], False
-    if not any(str(key).casefold() in _SECTIONS or str(key).casefold() in {"target", "banner", "cve", "cves"} for key in payload):
+    if not any(
+        str(key).casefold() in _SECTIONS
+        or str(key).casefold() in {"target", "banner", "cve", "cves"}
+        for key in payload
+    ):
         return [], False
     for key, value in payload.items():
         section = _SECTIONS.get(str(key).casefold())
@@ -162,14 +163,16 @@ def _parse(payload: Any, unit: TargetedUnit) -> tuple[list[TargetedIssue], bool]
             text = "; ".join(fails + warns)
             score = _score(row.get("cvss", row.get("cvss_score")))
             cve_id = _cve(row.get("cve", row.get("cve_id")))
-            key_name = re.sub(r"[^a-z0-9_.@+-]+", "-", name.casefold()).strip("-") or category
+            key_name = (
+                re.sub(r"[^a-z0-9_.@+-]+", "-", name.casefold()).strip("-") or category
+            )
             issue = TargetedIssue(
                 f"ssh.algorithm:{category}:{key_name}",
                 f"SSH {category} algorithm policy issue: {name}",
                 text,
                 _severity(bool(fails), score),
                 "Disable the affected SSH algorithm and apply the server hardening guidance.",
-                _text(f"ssh-audit: {category}={name}; {text}"),
+                sanitize_evidence(f"ssh-audit: {category}={name}; {text}"),
                 cve_id=cve_id,
                 cvss_score=score,
             )
@@ -186,30 +189,79 @@ def parse_ssh_audit_json(
         report, unit = unit, report
     if not isinstance(unit, TargetedUnit):
         return []
-    issues, valid = _parse(_payload(report), unit)
+    issues, valid = _parse(parse_json_payload(report), unit)
     return issues[:TARGETED_MAX_ISSUES_PER_UNIT] if valid else []
 
 
 def _result(unit: TargetedUnit, execution: ToolExecution) -> TargetedUnitResult:
-    return TargetedUnitResult(unit, execution.outcome, exit_code=execution.exit_code, reason_code=execution.reason_code, diagnostic=execution.diagnostic)
+    return TargetedUnitResult(
+        unit,
+        execution.outcome,
+        exit_code=execution.exit_code,
+        reason_code=execution.reason_code,
+        diagnostic=execution.diagnostic,
+    )
 
 
-def run_ssh_audit(unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any) -> TargetedUnitResult:
-    command = ToolCommand(TargetedTool.SSH_AUDIT, ["ssh-audit", "-j", "-t", "5", "--skip-rate-test", "-p", str(unit.port), unit.ip], "stdout")
+def run_ssh_audit(
+    unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any
+) -> TargetedUnitResult:
+    command = ToolCommand(
+        TargetedTool.SSH_AUDIT,
+        [
+            "ssh-audit",
+            "-j",
+            "-t",
+            "5",
+            "--skip-rate-test",
+            "-p",
+            str(unit.port),
+            unit.ip,
+        ],
+        "stdout",
+    )
     execution = executor.execute(command, **deadline)
     if execution.outcome != TargetedOutcome.COMPLETED:
         return _result(unit, execution)
     if execution.report_truncated or execution.stdout_truncated:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.OUTPUT_LIMIT)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.OUTPUT_LIMIT,
+        )
     report = execution.report or execution.stdout
     if not execution.report_present and not report:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
-    payload = _payload(report)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.MALFORMED_REPORT,
+        )
+    payload = parse_json_payload(report)
     if isinstance(payload, Mapping) and not _target_ok(payload, unit):
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.WRONG_TARGET)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.WRONG_TARGET,
+        )
     issues, valid = _parse(payload, unit)
     if not valid:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, exit_code=execution.exit_code, reason_code=TargetedGapReason.MALFORMED_REPORT)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.MALFORMED_REPORT,
+        )
     if len(issues) > TARGETED_MAX_ISSUES_PER_UNIT:
-        return TargetedUnitResult(unit, TargetedOutcome.FAILED, issues=issues[:TARGETED_MAX_ISSUES_PER_UNIT], exit_code=execution.exit_code, reason_code=TargetedGapReason.ISSUE_LIMIT)
-    return TargetedUnitResult(unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code)
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            issues=issues[:TARGETED_MAX_ISSUES_PER_UNIT],
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.ISSUE_LIMIT,
+        )
+    return TargetedUnitResult(
+        unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
+    )

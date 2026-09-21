@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlmodel import Session, select
 
@@ -15,6 +16,36 @@ from api.models.persistence import (
     ScanRecord,
     ServiceRecord,
 )
+
+_LATEST_SCAN_HOST_ORDER = (
+    ScanRecord.timestamp.desc(),
+    ScanRecord.created_at.desc(),
+    ScanRecord.scan_id.desc(),
+)
+
+
+def latest_scan_host_for_host(
+    session: Session, host_id: UUID, *, org_id: UUID
+) -> tuple[ScanHostRecord, ScanRecord] | None:
+    row = session.exec(
+        select(ScanHostRecord, ScanRecord)
+        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
+        .where(ScanHostRecord.host_id == host_id)
+        .where(ScanRecord.org_id == org_id)
+        .order_by(*_LATEST_SCAN_HOST_ORDER)
+    ).first()
+    if row is None:
+        return None
+    return row[0], row[1]
+
+
+def scan_is_latest_for_host(
+    session: Session, scan_record: ScanRecord, host_id: UUID
+) -> bool:
+    latest = latest_scan_host_for_host(session, host_id, org_id=scan_record.org_id)
+    if latest is None:
+        return True
+    return latest[1].scan_id == scan_record.scan_id
 
 
 def reconcile_scan_inventory(session: Session, scan_record: ScanRecord) -> None:
@@ -48,7 +79,7 @@ def _reconcile_machine(
     host: HostRecord,
 ) -> None:
     ts = scan_record.timestamp
-    is_latest = ts >= host.last_seen_at
+    is_latest = scan_is_latest_for_host(session, scan_record, host.id)
 
     open_services = _reconcile_ports(session, host, scan_host, ts, is_latest)
     findings = _reconcile_findings(

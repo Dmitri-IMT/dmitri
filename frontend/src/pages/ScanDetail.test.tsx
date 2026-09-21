@@ -221,11 +221,24 @@ describe('ScanDetail', () => {
     expect(
       screen.getByTestId(`findings-critical-row-${phpCgiFinding.finding_id}`),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByTestId(`findings-high-row-${web.finding_id}`),
+    ).toBeNull()
+    expect(
+      screen.queryByTestId(`findings-medium-row-${ssl.finding_id}`),
+    ).toBeNull()
+    expect(
+      screen.queryByTestId(`findings-medium-row-${smb.finding_id}`),
+    ).toBeNull()
   })
 
   it('does not describe absent targeted findings as clean coverage', async () => {
     scanDetail(
-      completedScan({ scan_mode: 'extensive', findings: [phpCgiFinding] }),
+      completedScan({
+        scan_mode: 'extensive',
+        findings: [phpCgiFinding],
+        metadata: { targeted_units_planned: 0 },
+      }),
     )
     renderPage(`/scans/${SCAN_ID}`)
 
@@ -236,6 +249,26 @@ describe('ScanDetail', () => {
     expect(screen.getByTestId('scan-no-targeted-findings')).toHaveTextContent(
       'This does not mean every tool ran.',
     )
+  })
+
+  it('shows the targeted section when targeted_units_planned is zero', async () => {
+    scanDetail(
+      completedScan({
+        findings: [phpCgiFinding],
+        metadata: { targeted_units_planned: 0 },
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Service Targeted Tools' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('scan-no-targeted-findings')).toBeInTheDocument()
+    expect(screen.queryByTestId('findings-high')).not.toBeInTheDocument()
   })
 
   it('starts severity groups collapsed and opens one on demand', async () => {
@@ -716,7 +749,6 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-no-exposures')).not.toBeInTheDocument()
     expect(screen.queryByTestId('scan-no-findings')).not.toBeInTheDocument()
   })
-
 
   it('shows live progress for a processing scan and re-reads on Check again', async () => {
     const user = userEvent.setup()

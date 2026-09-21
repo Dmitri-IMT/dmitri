@@ -712,6 +712,9 @@ def test_target_models_have_stable_values_and_serialization() -> None:
                 "kind": "service_identity",
                 "summary": "Service identified",
                 "evidence": "structured field",
+                "path": None,
+                "rule_id": None,
+                "policy_version": None,
             }
         ],
         "exit_code": None,

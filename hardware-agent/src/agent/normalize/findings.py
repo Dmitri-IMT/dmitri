@@ -116,13 +116,7 @@ def _append_unique(
         return
     existing = findings[existing_index]
     preferred, other = _preferred_finding(existing, finding)
-    targeted = (
-        finding
-        if finding.source == "targeted_service_assessment"
-        else existing
-        if existing.source == "targeted_service_assessment"
-        else None
-    )
+    richer = _richer_source_finding(existing, finding)
     content = {
         "references": sorted(set(existing.references + finding.references)),
         "evidence": _merge_evidence(
@@ -132,11 +126,8 @@ def _append_unique(
             other.source,
         ),
     }
-    if targeted is not None:
-        content.update(
-            description=targeted.description,
-            recommendation=targeted.recommendation,
-        )
+    for field in _MERGE_FIELDS_FROM_HIGHER_RANK:
+        content[field] = getattr(richer, field)
     if preferred is existing:
         merged = existing.model_copy(update=content)
     else:
@@ -198,6 +189,25 @@ def _severity_rank(value: str) -> int:
     return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(value, 0)
 
 
+SOURCE_RANK: dict[str, int] = {
+    "targeted_service_assessment": 1,
+}
+
+_MERGE_FIELDS_FROM_HIGHER_RANK = ("description", "recommendation")
+
+
+def _source_rank(source: str) -> int:
+    return SOURCE_RANK.get(source, 0)
+
+
+def _richer_source_finding(
+    first: FindingPayload, second: FindingPayload
+) -> FindingPayload:
+    if _source_rank(second.source) > _source_rank(first.source):
+        return second
+    return first
+
+
 def _preferred_finding(
     first: FindingPayload, second: FindingPayload
 ) -> tuple[FindingPayload, FindingPayload]:
@@ -205,9 +215,7 @@ def _preferred_finding(
         return second, first
     if _severity_rank(first.severity) > _severity_rank(second.severity):
         return first, second
-    first_targeted = first.source == "targeted_service_assessment"
-    second_targeted = second.source == "targeted_service_assessment"
-    if second_targeted and not first_targeted:
+    if _source_rank(second.source) > _source_rank(first.source):
         return second, first
     return first, second
 

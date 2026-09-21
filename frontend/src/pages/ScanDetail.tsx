@@ -2,13 +2,12 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Collapsible } from 'radix-ui'
 import { queryKeys } from '@/api/queryKeys'
 import { getScan } from '@/api/scans'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import PageHeader from '@/components/PageHeader'
 import ReadDetailGate from '@/components/ReadDetailGate'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
 import { SEVERITY_ORDER } from '@/lib/severity'
@@ -23,6 +22,7 @@ import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
+import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings from '@/pages/scans/ServiceTargetedFindings'
 import SeverityWord from '@/components/SeverityWord'
 import useI18n from '@/i18n/useI18n'
@@ -32,6 +32,12 @@ type FindingRecord = components['schemas']['FindingRecord']
 type Severity = components['schemas']['Severity']
 
 const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
+
+const TARGETED_SOURCE = 'targeted_service_assessment'
+
+function isTargetedFinding(finding: FindingRecord): boolean {
+  return finding.source === TARGETED_SOURCE
+}
 
 function ScanDetail() {
   const { t } = useI18n()
@@ -90,18 +96,19 @@ function ScanDetail() {
       detail={readDetailState(scanId, query)}
     >
       {(scan) => {
+        const severityFindings = scan.findings.filter(
+          (finding) => !isTargetedFinding(finding),
+        )
         const groups = SEVERITIES.map((severity) => ({
           severity,
-          findings: scan.findings.filter(
+          findings: severityFindings.filter(
             (finding: FindingRecord) => finding.severity === severity,
           ),
         })).filter((group) => group.findings.length > 0)
         const metadata = scan.metadata ?? {}
-        const hasTargetedStage =
-          ['extensive', 'max', 'nspi'].includes(scan.scan_mode) ||
-          scan.findings.some(
-            (finding) => finding.source === 'targeted_service_assessment',
-          )
+        const hasTargetedSection =
+          metadata.targeted_units_planned != null ||
+          scan.findings.some(isTargetedFinding)
         const partial = metadata.partial_result === true
         const completedPartial =
           partial && metadata.terminated_by === 'completed'
@@ -172,174 +179,89 @@ function ScanDetail() {
                         (finding) => finding.finding_id === openFindingId,
                       )
                       return (
-                        <Collapsible.Root
+                        <ScanDetailSection
                           key={group.severity}
+                          title={<SeverityWord severity={group.severity} />}
                           defaultOpen={opensForDeepLink}
-                          asChild
+                          triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
                         >
-                          <Card>
-                            <CardHeader className="p-0">
-                              <Collapsible.Trigger
-                                className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                                aria-label={`Toggle ${group.severity} vulnerabilities`}
-                              >
-                                <h2 className="text-title-sm">
-                                  <SeverityWord severity={group.severity} />
-                                </h2>
-                                <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">
-                                  ›
-                                </span>
-                              </Collapsible.Trigger>
-                            </CardHeader>
-                            <Collapsible.Content forceMount asChild>
-                              <CardContent className="data-[state=closed]:hidden">
-                                <FindingsTable
-                                  findings={group.findings}
-                                  variant="scan"
-                                  testId={`findings-${group.severity}`}
-                                  caption={`${group.severity} vulnerabilities in this scan`}
-                                  openFindingId={openFindingId}
-                                  onOpenFindingChange={setOpenFindingId}
-                                />
-                              </CardContent>
-                            </Collapsible.Content>
-                          </Card>
-                        </Collapsible.Root>
+                          <FindingsTable
+                            findings={group.findings}
+                            variant="scan"
+                            testId={`findings-${group.severity}`}
+                            caption={`${group.severity} vulnerabilities in this scan`}
+                            openFindingId={openFindingId}
+                            onOpenFindingChange={setOpenFindingId}
+                          />
+                        </ScanDetailSection>
                       )
                     })}
                   </div>
                 )}
-                <Collapsible.Root defaultOpen={false} asChild>
-                  <Card>
-                    <CardHeader className="p-0">
-                      <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <h2 className="text-title-sm">Attack surface</h2>
-                        <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">
-                          ›
-                        </span>
-                      </Collapsible.Trigger>
-                    </CardHeader>
-                    <Collapsible.Content forceMount asChild>
-                      <CardContent className="data-[state=closed]:hidden">
-                        {scan.assessment_status === 'unavailable' ? (
-                          <div
-                            data-testid="scan-assessment-unavailable"
-                            className="flex flex-col gap-2 text-body-md"
-                          >
-                            <p>
-                              Unavailable — this scan predates attack-surface
-                              analysis.
-                            </p>
-                            <p className="text-muted-foreground">
-                              Re-run the scan to produce this data.
-                            </p>
-                          </div>
-                        ) : scan.exposures.length === 0 ? (
-                          <p
-                            data-testid="scan-no-exposures"
-                            className="text-body-md"
-                          >
-                            No reachable services were found in this scan.
-                          </p>
-                        ) : (
-                          <ExposureTable
-                            exposures={scan.exposures}
-                            findings={scan.findings}
-                            testId="scan-exposures-table"
-                            openExposureId={openExposureId}
-                            onOpenExposureChange={setOpenExposureId}
-                            onOpenFinding={(id) => {
-                              const finding = scan.findings.find(
-                                (item) => item.finding_id === id,
-                              )
-                              flushSync(() => setOpenFindingId(id))
-                              if (finding) {
-                                document
-                                  .querySelector<HTMLButtonElement>(
-                                    `[data-testid="findings-${finding.severity}-caret-${id}"]`,
-                                  )
-                                  ?.focus()
-                              }
-                            }}
-                          />
-                        )}
-                      </CardContent>
-                    </Collapsible.Content>
-                  </Card>
-                </Collapsible.Root>
-                {hasTargetedStage && (
-                  <Collapsible.Root defaultOpen={false} asChild>
-                    <Card>
-                      <CardHeader className="p-0">
-                        <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                          <h2 className="text-title-sm">
-                            Service Targeted Tools
-                          </h2>
-                          <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">
-                            ›
-                          </span>
-                        </Collapsible.Trigger>
-                      </CardHeader>
-                      <Collapsible.Content forceMount asChild>
-                        <CardContent className="data-[state=closed]:hidden">
-                          <ServiceTargetedFindings
-                            findings={scan.findings}
-                            openFindingId={openFindingId}
-                            onOpenFindingChange={setOpenFindingId}
-                          />
-                        </CardContent>
-                      </Collapsible.Content>
-                    </Card>
-                  </Collapsible.Root>
+                <ScanDetailSection title="Attack surface">
+                  {scan.assessment_status === 'unavailable' ? (
+                    <div
+                      data-testid="scan-assessment-unavailable"
+                      className="flex flex-col gap-2 text-body-md"
+                    >
+                      <p>
+                        Unavailable — this scan predates attack-surface
+                        analysis.
+                      </p>
+                      <p className="text-muted-foreground">
+                        Re-run the scan to produce this data.
+                      </p>
+                    </div>
+                  ) : scan.exposures.length === 0 ? (
+                    <p data-testid="scan-no-exposures" className="text-body-md">
+                      No reachable services were found in this scan.
+                    </p>
+                  ) : (
+                    <ExposureTable
+                      exposures={scan.exposures}
+                      findings={scan.findings}
+                      testId="scan-exposures-table"
+                      openExposureId={openExposureId}
+                      onOpenExposureChange={setOpenExposureId}
+                      onOpenFinding={(id) => {
+                        const finding = scan.findings.find(
+                          (item) => item.finding_id === id,
+                        )
+                        flushSync(() => setOpenFindingId(id))
+                        if (finding) {
+                          document
+                            .querySelector<HTMLButtonElement>(
+                              `[data-testid="findings-${finding.severity}-caret-${id}"]`,
+                            )
+                            ?.focus()
+                        }
+                      }}
+                    />
+                  )}
+                </ScanDetailSection>
+                {hasTargetedSection && (
+                  <ScanDetailSection title="Service Targeted Tools">
+                    <ServiceTargetedFindings
+                      findings={scan.findings}
+                      openFindingId={openFindingId}
+                      onOpenFindingChange={setOpenFindingId}
+                    />
+                  </ScanDetailSection>
                 )}
                 {scan.hosts.some(
                   (host) => host.industrial_services.length > 0,
                 ) && (
-                  <Collapsible.Root defaultOpen={false} asChild>
-                    <Card>
-                      <CardHeader className="p-0">
-                        <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                          <h2 className="text-title-sm">
-                            {t('common.industrialServices')}
-                          </h2>
-                          <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">
-                            ›
-                          </span>
-                        </Collapsible.Trigger>
-                      </CardHeader>
-                      <Collapsible.Content forceMount asChild>
-                        <CardContent className="data-[state=closed]:hidden">
-                          <ScanIndustrialServices hosts={scan.hosts} />
-                        </CardContent>
-                      </Collapsible.Content>
-                    </Card>
-                  </Collapsible.Root>
+                  <ScanDetailSection title={t('common.industrialServices')}>
+                    <ScanIndustrialServices hosts={scan.hosts} />
+                  </ScanDetailSection>
                 )}
-                <Collapsible.Root defaultOpen={false} asChild>
-                  <Card>
-                    <CardHeader className="p-0">
-                      <Collapsible.Trigger className="flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <h2 className="text-title-sm">
-                          {t('common.machinesSeen')}
-                        </h2>
-                        <span aria-hidden="true" className="text-title-sm leading-none text-muted-foreground transition-transform data-[state=open]:rotate-90">
-                          ›
-                        </span>
-                      </Collapsible.Trigger>
-                    </CardHeader>
-                    <Collapsible.Content forceMount asChild>
-                      <CardContent className="data-[state=closed]:hidden">
-                        {scan.hosts.length === 0 ? (
-                          <p className="text-body-md">
-                            No machines were discovered.
-                          </p>
-                        ) : (
-                          <ScanHostsTable hosts={scan.hosts} />
-                        )}
-                      </CardContent>
-                    </Collapsible.Content>
-                  </Card>
-                </Collapsible.Root>
+                <ScanDetailSection title={t('common.machinesSeen')}>
+                  {scan.hosts.length === 0 ? (
+                    <p className="text-body-md">No machines were discovered.</p>
+                  ) : (
+                    <ScanHostsTable hosts={scan.hosts} />
+                  )}
+                </ScanDetailSection>
               </>
             )}
           </>
