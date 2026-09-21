@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Collapsible } from 'radix-ui'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 
@@ -16,11 +16,13 @@ function ScanDetailSection({
   triggerAriaLabel?: string
 }) {
   const [open, setOpen] = useState(defaultOpen || openWhen)
-  if (openWhen && !open) {
+  const wasOpenWhen = useRef(openWhen)
+  if (openWhen && !wasOpenWhen.current && !open) {
     setOpen(true)
   }
+  wasOpenWhen.current = openWhen
   return (
-    <Collapsible.Root open={open} onOpenChange={setOpen} asChild>
+    <Collapsible.Root open={open} onOpenChange={setOpen}>
       <Card>
         <CardHeader className="p-0">
           <Collapsible.Trigger

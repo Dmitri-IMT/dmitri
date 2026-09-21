@@ -257,6 +257,7 @@ function ScanDetail() {
                   <ScanDetailSection
                     title="Service Targeted Tools"
                     openWhen={opensTargetedDeepLink}
+                    triggerAriaLabel="Toggle service-targeted findings"
                   >
                     <ServiceTargetedFindings
                       findings={scan.findings}

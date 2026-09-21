@@ -233,6 +233,7 @@ describe('ScanDetail', () => {
   })
 
   it('opens the targeted section for a ?finding= deep link', async () => {
+    const user = userEvent.setup()
     const web = finding({
       finding_id: '44444444-aaaa-4aaa-8aaa-444444444444',
       severity: 'high',
@@ -253,6 +254,13 @@ describe('ScanDetail', () => {
     expect(
       screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
     ).not.toBeInTheDocument()
+
+    const trigger = screen.getByRole('button', {
+      name: 'Toggle service-targeted findings',
+    })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('does not describe absent targeted findings as clean coverage', async () => {
