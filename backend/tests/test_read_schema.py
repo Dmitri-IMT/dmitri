@@ -31,6 +31,8 @@ def _scan_host_view_payload(**overrides: object) -> dict:
         "hostname": "lab-camera",
         "vendor": "Raspberry Pi Trading Ltd",
         "ports": [],
+        "machine_type": None,
+        "device_profile": None,
     }
     payload.update(overrides)
     return payload
@@ -47,6 +49,7 @@ def _host_summary_payload(**overrides: object) -> dict:
         "last_seen_at": "2026-03-05T14:12:45Z",
         "open_ports_count": 0,
         "machine_type": "camera",
+        "device_profile": None,
         "vulnerability_count": 0,
     }
     payload.update(overrides)
@@ -167,6 +170,9 @@ def test_scan_detail_response_nests_scan_host_view_and_finding_read():
             "scan_mode": "standard",
             "hosts": [_scan_host_view_payload()],
             "findings": [],
+            "assessment_status": "unavailable",
+            "assessment_policy_version": None,
+            "exposures": [],
             "status": "completed",
             "host_count": 1,
             "finding_count": 0,
@@ -264,6 +270,9 @@ def test_host_port_carries_the_two_dates_and_no_state():
             HostDetailResponse,
             {
                 **_host_summary_payload(),
+                "assessment_status": "unavailable",
+                "assessment_policy_version": None,
+                "exposures": [],
                 "ports": [],
                 "scan_history": [],
             },
@@ -303,6 +312,9 @@ def test_host_read_models_accept_optional_nullable_operating_system(
             HostDetailResponse,
             {
                 **_host_summary_payload(),
+                "assessment_status": "unavailable",
+                "assessment_policy_version": None,
+                "exposures": [],
                 "ports": [],
                 "scan_history": [],
             },

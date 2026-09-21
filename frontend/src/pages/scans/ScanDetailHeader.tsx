@@ -28,27 +28,37 @@ function StripEntry({
 
 export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
   const durationCopy = formatScanDuration(scan.duration)
+  const needsReview = scan.exposures.filter(
+    (exposure) => exposure.attention !== 'informational',
+  ).length
+  const attackSurface =
+    scan.assessment_status === 'unavailable'
+      ? 'Unavailable'
+      : `${scan.exposures.length} reachable ${scan.exposures.length === 1 ? 'service' : 'services'} · ${needsReview} ${needsReview === 1 ? 'needs' : 'need'} review`
   return (
-    <div
-      data-testid="scan-summary-strip"
-      className="flex gap-12 border-y border-border py-4"
-    >
-      <StripEntry label="Mode" value={SCAN_MODE_LABEL[scan.scan_mode]} />
-      <StripEntry label="Network" value={scan.subnet} />
-      {!hidesCounts(scan.status) && (
-        <>
-          <StripEntry label="Machines seen" value={String(scan.host_count)} />
-          <StripEntry
-            label="Vulnerabilities"
-            value={String(scan.finding_count)}
-          />
-        </>
-      )}
-      <StripEntry
-        label="Duration"
-        value={durationCopy ?? <EmptyMark />}
-        testId="scan-summary-duration"
-      />
+    <div data-testid="scan-assessment-summary">
+      <div
+        data-testid="scan-summary-strip"
+        className="flex gap-12 border-y border-border py-4"
+      >
+        <StripEntry label="Mode" value={SCAN_MODE_LABEL[scan.scan_mode]} />
+        <StripEntry label="Network" value={scan.subnet} />
+        {!hidesCounts(scan.status) && (
+          <>
+            <StripEntry label="Machines seen" value={String(scan.host_count)} />
+            <StripEntry label="Attack surface" value={attackSurface} />
+            <StripEntry
+              label="Vulnerabilities"
+              value={String(scan.finding_count)}
+            />
+          </>
+        )}
+        <StripEntry
+          label="Duration"
+          value={durationCopy ?? <EmptyMark />}
+          testId="scan-summary-duration"
+        />
+      </div>
     </div>
   )
 }

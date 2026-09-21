@@ -17,6 +17,11 @@ AI_ANALYSIS_STATUSES = ("pending", "processing", "completed", "failed")
 _AI_ANALYSIS_STATUS_CHECK = (
     "status IN (" + ", ".join(f"'{status}'" for status in AI_ANALYSIS_STATUSES) + ")"
 )
+_MACHINE_TYPE_CHECK = (
+    "machine_type IS NULL OR machine_type IN "
+    "('router', 'computer', 'camera', 'storage', 'tv', 'phone', 'printer', "
+    "'sensor', 'unknown')"
+)
 
 
 def utc_now() -> datetime:
@@ -41,6 +46,7 @@ class ScanRecord(SQLModel, table=True):
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    assessment_policy_version: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
@@ -71,7 +77,10 @@ class AIUsageRecord(SQLModel, table=True):
 
 class ScanHostRecord(SQLModel, table=True):
     __tablename__ = "scan_hosts"
-    __table_args__ = (UniqueConstraint("scan_id", "ip"),)
+    __table_args__ = (
+        UniqueConstraint("scan_id", "ip"),
+        CheckConstraint(_MACHINE_TYPE_CHECK, name="ck_scan_hosts_machine_type"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
@@ -81,6 +90,10 @@ class ScanHostRecord(SQLModel, table=True):
     hostname: str
     vendor: str
     operating_system_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
+    machine_type: str | None = None
+    device_profile_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
@@ -102,6 +115,10 @@ class HostRecord(SQLModel, table=True):
     hostname: str
     vendor: str
     machine_type: str | None = None
+    device_profile_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
+    device_profile_policy_version: str | None = None
     operating_system_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON(none_as_null=True))
     )
@@ -159,6 +176,47 @@ class CPERecord(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     port_id: int = Field(index=True, foreign_key="ports.id")
     cpe: str = Field(index=True)
+
+
+class ExposureRecord(SQLModel, table=True):
+    __tablename__ = "exposures"
+    __table_args__ = (
+        UniqueConstraint("exposure_id"),
+        UniqueConstraint("scan_id", "scan_host_id", "port", "protocol"),
+        CheckConstraint(
+            "role IN ('administration', 'data_store', 'file_sharing', "
+            "'remote_access', 'proxy', 'api', 'device_control', 'discovery', "
+            "'media', 'general_service', 'unknown')",
+            name="ck_exposures_role",
+        ),
+        CheckConstraint(
+            "attention IN ('informational', 'review', 'priority')",
+            name="ck_exposures_attention",
+        ),
+        CheckConstraint(
+            "confidence IN ('low', 'medium', 'high')",
+            name="ck_exposures_confidence",
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    exposure_id: UUID = Field(default_factory=uuid4)
+    scan_id: UUID = Field(index=True, foreign_key="scans.scan_id")
+    scan_host_id: int = Field(index=True, foreign_key="scan_hosts.id")
+    port_id: int = Field(index=True, foreign_key="ports.id")
+    ip: str
+    port: int
+    protocol: str
+    observed_service: str
+    observed_version: str | None = None
+    role: str = Field(index=True)
+    attention: str = Field(index=True)
+    confidence: str
+    reason: str
+    evidence_json: list[dict[str, str]] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 
 
 

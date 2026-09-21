@@ -17,8 +17,16 @@ from .industrial import (
     ModbusDeviceIdentificationPayload,
 )
 from .operating_system import OperatingSystemDetection
+from .scan import (
+    AssessmentEvidencePayload,
+    DeviceProfilePayload,
+    ExposureAttention,
+    ExposureConfidence,
+    ExposureRole,
+)
 
 ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
+AssessmentStatus = Literal["available", "unavailable"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[
     "last_seen_at", "hostname", "vendor", "ip", "vulnerability_count"
@@ -103,6 +111,8 @@ class ScanHostView(BaseModel):
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
     ports: list[Port]
+    machine_type: MachineType | None
+    device_profile: DeviceProfilePayload | None
     industrial_services: list[IndustrialServiceView] = Field(
         default_factory=list
     )
@@ -149,6 +159,28 @@ class FindingRead(BaseModel):
     fixed_at: datetime | None = None
 
 
+class ExposureRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exposure_id: UUID
+    scan_id: UUID
+    host_id: UUID
+    ip: IPv4Address
+    port: Annotated[int, Field(ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"]
+    observed_service: constr(min_length=1, max_length=160)
+    observed_version: constr(min_length=1, max_length=160) | None = None
+    role: ExposureRole
+    attention: ExposureAttention
+    confidence: ExposureConfidence
+    reason: constr(min_length=1, max_length=240)
+    evidence: list[AssessmentEvidencePayload] = Field(
+        default_factory=list, max_length=12
+    )
+    related_finding_ids: list[UUID]
+    detected_at: datetime
+
+
 class HostSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -162,6 +194,7 @@ class HostSummary(BaseModel):
     last_seen_at: datetime
     open_ports_count: Annotated[int, Field(ge=0)]
     machine_type: MachineType
+    device_profile: DeviceProfilePayload | None
     vulnerability_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
     unreadable_fields: list[str] = Field(default_factory=list)
@@ -179,6 +212,9 @@ class HostScanHistoryEntry(BaseModel):
 
 
 class HostDetailResponse(HostSummary):
+    assessment_status: AssessmentStatus
+    assessment_policy_version: constr(min_length=1) | None
+    exposures: list[ExposureRead]
     ports: list[HostPort]
     industrial_services: list[IndustrialServiceView] = Field(
         default_factory=list
@@ -195,6 +231,9 @@ class ScanDetailResponse(BaseModel):
     scan_mode: ScanMode
     hosts: list[ScanHostView]
     findings: list[FindingRead]
+    assessment_status: AssessmentStatus
+    assessment_policy_version: constr(min_length=1) | None
+    exposures: list[ExposureRead]
     metadata: dict[str, str | int | float | bool] | None = None
     status: ScanStatus
     command_id: UUID | None = None

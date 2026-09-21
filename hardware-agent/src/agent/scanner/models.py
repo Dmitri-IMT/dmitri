@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.ot.modbus.models import ModbusService
+
+if TYPE_CHECKING:
+    from agent.targeted.models import TargetedUnitResult
 
 
 @dataclass(slots=True)
@@ -39,6 +42,7 @@ class ServiceInfo:
     product: str = ""
     version: str = ""
     extra_info: str = ""
+    tunnel: str | None = None
     cpes: list[str] = field(default_factory=list)
 
     @property
@@ -83,6 +87,7 @@ class HostInfo:
     operating_system: OperatingSystemInfo | None = None
     host_scripts: list[ScriptResult] = field(default_factory=list)
     industrial_services: list[ModbusService] = field(default_factory=list)
+    targeted_results: list[TargetedUnitResult] = field(default_factory=list)
 
     @property
     def open_ports(self) -> list[PortInfo]:

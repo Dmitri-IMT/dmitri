@@ -121,6 +121,11 @@ def parse_ports(host_element: ET.Element) -> list[PortInfo]:
             extra_info=(
                 service_node.get("extrainfo", "") if service_node is not None else ""
             ),
+            tunnel=(
+                _optional_attribute(service_node, "tunnel")
+                if service_node is not None
+                else None
+            ),
             cpes=(
                 [cpe.text for cpe in service_node.findall("cpe") if cpe.text]
                 if service_node is not None

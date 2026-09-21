@@ -9,16 +9,17 @@ from typing import Any
 
 from agent.normalize.contracts import FindingPayload
 from agent.scanner.models import HostInfo, PortInfo, ScriptResult
+from agent.targeted.models import TargetedIssue, TargetedUnitResult
 
 CVE_PATTERN = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://\S+")
 
 
 def extract_findings(hosts: list[HostInfo]) -> list[FindingPayload]:
-    """Convert parsed NSE results into the shared `findings` payload."""
+    """Convert general and targeted evidence into the shared findings payload."""
 
     findings: list[FindingPayload] = []
-    seen: set[tuple[str, int | None, int | None, str, str]] = set()
+    seen: dict[tuple[object, ...], int] = {}
 
     for host in hosts:
         for script in host.host_scripts:
@@ -32,6 +33,23 @@ def extract_findings(hosts: list[HostInfo]) -> list[FindingPayload]:
 
         for finding in _extract_modbus_read_findings(host):
             _append_unique(findings, seen, finding)
+
+        for result in host.targeted_results:
+            port = next(
+                (
+                    candidate
+                    for candidate in host.ports
+                    if candidate.port == result.unit.port
+                    and candidate.protocol == result.unit.protocol
+                ),
+                None,
+            )
+            for issue in result.issues:
+                _append_unique(
+                    findings,
+                    seen,
+                    _targeted_finding(host, port, result, issue),
+                )
 
     return findings
 
@@ -87,20 +105,156 @@ def _function_code(address_space: str) -> int:
 
 def _append_unique(
     findings: list[FindingPayload],
-    seen: set[tuple[str, int | None, int | None, str, str]],
+    seen: dict[tuple[object, ...], int],
     finding: FindingPayload,
 ) -> None:
-    key = (
+    key = finding_dedupe_key(finding)
+    existing_index = seen.get(key)
+    if existing_index is None:
+        seen[key] = len(findings)
+        findings.append(finding)
+        return
+    existing = findings[existing_index]
+    preferred, other = _preferred_finding(existing, finding)
+    richer = _richer_source_finding(existing, finding)
+    content = {
+        "references": sorted(set(existing.references + finding.references)),
+        "evidence": _merge_evidence(
+            preferred.evidence,
+            other.evidence,
+            preferred.source,
+            other.source,
+        ),
+    }
+    for field in _MERGE_FIELDS_FROM_HIGHER_RANK:
+        content[field] = getattr(richer, field)
+    if preferred is existing:
+        merged = existing.model_copy(update=content)
+    else:
+        merged = preferred.model_copy(update=content)
+    findings[existing_index] = merged
+
+
+def finding_dedupe_key(finding: FindingPayload) -> tuple[object, ...]:
+    """Return the source-independent identity used for finding reconciliation."""
+
+    identity = finding.cve_id.upper() if finding.cve_id else _finding_identity(finding)
+    return (
         str(finding.ip) if finding.ip is not None else "global",
         finding.port,
         finding.unit_id,
-        finding.source_script or "unknown-script",
-        finding.cve_id or finding.title,
+        finding.protocol,
+        identity,
     )
-    if key in seen:
-        return
-    seen.add(key)
-    findings.append(finding)
+
+
+def _finding_identity(finding: FindingPayload) -> str:
+    if finding.issue_key:
+        return finding.issue_key
+    text = f"{finding.title} {finding.source_script or ''}".casefold()
+    if "ftp" in text and "anonymous" in text:
+        return "ftp:anonymous-login"
+    if "ftp" in text and "cleartext" in text:
+        return "ftp:cleartext"
+    if "telnet" in text or ("cleartext" in text and "remote" in text):
+        return "telnet:cleartext"
+    if "smb" in text and "anonymous" in text:
+        return "smb:anonymous-session"
+    if "smb" in text and "signing" in text:
+        return "smb:signing"
+    if "smbv1" in text or "smb v1" in text:
+        return "smb:protocol:smbv1"
+    if "tls" in text or "ssl" in text:
+        if "expired" in text:
+            return "tls.certificate:expired"
+        if "self-signed" in text:
+            return "tls.certificate:self-signed"
+        if "signature" in text:
+            return "tls.certificate:weak-signature"
+        if "public key" in text:
+            return "tls.certificate:weak-key"
+        for protocol in ("sslv3", "tlsv1.0", "tls1.0", "tlsv1.1", "tls1.1"):
+            if protocol in text:
+                return f"tls.protocol:{protocol}"
+        if "cipher" in text:
+            evidence = finding.evidence.casefold()
+            for primitive in ("rc4", "3des", "des", "null", "export"):
+                if primitive in evidence:
+                    return f"tls.cipher:{primitive}"
+            return f"title:{finding.title.casefold().strip()}:{evidence}"
+    return f"title:{finding.title.casefold().strip()}"
+
+
+def _severity_rank(value: str) -> int:
+    return {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(value, 0)
+
+
+SOURCE_RANK: dict[str, int] = {
+    "targeted_service_assessment": 1,
+}
+
+_MERGE_FIELDS_FROM_HIGHER_RANK = ("description", "recommendation")
+
+
+def _source_rank(source: str) -> int:
+    return SOURCE_RANK.get(source, 0)
+
+
+def _richer_source_finding(
+    first: FindingPayload, second: FindingPayload
+) -> FindingPayload:
+    if _source_rank(second.source) > _source_rank(first.source):
+        return second
+    return first
+
+
+def _preferred_finding(
+    first: FindingPayload, second: FindingPayload
+) -> tuple[FindingPayload, FindingPayload]:
+    if _severity_rank(second.severity) > _severity_rank(first.severity):
+        return second, first
+    if _severity_rank(first.severity) > _severity_rank(second.severity):
+        return first, second
+    if _source_rank(second.source) > _source_rank(first.source):
+        return second, first
+    return first, second
+
+
+def _merge_evidence(
+    preferred: str,
+    other: str,
+    preferred_source: str | None,
+    other_source: str | None,
+) -> str:
+    if not other or other == preferred:
+        return preferred
+    label = f"corroborated by {other_source or preferred_source or 'another source'}"
+    if label.casefold() in preferred.casefold():
+        return preferred
+    return f"{preferred}; {label}"
+
+
+def _targeted_finding(
+    host: HostInfo,
+    port: PortInfo | None,
+    result: TargetedUnitResult,
+    issue: TargetedIssue,
+) -> FindingPayload:
+    return _base_finding(
+        host,
+        port,
+        severity=issue.severity,
+        title=issue.title,
+        description=issue.description,
+        recommendation=issue.recommendation,
+        evidence=issue.evidence,
+        source="targeted_service_assessment",
+        source_script=result.unit.tool.value,
+        issue_key=issue.issue_key,
+        cve_id=issue.cve_id,
+        cvss_score=issue.cvss_score,
+        references=issue.references,
+    )
 
 
 def _extract_script_findings(
@@ -641,6 +795,7 @@ def _base_finding(
     cvss_score: float | None = None,
     references: list[str] | None = None,
     unit_id: int | None = None,
+    issue_key: str | None = None,
 ) -> FindingPayload:
     protocol = (
         port.protocol if port is not None and port.protocol in {"tcp", "udp"} else None
@@ -654,6 +809,7 @@ def _base_finding(
         service=service_name,
         source=source,
         source_script=source_script,
+        issue_key=issue_key,
         cve_id=cve_id,
         cvss_score=cvss_score,
         severity=severity,  # type: ignore[arg-type]

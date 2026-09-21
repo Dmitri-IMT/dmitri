@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 
 from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
 from agent.scanner.models import PortInfo, PortScanResult
@@ -38,8 +39,16 @@ def merge_ports(
             continue
 
         current.state = new_port.state or current.state
-        if new_port.service.name or new_port.service.banner or new_port.service.cpes:
-            current.service = new_port.service
+        if (
+            new_port.service.name
+            or new_port.service.banner
+            or new_port.service.tunnel
+            or new_port.service.cpes
+        ):
+            current.service = replace(
+                new_port.service,
+                tunnel=new_port.service.tunnel or current.service.tunnel,
+            )
         if new_port.scripts:
             current.scripts = new_port.scripts
 

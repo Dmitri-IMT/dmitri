@@ -9,10 +9,16 @@ from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
     FatalScanError,
+    ScanCancelled,
 )
-from agent.scanner.models import HostInfo
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.runner import ScanRunner
+from agent.targeted.models import (
+    TargetedIssue,
+    TargetedOutcome,
+    TargetedUnitResult,
+)
 
 
 class _FakeReporter:
@@ -43,6 +49,8 @@ def _build_runner(
     hosts: list[HostInfo],
     port_stage=None,
     deep_stage=None,
+    scan_mode: str = "standard",
+    targeted_stage=None,
 ) -> tuple[ScanRunner, list[ScanPayload], list[Exception], _FakeReporter]:
     monkeypatch.setattr("agent.scanner.runner.check_network_connectivity", lambda: None)
     monkeypatch.setattr(
@@ -53,12 +61,16 @@ def _build_runner(
         monkeypatch.setattr(stages, "run_port_stage", port_stage)
     if deep_stage is not None:
         monkeypatch.setattr(stages, "run_deep_inspection_stage", deep_stage)
+    if targeted_stage is not None:
+        monkeypatch.setattr(
+            "agent.scanner.runner.run_targeted_stage", targeted_stage
+        )
     completed: list[ScanPayload] = []
     errors: list[Exception] = []
     reporter = _FakeReporter()
     runner = ScanRunner(
         subnet="192.168.1.0/24",
-        scan_mode="standard",
+        scan_mode=scan_mode,  # type: ignore[arg-type]
         reporter=reporter,
         on_complete=completed.append,
         on_error=errors.append,
@@ -231,6 +243,121 @@ class TestZeroHosts:
         runner._run()
 
         assert completed[0].hosts == []
+
+
+class TestTargetedInterruption:
+    @pytest.mark.parametrize(
+        ("exception", "terminated_by"),
+        [
+            (BudgetExceeded(), "timeout"),
+            (FatalScanError("targeted failed"), "error"),
+        ],
+    )
+    def test_targeted_interruptions_retain_partial_stage_metadata(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        exception: Exception,
+        terminated_by: str,
+    ) -> None:
+        def targeted_stage(*args, **kwargs):
+            raise exception
+
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch,
+            hosts=_one_host(),
+            port_stage=lambda *args, **kwargs: 0,
+            deep_stage=lambda *args, **kwargs: 0,
+            scan_mode="extensive",
+            targeted_stage=targeted_stage,
+        )
+
+        runner._run()
+
+        assert errors == []
+        assert len(completed) == 1
+        metadata = completed[0].metadata
+        assert metadata["partial_result"] is True
+        assert metadata["interrupted_stage"] == "targeted_assessment"
+        assert metadata["terminated_by"] == terminated_by
+
+    def test_targeted_cancellation_retains_hosts_and_previous_findings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        host = _one_host()[0]
+        host.ports = []
+        from agent.scanner.models import ScriptResult
+
+        host.host_scripts = [
+            ScriptResult(
+                "banner",
+                "CVE-2024-1234 is present",
+            )
+        ]
+
+        def targeted_stage(*args, **kwargs):
+            raise ScanCancelled()
+
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch,
+            hosts=[host],
+            port_stage=lambda *args, **kwargs: 0,
+            deep_stage=lambda *args, **kwargs: 0,
+            scan_mode="extensive",
+            targeted_stage=targeted_stage,
+        )
+
+        runner._run()
+
+        assert errors == []
+        assert len(completed) == 1
+        payload = completed[0]
+        assert [str(device.ip) for device in payload.hosts] == [host.ip]
+        assert len(payload.findings) == 1
+        assert payload.metadata["interrupted_stage"] == "targeted_assessment"
+        assert payload.metadata["terminated_by"] == "user_cancel"
+
+    def test_cancellation_after_completed_targeted_unit_retains_targeted_finding(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        host = _one_host()[0]
+        host.ports = [
+            PortInfo(port=443, service=ServiceInfo(name="https")),
+        ]
+        issue = TargetedIssue(
+            issue_key="tls:weak-cipher:rc4",
+            title="RC4 cipher accepted",
+            description="The endpoint accepts RC4.",
+            severity="high",
+            recommendation="Disable RC4.",
+            evidence="RC4",
+        )
+
+        def adapter(unit, _executor, **kwargs):
+            kwargs["cancel_event"].set()
+            return TargetedUnitResult(
+                unit,
+                TargetedOutcome.COMPLETED,
+                issues=[issue],
+            )
+
+        monkeypatch.setattr("agent.targeted.stage._adapter_for", lambda tool: adapter)
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch,
+            hosts=[host],
+            port_stage=lambda *args, **kwargs: 0,
+            deep_stage=lambda *args, **kwargs: 0,
+            scan_mode="extensive",
+        )
+
+        runner._run()
+
+        assert errors == []
+        assert len(completed) == 1
+        payload = completed[0]
+        assert payload.metadata["interrupted_stage"] == "targeted_assessment"
+        assert payload.metadata["terminated_by"] == "user_cancel"
+        assert len(payload.findings) == 1
+        assert payload.findings[0].source == "targeted_service_assessment"
 
 
 class TestCompletedWithSkippedHosts:

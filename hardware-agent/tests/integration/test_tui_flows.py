@@ -10,6 +10,8 @@ from uuid import uuid4
 
 import pytest
 from agent.normalize.contracts import (
+    DeviceProfilePayload,
+    ExposurePayload,
     FindingPayload,
     HostPayload,
     OperatingSystemDetection,
@@ -18,17 +20,13 @@ from agent.normalize.contracts import (
 )
 from agent.paths import DmitriConfig, save_config
 from agent.tui.app import DmitriApp
+from agent.tui.screens.device_detail import DeviceDetailScreen
 from agent.tui.screens.home import HomeScreen
 from agent.tui.screens.past_scans import PastScansScreen
 from agent.tui.screens.scan_view import ScanViewScreen
 from agent.tui.screens.settings import SettingsScreen
 from agent.tui.screens.setup import SetupScreen
-from textual.widgets import Static
-
-EXPECTED_OS_BLOCK = (
-    "Operating system:\n"
-    "    Detected: Linux 5.10 - 5.15 (98% confidence)"
-)
+from textual.widgets import OptionList, Static
 
 
 def _make_config(tmp_path: Path) -> tuple[Path, Path]:
@@ -58,6 +56,12 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
                     name="Linux 5.10 - 5.15",
                     accuracy=98,
                 ),
+                machine_type="router",
+                device_profile=DeviceProfilePayload(
+                    manufacturer="Netgear",
+                    confidence="medium",
+                    limitations=["Exact product model unavailable."],
+                ),
                 ports=[
                     PortPayload(
                         port=22,
@@ -84,8 +88,60 @@ def _make_payload(subnet: str = "192.168.1.0/24") -> ScanPayload:
                 evidence="diffie-hellman-group1-sha1",
             ),
         ],
+        assessment_policy_version="2026-09-15.1",
+        exposures=[
+            ExposurePayload(
+                ip="192.168.1.1",
+                port=22,
+                protocol="tcp",
+                observed_service="ssh",
+                observed_version="OpenSSH 8.9",
+                role="remote_access",
+                attention="review",
+                confidence="high",
+                reason="A remote-access service is reachable.",
+            )
+        ],
         metadata={"hosts_discovered": 1, "findings_count": 1},
     )
+
+
+def _make_multi_host_payload() -> ScanPayload:
+    payload = _make_payload()
+    payload.hosts.append(
+        HostPayload(
+            ip="192.168.1.2",
+            hostname="camera.local",
+            vendor="Acme",
+            machine_type="camera",
+            device_profile=DeviceProfilePayload(
+                manufacturer="Acme",
+                product_family="Camera family",
+                confidence="high",
+            ),
+            ports=[
+                PortPayload(
+                    port=80,
+                    protocol="tcp",
+                    state="open",
+                    service="http",
+                )
+            ],
+        )
+    )
+    payload.exposures.append(
+        ExposurePayload(
+            ip="192.168.1.2",
+            port=80,
+            protocol="tcp",
+            observed_service="http",
+            role="administration",
+            attention="priority",
+            confidence="high",
+            reason="An administrative interface is reachable without TLS.",
+        )
+    )
+    return payload
 
 
 @pytest.mark.asyncio
@@ -144,11 +200,11 @@ async def test_past_scans_empty_state(tmp_path):
 
 @pytest.mark.asyncio
 async def test_past_scans_with_files(tmp_path):
-    """S6 lists scan files from results/ subdirectory."""
+    """A saved scan opens summary, detail, and returns with selection intact."""
     config_path, workspace_dir = _make_config(tmp_path)
     config = DmitriConfig(results_dir=str(workspace_dir))
 
-    payload = _make_payload()
+    payload = _make_multi_host_payload()
     scan_file = workspace_dir / "results" / "2026-05-03T14-30-00_192-168-1-0_24.json"
     scan_file.write_text(
         json.dumps(payload.model_dump(mode="json"), indent=2),
@@ -173,19 +229,44 @@ async def test_past_scans_with_files(tmp_path):
             await pilot.press("enter")
             await pilot.pause()
             assert isinstance(pilot.app.screen, ScanViewScreen)
-            content = pilot.app.screen.query_one("#scan-view-content", Static)
-            assert EXPECTED_OS_BLOCK in str(content.render())
+            summary = pilot.app.screen
+            assert summary.query_one("#scan-view-container") is not None
+            devices = summary.query_one("#scan-device-list", OptionList)
+            assert devices.highlighted == 0
+            await pilot.press("down")
+            assert devices.highlighted == 1
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(pilot.app.screen, DeviceDetailScreen)
+            detail = pilot.app.screen
+            assert str(detail._host.ip) == "192.168.1.2"
+            await pilot.press("escape")
+            await pilot.pause()
+            assert pilot.app.screen is summary
+            assert devices.highlighted == 1
+            await pilot.press("escape")
+            await pilot.pause()
+            assert isinstance(pilot.app.screen, PastScansScreen)
+            assert (
+                pilot.app.screen.query_one("#past-scans-list", OptionList).highlighted
+                == 0
+            )
 
 
 @pytest.mark.asyncio
 async def test_completed_scan_payload_shows_operating_system(tmp_path):
-    """A freshly completed payload reaches the same scan result renderer."""
+    """A fresh result uses the same summary/detail/back flow without HTTP."""
     config_path, results_dir = _make_config(tmp_path)
     config = DmitriConfig(results_dir=str(results_dir))
-    payload = _make_payload()
+    payload = _make_multi_host_payload()
+
+    def unexpected_http(*args, **kwargs):
+        raise AssertionError("the local TUI must not make an HTTP request")
+
     with (
         patch("agent.tui.app.load_config", return_value=config),
         patch("agent.tui.screens.home.load_config", return_value=config),
+        patch("httpx.Client.request", side_effect=unexpected_http) as request,
     ):
         async with DmitriApp().run_test() as pilot:
             await pilot.pause()
@@ -194,8 +275,98 @@ async def test_completed_scan_payload_shows_operating_system(tmp_path):
             home._on_scan_complete((payload, True))
             await pilot.pause()
             assert isinstance(pilot.app.screen, ScanViewScreen)
-            content = pilot.app.screen.query_one("#scan-view-content", Static)
-            assert EXPECTED_OS_BLOCK in str(content.render())
+            summary = pilot.app.screen
+            assert summary.query_one("#scan-result-header") is not None
+            assert summary.query_one("#scan-category-summary") is not None
+            devices = summary.query_one("#scan-device-list", OptionList)
+            assert devices.highlighted == 0
+            await pilot.press("j")
+            assert devices.highlighted == 1
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(pilot.app.screen, DeviceDetailScreen)
+            detail = pilot.app.screen
+            assert str(detail._host.ip) == "192.168.1.2"
+            for widget_id in (
+                "#device-detail-header",
+                "#device-profile",
+                "#device-inventory",
+                "#device-exposures",
+                "#device-findings",
+            ):
+                assert detail.query_one(widget_id) is not None
+            await pilot.press("escape")
+            await pilot.pause()
+            assert pilot.app.screen is summary
+            assert devices.highlighted == 1
+            await pilot.press("escape")
+            await pilot.pause()
+            assert pilot.app.screen is home
+            request.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_home_summary_counts_duplicate_raw_ports_once(tmp_path):
+    """Fresh-scan summary uses canonical endpoint identity for its open count."""
+    config = DmitriConfig(results_dir=str(tmp_path))
+    payload = _make_payload()
+    payload.hosts[0].ports.append(payload.hosts[0].ports[0].model_copy(deep=True))
+
+    with (
+        patch("agent.tui.app.load_config", return_value=config),
+        patch("agent.tui.screens.home.load_config", return_value=config),
+        patch("agent.tui.screens.home.write_scan_result", return_value=None),
+    ):
+        async with DmitriApp().run_test() as pilot:
+            await pilot.pause()
+            home = pilot.app.screen
+            assert isinstance(home, HomeScreen)
+            home._on_scan_complete((payload, False))
+            await pilot.pause()
+
+            summary = str(home.query_one("#summary-band", Static).render())
+            assert "Ports open: 1" in summary
+
+
+@pytest.mark.asyncio
+async def test_home_summary_counts_endpoint_identity_across_hosts_protocols_and_states(
+    tmp_path,
+):
+    config = DmitriConfig(results_dir=str(tmp_path))
+    payload = _make_payload()
+    first = payload.hosts[0]
+    first.ports.extend(
+        [
+            first.ports[0].model_copy(deep=True),
+            PortPayload(port=443, protocol="tcp", state="closed", service="https"),
+        ]
+    )
+    second = HostPayload(
+        ip="192.168.1.2",
+        hostname="second.local",
+        vendor="Unknown",
+        ports=[
+            PortPayload(port=22, protocol="tcp", state="open", service="ssh"),
+            PortPayload(port=22, protocol="udp", state="open", service="unknown"),
+            PortPayload(port=53, protocol="udp", state="filtered", service="domain"),
+        ],
+    )
+    payload.hosts.extend([second, second.model_copy(deep=True)])
+
+    with (
+        patch("agent.tui.app.load_config", return_value=config),
+        patch("agent.tui.screens.home.load_config", return_value=config),
+        patch("agent.tui.screens.home.write_scan_result", return_value=None),
+    ):
+        async with DmitriApp().run_test() as pilot:
+            await pilot.pause()
+            home = pilot.app.screen
+            assert isinstance(home, HomeScreen)
+            home._on_scan_complete((payload, False))
+            await pilot.pause()
+
+            summary = str(home.query_one("#summary-band", Static).render())
+            assert "Ports open: 3" in summary
 
 
 @pytest.mark.asyncio

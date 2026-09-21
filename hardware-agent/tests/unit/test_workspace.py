@@ -802,6 +802,52 @@ def test_written_json_is_valid(tmp_path):
     assert isinstance(data["findings"], list)
 
 
+def test_legacy_workspace_json_marks_assessment_unavailable(tmp_path: Path) -> None:
+    legacy = _make_payload().model_dump(
+        mode="json", exclude={"assessment_policy_version", "exposures"}
+    )
+    loaded = ScanPayload.model_validate(legacy)
+
+    assert loaded.assessment_policy_version is None
+    assert loaded.exposures == []
+
+
+def test_current_assessment_round_trips_without_information_loss(
+    tmp_path: Path,
+) -> None:
+    from agent.assessment.analyzer import assess_hosts
+    from agent.assessment.policy import LOCAL_ASSESSMENT_POLICY_VERSION
+    from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+    from agent.scanner.stages import build_host_payload
+
+    host = HostInfo(
+        ip="192.168.1.10",
+        hostname="camera.local",
+        ports=[PortInfo(port=80, service=ServiceInfo(name="http"))],
+    )
+    assessment = assess_hosts([host])
+    payload = _make_payload().model_copy(
+        update={
+            "hosts": [
+                build_host_payload(
+                    host,
+                    machine_type=assessment.machine_types[host.ip],
+                    device_profile=assessment.device_profiles[host.ip],
+                )
+            ],
+            "assessment_policy_version": LOCAL_ASSESSMENT_POLICY_VERSION,
+            "exposures": assessment.exposures,
+        }
+    )
+    validated = ScanPayload.model_validate(payload.model_dump(mode="json"))
+    path = write_scan_result(validated, str(tmp_path))
+    loaded = ScanPayload.model_validate_json(path.read_text(encoding="utf-8"))
+
+    assert loaded == validated
+    assert loaded.hosts[0].device_profile == assessment.device_profiles[host.ip]
+    assert loaded.exposures == assessment.exposures
+
+
 def test_operating_system_round_trips_through_workspace_json(tmp_path: Path) -> None:
     payload = _make_payload().model_copy(
         update={

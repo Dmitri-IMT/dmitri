@@ -16,6 +16,9 @@ ScanEventKind = Literal[
     "modbus_host_inspected",
     "ot_stage_deadline",
     "ot_stage_done",
+    "targeted_stage_started",
+    "targeted_unit_done",
+    "targeted_stage_done",
     "unit_timed_out",
     "unit_failed",
     "normalize_started",
@@ -36,6 +39,11 @@ class ScanEvent:
     ip: str | None = None
     units_skipped: int = 0
     units_total: int = 0
+    units_done: int = 0
+    units_completed: int = 0
+    units_failed: int = 0
+    units_timed_out: int = 0
+    outcome: str = ""
     deadline_seconds: int = 0
 
 
@@ -49,15 +57,16 @@ class StageWeights:
     port_scan: int
     deep_inspection: int
     ot_inspection: int
+    targeted_assessment: int
     normalize: int
 
 
 STAGE_WEIGHTS: dict[str, StageWeights] = {
-    "quick": StageWeights(15, 50, 30, 0, 5),
-    "standard": StageWeights(10, 50, 35, 0, 5),
-    "extensive": StageWeights(5, 55, 35, 0, 5),
-    "nspi": StageWeights(10, 40, 35, 10, 5),
-    "max": StageWeights(5, 55, 35, 0, 5),
+    "quick": StageWeights(15, 50, 30, 0, 0, 5),
+    "standard": StageWeights(10, 50, 35, 0, 0, 5),
+    "extensive": StageWeights(5, 50, 30, 0, 10, 5),
+    "nspi": StageWeights(10, 35, 30, 10, 10, 5),
+    "max": StageWeights(5, 50, 30, 0, 10, 5),
 }
 
 
@@ -66,6 +75,7 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
     p = float(weights.port_scan)
     i = float(weights.deep_inspection)
     o = float(weights.ot_inspection)
+    t = float(weights.targeted_assessment)
 
     kind = event.kind
     if kind == "discovery_started":
@@ -87,8 +97,17 @@ def target_pct(event: ScanEvent, weights: StageWeights) -> float | None:
     if kind == "modbus_host_inspected":
         fraction = event.hosts_done / event.hosts_total if event.hosts_total else 0.0
         return d + p + i + o * fraction
-    if kind in ("normalize_started", "ot_stage_done"):
+    if kind == "ot_stage_done":
         return d + p + i + o
+    if kind == "normalize_started":
+        return d + p + i + o + t
+    if kind == "targeted_stage_started":
+        return d + p + i + o
+    if kind == "targeted_unit_done":
+        fraction = event.units_done / event.units_total if event.units_total else 0.0
+        return d + p + i + o + t * fraction
+    if kind == "targeted_stage_done":
+        return d + p + i + o + t
     if kind == "completed":
         return 100.0
     return None

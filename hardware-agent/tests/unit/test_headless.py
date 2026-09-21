@@ -13,6 +13,7 @@ from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.runner import ScanRunner
 from agent.scanner.workspace import write_scan_result
+from agent.targeted.models import TargetedStageSummary
 
 MODE = "standard"
 SUBNET = "192.168.1.0/24"
@@ -224,6 +225,44 @@ class TestOnePipeline:
     def test_headless_imports_shared_runner_and_writer(self) -> None:
         assert headless.ScanRunner is ScanRunner
         assert headless.write_scan_result is write_scan_result
+
+    @pytest.mark.parametrize("mode", ["extensive", "max", "nspi"])
+    def test_headless_eligible_modes_use_targeted_stage_and_keep_gap_partial(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path, mode: str
+    ) -> None:
+        _patch_discovery(monkeypatch, _one_host())
+        monkeypatch.setattr(stages, "run_port_stage", lambda *args, **kwargs: 0)
+        monkeypatch.setattr(
+            stages, "run_deep_inspection_stage", lambda *args, **kwargs: 0
+        )
+        if mode == "nspi":
+            monkeypatch.setattr(
+                stages,
+                "run_ot_inspection_stage",
+                lambda *args, **kwargs: stages.OtInspectionResult(),
+            )
+        calls: list[str] = []
+
+        def targeted_stage(hosts, *, scan_mode, **kwargs):
+            calls.append(scan_mode)
+            return TargetedStageSummary(eligible=1, planned=1, failed=1)
+
+        monkeypatch.setattr(
+            "agent.scanner.runner.run_targeted_stage", targeted_stage
+        )
+
+        result = headless.run_headless_scan(
+            mode, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
+        )
+
+        assert calls == [mode]
+        assert result.outcome == "partial"
+        assert result.payload is not None
+        assert result.payload.metadata["partial_result"] is True
+        assert result.payload.metadata["terminated_by"] == "completed"
+        assert "interrupted_stage" not in result.payload.metadata
+        assert result.payload.metadata["targeted_units_failed"] == 1
+        assert headless.EXIT_CODES[result.outcome] == 10
 
 
 class TestInputValidation:

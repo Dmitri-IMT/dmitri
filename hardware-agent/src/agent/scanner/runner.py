@@ -10,7 +10,10 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
+from agent.assessment import assess_hosts
+from agent.assessment.policy import LOCAL_ASSESSMENT_POLICY_VERSION
 from agent.config import (
+    TARGETED_MODES,
     AgentSettings,
     NspiSubmode,
     min_cvss_for_mode,
@@ -32,6 +35,9 @@ from agent.scanner.errors import (
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.scanner.stages import OtInspectionResult
+from agent.targeted.executor import TargetedExecutor
+from agent.targeted.models import TargetedStageSummary
+from agent.targeted.stage import run_targeted_stage
 from agent.utils.network import LocalNetworkInfo, check_network_connectivity
 
 
@@ -65,6 +71,7 @@ class ScanRunner:
         self._runner_lock = threading.Lock()
         self._active_runner: NmapRunner | None = None
         self._modbus_controller = ModbusClientController()
+        self._targeted_executor = TargetedExecutor()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -79,6 +86,7 @@ class ScanRunner:
             runner = self._active_runner
         if runner is not None:
             runner.terminate_active()
+        self._targeted_executor.terminate_active()
         self._modbus_controller.cancel()
 
     @property
@@ -110,10 +118,19 @@ class ScanRunner:
         interrupted_stage: str | None,
         terminated_by: str,
         ot_inspection: OtInspectionResult | None = None,
+        targeted_summary: TargetedStageSummary | None = None,
     ) -> ScanPayload:
         findings = extract_findings(hosts)
+        assessment = assess_hosts(hosts)
         elapsed_seconds = round(perf_counter() - started_counter, 2)
-        hosts_payload = [stages.build_host_payload(h) for h in hosts]
+        hosts_payload = [
+            stages.build_host_payload(
+                host,
+                machine_type=assessment.machine_types[host.ip],
+                device_profile=assessment.device_profiles[host.ip],
+            )
+            for host in hosts
+        ]
         return ScanPayload(
             scan_id=scan_id,
             timestamp=datetime.now(timezone.utc),
@@ -121,6 +138,8 @@ class ScanRunner:
             scan_mode=self.scan_mode,
             hosts=hosts_payload,
             findings=findings,
+            assessment_policy_version=LOCAL_ASSESSMENT_POLICY_VERSION,
+            exposures=assessment.exposures,
             metadata=stages.build_metadata(
                 runner=runner,
                 settings=settings,
@@ -133,6 +152,7 @@ class ScanRunner:
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary,
             ),
         )
 
@@ -149,6 +169,7 @@ class ScanRunner:
         terminated_by: str,
         message: str,
         ot_inspection: OtInspectionResult | None = None,
+        targeted_summary: TargetedStageSummary | None = None,
     ) -> None:
         if (
             runner is None
@@ -170,6 +191,7 @@ class ScanRunner:
                 interrupted_stage=interrupted_stage,
                 terminated_by=terminated_by,
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary,
             )
         except Exception as exc:
             self._emit(ScanEvent(kind="failed", message=message))
@@ -193,6 +215,7 @@ class ScanRunner:
         port_units_skipped = 0
         deep_units_skipped = 0
         ot_inspection = OtInspectionResult()
+        targeted_summary: TargetedStageSummary | None = None
         try:
             check_network_connectivity()
             settings = AgentSettings(
@@ -296,12 +319,38 @@ class ScanRunner:
                     self._check_cancel()
                     self._check_deadline(deadline)
 
+            if self.scan_mode in TARGETED_MODES:
+                interrupted_stage = "targeted_assessment"
+                stages.set_runner_stage(runner, "targeted")
+                targeted_summary = run_targeted_stage(
+                    hosts,
+                    scan_mode=self.scan_mode,
+                    reporter=self._reporter,
+                    cancel_event=self._cancel_event,
+                    executor=self._targeted_executor,
+                    overall_deadline=deadline,
+                    scan_id=str(scan_id),
+                )
+                self._check_cancel()
+                self._check_deadline(deadline)
+
             interrupted_stage = "normalize"
             self._emit(
                 ScanEvent(kind="normalize_started", message="Generating results…")
             )
             self._check_cancel()
-            partial_result = port_units_skipped > 0 or deep_units_skipped > 0
+            targeted_gaps = bool(
+                targeted_summary
+                and (
+                    targeted_summary.omitted
+                    or targeted_summary.failed
+                    or targeted_summary.timed_out
+                    or targeted_summary.skipped
+                )
+            )
+            partial_result = (
+                port_units_skipped > 0 or deep_units_skipped > 0 or targeted_gaps
+            )
             payload = self._build_payload(
                 scan_id=scan_id,
                 settings=settings,
@@ -313,6 +362,7 @@ class ScanRunner:
                 interrupted_stage=None,
                 terminated_by="completed",
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary,
             )
 
             self._check_cancel()
@@ -335,6 +385,7 @@ class ScanRunner:
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
                     ot_inspection=ot_inspection,
+                    targeted_summary=targeted_summary,
                     terminated_by="error",
                     message=f"Scan failed: {exc}",
                 )
@@ -349,6 +400,7 @@ class ScanRunner:
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
                     ot_inspection=ot_inspection,
+                    targeted_summary=targeted_summary,
                     terminated_by="error",
                     message="Scan stopped early",
                 )
@@ -362,6 +414,7 @@ class ScanRunner:
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
                     ot_inspection=ot_inspection,
+                    targeted_summary=targeted_summary,
                     terminated_by="timeout",
                     message="Scan timed out",
                 )
@@ -375,6 +428,7 @@ class ScanRunner:
                 hosts=hosts,
                 interrupted_stage=interrupted_stage,
                 ot_inspection=ot_inspection,
+                targeted_summary=targeted_summary,
                 terminated_by="user_cancel",
                 message="Scan aborted",
             )
@@ -389,6 +443,7 @@ class ScanRunner:
                     hosts=hosts,
                     interrupted_stage=interrupted_stage,
                     ot_inspection=ot_inspection,
+                    targeted_summary=targeted_summary,
                     terminated_by="error",
                     message=f"Scan failed: {exc}",
                 )

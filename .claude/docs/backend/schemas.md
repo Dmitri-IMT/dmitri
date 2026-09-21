@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-19T21:00:00Z
+timestamp: 2026-09-20T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -28,9 +28,10 @@ the ingest input plus the main persisted projections.
 | `SubnetCIDR` | Constrained str, CIDR regex `d.d.d.d/n`. | `backend/src/api/schemas/scan.py:10` |
 | `ScanMode` | `Literal["quick", "standard", "extensive", "nspi", "max"]`. Defined in `core/scan_mode.py` (so `core/config.py` does not import schemas); `scan.py` and `read.py` re-export it. | `backend/src/api/core/scan_mode.py:5` |
 | `PortPayload` | `port` (1–65535), `protocol` tcp/udp, `state`, `service`, `version`, `cpes`. | `backend/src/api/schemas/scan.py:19` |
-| `HostPayload` | `ip`, MAC, `hostname`, `vendor`, `ports`, `industrial_services`. | `backend/src/api/schemas/scan.py` |
+| `AssessmentEvidencePayload` / `ExposurePayload` / `DeviceProfilePayload` | Strict bounded assessment shapes mirrored from the shared contract; exposures are endpoint inventory, not findings. | `backend/src/api/schemas/scan.py:63` |
+| `HostPayload` | Original host evidence plus optional `machine_type` and `device_profile` for legacy compatibility. | `backend/src/api/schemas/scan.py:140` |
 | `FindingPayload` | Optional `unit_id` (0–255) for Modbus unit attribution. | `backend/src/api/schemas/scan.py` |
-| `ScanIngestRequest` | Top-level payload: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `hosts`, `findings`, `metadata`. `hosts`/`findings` are required (no defaults). | `backend/src/api/schemas/scan.py:59` |
+| `ScanIngestRequest` | Top-level payload. `assessment_policy_version` and `exposures` are both present for current scans and both absent for legacy scans; endpoint cardinality and host references are validated. | `backend/src/api/schemas/scan.py:174` |
 | `ScanIngestAcceptedResponse` | `message`, `scan_id`, `hosts_received` (`ge=0`), `status` (`Literal["accepted"]`) — the `202` response body. | `backend/src/api/schemas/scan.py:71` |
 
 `schemas/industrial.py` is the Modbus ingest models (`ModbusTcpServicePayload` and units). Read
@@ -52,15 +53,17 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `Severity` / `SEVERITY_ORDER` | **Moved out of this module 2026-07-31** to [`core/severity.py`](/backend/api.md); `read.py` now imports `Severity` from there. Dict `low→1 … critical→4`, derived from the `Severity` literal's declaration order — the single severity-domain definition. | `backend/src/api/core/severity.py:5` |
 | `Port` | Read-side **per-scan** port view (`extra="forbid"`): port/protocol/state/service/version. Unchanged. | `backend/src/api/schemas/read.py:24` |
 | `HostPort` | Durable service on a machine: port/protocol/service, optional `version`, `first_seen_at`/`last_seen_at`. **No `state`.** | `backend/src/api/schemas/read.py:40` |
-| `ScanHostView` | A host as observed in one scan; **`host_id` is required** (resolved identity, not nullable). `mac` and `ports` are required-but-nullable / required — no defaults. Also `industrial_services` and `unreadable_fields`. | `backend/src/api/schemas/read.py:45` |
+| `ScanHostView` | Per-scan host with required durable `host_id`, ports/industrial data, and nullable `machine_type` / `device_profile` when assessment is unavailable. | `backend/src/api/schemas/read.py:104` |
+| `ExposureRead` | Read projection of the stored endpoint exposure, including stable id, host id, endpoint, role, attention, confidence, reason, and evidence. | `backend/src/api/schemas/read.py:162` |
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
 | `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). Every job variant carries `language`. | `backend/src/api/schemas/ai.py` |
 | `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. The request `AIChatRequest` takes `question` plus optional `language` (default `en`). | `backend/src/api/schemas/ai.py` |
 | `ScanReportResponse` | Report JSON; carries `kind` and `language`. | `backend/src/api/schemas/reports.py` |
 | `AIUsageResponse` | `GET /ai/usage` summary + `data` entries. | `backend/src/api/schemas/ai.py` |
-| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. | `backend/src/api/schemas/read.py:83` |
+| `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. Also carries the optional full device profile; legacy rows may supply only the type. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
-| `HostDetailResponse` | `GET /hosts/{host_id}`: **subclasses `HostSummary`** (identity, `machine_type`, `vulnerability_count`) and adds durable `HostPort[]`, `industrial_services` from the latest scan, and `scan_history`. Flat on the wire. | `backend/src/api/schemas/read.py:177` |
+| `HostDetailResponse` | Host summary plus assessment status/version, latest-scan exposures, durable ports, latest industrial data, and scan history. | `backend/src/api/schemas/read.py:214` |
+| `ScanDetailResponse` assessment fields | `assessment_status`, nullable policy version, and stored `ExposureRead[]` distinguish current assessment from legacy unavailable data; exposure attention never changes finding counts. | `backend/src/api/schemas/read.py:225` |
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/`error_code`/counts; `hosts`/`findings` are required. `error_code` is `ScanErrorCode \| None` and is **not** required — present as `null` on a non-failed scan, never bare on a failed one. | `backend/src/api/schemas/read.py:103` |
 | `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:118` |
 | `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |

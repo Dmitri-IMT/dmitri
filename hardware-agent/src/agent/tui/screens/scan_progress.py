@@ -50,6 +50,7 @@ class ScanProgressScreen(DmitriScreen):
         "port_scan": "port scanning",
         "deep_inspection": "deep inspection",
         "ot_inspection": "Modbus inventory",
+        "targeted_assessment": "targeted service assessment",
         "normalize": "results generation",
     }
 
@@ -111,6 +112,11 @@ class ScanProgressScreen(DmitriScreen):
         self._port_base_label = ""
         self._port_batches_done = 0
         self._port_batches_total = 0
+        self._targeted_units_total = 0
+        self._targeted_units_completed = 0
+        self._targeted_units_failed = 0
+        self._targeted_units_timed_out = 0
+        self._targeted_units_skipped = 0
 
     def compose_body(self):
         with Vertical(id="progress-container"):
@@ -272,6 +278,12 @@ class ScanProgressScreen(DmitriScreen):
         self, message: "ScanProgressScreen.ProgressUpdated"
     ) -> None:
         event = message.event
+        if event.kind.startswith("targeted_") and self.scan_mode not in (
+            "extensive",
+            "max",
+            "nspi",
+        ):
+            return
         self._target_pct = self._mapper.update(event)
         if event.kind == "failed":
             self._active_stages.clear()
@@ -406,6 +418,53 @@ class ScanProgressScreen(DmitriScreen):
                 line = f"[green]OK[/green] {inspected} Modbus hosts {action}"
             self._finish_stage("ot", line)
             return
+        if kind == "targeted_stage_started":
+            self._targeted_units_total = event.units_total
+            self._targeted_units_completed = 0
+            self._targeted_units_failed = 0
+            self._targeted_units_timed_out = 0
+            self._targeted_units_skipped = 0
+            if event.units_total == 0:
+                log.write("[dim]No supported services found[/dim]")
+            else:
+                self._start_stage(
+                    "targeted",
+                    f"Assessing services… (0/{event.units_total})",
+                )
+            return
+        if kind == "targeted_unit_done":
+            if "targeted" not in self._stage_lines:
+                return
+            label = f"Assessing services… ({event.units_done}/{event.units_total})"
+            self._active_stages["targeted"] = label
+            self._replace_log_line(
+                log,
+                self._stage_lines["targeted"],
+                self._spinner_line(label),
+            )
+            return
+        if kind == "targeted_stage_done":
+            self._targeted_units_total = event.units_total
+            self._targeted_units_completed = event.units_completed
+            self._targeted_units_failed = event.units_failed
+            self._targeted_units_timed_out = event.units_timed_out
+            self._targeted_units_skipped = event.units_skipped
+            if "targeted" not in self._stage_lines:
+                return
+            if (
+                event.units_completed == event.units_total
+                and event.units_failed == 0
+                and event.units_timed_out == 0
+                and event.units_skipped == 0
+            ):
+                line = (
+                    f"[green]✓[/green] Targeted checks completed: "
+                    f"{event.units_completed}"
+                )
+            else:
+                line = self._targeted_degraded_line()
+            self._finish_stage("targeted", line)
+            return
         if kind == "normalize_started":
             if "scripts" in self._stage_lines:
                 self._finish_stage(
@@ -419,8 +478,19 @@ class ScanProgressScreen(DmitriScreen):
                 ):
                     self._finish_stage("normalize", self._done_line(self._payload))
             else:
+                if "targeted" in self._stage_lines:
+                    self._finish_stage("targeted", self._targeted_degraded_line())
                 self._start_stage("normalize", "Generating results…")
             return
+
+    def _targeted_degraded_line(self) -> str:
+        return (
+            f"[yellow]⚠[/yellow] Targeted checks: "
+            f"{self._targeted_units_completed} completed, "
+            f"{self._targeted_units_failed} failed, "
+            f"{self._targeted_units_timed_out} timed out, "
+            f"{self._targeted_units_skipped} skipped"
+        )
 
     def _done_line(self, payload) -> str:
         devices = len(payload.hosts)

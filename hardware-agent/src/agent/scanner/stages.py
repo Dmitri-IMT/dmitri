@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import TYPE_CHECKING, TypeVar
 
+from agent.assessment.policy import MachineType
 from agent.config import (
     NSPI_HOST_TIMEOUT,
     NSPI_SCRIPT_TIMEOUT,
@@ -25,6 +26,7 @@ from agent.discovery.port_discovery import (
 from agent.discovery.service_detection import detect_services
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import (
+    DeviceProfilePayload,
     HostPayload,
     ModbusAddressRangePayload,
     ModbusDeviceIdentificationPayload,
@@ -58,6 +60,7 @@ if TYPE_CHECKING:
     from agent.scanner.models import HostInfo
     from agent.scanner.nmap import NmapRunner
     from agent.scanner.progress import ScanReporter
+    from agent.targeted.models import TargetedStageSummary
     from agent.utils.network import LocalNetworkInfo
 
 LOGGER = logging.getLogger(__name__)
@@ -533,7 +536,12 @@ def run_ot_inspection_stage(
     return result
 
 
-def build_host_payload(host: HostInfo) -> HostPayload:
+def build_host_payload(
+    host: HostInfo,
+    *,
+    machine_type: MachineType | None = None,
+    device_profile: DeviceProfilePayload | None = None,
+) -> HostPayload:
     return HostPayload(
         ip=host.ip,
         mac=host.mac,
@@ -622,6 +630,8 @@ def build_host_payload(host: HostInfo) -> HostPayload:
             )
             for service in host.industrial_services
         ],
+        machine_type=machine_type,
+        device_profile=device_profile,
     )
 
 
@@ -669,6 +679,7 @@ def build_metadata(
     interrupted_stage: str | None = None,
     terminated_by: str | None = None,
     ot_inspection: OtInspectionResult | None = None,
+    targeted_summary: TargetedStageSummary | None = None,
 ) -> dict[str, str | int | float | bool]:
     metadata: dict[str, str | int | float | bool] = {
         "agent_version": AGENT_VERSION,
@@ -743,4 +754,47 @@ def build_metadata(
                 metadata["modbus_stage_deadline_seconds"] = (
                     ot_result.stage_deadline_seconds
                 )
+    if targeted_summary is not None:
+        metadata.update(
+            {
+                "targeted_units_eligible": targeted_summary.eligible,
+                "targeted_units_planned": targeted_summary.planned,
+                "targeted_units_omitted": targeted_summary.omitted,
+                "targeted_units_completed": targeted_summary.completed,
+                "targeted_units_failed": targeted_summary.failed,
+                "targeted_units_timed_out": targeted_summary.timed_out,
+                "targeted_units_skipped": targeted_summary.skipped,
+                "targeted_finding_candidates": targeted_summary.finding_candidates,
+                "targeted_observation_candidates": (
+                    targeted_summary.observation_candidates
+                ),
+                "targeted_coverage": _targeted_coverage(targeted_summary),
+            }
+        )
     return metadata
+
+
+def _targeted_coverage(summary: TargetedStageSummary) -> str:
+    """Render the bounded, deterministic per-tool coverage summary."""
+
+    from agent.config import TARGETED_COVERAGE_LIMIT_CHARS
+    from agent.targeted.models import TargetedGapReason, TargetedOutcome, TargetedTool
+
+    chunks: list[str] = []
+    for tool in TargetedTool:
+        counts = summary.per_tool[tool]
+        chunk = (
+            f"{tool.value}:c={counts[TargetedOutcome.COMPLETED]},"
+            f"f={counts[TargetedOutcome.FAILED]},"
+            f"t={counts[TargetedOutcome.TIMED_OUT]},"
+            f"s={counts[TargetedOutcome.SKIPPED]}"
+        )
+        gaps = [
+            f"{reason.value}:{summary.gap_by_tool[tool][reason]}"
+            for reason in TargetedGapReason
+            if summary.gap_by_tool[tool][reason]
+        ]
+        if gaps:
+            chunk += ",gaps=" + "|".join(gaps)
+        chunks.append(chunk)
+    return ";".join(chunks)[:TARGETED_COVERAGE_LIMIT_CHARS]

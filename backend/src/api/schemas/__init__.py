@@ -14,6 +14,9 @@ from .persistence import (
     PersistedScanSummary,
 )
 from .scan import (
+    AssessmentEvidencePayload,
+    DeviceProfilePayload,
+    ExposurePayload,
     FindingPayload,
     HostPayload,
     PortPayload,
@@ -22,6 +25,9 @@ from .scan import (
 )
 
 __all__ = [
+    "AssessmentEvidencePayload",
+    "DeviceProfilePayload",
+    "ExposurePayload",
     "FindingPayload",
     "HostPayload",
     "ModbusAddressRangePayload",

@@ -2728,6 +2728,220 @@ components:
         - printer
         - sensor
         - unknown
+    AssessmentStatus:
+      type: string
+      enum: [available, unavailable]
+    AssessmentConfidence:
+      type: string
+      enum: [unknown, low, medium, high]
+    EvidenceKind:
+      type: string
+      enum:
+        - manufacturer
+        - hostname
+        - operating_system
+        - service
+        - version
+        - banner
+        - certificate
+        - protocol
+        - port
+        - cpe
+        - industrial
+        - web_path
+    ExposureRole:
+      type: string
+      enum:
+        - administration
+        - data_store
+        - file_sharing
+        - remote_access
+        - proxy
+        - api
+        - device_control
+        - discovery
+        - media
+        - general_service
+        - unknown
+    ExposureAttention:
+      type: string
+      enum: [informational, review, priority]
+    ExposureConfidence:
+      type: string
+      enum: [low, medium, high]
+    AssessmentEvidencePayload:
+      type: object
+      additionalProperties: false
+      required: [kind, source, value]
+      properties:
+        kind:
+          $ref: '#/components/schemas/EvidenceKind'
+        source:
+          type: string
+          minLength: 1
+          maxLength: 80
+        value:
+          type: string
+          minLength: 1
+          maxLength: 160
+    DeviceProfilePayload:
+      type: object
+      additionalProperties: false
+      required: [confidence]
+      properties:
+        manufacturer:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 160
+        product_family:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 160
+        model:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 160
+        confidence:
+          $ref: '#/components/schemas/AssessmentConfidence'
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentEvidencePayload'
+          maxItems: 12
+          default: []
+        conflicts:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 240
+          maxItems: 5
+          default: []
+        limitations:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 240
+          maxItems: 5
+          default: []
+    ExposurePayload:
+      type: object
+      additionalProperties: false
+      required:
+        - ip
+        - port
+        - protocol
+        - observed_service
+        - role
+        - attention
+        - confidence
+        - reason
+      properties:
+        ip:
+          type: string
+          format: ipv4
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          type: string
+          enum: [tcp, udp]
+        observed_service:
+          type: string
+          minLength: 1
+          maxLength: 160
+        observed_version:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 160
+        role:
+          $ref: '#/components/schemas/ExposureRole'
+        attention:
+          $ref: '#/components/schemas/ExposureAttention'
+        confidence:
+          $ref: '#/components/schemas/ExposureConfidence'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 240
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentEvidencePayload'
+          maxItems: 12
+          default: []
+    ExposureRead:
+      type: object
+      additionalProperties: false
+      required:
+        - exposure_id
+        - scan_id
+        - host_id
+        - ip
+        - port
+        - protocol
+        - observed_service
+        - role
+        - attention
+        - confidence
+        - reason
+        - related_finding_ids
+        - detected_at
+      properties:
+        exposure_id:
+          type: string
+          format: uuid
+        scan_id:
+          type: string
+          format: uuid
+        host_id:
+          type: string
+          format: uuid
+        ip:
+          type: string
+          format: ipv4
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        protocol:
+          type: string
+          enum: [tcp, udp]
+        observed_service:
+          type: string
+          minLength: 1
+          maxLength: 160
+        observed_version:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 160
+        role:
+          $ref: '#/components/schemas/ExposureRole'
+        attention:
+          $ref: '#/components/schemas/ExposureAttention'
+        confidence:
+          $ref: '#/components/schemas/ExposureConfidence'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 240
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssessmentEvidencePayload'
+          maxItems: 12
+          default: []
+        related_finding_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          default: []
+        detected_at:
+          type: string
+          format: date-time
     Port:
       type: object
       additionalProperties: false
@@ -3037,6 +3251,14 @@ components:
           items:
             $ref: '#/components/schemas/ModbusTcpServicePayload'
           default: []
+        machine_type:
+          anyOf:
+            - $ref: '#/components/schemas/MachineType'
+            - type: 'null'
+        device_profile:
+          anyOf:
+            - $ref: '#/components/schemas/DeviceProfilePayload'
+            - type: 'null'
     ScanHostView:
       type: object
       additionalProperties: false
@@ -3047,6 +3269,8 @@ components:
         - hostname
         - vendor
         - ports
+        - machine_type
+        - device_profile
       properties:
         host_id:
           type: string
@@ -3073,6 +3297,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Port'
+        machine_type:
+          anyOf:
+            - $ref: '#/components/schemas/MachineType'
+            - type: 'null'
+        device_profile:
+          anyOf:
+            - $ref: '#/components/schemas/DeviceProfilePayload'
+            - type: 'null'
         industrial_services:
           type: array
           description: >
@@ -3297,6 +3529,14 @@ components:
               - type: integer
               - type: number
               - type: boolean
+        assessment_policy_version:
+          type: [string, 'null']
+          minLength: 1
+        exposures:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposurePayload'
+          default: []
     ScanIngestAcceptedResponse:
       type: object
       additionalProperties: false
@@ -3377,6 +3617,9 @@ components:
         - scan_mode
         - hosts
         - findings
+        - assessment_status
+        - assessment_policy_version
+        - exposures
         - status
         - host_count
         - finding_count
@@ -3402,6 +3645,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FindingRecord'
+        assessment_status:
+          $ref: '#/components/schemas/AssessmentStatus'
+        assessment_policy_version:
+          type: [string, 'null']
+          minLength: 1
+        exposures:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposureRead'
         metadata:
           anyOf:
             - type: object
@@ -3474,6 +3726,7 @@ components:
         - last_seen_at
         - open_ports_count
         - machine_type
+        - device_profile
         - vulnerability_count
       properties:
         host_id:
@@ -3506,6 +3759,10 @@ components:
           minimum: 0
         machine_type:
           $ref: '#/components/schemas/MachineType'
+        device_profile:
+          anyOf:
+            - $ref: '#/components/schemas/DeviceProfilePayload'
+            - type: 'null'
         vulnerability_count:
           type: integer
           minimum: 0
@@ -3559,7 +3816,11 @@ components:
         - last_seen_at
         - open_ports_count
         - machine_type
+        - device_profile
         - vulnerability_count
+        - assessment_status
+        - assessment_policy_version
+        - exposures
         - ports
         - scan_history
       properties:
@@ -3593,9 +3854,22 @@ components:
           minimum: 0
         machine_type:
           $ref: '#/components/schemas/MachineType'
+        device_profile:
+          anyOf:
+            - $ref: '#/components/schemas/DeviceProfilePayload'
+            - type: 'null'
         vulnerability_count:
           type: integer
           minimum: 0
+        assessment_status:
+          $ref: '#/components/schemas/AssessmentStatus'
+        assessment_policy_version:
+          type: [string, 'null']
+          minLength: 1
+        exposures:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposureRead'
         highest_severity:
           anyOf:
             - $ref: '#/components/schemas/Severity'

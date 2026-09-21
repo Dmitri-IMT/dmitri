@@ -5,10 +5,16 @@ from uuid import uuid4
 
 import pytest
 from api.models.command import Agent, Command
-from api.models.persistence import KevRecord, RiskSnapshotRecord, ScanRecord
+from api.models.persistence import (
+    ExposureRecord,
+    KevRecord,
+    PortRecord,
+    RiskSnapshotRecord,
+    ScanRecord,
+)
 from api.services.read import get_scan_detail
 from read_factories import seed_read_graph
-from sqlmodel import Session
+from sqlmodel import Session, select
 from starlette.testclient import TestClient
 
 
@@ -71,6 +77,129 @@ def test_get_scan_by_id_happy_path(
     for finding in body["findings"]:
         assert finding["host_id"] == expected_finding_host_ids[finding["finding_id"]]
     assert body["error_code"] is None
+    assert body["assessment_status"] == "unavailable"
+    assert body["assessment_policy_version"] is None
+    assert body["exposures"] == []
+    assert all(row["machine_type"] is None for row in body["hosts"])
+    assert all(row["device_profile"] is None for row in body["hosts"])
+
+
+def test_current_scan_returns_profile_stable_exposures_and_related_findings(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    profile = {
+        "manufacturer": "Acme",
+        "product_family": "Camera",
+        "model": None,
+        "confidence": "high",
+        "evidence": [],
+        "conflicts": [],
+        "limitations": [],
+    }
+    seeded["scan"].assessment_policy_version = "2026-09-15.1"
+    seeded["scan_host"].machine_type = "camera"
+    seeded["scan_host"].device_profile_json = profile
+    port = administrative_session.exec(
+        select(PortRecord).where(
+            PortRecord.scan_host_id == seeded["scan_host"].id
+        )
+    ).one()
+    seeded["finding"].port_id = port.id
+    ssh_port = PortRecord(
+        scan_host_id=seeded["scan_host"].id,
+        port=22,
+        protocol="tcp",
+        state="open",
+    )
+    administrative_session.add(ssh_port)
+    administrative_session.flush()
+    exposures = [
+        ExposureRecord(
+            scan_id=seeded["scan"].scan_id,
+            scan_host_id=seeded["scan_host"].id,
+            port_id=port.id,
+            ip=seeded["scan_host"].ip,
+            port=80,
+            protocol="tcp",
+            observed_service="http",
+            role="administration",
+            attention="priority",
+            confidence="high",
+            reason="cleartext administration",
+        ),
+        ExposureRecord(
+            scan_id=seeded["scan"].scan_id,
+            scan_host_id=seeded["scan_host"].id,
+            port_id=ssh_port.id,
+            ip=seeded["scan_host"].ip,
+            port=22,
+            protocol="tcp",
+            observed_service="ssh",
+            role="remote_access",
+            attention="review",
+            confidence="high",
+            reason="remote access",
+        )
+    ]
+    administrative_session.add_all(exposures)
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assessment_status"] == "available"
+    assert body["assessment_policy_version"] == "2026-09-15.1"
+    assert [(row["ip"], row["protocol"], row["port"]) for row in body["exposures"]] == [
+        ("192.168.1.10", "tcp", 22),
+        ("192.168.1.10", "tcp", 80),
+    ]
+    assert body["exposures"][0]["related_finding_ids"] == []
+    assert body["exposures"][1]["related_finding_ids"] == [
+        str(seeded["finding"].finding_id)
+    ]
+    host = next(
+        row
+        for row in body["hosts"]
+        if row["host_id"] == str(seeded["host"].id)
+    )
+    assert host["machine_type"] == "camera"
+    assert host["device_profile"] == profile
+    assert len(body["findings"]) == 2
+
+
+def test_partial_current_scan_keeps_assessment_available(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["scan"].assessment_policy_version = "2026-09-15.1"
+    seeded["scan"].metadata_json = {
+        "partial_result": True,
+        "terminated_by": "completed",
+    }
+    for scan_host in (seeded["scan_host"],):
+        scan_host.machine_type = "unknown"
+        scan_host.device_profile_json = {
+            "manufacturer": None,
+            "product_family": None,
+            "model": None,
+            "confidence": "unknown",
+            "evidence": [],
+            "conflicts": [],
+            "limitations": ["partial evidence"],
+        }
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+    assert response.status_code == 200
+    assert response.json()["assessment_status"] == "available"
+    assert response.json()["metadata"]["partial_result"] is True
 
 
 def test_get_scan_by_id_returns_scan_host_operating_system_snapshot(

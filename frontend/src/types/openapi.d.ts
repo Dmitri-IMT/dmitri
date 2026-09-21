@@ -757,6 +757,75 @@ export interface components {
         Severity: "low" | "medium" | "high" | "critical";
         /** @enum {string} */
         MachineType: "router" | "computer" | "camera" | "storage" | "tv" | "phone" | "printer" | "sensor" | "unknown";
+        /** @enum {string} */
+        AssessmentStatus: "available" | "unavailable";
+        /** @enum {string} */
+        AssessmentConfidence: "unknown" | "low" | "medium" | "high";
+        /** @enum {string} */
+        EvidenceKind: "manufacturer" | "hostname" | "operating_system" | "service" | "version" | "banner" | "certificate" | "protocol" | "port" | "cpe" | "industrial" | "web_path";
+        /** @enum {string} */
+        ExposureRole: "administration" | "data_store" | "file_sharing" | "remote_access" | "proxy" | "api" | "device_control" | "discovery" | "media" | "general_service" | "unknown";
+        /** @enum {string} */
+        ExposureAttention: "informational" | "review" | "priority";
+        /** @enum {string} */
+        ExposureConfidence: "low" | "medium" | "high";
+        AssessmentEvidencePayload: {
+            kind: components["schemas"]["EvidenceKind"];
+            source: string;
+            value: string;
+        };
+        DeviceProfilePayload: {
+            manufacturer?: string | null;
+            product_family?: string | null;
+            model?: string | null;
+            confidence: components["schemas"]["AssessmentConfidence"];
+            /** @default [] */
+            evidence: components["schemas"]["AssessmentEvidencePayload"][];
+            /** @default [] */
+            conflicts: string[];
+            /** @default [] */
+            limitations: string[];
+        };
+        ExposurePayload: {
+            /** Format: ipv4 */
+            ip: string;
+            port: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            observed_service: string;
+            observed_version?: string | null;
+            role: components["schemas"]["ExposureRole"];
+            attention: components["schemas"]["ExposureAttention"];
+            confidence: components["schemas"]["ExposureConfidence"];
+            reason: string;
+            /** @default [] */
+            evidence: components["schemas"]["AssessmentEvidencePayload"][];
+        };
+        ExposureRead: {
+            /** Format: uuid */
+            exposure_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            /** Format: uuid */
+            host_id: string;
+            /** Format: ipv4 */
+            ip: string;
+            port: number;
+            /** @enum {string} */
+            protocol: "tcp" | "udp";
+            observed_service: string;
+            observed_version?: string | null;
+            role: components["schemas"]["ExposureRole"];
+            attention: components["schemas"]["ExposureAttention"];
+            confidence: components["schemas"]["ExposureConfidence"];
+            reason: string;
+            /** @default [] */
+            evidence: components["schemas"]["AssessmentEvidencePayload"][];
+            /** @default [] */
+            related_finding_ids: string[];
+            /** Format: date-time */
+            detected_at: string;
+        };
         Port: {
             port: number;
             /** @enum {string} */
@@ -866,6 +935,8 @@ export interface components {
             ports: components["schemas"]["PortPayload"][];
             /** @default [] */
             industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
+            machine_type?: components["schemas"]["MachineType"] | null;
+            device_profile?: components["schemas"]["DeviceProfilePayload"] | null;
         };
         ScanHostView: {
             /** Format: uuid */
@@ -877,6 +948,8 @@ export interface components {
             vendor: string;
             operating_system?: components["schemas"]["OperatingSystemDetection"] | null;
             ports: components["schemas"]["Port"][];
+            machine_type: components["schemas"]["MachineType"] | null;
+            device_profile: components["schemas"]["DeviceProfilePayload"] | null;
             /**
              * @description Industrial observations retained 180 days from scan ingestion. No pruning job enforces that period yet.
              * @default []
@@ -947,6 +1020,9 @@ export interface components {
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
+            assessment_policy_version?: string | null;
+            /** @default [] */
+            exposures: components["schemas"]["ExposurePayload"][];
         };
         ScanIngestAcceptedResponse: {
             /** @example scan received successfully */
@@ -982,6 +1058,9 @@ export interface components {
             /** @description Machines discovered by this scan. Items reuse the ingest `HostPayload` shape; they gain a `host_id` under contract ask C9. */
             hosts: components["schemas"]["ScanHostView"][];
             findings: components["schemas"]["FindingRecord"][];
+            assessment_status: components["schemas"]["AssessmentStatus"];
+            assessment_policy_version: string | null;
+            exposures: components["schemas"]["ExposureRead"][];
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
@@ -1014,6 +1093,7 @@ export interface components {
             last_seen_at: string;
             open_ports_count: number;
             machine_type: components["schemas"]["MachineType"];
+            device_profile: components["schemas"]["DeviceProfilePayload"] | null;
             vulnerability_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
             /** @default [] */
@@ -1044,7 +1124,11 @@ export interface components {
             last_seen_at: string;
             open_ports_count: number;
             machine_type: components["schemas"]["MachineType"];
+            device_profile: components["schemas"]["DeviceProfilePayload"] | null;
             vulnerability_count: number;
+            assessment_status: components["schemas"]["AssessmentStatus"];
+            assessment_policy_version: string | null;
+            exposures: components["schemas"]["ExposureRead"][];
             highest_severity?: components["schemas"]["Severity"] | null;
             ports: components["schemas"]["HostPort"][];
             /** @default [] */

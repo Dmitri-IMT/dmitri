@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from datetime import timedelta
+from ipaddress import ip_address
 from uuid import UUID
 
 from pydantic import TypeAdapter, ValidationError
@@ -15,6 +16,7 @@ from api.core.scan_read import scan_duration_seconds
 from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
+    ExposureRecord,
     FindingRecord,
     HostFindingRecord,
     HostPortRecord,
@@ -31,6 +33,7 @@ from api.models.persistence import (
 )
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
+    ExposureRead,
     FindingListResponse,
     FindingModbusUnitRef,
     FindingRead,
@@ -56,9 +59,11 @@ from api.schemas.read import (
     SeverityBreakdown,
     SortOrder,
 )
+from api.schemas.scan import DeviceProfilePayload
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
+from api.services.inventory import latest_scan_host_for_host
 
 logger = logging.getLogger(__name__)
 
@@ -152,13 +157,9 @@ def get_host_detail(
             .order_by(HostPortRecord.port.asc())
         ).all()
     ]
-    latest_scan_host = session.exec(
-        select(ScanHostRecord)
-        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanHostRecord.host_id == host_id)
-        .where(ScanRecord.org_id == org_id)
-        .order_by(ScanRecord.timestamp.desc())
-    ).first()
+    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
+    latest_scan_host = latest_pair[0] if latest_pair else None
+    latest_scan = latest_pair[1] if latest_pair else None
     industrial_services = (
         _industrial_service_views(session, latest_scan_host.id, unreadable)
         if latest_scan_host
@@ -192,8 +193,34 @@ def get_host_detail(
 
     payload = summary.model_dump()
     payload["unreadable_fields"] = unreadable
+    assessment_available = (
+        latest_scan is not None
+        and latest_scan.assessment_policy_version is not None
+    )
+    if assessment_available and latest_scan_host is not None:
+        payload["machine_type"] = latest_scan_host.machine_type or "unknown"
+        payload["device_profile"] = _device_profile(
+            latest_scan_host.device_profile_json
+        )
     return HostDetailResponse(
         **payload,
+        assessment_status=(
+            "available" if assessment_available else "unavailable"
+        ),
+        assessment_policy_version=(
+            latest_scan.assessment_policy_version
+            if assessment_available
+            else None
+        ),
+        exposures=(
+            _exposure_reads(
+                session,
+                scan_id=latest_scan.scan_id,
+                scan_host_id=latest_scan_host.id,
+            )
+            if assessment_available and latest_scan_host is not None
+            else []
+        ),
         ports=ports,
         industrial_services=industrial_services,
         scan_history=scan_history,
@@ -214,7 +241,13 @@ def get_scan_detail(
     scan_hosts = session.exec(
         select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
     ).all()
-    hosts = [_to_scan_host_view(session, scan_host) for scan_host in scan_hosts]
+    assessment_available = scan.assessment_policy_version is not None
+    hosts = [
+        _to_scan_host_view(
+            session, scan_host, assessment_available=assessment_available
+        )
+        for scan_host in scan_hosts
+    ]
 
     findings = to_finding_reads(
         session.exec(
@@ -231,6 +264,15 @@ def get_scan_detail(
         scan_mode=scan.scan_mode,
         hosts=hosts,
         findings=findings,
+        assessment_status=(
+            "available" if assessment_available else "unavailable"
+        ),
+        assessment_policy_version=scan.assessment_policy_version,
+        exposures=(
+            _exposure_reads(session, scan_id=scan.scan_id)
+            if assessment_available
+            else []
+        ),
         metadata=scan.metadata_json,
         status=scan.status,
         command_id=command.id if command else None,
@@ -505,13 +547,19 @@ def _to_host_summary(host: HostRecord) -> HostSummary:
         last_seen_at=host.last_seen_at,
         open_ports_count=host.open_ports_count,
         machine_type=host.machine_type or "unknown",
+        device_profile=_device_profile(host.device_profile_json),
         vulnerability_count=host.vulnerability_count,
         highest_severity=host.highest_severity,
         unreadable_fields=unreadable,
     )
 
 
-def _to_scan_host_view(session: Session, scan_host: ScanHostRecord) -> ScanHostView:
+def _to_scan_host_view(
+    session: Session,
+    scan_host: ScanHostRecord,
+    *,
+    assessment_available: bool,
+) -> ScanHostView:
     unreadable: list[str] = []
     return ScanHostView(
         host_id=scan_host.host_id,
@@ -527,11 +575,87 @@ def _to_scan_host_view(session: Session, scan_host: ScanHostRecord) -> ScanHostV
             context=f"scan_host_id={scan_host.id}",
         ),
         ports=_ports_for_scan_host(session, scan_host.id),
+        machine_type=(scan_host.machine_type if assessment_available else None),
+        device_profile=(
+            _device_profile(scan_host.device_profile_json)
+            if assessment_available
+            else None
+        ),
         industrial_services=_industrial_service_views(
             session, scan_host.id, unreadable
         ),
         unreadable_fields=unreadable,
     )
+
+
+def _device_profile(value: dict | None) -> DeviceProfilePayload | None:
+    if value is None:
+        return None
+    return DeviceProfilePayload.model_validate(value)
+
+
+def _exposure_reads(
+    session: Session,
+    *,
+    scan_id: UUID,
+    scan_host_id: int | None = None,
+) -> list[ExposureRead]:
+    predicate = [ExposureRecord.scan_id == scan_id]
+    if scan_host_id is not None:
+        predicate.append(ExposureRecord.scan_host_id == scan_host_id)
+    exposures = session.exec(select(ExposureRecord).where(*predicate)).all()
+    if not exposures:
+        return []
+
+    port_ids = {row.port_id for row in exposures}
+    scan_host_ids = {row.scan_host_id for row in exposures}
+    host_ids = dict(
+        session.exec(
+            select(ScanHostRecord.id, ScanHostRecord.host_id).where(
+                ScanHostRecord.id.in_(scan_host_ids)
+            )
+        ).all()
+    )
+    related: dict[int, list[UUID]] = {}
+    for port_id, finding_id in session.exec(
+        select(FindingRecord.port_id, FindingRecord.finding_id).where(
+            FindingRecord.scan_id == scan_id,
+            FindingRecord.port_id.in_(port_ids),
+        )
+    ).all():
+        if port_id is not None:
+            related.setdefault(port_id, []).append(finding_id)
+
+    exposures.sort(
+        key=lambda row: (ip_address(row.ip), row.protocol, row.port)
+    )
+    result = []
+    for row in exposures:
+        host_id = host_ids.get(row.scan_host_id)
+        if host_id is None:
+            raise ValueError("exposure scan host has no inventory host")
+        result.append(
+            ExposureRead(
+                exposure_id=row.exposure_id,
+                scan_id=row.scan_id,
+                host_id=host_id,
+                ip=row.ip,
+                port=row.port,
+                protocol=row.protocol,
+                observed_service=row.observed_service,
+                observed_version=row.observed_version,
+                role=row.role,
+                attention=row.attention,
+                confidence=row.confidence,
+                reason=row.reason,
+                evidence=row.evidence_json,
+                related_finding_ids=sorted(
+                    related.get(row.port_id, []), key=str
+                ),
+                detected_at=row.created_at,
+            )
+        )
+    return result
 
 
 def _validate_or_degrade(

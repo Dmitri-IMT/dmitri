@@ -16,6 +16,7 @@ dependencies = [
   "cryptography>=42.0",
   "websockets>=15.0",
   "pymodbus==3.13.1",
+  "ssh-audit==3.9.0",
 ]
 
 [project.scripts]

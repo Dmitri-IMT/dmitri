@@ -38,6 +38,14 @@ class _RecordingRunner(_FakeRunner):
         self.terminate_calls += 1
 
 
+class _RecordingTargetedExecutor:
+    def __init__(self) -> None:
+        self.terminate_calls = 0
+
+    def terminate_active(self) -> None:
+        self.terminate_calls += 1
+
+
 def _kinds(events) -> list[str]:
     return [event.kind for event in events]
 
@@ -72,6 +80,20 @@ class TestRequestCancel:
         runner.request_cancel()
 
         assert runner.is_cancelled is True
+
+    def test_request_cancel_terminates_active_targeted_operation(self) -> None:
+        targeted = _RecordingTargetedExecutor()
+        runner = ScanRunner(
+            subnet="192.168.1.0/24",
+            scan_mode="extensive",
+            runner=_FakeRunner(),
+        )
+        runner._targeted_executor = targeted  # type: ignore[assignment]
+
+        runner.request_cancel()
+
+        assert runner.is_cancelled is True
+        assert targeted.terminate_calls == 1
 
 
 class TestCancelDuringStage:

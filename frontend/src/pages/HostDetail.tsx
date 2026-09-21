@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import HostFindings from '@/pages/hosts/HostFindings'
 import HostIdentity from '@/pages/hosts/HostIdentity'
+import HostProfile from '@/pages/hosts/HostProfile'
+import HostExposures from '@/pages/hosts/HostExposures'
 import IndustrialServices from '@/pages/hosts/IndustrialServices'
 import HostPortsTable from '@/pages/hosts/HostPortsTable'
 import HostScanHistoryTable from '@/pages/hosts/HostScanHistoryTable'
@@ -37,6 +39,22 @@ function HostDetail() {
         <>
           <HostIdentity host={host} />
           <div className="flex flex-col gap-8">
+            <Card data-testid="host-profile">
+              <CardHeader>
+                <h2 className="text-title-sm">Machine profile</h2>
+              </CardHeader>
+              <CardContent>
+                <HostProfile host={host} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <h2 className="text-title-sm">Attack surface</h2>
+              </CardHeader>
+              <CardContent>
+                <HostExposures host={host} />
+              </CardContent>
+            </Card>
             <ContextChat
               scope="host"
               contextId={host.host_id}

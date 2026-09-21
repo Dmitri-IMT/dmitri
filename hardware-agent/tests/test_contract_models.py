@@ -8,7 +8,18 @@ from uuid import uuid4
 
 import pytest
 import yaml
+from agent.assessment.policy import (
+    ASSESSMENT_CONFIDENCES,
+    EVIDENCE_KINDS,
+    EXPOSURE_ATTENTIONS,
+    EXPOSURE_CONFIDENCES,
+    EXPOSURE_ROLES,
+    MACHINE_TYPES,
+)
 from agent.normalize.contracts import (
+    AssessmentEvidencePayload,
+    DeviceProfilePayload,
+    ExposurePayload,
     FindingPayload,
     HostPayload,
     ModbusAddressRangePayload,
@@ -437,7 +448,10 @@ def test_agent_models_emit_no_field_the_contract_forbids() -> None:
     for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
         assert schema["additionalProperties"] is False
-        unknown = set(model.model_fields) - set(schema["properties"])
+        emitted_fields = {
+            name for name, field in model.model_fields.items() if not field.exclude
+        }
+        unknown = emitted_fields - set(schema["properties"])
         assert not unknown, f"{schema_name} would reject {sorted(unknown)}"
 
 
@@ -521,3 +535,214 @@ def test_health_503_references_database_unavailable_error() -> None:
             "details": {},
         }
     }
+
+
+def _assessment_host(*, state: str = "open") -> HostPayload:
+    return HostPayload(
+        ip="192.168.0.20",
+        hostname="camera.local",
+        vendor="Axis Communications",
+        ports=[
+            PortPayload(
+                port=554,
+                protocol="tcp",
+                state=state,
+                service="rtsp",
+            )
+        ],
+        machine_type="camera",
+        device_profile=DeviceProfilePayload(
+            manufacturer="Axis Communications",
+            product_family=None,
+            model=None,
+            confidence="medium",
+            evidence=[],
+            conflicts=[],
+            limitations=["Available evidence does not support an exact model."],
+        ),
+    )
+
+
+def _assessment_exposure() -> ExposurePayload:
+    return ExposurePayload(
+        ip="192.168.0.20",
+        port=554,
+        protocol="tcp",
+        observed_service="rtsp",
+        observed_version=None,
+        role="media",
+        attention="informational",
+        confidence="low",
+        reason="The endpoint is classified as media from an observed service.",
+        evidence=[],
+    )
+
+
+def test_assessment_contract_vocabulary_is_exact() -> None:
+    assert MACHINE_TYPES == (
+        "router",
+        "computer",
+        "camera",
+        "storage",
+        "tv",
+        "phone",
+        "printer",
+        "sensor",
+        "unknown",
+    )
+    assert EXPOSURE_ROLES == (
+        "administration",
+        "data_store",
+        "file_sharing",
+        "remote_access",
+        "proxy",
+        "api",
+        "device_control",
+        "discovery",
+        "media",
+        "general_service",
+        "unknown",
+    )
+    assert EXPOSURE_ATTENTIONS == ("informational", "review", "priority")
+    assert ASSESSMENT_CONFIDENCES == ("unknown", "low", "medium", "high")
+    assert EXPOSURE_CONFIDENCES == ("low", "medium", "high")
+    assert EVIDENCE_KINDS == (
+        "manufacturer",
+        "hostname",
+        "operating_system",
+        "service",
+        "version",
+        "banner",
+        "certificate",
+        "protocol",
+        "port",
+        "cpe",
+        "industrial",
+        "web_path",
+    )
+
+
+def test_legacy_payload_defaults_to_assessment_unavailable() -> None:
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.0.0/24",
+        scan_mode="quick",
+        hosts=[
+            HostPayload(
+                ip="192.168.0.20",
+                hostname="host",
+                vendor="unknown",
+            )
+        ],
+    )
+
+    assert payload.assessment_policy_version is None
+    assert payload.exposures == []
+    assert payload.hosts[0].machine_type is None
+    assert payload.hosts[0].device_profile is None
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param("missing_profile", id="missing-profile"),
+        pytest.param("missing_type", id="missing-machine-type"),
+        pytest.param("missing_exposure", id="missing-open-endpoint"),
+        pytest.param("duplicate_exposure", id="duplicate-open-endpoint"),
+        pytest.param("unmatched_exposure", id="unmatched-open-endpoint"),
+    ],
+)
+def test_current_payload_rejects_incomplete_endpoint_assessment(mutation: str) -> None:
+    host = _assessment_host()
+    exposures = [_assessment_exposure()]
+    if mutation == "missing_profile":
+        host.device_profile = None
+    elif mutation == "missing_type":
+        host.machine_type = None
+    elif mutation == "missing_exposure":
+        exposures = []
+    elif mutation == "duplicate_exposure":
+        exposures.append(_assessment_exposure())
+    elif mutation == "unmatched_exposure":
+        exposures[0] = exposures[0].model_copy(update={"port": 8554})
+
+    with pytest.raises(ValidationError):
+        ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.0.0/24",
+            scan_mode="quick",
+            hosts=[host],
+            assessment_policy_version="2026-09-15.1",
+            exposures=exposures,
+        )
+
+
+def test_legacy_payload_rejects_any_assessment_data() -> None:
+    with pytest.raises(ValidationError):
+        ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.0.0/24",
+            scan_mode="quick",
+            hosts=[_assessment_host(state="closed")],
+        )
+
+
+def test_current_payload_accepts_exactly_one_exposure_per_open_endpoint() -> None:
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.168.0.0/24",
+        scan_mode="quick",
+        hosts=[_assessment_host()],
+        assessment_policy_version="2026-09-15.1",
+        exposures=[_assessment_exposure()],
+    )
+
+    assert payload.exposures[0].role == "media"
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "value"),
+    [
+        (AssessmentEvidencePayload, "source", "s" * 81),
+        (AssessmentEvidencePayload, "value", "v" * 161),
+        (ExposurePayload, "port", 0),
+        (ExposurePayload, "port", 65536),
+        (ExposurePayload, "observed_service", "s" * 161),
+        (ExposurePayload, "reason", "r" * 241),
+        (DeviceProfilePayload, "manufacturer", "m" * 161),
+    ],
+)
+def test_assessment_contract_rejects_bounds(model, field: str, value) -> None:
+    fixtures = {
+        AssessmentEvidencePayload: {
+            "kind": "service",
+            "source": "nmap",
+            "value": "ssh",
+        },
+        ExposurePayload: _assessment_exposure().model_dump(),
+        DeviceProfilePayload: _assessment_host().device_profile.model_dump(),
+    }
+    fixtures[model][field] = value
+
+    with pytest.raises(ValidationError):
+        model.model_validate(fixtures[model])
+
+
+def test_assessment_evidence_is_deduplicated_and_stably_ordered() -> None:
+    profile = DeviceProfilePayload(
+        confidence="low",
+        evidence=[
+            {"kind": "service", "source": "22/tcp", "value": "SSH"},
+            {"kind": "port", "source": "nmap", "value": "22/tcp open"},
+            {"kind": "service", "source": "22/tcp", "value": "ssh"},
+        ],
+    )
+
+    assert [(item.kind, item.source, item.value) for item in profile.evidence] == [
+        ("port", "nmap", "22/tcp open"),
+        ("service", "22/tcp", "SSH"),
+    ]
