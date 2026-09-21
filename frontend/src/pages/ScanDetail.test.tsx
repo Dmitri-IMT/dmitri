@@ -232,6 +232,29 @@ describe('ScanDetail', () => {
     ).toBeNull()
   })
 
+  it('opens the targeted section for a ?finding= deep link', async () => {
+    const web = finding({
+      finding_id: '44444444-aaaa-4aaa-8aaa-444444444444',
+      severity: 'high',
+      title: 'Exposed environment configuration',
+      source: 'targeted_service_assessment',
+      source_script: 'ffuf',
+    })
+    scanDetail(
+      completedScan({
+        scan_mode: 'extensive',
+        findings: [phpCgiFinding, web],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}?finding=${web.finding_id}`)
+
+    const panel = await screen.findByTestId(`finding-panel-${web.finding_id}`)
+    expect(panel).toBeVisible()
+    expect(
+      screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
+    ).not.toBeInTheDocument()
+  })
+
   it('does not describe absent targeted findings as clean coverage', async () => {
     scanDetail(
       completedScan({

@@ -12,6 +12,13 @@ const CATEGORIES = [
   { key: 'telnet', label: 'Telnet', tools: ['telnet-check'] },
 ] as const
 
+export function targetedFindingsTableTestId(finding: FindingRecord): string {
+  const category = CATEGORIES.find((item) =>
+    item.tools.some((tool) => tool === finding.source_script),
+  )
+  return `targeted-${category?.key ?? 'other'}`
+}
+
 function ServiceTargetedFindings({
   findings,
   openFindingId,

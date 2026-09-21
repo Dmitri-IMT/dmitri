@@ -6,7 +6,7 @@ from collections.abc import Callable
 from time import monotonic
 from typing import Any
 
-from agent.config import TARGETED_EVIDENCE_LIMIT_CHARS, TARGETED_UNIT_TIMEOUT_S
+from agent.config import TARGETED_UNIT_TIMEOUT_S
 from agent.targeted.executor import TargetedExecutor
 
 # ruff: noqa: E501
@@ -17,21 +17,9 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
+from agent.targeted.report import sanitize_evidence
 
 _BANNER_LIMIT = 4096
-
-
-def _text(value: bytes | str, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    if isinstance(value, bytes):
-        value = value.decode("utf-8", "replace")
-    value = " ".join(value.split())
-    value = "".join(character for character in value if character.isprintable())
-    value = re.sub(
-        r"(?i)(password|passwd|token|secret|authorization)\s*[=:]\s*\S+",
-        r"\1=[REDACTED]",
-        value,
-    )
-    return value[:limit]
 
 
 def _deadline(unit: TargetedUnit, **kwargs: Any) -> tuple[float, str]:
@@ -117,7 +105,7 @@ def _failed(
         unit,
         TargetedOutcome.FAILED,
         reason_code=reason,
-        diagnostic=_text(diagnostic or ""),
+        diagnostic=sanitize_evidence(diagnostic or ""),
     )
 
 
@@ -208,7 +196,7 @@ def run_ftp_check(
                 "The FTP greeting and control channel were reachable without TLS negotiation.",
                 "medium",
                 "Disable plaintext FTP or require an encrypted transport before authentication.",
-                _text(
+                sanitize_evidence(
                     f"ftp-check: greeting={greeting_code}; auth_tls={'advertised' if b'AUTH TLS' in feat.upper() else 'not-advertised'}"
                 ),
             )
@@ -276,7 +264,7 @@ def run_telnet_check(
                 TargetedOutcome.SKIPPED,
                 reason_code=TargetedGapReason.STAGE_BUDGET,
             )
-        evidence = _text(banner[:_BANNER_LIMIT])
+        evidence = sanitize_evidence(banner[:_BANNER_LIMIT])
         return TargetedUnitResult(
             unit,
             TargetedOutcome.COMPLETED,

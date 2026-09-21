@@ -23,7 +23,9 @@ import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
-import ServiceTargetedFindings from '@/pages/scans/ServiceTargetedFindings'
+import ServiceTargetedFindings, {
+  targetedFindingsTableTestId,
+} from '@/pages/scans/ServiceTargetedFindings'
 import SeverityWord from '@/components/SeverityWord'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
@@ -109,6 +111,13 @@ function ScanDetail() {
         const hasTargetedSection =
           metadata.targeted_units_planned != null ||
           scan.findings.some(isTargetedFinding)
+        const opensTargetedDeepLink =
+          openFindingId != null &&
+          scan.findings.some(
+            (finding) =>
+              isTargetedFinding(finding) &&
+              finding.finding_id === openFindingId,
+          )
         const partial = metadata.partial_result === true
         const completedPartial =
           partial && metadata.terminated_by === 'completed'
@@ -183,6 +192,7 @@ function ScanDetail() {
                           key={group.severity}
                           title={<SeverityWord severity={group.severity} />}
                           defaultOpen={opensForDeepLink}
+                          openWhen={opensForDeepLink}
                           triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
                         >
                           <FindingsTable
@@ -228,19 +238,26 @@ function ScanDetail() {
                           (item) => item.finding_id === id,
                         )
                         flushSync(() => setOpenFindingId(id))
-                        if (finding) {
-                          document
-                            .querySelector<HTMLButtonElement>(
-                              `[data-testid="findings-${finding.severity}-caret-${id}"]`,
-                            )
-                            ?.focus()
+                        if (finding == null) {
+                          return
                         }
+                        const table = isTargetedFinding(finding)
+                          ? targetedFindingsTableTestId(finding)
+                          : `findings-${finding.severity}`
+                        document
+                          .querySelector<HTMLButtonElement>(
+                            `[data-testid="${table}-caret-${id}"]`,
+                          )
+                          ?.focus()
                       }}
                     />
                   )}
                 </ScanDetailSection>
                 {hasTargetedSection && (
-                  <ScanDetailSection title="Service Targeted Tools">
+                  <ScanDetailSection
+                    title="Service Targeted Tools"
+                    openWhen={opensTargetedDeepLink}
+                  >
                     <ServiceTargetedFindings
                       findings={scan.findings}
                       openFindingId={openFindingId}

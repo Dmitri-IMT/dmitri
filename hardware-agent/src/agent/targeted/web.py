@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
 import re
 import tempfile
 from dataclasses import dataclass
@@ -22,7 +21,6 @@ from urllib.parse import unquote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from agent.config import (
-    TARGETED_EVIDENCE_LIMIT_CHARS,
     TARGETED_MAX_ISSUES_PER_UNIT,
     TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT,
     TARGETED_WORDLIST_MAX_BYTES,
@@ -38,6 +36,7 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
+from agent.targeted.report import parse_json_payload, sanitize_evidence
 
 WEB_RESULT_POLICY_VERSION = "2026-09-15.1"
 WEB_MAX_BODY_BYTES = 65_536
@@ -218,7 +217,6 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
 # not resolved from that pinned database cannot become a finding.  Tests and
 # callers may provide a parsed mapping; a file is accepted only after the
 # pinned database digest has been checked.
-NIKTO_TUNING_POLICY: dict[str, str] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,17 +259,6 @@ class WebResponse:
     @property
     def lines(self) -> int:
         return self.body.count(b"\n") + (1 if self.body else 0)
-
-
-def _text(value: Any, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    value = re.sub(
-        r"(?i)(authorization|cookie|password|passwd|token|secret|api[_-]?key)\s*[:=]\s*[^,;\s]+",
-        r"\1=[REDACTED]",
-        str(value),
-    )
-    value = re.sub(r"(?i)(https?://[^/?#\s]+)(?:[/?#][^\s]*)", r"\1/[REDACTED]", value)
-    value = " ".join(value.split())
-    return value[:limit]
 
 
 def _normal_path(path: str) -> str:
@@ -517,15 +504,7 @@ def parse_ffuf_json(
         target_unit = unit
     else:
         target_unit = None
-    if isinstance(report, Mapping):
-        payload = report
-    else:
-        try:
-            payload = json.loads(
-                report.decode("utf-8") if isinstance(report, bytes) else report
-            )
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return []
+    payload = parse_json_payload(report) if report is not None else None
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         return []
     output: dict[tuple[str, int], WebCandidate] = {}
@@ -710,7 +689,7 @@ def validate_web_candidate(
         else:
             return None
     path = _normal_path(candidate.path)
-    evidence = _text(
+    evidence = sanitize_evidence(
         f"{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}; path={path}; status={result.status}; content_type={result.content_type or 'unknown'}; length={result.length}; signature={signature}"
     )
     if rule.observation:
@@ -844,7 +823,7 @@ def run_ffuf(
                 exit_code=execution.exit_code,
                 reason_code=TargetedGapReason.MALFORMED_REPORT,
             )
-        payload = _json(execution.report)
+        payload = parse_json_payload(execution.report)
         if not isinstance(payload, dict) or not isinstance(
             payload.get("results"), list
         ):
@@ -901,7 +880,7 @@ def run_ffuf(
             unit,
             TargetedOutcome.FAILED,
             reason_code=TargetedGapReason.BASELINE_UNAVAILABLE,
-            diagnostic=_text(exc, 512),
+            diagnostic=sanitize_evidence(exc, 512),
         )
     finally:
         effective.unlink(missing_ok=True)
@@ -910,8 +889,6 @@ def run_ffuf(
 def _load_nikto_policy(
     source: Mapping[str, str] | str | Path | None,
 ) -> Mapping[str, str]:
-    if source is None and NIKTO_TUNING_POLICY:
-        return NIKTO_TUNING_POLICY
     if isinstance(source, Mapping):
         return {
             str(identifier).zfill(6): str(category).casefold()
@@ -989,7 +966,7 @@ def _safe_nikto_references(row: Mapping[str, Any]) -> tuple[list[str], str | Non
         if cve_id is None and cves:
             cve_id = cves[0].upper()
         for match in re.findall(r"(?i)https?://[^\s<>\"']+", value):
-            safe.append(_text(match))
+            safe.append(sanitize_evidence(match))
     return list(dict.fromkeys(safe))[:8], cve_id
 
 
@@ -1037,16 +1014,16 @@ def _parse_nikto_issues(
             continue
         path = _normal_path(uri)
         method = row.get("method", "")
-        method_text = _text(method) if isinstance(method, str) else ""
+        method_text = sanitize_evidence(method) if isinstance(method, str) else ""
         references, cve_id = _safe_nikto_references(row)
-        evidence = _text(
-            f"{WEB_RESULT_POLICY_VERSION}:nikto:{identifier}; method={method_text or 'unknown'}; path={path}; {_text(message)}"
+        evidence = sanitize_evidence(
+            f"{WEB_RESULT_POLICY_VERSION}:nikto:{identifier}; method={method_text or 'unknown'}; path={path}; {sanitize_evidence(message)}"
         )
         issues.append(
             TargetedIssue(
                 f"nikto:{identifier}:{path}",
                 f"Nikto web security issue {identifier}",
-                _text(message),
+                sanitize_evidence(message),
                 severity,
                 "Apply the vendor or web-server remediation for this issue and restrict the affected endpoint.",
                 evidence,
@@ -1066,15 +1043,7 @@ def parse_nikto_json(
     if isinstance(report, TargetedUnit):
         report, unit = unit, report
     target_unit = unit if isinstance(unit, TargetedUnit) else None
-    if isinstance(report, Mapping):
-        payload = report
-    else:
-        try:
-            payload = json.loads(
-                report.decode("utf-8") if isinstance(report, bytes) else report
-            )
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return []
+    payload = parse_json_payload(report) if report is not None else None
     if not isinstance(payload, dict) or not isinstance(
         payload.get("vulnerabilities"), list
     ):
@@ -1125,7 +1094,7 @@ def run_nikto(
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.MALFORMED_REPORT,
         )
-    payload = _json(execution.report)
+    payload = parse_json_payload(execution.report)
     if not isinstance(payload, dict) or not isinstance(
         payload.get("vulnerabilities"), list
     ):
@@ -1157,10 +1126,3 @@ def run_nikto(
     return TargetedUnitResult(
         unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
     )
-
-
-def _json(report: bytes) -> Any:
-    try:
-        return json.loads(report.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None

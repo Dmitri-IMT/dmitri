@@ -173,16 +173,22 @@ def _targeted_web_evidence(
     )
 
 
+_WEB_KIND_ROLE: dict[str, ExposureRole] = {
+    "administration": "administration",
+    "api_surface": "api",
+}
+
+
 def _exposure_for(host: HostInfo, port: PortInfo) -> ExposurePayload:
     role, confidence, basis = _select_role(host, port)
     targeted_observations = _targeted_endpoint_observations(host, port)
     targeted_roles = {
-        "administration" if item.kind == "administration" else "api"
+        _WEB_KIND_ROLE[item.kind]
         for item in targeted_observations
-        if item.kind in {"administration", "api_surface"}
+        if item.kind in _WEB_KIND_ROLE
     }
     if len(targeted_roles) == 1:
-        role = next(iter(targeted_roles))  # type: ignore[assignment]
+        role = next(iter(targeted_roles))
         confidence = "high"
         basis = "validated targeted web-surface observation"
     elif len(targeted_roles) > 1:

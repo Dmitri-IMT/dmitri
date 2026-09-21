@@ -9,8 +9,9 @@ from agent.config import TARGETED_EVIDENCE_LIMIT_CHARS
 from agent.targeted.models import TargetedUnit
 
 _SECRET_RE = re.compile(
-    r"(?i)(password|passwd|token|secret|authorization)\s*[=:]\s*\S+"
+    r"(?i)(password|passwd|token|secret|authorization|cookie|api[_-]?key)\s*[=:]\s*\S+"
 )
+_URL_PATH_RE = re.compile(r"(?i)(https?://[^/?#\s]+)(?:[/?#][^\s]*)")
 
 
 def parse_json_payload(report: bytes | str | Mapping[str, Any]) -> Any:
@@ -25,9 +26,13 @@ def parse_json_payload(report: bytes | str | Mapping[str, Any]) -> Any:
 
 
 def sanitize_evidence(value: Any, limit: int = TARGETED_EVIDENCE_LIMIT_CHARS) -> str:
-    value = " ".join(str(value).split())
-    value = "".join(character for character in value if character.isprintable())
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", "replace")
+    value = str(value)
     value = _SECRET_RE.sub(r"\1=[REDACTED]", value)
+    value = _URL_PATH_RE.sub(r"\1/[REDACTED]", value)
+    value = " ".join(value.split())
+    value = "".join(character for character in value if character.isprintable())
     return value[:limit]
 
 
