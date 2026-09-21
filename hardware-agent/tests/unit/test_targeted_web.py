@@ -189,6 +189,9 @@ def test_policy_seeds_are_frozen_and_normalized() -> None:
         seed for rule in WEB_RESULT_RULES.values() for seed in rule.seeds
     )
     for rule in WEB_RESULT_RULES.values():
+        assert callable(rule.matches_path)
+        assert callable(rule.matches_body)
+        assert rule.proof
         for seed in rule.seeds:
             classified = classify_ffuf_candidate(f"/{seed}")
             assert classified is not None

@@ -13,7 +13,7 @@ import csv
 import hashlib
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
@@ -86,10 +86,10 @@ class WebRule:
     title: str
     remediation: str
     observation: str | None = None
-    matches_path: Callable[[str, str], bool] | None = None
-    proof: str | None = None
-    matches_body: Callable[[str, str, bytes], bool] | None = None
-    seeds: tuple[str, ...] = ()
+    matches_path: Callable[[str, str], bool] = field(kw_only=True)
+    proof: str = field(kw_only=True)
+    matches_body: Callable[[str, str, bytes], bool] = field(kw_only=True)
+    seeds: tuple[str, ...] = field(default=(), kw_only=True)
 
 
 WEB_RESULT_RULES: dict[str, WebRule] = {
@@ -376,10 +376,9 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
     ),
 }
 
-WEB_SEED_PATHS = tuple(
+WEB_RESULT_SEEDS = tuple(
     seed for rule in WEB_RESULT_RULES.values() for seed in rule.seeds
 )
-WEB_RESULT_SEEDS = WEB_SEED_PATHS
 
 # A provisioned Nikto tree supplies the authoritative rows at runtime.  An ID
 # not resolved from that pinned database cannot become a finding.  Tests and
@@ -458,14 +457,12 @@ def _rule_for_path(path: str) -> WebRule | None:
     path = _normal_path(path).casefold()
     base = _basename(path)
     for rule in WEB_RESULT_RULES.values():
-        if rule.matches_path is not None and rule.matches_path(path, base):
+        if rule.matches_path(path, base):
             return rule
     return None
 
 
 def _signature(rule: WebRule, path: str, body: bytes) -> str | None:
-    if rule.matches_body is None or rule.proof is None:
-        return None
     text = body.decode("utf-8", "replace")
     if rule.matches_body(_basename(path), text, body):
         return rule.proof
@@ -730,7 +727,7 @@ def _effective_wordlist(base: Path) -> Path:
             for line in base.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         }
-        entries.update(WEB_SEED_PATHS)
+        entries.update(WEB_RESULT_SEEDS)
         for entry in sorted(entries):
             handle.write(entry + "\n")
         return Path(handle.name)
