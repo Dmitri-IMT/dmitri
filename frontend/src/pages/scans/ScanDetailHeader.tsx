@@ -27,7 +27,13 @@ function StripEntry({
   )
 }
 
-export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
+export function ScanSummaryStrip({
+  scan,
+  actions,
+}: {
+  scan: ScanDetailResponse
+  actions?: ReactNode
+}) {
   const { t } = useI18n()
   const durationCopy = formatScanDuration(scan.duration)
   const needsReview = scan.exposures.filter(
@@ -41,46 +47,43 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
     <div data-testid="scan-assessment-summary">
       <div
         data-testid="scan-summary-strip"
-        className="flex gap-12 border-y border-border py-4"
+        className="flex items-center justify-between gap-12 border-y border-border py-4"
       >
-        <StripEntry
-          label={t('common.mode')}
-          value={SCAN_MODE_LABEL[scan.scan_mode]}
-        />
-        <StripEntry label={t('common.network')} value={scan.subnet} />
-        {!hidesCounts(scan.status) && (
-          <>
-            <StripEntry
-              label={t('common.machinesSeen')}
-              value={String(scan.host_count)}
-            />
-            <StripEntry
-              label={t('common.attackSurface')}
-              value={attackSurface}
-            />
-            <StripEntry
-              label={t('common.vulnerabilities')}
-              value={String(scan.finding_count)}
-            />
-          </>
-        )}
-        <StripEntry
-          label={t('common.duration')}
-          value={durationCopy ?? <EmptyMark />}
-          testId="scan-summary-duration"
-        />
+        <div className="flex min-w-0 flex-wrap gap-12">
+          <StripEntry
+            label={t('common.mode')}
+            value={SCAN_MODE_LABEL[scan.scan_mode]}
+          />
+          <StripEntry label={t('common.network')} value={scan.subnet} />
+          {!hidesCounts(scan.status) && (
+            <>
+              <StripEntry
+                label={t('common.machinesSeen')}
+                value={String(scan.host_count)}
+              />
+              <StripEntry
+                label={t('common.attackSurface')}
+                value={attackSurface}
+              />
+              <StripEntry
+                label={t('common.vulnerabilities')}
+                value={String(scan.finding_count)}
+              />
+            </>
+          )}
+          <StripEntry
+            label={t('common.duration')}
+            value={durationCopy ?? <EmptyMark />}
+            testId="scan-summary-duration"
+          />
+        </div>
+        {actions}
       </div>
     </div>
   )
 }
 
-function ScanDetailHeader({
-  scan,
-  actions,
-}: {
-  scan: ScanDetailResponse
-  actions?: ReactNode
-}) {
+function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
   const progress =
     scan.status === 'pending'
       ? 15
@@ -92,12 +95,9 @@ function ScanDetailHeader({
   return (
     <div data-testid="scan-detail-header" className="flex flex-col gap-4">
       <BackLink fallback="/scans" />
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-title-lg">
-          Scan · <Timestamp value={scan.timestamp} />
-        </h1>
-        {actions}
-      </div>
+      <h1 className="text-title-lg">
+        Scan · <Timestamp value={scan.timestamp} />
+      </h1>
       {isUnfinished(scan.status) && (
         <div className="flex flex-col gap-2" data-testid="scan-progress">
           <div className="flex items-center justify-between text-body-sm">

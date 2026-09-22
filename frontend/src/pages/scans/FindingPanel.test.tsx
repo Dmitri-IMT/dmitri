@@ -69,5 +69,9 @@ describe('FindingPanel risk', () => {
       'Explain this vulnerability in plain language and tell me what to do.',
       'en',
     )
+    expect(
+      screen.queryByRole('button', { name: 'Explain with AI' }),
+    ).not.toBeInTheDocument()
+    expect(askContextAI).toHaveBeenCalledTimes(1)
   })
 })

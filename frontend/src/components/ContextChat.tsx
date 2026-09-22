@@ -45,6 +45,7 @@ export default function ContextChat({
   const visibleMessages = historyVisible
     ? messages
     : messages.filter((m) => m.message_id.startsWith('local-'))
+  const oneShotAnswered = oneShot && visibleMessages.length > 0
 
   useEffect(() => {
     if (!historyVisible) return
@@ -116,17 +117,19 @@ export default function ContextChat({
           </Button>
         )}
         {oneShot ? (
-          <Button
-            type="button"
-            size="sm"
-            className="self-start"
-            onClick={() => void ask(presetQuestion)}
-            disabled={sending}
-          >
-            {sending
-              ? (askingLabel ?? t('ai.asking'))
-              : (askLabel ?? t('ai.ask'))}
-          </Button>
+          !oneShotAnswered && (
+            <Button
+              type="button"
+              size="sm"
+              className="self-start"
+              onClick={() => void ask(presetQuestion)}
+              disabled={sending}
+            >
+              {sending
+                ? (askingLabel ?? t('ai.asking'))
+                : (askLabel ?? t('ai.ask'))}
+            </Button>
+          )
         ) : (
           <form className="flex flex-col gap-3" onSubmit={submit}>
             <label

@@ -584,15 +584,15 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-reports')).not.toBeInTheDocument()
   })
 
-  it('shows the report action in the header once the scan has finished', async () => {
+  it('shows the report action in the scan summary strip once the scan has finished', async () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}`)
 
     await screen.findByTestId(
       `findings-critical-row-${phpCgiFinding.finding_id}`,
     )
-    const header = screen.getByTestId('scan-detail-header')
-    expect(within(header).getByTestId('scan-reports')).toBeInTheDocument()
+    const summary = screen.getByTestId('scan-assessment-summary')
+    expect(within(summary).getByTestId('scan-reports')).toBeInTheDocument()
   })
 
   it('uses the unknown failure sentence when error_code is missing', async () => {

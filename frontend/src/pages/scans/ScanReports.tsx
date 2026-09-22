@@ -77,12 +77,12 @@ function ScanReports({ scanId }: { scanId: string }) {
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="sm"
             className="text-primary hover:text-primary"
-            aria-label={t('reports.title')}
             disabled={busy}
           >
             <Download aria-hidden="true" />
+            {t('reports.title')}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

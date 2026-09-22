@@ -124,13 +124,13 @@ function ScanDetail() {
 
         return (
           <>
-            <ScanDetailHeader
+            <ScanDetailHeader scan={scan} />
+            <ScanSummaryStrip
               scan={scan}
               actions={
                 isFinished ? <ScanReports scanId={scan.scan_id} /> : undefined
               }
             />
-            <ScanSummaryStrip scan={scan} />
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
             ) : isUnfinished(scan.status) ? (
