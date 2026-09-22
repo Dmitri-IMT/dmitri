@@ -4,7 +4,7 @@ title: frontend shared tables
 description: DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate hold list- and detail-page state machines; Pagination, EmptyState, SeverityWord, and LoadingSkeleton.
 resource: frontend/src/components/DataTable.tsx
 tags: [frontend, ui, tables, react]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 
 # frontend shared tables
@@ -32,9 +32,10 @@ directory table.
 | `NotFoundNotice` | The shared 404 block for a detail route: the sentence at `${testId}-not-found` and a real Back link at `${testId}-back`. Rendered by `ReadDetailGate`, never by a screen. | `frontend/src/components/NotFoundNotice.tsx:11` |
 | `ReadDetailGate` | The detail-page counterpart to `ListSurface`: takes a `DetailState<T>`, `backTo`, and `backLabel`; owns notFound → error → loading with a placeholder `PageHeader` in non-ready states. Calls `children(data)` only when ready. | `frontend/src/components/ReadDetailGate.tsx:18` |
 | `EmptyMark` | The `—` absence mark. One definition; every column module and cell renderer imports it. | `frontend/src/components/EmptyMark.tsx:2` |
-| `Pagination` | Required `label` becomes the nav `aria-label` (for example `Scan pages`, `Attention pages`). Previous/Next stay icon-only. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. | `frontend/src/components/Pagination.tsx:20` |
+| `Pagination` | Required `label` becomes the nav `aria-label` (for example `Scan pages`, `Attention pages`). Previous/Next stay icon-only; their `aria-label`s and each dot's (`Page N`) come from `useI18n` (`common.previousPage` / `common.nextPage` / `common.pageNumber`). Page controls are small circular dots (DMI-179, replacing numbered buttons) via [`dotWindow`](#dotwindow) — at most 10 rendered regardless of `perPage`/`total`, so the DOM never grows unbounded for a large result set. Unavailable edge controls stay mounted, greyed, and `tabIndex={-1}`. The whole component is absent when `total <= perPage`. Shared by Home's attention/events/activity panels, Network/Scans/Devices list pages, and Settings' [AI usage table](./ai-usage.md). | `frontend/src/components/Pagination.tsx:20` |
+| `dotWindow` | `(page, pageCount, max = 10) => number[]`. `pageCount <= max` → every page number; else a contiguous window of exactly `max` pages centred on `page`, clamped to `[1, pageCount]`. Replaced `pageWindow` (deleted), which returned an ellipsis-and-jump-to-end shape sized for numbered buttons — dots don't carry a label to elide, so the window is now a plain contiguous slice instead. | `frontend/src/lib/dotWindow.ts:1` |
 | `EmptyState` | Centred heading, body, optional `action` and `note` slots — no ornament. The root has `role="status"` and the heading id is `${testId}-heading`. Devices blank is the one list blank with `note` only and no `action`. | `frontend/src/components/EmptyState.tsx:11` |
-| `SeverityWord` | Severity as a semibold rounded pill with a per-level colour (red, orange, amber, emerald Tailwind palette classes, with `dark:` pairs) (`Critical` / `High` / …). Null severity renders `EmptyMark`. Replaces `SeverityBadge`. | `frontend/src/components/SeverityWord.tsx:22` |
+| `SeverityWord` | Severity as a **bold (`font-semibold`) plain word** (`Critical` / `High` / …) — no pill, background, border or hue, per FOUNDATIONS §Color (DMI-179; previously a semibold rounded pill with a per-level colour). Null severity renders `EmptyMark`. The word comes from the `common.severity` catalog function (`useI18n`), the single source for the four severity words; scan-detail group headings use sibling `common.severityGroup*` functions ([screens](./screens.md)). | `frontend/src/components/SeverityWord.tsx:13` |
 | `AttentionWord` | Exposure attention as semantic text (`Informational`, `Review`, `Priority`); deliberately separate from vulnerability severity. | `frontend/src/components/AttentionWord.tsx:11` |
 | `LoadingSkeleton` | `rows × columns` bars using `bg-border`, inside one `<tbody>`. Rendered by a pending `DataTable`, Home loading and `QuietMachineGroup`. Bars mount only after `useSkeletonDelay` (250 ms) so a fast read never flashes. | `frontend/src/components/LoadingSkeleton.tsx:13` |
 | `useSkeletonDelay` | `false` until 250 ms after mount, then `true`. Shared by `LoadingSkeleton`, Home loading, and Users `SkeletonRows`. | `frontend/src/hooks/useSkeletonDelay.ts:6` |
@@ -60,6 +61,8 @@ directory table.
 - **No `onRowClick`, no `href` string, no `expandable` boolean.** Those would allow a fourth
   interaction the component has no states for.
 - **Column widths are named Tailwind fraction utilities**, never pixel widths.
+- **Header labels keep their authored casing** — `DataTable` no longer forces `uppercase` on `<th>`
+  (DMI-179). Flagged as possibly a wider design-system question but left alone here.
 - **Every column left-aligns; numbers keep tabular figures** (`FOUNDATIONS.md` §Tables). Older
   screens may still pass `align: 'right'` until a named follow-up restyle.
 - **Severity is the last column of findings tables.**

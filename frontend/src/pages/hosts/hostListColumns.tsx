@@ -73,7 +73,7 @@ export function hostListColumns(
     {
       key: 'machine_type',
       label: translate('common.type'),
-      width: 'w-8/50',
+      width: 'w-6/50',
       render: (host) => {
         const label = MACHINE_TYPE_LABELS[host.machine_type]
         return label ? (
@@ -86,7 +86,7 @@ export function hostListColumns(
     {
       key: 'vulnerability_count',
       label: translate('common.vulnerabilities'),
-      width: 'w-5/50',
+      width: 'w-7/50',
       sortable: true,
       render: (host) => (
         <span className="block tabular-nums">{host.vulnerability_count}</span>

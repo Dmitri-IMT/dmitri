@@ -2,9 +2,11 @@ import type { ReactNode } from 'react'
 import BackLink from '@/components/BackLink'
 import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
+import ScanReports from '@/pages/scans/ScanReports'
 import { formatScanDuration } from '@/lib/scanDuration'
 import { SCAN_MODE_LABEL } from '@/lib/scanModes'
 import { hidesCounts, isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
+import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
@@ -27,37 +29,52 @@ function StripEntry({
 }
 
 export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
+  const { t } = useI18n()
   const durationCopy = formatScanDuration(scan.duration)
   const needsReview = scan.exposures.filter(
     (exposure) => exposure.attention !== 'informational',
   ).length
   const attackSurface =
     scan.assessment_status === 'unavailable'
-      ? 'Unavailable'
-      : `${scan.exposures.length} reachable ${scan.exposures.length === 1 ? 'service' : 'services'} · ${needsReview} ${needsReview === 1 ? 'needs' : 'need'} review`
+      ? t('common.unavailable')
+      : `${t('common.reachableServices', { count: scan.exposures.length })} · ${t('common.needsReview', { count: needsReview })}`
   return (
     <div data-testid="scan-assessment-summary">
       <div
         data-testid="scan-summary-strip"
-        className="flex gap-12 border-y border-border py-4"
+        className="flex items-center justify-between gap-12 border-y border-border py-4"
       >
-        <StripEntry label="Mode" value={SCAN_MODE_LABEL[scan.scan_mode]} />
-        <StripEntry label="Network" value={scan.subnet} />
-        {!hidesCounts(scan.status) && (
-          <>
-            <StripEntry label="Machines seen" value={String(scan.host_count)} />
-            <StripEntry label="Attack surface" value={attackSurface} />
-            <StripEntry
-              label="Vulnerabilities"
-              value={String(scan.finding_count)}
-            />
-          </>
+        <div className="flex min-w-0 flex-wrap gap-12">
+          <StripEntry
+            label={t('common.mode')}
+            value={SCAN_MODE_LABEL[scan.scan_mode]}
+          />
+          <StripEntry label={t('common.network')} value={scan.subnet} />
+          {!hidesCounts(scan.status) && (
+            <>
+              <StripEntry
+                label={t('common.machinesSeen')}
+                value={String(scan.host_count)}
+              />
+              <StripEntry
+                label={t('common.attackSurface')}
+                value={attackSurface}
+              />
+              <StripEntry
+                label={t('common.vulnerabilities')}
+                value={String(scan.finding_count)}
+              />
+            </>
+          )}
+          <StripEntry
+            label={t('common.duration')}
+            value={durationCopy ?? <EmptyMark />}
+            testId="scan-summary-duration"
+          />
+        </div>
+        {scan.status !== 'failed' && !isUnfinished(scan.status) && (
+          <ScanReports scanId={scan.scan_id} />
         )}
-        <StripEntry
-          label="Duration"
-          value={durationCopy ?? <EmptyMark />}
-          testId="scan-summary-duration"
-        />
       </div>
     </div>
   )

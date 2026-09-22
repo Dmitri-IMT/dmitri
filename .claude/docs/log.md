@@ -3,6 +3,31 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-22
+
+* **Update**: DMI-179 fifth review round. `ScanDetailSection` takes `openToken` (finding id) instead of
+  `defaultOpen`/`openWhen`, so a collapsed group reopens for a second finding. Severity group titles,
+  toggles and captions plus `Pagination` labels now come from the i18n catalogs. `ScanSummaryStrip`
+  renders `ScanReports` itself (no `actions` slot). The AI-usage table uses a CSS min-height instead
+  of spacer rows and clamps a stale page. `SeverityWord` is bold again and reads its word from the
+  `common.severity` catalog function; the severity-group copy functions take `severity`, not a
+  translated label. Touched: `frontend/screens.md`, `frontend/tables.md`, `frontend/ai-usage.md`.
+
+* **Update**: DMI-179 (repair frontend regressions from PR #151, plus follow-up feedback).
+  `GlobalAssistant` deleted — `AppShell` no longer mounts it, and `ContextChat`'s multi-turn/history
+  branch is now dead code with no caller (only the one-shot "Explain with AI" path is live, and it
+  can now only be asked once per mount). `SeverityWord` is a plain word again, no pill. `TopBar`
+  drops the below-`xl` mobile nav collapse — the inline nav shows at every width. Pagination is now a
+  bounded (max 10) dot window (`dotWindow` replaces deleted `pageWindow`), shared by Home, the list
+  pages, and the Settings AI-usage table (now 10 rows/page with a fixed-height `tbody`). `ScanReports`
+  moved out of a page-end card into `ScanSummaryStrip` as a borderless purple button. Fixed a real bug
+  in `ScanDetailSection`: it force-opens on a deep link now via its own tracked state instead of
+  remounting on every `openFindingId` change, so closing a deep-linked finding's row no longer
+  collapses the whole group. Backend: the `stale_coverage` Home notice was removed end to end
+  (service, schema, OpenAPI contract, generated frontend types). Touched: `backend/services.md`,
+  `backend/schemas.md`, `frontend/screens.md`, `frontend/context-ai.md`, `frontend/scan-ai.md`,
+  `frontend/ai-usage.md`, `frontend/tables.md`, `frontend/i18n.md`, `frontend/index.md`.
+
 ## 2026-09-20
 
 * **Creation**: `hardware-agent/assessment.md` maps the versioned, deterministic local policy that

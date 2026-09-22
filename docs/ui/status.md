@@ -32,7 +32,7 @@ The product should explain what needs attention. It is not a metrics dashboard.
 - Both roles can read Home, scans, the network, and devices.
 - Only admins can scan, invite users, or manage roles.
 - Viewer-only UI omits unavailable actions; it does not show disabled controls.
-- Home is the default screen. It gives a plain verdict, then only critical/high findings, failed scans, or stale coverage.
+- Home is the default screen. It gives a plain verdict, then only critical/high findings or failed scans. The stale-coverage ("No successful scan in N days") notice was removed (DMI-179).
 - Home has all-clear, needs-review, first-run, and error states. First-run sends admins to Scans to run the first scan.
 - Scan now shows: queued → delivered → running → uploading → done. Done links to the scan.
 - MVP excludes Pi setup, notifications, charts/metric cards, and the LLM explainer.

@@ -46,12 +46,11 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
       key: 'port',
       label: 'Port',
       width: 'w-3/25',
-      align: 'right',
       render: (finding) =>
         finding.port == null ? (
           <EmptyMark />
         ) : (
-          <span className="block tabular-nums">{finding.port}</span>
+          <span className="block pr-3 tabular-nums">{finding.port}</span>
         ),
     },
     {
@@ -101,7 +100,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
         finding.port == null ? (
           <EmptyMark />
         ) : (
-          <span className="block tabular-nums">{finding.port}</span>
+          <span className="block pr-3 tabular-nums">{finding.port}</span>
         ),
     },
     {

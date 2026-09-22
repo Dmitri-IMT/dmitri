@@ -14,7 +14,6 @@ import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
-import ScanReports from '@/pages/scans/ScanReports'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -26,7 +25,6 @@ import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
   targetedFindingsTableTestId,
 } from '@/pages/scans/ServiceTargetedFindings'
-import SeverityWord from '@/components/SeverityWord'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
@@ -111,28 +109,11 @@ function ScanDetail() {
         const hasTargetedSection =
           metadata.targeted_units_planned != null ||
           scan.findings.some(isTargetedFinding)
-        const opensTargetedDeepLink =
-          openFindingId != null &&
-          scan.findings.some(
-            (finding) =>
-              isTargetedFinding(finding) &&
-              finding.finding_id === openFindingId,
-          )
+        const opensTargetedDeepLink = scan.findings.some(
+          (finding) =>
+            isTargetedFinding(finding) && finding.finding_id === openFindingId,
+        )
         const partial = metadata.partial_result === true
-        const completedPartial =
-          partial && metadata.terminated_by === 'completed'
-        const interruptedStage =
-          typeof metadata.interrupted_stage === 'string'
-            ? metadata.interrupted_stage
-            : ''
-        const stageLabels: Record<string, string> = {
-          discovery: 'Host discovery',
-          ports: 'Port scanning',
-          deep_inspection: 'Deep inspection',
-          ot_inspection: 'Industrial inspection',
-          targeted_assessment: 'Targeted service assessment',
-          normalize: 'Results generation',
-        }
 
         return (
           <>
@@ -150,36 +131,15 @@ function ScanDetail() {
               />
             ) : (
               <>
-                {partial && (
-                  <div
-                    data-testid="scan-partial-notice"
-                    role="status"
-                    className="flex flex-col gap-2 border border-edge p-6"
-                  >
-                    <p className="text-title-xs">
-                      {completedPartial
-                        ? 'INCOMPLETE EVIDENCE'
-                        : 'STOPPED SCAN'}
-                    </p>
-                    <p className="max-w-prose text-body-md text-muted-foreground">
-                      {completedPartial
-                        ? 'The scan finished, but some checks did not complete. Counts below use accepted evidence only; missing coverage is not a clean result.'
-                        : stageLabels[interruptedStage]
-                          ? `${stageLabels[interruptedStage]} did not finish. Counts below use accepted evidence only.`
-                          : 'The scan did not finish. Counts below use accepted evidence only.'}
-                    </p>
-                  </div>
-                )}
                 <ScanAIAnalysis
                   scanId={scan.scan_id}
                   findings={scan.findings}
                 />
-                <ScanReports scanId={scan.scan_id} />
                 {groups.length === 0 ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     {partial
-                      ? 'No confirmed vulnerabilities in accepted evidence.'
-                      : 'No confirmed vulnerabilities were found in this scan.'}
+                      ? t('common.noVulnerabilitiesAcceptedEvidence')
+                      : t('common.noVulnerabilitiesInScan')}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-8">
@@ -189,20 +149,27 @@ function ScanDetail() {
                       )
                       return (
                         <ScanDetailSection
-                          key={
+                          key={group.severity}
+                          title={t('common.severityGroupTitle', {
+                            severity: group.severity,
+                            count: group.findings.length,
+                          })}
+                          openToken={
                             opensForDeepLink
-                              ? `${group.severity}-${openFindingId}`
-                              : group.severity
+                              ? (openFindingId ?? undefined)
+                              : undefined
                           }
-                          title={<SeverityWord severity={group.severity} />}
-                          defaultOpen={opensForDeepLink}
-                          triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
+                          triggerAriaLabel={t('common.severityGroupToggle', {
+                            severity: group.severity,
+                          })}
                         >
                           <FindingsTable
                             findings={group.findings}
                             variant="scan"
                             testId={`findings-${group.severity}`}
-                            caption={`${group.severity} vulnerabilities in this scan`}
+                            caption={t('common.severityGroupCaption', {
+                              severity: group.severity,
+                            })}
                             openFindingId={openFindingId}
                             onOpenFindingChange={setOpenFindingId}
                           />
@@ -211,23 +178,20 @@ function ScanDetail() {
                     })}
                   </div>
                 )}
-                <ScanDetailSection title="Attack surface">
+                <ScanDetailSection title={t('common.attackSurface')}>
                   {scan.assessment_status === 'unavailable' ? (
                     <div
                       data-testid="scan-assessment-unavailable"
                       className="flex flex-col gap-2 text-body-md"
                     >
-                      <p>
-                        Unavailable — this scan predates attack-surface
-                        analysis.
-                      </p>
+                      <p>{t('common.attackSurfaceUnavailable')}</p>
                       <p className="text-muted-foreground">
-                        Re-run the scan to produce this data.
+                        {t('common.rerunForData')}
                       </p>
                     </div>
                   ) : scan.exposures.length === 0 ? (
                     <p data-testid="scan-no-exposures" className="text-body-md">
-                      No reachable services were found in this scan.
+                      {t('common.noReachableServices')}
                     </p>
                   ) : (
                     <ExposureTable
@@ -258,13 +222,13 @@ function ScanDetail() {
                 </ScanDetailSection>
                 {hasTargetedSection && (
                   <ScanDetailSection
-                    key={
-                      opensTargetedDeepLink
-                        ? `targeted-${openFindingId}`
-                        : 'targeted'
-                    }
+                    key="targeted"
                     title="Service Targeted Tools"
-                    defaultOpen={opensTargetedDeepLink}
+                    openToken={
+                      opensTargetedDeepLink
+                        ? (openFindingId ?? undefined)
+                        : undefined
+                    }
                     triggerAriaLabel="Toggle service-targeted findings"
                   >
                     <ServiceTargetedFindings

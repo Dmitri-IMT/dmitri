@@ -85,6 +85,55 @@ describe('Settings', () => {
     expect(screen.queryByRole('heading', { name: 'Activity' })).toBeNull()
   })
 
+  it('paginates AI usage at 10 rows per page, padded to a stable height', async () => {
+    const user = userEvent.setup()
+    const entries = Array.from({ length: 12 }, (_, index) => ({
+      operation: `op-${index}`,
+      provider: 'groq',
+      model: 'openai/gpt-oss-120b',
+      status: 'ok',
+      input_tokens: 10,
+      output_tokens: 20,
+      total_tokens: 30,
+      latency_ms: 100,
+      http_status: 200,
+      request_id: null,
+      error_code: null,
+      scan_id: null,
+      created_at: new Date(Date.now() - index * 1000).toISOString(),
+    }))
+    server.use(
+      http.get(`${baseURL}/ai/usage`, () =>
+        HttpResponse.json({
+          summary: {
+            requests: 12,
+            input_tokens: 120,
+            output_tokens: 240,
+            total_tokens: 360,
+            errors: 0,
+          },
+          data: entries,
+        }),
+      ),
+    )
+    renderSettings()
+
+    const usage = within(await screen.findByTestId('settings-ai-usage'))
+    await usage.findByText('op-0')
+    expect(usage.getByText('op-9')).toBeInTheDocument()
+    expect(usage.queryByText('op-10')).not.toBeInTheDocument()
+    const rowsPage1 = usage.getByRole('table').querySelectorAll('tbody tr')
+    expect(rowsPage1).toHaveLength(10)
+
+    await user.click(usage.getByTestId('settings-ai-usage-page-2'))
+
+    expect(usage.getByText('op-10')).toBeInTheDocument()
+    expect(usage.getByText('op-11')).toBeInTheDocument()
+    expect(usage.queryByText('op-0')).not.toBeInTheDocument()
+    const rowsPage2 = usage.getByRole('table').querySelectorAll('tbody tr')
+    expect(rowsPage2).toHaveLength(2)
+  })
+
   it('carries the change-password button alone, with no Password label and outside the value list', async () => {
     renderSettings()
 

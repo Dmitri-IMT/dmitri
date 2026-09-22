@@ -311,7 +311,7 @@ function DataTable<Row, SortKey extends string = never>({
                   key={column.key}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={`truncate pr-4 font-normal uppercase ${columnTextAlign(column.align)}`}
+                  className={`truncate pr-4 font-normal ${columnTextAlign(column.align)}`}
                 >
                   {sort && column.sortable ? (
                     <Button

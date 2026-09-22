@@ -8,7 +8,6 @@ from api.core.home_constants import (
     BOX_OFFLINE_DAYS,
     HOME_EVENTS_PER_PAGE,
     MEMBER_IDLE_DAYS,
-    STALE_COVERAGE_DAYS,
 )
 from api.models.command import Agent
 from api.models.identity import User
@@ -311,19 +310,15 @@ def test_event_copy_uses_box_and_machine_vocabulary(
     assert all("device joined the network" not in text for text in texts)
 
 
-def test_stale_coverage_stays_a_notice_not_an_event(
+def test_failed_scan_stays_a_notice_not_an_event(
     administrative_session: Session,
 ) -> None:
-    org = make_org(administrative_session, "Stale Coverage")
-    make_scan(
-        administrative_session,
-        org.id,
-        timestamp=NOW - timedelta(days=STALE_COVERAGE_DAYS + 1),
-    )
+    org = make_org(administrative_session, "Failed Scan")
+    make_scan(administrative_session, org.id, timestamp=NOW, status="failed")
 
     snapshot = _snapshot(administrative_session, org.id)
 
-    assert [notice.kind for notice in snapshot.notices] == ["stale_coverage"]
+    assert [notice.kind for notice in snapshot.notices] == ["failed_scan"]
     assert snapshot.events.data == []
     assert snapshot.events.total == 0
 

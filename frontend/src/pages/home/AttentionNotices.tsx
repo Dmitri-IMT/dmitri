@@ -6,8 +6,6 @@ function noticeTestId(kind: HomeNotice['kind']): string {
   switch (kind) {
     case 'failed_scan':
       return 'home-item-scan'
-    case 'stale_coverage':
-      return 'home-item-coverage'
     default: {
       const _exhaustive: never = kind
       return _exhaustive

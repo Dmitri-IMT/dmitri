@@ -134,12 +134,13 @@ body {
   grid-template-columns: 1fr auto 1fr;
 }
 
-@utility grid-cols-topbar {
-  grid-template-columns: auto 1fr auto;
-}
-
 @utility h-row {
   height: 3.5rem;
+}
+
+/* Header row plus ten h-10 rows, so a short last page keeps the table height. */
+@utility min-h-usage-table {
+  min-height: calc(11 * 2.5rem);
 }
 
 @utility min-h-scan-type-description {

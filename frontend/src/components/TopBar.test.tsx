@@ -188,24 +188,12 @@ describe('TopBar', () => {
     expect(mutedLink).not.toHaveAttribute('aria-current')
   })
 
-  it('opens the compact navigation with an accessible toggle', async () => {
-    const user = userEvent.setup()
+  it('shows the six nav links at every width, with no mobile menu toggle', async () => {
     renderTopBarAs(viewerProfile)
+    await screen.findByTestId('top-bar')
 
-    const toggle = await screen.findByTestId('mobile-menu-toggle')
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('mobile-menu-toggle')).not.toBeInTheDocument()
     expect(screen.queryByTestId('mobile-navigation')).not.toBeInTheDocument()
-
-    await user.click(toggle)
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(toggle).toHaveAttribute('aria-controls', 'mobile-navigation')
-    expect(screen.getByTestId('mobile-navigation')).toBeInTheDocument()
-    expect(
-      within(screen.getByTestId('mobile-navigation')).getByRole('link', {
-        name: 'Scans',
-      }),
-    ).toHaveAttribute('href', '/scans')
   })
 
   it('groups theme, language, account and logout in the options menu', async () => {

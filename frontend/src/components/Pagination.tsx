@@ -3,10 +3,10 @@ import { Button } from '@/components/ui/button'
 import {
   Pagination as PaginationRoot,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
 } from '@/components/ui/pagination'
-import { pageWindow } from '@/lib/pageWindow'
+import { dotWindow } from '@/lib/dotWindow'
+import useI18n from '@/i18n/useI18n'
 
 type PaginationProps = {
   page: number
@@ -25,6 +25,7 @@ function Pagination({
   testId,
   label,
 }: PaginationProps) {
+  const { t } = useI18n()
   if (total <= perPage) return null
 
   const pageCount = Math.ceil(total / perPage)
@@ -39,7 +40,7 @@ function Pagination({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Previous page"
+            aria-label={t('common.previousPage')}
             disabled={atFirstPage}
             tabIndex={atFirstPage ? -1 : undefined}
             data-testid={`${testId}-previous`}
@@ -48,33 +49,35 @@ function Pagination({
             <ChevronLeft aria-hidden="true" />
           </Button>
         </PaginationItem>
-        {pageWindow(page, pageCount).map((item, index) =>
-          item === 'ellipsis' ? (
-            <PaginationItem key={`ellipsis-${index}`}>
-              <PaginationEllipsis />
-            </PaginationItem>
-          ) : (
-            <PaginationItem key={item}>
-              <Button
-                type="button"
-                variant={item === page ? 'outline' : 'ghost'}
-                size="icon"
-                aria-current={item === page ? 'page' : undefined}
-                data-testid={`${testId}-page-${item}`}
-                className="text-body-sm"
-                onClick={() => onPageChange(item)}
-              >
-                {item}
-              </Button>
-            </PaginationItem>
-          ),
-        )}
+        {dotWindow(page, pageCount).map((item) => (
+          <PaginationItem key={item}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={t('common.pageNumber', { page: item })}
+              aria-current={item === page ? 'page' : undefined}
+              data-testid={`${testId}-page-${item}`}
+              onClick={() => onPageChange(item)}
+              className="size-9 rounded-full"
+            >
+              <span
+                aria-hidden="true"
+                className={`rounded-full transition-all ${
+                  item === page
+                    ? 'size-2.5 bg-primary'
+                    : 'size-2 bg-muted-foreground/40'
+                }`}
+              />
+            </Button>
+          </PaginationItem>
+        ))}
         <PaginationItem>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Next page"
+            aria-label={t('common.nextPage')}
             disabled={atLastPage}
             tabIndex={atLastPage ? -1 : undefined}
             data-testid={`${testId}-next`}

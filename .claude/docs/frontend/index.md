@@ -39,9 +39,9 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
 * [devices-screen](./devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
 * [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
-* [context-ai](./context-ai.md) — Multi-turn `/ai/chat` via GlobalAssistant; finding/host one-shot explains post to the same route from FindingPanel and HostDetail.
+* [context-ai](./context-ai.md) — One-shot "Explain with AI" (finding, host) via ContextChat's presetQuestion mode against `/ai/chat`, askable once per mount. GlobalAssistant (the floating multi-turn assistant) was deleted.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
-* [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.
+* [screens](./screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation shown at every width, two-group Settings surface, password reveal fields, and shared presentation and interaction components.

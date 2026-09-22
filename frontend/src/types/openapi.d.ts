@@ -1602,7 +1602,7 @@ export interface components {
         /** @enum {string} */
         HomeEventKind: "box_offline" | "member_idle" | "machine_first_seen";
         /** @enum {string} */
-        HomeNoticeKind: "failed_scan" | "stale_coverage";
+        HomeNoticeKind: "failed_scan";
         /** @enum {string} */
         ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
         HomeEvent: {
@@ -1620,7 +1620,6 @@ export interface components {
         HomeNotice: {
             kind: components["schemas"]["HomeNoticeKind"];
             text: string;
-            days?: number | null;
         };
         HomeAttentionPage: {
             data: components["schemas"]["FindingRecord"][];

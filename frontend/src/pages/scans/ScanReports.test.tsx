@@ -24,12 +24,24 @@ describe('ScanReports', () => {
     })
   })
 
+  it('renders a single borderless icon button, not a card or full-width row', () => {
+    renderWithProviders(<ScanReports scanId="scan-1" />)
+
+    const trigger = screen.getByRole('button', { name: 'Scan reports' })
+    expect(trigger).toBeInTheDocument()
+    expect(trigger).toHaveAttribute('data-variant', 'ghost')
+    expect(screen.getByTestId('scan-reports')).not.toHaveClass('border-border')
+  })
+
   it('previews first and downloads only after confirmation', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
+    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      screen.getByRole('button', { name: 'Download explained report' }),
+      await screen.findByRole('menuitem', {
+        name: 'Download explained report',
+      }),
     )
 
     expect(await screen.findByTitle('PDF report preview')).toBeInTheDocument()
@@ -46,8 +58,11 @@ describe('ScanReports', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
+    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      screen.getByRole('button', { name: 'Download technical report' }),
+      await screen.findByRole('menuitem', {
+        name: 'Download technical report',
+      }),
     )
     expect(await screen.findByText('Technical report preview')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Confirm download' }))
@@ -55,5 +70,23 @@ describe('ScanReports', () => {
     expect(
       screen.queryByText('Technical report preview'),
     ).not.toBeInTheDocument()
+  })
+
+  it('raises a toast instead of inline text when the report fails', async () => {
+    vi.mocked(downloadScanReport).mockRejectedValue(new Error('boom'))
+    const user = userEvent.setup()
+    renderWithProviders(<ScanReports scanId="scan-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
+    await user.click(
+      await screen.findByRole('menuitem', {
+        name: 'Download explained report',
+      }),
+    )
+
+    expect(await screen.findByTestId('toast')).toHaveTextContent(
+      "Couldn't prepare the report. Try again.",
+    )
+    expect(screen.queryByTitle('PDF report preview')).not.toBeInTheDocument()
   })
 })

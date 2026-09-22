@@ -1,5 +1,19 @@
 import type { Catalog } from './catalog.types'
 
+const SEVERITY: Record<string, string> = {
+  critical: 'Crítica',
+  high: 'Alta',
+  medium: 'Média',
+  low: 'Baixa',
+}
+
+const SEVERITY_LOWER: Record<string, string> = {
+  critical: 'crítica',
+  high: 'alta',
+  medium: 'média',
+  low: 'baixa',
+}
+
 export const catalog: Catalog = {
   'nav.home': 'Início',
   'nav.scans': 'Varreduras',
@@ -70,6 +84,22 @@ export const catalog: Catalog = {
   'common.machines': 'Equipamentos',
   'common.vulnerabilities': 'Vulnerabilidades',
   'common.highestSeverity': 'Maior gravidade',
+  'common.network': 'Rede',
+  'common.attackSurface': 'Superfície de ataque',
+  'common.unavailable': 'Indisponível',
+  'common.attackSurfaceUnavailable':
+    'Indisponível — este scan é anterior à análise de superfície de ataque.',
+  'common.rerunForData': 'Execute o scan novamente para gerar esses dados.',
+  'common.reachableServices': ({ count }) =>
+    count + (count === 1 ? ' serviço alcançável' : ' serviços alcançáveis'),
+  'common.needsReview': ({ count }) =>
+    count + (count === 1 ? ' precisa de revisão' : ' precisam de revisão'),
+  'common.noReachableServices':
+    'Nenhum serviço alcançável foi encontrado neste scan.',
+  'common.noVulnerabilitiesAcceptedEvidence':
+    'Nenhuma vulnerabilidade confirmada nas evidências aceitas.',
+  'common.noVulnerabilitiesInScan':
+    'Nenhuma vulnerabilidade confirmada foi encontrada neste scan.',
   'common.address': 'Endereço',
   'common.type': 'Tipo',
   'common.lastSeen': 'Visto por último',
@@ -99,6 +129,19 @@ export const catalog: Catalog = {
     'Nenhum servi\u00e7o industrial foi detectado neste equipamento.',
   'common.noAddressRanges': 'Nenhuma faixa de endere\u00e7os foi mapeada.',
   'common.back': 'Voltar',
+  'common.previousPage': 'Página anterior',
+  'common.nextPage': 'Próxima página',
+  'common.pageNumber': ({ page }) => 'Página ' + page,
+  'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityGroupTitle': ({ severity, count }) =>
+    SEVERITY[severity] +
+    ': ' +
+    count +
+    (count === 1 ? ' vulnerabilidade' : ' vulnerabilidades'),
+  'common.severityGroupToggle': ({ severity }) =>
+    'Alternar vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity],
+  'common.severityGroupCaption': ({ severity }) =>
+    'Vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity] + ' neste scan',
   'common.findingsLoadError':
     'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
   'common.noVulnerabilities': 'Nenhuma vulnerabilidade neste equipamento.',
@@ -234,4 +277,5 @@ export const catalog: Catalog = {
   'settings.tokens': 'Tokens',
   'settings.latency': 'Latência',
   'settings.noRequests': 'Nenhuma solicitação de IA registrada ainda.',
+  'settings.usagePages': 'Páginas de uso de IA',
 }

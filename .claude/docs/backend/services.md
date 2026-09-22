@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -57,9 +57,10 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `append_activity()` | Inserts one `activity` row in the caller's transaction. Duplicate unique key is a no-op. Does not commit. | `backend/src/api/services/activity.py:37` |
 | `append_scan_activity()` | The single writer for `scan_started` / `scan_finished` / `scan_failed`. Takes `org_id`, `scan_id`, `scan_mode` and `occurred_at` from the caller. Best-effort: insert runs in a savepoint; on `SQLAlchemyError` logs `logger.exception("Failed to append scan activity")` and does not abort the caller's transaction. | `backend/src/api/services/activity.py:49` |
 | `activity_text()` | Admin/viewer sentence matrix. Scan and machine rows are identical across roles. | `backend/src/api/services/activity.py:45` |
-| `read_home_snapshot()` | Attention page, notices, review state, paged activity, derived events. | `backend/src/api/services/home.py:219` |
-| `page_attention()` | Latest-scan findings with `host_hostname` from current `HostRecord.hostname`. Starts from `read.finding_read_query()` and adds only the attention filters and sort. | `backend/src/api/services/home.py:47` |
-| `derive_home_events()` | Current-state box-offline, member-idle, and new-machine facts. Revoked agents are deliberately excluded from box-offline events. Member idle is one SQL predicate over `users`; box offline stays a Python loop because it needs the registry overlay. Never stored. | `backend/src/api/services/home.py:104` |
+| `read_home_snapshot()` | Attention page, notices, review state, paged activity, derived events. | `backend/src/api/services/home.py:188` |
+| `page_attention()` | Latest-scan findings with `host_hostname` from current `HostRecord.hostname`. Starts from `read.finding_read_query()` and adds only the attention filters and sort. | `backend/src/api/services/home.py:46` |
+| `derive_home_events()` | Current-state box-offline, member-idle, and new-machine facts. Revoked agents are deliberately excluded from box-offline events. Member idle is one SQL predicate over `users`; box offline stays a Python loop because it needs the registry overlay. Never stored. | `backend/src/api/services/home.py:103` |
+| `build_notices()` | Only remaining notice kind is `failed_scan`. The `stale_coverage` ("No successful scan in N days") notice was removed end to end — DMI-179 — service, `HomeNoticeKind`, the OpenAPI enum and the generated frontend types. | `backend/src/api/services/home.py:177` |
 | `ORG_ADMIN_LOCK_NAMESPACE` / `lock_org_admins()` | Namespace `8818`; executes two-key `pg_advisory_xact_lock(namespace, hashtext(org_id))`, released automatically on commit or rollback. | `backend/src/api/services/org_lock.py:8` |
 | `_fields()` | The single builder behind both agent shapes, including persisted `revoked_at`, registry-derived `online`/`last_seen_at`, target subnet, and active command. | `backend/src/api/services/agents.py:18` |
 | `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:31` |

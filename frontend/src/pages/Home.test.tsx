@@ -325,44 +325,15 @@ describe('Home', () => {
     expect(screen.queryByTestId('home-table')).toBeNull()
   })
 
-  it('a stale coverage window renders its one-line notice', async () => {
+  it('a failed-scan notice sits below the last-scan line', async () => {
     overrideHome(() =>
       homeSnapshot({
-        review_count: 1,
-        latest_successful_scan: staleSuccessfulScan,
-        notices: [
-          {
-            kind: 'stale_coverage',
-            text: 'No successful scan in 9 days.',
-            days: 9,
-          },
-        ],
-        attention: { data: [], total: 0, page: 1 },
-      }),
-    )
-    renderWithProviders(<Home />)
-
-    await screen.findByTestId('home-item-coverage')
-    expect(screen.getByTestId('home-item-coverage')).toHaveTextContent(
-      'No successful scan in 9 days.',
-    )
-    expect(screen.queryByTestId('home-table')).toBeNull()
-  })
-
-  it('failed-scan and stale-coverage notices sit below the last-scan line', async () => {
-    overrideHome(() =>
-      homeSnapshot({
-        review_count: 4,
+        review_count: 3,
         latest_successful_scan: staleSuccessfulScan,
         notices: [
           {
             kind: 'failed_scan',
             text: "Last night's scan didn't finish.",
-          },
-          {
-            kind: 'stale_coverage',
-            text: 'No successful scan in 9 days.',
-            days: 9,
           },
         ],
         attention: {
@@ -377,18 +348,13 @@ describe('Home', () => {
     await screen.findByTestId('home-item-scan')
     const context = screen.getByTestId('home-context')
     const scanNotice = screen.getByTestId('home-item-scan')
-    const coverageNotice = screen.getByTestId('home-item-coverage')
 
     expect(
       context.compareDocumentPosition(scanNotice) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(
-      scanNotice.compareDocumentPosition(coverageNotice) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
     expect(screen.getByTestId('home-verdict')).toHaveTextContent(
-      '4 things need your attention',
+      '3 things need your attention',
     )
   })
 
