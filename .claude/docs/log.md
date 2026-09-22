@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-22
 
+* **Update**: DMI-179 fifth review round. `ScanDetailSection` takes `openToken` (finding id) instead of
+  `defaultOpen`/`openWhen`, so a collapsed group reopens for a second finding. Severity group titles,
+  toggles and captions plus `Pagination` labels now come from the i18n catalogs. `ScanSummaryStrip`
+  renders `ScanReports` itself (no `actions` slot). The AI-usage table uses a CSS min-height instead
+  of spacer rows and clamps a stale page. `SeverityWord` is bold again and no longer exports
+  `SEVERITY_LABEL`. Touched: `frontend/screens.md`, `frontend/tables.md`, `frontend/ai-usage.md`.
+
 * **Update**: DMI-179 (repair frontend regressions from PR #151, plus follow-up feedback).
   `GlobalAssistant` deleted — `AppShell` no longer mounts it, and `ContextChat`'s multi-turn/history
   branch is now dead code with no caller (only the one-shot "Explain with AI" path is live, and it

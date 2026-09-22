@@ -23,7 +23,7 @@ are not stored.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `getAIUsage` | `GET /ai/usage?limit=` (default 50, max 100). | `frontend/src/api/ai.ts:10` |
-| `AIUsagePanel` | Pending, error-with-retry, and ready states; `data-testid="settings-ai-usage"`. Slices the fetched page into 10-row pages locally (`USAGE_PER_PAGE`) and pads the `<tbody>` with `aria-hidden` spacer rows on a short last page, so the table's height never changes between pages — without the padding, a shorter last page shrinks the document and flashes the window scrollbar. | `frontend/src/pages/settings/AIUsagePanel.tsx:18` |
+| `AIUsagePanel` | Pending, error-with-retry, and ready states; `data-testid="settings-ai-usage"`. Slices the fetched page into 10-row pages locally (`USAGE_PER_PAGE`) Rows and header are fixed at `h-10`, and the table's wrapper carries the `min-h-usage-table` utility (`index.css`, header + 10 rows) so a short last page keeps the same height — otherwise it shrinks the document and flashes the window scrollbar. The current page is clamped to the last page that exists, so a refetch that returns fewer entries never leaves an empty page with no pagination to leave it. | `frontend/src/pages/settings/AIUsagePanel.tsx:18` |
 | `Settings` | Renders `<AIUsagePanel />` below the account `<hr>`. | `frontend/src/pages/Settings.tsx:101` |
 
 ## How it connects
