@@ -119,10 +119,17 @@ function ScanDetail() {
               finding.finding_id === openFindingId,
           )
         const partial = metadata.partial_result === true
+        const isFinished =
+          scan.status !== 'failed' && !isUnfinished(scan.status)
 
         return (
           <>
-            <ScanDetailHeader scan={scan} />
+            <ScanDetailHeader
+              scan={scan}
+              actions={
+                isFinished ? <ScanReports scanId={scan.scan_id} /> : undefined
+              }
+            />
             <ScanSummaryStrip scan={scan} />
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
@@ -143,8 +150,8 @@ function ScanDetail() {
                 {groups.length === 0 ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     {partial
-                      ? 'No confirmed vulnerabilities in accepted evidence.'
-                      : 'No confirmed vulnerabilities were found in this scan.'}
+                      ? t('common.noVulnerabilitiesAcceptedEvidence')
+                      : t('common.noVulnerabilitiesInScan')}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-8">
@@ -176,23 +183,20 @@ function ScanDetail() {
                     })}
                   </div>
                 )}
-                <ScanDetailSection title="Attack surface">
+                <ScanDetailSection title={t('common.attackSurface')}>
                   {scan.assessment_status === 'unavailable' ? (
                     <div
                       data-testid="scan-assessment-unavailable"
                       className="flex flex-col gap-2 text-body-md"
                     >
-                      <p>
-                        Unavailable — this scan predates attack-surface
-                        analysis.
-                      </p>
+                      <p>{t('common.attackSurfaceUnavailable')}</p>
                       <p className="text-muted-foreground">
-                        Re-run the scan to produce this data.
+                        {t('common.rerunForData')}
                       </p>
                     </div>
                   ) : scan.exposures.length === 0 ? (
                     <p data-testid="scan-no-exposures" className="text-body-md">
-                      No reachable services were found in this scan.
+                      {t('common.noReachableServices')}
                     </p>
                   ) : (
                     <ExposureTable
@@ -253,7 +257,6 @@ function ScanDetail() {
                     <ScanHostsTable hosts={scan.hosts} />
                   )}
                 </ScanDetailSection>
-                <ScanReports scanId={scan.scan_id} />
               </>
             )}
           </>

@@ -69,6 +69,21 @@ export const catalog: Catalog = {
   'common.machines': 'Устройства',
   'common.vulnerabilities': 'Уязвимости',
   'common.highestSeverity': 'Максимальная критичность',
+  'common.network': 'Сеть',
+  'common.attackSurface': 'Поверхность атаки',
+  'common.unavailable': 'Недоступно',
+  'common.attackSurfaceUnavailable':
+    'Недоступно — это сканирование выполнено до анализа поверхности атаки.',
+  'common.rerunForData': 'Запустите сканирование заново, чтобы получить эти данные.',
+  'common.reachableServices': ({ count }) =>
+    count + ' доступных служб',
+  'common.needsReview': ({ count }) => count + ' требуют проверки',
+  'common.noReachableServices':
+    'В этом сканировании не найдено доступных служб.',
+  'common.noVulnerabilitiesAcceptedEvidence':
+    'Нет подтверждённых уязвимостей в принятых данных.',
+  'common.noVulnerabilitiesInScan':
+    'В этом сканировании не найдено подтверждённых уязвимостей.',
   'common.address': 'Адрес',
   'common.type': 'Тип',
   'common.lastSeen': 'Последняя активность',
@@ -224,4 +239,5 @@ export const catalog: Catalog = {
   'settings.tokens': 'Токены',
   'settings.latency': 'Задержка',
   'settings.noRequests': 'Запросов к ИИ пока нет.',
+  'settings.usagePages': 'Страницы использования ИИ',
 }

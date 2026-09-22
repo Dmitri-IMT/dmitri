@@ -70,6 +70,22 @@ export const catalog: Catalog = {
   'common.machines': 'Equipamentos',
   'common.vulnerabilities': 'Vulnerabilidades',
   'common.highestSeverity': 'Maior gravidade',
+  'common.network': 'Rede',
+  'common.attackSurface': 'Superfície de ataque',
+  'common.unavailable': 'Indisponível',
+  'common.attackSurfaceUnavailable':
+    'Indisponível — este scan é anterior à análise de superfície de ataque.',
+  'common.rerunForData': 'Execute o scan novamente para gerar esses dados.',
+  'common.reachableServices': ({ count }) =>
+    count + (count === 1 ? ' serviço alcançável' : ' serviços alcançáveis'),
+  'common.needsReview': ({ count }) =>
+    count + (count === 1 ? ' precisa de revisão' : ' precisam de revisão'),
+  'common.noReachableServices':
+    'Nenhum serviço alcançável foi encontrado neste scan.',
+  'common.noVulnerabilitiesAcceptedEvidence':
+    'Nenhuma vulnerabilidade confirmada nas evidências aceitas.',
+  'common.noVulnerabilitiesInScan':
+    'Nenhuma vulnerabilidade confirmada foi encontrada neste scan.',
   'common.address': 'Endereço',
   'common.type': 'Tipo',
   'common.lastSeen': 'Visto por último',
@@ -234,4 +250,5 @@ export const catalog: Catalog = {
   'settings.tokens': 'Tokens',
   'settings.latency': 'Latência',
   'settings.noRequests': 'Nenhuma solicitação de IA registrada ainda.',
+  'settings.usagePages': 'Páginas de uso de IA',
 }

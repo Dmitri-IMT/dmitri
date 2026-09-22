@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getAIUsage } from '@/api/ai'
 import { queryKeys } from '@/api/queryKeys'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import Pagination from '@/components/Pagination'
 import useI18n from '@/i18n/useI18n'
 
 const USAGE_LIMIT = 50
+const USAGE_PER_PAGE = 5
 const numberFormat = new Intl.NumberFormat()
 
 function formatNumber(value: number) {
@@ -14,11 +17,16 @@ function formatNumber(value: number) {
 
 function AIUsagePanel() {
   const { t } = useI18n()
+  const [page, setPage] = useState(1)
   const query = useQuery({
     queryKey: queryKeys.ai.usage(USAGE_LIMIT),
     queryFn: () => getAIUsage(USAGE_LIMIT),
     retry: false,
   })
+  const pageData = query.data?.data.slice(
+    (page - 1) * USAGE_PER_PAGE,
+    page * USAGE_PER_PAGE,
+  )
 
   return (
     <section data-testid="settings-ai-usage" className="flex flex-col gap-4">
@@ -121,7 +129,7 @@ function AIUsagePanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {query.data.data.map((entry, index) => (
+                    {pageData?.map((entry, index) => (
                       <tr
                         key={`${entry.created_at}-${index}`}
                         className="border-b border-border last:border-0"
@@ -143,6 +151,14 @@ function AIUsagePanel() {
                     ))}
                   </tbody>
                 </table>
+                <Pagination
+                  page={page}
+                  perPage={USAGE_PER_PAGE}
+                  total={query.data.data.length}
+                  onPageChange={setPage}
+                  testId="settings-ai-usage"
+                  label={t('settings.usagePages')}
+                />
               </div>
             ) : (
               <p className="text-body-md text-muted-foreground">

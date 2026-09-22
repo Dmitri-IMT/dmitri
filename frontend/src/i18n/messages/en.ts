@@ -70,6 +70,22 @@ export const catalog = {
   'common.machines': 'Machines',
   'common.vulnerabilities': 'Vulnerabilities',
   'common.highestSeverity': 'Highest severity',
+  'common.network': 'Network',
+  'common.attackSurface': 'Attack surface',
+  'common.unavailable': 'Unavailable',
+  'common.attackSurfaceUnavailable':
+    'Unavailable — this scan predates attack-surface analysis.',
+  'common.rerunForData': 'Re-run the scan to produce this data.',
+  'common.reachableServices': ({ count }) =>
+    count + ' reachable ' + (count === 1 ? 'service' : 'services'),
+  'common.needsReview': ({ count }) =>
+    count + ' ' + (count === 1 ? 'needs' : 'need') + ' review',
+  'common.noReachableServices':
+    'No reachable services were found in this scan.',
+  'common.noVulnerabilitiesAcceptedEvidence':
+    'No confirmed vulnerabilities in accepted evidence.',
+  'common.noVulnerabilitiesInScan':
+    'No confirmed vulnerabilities were found in this scan.',
   'common.address': 'Address',
   'common.type': 'Type',
   'common.lastSeen': 'Last seen',
@@ -225,4 +241,5 @@ export const catalog = {
   'settings.tokens': 'Tokens',
   'settings.latency': 'Latency',
   'settings.noRequests': 'No AI requests recorded yet.',
+  'settings.usagePages': 'AI usage pages',
 } satisfies Record<string, Value>
