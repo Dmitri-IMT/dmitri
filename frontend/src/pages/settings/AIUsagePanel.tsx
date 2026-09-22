@@ -111,7 +111,11 @@ function AIUsagePanel() {
             </dl>
             {query.data.data.length > 0 ? (
               <div className="overflow-x-auto">
-                <div className="min-h-usage-table">
+                <div
+                  className={
+                    entries.length > USAGE_PER_PAGE ? 'min-h-usage-table' : ''
+                  }
+                >
                   <table className="w-full min-w-form text-left text-body-sm">
                     <caption className="sr-only">
                       {t('settings.recentRequests')}
