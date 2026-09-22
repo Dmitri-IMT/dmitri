@@ -30,9 +30,7 @@ describe('ScanReports', () => {
     const trigger = screen.getByRole('button', { name: 'Scan reports' })
     expect(trigger).toBeInTheDocument()
     expect(trigger).toHaveAttribute('data-variant', 'ghost')
-    expect(screen.getByTestId('scan-reports')).not.toHaveClass(
-      'border-border',
-    )
+    expect(screen.getByTestId('scan-reports')).not.toHaveClass('border-border')
   })
 
   it('previews first and downloads only after confirmation', async () => {
@@ -41,7 +39,9 @@ describe('ScanReports', () => {
 
     await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download explained report' }),
+      await screen.findByRole('menuitem', {
+        name: 'Download explained report',
+      }),
     )
 
     expect(await screen.findByTitle('PDF report preview')).toBeInTheDocument()
@@ -60,7 +60,9 @@ describe('ScanReports', () => {
 
     await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download technical report' }),
+      await screen.findByRole('menuitem', {
+        name: 'Download technical report',
+      }),
     )
     expect(await screen.findByText('Technical report preview')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Confirm download' }))
@@ -77,7 +79,9 @@ describe('ScanReports', () => {
 
     await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download explained report' }),
+      await screen.findByRole('menuitem', {
+        name: 'Download explained report',
+      }),
     )
 
     expect(await screen.findByTestId('toast')).toHaveTextContent(

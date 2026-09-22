@@ -115,6 +115,24 @@ export const catalog: Catalog = {
     'Nenhum servi\u00e7o industrial foi detectado neste equipamento.',
   'common.noAddressRanges': 'Nenhuma faixa de endere\u00e7os foi mapeada.',
   'common.back': 'Voltar',
+  'common.previousPage': 'Página anterior',
+  'common.nextPage': 'Próxima página',
+  'common.pageNumber': ({ page }) => 'Página ' + page,
+  'common.severityCritical': 'Crítica',
+  'common.severityHigh': 'Alta',
+  'common.severityMedium': 'Média',
+  'common.severityLow': 'Baixa',
+  'common.severityGroupTitle': ({ label, count }) =>
+    label +
+    ': ' +
+    count +
+    (count === 1 ? ' vulnerabilidade' : ' vulnerabilidades'),
+  'common.severityGroupToggle': ({ label }) =>
+    'Alternar vulnerabilidades de gravidade ' + String(label).toLowerCase(),
+  'common.severityGroupCaption': ({ label }) =>
+    'Vulnerabilidades de gravidade ' +
+    String(label).toLowerCase() +
+    ' neste scan',
   'common.findingsLoadError':
     'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
   'common.noVulnerabilities': 'Nenhuma vulnerabilidade neste equipamento.',

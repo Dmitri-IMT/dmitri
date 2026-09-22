@@ -3,7 +3,7 @@ import type { components } from '@/types/openapi'
 
 type Severity = components['schemas']['Severity']
 
-export const SEVERITY_LABEL: Record<Severity, string> = {
+const SEVERITY_LABEL: Record<Severity, string> = {
   critical: 'Critical',
   high: 'High',
   medium: 'Medium',
@@ -12,7 +12,7 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 
 function SeverityWord({ severity }: { severity: Severity | null | undefined }) {
   if (severity == null) return <EmptyMark />
-  return <span>{SEVERITY_LABEL[severity]}</span>
+  return <span className="font-semibold">{SEVERITY_LABEL[severity]}</span>
 }
 
 export default SeverityWord

@@ -113,6 +113,22 @@ export const catalog = {
     'No industrial services were detected on this machine.',
   'common.noAddressRanges': 'No address ranges were mapped.',
   'common.back': 'Back',
+  'common.previousPage': 'Previous page',
+  'common.nextPage': 'Next page',
+  'common.pageNumber': ({ page }) => 'Page ' + page,
+  'common.severityCritical': 'Critical',
+  'common.severityHigh': 'High',
+  'common.severityMedium': 'Medium',
+  'common.severityLow': 'Low',
+  'common.severityGroupTitle': ({ label, count }) =>
+    label +
+    ': ' +
+    count +
+    (count === 1 ? ' vulnerability' : ' vulnerabilities'),
+  'common.severityGroupToggle': ({ label }) =>
+    'Toggle ' + String(label).toLowerCase() + ' vulnerabilities',
+  'common.severityGroupCaption': ({ label }) =>
+    String(label).toLowerCase() + ' vulnerabilities in this scan',
   'common.findingsLoadError': "Couldn't load this machine's vulnerabilities.",
   'common.noVulnerabilities': 'No vulnerabilities on this machine.',
   'common.vulnerabilitiesOnMachine': 'Vulnerabilities on this machine',

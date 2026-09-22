@@ -23,9 +23,15 @@ function AIUsagePanel() {
     queryFn: () => getAIUsage(USAGE_LIMIT),
     retry: false,
   })
-  const pageData = query.data?.data.slice(
-    (page - 1) * USAGE_PER_PAGE,
-    page * USAGE_PER_PAGE,
+  const entries = query.data?.data ?? []
+  // A refetch can return fewer pages than the one the user is on.
+  const currentPage = Math.min(
+    page,
+    Math.max(1, Math.ceil(entries.length / USAGE_PER_PAGE)),
+  )
+  const pageData = entries.slice(
+    (currentPage - 1) * USAGE_PER_PAGE,
+    currentPage * USAGE_PER_PAGE,
   )
 
   return (
@@ -105,67 +111,56 @@ function AIUsagePanel() {
             </dl>
             {query.data.data.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-form text-left text-body-sm">
-                  <caption className="sr-only">
-                    {t('settings.recentRequests')}
-                  </caption>
-                  <thead className="border-b border-border text-muted-foreground">
-                    <tr>
-                      <th className="px-2 py-2 font-normal">
-                        {t('settings.operation')}
-                      </th>
-                      <th className="px-2 py-2 font-normal">
-                        {t('settings.model')}
-                      </th>
-                      <th className="px-2 py-2 font-normal">
-                        {t('settings.status')}
-                      </th>
-                      <th className="px-2 py-2 font-normal">
-                        {t('settings.tokens')}
-                      </th>
-                      <th className="px-2 py-2 font-normal">
-                        {t('settings.latency')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageData?.map((entry, index) => (
-                      <tr
-                        key={`${entry.created_at}-${index}`}
-                        className="border-b border-border last:border-0"
-                      >
-                        <td className="px-2 py-2">{entry.operation}</td>
-                        <td className="max-w-form truncate px-2 py-2">
-                          {entry.model}
-                        </td>
-                        <td className="px-2 py-2">{entry.status}</td>
-                        <td className="px-2 py-2">
-                          {formatNumber(entry.total_tokens ?? 0)}
-                        </td>
-                        <td className="px-2 py-2">
-                          {entry.latency_ms === null
-                            ? '—'
-                            : `${entry.latency_ms} ms`}
-                        </td>
+                <div className="min-h-usage-table">
+                  <table className="w-full min-w-form text-left text-body-sm">
+                    <caption className="sr-only">
+                      {t('settings.recentRequests')}
+                    </caption>
+                    <thead className="border-b border-border text-muted-foreground">
+                      <tr className="h-10">
+                        <th className="px-2 py-2 font-normal">
+                          {t('settings.operation')}
+                        </th>
+                        <th className="px-2 py-2 font-normal">
+                          {t('settings.model')}
+                        </th>
+                        <th className="px-2 py-2 font-normal">
+                          {t('settings.status')}
+                        </th>
+                        <th className="px-2 py-2 font-normal">
+                          {t('settings.tokens')}
+                        </th>
+                        <th className="px-2 py-2 font-normal">
+                          {t('settings.latency')}
+                        </th>
                       </tr>
-                    ))}
-                    {Array.from({
-                      length: USAGE_PER_PAGE - (pageData?.length ?? 0),
-                    }).map((_, index) => (
-                      <tr
-                        key={`spacer-${index}`}
-                        aria-hidden="true"
-                        className="border-b border-border last:border-0"
-                      >
-                        <td className="px-2 py-2" colSpan={5}>
-                          &nbsp;
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pageData.map((entry, index) => (
+                        <tr
+                          key={`${entry.created_at}-${index}`}
+                          className="h-10 border-b border-border last:border-0"
+                        >
+                          <td className="px-2 py-2">{entry.operation}</td>
+                          <td className="max-w-form truncate px-2 py-2">
+                            {entry.model}
+                          </td>
+                          <td className="px-2 py-2">{entry.status}</td>
+                          <td className="px-2 py-2">
+                            {formatNumber(entry.total_tokens ?? 0)}
+                          </td>
+                          <td className="px-2 py-2">
+                            {entry.latency_ms === null
+                              ? '—'
+                              : `${entry.latency_ms} ms`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <Pagination
-                  page={page}
+                  page={currentPage}
                   perPage={USAGE_PER_PAGE}
                   total={query.data.data.length}
                   onPageChange={setPage}

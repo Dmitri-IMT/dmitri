@@ -6,23 +6,21 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 function ScanDetailSection({
   title,
   children,
-  defaultOpen = false,
-  openWhen = false,
+  openToken,
   triggerAriaLabel,
 }: {
   title: ReactNode
   children: ReactNode
-  defaultOpen?: boolean
-  /** Forces the section open on demand (e.g. a fresh deep link). Never forces it closed. */
-  openWhen?: boolean
+  /** Opens the section each time it changes to a new value (e.g. a deep-linked finding id). Never forces it closed. */
+  openToken?: string
   triggerAriaLabel?: string
 }) {
-  const [open, setOpen] = useState(defaultOpen || openWhen)
-  const [lastOpenWhen, setLastOpenWhen] = useState(openWhen)
+  const [open, setOpen] = useState(openToken != null)
+  const [lastOpenToken, setLastOpenToken] = useState(openToken)
 
-  if (openWhen !== lastOpenWhen) {
-    setLastOpenWhen(openWhen)
-    if (openWhen) setOpen(true)
+  if (openToken !== lastOpenToken) {
+    setLastOpenToken(openToken)
+    if (openToken != null) setOpen(true)
   }
 
   return (

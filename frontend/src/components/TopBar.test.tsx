@@ -192,9 +192,7 @@ describe('TopBar', () => {
     renderTopBarAs(viewerProfile)
     await screen.findByTestId('top-bar')
 
-    expect(
-      screen.queryByTestId('mobile-menu-toggle'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mobile-menu-toggle')).not.toBeInTheDocument()
     expect(screen.queryByTestId('mobile-navigation')).not.toBeInTheDocument()
   })
 

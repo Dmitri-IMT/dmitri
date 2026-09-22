@@ -65,9 +65,11 @@ describe('Pagination', () => {
   it('never renders more than 10 dots, however many pages there are', () => {
     renderPagination(1, 8000)
 
-    expect(screen.getByTestId('scans-pagination').querySelectorAll(
-      'button[data-testid^="scans-page-"]',
-    )).toHaveLength(10)
+    expect(
+      screen
+        .getByTestId('scans-pagination')
+        .querySelectorAll('button[data-testid^="scans-page-"]'),
+    ).toHaveLength(10)
     expect(
       screen.queryByRole('button', { name: 'Page 400' }),
     ).not.toBeInTheDocument()

@@ -6,6 +6,7 @@ import {
   PaginationItem,
 } from '@/components/ui/pagination'
 import { dotWindow } from '@/lib/dotWindow'
+import useI18n from '@/i18n/useI18n'
 
 type PaginationProps = {
   page: number
@@ -24,6 +25,7 @@ function Pagination({
   testId,
   label,
 }: PaginationProps) {
+  const { t } = useI18n()
   if (total <= perPage) return null
 
   const pageCount = Math.ceil(total / perPage)
@@ -38,7 +40,7 @@ function Pagination({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Previous page"
+            aria-label={t('common.previousPage')}
             disabled={atFirstPage}
             tabIndex={atFirstPage ? -1 : undefined}
             data-testid={`${testId}-previous`}
@@ -53,7 +55,7 @@ function Pagination({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label={`Page ${item}`}
+              aria-label={t('common.pageNumber', { page: item })}
               aria-current={item === page ? 'page' : undefined}
               data-testid={`${testId}-page-${item}`}
               onClick={() => onPageChange(item)}
@@ -75,7 +77,7 @@ function Pagination({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Next page"
+            aria-label={t('common.nextPage')}
             disabled={atLastPage}
             tabIndex={atLastPage ? -1 : undefined}
             data-testid={`${testId}-next`}

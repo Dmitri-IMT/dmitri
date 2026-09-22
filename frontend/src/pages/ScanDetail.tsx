@@ -14,7 +14,6 @@ import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
-import ScanReports from '@/pages/scans/ScanReports'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -26,14 +25,21 @@ import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
   targetedFindingsTableTestId,
 } from '@/pages/scans/ServiceTargetedFindings'
-import { SEVERITY_LABEL } from '@/components/SeverityWord'
 import useI18n from '@/i18n/useI18n'
+import type { MessageKey } from '@/i18n/messages'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 type Severity = components['schemas']['Severity']
 
 const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
+
+const SEVERITY_LABEL_KEY: Record<Severity, MessageKey> = {
+  critical: 'common.severityCritical',
+  high: 'common.severityHigh',
+  medium: 'common.severityMedium',
+  low: 'common.severityLow',
+}
 
 const TARGETED_SOURCE = 'targeted_service_assessment'
 
@@ -111,26 +117,16 @@ function ScanDetail() {
         const hasTargetedSection =
           metadata.targeted_units_planned != null ||
           scan.findings.some(isTargetedFinding)
-        const opensTargetedDeepLink =
-          openFindingId != null &&
-          scan.findings.some(
-            (finding) =>
-              isTargetedFinding(finding) &&
-              finding.finding_id === openFindingId,
-          )
+        const opensTargetedDeepLink = scan.findings.some(
+          (finding) =>
+            isTargetedFinding(finding) && finding.finding_id === openFindingId,
+        )
         const partial = metadata.partial_result === true
-        const isFinished =
-          scan.status !== 'failed' && !isUnfinished(scan.status)
 
         return (
           <>
             <ScanDetailHeader scan={scan} />
-            <ScanSummaryStrip
-              scan={scan}
-              actions={
-                isFinished ? <ScanReports scanId={scan.scan_id} /> : undefined
-              }
-            />
+            <ScanSummaryStrip scan={scan} />
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
             ) : isUnfinished(scan.status) ? (
@@ -159,18 +155,30 @@ function ScanDetail() {
                       const opensForDeepLink = group.findings.some(
                         (finding) => finding.finding_id === openFindingId,
                       )
+                      const label = t(SEVERITY_LABEL_KEY[group.severity])
                       return (
                         <ScanDetailSection
                           key={group.severity}
-                          title={`${SEVERITY_LABEL[group.severity]}: ${group.findings.length} vulnerabilit${group.findings.length === 1 ? 'y' : 'ies'}`}
-                          openWhen={opensForDeepLink}
-                          triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
+                          title={t('common.severityGroupTitle', {
+                            label,
+                            count: group.findings.length,
+                          })}
+                          openToken={
+                            opensForDeepLink
+                              ? (openFindingId ?? undefined)
+                              : undefined
+                          }
+                          triggerAriaLabel={t('common.severityGroupToggle', {
+                            label,
+                          })}
                         >
                           <FindingsTable
                             findings={group.findings}
                             variant="scan"
                             testId={`findings-${group.severity}`}
-                            caption={`${group.severity} vulnerabilities in this scan`}
+                            caption={t('common.severityGroupCaption', {
+                              label,
+                            })}
                             openFindingId={openFindingId}
                             onOpenFindingChange={setOpenFindingId}
                           />
@@ -225,7 +233,11 @@ function ScanDetail() {
                   <ScanDetailSection
                     key="targeted"
                     title="Service Targeted Tools"
-                    openWhen={opensTargetedDeepLink}
+                    openToken={
+                      opensTargetedDeepLink
+                        ? (openFindingId ?? undefined)
+                        : undefined
+                    }
                     triggerAriaLabel="Toggle service-targeted findings"
                   >
                     <ServiceTargetedFindings

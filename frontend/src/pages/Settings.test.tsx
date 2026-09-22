@@ -131,7 +131,7 @@ describe('Settings', () => {
     expect(usage.getByText('op-11')).toBeInTheDocument()
     expect(usage.queryByText('op-0')).not.toBeInTheDocument()
     const rowsPage2 = usage.getByRole('table').querySelectorAll('tbody tr')
-    expect(rowsPage2).toHaveLength(10)
+    expect(rowsPage2).toHaveLength(2)
   })
 
   it('carries the change-password button alone, with no Password label and outside the value list', async () => {

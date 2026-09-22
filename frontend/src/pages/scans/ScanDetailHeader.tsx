@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import BackLink from '@/components/BackLink'
 import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
+import ScanReports from '@/pages/scans/ScanReports'
 import { formatScanDuration } from '@/lib/scanDuration'
 import { SCAN_MODE_LABEL } from '@/lib/scanModes'
 import { hidesCounts, isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
@@ -27,13 +28,7 @@ function StripEntry({
   )
 }
 
-export function ScanSummaryStrip({
-  scan,
-  actions,
-}: {
-  scan: ScanDetailResponse
-  actions?: ReactNode
-}) {
+export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
   const { t } = useI18n()
   const durationCopy = formatScanDuration(scan.duration)
   const needsReview = scan.exposures.filter(
@@ -77,7 +72,9 @@ export function ScanSummaryStrip({
             testId="scan-summary-duration"
           />
         </div>
-        {actions}
+        {scan.status !== 'failed' && !isUnfinished(scan.status) && (
+          <ScanReports scanId={scan.scan_id} />
+        )}
       </div>
     </div>
   )

@@ -268,9 +268,7 @@ describe('ScanDetail', () => {
     scanDetail(completedScan())
     renderPage(`/scans/${SCAN_ID}?finding=${phpCgiFinding.finding_id}`)
 
-    await screen.findByTestId(
-      `finding-panel-${phpCgiFinding.finding_id}`,
-    )
+    await screen.findByTestId(`finding-panel-${phpCgiFinding.finding_id}`)
     const trigger = screen.getByRole('button', {
       name: 'Toggle critical vulnerabilities',
     })
@@ -743,9 +741,9 @@ describe('ScanDetail', () => {
     scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
-    expect(
-      await screen.findByTestId('scan-no-findings'),
-    ).toHaveTextContent('No confirmed vulnerabilities in accepted evidence.')
+    expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities in accepted evidence.',
+    )
     expect(screen.queryByTestId('scan-partial-notice')).not.toBeInTheDocument()
 
     view.unmount()

@@ -13,13 +13,13 @@ const SEVERITIES: [Severity, string][] = [
 ]
 
 describe('SeverityWord', () => {
-  it.each(SEVERITIES)('renders %s as a plain word', (severity, word) => {
+  it.each(SEVERITIES)('renders %s as a bold plain word', (severity, word) => {
     render(<SeverityWord severity={severity} />)
 
     const rendered = screen.getByText(word)
     expect(rendered).toBeVisible()
     expect(rendered).toHaveTextContent(new RegExp(`^${word}$`))
-    expect(rendered.className).toBe('')
+    expect(rendered.className).toBe('font-semibold')
     expect(document.body.textContent).toBe(word)
   })
 

@@ -74,9 +74,9 @@ export const catalog: Catalog = {
   'common.unavailable': 'Недоступно',
   'common.attackSurfaceUnavailable':
     'Недоступно — это сканирование выполнено до анализа поверхности атаки.',
-  'common.rerunForData': 'Запустите сканирование заново, чтобы получить эти данные.',
-  'common.reachableServices': ({ count }) =>
-    count + ' доступных служб',
+  'common.rerunForData':
+    'Запустите сканирование заново, чтобы получить эти данные.',
+  'common.reachableServices': ({ count }) => count + ' доступных служб',
   'common.needsReview': ({ count }) => count + ' требуют проверки',
   'common.noReachableServices':
     'В этом сканировании не найдено доступных служб.',
@@ -109,6 +109,27 @@ export const catalog: Catalog = {
   'common.noIndustrialServices': 'Промышленные сервисы не обнаружены.',
   'common.noAddressRanges': 'Диапазоны адресов не сопоставлены.',
   'common.back': 'Назад',
+  'common.previousPage': 'Предыдущая страница',
+  'common.nextPage': 'Следующая страница',
+  'common.pageNumber': ({ page }) => 'Страница ' + page,
+  'common.severityCritical': 'Критическая',
+  'common.severityHigh': 'Высокая',
+  'common.severityMedium': 'Средняя',
+  'common.severityLow': 'Низкая',
+  'common.severityGroupTitle': ({ label, count }) => {
+    const n = Number(count)
+    const word =
+      n % 10 === 1 && n % 100 !== 11
+        ? 'уязвимость'
+        : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)
+          ? 'уязвимости'
+          : 'уязвимостей'
+    return label + ': ' + count + ' ' + word
+  },
+  'common.severityGroupToggle': ({ label }) =>
+    'Показать или скрыть уязвимости: ' + String(label).toLowerCase(),
+  'common.severityGroupCaption': ({ label }) =>
+    'Уязвимости в этом скане: ' + String(label).toLowerCase(),
   'common.findingsLoadError': 'Не удалось загрузить уязвимости устройства.',
   'common.noVulnerabilities': 'На этом устройстве уязвимостей нет.',
   'common.vulnerabilitiesOnMachine': 'Уязвимости устройства',
