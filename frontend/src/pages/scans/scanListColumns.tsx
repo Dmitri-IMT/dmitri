@@ -71,7 +71,6 @@ export function scanListColumns(
       key: 'duration',
       label: t('common.duration'),
       width: 'w-1/12',
-      align: 'right',
       render: (scan) =>
         scanDurationCell(scan, `scans-duration-${scan.scan_id}`),
     },
@@ -79,14 +78,12 @@ export function scanListColumns(
       key: 'host_count',
       label: t('common.machines'),
       width: 'w-1/10',
-      align: 'right',
       render: (scan) => countCell(scan, scan.host_count),
     },
     {
       key: 'finding_count',
       label: t('common.vulnerabilities'),
       width: 'w-3/25',
-      align: 'right',
       render: (scan) =>
         countCell(
           scan,
