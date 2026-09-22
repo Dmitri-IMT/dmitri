@@ -46,7 +46,6 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
       key: 'port',
       label: 'Port',
       width: 'w-3/25',
-      align: 'right',
       render: (finding) =>
         finding.port == null ? (
           <EmptyMark />

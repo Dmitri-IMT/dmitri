@@ -78,6 +78,7 @@ function ScanReports({ scanId }: { scanId: string }) {
             type="button"
             variant="ghost"
             size="icon"
+            className="text-primary hover:text-primary"
             aria-label={t('reports.title')}
             disabled={busy}
           >

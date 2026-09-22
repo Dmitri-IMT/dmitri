@@ -161,13 +161,9 @@ function ScanDetail() {
                       )
                       return (
                         <ScanDetailSection
-                          key={
-                            opensForDeepLink
-                              ? `${group.severity}-${openFindingId}`
-                              : group.severity
-                          }
+                          key={group.severity}
                           title={`${SEVERITY_LABEL[group.severity]}: ${group.findings.length} vulnerabilit${group.findings.length === 1 ? 'y' : 'ies'}`}
-                          defaultOpen={opensForDeepLink}
+                          openWhen={opensForDeepLink}
                           triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
                         >
                           <FindingsTable
@@ -227,13 +223,9 @@ function ScanDetail() {
                 </ScanDetailSection>
                 {hasTargetedSection && (
                   <ScanDetailSection
-                    key={
-                      opensTargetedDeepLink
-                        ? `targeted-${openFindingId}`
-                        : 'targeted'
-                    }
+                    key="targeted"
                     title="Service Targeted Tools"
-                    defaultOpen={opensTargetedDeepLink}
+                    openWhen={opensTargetedDeepLink}
                     triggerAriaLabel="Toggle service-targeted findings"
                   >
                     <ServiceTargetedFindings

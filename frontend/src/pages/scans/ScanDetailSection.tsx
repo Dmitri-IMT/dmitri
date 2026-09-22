@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Collapsible } from 'radix-ui'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -7,15 +7,26 @@ function ScanDetailSection({
   title,
   children,
   defaultOpen = false,
+  openWhen = false,
   triggerAriaLabel,
 }: {
   title: ReactNode
   children: ReactNode
   defaultOpen?: boolean
+  /** Forces the section open on demand (e.g. a fresh deep link). Never forces it closed. */
+  openWhen?: boolean
   triggerAriaLabel?: string
 }) {
+  const [open, setOpen] = useState(defaultOpen || openWhen)
+  const [lastOpenWhen, setLastOpenWhen] = useState(openWhen)
+
+  if (openWhen !== lastOpenWhen) {
+    setLastOpenWhen(openWhen)
+    if (openWhen) setOpen(true)
+  }
+
   return (
-    <Collapsible.Root defaultOpen={defaultOpen}>
+    <Collapsible.Root open={open} onOpenChange={setOpen}>
       <Card>
         <CardHeader className="p-0">
           <Collapsible.Trigger

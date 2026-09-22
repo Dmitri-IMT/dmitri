@@ -8,7 +8,7 @@ import Pagination from '@/components/Pagination'
 import useI18n from '@/i18n/useI18n'
 
 const USAGE_LIMIT = 50
-const USAGE_PER_PAGE = 5
+const USAGE_PER_PAGE = 10
 const numberFormat = new Intl.NumberFormat()
 
 function formatNumber(value: number) {
@@ -146,6 +146,19 @@ function AIUsagePanel() {
                           {entry.latency_ms === null
                             ? '—'
                             : `${entry.latency_ms} ms`}
+                        </td>
+                      </tr>
+                    ))}
+                    {Array.from({
+                      length: USAGE_PER_PAGE - (pageData?.length ?? 0),
+                    }).map((_, index) => (
+                      <tr
+                        key={`spacer-${index}`}
+                        aria-hidden="true"
+                        className="border-b border-border last:border-0"
+                      >
+                        <td className="px-2 py-2" colSpan={5}>
+                          &nbsp;
                         </td>
                       </tr>
                     ))}

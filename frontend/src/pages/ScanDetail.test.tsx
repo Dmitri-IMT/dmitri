@@ -263,6 +263,30 @@ describe('ScanDetail', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('keeps the severity section open after closing its deep-linked finding', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}?finding=${phpCgiFinding.finding_id}`)
+
+    await screen.findByTestId(
+      `finding-panel-${phpCgiFinding.finding_id}`,
+    )
+    const trigger = screen.getByRole('button', {
+      name: 'Toggle critical vulnerabilities',
+    })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(
+      screen.getByTestId(`findings-critical-caret-${phpCgiFinding.finding_id}`),
+    )
+
+    expect(
+      screen.queryByTestId(`finding-panel-${phpCgiFinding.finding_id}`),
+    ).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('findings-critical')).toBeVisible()
+  })
+
   it('does not describe absent targeted findings as clean coverage', async () => {
     scanDetail(
       completedScan({
