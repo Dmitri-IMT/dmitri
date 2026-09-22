@@ -35,9 +35,10 @@ interaction in implementation before it has passed through that sequence.
   under [`ADR-017`](../adr/ADR-017-account-removal.md), although its backend route exists. The scan
   target network remains an agent property, not a setting.
 - **Home** is the root route (`/`). It is deliberately not a metrics wall:
-  it gives a plain-language verdict, only shows actionable critical/high findings, failed scans,
-  or stale coverage, and is intentionally sparse when all is clear. Charts and metric cards are
-  not in the MVP.
+  it gives a plain-language verdict, only shows actionable critical/high findings and failed
+  scans, and is intentionally sparse when all is clear. The stale-coverage notice ("No successful
+  scan in N days") was removed (DMI-179) — Home does not flag scan-coverage age any more. Charts
+  and metric cards are not in the MVP.
 - **Agents:** both roles can read agent state; only admins see **Scan now**. Users & invites is
   omitted for viewers rather than rendered disabled.
 - **LLM explainer:** deferred, in-context on scan/finding detail when it is later scoped; no
@@ -92,8 +93,9 @@ interaction in implementation before it has passed through that sequence.
 - **`GET /agents/{agent_id}` is implemented and wired** (DMI-78/DMI-89). Home's Pi-status footer
   line is built from that read (DMI-89 follow-up).
 - **Open design decisions (0):** *(409 busy-Pi copy settled in DMI-89.)* The stale-coverage
-  threshold is decided — spec 020 locked it at **3 days**, owned by `STALE_COVERAGE_DAYS` in
-  `frontend/src/lib/review.ts`.
+  threshold decision (spec 020, 3 days) is moot — the notice itself was removed (DMI-179). The
+  `STALE_COVERAGE_DAYS` constant lived in `backend/src/api/core/home_constants.py`, not
+  `frontend/src/lib/review.ts`; it and the notice's `build_notices()` branch are both deleted.
 
 ## Milestones
 

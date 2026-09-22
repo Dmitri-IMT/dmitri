@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -79,8 +79,9 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `OrgMemberListResponse` | `{data: OrgMember[]}` with extras forbidden. | `backend/src/api/schemas/users.py:27` |
 | `UpdateUserRoleRequest` | Exactly one `role`, constrained to `admin` or `viewer`. | `backend/src/api/schemas/users.py:33` |
 
-| `HomeSnapshot` | `review_state`, `review_count`, `latest_successful_scan`, `notices`, `attention`, `events`, `activity`. Nested pages reuse `FindingRead` / `ScanSummary`. | `backend/src/api/schemas/home.py:70` |
-| `HomeListPage` | The one page envelope — `data` / `total` / `page`. `HomeAttentionPage`, `HomeEventsPage` and `HomeActivityPage` subclass it and narrow `data` only. Plain inheritance, not a generic, so each keeps its own OpenAPI component name and `test_contract_fidelity.py` and the generated frontend types are untouched. | `backend/src/api/schemas/home.py:48` |
+| `HomeSnapshot` | `review_state`, `review_count`, `latest_successful_scan`, `notices`, `attention`, `events`, `activity`. Nested pages reuse `FindingRead` / `ScanSummary`. | `backend/src/api/schemas/home.py:68` |
+| `HomeListPage` | The one page envelope — `data` / `total` / `page`. `HomeAttentionPage`, `HomeEventsPage` and `HomeActivityPage` subclass it and narrow `data` only. Plain inheritance, not a generic, so each keeps its own OpenAPI component name and `test_contract_fidelity.py` and the generated frontend types are untouched. | `backend/src/api/schemas/home.py:46` |
+| `HomeNoticeKind` / `HomeNotice` | Only `failed_scan` remains — `stale_coverage` and `HomeNotice.days` were removed (DMI-179), in lockstep with the OpenAPI contract and generated frontend types. | `backend/src/api/schemas/home.py:35`, `:39` |
 
 Consumed by [`routers/users.py`](/backend/routers.md) for self profile and admin member operations.
 
