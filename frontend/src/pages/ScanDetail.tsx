@@ -26,7 +26,7 @@ import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
   targetedFindingsTableTestId,
 } from '@/pages/scans/ServiceTargetedFindings'
-import SeverityWord from '@/components/SeverityWord'
+import { SEVERITY_LABEL } from '@/components/SeverityWord'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
@@ -119,20 +119,6 @@ function ScanDetail() {
               finding.finding_id === openFindingId,
           )
         const partial = metadata.partial_result === true
-        const completedPartial =
-          partial && metadata.terminated_by === 'completed'
-        const interruptedStage =
-          typeof metadata.interrupted_stage === 'string'
-            ? metadata.interrupted_stage
-            : ''
-        const stageLabels: Record<string, string> = {
-          discovery: 'Host discovery',
-          ports: 'Port scanning',
-          deep_inspection: 'Deep inspection',
-          ot_inspection: 'Industrial inspection',
-          targeted_assessment: 'Targeted service assessment',
-          normalize: 'Results generation',
-        }
 
         return (
           <>
@@ -150,31 +136,10 @@ function ScanDetail() {
               />
             ) : (
               <>
-                {partial && (
-                  <div
-                    data-testid="scan-partial-notice"
-                    role="status"
-                    className="flex flex-col gap-2 border border-edge p-6"
-                  >
-                    <p className="text-title-xs">
-                      {completedPartial
-                        ? 'INCOMPLETE EVIDENCE'
-                        : 'STOPPED SCAN'}
-                    </p>
-                    <p className="max-w-prose text-body-md text-muted-foreground">
-                      {completedPartial
-                        ? 'The scan finished, but some checks did not complete. Counts below use accepted evidence only; missing coverage is not a clean result.'
-                        : stageLabels[interruptedStage]
-                          ? `${stageLabels[interruptedStage]} did not finish. Counts below use accepted evidence only.`
-                          : 'The scan did not finish. Counts below use accepted evidence only.'}
-                    </p>
-                  </div>
-                )}
                 <ScanAIAnalysis
                   scanId={scan.scan_id}
                   findings={scan.findings}
                 />
-                <ScanReports scanId={scan.scan_id} />
                 {groups.length === 0 ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     {partial
@@ -194,7 +159,7 @@ function ScanDetail() {
                               ? `${group.severity}-${openFindingId}`
                               : group.severity
                           }
-                          title={<SeverityWord severity={group.severity} />}
+                          title={`${SEVERITY_LABEL[group.severity]} — ${group.findings.length} vulnerabilit${group.findings.length === 1 ? 'y' : 'ies'}`}
                           defaultOpen={opensForDeepLink}
                           triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
                         >
@@ -288,6 +253,7 @@ function ScanDetail() {
                     <ScanHostsTable hosts={scan.hosts} />
                   )}
                 </ScanDetailSection>
+                <ScanReports scanId={scan.scan_id} />
               </>
             )}
           </>

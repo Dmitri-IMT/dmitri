@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { downloadScanReport, type ScanReportKind } from '@/api/scans'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useToast } from '@/hooks/useToast'
 import useI18n from '@/i18n/useI18n'
 
 type Preview = {
@@ -19,9 +25,9 @@ type Preview = {
 
 function ScanReports({ scanId }: { scanId: string }) {
   const { language, t } = useI18n()
+  const { show } = useToast()
   const [preparing, setPreparing] = useState<ScanReportKind | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [error, setError] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -31,7 +37,6 @@ function ScanReports({ scanId }: { scanId: string }) {
 
   async function openPreview(kind: ScanReportKind) {
     setPreparing(kind)
-    setError(false)
     try {
       const blob = await downloadScanReport(scanId, kind, language)
       const url = URL.createObjectURL(blob)
@@ -40,7 +45,7 @@ function ScanReports({ scanId }: { scanId: string }) {
         return { kind, blob, url }
       })
     } catch {
-      setError(true)
+      show(t('reports.error'))
     } finally {
       setPreparing(null)
     }
@@ -63,36 +68,26 @@ function ScanReports({ scanId }: { scanId: string }) {
   }
 
   return (
-    <Card data-testid="scan-reports">
-      <CardHeader>
-        <h2 className="text-title-sm">{t('reports.title')}</h2>
-        <p className="text-body-sm text-muted-foreground">
-          {t('reports.description')}
-        </p>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-3">
-        {(['explained', 'technical'] as const).map((kind) => (
+    <div data-testid="scan-reports" className="flex justify-end">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
-            key={kind}
             type="button"
             variant="outline"
-            size="sm"
             disabled={preparing !== null || preview !== null}
-            onClick={() => void openPreview(kind)}
           >
-            {preparing === kind
-              ? t('reports.preparing')
-              : kind === 'explained'
-                ? t('reports.downloadExplained')
-                : t('reports.downloadTechnical')}
+            {preparing !== null ? t('reports.preparing') : t('reports.title')}
           </Button>
-        ))}
-        {error && (
-          <p className="basis-full text-body-sm text-destructive" role="alert">
-            {t('reports.error')}
-          </p>
-        )}
-      </CardContent>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => void openPreview('explained')}>
+            {t('reports.downloadExplained')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void openPreview('technical')}>
+            {t('reports.downloadTechnical')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Dialog
         open={preview !== null}
         onOpenChange={(open) => !open && closePreview()}
@@ -125,7 +120,7 @@ function ScanReports({ scanId }: { scanId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   )
 }
 

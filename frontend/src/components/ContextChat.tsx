@@ -8,6 +8,7 @@ import type { AIChatHistoryResponse } from '@/api/ai'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/hooks/useToast'
 import useI18n from '@/i18n/useI18n'
 import { readAiAskError } from '@/api/readAiAskError'
 
@@ -32,6 +33,7 @@ export default function ContextChat({
   askingLabel,
 }: Props) {
   const { language, t } = useI18n()
+  const { show } = useToast()
   const oneShot = presetQuestion !== undefined
   const resolvedTitle = title ?? t('ai.askContext')
   const resolvedPlaceholder = questionPlaceholder ?? t('ai.placeholder')
@@ -40,7 +42,6 @@ export default function ContextChat({
   const [historyVisible, setHistoryVisible] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const visibleMessages = historyVisible
     ? messages
     : messages.filter((m) => m.message_id.startsWith('local-'))
@@ -64,7 +65,6 @@ export default function ContextChat({
   async function ask(asked: string) {
     if (asked.length < 3 || sending) return
     setSending(true)
-    setError(null)
     try {
       const response = await askContextAI(scope, contextId, asked, language)
       setMessages((current) => [
@@ -80,7 +80,7 @@ export default function ContextChat({
       ])
       setQuestion('')
     } catch (caught) {
-      setError(readAiAskError(caught, t('ai.genericError')))
+      show(readAiAskError(caught, t('ai.genericError')))
     } finally {
       setSending(false)
     }
@@ -105,6 +105,7 @@ export default function ContextChat({
             type="button"
             variant="outline"
             size="sm"
+            className="self-start"
             aria-expanded={historyVisible}
             onClick={() => {
               if (!historyVisible) setLoadingHistory(true)
@@ -118,6 +119,7 @@ export default function ContextChat({
           <Button
             type="button"
             size="sm"
+            className="self-start"
             onClick={() => void ask(presetQuestion)}
             disabled={sending}
           >
@@ -143,6 +145,7 @@ export default function ContextChat({
             <Button
               type="submit"
               size="sm"
+              className="self-start"
               disabled={sending || question.trim().length < 3}
             >
               {sending ? t('ai.asking') : t('ai.ask')}
@@ -182,11 +185,6 @@ export default function ContextChat({
             )}
           </div>
         ))}
-        {error && (
-          <p className="text-body-sm text-destructive" role="alert">
-            {error}
-          </p>
-        )}
       </CardContent>
     </Card>
   )

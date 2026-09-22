@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { MenuIcon, XIcon } from 'lucide-react'
+import { MenuIcon } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { cn } from '@/lib/utils'
 import { useSession } from '@/auth/useSession'
@@ -24,13 +23,12 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 function TopBar() {
   const { signOut, user } = useSession()
   const { t } = useI18n()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <header data-testid="top-bar" className="border-b border-rule bg-card">
-      <div className="relative mx-auto grid max-w-frame grid-cols-topbar items-center px-4 py-3 xl:grid-cols-bar">
+      <div className="mx-auto grid max-w-frame grid-cols-bar items-center px-4 py-3">
         <span className="justify-self-start text-title-xs">Dmitri</span>
-        <nav className="hidden min-w-0 items-center gap-4 justify-self-center xl:flex">
+        <nav className="flex min-w-0 items-center gap-4 justify-self-center">
           <NavLink to="/" end data-testid="nav-home" className={navLinkClass}>
             {t('nav.home')}
           </NavLink>
@@ -120,74 +118,7 @@ function TopBar() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation"
-            data-testid="mobile-menu-toggle"
-            className="xl:hidden"
-            onClick={() => setMobileMenuOpen((open) => !open)}
-          >
-            {mobileMenuOpen ? <XIcon /> : <MenuIcon />}
-          </Button>
         </div>
-        {mobileMenuOpen && (
-          <nav
-            id="mobile-navigation"
-            aria-label="Navegação principal"
-            data-testid="mobile-navigation"
-            className="absolute inset-x-4 top-full z-20 flex flex-col gap-1 rounded-control border border-rule bg-card p-2 shadow-lg xl:hidden"
-          >
-            <NavLink
-              to="/"
-              end
-              className={navLinkClass}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {t('nav.home')}
-            </NavLink>
-            <NavLink
-              to="/scans"
-              className={navLinkClass}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {t('nav.scans')}
-            </NavLink>
-            <NavLink
-              to="/network"
-              className={navLinkClass}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {t('nav.network')}
-            </NavLink>
-            <NavLink
-              to="/devices"
-              className={navLinkClass}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {t('nav.devices')}
-            </NavLink>
-            <AdminOnly>
-              <NavLink
-                to="/users"
-                className={navLinkClass}
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {t('nav.users')}
-              </NavLink>
-            </AdminOnly>
-            <NavLink
-              to="/settings"
-              className={navLinkClass}
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {t('nav.settings')}
-            </NavLink>
-          </nav>
-        )}
       </div>
     </header>
   )

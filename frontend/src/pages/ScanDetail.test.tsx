@@ -311,9 +311,11 @@ describe('ScanDetail', () => {
       name: 'Toggle critical vulnerabilities',
     })
     expect(criticalToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(criticalToggle).toHaveAttribute('data-state', 'closed')
 
     await user.click(criticalToggle)
     expect(criticalToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(criticalToggle).toHaveAttribute('data-state', 'open')
     expect(screen.getByTestId('findings-critical')).not.toHaveAttribute(
       'hidden',
     )
@@ -347,11 +349,10 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
-      'Scan reports',
-      'Critical',
-      'High',
-      'Medium',
-      'Low',
+      'Critical — 1 vulnerability',
+      'High — 1 vulnerability',
+      'Medium — 1 vulnerability',
+      'Low — 1 vulnerability',
       'Attack surface',
       'Machines seen',
     ])
@@ -448,7 +449,7 @@ describe('ScanDetail', () => {
     )
 
     expect(
-      screen.getByRole('heading', { name: 'Critical' }),
+      screen.getByRole('heading', { name: 'Critical — 1 vulnerability' }),
     ).toBeInTheDocument()
     expect(
       screen.getAllByRole('columnheader', { name: 'Vulnerability' }),
@@ -698,7 +699,7 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-no-exposures')).not.toBeInTheDocument()
   })
 
-  it('qualifies completed and interrupted partial results', async () => {
+  it('drops the partial-evidence banner but keeps the no-findings copy honest', async () => {
     const completedPartial = withPartialResult(
       completedScan({ findings: [], finding_count: 0 }),
       'completed',
@@ -706,54 +707,19 @@ describe('ScanDetail', () => {
     scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
-    const incomplete = await screen.findByTestId('scan-partial-notice')
-    expect(incomplete).toHaveAttribute('role', 'status')
-    expect(incomplete).toHaveTextContent('INCOMPLETE EVIDENCE')
-    expect(incomplete).toHaveTextContent(
-      'Counts below use accepted evidence only; missing coverage is not a clean result.',
-    )
-    expect(screen.getByTestId('scan-no-findings')).toHaveTextContent(
-      'No confirmed vulnerabilities in accepted evidence.',
-    )
+    expect(
+      await screen.findByTestId('scan-no-findings'),
+    ).toHaveTextContent('No confirmed vulnerabilities in accepted evidence.')
+    expect(screen.queryByTestId('scan-partial-notice')).not.toBeInTheDocument()
 
     view.unmount()
     scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
     renderPage(`/scans/${SCAN_ID}`)
 
-    const stopped = await screen.findByTestId('scan-partial-notice')
-    expect(stopped).toHaveAttribute('role', 'status')
-    expect(stopped).toHaveTextContent('STOPPED SCAN')
-    expect(stopped).toHaveTextContent('Deep inspection did not finish')
-    expect(stopped).toHaveTextContent(
-      'Counts below use accepted evidence only.',
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
     )
-  })
-
-  it.each([
-    ['discovery', 'Host discovery'],
-    ['ports', 'Port scanning'],
-    ['deep_inspection', 'Deep inspection'],
-    ['ot_inspection', 'Industrial inspection'],
-    ['targeted_assessment', 'Targeted service assessment'],
-    ['normalize', 'Results generation'],
-  ])('names the interrupted %s stage as %s', async (stage, label) => {
-    scanDetail(withPartialResult(completedScan(), 'error', stage))
-    const view = renderPage(`/scans/${SCAN_ID}`)
-
-    expect(await screen.findByTestId('scan-partial-notice')).toHaveTextContent(
-      `${label} did not finish. Counts below use accepted evidence only.`,
-    )
-
-    view.unmount()
-  })
-
-  it('uses the generic stopped copy for an absent interrupted stage', async () => {
-    scanDetail(withPartialResult(completedScan(), 'user_cancel'))
-    renderPage(`/scans/${SCAN_ID}`)
-
-    expect(await screen.findByTestId('scan-partial-notice')).toHaveTextContent(
-      'The scan did not finish. Counts below use accepted evidence only.',
-    )
+    expect(screen.queryByTestId('scan-partial-notice')).not.toBeInTheDocument()
   })
 
   it('keeps loading and request errors free of false zero claims', async () => {

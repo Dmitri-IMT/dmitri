@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import type { components } from '@/types/openapi'
 import SeverityWord from './SeverityWord'
 
@@ -13,28 +13,14 @@ const SEVERITIES: [Severity, string][] = [
 ]
 
 describe('SeverityWord', () => {
-  it.each(SEVERITIES)(
-    'renders %s with its semantic color',
-    (severity, word) => {
-      render(<SeverityWord severity={severity} />)
+  it.each(SEVERITIES)('renders %s as a plain word', (severity, word) => {
+    render(<SeverityWord severity={severity} />)
 
-      const rendered = screen.getByText(word)
-      expect(rendered).toBeVisible()
-      expect(rendered).toHaveTextContent(new RegExp(`^${word}$`))
-      expect(rendered).toHaveClass('rounded-full', 'border')
-      expect(document.body.textContent).toBe(word)
-    },
-  )
-
-  it('uses a different color class for each severity', () => {
-    const classes = SEVERITIES.map(([severity, word]) => {
-      render(<SeverityWord severity={severity} />)
-      const className = screen.getByText(word).className
-      cleanup()
-      return className
-    })
-
-    expect(new Set(classes).size).toBe(4)
+    const rendered = screen.getByText(word)
+    expect(rendered).toBeVisible()
+    expect(rendered).toHaveTextContent(new RegExp(`^${word}$`))
+    expect(rendered.className).toBe('')
+    expect(document.body.textContent).toBe(word)
   })
 
   it.each([[null], [undefined]])(
