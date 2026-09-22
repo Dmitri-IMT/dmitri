@@ -13,7 +13,6 @@ from api.core.home_constants import (
     HOME_EVENTS_PER_PAGE,
     MACHINE_FIRST_SEEN_RECENT_DAYS,
     MEMBER_IDLE_DAYS,
-    STALE_COVERAGE_DAYS,
 )
 from api.models.activity import ActivityRecord
 from api.models.command import Agent
@@ -175,11 +174,7 @@ def derive_home_events(
     return box_offline + member_idle + machines
 
 
-def build_notices(
-    latest_scan: ScanSummary | None,
-    latest_successful_scan: ScanSummary | None,
-    now: datetime,
-) -> list[HomeNotice]:
+def build_notices(latest_scan: ScanSummary | None) -> list[HomeNotice]:
     notices: list[HomeNotice] = []
     if latest_scan is not None and latest_scan.status == "failed":
         notices.append(
@@ -187,16 +182,6 @@ def build_notices(
                 kind="failed_scan", text="Last night's scan didn't finish."
             )
         )
-    if latest_successful_scan is not None:
-        days = (now - latest_successful_scan.timestamp).days
-        if days > STALE_COVERAGE_DAYS:
-            notices.append(
-                HomeNotice(
-                    kind="stale_coverage",
-                    text=f"No successful scan in {days} days.",
-                    days=days,
-                )
-            )
     return notices
 
 
@@ -219,7 +204,7 @@ def read_home_snapshot(
         scan_id=latest_scan.scan_id if latest_scan else None,
         page=attention_page,
     )
-    notices = build_notices(latest_scan, latest_successful_scan, now)
+    notices = build_notices(latest_scan)
     review_count = attention.total + len(notices)
 
     if latest_scan is None:

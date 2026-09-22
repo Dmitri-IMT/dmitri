@@ -34,7 +34,6 @@ class HomeActivityItem(BaseModel):
 
 class HomeNoticeKind(str, Enum):
     failed_scan = "failed_scan"
-    stale_coverage = "stale_coverage"
 
 
 class HomeNotice(BaseModel):
@@ -42,7 +41,6 @@ class HomeNotice(BaseModel):
 
     kind: HomeNoticeKind
     text: str
-    days: Annotated[int | None, Field(ge=0)] = None
 
 
 class HomeListPage(BaseModel):

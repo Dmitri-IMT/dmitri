@@ -89,7 +89,9 @@ export function hostListColumns(
       width: 'w-5/50',
       sortable: true,
       render: (host) => (
-        <span className="block tabular-nums">{host.vulnerability_count}</span>
+        <span className="block pr-3 tabular-nums">
+          {host.vulnerability_count}
+        </span>
       ),
     },
     {

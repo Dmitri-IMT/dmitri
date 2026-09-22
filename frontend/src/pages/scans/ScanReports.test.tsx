@@ -24,13 +24,20 @@ describe('ScanReports', () => {
     })
   })
 
+  it('renders as a full-width row, not a collapsible section', () => {
+    renderWithProviders(<ScanReports scanId="scan-1" />)
+
+    const row = screen.getByTestId('scan-reports')
+    expect(row).toBeInTheDocument()
+    expect(row.querySelector('[aria-expanded]')).toBeNull()
+  })
+
   it('previews first and downloads only after confirmation', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download explained report' }),
+      screen.getByRole('button', { name: 'Download explained report' }),
     )
 
     expect(await screen.findByTitle('PDF report preview')).toBeInTheDocument()
@@ -47,9 +54,8 @@ describe('ScanReports', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download technical report' }),
+      screen.getByRole('button', { name: 'Download technical report' }),
     )
     expect(await screen.findByText('Technical report preview')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Confirm download' }))
@@ -64,9 +70,8 @@ describe('ScanReports', () => {
     const user = userEvent.setup()
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
-    await user.click(screen.getByRole('button', { name: 'Scan reports' }))
     await user.click(
-      await screen.findByRole('menuitem', { name: 'Download explained report' }),
+      screen.getByRole('button', { name: 'Download explained report' }),
     )
 
     expect(await screen.findByTestId('toast')).toHaveTextContent(

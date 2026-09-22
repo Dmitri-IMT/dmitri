@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { FileText } from 'lucide-react'
 import { downloadScanReport, type ScanReportKind } from '@/api/scans'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,12 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useToast } from '@/hooks/useToast'
 import useI18n from '@/i18n/useI18n'
 
@@ -67,27 +62,45 @@ function ScanReports({ scanId }: { scanId: string }) {
     closePreview()
   }
 
+  const busy = preparing !== null || preview !== null
+
   return (
-    <div data-testid="scan-reports" className="flex justify-end">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={preparing !== null || preview !== null}
-          >
-            {preparing !== null ? t('reports.preparing') : t('reports.title')}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onSelect={() => void openPreview('explained')}>
-            {t('reports.downloadExplained')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void openPreview('technical')}>
-            {t('reports.downloadTechnical')}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <div
+      data-testid="scan-reports"
+      className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card p-6"
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent/10">
+          <FileText aria-hidden="true" className="size-5 text-accent" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-body-md font-semibold">{t('reports.title')}</span>
+          <span className="text-body-sm text-muted-foreground">
+            {t('reports.description')}
+          </span>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void openPreview('explained')}
+        >
+          {preparing === 'explained'
+            ? t('reports.preparing')
+            : t('reports.downloadExplained')}
+        </Button>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => void openPreview('technical')}
+        >
+          {preparing === 'technical'
+            ? t('reports.preparing')
+            : t('reports.downloadTechnical')}
+        </Button>
+      </div>
       <Dialog
         open={preview !== null}
         onOpenChange={(open) => !open && closePreview()}

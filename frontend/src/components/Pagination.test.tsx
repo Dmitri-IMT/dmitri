@@ -46,28 +46,31 @@ describe('Pagination', () => {
     )
   })
 
-  it('lists every page and marks the current one', async () => {
+  it('renders a dot per page and marks the current one', async () => {
     const user = userEvent.setup()
     const onPageChange = renderPagination(2)
 
-    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute(
       'aria-current',
       'page',
     )
-    expect(screen.getByRole('button', { name: '1' })).not.toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Page 1' })).not.toHaveAttribute(
       'aria-current',
     )
 
-    await user.click(screen.getByRole('button', { name: '3' }))
+    await user.click(screen.getByRole('button', { name: 'Page 3' }))
     expect(onPageChange).toHaveBeenCalledWith(3)
   })
 
-  it('elides the middle of a long run of pages', () => {
-    renderPagination(1, 400)
+  it('never renders more than 10 dots, however many pages there are', () => {
+    renderPagination(1, 8000)
 
-    expect(screen.getByRole('button', { name: '20' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '10' })).not.toBeInTheDocument()
-    expect(screen.getByText('More pages')).toBeInTheDocument()
+    expect(screen.getByTestId('scans-pagination').querySelectorAll(
+      'button[data-testid^="scans-page-"]',
+    )).toHaveLength(10)
+    expect(
+      screen.queryByRole('button', { name: 'Page 400' }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps the previous control rendered, inert, and out of the tab order on the first page', async () => {

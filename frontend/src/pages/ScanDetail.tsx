@@ -159,7 +159,7 @@ function ScanDetail() {
                               ? `${group.severity}-${openFindingId}`
                               : group.severity
                           }
-                          title={`${SEVERITY_LABEL[group.severity]} — ${group.findings.length} vulnerabilit${group.findings.length === 1 ? 'y' : 'ies'}`}
+                          title={`${SEVERITY_LABEL[group.severity]}: ${group.findings.length} vulnerabilit${group.findings.length === 1 ? 'y' : 'ies'}`}
                           defaultOpen={opensForDeepLink}
                           triggerAriaLabel={`Toggle ${group.severity} vulnerabilities`}
                         >

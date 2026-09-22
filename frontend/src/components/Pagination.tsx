@@ -3,10 +3,9 @@ import { Button } from '@/components/ui/button'
 import {
   Pagination as PaginationRoot,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
 } from '@/components/ui/pagination'
-import { pageWindow } from '@/lib/pageWindow'
+import { dotWindow } from '@/lib/dotWindow'
 
 type PaginationProps = {
   page: number
@@ -48,27 +47,29 @@ function Pagination({
             <ChevronLeft aria-hidden="true" />
           </Button>
         </PaginationItem>
-        {pageWindow(page, pageCount).map((item, index) =>
-          item === 'ellipsis' ? (
-            <PaginationItem key={`ellipsis-${index}`}>
-              <PaginationEllipsis />
-            </PaginationItem>
-          ) : (
-            <PaginationItem key={item}>
-              <Button
-                type="button"
-                variant={item === page ? 'outline' : 'ghost'}
-                size="icon"
-                aria-current={item === page ? 'page' : undefined}
-                data-testid={`${testId}-page-${item}`}
-                className="text-body-sm"
-                onClick={() => onPageChange(item)}
-              >
-                {item}
-              </Button>
-            </PaginationItem>
-          ),
-        )}
+        {dotWindow(page, pageCount).map((item) => (
+          <PaginationItem key={item}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Page ${item}`}
+              aria-current={item === page ? 'page' : undefined}
+              data-testid={`${testId}-page-${item}`}
+              onClick={() => onPageChange(item)}
+              className="size-9 rounded-full"
+            >
+              <span
+                aria-hidden="true"
+                className={`rounded-full transition-all ${
+                  item === page
+                    ? 'size-2.5 bg-primary'
+                    : 'size-2 bg-muted-foreground/40'
+                }`}
+              />
+            </Button>
+          </PaginationItem>
+        ))}
         <PaginationItem>
           <Button
             type="button"

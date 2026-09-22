@@ -349,10 +349,10 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
-      'Critical — 1 vulnerability',
-      'High — 1 vulnerability',
-      'Medium — 1 vulnerability',
-      'Low — 1 vulnerability',
+      'Critical: 1 vulnerability',
+      'High: 1 vulnerability',
+      'Medium: 1 vulnerability',
+      'Low: 1 vulnerability',
       'Attack surface',
       'Machines seen',
     ])
@@ -449,7 +449,7 @@ describe('ScanDetail', () => {
     )
 
     expect(
-      screen.getByRole('heading', { name: 'Critical — 1 vulnerability' }),
+      screen.getByRole('heading', { name: 'Critical: 1 vulnerability' }),
     ).toBeInTheDocument()
     expect(
       screen.getAllByRole('columnheader', { name: 'Vulnerability' }),

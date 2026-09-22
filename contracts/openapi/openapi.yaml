@@ -5142,7 +5142,6 @@ components:
       type: string
       enum:
         - failed_scan
-        - stale_coverage
     ActivityKind:
       type: string
       enum:
@@ -5196,11 +5195,6 @@ components:
           $ref: '#/components/schemas/HomeNoticeKind'
         text:
           type: string
-        days:
-          anyOf:
-            - type: integer
-              minimum: 0
-            - type: 'null'
     HomeAttentionPage:
       type: object
       additionalProperties: false

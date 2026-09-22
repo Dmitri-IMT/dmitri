@@ -6,7 +6,6 @@ from uuid import UUID, uuid4
 from api.core.home_constants import (
     HOME_ACTIVITY_PER_PAGE,
     HOME_ATTENTION_PER_PAGE,
-    STALE_COVERAGE_DAYS,
 )
 from api.models.identity import Org
 from api.models.persistence import HostRecord, ScanHostRecord, ScanRecord
@@ -221,30 +220,6 @@ def test_attention_page_past_the_end_is_empty_with_real_total(
     assert attention.data == []
     assert attention.total == 2
     assert attention.page == 9
-
-
-def test_stale_coverage_boundary_excludes_exact_threshold(
-    administrative_session: Session,
-) -> None:
-    fresh = make_org(administrative_session, "Fresh Coverage")
-    make_scan(
-        administrative_session,
-        fresh.id,
-        timestamp=NOW - timedelta(days=STALE_COVERAGE_DAYS),
-    )
-    stale = make_org(administrative_session, "Stale Coverage")
-    make_scan(
-        administrative_session,
-        stale.id,
-        timestamp=NOW - timedelta(days=STALE_COVERAGE_DAYS + 1),
-    )
-
-    fresh_notices = _snapshot(administrative_session, fresh.id).notices
-    stale_notices = _snapshot(administrative_session, stale.id).notices
-
-    assert [n.kind for n in fresh_notices] == []
-    assert [n.kind for n in stale_notices] == ["stale_coverage"]
-    assert stale_notices[0].days == STALE_COVERAGE_DAYS + 1
 
 
 def test_failed_latest_scan_notices_and_stays_out_of_events(
