@@ -1,18 +1,15 @@
 import EmptyMark from '@/components/EmptyMark'
+import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
 type Severity = components['schemas']['Severity']
 
-const SEVERITY_LABEL: Record<Severity, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-}
-
 function SeverityWord({ severity }: { severity: Severity | null | undefined }) {
+  const { t } = useI18n()
   if (severity == null) return <EmptyMark />
-  return <span className="font-semibold">{SEVERITY_LABEL[severity]}</span>
+  return (
+    <span className="font-semibold">{t('common.severity', { severity })}</span>
+  )
 }
 
 export default SeverityWord

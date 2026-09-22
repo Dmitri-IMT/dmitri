@@ -1,5 +1,12 @@
 import type { Catalog } from './catalog.types'
 
+const SEVERITY: Record<string, string> = {
+  critical: 'Критическая',
+  high: 'Высокая',
+  medium: 'Средняя',
+  low: 'Низкая',
+}
+
 export const catalog: Catalog = {
   'nav.home': 'Главная',
   'nav.scans': 'Сканирования',
@@ -112,11 +119,8 @@ export const catalog: Catalog = {
   'common.previousPage': 'Предыдущая страница',
   'common.nextPage': 'Следующая страница',
   'common.pageNumber': ({ page }) => 'Страница ' + page,
-  'common.severityCritical': 'Критическая',
-  'common.severityHigh': 'Высокая',
-  'common.severityMedium': 'Средняя',
-  'common.severityLow': 'Низкая',
-  'common.severityGroupTitle': ({ label, count }) => {
+  'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityGroupTitle': ({ severity, count }) => {
     const n = Number(count)
     const word =
       n % 10 === 1 && n % 100 !== 11
@@ -124,12 +128,12 @@ export const catalog: Catalog = {
         : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)
           ? 'уязвимости'
           : 'уязвимостей'
-    return label + ': ' + count + ' ' + word
+    return SEVERITY[severity] + ': ' + count + ' ' + word
   },
-  'common.severityGroupToggle': ({ label }) =>
-    'Показать или скрыть уязвимости: ' + String(label).toLowerCase(),
-  'common.severityGroupCaption': ({ label }) =>
-    'Уязвимости в этом скане: ' + String(label).toLowerCase(),
+  'common.severityGroupToggle': ({ severity }) =>
+    'Показать или скрыть уязвимости: ' + SEVERITY[severity],
+  'common.severityGroupCaption': ({ severity }) =>
+    'Уязвимости в этом скане: ' + SEVERITY[severity],
   'common.findingsLoadError': 'Не удалось загрузить уязвимости устройства.',
   'common.noVulnerabilities': 'На этом устройстве уязвимостей нет.',
   'common.vulnerabilitiesOnMachine': 'Уязвимости устройства',

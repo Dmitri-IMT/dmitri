@@ -1,5 +1,19 @@
 import type { Catalog } from './catalog.types'
 
+const SEVERITY: Record<string, string> = {
+  critical: 'Crítica',
+  high: 'Alta',
+  medium: 'Média',
+  low: 'Baixa',
+}
+
+const SEVERITY_LOWER: Record<string, string> = {
+  critical: 'crítica',
+  high: 'alta',
+  medium: 'média',
+  low: 'baixa',
+}
+
 export const catalog: Catalog = {
   'nav.home': 'Início',
   'nav.scans': 'Varreduras',
@@ -118,21 +132,16 @@ export const catalog: Catalog = {
   'common.previousPage': 'Página anterior',
   'common.nextPage': 'Próxima página',
   'common.pageNumber': ({ page }) => 'Página ' + page,
-  'common.severityCritical': 'Crítica',
-  'common.severityHigh': 'Alta',
-  'common.severityMedium': 'Média',
-  'common.severityLow': 'Baixa',
-  'common.severityGroupTitle': ({ label, count }) =>
-    label +
+  'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityGroupTitle': ({ severity, count }) =>
+    SEVERITY[severity] +
     ': ' +
     count +
     (count === 1 ? ' vulnerabilidade' : ' vulnerabilidades'),
-  'common.severityGroupToggle': ({ label }) =>
-    'Alternar vulnerabilidades de gravidade ' + String(label).toLowerCase(),
-  'common.severityGroupCaption': ({ label }) =>
-    'Vulnerabilidades de gravidade ' +
-    String(label).toLowerCase() +
-    ' neste scan',
+  'common.severityGroupToggle': ({ severity }) =>
+    'Alternar vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity],
+  'common.severityGroupCaption': ({ severity }) =>
+    'Vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity] + ' neste scan',
   'common.findingsLoadError':
     'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
   'common.noVulnerabilities': 'Nenhuma vulnerabilidade neste equipamento.',

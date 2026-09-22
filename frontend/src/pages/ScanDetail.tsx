@@ -26,20 +26,12 @@ import ServiceTargetedFindings, {
   targetedFindingsTableTestId,
 } from '@/pages/scans/ServiceTargetedFindings'
 import useI18n from '@/i18n/useI18n'
-import type { MessageKey } from '@/i18n/messages'
 import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 type Severity = components['schemas']['Severity']
 
 const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
-
-const SEVERITY_LABEL_KEY: Record<Severity, MessageKey> = {
-  critical: 'common.severityCritical',
-  high: 'common.severityHigh',
-  medium: 'common.severityMedium',
-  low: 'common.severityLow',
-}
 
 const TARGETED_SOURCE = 'targeted_service_assessment'
 
@@ -155,12 +147,11 @@ function ScanDetail() {
                       const opensForDeepLink = group.findings.some(
                         (finding) => finding.finding_id === openFindingId,
                       )
-                      const label = t(SEVERITY_LABEL_KEY[group.severity])
                       return (
                         <ScanDetailSection
                           key={group.severity}
                           title={t('common.severityGroupTitle', {
-                            label,
+                            severity: group.severity,
                             count: group.findings.length,
                           })}
                           openToken={
@@ -169,7 +160,7 @@ function ScanDetail() {
                               : undefined
                           }
                           triggerAriaLabel={t('common.severityGroupToggle', {
-                            label,
+                            severity: group.severity,
                           })}
                         >
                           <FindingsTable
@@ -177,7 +168,7 @@ function ScanDetail() {
                             variant="scan"
                             testId={`findings-${group.severity}`}
                             caption={t('common.severityGroupCaption', {
-                              label,
+                              severity: group.severity,
                             })}
                             openFindingId={openFindingId}
                             onOpenFindingChange={setOpenFindingId}

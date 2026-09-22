@@ -1,5 +1,12 @@
 import type { Value } from './catalog.types'
 
+const SEVERITY: Record<string, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+}
+
 export const catalog = {
   'nav.home': 'Home',
   'nav.scans': 'Scans',
@@ -116,19 +123,16 @@ export const catalog = {
   'common.previousPage': 'Previous page',
   'common.nextPage': 'Next page',
   'common.pageNumber': ({ page }) => 'Page ' + page,
-  'common.severityCritical': 'Critical',
-  'common.severityHigh': 'High',
-  'common.severityMedium': 'Medium',
-  'common.severityLow': 'Low',
-  'common.severityGroupTitle': ({ label, count }) =>
-    label +
+  'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityGroupTitle': ({ severity, count }) =>
+    SEVERITY[severity] +
     ': ' +
     count +
     (count === 1 ? ' vulnerability' : ' vulnerabilities'),
-  'common.severityGroupToggle': ({ label }) =>
-    'Toggle ' + String(label).toLowerCase() + ' vulnerabilities',
-  'common.severityGroupCaption': ({ label }) =>
-    String(label).toLowerCase() + ' vulnerabilities in this scan',
+  'common.severityGroupToggle': ({ severity }) =>
+    'Toggle ' + severity + ' vulnerabilities',
+  'common.severityGroupCaption': ({ severity }) =>
+    severity + ' vulnerabilities in this scan',
   'common.findingsLoadError': "Couldn't load this machine's vulnerabilities.",
   'common.noVulnerabilities': 'No vulnerabilities on this machine.',
   'common.vulnerabilitiesOnMachine': 'Vulnerabilities on this machine',
