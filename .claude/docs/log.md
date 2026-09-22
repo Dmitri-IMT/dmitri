@@ -9,8 +9,9 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `defaultOpen`/`openWhen`, so a collapsed group reopens for a second finding. Severity group titles,
   toggles and captions plus `Pagination` labels now come from the i18n catalogs. `ScanSummaryStrip`
   renders `ScanReports` itself (no `actions` slot). The AI-usage table uses a CSS min-height instead
-  of spacer rows and clamps a stale page. `SeverityWord` is bold again and no longer exports
-  `SEVERITY_LABEL`. Touched: `frontend/screens.md`, `frontend/tables.md`, `frontend/ai-usage.md`.
+  of spacer rows and clamps a stale page. `SeverityWord` is bold again and reads its word from the
+  `common.severity` catalog function; the severity-group copy functions take `severity`, not a
+  translated label. Touched: `frontend/screens.md`, `frontend/tables.md`, `frontend/ai-usage.md`.
 
 * **Update**: DMI-179 (repair frontend regressions from PR #151, plus follow-up feedback).
   `GlobalAssistant` deleted — `AppShell` no longer mounts it, and `ContextChat`'s multi-turn/history
