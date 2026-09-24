@@ -41,16 +41,20 @@ def _env_value(env_file: Path, name: str) -> str | None:
     return None
 
 
-def _write_env(env_file: Path, lines: list[str]) -> None:
-    env_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=env_file.parent, prefix=".agent-env-")
+def _write_private_file(path: Path, lines: list[str], *, replace: bool = True) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}-")
     try:
         with os.fdopen(fd, "w") as handle:
             handle.write("".join(f"{line}\n" for line in lines))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, env_file)
-        _sync_directory(env_file.parent)
+        if replace:
+            os.replace(tmp, path)
+        else:
+            # Publish a complete key without replacing a concurrent installer's.
+            os.link(tmp, path)
+        _sync_directory(path.parent)
     finally:
         Path(tmp).unlink(missing_ok=True)
 
@@ -85,18 +89,10 @@ def load_or_create_key(env_file: Path = ENV_FILE) -> bytes:
             serialization.NoEncryption(),
         )
     )
-    key_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # Never overwrite a key created by another installer. An incomplete key
-    # fails validation on retry instead of silently changing device identity.
     try:
-        fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        _write_private_file(key_file, [private_key.hex()], replace=False)
     except FileExistsError:
         return parse_private_key(key_file.read_text().strip())
-    with os.fdopen(fd, "w") as handle:
-        handle.write(private_key.hex() + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    _sync_directory(key_file.parent)
     return private_key
 
 
@@ -162,7 +158,7 @@ def provision(env_file: Path = ENV_FILE) -> None:
             display_name=display_name,
             public_key=public_key_hex(private_key),
         )
-    _write_env(
+    _write_private_file(
         env_file,
         [
             f"BACKEND_URL={backend_url}",

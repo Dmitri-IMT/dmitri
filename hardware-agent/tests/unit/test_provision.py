@@ -120,19 +120,21 @@ def test_retry_after_backend_commit_keeps_identity(tmp_path, monkeypatch, failur
         "Client",
         lambda **kwargs: real_client(**kwargs, transport=httpx.MockTransport(handler)),
     )
-    write_env = module._write_env
+    write_file = module._write_private_file
     if failure == "env-write":
 
-        def fail_write(*args):
-            raise OSError("disk full")
+        def fail_write(path, *args, **kwargs):
+            if path == env_file:
+                raise OSError("disk full")
+            return write_file(path, *args, **kwargs)
 
-        monkeypatch.setattr(module, "_write_env", fail_write)
+        monkeypatch.setattr(module, "_write_private_file", fail_write)
 
     with pytest.raises((httpx.ReadError, OSError)):
         provision(env_file)
     assert not env_file.exists()
     key = load_or_create_key(env_file)
-    monkeypatch.setattr(module, "_write_env", write_env)
+    monkeypatch.setattr(module, "_write_private_file", write_file)
     provision(env_file)
 
     assert keys[0] == keys[1]
@@ -146,3 +148,29 @@ def test_legacy_partial_env_keeps_its_key(tmp_path):
     env_file.write_text(f"DEVICE_PRIVATE_KEY={'ab' * 32}\n")
     assert load_or_create_key(env_file) == bytes.fromhex("ab" * 32)
     assert (tmp_path / "device.key").read_text().strip() == "ab" * 32
+
+
+def test_interrupted_key_write_can_be_retried(tmp_path, monkeypatch):
+    import os
+
+    env_file = tmp_path / "agent.env"
+    with monkeypatch.context() as patch:
+
+        def interrupt(_fd):
+            raise OSError("interrupted before sync")
+
+        patch.setattr(os, "fsync", interrupt)
+        with pytest.raises(OSError):
+            load_or_create_key(env_file)
+    assert not (tmp_path / "device.key").exists()
+    assert load_or_create_key(env_file) == load_or_create_key(env_file)
+
+
+def test_concurrent_installers_keep_one_complete_key(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        keys = list(
+            pool.map(lambda _: load_or_create_key(tmp_path / "agent.env"), range(4))
+        )
+    assert len(set(keys)) == 1

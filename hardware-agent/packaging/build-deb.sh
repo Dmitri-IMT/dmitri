@@ -59,7 +59,7 @@ mkdir -p /var/lib/dmitri /opt/uv-python
 lock=$(cat /usr/lib/dmitri/scan-lock-path)
 touch "$lock"
 chmod 644 "$lock"
-env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python uv sync --project /opt/dmitri-agent
+env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python uv sync --frozen --project /opt/dmitri-agent
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
     systemctl enable dmitri-agent.service dmitri-agent-update.timer
