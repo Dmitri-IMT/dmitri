@@ -10,6 +10,7 @@ from __future__ import annotations
 import getpass
 import os
 import sys
+import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -42,11 +43,24 @@ def _env_value(env_file: Path, name: str) -> str | None:
 
 def _write_env(env_file: Path, lines: list[str]) -> None:
     env_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    tmp = env_file.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        handle.write("".join(f"{line}\n" for line in lines))
-    os.replace(tmp, env_file)
+    fd, tmp = tempfile.mkstemp(dir=env_file.parent, prefix=".agent-env-")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write("".join(f"{line}\n" for line in lines))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, env_file)
+        _sync_directory(env_file.parent)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
+def _sync_directory(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def is_provisioned(env_file: Path = ENV_FILE) -> bool:
@@ -58,15 +72,31 @@ def load_or_create_key(env_file: Path = ENV_FILE) -> bytes:
 
     A rerun after a failed registration keeps the same key.
     """
+    key_file = env_file.with_name("device.key")
+    if key_file.exists():
+        return parse_private_key(key_file.read_text().strip())
     existing = _env_value(env_file, "DEVICE_PRIVATE_KEY")
-    if existing is not None:
-        return parse_private_key(existing)
-    private_key = Ed25519PrivateKey.generate().private_bytes(
-        serialization.Encoding.Raw,
-        serialization.PrivateFormat.Raw,
-        serialization.NoEncryption(),
+    private_key = (
+        parse_private_key(existing)
+        if existing is not None
+        else Ed25519PrivateKey.generate().private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        )
     )
-    _write_env(env_file, [f"DEVICE_PRIVATE_KEY={private_key.hex()}"])
+    key_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Never overwrite a key created by another installer. An incomplete key
+    # fails validation on retry instead of silently changing device identity.
+    try:
+        fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return parse_private_key(key_file.read_text().strip())
+    with os.fdopen(fd, "w") as handle:
+        handle.write(private_key.hex() + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    _sync_directory(key_file.parent)
     return private_key
 
 
@@ -149,6 +179,12 @@ def main() -> None:
         return
     try:
         provision()
-    except (ProvisionError, httpx.HTTPError, EOFError) as exc:
+    except (
+        ProvisionError,
+        IngestConfigError,
+        OSError,
+        httpx.HTTPError,
+        EOFError,
+    ) as exc:
         print(f"provision: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
