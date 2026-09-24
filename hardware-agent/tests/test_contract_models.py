@@ -447,6 +447,12 @@ def test_agent_models_emit_only_documented_contract_fields() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     for schema_name, model in CONTRACT_MODELS:
         schema = spec["components"]["schemas"][schema_name]
+        # The backend ignores legacy extras only in these nested Modbus objects.
+        legacy_compatible = schema_name in {
+            "ModbusAddressRangePayload",
+            "ModbusUnitPayload",
+        }
+        assert schema.get("additionalProperties", True) is legacy_compatible
         emitted_fields = {
             name for name, field in model.model_fields.items() if not field.exclude
         }
