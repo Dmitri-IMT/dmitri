@@ -69,6 +69,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/users/{user_id}", "PATCH"),
     ("/api/v1/users/{user_id}", "DELETE"),
     ("/api/v1/agents", "GET"),
+    ("/api/v1/agents", "POST"),
     ("/api/v1/agents", "OPTIONS"),
     ("/api/v1/agents/{agent_id}", "GET"),
     ("/api/v1/agents/{agent_id}", "PATCH"),

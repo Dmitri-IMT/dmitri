@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from api.db.session import get_session
 from api.main import app
 from api.models.command import Agent
@@ -39,10 +40,20 @@ def test_admin_registers_an_agent_in_their_org(
     assert stored.public_key == bytes.fromhex("ab" * 32)
 
 
-def test_register_rejects_a_short_public_key(
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"display_name": "Lab Pi", "public_key": "abcd"},
+        {"display_name": "Lab Pi", "public_key": "zz" * 32},
+        {"display_name": "", "public_key": "ab" * 32},
+    ],
+    ids=["short-key", "non-hex-key", "empty-name"],
+)
+def test_register_rejects_an_invalid_body(
     administrative_session: Session,
     seeded_org: Org,
     bearer_headers,
+    body: dict[str, str],
 ) -> None:
     def _override_get_session():
         yield administrative_session
@@ -53,7 +64,7 @@ def test_register_rejects_a_short_public_key(
         response = client.post(
             "/api/v1/agents",
             headers=bearer_headers(seeded_org.id, "admin"),
-            json={"display_name": "Lab Pi", "public_key": "abcd"},
+            json=body,
         )
     finally:
         app.dependency_overrides.pop(get_session, None)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.agent_frames import AvailableSubnet
 from api.schemas.scan import SubnetCIDR
@@ -37,8 +38,9 @@ class AgentDetail(BaseModel):
 class RegisterAgentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    display_name: str
-    public_key: str
+    display_name: Annotated[str, Field(min_length=1)]
+    # Raw 32-byte Ed25519 public key, hex-encoded.
+    public_key: Annotated[str, Field(pattern=r"^[0-9a-fA-F]{64}$")]
 
 
 class RegisterAgentResponse(BaseModel):

@@ -10,6 +10,7 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent_ws
 from api.dependencies.auth import CallerIdentity, require_admin, require_user
 from api.errors import ApiError
 from api.models.command import Command
+from api.models.identity import Org
 from api.models.persistence import utc_now
 from api.schemas.agents import (
     AgentDetail,
@@ -66,23 +67,13 @@ def register_agent_route(
     caller: CallerIdentity = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> RegisterAgentResponse:
-    try:
-        raw = bytes.fromhex(body.public_key)
-    except ValueError:
-        raw = b""
-    if len(raw) != 32:
-        raise ApiError(
-            422,
-            "public_key must be 64 hex characters.",
-            code="invalid_public_key",
-        )
-    agent_id = register_agent(
+    agent = register_agent(
         session,
-        org_id=caller.org_id,
+        org=session.get_one(Org, caller.org_id),
         display_name=body.display_name,
-        public_key=raw,
+        public_key=bytes.fromhex(body.public_key),
     )
-    return RegisterAgentResponse(agent_id=agent_id)
+    return RegisterAgentResponse(agent_id=agent.id)
 
 
 @router.options("/api/v1/agents", status_code=204)

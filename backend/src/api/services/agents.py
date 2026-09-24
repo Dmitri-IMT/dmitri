@@ -32,19 +32,17 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
 
 
 def register_agent(
-    session: Session, *, org_id: UUID, display_name: str, public_key: bytes
-) -> UUID:
-    org = session.get(Org, org_id)
-    if org is None:
-        raise ValueError(f"unknown org: {org_id}")
+    session: Session, *, org: Org, display_name: str, public_key: bytes
+) -> Agent:
+    """Insert the agent and mint the org's OT digest key on its first agent."""
     if org.ot_digest_key is None:
         org.ot_digest_key = secrets.token_hex(32)
         session.add(org)
-    agent = Agent(org_id=org_id, display_name=display_name, public_key=public_key)
+    agent = Agent(org_id=org.id, display_name=display_name, public_key=public_key)
     session.add(agent)
     session.commit()
     session.refresh(agent)
-    return agent.id
+    return agent
 
 
 def list_agents(session: Session, *, org_id: UUID) -> list[AgentSummary]:
