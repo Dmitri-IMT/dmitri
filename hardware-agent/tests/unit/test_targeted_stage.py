@@ -52,6 +52,40 @@ def _units() -> list[TargetedUnit]:
     ]
 
 
+def test_plan_limit_retains_bounded_endpoint_reasons(monkeypatch) -> None:
+    hosts = [
+        HostInfo(
+            ip=f"10.0.{index // 254}.{index % 254 + 1}",
+            hostname="target",
+            ports=[PortInfo(port=80, service=ServiceInfo(name="http"))],
+        )
+        for index in range(150)
+    ]
+    monkeypatch.setattr(
+        stage,
+        "_adapter_for",
+        lambda tool: lambda unit, executor, **kwargs: TargetedUnitResult(
+            unit, TargetedOutcome.COMPLETED
+        ),
+    )
+
+    summary = stage.run_targeted_stage(hosts, scan_mode="extensive")
+
+    assert summary.eligible == 300
+    assert summary.planned == 96
+    assert summary.omitted == 204
+    assert summary.omitted_unlisted == 108
+    omitted = [
+        result
+        for host in hosts
+        for result in host.targeted_results
+        if result.reason_code == TargetedGapReason.PLAN_LIMIT
+    ]
+    assert len(omitted) == 96
+    assert all(result.outcome == TargetedOutcome.SKIPPED for result in omitted)
+    assert all(result.unit.port == 80 for result in omitted)
+
+
 def _install_plan(monkeypatch: pytest.MonkeyPatch, units: list[TargetedUnit]) -> None:
     def select(hosts, *, scan_mode, summary=None):
         assert scan_mode in {"extensive", "max", "nspi"}

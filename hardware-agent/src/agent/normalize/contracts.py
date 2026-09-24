@@ -262,6 +262,38 @@ class FindingPayload(BaseModel):
     references: list[constr(min_length=1)] = Field(default_factory=list)
 
 
+class CoverageObservationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observation_key: constr(min_length=1, max_length=512)
+    kind: Literal[
+        "administration", "api_surface", "service_identity", "device_identity"
+    ]
+    summary: constr(min_length=1, max_length=512)
+    evidence: constr(min_length=1, max_length=512)
+    path: constr(max_length=256) | None = None
+    rule_id: constr(max_length=128) | None = None
+    policy_version: constr(max_length=64) | None = None
+
+
+class CoverageUnitPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ip: IPv4Address
+    stage: Literal["ports", "deep_inspection", "targeted_assessment"]
+    port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"] | None = None
+    tool: constr(min_length=1, max_length=64) | None = None
+    outcome: Literal["completed", "partial", "failed", "timed_out", "skipped"]
+    reason_code: constr(min_length=1, max_length=64) | None = None
+    evidence_source: Literal[
+        "nmap_ports", "nmap_nse", "service_recovery", "port_discovery",
+        "targeted_tool", "targeted_tool_partial_report", "not_run",
+    ]
+    issue_keys: list[constr(min_length=1, max_length=256)] = Field(default_factory=list)
+    observations: list[CoverageObservationPayload] = Field(default_factory=list)
+
+
 class ScanPayload(BaseModel):
     scan_id: UUID
     timestamp: datetime
@@ -269,6 +301,7 @@ class ScanPayload(BaseModel):
     scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"]
     hosts: list[HostPayload] = Field(default_factory=list)
     findings: list[FindingPayload] = Field(default_factory=list)
+    coverage: list[CoverageUnitPayload] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None
     assessment_policy_version: constr(min_length=1, strip_whitespace=True) | None = None
     exposures: list[ExposurePayload] = Field(default_factory=list)

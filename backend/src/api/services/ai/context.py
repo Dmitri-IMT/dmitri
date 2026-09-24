@@ -32,7 +32,7 @@ from api.schemas.read import (
 )
 from api.services.read import get_scan_risk_summary
 
-AI_CONTEXT_VERSION = "2"
+AI_CONTEXT_VERSION = "3"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
@@ -49,6 +49,9 @@ class AIFindingContext(BaseModel):
     cvss_score: Annotated[float | None, Field(ge=0, le=10)]
     severity: Severity
     confidence: Literal["tentative", "probable", "confirmed"] | None
+    evidence_basis: Literal["cve_correlation", "target_observation"] = (
+        "target_observation"
+    )
     risk_score: Annotated[float | None, Field(ge=0, le=100)]
     exploitability: Annotated[float | None, Field(ge=0, le=1)]
     epss_score: Annotated[float | None, Field(ge=0, le=1)]
@@ -60,8 +63,10 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
+    evidence_completeness: Literal["complete", "partial", "unknown"] = "unknown"
+    incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     duration_seconds: Annotated[int | None, Field(ge=0)]
     host_count: Annotated[int, Field(ge=0)]
     total_findings: Annotated[int, Field(ge=0)]
@@ -101,10 +106,12 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
+    evidence_completeness: Literal["complete", "partial", "unknown"] = "unknown"
+    incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     host_count: Annotated[int, Field(ge=0)]
     aggregate: ChatAggregate
     top_findings: list[AIFindingContext]
@@ -114,7 +121,7 @@ class ScanChatContext(BaseModel):
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
 
@@ -122,7 +129,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -177,6 +184,11 @@ def build_finding_contexts(
                 cvss_score=finding.cvss_score,
                 severity=finding.severity,
                 confidence=finding.confidence,
+                evidence_basis=(
+                    "cve_correlation"
+                    if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}
+                    else "target_observation"
+                ),
                 risk_score=finding.risk_score,
                 exploitability=finding.exploitability,
                 epss_score=epss.epss_score if epss is not None else None,
@@ -238,6 +250,17 @@ def build_scan_ai_context(
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
+        evidence_completeness=(
+            "partial"
+            if (scan.metadata_json or {}).get("partial_result") is True
+            else "complete"
+            if (scan.metadata_json or {}).get("partial_result") is False
+            else "unknown"
+        ),
+        incomplete_check_count=sum(
+            unit.get("outcome") != "completed"
+            for unit in (scan.coverage_json or [])
+        ),
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
         host_count=host_count,
         total_findings=risk.total_findings,

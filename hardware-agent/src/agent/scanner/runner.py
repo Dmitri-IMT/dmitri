@@ -148,6 +148,12 @@ class ScanRunner:
             scan_mode=self.scan_mode,
             hosts=hosts_payload,
             findings=findings,
+            coverage=stages.build_coverage_payload(
+                hosts,
+                interrupted_stage=interrupted_stage,
+                terminated_by=terminated_by,
+                scan_mode=settings.scan_mode,
+            ),
             assessment_policy_version=LOCAL_ASSESSMENT_POLICY_VERSION,
             exposures=assessment.exposures,
             metadata=stages.build_metadata(

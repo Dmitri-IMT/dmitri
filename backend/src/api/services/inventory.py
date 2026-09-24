@@ -198,7 +198,10 @@ def _reconcile_findings(
             existing.fixed_at = None
         session.add(existing)
 
-    if is_latest:
+    evidence_complete = (
+        (scan_record.metadata_json or {}).get("partial_result") is not True
+    )
+    if is_latest and evidence_complete:
         for row in known.values():
             if row.dedupe_key not in seen and row.fixed_at is None:
                 row.fixed_at = ts

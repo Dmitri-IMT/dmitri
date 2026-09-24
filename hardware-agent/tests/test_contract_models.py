@@ -18,6 +18,8 @@ from agent.assessment.policy import (
 )
 from agent.normalize.contracts import (
     AssessmentEvidencePayload,
+    CoverageObservationPayload,
+    CoverageUnitPayload,
     DeviceProfilePayload,
     ExposurePayload,
     FindingPayload,
@@ -49,6 +51,8 @@ CONTRACT_MODELS = (
     ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
     ("PortPayload", PortPayload),
     ("FindingPayload", FindingPayload),
+    ("CoverageUnitPayload", CoverageUnitPayload),
+    ("CoverageObservationPayload", CoverageObservationPayload),
     ("AvailableSubnet", AvailableSubnet),
     ("AgentHelloFrame", AgentHello),
     ("AgentCommandFrame", AgentCommand),

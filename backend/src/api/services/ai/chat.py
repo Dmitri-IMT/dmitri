@@ -76,6 +76,16 @@ def build_scan_chat_bundle(
         provider_context=ScanChatContext(
             scan_mode=detail.scan_mode,
             status=detail.status,
+            evidence_completeness=(
+                "partial"
+                if (detail.metadata or {}).get("partial_result") is True
+                else "complete"
+                if (detail.metadata or {}).get("partial_result") is False
+                else "unknown"
+            ),
+            incomplete_check_count=sum(
+                unit.outcome != "completed" for unit in detail.coverage
+            ),
             host_count=detail.host_count,
             aggregate=ChatAggregate(
                 total_findings=risk.total_findings,

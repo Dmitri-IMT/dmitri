@@ -88,6 +88,11 @@ class HostInfo:
     host_scripts: list[ScriptResult] = field(default_factory=list)
     industrial_services: list[ModbusService] = field(default_factory=list)
     targeted_results: list[TargetedUnitResult] = field(default_factory=list)
+    port_scan_outcome: str | None = None
+    port_scan_reason: str | None = None
+    deep_inspection_outcome: str | None = None
+    deep_inspection_reason: str | None = None
+    deep_inspection_evidence_source: str | None = None
 
     @property
     def open_ports(self) -> list[PortInfo]:

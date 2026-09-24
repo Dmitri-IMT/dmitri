@@ -19,6 +19,7 @@ from .industrial import (
 from .operating_system import OperatingSystemDetection
 from .scan import (
     AssessmentEvidencePayload,
+    CoverageUnitPayload,
     DeviceProfilePayload,
     ExposureAttention,
     ExposureConfidence,
@@ -54,6 +55,7 @@ class HostPort(BaseModel):
     version: str | None = None
     first_seen_at: datetime
     last_seen_at: datetime
+    observed_in_latest_scan: bool | None = None
 
 
 class ModbusDeviceIdentificationView(ModbusDeviceIdentificationPayload):
@@ -235,6 +237,7 @@ class ScanDetailResponse(BaseModel):
     assessment_policy_version: constr(min_length=1) | None
     exposures: list[ExposureRead]
     metadata: dict[str, str | int | float | bool] | None = None
+    coverage: list[CoverageUnitPayload] = Field(default_factory=list)
     status: ScanStatus
     command_id: UUID | None = None
     error_code: ScanErrorCode | None = None
@@ -253,6 +256,7 @@ class ScanSummary(BaseModel):
     subnet: str
     scan_mode: ScanMode
     status: ScanStatus
+    partial_result: bool | None = None
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None

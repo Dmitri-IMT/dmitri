@@ -10,13 +10,18 @@ from agent.scanner.errors import (
     CircuitBreakerError,
     FatalScanError,
     ScanCancelled,
+    UnitScanError,
 )
 from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.runner import ScanRunner
 from agent.targeted.models import (
+    TargetedGapReason,
     TargetedIssue,
+    TargetedObservation,
     TargetedOutcome,
+    TargetedTool,
+    TargetedUnit,
     TargetedUnitResult,
 )
 
@@ -77,6 +82,134 @@ def _build_runner(
         runner=_FakeRunner(),
     )
     return runner, completed, errors, reporter
+
+
+def test_nse_failure_with_service_recovery_marks_payload_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = _one_host()[0]
+
+    def ports(*args, **kwargs):
+        host.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus-tcp"))]
+        return 0
+
+    def nse_failure(*args, **kwargs):
+        raise UnitScanError("NSE failed")
+
+    monkeypatch.setattr(stages, "run_nse_vulnerability_scan", nse_failure)
+    monkeypatch.setattr(
+        stages,
+        "detect_services",
+        lambda *args, **kwargs: [
+            PortInfo(port=502, service=ServiceInfo(name="modbus", product="PLC"))
+        ],
+    )
+    runner, completed, errors, _ = _build_runner(
+        monkeypatch, hosts=[host], port_stage=ports
+    )
+    runner.run_blocking()
+
+    assert errors == []
+    assert completed[0].metadata["partial_result"] is True
+    assert completed[0].metadata["terminated_by"] == "completed"
+    assert completed[0].hosts[0].ports[0].service == "modbus"
+    deep_coverage = next(
+        unit for unit in completed[0].coverage if unit.stage == "deep_inspection"
+    )
+    assert deep_coverage.model_dump(mode="json") == {
+        "ip": host.ip,
+        "stage": "deep_inspection",
+        "port": None,
+        "protocol": None,
+        "tool": None,
+        "outcome": "partial",
+        "reason_code": "nse_failed",
+        "evidence_source": "service_recovery",
+        "issue_keys": [],
+        "observations": [],
+    }
+
+
+def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() -> None:
+    host = _one_host()[0]
+    unit = TargetedUnit(host.ip, 80, "tcp", "http", TargetedTool.NIKTO)
+    host.targeted_results.append(
+        TargetedUnitResult(
+            unit,
+            TargetedOutcome.TIMED_OUT,
+            issues=[
+                TargetedIssue(
+                    "web:exposure", "Exposure", "Description", "high",
+                    "Recommendation", "Evidence",
+                )
+            ],
+            observations=[
+                TargetedObservation(
+                    "web:administration:/admin", "administration",
+                    "Administration interface found", "status=403; protected surface",
+                    path="/admin", rule_id="admin", policy_version="v1",
+                )
+            ],
+            reason_code=TargetedGapReason.UNIT_TIMEOUT,
+        )
+    )
+
+    coverage = stages.build_coverage_payload([host])
+
+    assert len(coverage) == 1
+    assert (str(coverage[0].ip), coverage[0].port, coverage[0].tool) == (
+        host.ip, 80, "nikto",
+    )
+    assert coverage[0].outcome == "timed_out"
+    assert coverage[0].reason_code == "unit_timeout"
+    assert coverage[0].evidence_source == "targeted_tool_partial_report"
+    assert coverage[0].issue_keys == ["web:exposure"]
+    assert coverage[0].observations[0].evidence == "status=403; protected surface"
+
+
+def test_interrupted_stages_record_known_pending_units() -> None:
+    host = _one_host()[0]
+    pending_ports = stages.build_coverage_payload(
+        [host], interrupted_stage="ports", terminated_by="user_cancel"
+    )
+    assert [(unit.stage, unit.outcome, unit.reason_code) for unit in pending_ports] == [
+        ("ports", "skipped", "scan_cancelled")
+    ]
+    assert pending_ports[0].evidence_source == "not_run"
+
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    pending_after_ports = stages.build_coverage_payload(
+        [host],
+        interrupted_stage="ports",
+        terminated_by="user_cancel",
+        scan_mode="extensive",
+    )
+    assert any(
+        unit.stage == "deep_inspection" and unit.outcome == "skipped"
+        for unit in pending_after_ports
+    )
+    assert any(
+        unit.stage == "targeted_assessment" and unit.outcome == "skipped"
+        for unit in pending_after_ports
+    )
+    pending_deep = stages.build_coverage_payload(
+        [host], interrupted_stage="deep_inspection", terminated_by="timeout"
+    )
+    assert [(unit.stage, unit.outcome, unit.reason_code) for unit in pending_deep] == [
+        ("deep_inspection", "skipped", "scan_timeout")
+    ]
+
+    pending_targeted = stages.build_coverage_payload(
+        [host],
+        interrupted_stage="targeted_assessment",
+        terminated_by="error",
+        scan_mode="extensive",
+    )
+    assert {(unit.port, unit.tool, unit.reason_code) for unit in pending_targeted} == {
+        (80, "ffuf", "scan_error"),
+        (80, "nikto", "scan_error"),
+    }
+    assert all(unit.evidence_source == "not_run" for unit in pending_targeted)
 
 
 class TestPostDiscoveryFatal:

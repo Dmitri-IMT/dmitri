@@ -213,7 +213,8 @@ def _process_cve_job(
     if not matches:
         return
     match = matches[0]
-    finding_record.confidence = "confirmed"
+    if finding_record.source in {"nmap_vulners", "nvd"}:
+        finding_record.confidence = "probable"
     finding_record.cvss_score = match["cvss_score"] or finding_record.cvss_score
     finding_record.severity = match["severity"]
     finding_record.references_json = sorted(
@@ -222,8 +223,9 @@ def _process_cve_job(
     finding_record.source_labels_json = sorted(
         set(finding_record.source_labels_json).union({"nvd"})
     )
-    if "NVD validated this CVE." not in finding_record.evidence:
-        finding_record.evidence = f"{finding_record.evidence} | NVD validated this CVE."
+    nvd_note = "NVD lists this CVE; target applicability is unverified."
+    if nvd_note not in finding_record.evidence:
+        finding_record.evidence = f"{finding_record.evidence} | {nvd_note}"
     finding_record.updated_at = datetime.now(timezone.utc)
     session.add(finding_record)
     refresh_risk_snapshot(session, finding_record)

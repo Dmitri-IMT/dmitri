@@ -6,6 +6,14 @@ from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
 from agent.scanner.stages import run_deep_inspection_stage
 
 
+class _Reporter:
+    def __init__(self) -> None:
+        self.events = []
+
+    def emit(self, event) -> None:
+        self.events.append(event)
+
+
 class _Runner:
     nmap_path = "nmap"
     calls = 0
@@ -49,21 +57,30 @@ def test_deep_stage_recovers_service_evidence_when_nse_returns_none(
 ) -> None:
     host = _host()
     runner = _Runner()
+    reporter = _Reporter()
 
     monkeypatch.setattr(
         "agent.scanner.stages.run_nse_vulnerability_scan",
         lambda *args, **kwargs: None,
     )
 
-    run_deep_inspection_stage(
+    incomplete = run_deep_inspection_stage(
         runner,
         AgentSettings(scan_mode="nspi"),
         [host],
+        reporter=reporter,
     )
 
     assert runner.calls == 1
+    assert incomplete == 1
+    assert host.deep_inspection_outcome == "partial"
+    assert host.deep_inspection_reason == "nse_timeout"
+    assert host.deep_inspection_evidence_source == "service_recovery"
     assert host.ports[0].service.name == "modbus"
     assert host.ports[0].service.banner == "Modbus TCP 1.0"
+    done = next(event for event in reporter.events if event.kind == "deep_stage_done")
+    assert done.units_skipped == 0
+    assert done.units_total == 1
 
 
 def test_deep_stage_recovers_after_unit_scan_error(monkeypatch) -> None:
@@ -75,13 +92,16 @@ def test_deep_stage_recovers_after_unit_scan_error(monkeypatch) -> None:
 
     monkeypatch.setattr("agent.scanner.stages.run_nse_vulnerability_scan", fail_nse)
 
-    run_deep_inspection_stage(
+    incomplete = run_deep_inspection_stage(
         runner,
         AgentSettings(scan_mode="standard"),
         [host],
     )
 
     assert runner.calls == 1
+    assert incomplete == 1
+    assert host.deep_inspection_outcome == "partial"
+    assert host.deep_inspection_reason == "nse_failed"
     assert host.ports[0].service.name == "modbus"
 
 

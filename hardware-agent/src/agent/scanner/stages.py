@@ -26,6 +26,8 @@ from agent.discovery.port_discovery import (
 from agent.discovery.service_detection import detect_services
 from agent.discovery.vulnerability_detection import run_nse_vulnerability_scan
 from agent.normalize.contracts import (
+    CoverageObservationPayload,
+    CoverageUnitPayload,
     DeviceProfilePayload,
     HostPayload,
     ModbusAddressRangePayload,
@@ -54,6 +56,7 @@ from agent.scanner.errors import (
 from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.version import installed_version
+from agent.targeted.report import sanitize_evidence
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
@@ -170,11 +173,15 @@ def run_port_stage(
             except BudgetExceeded:
                 hosts_skipped += len(batch)
                 for ip in batch:
+                    host_map[ip].port_scan_outcome = "timed_out"
+                    host_map[ip].port_scan_reason = "port_timeout"
                     _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
                 LOGGER.warning("Port scan timed out for batch %s.", batch)
             except UnitScanError:
                 hosts_skipped += len(batch)
                 for ip in batch:
+                    host_map[ip].port_scan_outcome = "failed"
+                    host_map[ip].port_scan_reason = "port_failed"
                     _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
                 LOGGER.warning("Port scan failed for batch %s.", batch)
             else:
@@ -182,9 +189,12 @@ def run_port_stage(
                     host = host_map[ip]
                     result = results.get(ip)
                     if result is None:
-                        raise UnitScanError(
-                            f"Port scan did not return results for {ip}"
-                        )
+                        hosts_skipped += 1
+                        host.port_scan_outcome = "failed"
+                        host.port_scan_reason = "port_no_result"
+                        _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
+                        LOGGER.warning("Port scan returned no result for %s.", ip)
+                        continue
                     host.ports = sorted(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
@@ -192,12 +202,16 @@ def run_port_stage(
                     host.operating_system = result.operating_system
                     if result.skipped:
                         hosts_skipped += 1
+                        host.port_scan_outcome = "partial"
+                        host.port_scan_reason = "port_host_timeout"
                         _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
                         LOGGER.warning(
                             "Port scan hit the host timeout for %s; "
                             "partial evidence kept.",
                             ip,
                         )
+                    else:
+                        host.port_scan_outcome = "completed"
                     LOGGER.info(
                         "Port scan finished for %s with %s ports.",
                         host.ip,
@@ -216,7 +230,7 @@ def run_port_stage(
                 raise CircuitBreakerError(
                     f"Port stage aborted: {hosts_skipped}/{len(hosts)} units failed"
                 )
-    ports_open = sum(len(host.ports) for host in hosts)
+    ports_open = sum(len(host.open_ports) for host in hosts)
     _emit(
         reporter,
         ScanEvent(
@@ -257,6 +271,7 @@ def run_deep_inspection_stage(
     )
     hosts_done = 0
     hosts_skipped = 0
+    hosts_incomplete = 0
     nspi_options = (
         {
             "script_timeout": NSPI_SCRIPT_TIMEOUT,
@@ -295,7 +310,14 @@ def run_deep_inspection_stage(
                 raise
             except BudgetExceeded:
                 LOGGER.warning("Deep inspection timed out for %s.", host.ip)
-                if _recover_deep_stage_services(runner, settings, host):
+                recovered = _recover_deep_stage_services(runner, settings, host)
+                host.deep_inspection_outcome = "partial" if recovered else "timed_out"
+                host.deep_inspection_reason = "nse_timeout"
+                host.deep_inspection_evidence_source = (
+                    "service_recovery" if recovered else "port_discovery"
+                )
+                hosts_incomplete += 1
+                if recovered:
                     LOGGER.info(
                         "Deep inspection recovered service evidence for %s.",
                         host.ip,
@@ -309,7 +331,14 @@ def run_deep_inspection_stage(
                     )
             except UnitScanError:
                 LOGGER.warning("Deep inspection failed for %s.", host.ip)
-                if _recover_deep_stage_services(runner, settings, host):
+                recovered = _recover_deep_stage_services(runner, settings, host)
+                host.deep_inspection_outcome = "partial" if recovered else "failed"
+                host.deep_inspection_reason = "nse_failed"
+                host.deep_inspection_evidence_source = (
+                    "service_recovery" if recovered else "port_discovery"
+                )
+                hosts_incomplete += 1
+                if recovered:
                     LOGGER.info(
                         "Deep inspection recovered service evidence for %s.",
                         host.ip,
@@ -331,7 +360,20 @@ def run_deep_inspection_stage(
                         LOGGER.warning(
                             "Deep inspection returned no result for %s.", host.ip
                         )
-                    if _recover_deep_stage_services(runner, settings, host):
+                    recovered = _recover_deep_stage_services(runner, settings, host)
+                    host.deep_inspection_outcome = "partial" if recovered else (
+                        "timed_out" if settings.scan_mode == "nspi" else "failed"
+                    )
+                    host.deep_inspection_reason = (
+                        "nse_timeout"
+                        if settings.scan_mode == "nspi"
+                        else "nse_no_result"
+                    )
+                    host.deep_inspection_evidence_source = (
+                        "service_recovery" if recovered else "port_discovery"
+                    )
+                    hosts_incomplete += 1
+                    if recovered:
                         LOGGER.info(
                             "Deep inspection recovered service evidence for %s.",
                             host.ip,
@@ -350,6 +392,8 @@ def run_deep_inspection_stage(
                             host.ip,
                         )
                 else:
+                    host.deep_inspection_outcome = "completed"
+                    host.deep_inspection_evidence_source = "nmap_nse"
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
                     if (
@@ -397,7 +441,7 @@ def run_deep_inspection_stage(
             units_total=hosts_total,
         ),
     )
-    return hosts_skipped
+    return hosts_incomplete
 
 
 @dataclass(frozen=True, slots=True)
@@ -636,6 +680,135 @@ def build_host_payload(
     )
 
 
+def build_coverage_payload(
+    hosts: list[HostInfo],
+    *,
+    interrupted_stage: str | None = None,
+    terminated_by: str | None = None,
+    scan_mode: str | None = None,
+) -> list[CoverageUnitPayload]:
+    """Keep the result of each inspection and targeted endpoint check."""
+
+    coverage: list[CoverageUnitPayload] = []
+    pending_reason = {
+        "user_cancel": "scan_cancelled",
+        "timeout": "scan_timeout",
+        "error": "scan_error",
+    }.get(terminated_by, "scan_interrupted")
+    for host in hosts:
+        if host.port_scan_outcome is not None:
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=host.ip,
+                    stage="ports",
+                    outcome=host.port_scan_outcome,
+                    reason_code=host.port_scan_reason,
+                    evidence_source="nmap_ports",
+                )
+            )
+        elif interrupted_stage == "ports":
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=host.ip,
+                    stage="ports",
+                    outcome="skipped",
+                    reason_code=pending_reason,
+                    evidence_source="not_run",
+                )
+            )
+        if host.deep_inspection_outcome is not None:
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=host.ip,
+                    stage="deep_inspection",
+                    outcome=host.deep_inspection_outcome,
+                    reason_code=host.deep_inspection_reason,
+                    evidence_source=host.deep_inspection_evidence_source,
+                )
+            )
+        elif interrupted_stage in {"ports", "deep_inspection"} and host.open_ports:
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=host.ip,
+                    stage="deep_inspection",
+                    outcome="skipped",
+                    reason_code=pending_reason,
+                    evidence_source="not_run",
+                )
+            )
+        for result in host.targeted_results:
+            observations = [
+                CoverageObservationPayload(
+                    observation_key=sanitize_evidence(item.observation_key, 512),
+                    kind=item.kind,
+                    summary=sanitize_evidence(item.summary, 512),
+                    evidence=sanitize_evidence(item.evidence, 512),
+                    path=sanitize_evidence(item.path, 256) if item.path else None,
+                    rule_id=(
+                        sanitize_evidence(item.rule_id, 128) if item.rule_id else None
+                    ),
+                    policy_version=(
+                        sanitize_evidence(item.policy_version, 64)
+                        if item.policy_version else None
+                    ),
+                )
+                for item in result.observations
+            ]
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=result.unit.ip,
+                    stage="targeted_assessment",
+                    port=result.unit.port,
+                    protocol=result.unit.protocol,
+                    tool=result.unit.tool.value,
+                    outcome=result.outcome.value,
+                    reason_code=(
+                        result.reason_code.value if result.reason_code else None
+                    ),
+                    evidence_source=(
+                        "targeted_tool_partial_report"
+                        if result.outcome != "completed"
+                        and (result.issues or observations)
+                        else "targeted_tool"
+                    ),
+                    issue_keys=[issue.issue_key for issue in result.issues],
+                    observations=observations,
+                )
+            )
+    if (
+        interrupted_stage in {
+            "ports",
+            "deep_inspection",
+            "ot_inspection",
+            "targeted_assessment",
+        }
+        and scan_mode is not None
+    ):
+        from agent.targeted.selection import select_targeted_units
+
+        completed_ids = {
+            result.unit.identity
+            for host in hosts
+            for result in host.targeted_results
+        }
+        for unit in select_targeted_units(hosts, scan_mode=scan_mode):
+            if unit.identity in completed_ids:
+                continue
+            coverage.append(
+                CoverageUnitPayload(
+                    ip=unit.ip,
+                    stage="targeted_assessment",
+                    port=unit.port,
+                    protocol=unit.protocol,
+                    tool=unit.tool.value,
+                    outcome="skipped",
+                    reason_code=pending_reason,
+                    evidence_source="not_run",
+                )
+            )
+    return coverage
+
+
 def nmap_arguments_summary(settings: AgentSettings) -> str:
     if settings.scan_mode == "nspi":
         port_stage = (
@@ -761,6 +934,7 @@ def build_metadata(
                 "targeted_units_eligible": targeted_summary.eligible,
                 "targeted_units_planned": targeted_summary.planned,
                 "targeted_units_omitted": targeted_summary.omitted,
+                "targeted_units_omitted_unlisted": targeted_summary.omitted_unlisted,
                 "targeted_units_completed": targeted_summary.completed,
                 "targeted_units_failed": targeted_summary.failed,
                 "targeted_units_timed_out": targeted_summary.timed_out,

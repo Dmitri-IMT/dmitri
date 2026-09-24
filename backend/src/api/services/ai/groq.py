@@ -29,9 +29,12 @@ The Dmitri system has already determined all technical facts in the supplied
 context. Use only that evidence. Never change or invent findings, hosts, CVEs,
 services, affected or fixed versions, exploitation status, remediation commands,
 firmware, patches, CVSS, EPSS, KEV status, severity, confidence, or risk scores.
-When evidence is insufficient, state that explicitly as uncertainty. Explain the
-result clearly for a non-specialist, keep recommendations defensive and high-level,
-and return exactly the requested structured schema.
+When evidence is insufficient, state that explicitly as uncertainty.
+An NVD record confirms that a CVE exists, not that the scanned target is affected.
+Treat cve_correlation as unverified target applicability. A partial or unknown
+evidence_completeness leaves checks unverified; never claim a clean target.
+Explain the result clearly for a non-specialist. Keep recommendations defensive
+and high-level, and return exactly the requested structured schema.
 Write all explanatory prose in {language_name}.
 {writing_skill_instructions}
 """
@@ -213,6 +216,8 @@ class GroqProvider:
                 "total_findings": context.total_findings,
                 "scored_findings": context.scored_findings,
                 "confirmed_findings": context.confirmed_findings,
+                "evidence_completeness": context.evidence_completeness,
+                "incomplete_check_count": context.incomplete_check_count,
                 "kev_findings": context.kev_findings,
                 "severity": context.severity.model_dump(mode="json"),
             },

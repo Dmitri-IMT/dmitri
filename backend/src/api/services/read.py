@@ -142,6 +142,23 @@ def get_host_detail(
 
     summary = _to_host_summary(host)
     unreadable = list(summary.unreadable_fields)
+    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
+    latest_scan_host = latest_pair[0] if latest_pair else None
+    latest_scan = latest_pair[1] if latest_pair else None
+    port_check_complete = (
+        _port_check_complete(latest_scan, latest_scan_host.ip)
+        if latest_scan is not None and latest_scan_host is not None
+        else False
+    )
+    latest_open_ports = {
+        (row.port, row.protocol)
+        for row in session.exec(
+            select(PortRecord).where(
+                PortRecord.scan_host_id == latest_scan_host.id,
+                PortRecord.state == "open",
+            )
+        ).all()
+    } if latest_scan_host is not None else set()
     ports = [
         HostPort(
             port=row.port,
@@ -150,6 +167,11 @@ def get_host_detail(
             version=row.version,
             first_seen_at=row.first_seen_at,
             last_seen_at=row.last_seen_at,
+            observed_in_latest_scan=(
+                True
+                if (row.port, row.protocol) in latest_open_ports
+                else False if port_check_complete else None
+            ),
         )
         for row in session.exec(
             select(HostPortRecord)
@@ -157,9 +179,6 @@ def get_host_detail(
             .order_by(HostPortRecord.port.asc())
         ).all()
     ]
-    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
-    latest_scan_host = latest_pair[0] if latest_pair else None
-    latest_scan = latest_pair[1] if latest_pair else None
     industrial_services = (
         _industrial_service_views(session, latest_scan_host.id, unreadable)
         if latest_scan_host
@@ -274,6 +293,7 @@ def get_scan_detail(
             else []
         ),
         metadata=scan.metadata_json,
+        coverage=scan.coverage_json or [],
         status=scan.status,
         command_id=command.id if command else None,
         error_code=scan_error_code(
@@ -464,7 +484,8 @@ def get_scan_risk_summary(
         total_findings=len(rows),
         scored_findings=len(scores),
         confirmed_findings=sum(
-            row.FindingRecord.confidence == "confirmed" for row in rows
+            effective_finding_confidence(row.FindingRecord) == "confirmed"
+            for row in rows
         ),
         kev_findings=sum(
             row.FindingRecord.cve_id is not None
@@ -519,6 +540,11 @@ def _to_scan_summary(
         subnet=scan.subnet,
         scan_mode=scan.scan_mode,
         status=scan.status,
+        partial_result=(
+            scan.metadata_json["partial_result"]
+            if isinstance((scan.metadata_json or {}).get("partial_result"), bool)
+            else None
+        ),
         host_count=host_count,
         finding_count=finding_count,
         highest_severity=highest_severity,
@@ -835,11 +861,32 @@ def _to_finding_read(
         detected_at=finding.created_at,
         risk_score=risk.risk_score if risk else None,
         exploitability=risk.exploitability if risk else None,
-        confidence=risk.confidence if risk else None,
+        confidence=(
+            "probable"
+            if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}
+            else risk.confidence if risk else None
+        ),
         risk_rationale=risk.rationale if risk else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
         last_seen_at=life.last_seen_at if life else None,
         fixed_at=life.fixed_at if life else None,
     )
+
+
+def _port_check_complete(scan: ScanRecord, ip: str) -> bool:
+    if scan.coverage_json:
+        outcomes = [
+            unit.get("outcome")
+            for unit in scan.coverage_json
+            if unit.get("stage") == "ports" and unit.get("ip") == ip
+        ]
+        return bool(outcomes) and all(outcome == "completed" for outcome in outcomes)
+    return (scan.metadata_json or {}).get("partial_result") is False
+
+
+def effective_finding_confidence(finding: FindingRecord) -> str:
+    if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}:
+        return "probable"
+    return finding.confidence
 

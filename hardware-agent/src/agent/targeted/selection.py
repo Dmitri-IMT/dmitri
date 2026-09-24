@@ -239,3 +239,25 @@ def select_targeted_units(
             summary.plan_limit_by_tool[tool] += tool_omitted
             summary.gap_by_tool[tool][TargetedGapReason.PLAN_LIMIT] += tool_omitted
     return selected
+
+
+def select_omitted_targeted_units(
+    hosts: Iterable[HostInfo], selected: list[TargetedUnit]
+) -> list[TargetedUnit]:
+    """Retain a bounded, deterministic sample of endpoints omitted by the plan."""
+
+    selected_ids = {unit.identity for unit in selected}
+    omitted: list[TargetedUnit] = []
+    for unit in _eligible_units(hosts):
+        if unit.identity in selected_ids:
+            continue
+        if len(omitted) < TARGETED_MAX_UNITS:
+            omitted.append(unit)
+            continue
+        worst_index = max(
+            range(len(omitted)), key=lambda index: _unit_order_key(omitted[index])
+        )
+        if _unit_order_key(unit) < _unit_order_key(omitted[worst_index]):
+            omitted[worst_index] = unit
+    omitted.sort(key=_unit_order_key)
+    return omitted

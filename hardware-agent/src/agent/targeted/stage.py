@@ -20,7 +20,10 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
-from agent.targeted.selection import select_targeted_units
+from agent.targeted.selection import (
+    select_omitted_targeted_units,
+    select_targeted_units,
+)
 from agent.targeted.smb import run_enum4linux
 from agent.targeted.ssh import run_ssh_audit
 from agent.targeted.tls import run_testssl
@@ -149,6 +152,17 @@ def run_targeted_stage(
     )
 
     host_by_ip = {host.ip: host for host in hosts}
+    if summary.omitted:
+        omitted_units = select_omitted_targeted_units(hosts, units)
+        summary.omitted_unlisted = summary.omitted - len(omitted_units)
+        for unit in omitted_units:
+            host_by_ip[unit.ip].targeted_results.append(
+                TargetedUnitResult(
+                    unit,
+                    TargetedOutcome.SKIPPED,
+                    reason_code=TargetedGapReason.PLAN_LIMIT,
+                )
+            )
     active_executor = executor or TargetedExecutor()
     stage_deadline = _stage_deadline(scan_mode, overall_deadline)
     interrupted = False

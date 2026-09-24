@@ -89,7 +89,7 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"2"' in payload["messages"][1]["content"]
+    assert '"context_version":"3"' in payload["messages"][1]["content"]
     assert "scan_id" not in payload["messages"][1]["content"]
     usage = provider.drain_usage_events()
     assert usage[0].operation == "scan_analysis"

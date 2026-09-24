@@ -30,6 +30,36 @@ class _DummyRunner:
         return Element("nmaprun")
 
 
+def test_port_batch_missing_host_result_is_isolated_and_reported(monkeypatch) -> None:
+    hosts = [
+        HostInfo(ip="10.0.0.1", hostname="first"),
+        HostInfo(ip="10.0.0.2", hostname="second"),
+    ]
+    monkeypatch.setattr(
+        "agent.scanner.stages.scan_ports_batch",
+        lambda *args, **kwargs: {
+            "10.0.0.2": PortScanResult(ports=[PortInfo(port=443)])
+        },
+    )
+    reporter = _FakeReporter()
+
+    skipped = run_port_stage(
+        _DummyRunner(),
+        AgentSettings(scan_mode="standard", host_batch_size=2, max_workers=1),
+        hosts,
+        reporter=reporter,
+    )
+
+    assert skipped == 1
+    assert hosts[0].port_scan_outcome == "failed"
+    assert hosts[0].port_scan_reason == "port_no_result"
+    assert hosts[1].port_scan_outcome == "completed"
+    assert [port.port for port in hosts[1].ports] == [443]
+    assert [event.ip for event in reporter.events if event.kind == "unit_failed"] == [
+        "10.0.0.1"
+    ]
+
+
 def _kinds(events: list[ScanEvent], kind: str) -> list[ScanEvent]:
     return [event for event in events if event.kind == kind]
 
@@ -287,6 +317,20 @@ class TestPortStageUnitFailureIsolated:
         assert len(done) == 1
         assert done[0].units_skipped == 2
         assert done[0].units_total == 4
+
+    def test_port_stage_count_excludes_filtered_ports(self, monkeypatch) -> None:
+        hosts = self._hosts()[:1]
+        events = _run_ports(
+            monkeypatch,
+            hosts,
+            {},
+            {"10.0.0.1": [PortInfo(port=80), PortInfo(port=81, state="filtered")]},
+        )
+
+        done = _kinds(events, "port_stage_done")
+        assert done[0].ports_open == 1
+        assert done[0].message == "1 open ports found"
+        assert len(hosts[0].ports) == 2
 
     def test_budget_exceeded_batch_emits_timeout(self, monkeypatch) -> None:
         hosts = self._hosts()

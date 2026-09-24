@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from api.models.persistence import (
     ExposureRecord,
+    HostPortRecord,
     HostRecord,
     PortRecord,
     ScanHostRecord,
@@ -523,6 +524,59 @@ def test_host_detail_uses_latest_scan_profile_and_exposures(
         (443, "tcp")
     ]
     assert body["vulnerability_count"] == seeded["host"].vulnerability_count
+
+
+def test_host_port_freshness_requires_completed_port_check(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    now = datetime.now(timezone.utc)
+    for port in (80, 23):
+        administrative_session.add(
+            HostPortRecord(
+                host_id=seeded["host"].id,
+                port=port,
+                protocol="tcp",
+                service="http" if port == 80 else "telnet",
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+        )
+    scan = seeded["scan"]
+    scan.metadata_json = {"partial_result": True}
+    scan.coverage_json = [
+        {"ip": seeded["host"].ip, "stage": "ports", "outcome": "completed"}
+    ]
+    administrative_session.commit()
+
+    def freshness() -> dict[int, bool | None]:
+        detail = get_host_detail(
+            administrative_session, seeded["host"].id, org_id=seeded["org"].id
+        )
+        assert detail is not None
+        return {port.port: port.observed_in_latest_scan for port in detail.ports}
+
+    assert freshness() == {80: True, 23: False}
+
+    scan.coverage_json = [
+        {"ip": seeded["host"].ip, "stage": "ports", "outcome": "partial"}
+    ]
+    administrative_session.commit()
+    assert freshness() == {80: True, 23: None}
+
+    scan.coverage_json = [
+        {"ip": "192.168.1.99", "stage": "ports", "outcome": "completed"}
+    ]
+    administrative_session.commit()
+    assert freshness() == {80: True, 23: None}
+
+    scan.coverage_json = []
+    administrative_session.commit()
+    assert freshness() == {80: True, 23: None}
+
+    scan.metadata_json = {"partial_result": False}
+    administrative_session.commit()
+    assert freshness() == {80: True, 23: False}
 
 
 def test_host_detail_tie_break_keeps_profile_and_exposures_on_one_scan(

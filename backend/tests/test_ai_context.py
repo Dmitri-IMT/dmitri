@@ -65,7 +65,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "2"
+    assert context.context_version == "3"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
