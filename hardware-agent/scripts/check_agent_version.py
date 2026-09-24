@@ -7,10 +7,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent.version import version_is_greater
-
 ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = ROOT / "hardware-agent" / "pyproject.toml"
+
+
+def parse_version(text: str) -> tuple[int, int, int]:
+    parts = text.strip().split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        raise ValueError(f"version must be MAJOR.MINOR.PATCH, got {text!r}")
+    return int(parts[0]), int(parts[1]), int(parts[2])
+
+
+def version_is_greater(candidate: str, current: str) -> bool:
+    return parse_version(candidate) > parse_version(current)
 
 
 def _version_line(text: str) -> str:

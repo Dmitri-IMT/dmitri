@@ -1,4 +1,12 @@
-from agent.version import parse_version, version_is_greater
+import importlib.util
+from pathlib import Path
+
+_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check_agent_version.py"
+_spec = importlib.util.spec_from_file_location("check_agent_version", _SCRIPT)
+_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+parse_version = _module.parse_version
+version_is_greater = _module.version_is_greater
 
 
 def test_parse_version_requires_three_numbers():

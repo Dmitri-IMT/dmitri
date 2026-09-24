@@ -23,12 +23,12 @@ mkdir -p "$stage/DEBIAN" \
     "$stage/usr/lib/dmitri" \
     "$stage/lib/systemd/system"
 
-cp "$root/pyproject.toml" "$root/uv.lock" "$root/README.md" "$root/dmitri-agent.service" \
-    "$stage/opt/dmitri-agent/"
+cp "$root/pyproject.toml" "$root/uv.lock" "$root/README.md" "$stage/opt/dmitri-agent/"
 cp -R "$root/src" "$stage/opt/dmitri-agent/src"
 cp "$root/packaging/apt-upgrade-agent" "$stage/usr/lib/dmitri/apt-upgrade-agent"
 chmod 755 "$stage/usr/lib/dmitri/apt-upgrade-agent"
-cp "$root/packaging/dmitri-agent-update.service" \
+cp "$root/dmitri-agent.service" \
+    "$root/packaging/dmitri-agent-update.service" \
     "$root/packaging/dmitri-agent-update.timer" \
     "$stage/lib/systemd/system/"
 
@@ -42,7 +42,8 @@ Maintainer: Dmitri IMT <dev@dmitri.imt>
 Depends: systemd
 Recommends: nmap
 Description: Dmitri scanner agent
- Installs the agent tree at /opt/dmitri-agent and a daily apt upgrade timer.
+ Installs the agent tree at /opt/dmitri-agent, dmitri-agent.service,
+ and a daily apt upgrade timer.
  The device key in /etc/dmitri/agent.env is not part of this package.
 EOF
 
@@ -57,8 +58,13 @@ mkdir -p /var/lib/dmitri /opt/uv-python
 env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python uv sync --project /opt/dmitri-agent
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
-    systemctl enable dmitri-agent-update.timer
+    systemctl enable dmitri-agent.service dmitri-agent-update.timer
     systemctl start dmitri-agent-update.timer || true
+    # Run the new tree now. Before provisioning writes DEVICE_ID the unit
+    # cannot start, so provision-pi.sh starts it after registration.
+    if grep -q '^DEVICE_ID=' /etc/dmitri/agent.env 2>/dev/null; then
+        systemctl restart dmitri-agent.service
+    fi
 fi
 EOF
 chmod 755 "$stage/DEBIAN/postinst"

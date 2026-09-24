@@ -1,6 +1,6 @@
 #!/bin/sh
-# Install this Pi and leave it connected to the deployed backend.
-# Run it on the Pi, from a checkout of the repo, as root.
+# Install the hardware-agent package on this Pi and leave it connected to the
+# deployed backend. Run it on the Pi, from a checkout of the repo, as root.
 set -eu
 
 die() {
@@ -18,13 +18,45 @@ prompt() {
 agent_src=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 env_file=/etc/dmitri/agent.env
 
+# The package owns the agent tree, dmitri-agent.service, and the update timer.
+# Its postinst runs `uv sync`, so uv must be on PATH first.
+install_package() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y nmap ca-certificates curl
+
+    if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh | env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
+    fi
+    command -v uv >/dev/null 2>&1 || die "uv install failed"
+
+    # A hand-installed copy of the unit in /etc overrides the packaged one.
+    if [ -f /etc/systemd/system/dmitri-agent.service ]; then
+        systemctl disable dmitri-agent.service || true
+        rm -f /etc/systemd/system/dmitri-agent.service
+    fi
+    # A hand-copied tree (before the package) can hold modules the package
+    # no longer ships. dpkg does not remove files it does not own.
+    if ! dpkg -s hardware-agent >/dev/null 2>&1; then
+        rm -rf /opt/dmitri-agent/src /opt/dmitri-agent/dmitri-agent.service
+    fi
+
+    deb_dir=$(mktemp -d)
+    sh "$agent_src/packaging/build-deb.sh" "$deb_dir/hardware-agent.deb" >/dev/null \
+        || die "package build failed"
+    dpkg -i "$deb_dir/hardware-agent.deb" || die "package install failed"
+    rm -rf "$deb_dir"
+}
+
 if [ -f "$env_file" ] && grep -q '^DEVICE_ID=' "$env_file"; then
-    echo "This Pi is already provisioned. Restarting the agent."
+    echo "This Pi is already provisioned. Installing the package and restarting the agent."
+    install_package
 else
     prompt "Backend URL (https://...): " backend_url
+    # The admin password goes to this URL. Never send it without TLS.
     case "$backend_url" in
-        http://*|https://*) ;;
-        *) die "BACKEND_URL must start with http:// or https://" ;;
+        https://*) ;;
+        *) die "BACKEND_URL must start with https://" ;;
     esac
     backend_url=${backend_url%/}
     prompt "Admin email for that backend: " admin_email
@@ -38,25 +70,10 @@ else
         || die "email, password, and name are required"
     echo "The Pi joins the org of that admin account."
 
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y nmap ca-certificates curl
+    install_package
 
-    if ! command -v uv >/dev/null 2>&1; then
-        curl -LsSf https://astral.sh/uv/install.sh | env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
-    fi
-    command -v uv >/dev/null 2>&1 || die "uv install failed"
-
-    mkdir -p /opt/dmitri-agent /var/lib/dmitri /etc/dmitri /opt/uv-python
+    mkdir -p /etc/dmitri
     chmod 700 /etc/dmitri
-    cp "$agent_src/pyproject.toml" "$agent_src/uv.lock" "$agent_src/README.md" \
-        "$agent_src/dmitri-agent.service" /opt/dmitri-agent/
-    rm -rf /opt/dmitri-agent/src
-    cp -R "$agent_src/src" /opt/dmitri-agent/src
-    env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-        uv sync --project /opt/dmitri-agent \
-        || die "uv sync failed"
-
     python=/opt/dmitri-agent/.venv/bin/python
     [ -x "$python" ] || die "uv sync did not create $python"
 
@@ -153,14 +170,16 @@ PY
     mv "$tmp" "$env_file"
 fi
 
-cp /opt/dmitri-agent/dmitri-agent.service /etc/systemd/system/dmitri-agent.service
-systemctl daemon-reload
-systemctl enable --now dmitri-agent
 systemctl restart dmitri-agent
 
+# Read only the journal of the current process. An older run's
+# "connected" line must not count.
 i=0
 while [ "$i" -lt 30 ]; do
-    if journalctl -u dmitri-agent --no-pager | grep -q "command channel connected"; then
+    invocation=$(systemctl show -p InvocationID --value dmitri-agent)
+    if [ -n "$invocation" ] \
+        && journalctl --no-pager _SYSTEMD_INVOCATION_ID="$invocation" \
+            | grep -q "command channel connected"; then
         echo "Ready. command channel connected."
         exit 0
     fi
