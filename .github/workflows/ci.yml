@@ -158,6 +158,7 @@ jobs:
       - name: Run backend test suite
         working-directory: backend
         run: |
+          set -o pipefail
           uv run pytest -ra | tee pytest-output.log
           if grep -qE '[0-9]+ skipped' pytest-output.log; then
             echo "::error::Database-test skips detected; CI requires a zero-skip backend suite."
@@ -239,4 +240,4 @@ jobs:
           test "$(dpkg-deb -f /tmp/hardware-agent.deb Version)" = "$expected"
           dpkg-deb -c /tmp/hardware-agent.deb | grep 'usr/lib/dmitri/apt-upgrade-agent'
           dpkg-deb -c /tmp/hardware-agent.deb | grep 'lib/systemd/system/dmitri-agent.service'
-
+          dpkg-deb -c /tmp/hardware-agent.deb | grep 'usr/lib/dmitri/scan-lock-path'

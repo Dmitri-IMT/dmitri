@@ -33,6 +33,22 @@ checkout; the package restarts the agent. It does not generate a new key. This i
 how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
 script does not pick a subnet.
 
+The installer refuses to run while a scan or another update holds the appliance
+lock. The timer skips that attempt. Both use the path installed in
+`/usr/lib/dmitri/scan-lock-path`, also read by the daemon, headless CLI and TUI.
+The daemon keeps the lock through result upload and pending terminal-status replay.
+
+Before registration, the private key is saved as `/etc/dmitri/device.key` (0600).
+The complete `agent.env` is written only after registration returns a device ID.
+If the connection drops after registration commits, rerun the script: the same
+organization and public key return the same device ID. A retry does not rename or
+restore a revoked device. Keep the key file when recovering an incomplete install.
+
+Deploy the backend with Alembic revision `20260924_35` before using this installer.
+Run `alembic upgrade head`. The migration rejects duplicate `(org_id, public_key)`
+rows; resolve any existing duplicates before deployment without deleting their
+scan history automatically.
+
 ## 0. Hardware
 
 | Item | Value |
@@ -97,7 +113,9 @@ checkout of this repo and install it:
 
 ```bash
 sh hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
-sudo dpkg -i /tmp/hardware-agent.deb
+agent_lock=$(cat hardware-agent/packaging/scan-lock-path)
+sudo mkdir -p "$(dirname "$agent_lock")"
+sudo flock -n -x "$agent_lock" dpkg -i /tmp/hardware-agent.deb
 ```
 
 The package installs the tree, `dmitri-agent.service`, and the update timer. Its

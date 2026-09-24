@@ -42,6 +42,14 @@ The first packages are installed with `dpkg -i`. The timer's `apt` upgrade does 
 
 The timer does not upgrade `hardware-agent` while that device has a scan in progress. An upgrade restarts the unit, and a restart kills the scan.
 
+The package owns `/usr/lib/dmitri/scan-lock-path`, which names the shared appliance
+lock independently of results directories and XDG settings. The timer and provision
+script take it exclusively before changing the installation. Scans take it shared
+and non-blocking: they refuse to start while an update owns it. The daemon acquires
+it before reporting `running`, holds it through result upload, and retains it while
+a terminal status awaits replay. TUI and headless entrypoints use the same contract.
+The package creates the lock file; source checkouts without the package have no updater.
+
 If the process does exit during a scan, the follow-up marks that command failed. Otherwise the backend can hold the command open and return `device_busy` after the device is back.
 
 ### 4. Version starts at 1.0.0
@@ -67,10 +75,12 @@ Move from `1.0.0` to `1.0.1` by publishing the new `.deb`. The timer upgrades th
 The upgrade failed when the unit is not active afterward, or when `hello` does not report `1.0.1`. Roll back with the previous package, which the repository must still serve.
 
 ```bash
-apt-get install hardware-agent=1.0.0
+sudo flock -n -x "$(cat /usr/lib/dmitri/scan-lock-path)" \
+  apt-get install --allow-downgrades hardware-agent=1.0.0
 ```
 
-Then restart the unit. `/etc/dmitri/agent.env` stays as it was.
+The package restarts the unit while the lock is held. `/etc/dmitri/agent.env`
+stays as it was. If the lock is busy, retry after the current command finishes.
 
 ## Consequences
 
