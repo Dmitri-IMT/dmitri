@@ -17,14 +17,19 @@ repo on the Pi, then run:
 sudo hardware-agent/scripts/provision-pi.sh
 ```
 
-The script asks for the deployed backend URL, an admin email and password for
-that backend, and a name for this Pi. The Pi joins the org of that admin
-account. It installs `nmap` and the agent, creates the device key on the Pi,
-registers the device, starts `dmitri-agent`, and exits when the journal says
-`command channel connected`.
+The script asks for the deployed backend URL (`https://` only, because the admin
+password goes to it), an admin email and password for that backend, and a name
+for this Pi. The Pi joins the org of that admin account. It installs `nmap` and
+`uv`, builds the `hardware-agent` package from the checkout and installs it with
+`dpkg -i`, creates the device key on the Pi, registers the device, starts
+`dmitri-agent`, and exits when the current process logs `command channel connected`.
 
-Run it again on an already provisioned Pi and it only restarts the agent. It
-does not generate a new key. Trigger the scan from the web UI (section 9). The
+The package installs `dmitri-agent.service` and the daily update timer
+([ADR-021](adr/ADR-021-pi-agent-updates.md)).
+
+Run it again on an already provisioned Pi and it installs the package from the
+checkout and restarts the agent. It does not generate a new key. This is also
+how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
 script does not pick a subnet.
 
 ## 0. Hardware
@@ -78,31 +83,31 @@ a stable address for support.
 ```bash
 sudo apt-get update
 sudo apt-get install -y nmap
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sudo env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
 ```
 
-`nmap` is the scanning engine (ADR-002). `uv` manages the agent's Python.
+`nmap` is the scanning engine (ADR-002). `uv` manages the agent's Python. It goes in
+`/usr/local/bin` because the package's `postinst` runs `uv` as root.
 
 ## 4. Install the agent
 
-The agent lives in `/opt/dmitri-agent`, owned by root.
+The agent lives in `/opt/dmitri-agent`, owned by root. Build the package from a
+checkout of this repo and install it:
 
 ```bash
-sudo mkdir -p /opt/dmitri-agent
-# copy hardware-agent/ -> /opt/dmitri-agent
-sudo chown -R root:root /opt/dmitri-agent
-sudo env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-  ~/.local/bin/uv sync --project /opt/dmitri-agent
+sh hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
+sudo dpkg -i /tmp/hardware-agent.deb
 ```
 
-One sync, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
+The package installs the tree, `dmitri-agent.service`, and the update timer. Its
+`postinst` runs `uv sync` once, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
 
 > **`UV_PYTHON_INSTALL_DIR` is not optional.** By default `uv` puts its interpreter under
 > `/root/.local/share/uv/`, and the venv's `bin/python` becomes a symlink into `/root`.
 > The service runs with `ProtectHome=true`, which hides `/root` — so systemd fails with
 > `203/EXEC "No such file or directory"` even though the executable is plainly there.
 > Installing the interpreter under `/opt/uv-python` keeps the whole runtime in one place
-> that the hardened unit can reach. Use the same variable on every later `uv sync`.
+> that the hardened unit can reach. The package's `postinst` sets it.
 
 Verify the runtime on the device:
 
@@ -189,11 +194,11 @@ sudo chmod 600 /etc/dmitri/agent.env
 
 ## 8. Enable the service
 
+The package already installed and enabled the unit. Start it now that `agent.env` is
+complete:
+
 ```bash
-sudo mkdir -p /var/lib/dmitri
-sudo cp /opt/dmitri-agent/dmitri-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now dmitri-agent
+sudo systemctl restart dmitri-agent
 systemctl status dmitri-agent
 journalctl -u dmitri-agent -f
 ```
@@ -244,7 +249,7 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 
 - **Agent updates.** [ADR-021](adr/ADR-021-pi-agent-updates.md). The package is
   `hardware-agent/packaging/build-deb.sh`. Provisioning installs it with `dpkg -i`.
-  The package enables a daily timer that runs `apt-get install --only-upgrade
+  An upgrade restarts `dmitri-agent`. The package enables a daily timer that runs `apt-get install --only-upgrade
   hardware-agent` and skips the upgrade while `nmap` is running. There is no apt
   repository yet, so a later upgrade is still a new `.deb` installed by hand until
   that repository exists.
