@@ -117,11 +117,44 @@ def _records(
     if isinstance(payload, list) and not payload:
         return [], False
     scan_result = payload.get("scanResult") if isinstance(payload, Mapping) else None
-    if isinstance(scan_result, list) and any(
-        not isinstance(row, Mapping) or not {"id", "severity", "finding"}.issubset(row)
-        for row in scan_result
-    ):
-        return [], False
+    if isinstance(scan_result, list):
+        flat_records = all(
+            isinstance(row, Mapping)
+            and {"id", "severity", "finding"}.issubset(row)
+            for row in scan_result
+        )
+        if scan_result and not flat_records:
+            records: list[Mapping[str, Any]] = []
+            saw_target_conflict = False
+            for host in scan_result:
+                if not isinstance(host, Mapping) or not any(
+                    isinstance(value, list) for value in host.values()
+                ):
+                    return [], False
+                host_values = [
+                    host.get(key)
+                    for key in ("ip", "host", "hostname", "fqdn", "target", "node")
+                ]
+                has_host = any(value not in (None, "") for value in host_values)
+                if unit is not None and (
+                    not has_host or not _target_matches(host, unit)
+                ):
+                    saw_target_conflict = True
+                    continue
+                for row in _walk(host):
+                    if not {"id", "severity", "finding"}.issubset(row):
+                        continue
+                    record = dict(row)
+                    for key in ("ip", "host", "port"):
+                        if host.get(key) not in (None, ""):
+                            record.setdefault(key, host[key])
+                    if unit is not None and not _target_matches(record, unit):
+                        saw_target_conflict = True
+                        continue
+                    records.append(record)
+            return records, not saw_target_conflict
+        if not flat_records:
+            return [], False
     records: list[Mapping[str, Any]] = []
     saw_target_conflict = False
     for row in _walk(payload):
@@ -161,7 +194,7 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
     finding_lower = finding.casefold()
     if not identifier or not finding or severity not in _SEVERITIES:
         return None
-    if finding_lower in _IGNORED_FINDINGS or finding_lower.startswith(("not ", "no ")):
+    if finding_lower in _IGNORED_FINDINGS or finding_lower.startswith("not "):
         return None
     if not any(
         word in identifier_lower or word in finding_lower
@@ -264,19 +297,23 @@ def run_testssl(
             "batch",
             "--color",
             "0",
-            "--socket-timeout",
+            "--connect-timeout",
             "5",
             "--openssl-timeout",
             "5",
+            "--protocols",
+            "--server-defaults",
+            "--header",
+            "--vulnerable",
             "--jsonfile-pretty",
             "REPORT",
             f"{unit.ip}:{unit.port}",
         ],
         "file",
-        10,
+        14,
     )
     execution = executor.execute(command, **deadline)
-    if execution.outcome != TargetedOutcome.COMPLETED:
+    if execution.outcome != TargetedOutcome.COMPLETED and not execution.report_present:
         return _result(unit, execution)
     if execution.report_truncated:
         return TargetedUnitResult(
@@ -295,6 +332,8 @@ def run_testssl(
     payload = parse_json_payload(execution.report)
     records, valid = _records(payload, unit)
     if not valid:
+        if execution.outcome != TargetedOutcome.COMPLETED:
+            return _result(unit, execution)
         malformed_scan_result = (
             isinstance(payload, Mapping)
             and isinstance(payload.get("scanResult"), list)
@@ -318,6 +357,7 @@ def run_testssl(
             TargetedOutcome.FAILED,
             exit_code=execution.exit_code,
             reason_code=reason,
+            diagnostic=execution.diagnostic or "testssl JSON report has an unsupported schema.",
         )
     issues = parse_testssl_json(execution.report, unit)
     if (
@@ -332,5 +372,10 @@ def run_testssl(
             reason_code=TargetedGapReason.ISSUE_LIMIT,
         )
     return TargetedUnitResult(
-        unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
+        unit,
+        execution.outcome,
+        issues=issues,
+        exit_code=execution.exit_code,
+        reason_code=execution.reason_code,
+        diagnostic=execution.diagnostic,
     )

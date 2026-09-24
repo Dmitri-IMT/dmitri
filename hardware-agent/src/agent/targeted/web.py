@@ -12,16 +12,19 @@ from __future__ import annotations
 import csv
 import hashlib
 import re
+import ssl
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from agent.config import (
     TARGETED_MAX_ISSUES_PER_UNIT,
+    TARGETED_UNIT_TIMEOUT_S,
     TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT,
     TARGETED_WORDLIST_MAX_BYTES,
     TARGETED_WORDLIST_MAX_ENTRIES,
@@ -69,6 +72,10 @@ _BACKUP_SUFFIXES = (
     ".tgz",
     ".gz",
 )
+
+
+class _WebDeadlineExceeded(TimeoutError):
+    pass
 
 
 def _config_stem(base: str) -> str:
@@ -572,17 +579,36 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 
 
 def _fetch(
-    url: str, *, timeout: float = 5.0, opener: Callable[..., Any] | None = None
+    url: str,
+    *,
+    timeout: float = 5.0,
+    opener: Callable[..., Any] | None = None,
+    deadline: float | None = None,
 ) -> WebResponse:
     current = url
     original_origin = _origin(url)
-    open_url = opener or build_opener(_NoRedirectHandler()).open
+    if opener is not None:
+        open_url = opener
+    elif original_origin[0] == "https":
+        # Certificate quality is assessed by testssl; still enumerate and
+        # validate paths on HTTPS services that use private/self-signed certs.
+        context = ssl._create_unverified_context()
+        open_url = build_opener(
+            _NoRedirectHandler(), HTTPSHandler(context=context)
+        ).open
+    else:
+        open_url = build_opener(_NoRedirectHandler()).open
     for redirect_count in range(WEB_MAX_REDIRECTS + 1):
         request = Request(
             current, method="GET", headers={"User-Agent": "Dmitri-targeted/1"}
         )
         try:
-            response = open_url(request, timeout=timeout)
+            request_timeout = timeout
+            if deadline is not None:
+                request_timeout = min(timeout, deadline - perf_counter())
+                if request_timeout <= 0:
+                    raise _WebDeadlineExceeded("web validation deadline reached")
+            response = open_url(request, timeout=request_timeout)
         except HTTPError as error:
             response = error
         try:
@@ -627,6 +653,8 @@ def validate_web_candidate(
         return None
     try:
         result = response or (fetcher or _fetch)(candidate.url)
+    except _WebDeadlineExceeded:
+        raise
     except Exception:
         return None
     if result.url:
@@ -744,15 +772,53 @@ def run_ffuf(
     fetcher: Callable[[str], WebResponse] | None = None,
     **deadline: Any,
 ) -> TargetedUnitResult:
+    start = perf_counter()
+    unit_deadline = start + TARGETED_UNIT_TIMEOUT_S[TargetedTool.FFUF.value]
+    deadline_values = [unit_deadline]
+    scope = "unit"
+    for key, candidate_scope in (("stage_deadline", "stage"), ("overall_deadline", "overall")):
+        value = deadline.get(key)
+        if isinstance(value, (int, float)) and value < min(deadline_values):
+            deadline_values = [float(value)]
+            scope = candidate_scope
+    end = min(deadline_values)
+    cancel_event = deadline.get("cancel_event")
+
+    def incomplete_result() -> TargetedUnitResult | None:
+        cancelled = bool(getattr(executor, "_cancelled", False)) or bool(
+            cancel_event is not None and cancel_event.is_set()
+        )
+        if cancelled:
+            return TargetedUnitResult(
+                unit, TargetedOutcome.SKIPPED, reason_code=TargetedGapReason.STAGE_BUDGET
+            )
+        if perf_counter() < end:
+            return None
+        if scope == "stage":
+            return TargetedUnitResult(
+                unit, TargetedOutcome.SKIPPED, reason_code=TargetedGapReason.STAGE_BUDGET
+            )
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.TIMED_OUT,
+            reason_code=(TargetedGapReason.UNIT_TIMEOUT if scope == "unit" else None),
+        )
+
+    def bounded_fetch(url: str) -> WebResponse:
+        status = incomplete_result()
+        if status is not None:
+            raise _WebDeadlineExceeded("web validation deadline reached")
+        if fetcher is not None:
+            return fetcher(url)
+        return _fetch(url, deadline=end)
+
     base, reason = _wordlist(wordlist)
     if base is None:
         return TargetedUnitResult(unit, TargetedOutcome.SKIPPED, reason_code=reason)
     effective = _effective_wordlist(base)
     try:
         url = f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/FUZZ"
-        command = ToolCommand(
-            TargetedTool.FFUF,
-            [
+        argv = [
                 "ffuf",
                 "-u",
                 url,
@@ -773,13 +839,26 @@ def run_ffuf(
                 "5",
                 "-maxtime",
                 "300",
-            ],
+            ]
+        if unit.transport == "https":
+            # The target certificate is reported separately by testssl.
+            argv.append("-k")
+        command = ToolCommand(
+            TargetedTool.FFUF,
+            argv,
             "file",
             8,
         )
         execution = executor.execute(command, **deadline)
-        if execution.outcome != TargetedOutcome.COMPLETED:
+        if execution.outcome != TargetedOutcome.COMPLETED and not execution.report_present:
             return _result_from_execution(unit, execution)
+        if execution.report_truncated:
+            return TargetedUnitResult(
+                unit,
+                TargetedOutcome.FAILED,
+                exit_code=execution.exit_code,
+                reason_code=TargetedGapReason.OUTPUT_LIMIT,
+            )
         if not execution.report_present:
             return TargetedUnitResult(
                 unit,
@@ -791,6 +870,8 @@ def run_ffuf(
         if not isinstance(payload, dict) or not isinstance(
             payload.get("results"), list
         ):
+            if execution.outcome != TargetedOutcome.COMPLETED:
+                return _result_from_execution(unit, execution)
             return TargetedUnitResult(
                 unit,
                 TargetedOutcome.FAILED,
@@ -807,13 +888,17 @@ def run_ffuf(
             )
         )
         result = TargetedUnitResult(
-            unit, TargetedOutcome.COMPLETED, exit_code=execution.exit_code
+            unit,
+            execution.outcome,
+            exit_code=execution.exit_code,
+            reason_code=execution.reason_code,
+            diagnostic=execution.diagnostic,
         )
         if candidates:
             synthetic = hashlib.sha256(
                 f"{scan_id}|{unit.ip}|{unit.port}".encode()
             ).hexdigest()[:16]
-            baseline_response = (fetcher or _fetch)(
+            baseline_response = bounded_fetch(
                 f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/.dmitri-not-found-{synthetic}"
             )
             if baseline_response.truncated:
@@ -825,7 +910,22 @@ def run_ffuf(
                 )
             baseline = _baseline(baseline_response)
             for candidate in candidates[:TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT]:
-                validated = validate_web_candidate(candidate, baseline, fetcher=fetcher)
+                status = incomplete_result()
+                if status is not None:
+                    status.issues = result.issues
+                    status.observations = result.observations
+                    return status
+                try:
+                    validated = validate_web_candidate(
+                        candidate, baseline, fetcher=bounded_fetch
+                    )
+                except _WebDeadlineExceeded:
+                    status = incomplete_result()
+                    if status is not None:
+                        status.issues = result.issues
+                        status.observations = result.observations
+                        return status
+                    raise
                 if (
                     isinstance(validated, TargetedIssue)
                     and len(result.issues) < TARGETED_MAX_ISSUES_PER_UNIT
@@ -840,6 +940,9 @@ def run_ffuf(
                 )
         return result
     except Exception as exc:
+        status = incomplete_result()
+        if status is not None:
+            return status
         return TargetedUnitResult(
             unit,
             TargetedOutcome.FAILED,
@@ -865,29 +968,39 @@ def _load_nikto_policy(
         if digest != NIKTO_DB_TESTS_SHA256:
             return {}
         with path.open(newline="", encoding="utf-8", errors="replace") as stream:
-            rows = csv.DictReader(stream)
-            output: dict[str, str] = {}
-            for row in rows:
-                normalized = {str(key).casefold(): value for key, value in row.items()}
-                identifier = next(
-                    (
-                        normalized.get(k)
-                        for k in ("id", "testid", "test_id", "osvdb")
-                        if normalized.get(k)
-                    ),
-                    None,
+            rows = list(
+                csv.reader(
+                    line
+                    for line in stream
+                    if line.strip() and not line.lstrip().startswith("#")
                 )
-                category = next(
-                    (
-                        normalized.get(k)
-                        for k in ("tuning", "category", "categories")
-                        if normalized.get(k)
-                    ),
-                    None,
-                )
-                if identifier and category:
-                    output[re.sub(r"\D", "", identifier).zfill(6)] = category.casefold()
-            return output
+            )
+        if not rows:
+            return {}
+        header = [value.strip().casefold() for value in rows[0]]
+        id_index = next(
+            (header.index(key) for key in ("id", "testid", "test_id", "osvdb") if key in header),
+            None,
+        )
+        category_index = next(
+            (header.index(key) for key in ("tuning", "category", "categories") if key in header),
+            None,
+        )
+        if id_index is not None and category_index is not None:
+            data_rows = rows[1:]
+        else:
+            # The pinned Nikto 2.6 database documents its nine-column format
+            # in comments; its actual rows have ID and Tuning in columns 0/2.
+            id_index, category_index = 0, 2
+            data_rows = rows
+        output: dict[str, str] = {}
+        for row in data_rows:
+            if len(row) <= max(id_index, category_index):
+                continue
+            identifier, category = row[id_index].strip(), row[category_index].strip()
+            if re.fullmatch(r"\d{1,6}", identifier) and category:
+                output[identifier.zfill(6)] = category.casefold()
+        return output
     except (OSError, UnicodeError):
         return {}
 
@@ -1004,13 +1117,35 @@ def parse_nikto_json(
     *,
     policy: Mapping[str, str] | str | Path | None = None,
 ) -> list[TargetedIssue]:
-    payload = parse_json_payload(report)
-    if not isinstance(payload, dict) or not isinstance(
-        payload.get("vulnerabilities"), list
-    ):
+    payload = _nikto_payload(parse_json_payload(report))
+    if payload is None:
         return []
     policies = _load_nikto_policy(policy)
     return _parse_nikto_issues(payload, unit, policies, TARGETED_MAX_ISSUES_PER_UNIT)[0]
+
+
+def _nikto_payload(value: Any) -> dict[str, Any] | None:
+    """Normalize Nikto's native host-array JSON and the legacy object form."""
+    if isinstance(value, Mapping) and isinstance(value.get("vulnerabilities"), list):
+        return {"vulnerabilities": value["vulnerabilities"]}
+    if not isinstance(value, list) or not value:
+        return None
+    vulnerabilities: list[dict[str, Any]] = []
+    for host in value:
+        if (
+            not isinstance(host, Mapping)
+            or not isinstance(host.get("vulnerabilities"), list)
+            or not isinstance(host.get("ip", host.get("host")), str)
+        ):
+            return None
+        for item in host["vulnerabilities"]:
+            if not isinstance(item, Mapping):
+                return None
+            normalized = dict(item)
+            normalized.setdefault("host", host.get("ip", host.get("host")))
+            normalized.setdefault("port", host.get("port"))
+            vulnerabilities.append(normalized)
+    return {"vulnerabilities": vulnerabilities}
 
 
 def run_nikto(
@@ -1033,7 +1168,7 @@ def run_nikto(
         "-timeout",
         "5",
         "-maxtime",
-        "150s",
+        "200s",
         "-Pause",
         "0.2",
         "-Format",
@@ -1042,26 +1177,35 @@ def run_nikto(
         "REPORT",
     ]
     execution = executor.execute(
-        ToolCommand(TargetedTool.NIKTO, argv, "file", 18), **deadline
+        ToolCommand(TargetedTool.NIKTO, argv, "file", 18, report_path_mode="base"), **deadline
     )
-    if execution.outcome != TargetedOutcome.COMPLETED:
+    if execution.outcome != TargetedOutcome.COMPLETED and not execution.report_present:
         return _result_from_execution(unit, execution)
+    if execution.report_truncated:
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.OUTPUT_LIMIT,
+        )
     if not execution.report_present:
         return TargetedUnitResult(
             unit,
             TargetedOutcome.FAILED,
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.MALFORMED_REPORT,
+            diagnostic=execution.diagnostic or "Nikto did not create its JSON report.",
         )
-    payload = parse_json_payload(execution.report)
-    if not isinstance(payload, dict) or not isinstance(
-        payload.get("vulnerabilities"), list
-    ):
+    payload = _nikto_payload(parse_json_payload(execution.report))
+    if payload is None:
+        if execution.outcome != TargetedOutcome.COMPLETED:
+            return _result_from_execution(unit, execution)
         return TargetedUnitResult(
             unit,
             TargetedOutcome.FAILED,
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.MALFORMED_REPORT,
+            diagnostic=execution.diagnostic or "Nikto JSON report has an unsupported schema.",
         )
     if not _nikto_policy_available(policy):
         return TargetedUnitResult(
@@ -1082,6 +1226,20 @@ def run_nikto(
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.ISSUE_LIMIT,
         )
+    internal_timeout = bool(
+        execution.diagnostic
+        and "host maximum execution time" in execution.diagnostic.casefold()
+        and "reached" in execution.diagnostic.casefold()
+    )
     return TargetedUnitResult(
-        unit, TargetedOutcome.COMPLETED, issues=issues, exit_code=execution.exit_code
+        unit,
+        TargetedOutcome.TIMED_OUT if internal_timeout else execution.outcome,
+        issues=issues,
+        exit_code=execution.exit_code,
+        reason_code=(
+            TargetedGapReason.UNIT_TIMEOUT
+            if internal_timeout
+            else execution.reason_code
+        ),
+        diagnostic=execution.diagnostic,
     )
