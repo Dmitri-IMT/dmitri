@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from uuid import UUID
 
@@ -7,6 +8,7 @@ from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
 from api.models.command import Agent
+from api.models.identity import Org
 from api.schemas.agents import AgentDetail, AgentSummary
 from api.services import agent_connections
 from api.services.commands import SubnetNotReportedError, active_command_for
@@ -27,6 +29,22 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
         "target_subnet": agent.target_subnet,
         "active_command_id": None if active is None else active.id,
     }
+
+
+def register_agent(
+    session: Session, *, org_id: UUID, display_name: str, public_key: bytes
+) -> UUID:
+    org = session.get(Org, org_id)
+    if org is None:
+        raise ValueError(f"unknown org: {org_id}")
+    if org.ot_digest_key is None:
+        org.ot_digest_key = secrets.token_hex(32)
+        session.add(org)
+    agent = Agent(org_id=org_id, display_name=display_name, public_key=public_key)
+    session.add(agent)
+    session.commit()
+    session.refresh(agent)
+    return agent.id
 
 
 def list_agents(session: Session, *, org_id: UUID) -> list[AgentSummary]:

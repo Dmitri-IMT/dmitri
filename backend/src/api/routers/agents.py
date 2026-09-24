@@ -14,6 +14,8 @@ from api.models.persistence import utc_now
 from api.schemas.agents import (
     AgentDetail,
     AgentListResponse,
+    RegisterAgentRequest,
+    RegisterAgentResponse,
     UpdateAgentTargetSubnetRequest,
 )
 from api.schemas.commands import CommandSummary, CreateCommandRequest
@@ -28,6 +30,7 @@ from api.services.agents import (
     AgentOfflineError,
     get_agent_detail,
     list_agents,
+    register_agent,
     restore_agent,
     revoke_agent,
     set_target_subnet,
@@ -51,6 +54,35 @@ def list_agents_route(
     session: Session = Depends(get_session),
 ) -> AgentListResponse:
     return AgentListResponse(data=list_agents(session, org_id=caller.org_id))
+
+
+@router.post(
+    "/api/v1/agents",
+    response_model=RegisterAgentResponse,
+    status_code=201,
+)
+def register_agent_route(
+    body: RegisterAgentRequest,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> RegisterAgentResponse:
+    try:
+        raw = bytes.fromhex(body.public_key)
+    except ValueError:
+        raw = b""
+    if len(raw) != 32:
+        raise ApiError(
+            422,
+            "public_key must be 64 hex characters.",
+            code="invalid_public_key",
+        )
+    agent_id = register_agent(
+        session,
+        org_id=caller.org_id,
+        display_name=body.display_name,
+        public_key=raw,
+    )
+    return RegisterAgentResponse(agent_id=agent_id)
 
 
 @router.options("/api/v1/agents", status_code=204)

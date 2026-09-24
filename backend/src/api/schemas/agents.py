@@ -34,6 +34,19 @@ class AgentDetail(BaseModel):
     active_command_id: UUID | None = None
 
 
+class RegisterAgentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str
+    public_key: str
+
+
+class RegisterAgentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: UUID
+
+
 class AgentListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
