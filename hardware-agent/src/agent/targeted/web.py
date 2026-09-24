@@ -776,7 +776,10 @@ def run_ffuf(
     unit_deadline = start + TARGETED_UNIT_TIMEOUT_S[TargetedTool.FFUF.value]
     deadline_values = [unit_deadline]
     scope = "unit"
-    for key, candidate_scope in (("stage_deadline", "stage"), ("overall_deadline", "overall")):
+    for key, candidate_scope in (
+        ("stage_deadline", "stage"),
+        ("overall_deadline", "overall"),
+    ):
         value = deadline.get(key)
         if isinstance(value, (int, float)) and value < min(deadline_values):
             deadline_values = [float(value)]
@@ -790,13 +793,17 @@ def run_ffuf(
         )
         if cancelled:
             return TargetedUnitResult(
-                unit, TargetedOutcome.SKIPPED, reason_code=TargetedGapReason.STAGE_BUDGET
+                unit,
+                TargetedOutcome.SKIPPED,
+                reason_code=TargetedGapReason.STAGE_BUDGET,
             )
         if perf_counter() < end:
             return None
         if scope == "stage":
             return TargetedUnitResult(
-                unit, TargetedOutcome.SKIPPED, reason_code=TargetedGapReason.STAGE_BUDGET
+                unit,
+                TargetedOutcome.SKIPPED,
+                reason_code=TargetedGapReason.STAGE_BUDGET,
             )
         return TargetedUnitResult(
             unit,
@@ -819,27 +826,27 @@ def run_ffuf(
     try:
         url = f"{unit.transport or 'http'}://{unit.ip}:{unit.port}/FUZZ"
         argv = [
-                "ffuf",
-                "-u",
-                url,
-                "-w",
-                str(effective),
-                "-of",
-                "json",
-                "-o",
-                "REPORT",
-                "-noninteractive",
-                "-s",
-                "-ac",
-                "-t",
-                "2",
-                "-rate",
-                "20",
-                "-timeout",
-                "5",
-                "-maxtime",
-                "300",
-            ]
+            "ffuf",
+            "-u",
+            url,
+            "-w",
+            str(effective),
+            "-of",
+            "json",
+            "-o",
+            "REPORT",
+            "-noninteractive",
+            "-s",
+            "-ac",
+            "-t",
+            "2",
+            "-rate",
+            "20",
+            "-timeout",
+            "5",
+            "-maxtime",
+            "300",
+        ]
         if unit.transport == "https":
             # The target certificate is reported separately by testssl.
             argv.append("-k")
@@ -850,7 +857,10 @@ def run_ffuf(
             8,
         )
         execution = executor.execute(command, **deadline)
-        if execution.outcome != TargetedOutcome.COMPLETED and not execution.report_present:
+        if (
+            execution.outcome != TargetedOutcome.COMPLETED
+            and not execution.report_present
+        ):
             return _result_from_execution(unit, execution)
         if execution.report_truncated:
             return TargetedUnitResult(
@@ -979,11 +989,19 @@ def _load_nikto_policy(
             return {}
         header = [value.strip().casefold() for value in rows[0]]
         id_index = next(
-            (header.index(key) for key in ("id", "testid", "test_id", "osvdb") if key in header),
+            (
+                header.index(key)
+                for key in ("id", "testid", "test_id", "osvdb")
+                if key in header
+            ),
             None,
         )
         category_index = next(
-            (header.index(key) for key in ("tuning", "category", "categories") if key in header),
+            (
+                header.index(key)
+                for key in ("tuning", "category", "categories")
+                if key in header
+            ),
             None,
         )
         if id_index is not None and category_index is not None:
@@ -1177,7 +1195,8 @@ def run_nikto(
         "REPORT",
     ]
     execution = executor.execute(
-        ToolCommand(TargetedTool.NIKTO, argv, "file", 18, report_path_mode="base"), **deadline
+        ToolCommand(TargetedTool.NIKTO, argv, "file", 18, report_path_mode="base"),
+        **deadline,
     )
     if execution.outcome != TargetedOutcome.COMPLETED and not execution.report_present:
         return _result_from_execution(unit, execution)
@@ -1205,7 +1224,8 @@ def run_nikto(
             TargetedOutcome.FAILED,
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.MALFORMED_REPORT,
-            diagnostic=execution.diagnostic or "Nikto JSON report has an unsupported schema.",
+            diagnostic=execution.diagnostic
+            or "Nikto JSON report has an unsupported schema.",
         )
     if not _nikto_policy_available(policy):
         return TargetedUnitResult(
