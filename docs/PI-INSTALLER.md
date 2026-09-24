@@ -5,8 +5,27 @@
 > Self-service pairing and device-key rotation are Phase 2 — see
 > [`roadmap/AUTH.md`](roadmap/AUTH.md).
 
-Every step below was executed against real hardware on 2026-09-11; the commands are
-transcribed from that run, not written from memory.
+Every step below was executed against real hardware on 2026-09-11. Use the script.
+The manual steps after it are the troubleshooting path for the same work.
+
+## Provision with the script
+
+Flash the card (sections 0 and 1), boot, and SSH in (section 2). Clone this
+repo on the Pi, then run:
+
+```bash
+sudo hardware-agent/scripts/provision-pi.sh
+```
+
+The script asks for the deployed backend URL, an admin email and password for
+that backend, and a name for this Pi. The Pi joins the org of that admin
+account. It installs `nmap` and the agent, creates the device key on the Pi,
+registers the device, starts `dmitri-agent`, and exits when the journal says
+`command channel connected`.
+
+Run it again on an already provisioned Pi and it only restarts the agent. It
+does not generate a new key. Trigger the scan from the web UI (section 9). The
+script does not pick a subnet.
 
 ## 0. Hardware
 
@@ -223,9 +242,11 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 
 ## Not covered
 
-- **Agent updates.** No mechanism is defined yet. Today an update means copying a new
-  tree to `/opt/dmitri-agent`, re-running `uv sync` and restarting the unit, by hand,
-  per device. This does not scale past a handful of appliances and needs its own
-  decision record.
+- **Agent updates.** [ADR-021](adr/ADR-021-pi-agent-updates.md). The package is
+  `hardware-agent/packaging/build-deb.sh`. Provisioning installs it with `dpkg -i`.
+  The package enables a daily timer that runs `apt-get install --only-upgrade
+  hardware-agent` and skips the upgrade while `nmap` is running. There is no apt
+  repository yet, so a later upgrade is still a new `.deb` installed by hand until
+  that repository exists.
 - Self-service pairing and device-key rotation (Phase 2).
 - Wi-Fi capture via the ALFA adapter.
