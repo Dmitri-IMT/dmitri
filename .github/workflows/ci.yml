@@ -224,8 +224,6 @@ jobs:
           python-version: "3.11"
 
       - name: Require a hardware-agent version bump
-        env:
-          PYTHONPATH: hardware-agent/src
         run: python hardware-agent/scripts/check_agent_version.py origin/main
 
   agent-package:
@@ -237,6 +235,8 @@ jobs:
         run: |
           chmod +x hardware-agent/packaging/build-deb.sh hardware-agent/packaging/apt-upgrade-agent
           hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
-          dpkg-deb -I /tmp/hardware-agent.deb | grep 'Version: 1.0.0'
+          expected=$(sed -n 's/^version = "\(.*\)"/\1/p' hardware-agent/pyproject.toml)
+          test "$(dpkg-deb -f /tmp/hardware-agent.deb Version)" = "$expected"
           dpkg-deb -c /tmp/hardware-agent.deb | grep 'usr/lib/dmitri/apt-upgrade-agent'
+          dpkg-deb -c /tmp/hardware-agent.deb | grep 'lib/systemd/system/dmitri-agent.service'
 
