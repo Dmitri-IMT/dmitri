@@ -100,7 +100,7 @@ export const catalog: Catalog = {
   'common.weeks': 'недель',
   'common.machinesSeen': 'Найденные устройства',
   'common.industrialServices': 'Промышленные сервисы',
-  'common.servicesRunning': 'Сервисы на этом устройстве',
+  'common.servicesRunning': 'Порты, наблюдавшиеся на этом устройстве',
   'common.scanHistory': 'История сканирований',
   'common.machine': 'Устройство',
   'common.vendor': 'Производитель',
@@ -112,7 +112,8 @@ export const catalog: Catalog = {
   'common.addressSpace': 'Адресное пространство',
   'common.range': 'Диапазон',
   'common.result': 'Результат',
-  'common.noServices': 'На этом устройстве нет запущенных сервисов.',
+  'common.noServices':
+    'Для этого устройства не зарегистрировано ни одного порта.',
   'common.noIndustrialServices': 'Промышленные сервисы не обнаружены.',
   'common.noAddressRanges': 'Диапазоны адресов не сопоставлены.',
   'common.back': 'Назад',
@@ -265,4 +266,29 @@ export const catalog: Catalog = {
   'settings.latency': 'Задержка',
   'settings.noRequests': 'Запросов к ИИ пока нет.',
   'settings.usagePages': 'Страницы использования ИИ',
+  'scans.partialEvidence':
+    'Данные сканирования неполные. Некоторые проверки не завершились, поэтому результаты ниже охватывают не все службы.',
+  'scans.failedEvidence': 'Наблюдения, сохранённые до сбоя сканирования:',
+  'scans.checkCoverage': 'Охват проверок',
+  'scans.coverageUnavailable':
+    'Для этого сканирования сведения об охвате проверок не сохранены.',
+  'scans.coverageCompleted': ({ completed, total }) =>
+    `Завершено проверок: ${completed} из ${total}`,
+  'scans.coveragePorts': 'Проверка портов',
+  'scans.coverageDeepInspection': 'Углублённая проверка',
+  'scans.coverageTargetedAssessment': 'Адресная проверка',
+  'scans.coverageOutcomeCompleted': 'завершена',
+  'scans.coverageOutcomePartial': 'частично выполнена',
+  'scans.coverageOutcomeFailed': 'не удалась',
+  'scans.coverageOutcomeTimedOut': 'превышено время ожидания',
+  'scans.coverageOutcomeSkipped': 'пропущена',
+  'scans.openPorts': 'Открытые порты',
+  'scans.filteredPorts': 'Фильтрованные порты',
+  'scans.currentPort': 'Наблюдался в последнем сканировании',
+  'scans.historicalPort': 'Предыдущее наблюдение',
+  'scans.unknownPort': 'Не проверен в последнем сканировании',
+  'home.detected': 'Наблюдалось',
+  'ai.evidenceLimit':
+    'Совпадения CVE и записи NVD не подтверждают, что уязвимость затрагивает проверенные устройства. Проверьте установленное ПО и его версию.',
+  'ai.partialLimit': 'Некоторые проверки в этом сканировании не завершились.',
 }

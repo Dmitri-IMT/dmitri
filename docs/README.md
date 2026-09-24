@@ -60,6 +60,7 @@
 |------|---------------------------|
 | [`implementation/NSE-VULNERABILITY-PIPELINE.md`](implementation/NSE-VULNERABILITY-PIPELINE.md) | Add/modify NSE scripts or the vulnerability pipeline |
 | [`implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`](implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md) | Work on the AI/assessment roadmap |
+| [`implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md`](implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md) | Understand scan coverage, partial-scan reconciliation, CVE confidence and evidence display corrections |
 
 ### UI & setup (`ui/`, root)
 

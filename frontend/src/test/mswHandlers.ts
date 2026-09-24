@@ -392,6 +392,7 @@ export const hostDetailFixtures: HostDetailResponse[] = hostFixtures.map(
               version: index % 2 === 0 ? 'nginx 1.24' : 'OpenSSH 9.6',
               first_seen_at: minutesAgo(10_000 + index * 60),
               last_seen_at: minutesAgo(10 + index * 10),
+              observed_in_latest_scan: true,
             },
           ],
     scan_history: [

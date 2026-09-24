@@ -14,6 +14,7 @@ import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
+import ScanCoverage from '@/pages/scans/ScanCoverage'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -114,14 +115,29 @@ function ScanDetail() {
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
         const partial = metadata.partial_result === true
+        const coverage = scan.coverage ?? []
+        const hasRecordedEvidence =
+          scan.findings.length > 0 ||
+          scan.exposures.length > 0 ||
+          scan.hosts.length > 0 ||
+          coverage.length > 0
 
         return (
           <>
             <ScanDetailHeader scan={scan} />
             <ScanSummaryStrip scan={scan} />
-            {scan.status === 'failed' ? (
+            {partial && (
+              <div
+                data-testid="scan-partial-notice"
+                className="rounded-md border border-border bg-muted p-4 text-body-md"
+              >
+                {t('scans.partialEvidence')}
+              </div>
+            )}
+            {scan.status === 'failed' && (
               <ScanFailedNotice errorCode={scan.error_code} />
-            ) : isUnfinished(scan.status) ? (
+            )}
+            {isUnfinished(scan.status) ? (
               <ScanUnfinishedNotice
                 scan={scan}
                 onCheck={() => {
@@ -129,19 +145,32 @@ function ScanDetail() {
                 }}
                 isChecking={query.isFetching}
               />
-            ) : (
-              <>
-                <ScanAIAnalysis
-                  scanId={scan.scan_id}
-                  findings={scan.findings}
-                />
-                {groups.length === 0 ? (
+            ) : scan.status !== 'failed' || hasRecordedEvidence ? (
+              <div
+                data-testid={
+                  scan.status === 'failed' ? 'scan-failed-evidence' : undefined
+                }
+                className="flex flex-col gap-8"
+              >
+                {scan.status === 'failed' && (
+                  <p className="text-body-md text-muted-foreground">
+                    {t('scans.failedEvidence')}
+                  </p>
+                )}
+                {scan.status !== 'failed' && (
+                  <ScanAIAnalysis
+                    scanId={scan.scan_id}
+                    findings={scan.findings}
+                    partial={partial}
+                  />
+                )}
+                {groups.length === 0 && scan.status !== 'failed' ? (
                   <p data-testid="scan-no-findings" className="text-body-md">
                     {partial
                       ? t('common.noVulnerabilitiesAcceptedEvidence')
                       : t('common.noVulnerabilitiesInScan')}
                   </p>
-                ) : (
+                ) : groups.length > 0 ? (
                   <div className="flex flex-col gap-8">
                     {groups.map((group) => {
                       const opensForDeepLink = group.findings.some(
@@ -177,49 +206,54 @@ function ScanDetail() {
                       )
                     })}
                   </div>
-                )}
-                <ScanDetailSection title={t('common.attackSurface')}>
-                  {scan.assessment_status === 'unavailable' ? (
-                    <div
-                      data-testid="scan-assessment-unavailable"
-                      className="flex flex-col gap-2 text-body-md"
-                    >
-                      <p>{t('common.attackSurfaceUnavailable')}</p>
-                      <p className="text-muted-foreground">
-                        {t('common.rerunForData')}
+                ) : null}
+                {(scan.status !== 'failed' || scan.exposures.length > 0) && (
+                  <ScanDetailSection title={t('common.attackSurface')}>
+                    {scan.assessment_status === 'unavailable' ? (
+                      <div
+                        data-testid="scan-assessment-unavailable"
+                        className="flex flex-col gap-2 text-body-md"
+                      >
+                        <p>{t('common.attackSurfaceUnavailable')}</p>
+                        <p className="text-muted-foreground">
+                          {t('common.rerunForData')}
+                        </p>
+                      </div>
+                    ) : scan.exposures.length === 0 ? (
+                      <p
+                        data-testid="scan-no-exposures"
+                        className="text-body-md"
+                      >
+                        {t('common.noReachableServices')}
                       </p>
-                    </div>
-                  ) : scan.exposures.length === 0 ? (
-                    <p data-testid="scan-no-exposures" className="text-body-md">
-                      {t('common.noReachableServices')}
-                    </p>
-                  ) : (
-                    <ExposureTable
-                      exposures={scan.exposures}
-                      findings={scan.findings}
-                      testId="scan-exposures-table"
-                      openExposureId={openExposureId}
-                      onOpenExposureChange={setOpenExposureId}
-                      onOpenFinding={(id) => {
-                        const finding = scan.findings.find(
-                          (item) => item.finding_id === id,
-                        )
-                        flushSync(() => setOpenFindingId(id))
-                        if (finding == null) {
-                          return
-                        }
-                        const table = isTargetedFinding(finding)
-                          ? targetedFindingsTableTestId(finding)
-                          : `findings-${finding.severity}`
-                        document
-                          .querySelector<HTMLButtonElement>(
-                            `[data-testid="${table}-caret-${id}"]`,
+                    ) : (
+                      <ExposureTable
+                        exposures={scan.exposures}
+                        findings={scan.findings}
+                        testId="scan-exposures-table"
+                        openExposureId={openExposureId}
+                        onOpenExposureChange={setOpenExposureId}
+                        onOpenFinding={(id) => {
+                          const finding = scan.findings.find(
+                            (item) => item.finding_id === id,
                           )
-                          ?.focus()
-                      }}
-                    />
-                  )}
-                </ScanDetailSection>
+                          flushSync(() => setOpenFindingId(id))
+                          if (finding == null) {
+                            return
+                          }
+                          const table = isTargetedFinding(finding)
+                            ? targetedFindingsTableTestId(finding)
+                            : `findings-${finding.severity}`
+                          document
+                            .querySelector<HTMLButtonElement>(
+                              `[data-testid="${table}-caret-${id}"]`,
+                            )
+                            ?.focus()
+                        }}
+                      />
+                    )}
+                  </ScanDetailSection>
+                )}
                 {hasTargetedSection && (
                   <ScanDetailSection
                     key="targeted"
@@ -238,6 +272,11 @@ function ScanDetail() {
                     />
                   </ScanDetailSection>
                 )}
+                {(scan.status !== 'failed' || coverage.length > 0) && (
+                  <ScanDetailSection title={t('scans.checkCoverage')}>
+                    <ScanCoverage coverage={coverage} />
+                  </ScanDetailSection>
+                )}
                 {scan.hosts.some(
                   (host) => host.industrial_services.length > 0,
                 ) && (
@@ -245,15 +284,19 @@ function ScanDetail() {
                     <ScanIndustrialServices hosts={scan.hosts} />
                   </ScanDetailSection>
                 )}
-                <ScanDetailSection title={t('common.machinesSeen')}>
-                  {scan.hosts.length === 0 ? (
-                    <p className="text-body-md">No machines were discovered.</p>
-                  ) : (
-                    <ScanHostsTable hosts={scan.hosts} />
-                  )}
-                </ScanDetailSection>
-              </>
-            )}
+                {(scan.status !== 'failed' || scan.hosts.length > 0) && (
+                  <ScanDetailSection title={t('common.machinesSeen')}>
+                    {scan.hosts.length === 0 ? (
+                      <p className="text-body-md">
+                        No machines were discovered.
+                      </p>
+                    ) : (
+                      <ScanHostsTable hosts={scan.hosts} />
+                    )}
+                  </ScanDetailSection>
+                )}
+              </div>
+            ) : null}
           </>
         )
       }}

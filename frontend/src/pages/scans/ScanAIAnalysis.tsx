@@ -25,9 +25,11 @@ function waitingForAnalysis(status: ScanAIAnalysisResponse['status']): boolean {
 function ScanAIAnalysis({
   scanId,
   findings,
+  partial = false,
 }: {
   scanId: string
   findings: FindingRecord[]
+  partial?: boolean
 }) {
   const { language, t } = useI18n()
   const queryClient = useQueryClient()
@@ -182,6 +184,13 @@ function ScanAIAnalysis({
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
+            <p
+              data-testid="scan-ai-evidence-limit"
+              className="text-body-sm text-muted-foreground"
+            >
+              {t('ai.evidenceLimit')}
+              {partial && ` ${t('ai.partialLimit')}`}
+            </p>
             <Disclosure
               label={t('ai.showOverview')}
               testId="scan-ai-overview-toggle"

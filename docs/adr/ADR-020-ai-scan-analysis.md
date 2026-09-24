@@ -75,6 +75,16 @@ The backend rejects unknown references, maps valid references to persisted IDs,
 and replaces placeholders with local display values before it stores or returns
 the analysis.
 
+The context also carries each finding's public evidence basis (`cve_correlation`
+or `target_observation`), aggregate evidence completeness (`complete`, `partial`
+or `unknown`) and the count of incomplete coverage units. It does not send the
+coverage entries, port/service map or raw observations. The provider must treat a
+CVE correlation as unverified target applicability and partial or unknown
+coverage as insufficient to claim that a target is clean.
+This change advances the provider context version to `3` and the prompt version
+to `4`. Stored analyses keep their original content; the UI shows the evidence
+limit beside completed analyses, including older records.
+
 ### 7. Prompt-injection containment
 
 The model has no tools or write capability, and it receives only the bounded

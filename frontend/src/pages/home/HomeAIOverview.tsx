@@ -93,6 +93,13 @@ function HomeAIOverview({
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <p
+          data-testid="home-ai-evidence-limit"
+          className="text-body-sm text-muted-foreground"
+        >
+          {t('ai.evidenceLimit')}
+          {latestScan.partial_result === true && ` ${t('ai.partialLimit')}`}
+        </p>
         <p className="text-title-xs">{analysis.analysis.executive_summary}</p>
         <p className="max-w-prose text-body-md">
           {analysis.analysis.plain_language_summary}
