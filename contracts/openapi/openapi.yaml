@@ -878,6 +878,38 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - agents
+      summary: Register a scanner agent
+      description: >-
+        Admin-only. Registers a Pi's public key in the caller's org. The Pi generates the
+        key pair; only the public key is sent. `hardware-agent/scripts/provision-pi.sh`
+        calls this route after an admin login.
+      operationId: registerAgent
+      security:
+        - FrontendBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterAgentRequest'
+      responses:
+        '201':
+          description: The new agent's id. The Pi uses it as `DEVICE_ID`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterAgentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - agents
@@ -4096,6 +4128,31 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentSummary'
+
+    RegisterAgentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - display_name
+        - public_key
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+        public_key:
+          type: string
+          description: Raw 32-byte Ed25519 public key, hex-encoded.
+          pattern: '^[0-9a-fA-F]{64}$'
+
+    RegisterAgentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - agent_id
+      properties:
+        agent_id:
+          type: string
+          format: uuid
 
     UpdateAgentTargetSubnetRequest:
       type: object
