@@ -43,6 +43,8 @@ SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
 RUNTIME_GRANTS_BY_TABLE = {
     "activity": frozenset({"SELECT", "INSERT"}),
+    "ai_chat_messages": frozenset({"SELECT", "INSERT", "DELETE"}),
+    "ai_usage": frozenset({"SELECT", "INSERT"}),
     "agent_nonces": frozenset({"SELECT", "INSERT", "DELETE"}),
     "host_findings": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),
     "host_ports": frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"}),

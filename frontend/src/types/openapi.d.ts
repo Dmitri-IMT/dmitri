@@ -343,7 +343,7 @@ export interface paths {
         put?: never;
         /**
          * Register a scanner agent
-         * @description Admin-only. Registers a Pi's public key in the caller's org. The Pi generates the key pair; only the public key is sent. `hardware-agent/scripts/provision-pi.sh` calls this route after an admin login.
+         * @description Admin-only. Registers a Pi's public key in the caller's org. The Pi generates the key pair; only the public key is sent. `hardware-agent/scripts/provision-pi.sh` calls this route after an admin login. Retrying with the same public key in the same org returns the existing agent ID without changing its name or revocation state.
          */
         post: operations["registerAgent"];
         delete?: never;
@@ -2873,7 +2873,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The new agent's id. The Pi uses it as `DEVICE_ID`. */
+            /** @description The registered or existing agent's id. The Pi uses it as `DEVICE_ID`. */
             201: {
                 headers: {
                     [name: string]: unknown;

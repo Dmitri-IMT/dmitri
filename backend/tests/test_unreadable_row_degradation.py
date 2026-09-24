@@ -18,11 +18,14 @@ def test_junk_json_degrades_without_failing_the_list(
     bearer_headers,
     seeded_org: Org,
     provisioned_agent,
+    monkeypatch,
 ) -> None:
     scan = _scan(
         [_host("192.168.1.50"), _host("192.168.1.51", mac="00:80:F4:11:22:44")]
     )
     _persist(administrative_session, scan, seeded_org, provisioned_agent)
+    # Keep the fixture's hosts in the active group regardless of today's date.
+    monkeypatch.setattr("api.services.read.utc_now", lambda: scan.timestamp)
 
     broken_host = administrative_session.exec(
         select(HostRecord).where(HostRecord.ip == "192.168.1.50")

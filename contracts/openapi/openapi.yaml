@@ -3139,7 +3139,6 @@ components:
           default: false
     ModbusAddressRangePayload:
       type: object
-      additionalProperties: false
       required:
         - address_space
         - start_address
@@ -3176,7 +3175,6 @@ components:
           format: date-time
     ModbusUnitPayload:
       type: object
-      additionalProperties: false
       required:
         - unit_id
         - status
