@@ -4,7 +4,8 @@ import secrets
 from datetime import datetime
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlmodel import Session, select, update
 from starlette.concurrency import run_in_threadpool
 
 from api.models.command import Agent
@@ -34,12 +35,21 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
 def register_agent(
     session: Session, *, org: Org, display_name: str, public_key: bytes
 ) -> Agent:
-    """Insert the agent and mint the org's OT digest key on its first agent."""
+    """Register once per org/key; retries preserve identity and revocation."""
     if org.ot_digest_key is None:
-        org.ot_digest_key = secrets.token_hex(32)
-        session.add(org)
-    agent = Agent(org_id=org.id, display_name=display_name, public_key=public_key)
-    session.add(agent)
+        session.exec(
+            update(Org)
+            .where(Org.id == org.id, Org.ot_digest_key.is_(None))
+            .values(ot_digest_key=secrets.token_hex(32))
+        )
+    session.execute(
+        insert(Agent)
+        .values(org_id=org.id, display_name=display_name, public_key=public_key)
+        .on_conflict_do_nothing(constraint="uq_agents_org_public_key")
+    )
+    agent = session.exec(
+        select(Agent).where(Agent.org_id == org.id, Agent.public_key == public_key)
+    ).one()
     session.commit()
     session.refresh(agent)
     return agent

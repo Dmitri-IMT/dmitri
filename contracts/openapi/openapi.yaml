@@ -886,6 +886,8 @@ paths:
         Admin-only. Registers a Pi's public key in the caller's org. The Pi generates the
         key pair; only the public key is sent. `hardware-agent/scripts/provision-pi.sh`
         calls this route after an admin login.
+        Retrying with the same public key in the same org returns the existing
+        agent ID without changing its name or revocation state.
       operationId: registerAgent
       security:
         - FrontendBearerAuth: []
@@ -897,7 +899,7 @@ paths:
               $ref: '#/components/schemas/RegisterAgentRequest'
       responses:
         '201':
-          description: The new agent's id. The Pi uses it as `DEVICE_ID`.
+          description: The registered or existing agent's id. The Pi uses it as `DEVICE_ID`.
           content:
             application/json:
               schema:
