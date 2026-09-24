@@ -34,7 +34,7 @@ from agent.scanner.errors import (
 )
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
-from agent.scanner.scan_lock import scan_lock
+from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
 from agent.scanner.stages import OtInspectionResult
 from agent.targeted.executor import TargetedExecutor
 from agent.targeted.models import TargetedStageSummary
@@ -82,9 +82,13 @@ class ScanRunner:
         self._run_locked()
 
     def _run_locked(self) -> None:
-        # Held until the scan ends, so the package upgrade waits for it.
-        with scan_lock():
-            self._run()
+        try:
+            with scan_lock():
+                self._run()
+        except (OSError, UpgradeInProgressError) as exc:
+            self._emit(ScanEvent(kind="failed", message=str(exc)))
+            if self._on_error:
+                self._on_error(exc)
 
     def request_cancel(self) -> None:
         self._cancel_event.set()

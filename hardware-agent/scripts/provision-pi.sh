@@ -12,8 +12,15 @@ die() {
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
 
-agent_src=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+agent_src=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 env_file=/etc/dmitri/agent.env
+
+# Acquire before any package or source mutation, including a repeated install.
+lock=$(cat "$agent_src/packaging/scan-lock-path")
+mkdir -p "$(dirname "$lock")"
+exec 9>>"$lock"
+chmod 644 "$lock"
+flock -n -x 9 || die "scan or update in progress; try again later"
 
 # Checked before the install: the package's postinst restarts the agent only
 # when DEVICE_ID is already set.
@@ -46,7 +53,7 @@ fi
 deb_dir=$(mktemp -d)
 sh "$agent_src/packaging/build-deb.sh" "$deb_dir/hardware-agent.deb" >/dev/null \
     || die "package build failed"
-dpkg -i "$deb_dir/hardware-agent.deb" || die "package install failed"
+dpkg -i "$deb_dir/hardware-agent.deb" 9>&- || die "package install failed"
 rm -rf "$deb_dir"
 
 if [ "$provisioned" = true ]; then
@@ -55,6 +62,8 @@ else
     /opt/dmitri-agent/.venv/bin/dmitri provision || die "registration failed"
     systemctl restart dmitri-agent
 fi
+flock -u 9
+exec 9>&-
 
 # Read only the journal of the current process. An older run's
 # "connected" line must not count.

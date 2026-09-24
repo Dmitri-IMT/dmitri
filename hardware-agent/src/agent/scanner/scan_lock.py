@@ -12,13 +12,19 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from agent.paths import default_results_dir
+LOCK_PATH_FILE = Path("/usr/lib/dmitri/scan-lock-path")
 
 
-def scan_lock_path() -> Path:
-    # dmitri-agent.service sets XDG_DATA_HOME=/var/lib/dmitri, so on the Pi this
-    # is /var/lib/dmitri/dmitri/scan.lock, the path apt-upgrade-agent locks.
-    return Path(default_results_dir()).parent / "scan.lock"
+def scan_lock_path() -> Path | None:
+    # The package installs this contract for Python and both shell entrypoints.
+    # Source checkouts have no appliance updater and need no system lock.
+    if not LOCK_PATH_FILE.exists():
+        return None
+    return Path(LOCK_PATH_FILE.read_text().strip())
+
+
+class UpgradeInProgressError(Exception):
+    pass
 
 
 @contextmanager
@@ -30,8 +36,17 @@ def scan_lock() -> Iterator[None]:
     import fcntl
 
     path = scan_lock_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as handle:
+    if path is None:
+        yield
+        return
+    # Packaging creates the file; read access lets unprivileged TUI scans join.
+    # Do not recreate it: replacing the inode would split the lock protocol.
+    with path.open("r") as handle:
         # Shared: scans do not block each other, only the upgrade.
-        fcntl.flock(handle, fcntl.LOCK_SH)
+        try:
+            fcntl.flock(handle, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise UpgradeInProgressError(
+                "Agent update in progress; try again later."
+            ) from exc
         yield

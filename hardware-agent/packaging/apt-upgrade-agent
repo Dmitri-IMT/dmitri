@@ -3,12 +3,11 @@
 # drops the in-process scan ledger. Every scan holds a shared lock on this
 # file (agent/scanner/scan_lock.py) until it ends.
 set -eu
-lock=/var/lib/dmitri/dmitri/scan.lock
-mkdir -p "$(dirname "$lock")"
+lock=$(cat /usr/lib/dmitri/scan-lock-path)
 exec 9>>"$lock"
 if ! flock -n -x 9; then
     echo "hardware-agent: scan in progress, not upgrading"
     exit 0
 fi
 apt-get update
-apt-get install -y --only-upgrade hardware-agent
+apt-get install -y --only-upgrade hardware-agent 9>&-

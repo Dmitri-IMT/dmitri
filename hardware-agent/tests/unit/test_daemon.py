@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -542,3 +543,68 @@ class TestShutdown:
 
         assert client.closed is True
         assert ingest.closed is True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_upgrade_cannot_interrupt_upload() -> None:
+    import fcntl
+
+    from agent.scanner import scan_lock as locks
+
+    path = locks.scan_lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    gate = threading.Event()
+    daemon, _, _, ingest = build(ingest=FakeIngest(gate=gate))
+    await daemon.handle_command(command())
+    try:
+        assert await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+        with path.open("a") as handle:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        gate.set()
+        await drain()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_upgrade_refuses_command_before_running() -> None:
+    import fcntl
+
+    from agent.scanner.scan_lock import scan_lock_path
+
+    daemon, client, scan, ingest = build()
+    subject = command()
+    with scan_lock_path().open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        await dispatch(daemon, subject)
+    assert client.frames(subject) == [("failed", "device_busy")]
+    assert not scan.calls
+    assert not ingest.calls
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_pending_terminal_status_keeps_lock_until_replay() -> None:
+    import fcntl
+
+    from agent.scanner.scan_lock import scan_lock_path
+
+    gate = threading.Event()
+    daemon, client, _, ingest = build(ingest=FakeIngest(gate=gate))
+    subject = command()
+    await daemon.handle_command(subject)
+    try:
+        assert await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+        client.connected = False
+    finally:
+        gate.set()
+        await drain()
+    with scan_lock_path().open("a") as handle:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        client.connected = True
+        await daemon.replay_pending()
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert client.frames(subject)[-1] == ("done", None)

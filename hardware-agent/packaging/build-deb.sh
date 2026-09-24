@@ -3,7 +3,7 @@
 # by postinst (UV_PYTHON_INSTALL_DIR=/opt/uv-python), not inside the package.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/pyproject.toml")
 if [ -z "$version" ]; then
     echo "build-deb: no version in $root/pyproject.toml" >&2
@@ -26,6 +26,7 @@ mkdir -p "$stage/DEBIAN" \
 cp "$root/pyproject.toml" "$root/uv.lock" "$root/README.md" "$stage/opt/dmitri-agent/"
 cp -R "$root/src" "$stage/opt/dmitri-agent/src"
 cp "$root/packaging/apt-upgrade-agent" "$stage/usr/lib/dmitri/apt-upgrade-agent"
+cp "$root/packaging/scan-lock-path" "$stage/usr/lib/dmitri/scan-lock-path"
 chmod 755 "$stage/usr/lib/dmitri/apt-upgrade-agent"
 cp "$root/dmitri-agent.service" \
     "$root/packaging/dmitri-agent-update.service" \
@@ -55,6 +56,9 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 mkdir -p /var/lib/dmitri /opt/uv-python
+lock=$(cat /usr/lib/dmitri/scan-lock-path)
+touch "$lock"
+chmod 644 "$lock"
 env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python uv sync --project /opt/dmitri-agent
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
