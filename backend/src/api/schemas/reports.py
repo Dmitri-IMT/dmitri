@@ -16,7 +16,7 @@ class ScanReportResponse(BaseModel):
 
     scan_id: UUID
     kind: ReportKind
-    language: AILanguage = "en"
+    language: AILanguage
     generated_at: datetime
     filename: str
     content_type: Literal["application/pdf"]

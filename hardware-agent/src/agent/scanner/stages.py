@@ -51,8 +51,9 @@ from agent.scanner.errors import (
     TransientScanError,
     UnitScanError,
 )
-from agent.scanner.nmap import AGENT_VERSION, LoggedNmapRunner
+from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
+from agent.version import installed_version
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
@@ -682,7 +683,7 @@ def build_metadata(
     targeted_summary: TargetedStageSummary | None = None,
 ) -> dict[str, str | int | float | bool]:
     metadata: dict[str, str | int | float | bool] = {
-        "agent_version": AGENT_VERSION,
+        "agent_version": installed_version(),
         "nmap_path": runner.nmap_path,
         "nmap_arguments": nmap_arguments_summary(settings),
         "elapsed_seconds": elapsed_seconds,

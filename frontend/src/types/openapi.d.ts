@@ -341,7 +341,11 @@ export interface paths {
          */
         get: operations["listAgents"];
         put?: never;
-        post?: never;
+        /**
+         * Register a scanner agent
+         * @description Admin-only. Registers a Pi's public key in the caller's org. The Pi generates the key pair; only the public key is sent. `hardware-agent/scripts/provision-pi.sh` calls this route after an admin login. Retrying with the same public key in the same org returns the existing agent ID without changing its name or revocation state.
+         */
+        post: operations["registerAgent"];
         delete?: never;
         /** CORS preflight for the agents collection */
         options: operations["optionsAgents"];
@@ -1202,6 +1206,15 @@ export interface components {
         };
         AgentListResponse: {
             data: components["schemas"]["AgentSummary"][];
+        };
+        RegisterAgentRequest: {
+            display_name: string;
+            /** @description Raw 32-byte Ed25519 public key, hex-encoded. */
+            public_key: string;
+        };
+        RegisterAgentResponse: {
+            /** Format: uuid */
+            agent_id: string;
         };
         UpdateAgentTargetSubnetRequest: {
             /** @example 10.0.0.0/24 */
@@ -2844,6 +2857,34 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    registerAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description The registered or existing agent's id. The Pi uses it as `DEVICE_ID`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterAgentResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
             500: components["responses"]["InternalServerError"];
         };
     };

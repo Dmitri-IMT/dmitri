@@ -54,7 +54,7 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 | Audience | Who | September responsibility |
 |----------|-----|---------------------------|
 | **Installer** | Technical person on-site (vendor, integrator, or customer IT) | Physically deploy Pi; generate the device **keypair on the Pi**, register its **public key** with the backend (`/etc/dmitri/agent.env`, systemd, network). May use SSH and vendor playbook — acceptable for this role. |
-| **Org admin** | Non-technical operator in the web app | **Easy day-to-day use only:** login, invite users, view agents (online/offline), trigger scans, read results. **Does not** provision Pi keys or run pairing wizards. |
+| **Org admin** | Non-technical operator in the web app | **Easy day-to-day use only:** login, invite users, view agents (online/offline), trigger scans, read results. No Pi setup in the web app. The admin's **credentials** authorize registration when the installer runs `provision-pi.sh` (DMI-147). |
 
 > **Auth model updated 2026-07-24 (ADR-005 amended):** the Pi authenticates with **Ed25519
 > asymmetric signing**, not a symmetric HMAC secret. The device holds a **private key**; the
@@ -65,15 +65,15 @@ Dmitri is **B2B**: Pi setup is **not** self-service for the company admin. Consu
 **September provisioning flow:**
 
 1. **Installer** generates an Ed25519 **keypair on the Pi**; the private key never leaves the device.
-2. **Installer** registers the device's **public key** with the backend (vendor-run provisioning command), creating the `agents` row scoped to `org_id`. The public key is **not a secret** — the channel needs integrity (bind the right public key to the right `agent_id`/`org_id`), not confidentiality.
+2. **Installer** registers the device's **public key** with the backend, creating the `agents` row scoped to `org_id`. Since 2026-09-24 (DMI-147), `hardware-agent/scripts/provision-pi.sh` does this over HTTPS: it logs in with an org **admin** account and calls `POST /api/v1/agents`, so the Pi joins that admin's org. The vendor CLI `backend-provision-agent` stays for cases with no admin login; both call the same `register_agent()`. The public key is **not a secret** — the channel needs integrity (bind the right public key to the right `agent_id`/`org_id`), not confidentiality.
 3. **Installer** writes Pi config (`DEVICE_ID`, `DEVICE_PRIVATE_KEY`, `BACKEND_URL`), enables `dmitri-agent.service`, verifies WSS + ingest.
 4. **Org admin** sees agent online in admin UI; uses product without touching device credentials.
 
 **Binding (C1):** Pi authenticates with `agent_id` + **Ed25519 signature** only. `org_id` is set on the `agents` row at provisioning time; backend resolves tenant from DB lookup — Pi does not carry `org_id`.
 
 **Agent admin (D1):** both roles may view agent state; only org **`admin`** may trigger scans or
-revoke/restore a device. Creating agent rows and public-key registration remain
-**vendor/installer ops** in September (not a self-serve admin UI flow). The viewer UI omits these
+revoke/restore a device. Only an org **`admin`** token can register a public key
+(`POST /api/v1/agents`). The installer runs that from the Pi; there is no web UI for it. The viewer UI omits these
 actions rather than disabling them.
 
 **Rotation (E1):** revoke/restore UX ships with **DMI-155** (spec 048): admin-only
@@ -88,7 +88,7 @@ has no UX: rotation = a new keypair on the Pi + replace the stored public key (n
 | Role | Read (scans, hosts, agents) | Trigger scan | Invite users | Remove a member | Pi provisioning |
 |------|------------------------------|--------------|--------------|-----------------|-----------------|
 | `viewer` | Yes | No | No | Own account only | No |
-| `admin` | Yes | Yes | Yes | Yes, and own account | No (installer/vendor) |
+| `admin` | Yes | Yes | Yes | Yes, and own account | Register a Pi via `provision-pi.sh` (no web UI) |
 
 Roles stay **`admin`** and **`viewer`**. "Viewer" is deliberately not renamed to "user": every
 member is a user, so the word cannot distinguish a role, and the screen that lists them is itself

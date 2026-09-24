@@ -5,8 +5,49 @@
 > Self-service pairing and device-key rotation are Phase 2 — see
 > [`roadmap/AUTH.md`](roadmap/AUTH.md).
 
-Every step below was executed against real hardware on 2026-09-11; the commands are
-transcribed from that run, not written from memory.
+Every step below was executed against real hardware on 2026-09-11. Use the script.
+The manual steps after it are the troubleshooting path for the same work.
+
+## Provision with the script
+
+Flash the card (sections 0 and 1), boot, and SSH in (section 2). Clone this
+repo on the Pi, then run:
+
+```bash
+sudo hardware-agent/scripts/provision-pi.sh
+```
+
+The script installs `nmap` and `uv`, builds the `hardware-agent` package from the
+checkout, and installs it with `dpkg -i`. Then it runs `dmitri provision`, which
+asks for the deployed backend URL (`https://` only, because the admin password goes
+to it), an admin email and password for that backend, and a name for this Pi. The Pi
+joins the org of that admin account. `dmitri provision` creates the device key on the
+Pi, registers the device, and writes `/etc/dmitri/agent.env`. The script then starts
+`dmitri-agent` and exits when the current process logs `command channel connected`.
+
+The package installs `dmitri-agent.service` and the daily update timer
+([ADR-021](adr/ADR-021-pi-agent-updates.md)).
+
+Run it again on an already provisioned Pi and it installs the package from the
+checkout; the package restarts the agent. It does not generate a new key. This is also
+how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
+script does not pick a subnet.
+
+The installer refuses to run while a scan or another update holds the appliance
+lock. The timer skips that attempt. Both use the path installed in
+`/usr/lib/dmitri/scan-lock-path`, also read by the daemon, headless CLI and TUI.
+The daemon keeps the lock through result upload and pending terminal-status replay.
+
+Before registration, the private key is saved as `/etc/dmitri/device.key` (0600).
+The complete `agent.env` is written only after registration returns a device ID.
+If the connection drops after registration commits, rerun the script: the same
+organization and public key return the same device ID. A retry does not rename or
+restore a revoked device. Keep the key file when recovering an incomplete install.
+
+Deploy the backend with Alembic revision `20260924_35` before using this installer.
+Run `alembic upgrade head`. The migration rejects duplicate `(org_id, public_key)`
+rows; resolve any existing duplicates before deployment without deleting their
+scan history automatically.
 
 ## 0. Hardware
 
@@ -59,31 +100,33 @@ a stable address for support.
 ```bash
 sudo apt-get update
 sudo apt-get install -y nmap
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sudo env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
 ```
 
-`nmap` is the scanning engine (ADR-002). `uv` manages the agent's Python.
+`nmap` is the scanning engine (ADR-002). `uv` manages the agent's Python. It goes in
+`/usr/local/bin` because the package's `postinst` runs `uv` as root.
 
 ## 4. Install the agent
 
-The agent lives in `/opt/dmitri-agent`, owned by root.
+The agent lives in `/opt/dmitri-agent`, owned by root. Build the package from a
+checkout of this repo and install it:
 
 ```bash
-sudo mkdir -p /opt/dmitri-agent
-# copy hardware-agent/ -> /opt/dmitri-agent
-sudo chown -R root:root /opt/dmitri-agent
-sudo env HOME=/root UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-  ~/.local/bin/uv sync --project /opt/dmitri-agent
+sh hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
+agent_lock=$(cat hardware-agent/packaging/scan-lock-path)
+sudo mkdir -p "$(dirname "$agent_lock")"
+sudo flock -n -x "$agent_lock" dpkg -i /tmp/hardware-agent.deb
 ```
 
-One sync, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
+The package installs the tree, `dmitri-agent.service`, and the update timer. Its
+`postinst` runs `uv sync` once, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
 
 > **`UV_PYTHON_INSTALL_DIR` is not optional.** By default `uv` puts its interpreter under
 > `/root/.local/share/uv/`, and the venv's `bin/python` becomes a symlink into `/root`.
 > The service runs with `ProtectHome=true`, which hides `/root` — so systemd fails with
 > `203/EXEC "No such file or directory"` even though the executable is plainly there.
 > Installing the interpreter under `/opt/uv-python` keeps the whole runtime in one place
-> that the hardened unit can reach. Use the same variable on every later `uv sync`.
+> that the hardened unit can reach. The package's `postinst` sets it.
 
 Verify the runtime on the device:
 
@@ -170,11 +213,11 @@ sudo chmod 600 /etc/dmitri/agent.env
 
 ## 8. Enable the service
 
+The package already installed and enabled the unit. Start it now that `agent.env` is
+complete:
+
 ```bash
-sudo mkdir -p /var/lib/dmitri
-sudo cp /opt/dmitri-agent/dmitri-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now dmitri-agent
+sudo systemctl restart dmitri-agent
 systemctl status dmitri-agent
 journalctl -u dmitri-agent -f
 ```
@@ -223,9 +266,12 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 
 ## Not covered
 
-- **Agent updates.** No mechanism is defined yet. Today an update means copying a new
-  tree to `/opt/dmitri-agent`, re-running `uv sync` and restarting the unit, by hand,
-  per device. This does not scale past a handful of appliances and needs its own
-  decision record.
+- **Agent updates.** [ADR-021](adr/ADR-021-pi-agent-updates.md). The package is
+  `hardware-agent/packaging/build-deb.sh`. Provisioning installs it with `dpkg -i`.
+  An upgrade restarts `dmitri-agent`. The package enables a daily timer that runs
+  `apt-get install --only-upgrade hardware-agent` and skips the upgrade while a scan
+  runs (every scan holds a shared lock on `/var/lib/dmitri/dmitri/scan.lock`). There
+  is no apt repository yet, so a later upgrade is still a new `.deb` installed by hand
+  until that repository exists.
 - Self-service pairing and device-key rotation (Phase 2).
 - Wi-Fi capture via the ALFA adapter.

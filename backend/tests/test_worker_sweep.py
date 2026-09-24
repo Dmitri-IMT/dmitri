@@ -19,7 +19,7 @@ def _seed_agent(
     agent = Agent(
         org_id=org_id,
         display_name=f"agent-{uuid4()}",
-        public_key=b"\x01" * 32,
+        public_key=uuid4().bytes * 2,
         last_seen_at=last_seen_at,
         connected_at=connected_at,
     )

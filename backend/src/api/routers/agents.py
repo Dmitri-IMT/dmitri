@@ -10,10 +10,13 @@ from api.dependencies.agent_auth import AgentIdentity, require_agent_ws
 from api.dependencies.auth import CallerIdentity, require_admin, require_user
 from api.errors import ApiError
 from api.models.command import Command
+from api.models.identity import Org
 from api.models.persistence import utc_now
 from api.schemas.agents import (
     AgentDetail,
     AgentListResponse,
+    RegisterAgentRequest,
+    RegisterAgentResponse,
     UpdateAgentTargetSubnetRequest,
 )
 from api.schemas.commands import CommandSummary, CreateCommandRequest
@@ -28,6 +31,7 @@ from api.services.agents import (
     AgentOfflineError,
     get_agent_detail,
     list_agents,
+    register_agent,
     restore_agent,
     revoke_agent,
     set_target_subnet,
@@ -51,6 +55,25 @@ def list_agents_route(
     session: Session = Depends(get_session),
 ) -> AgentListResponse:
     return AgentListResponse(data=list_agents(session, org_id=caller.org_id))
+
+
+@router.post(
+    "/api/v1/agents",
+    response_model=RegisterAgentResponse,
+    status_code=201,
+)
+def register_agent_route(
+    body: RegisterAgentRequest,
+    caller: CallerIdentity = Depends(require_admin),
+    session: Session = Depends(get_session),
+) -> RegisterAgentResponse:
+    agent = register_agent(
+        session,
+        org=session.get_one(Org, caller.org_id),
+        display_name=body.display_name,
+        public_key=bytes.fromhex(body.public_key),
+    )
+    return RegisterAgentResponse(agent_id=agent.id)
 
 
 @router.options("/api/v1/agents", status_code=204)

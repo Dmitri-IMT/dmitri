@@ -1,0 +1,8 @@
+[Unit]
+Description=Upgrade the Dmitri hardware-agent package
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/dmitri/apt-upgrade-agent
