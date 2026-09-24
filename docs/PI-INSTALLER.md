@@ -17,18 +17,19 @@ repo on the Pi, then run:
 sudo hardware-agent/scripts/provision-pi.sh
 ```
 
-The script asks for the deployed backend URL (`https://` only, because the admin
-password goes to it), an admin email and password for that backend, and a name
-for this Pi. The Pi joins the org of that admin account. It installs `nmap` and
-`uv`, builds the `hardware-agent` package from the checkout and installs it with
-`dpkg -i`, creates the device key on the Pi, registers the device, starts
-`dmitri-agent`, and exits when the current process logs `command channel connected`.
+The script installs `nmap` and `uv`, builds the `hardware-agent` package from the
+checkout, and installs it with `dpkg -i`. Then it runs `dmitri provision`, which
+asks for the deployed backend URL (`https://` only, because the admin password goes
+to it), an admin email and password for that backend, and a name for this Pi. The Pi
+joins the org of that admin account. `dmitri provision` creates the device key on the
+Pi, registers the device, and writes `/etc/dmitri/agent.env`. The script then starts
+`dmitri-agent` and exits when the current process logs `command channel connected`.
 
 The package installs `dmitri-agent.service` and the daily update timer
 ([ADR-021](adr/ADR-021-pi-agent-updates.md)).
 
 Run it again on an already provisioned Pi and it installs the package from the
-checkout and restarts the agent. It does not generate a new key. This is also
+checkout; the package restarts the agent. It does not generate a new key. This is also
 how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
 script does not pick a subnet.
 
@@ -249,9 +250,10 @@ Then trigger a scan from the web UI and confirm results arrive on the read path.
 
 - **Agent updates.** [ADR-021](adr/ADR-021-pi-agent-updates.md). The package is
   `hardware-agent/packaging/build-deb.sh`. Provisioning installs it with `dpkg -i`.
-  An upgrade restarts `dmitri-agent`. The package enables a daily timer that runs `apt-get install --only-upgrade
-  hardware-agent` and skips the upgrade while `nmap` is running. There is no apt
-  repository yet, so a later upgrade is still a new `.deb` installed by hand until
-  that repository exists.
+  An upgrade restarts `dmitri-agent`. The package enables a daily timer that runs
+  `apt-get install --only-upgrade hardware-agent` and skips the upgrade while a scan
+  runs (every scan holds a shared lock on `/var/lib/dmitri/dmitri/scan.lock`). There
+  is no apt repository yet, so a later upgrade is still a new `.deb` installed by hand
+  until that repository exists.
 - Self-service pairing and device-key rotation (Phase 2).
 - Wi-Fi capture via the ALFA adapter.
