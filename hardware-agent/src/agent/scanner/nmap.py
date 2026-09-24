@@ -21,6 +21,7 @@ from agent.scanner.errors import (
     TransientScanError,
     UnitScanError,
 )
+from agent.version import installed_version
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -28,7 +29,6 @@ if TYPE_CHECKING:
     from agent.config import AgentSettings
 
 LOGGER = logging.getLogger(__name__)
-AGENT_VERSION = "0.1.4"
 
 TRANSIENT_STDERR_MARKERS = (
     "temporary failure in name resolution",
@@ -335,6 +335,6 @@ def build_runner(
             settings.nmap_path,
             workspace_root,
             parent_scan_id=str(scan_id),
-            agent_version=AGENT_VERSION,
+            agent_version=installed_version(),
         )
     return NmapRunner(settings.nmap_path)

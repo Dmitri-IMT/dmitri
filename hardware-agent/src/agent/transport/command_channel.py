@@ -6,7 +6,6 @@ import ipaddress
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -25,6 +24,7 @@ from agent.normalize.contracts import SubnetCIDR
 from agent.transport.ingest import IngestConfig
 from agent.transport.signing import build_device_signature_headers
 from agent.utils.network import AvailableSubnetInfo, detect_available_subnets
+from agent.version import installed_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -115,13 +115,6 @@ class AgentStatus(BaseModel):
     error_code: str | None = None
 
 
-def _installed_version() -> str:
-    try:
-        return version("hardware-agent")
-    except PackageNotFoundError:
-        return "unknown"
-
-
 def _websocket_origin(backend_url: str) -> str:
     scheme, _, rest = backend_url.partition("://")
     return ("wss://" if scheme == "https" else "ws://") + rest.rstrip("/")
@@ -171,7 +164,7 @@ class CommandChannelClient:
         self._connect = connect
         self._sleep = sleep
         self._detect_subnets = detect_subnets
-        self._agent_version = agent_version or _installed_version()
+        self._agent_version = agent_version or installed_version()
         self._send_lock = asyncio.Lock()
         self._socket: Any = None
         self._parked_reason: ParkReason | None = None
