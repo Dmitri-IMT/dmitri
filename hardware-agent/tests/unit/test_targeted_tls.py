@@ -33,14 +33,58 @@ def test_testssl_maps_affirmative_protocol_and_ignores_ok() -> None:
     assert [issue.issue_key for issue in issues] == ["tls.protocol:tls1.0"]
 
 
+def test_testssl_parses_native_nested_host_report_and_inherits_target() -> None:
+    report = {
+        "scanResult": [
+            {
+                "ip": "192.0.2.10",
+                "port": "443",
+                "protocols": [
+                    {
+                        "id": "protocols",
+                        "severity": "HIGH",
+                        "finding": "TLS 1.0 offered",
+                    }
+                ],
+                "cert": [
+                    {
+                        "id": "cert_trust",
+                        "severity": "HIGH",
+                        "finding": "certificate does not match supplied URI",
+                    },
+                    {
+                        "id": "cert_chain_of_trust",
+                        "severity": "CRITICAL",
+                        "finding": "failed (self signed).",
+                    },
+                    {
+                        "id": "cert_subjectAltName",
+                        "severity": "HIGH",
+                        "finding": "No SAN, browsers are complaining",
+                    },
+                ],
+            }
+        ]
+    }
+
+    issues = parse_testssl_json(report, unit())
+
+    assert [issue.issue_key for issue in issues] == [
+        "tls.protocol:tls1.0",
+        "tls.certificate:certificate.does.not.match.supplied.uri",
+        "tls.certificate:self-signed",
+        "tls.certificate:no.san.browsers.are.complaining",
+    ]
+
+
 def test_testssl_uses_safe_argv_and_accepts_nonzero_exit() -> None:
     execution = ToolExecution(TargetedOutcome.COMPLETED, exit_code=7, report=json.dumps({"scanResult": []}).encode(), report_present=True)
     executor = FakeExecutor(execution)
     result = run_testssl(unit(), executor)
     assert result.outcome == TargetedOutcome.COMPLETED
-    assert executor.commands[0].argv[1:] == ["--warnings", "batch", "--color", "0", "--socket-timeout", "5", "--openssl-timeout", "5", "--jsonfile-pretty", "REPORT", "192.0.2.10:443"]
+    assert executor.commands[0].argv[1:] == ["--warnings", "batch", "--color", "0", "--connect-timeout", "5", "--openssl-timeout", "5", "--protocols", "--server-defaults", "--header", "--vulnerable", "--jsonfile-pretty", "REPORT", "192.0.2.10:443"]
     assert executor.commands[0].report_mode == "file"
-    assert executor.commands[0].report_argument_index == 10
+    assert executor.commands[0].report_argument_index == 14
 
 
 def test_testssl_ignores_non_affirmative_and_unknown_records() -> None:
@@ -102,6 +146,22 @@ def test_testssl_missing_report_is_not_clean_coverage() -> None:
     result = run_testssl(unit(), executor)
     assert result.outcome == TargetedOutcome.FAILED
     assert result.reason_code == TargetedGapReason.MALFORMED_REPORT
+
+
+def test_testssl_preserves_timeout_when_report_is_partial() -> None:
+    executor = FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.TIMED_OUT,
+            reason_code=TargetedGapReason.UNIT_TIMEOUT,
+            report=b'{"scanResult":[',
+            report_present=True,
+        )
+    )
+
+    result = run_testssl(unit(), executor)
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
 
 
 def test_testssl_incomplete_scan_record_is_malformed() -> None:

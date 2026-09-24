@@ -23,7 +23,7 @@ TARGETED_STAGE_TIMEOUT_S: dict[str, float] = {
 }
 TARGETED_UNIT_TIMEOUT_S: dict[str, float] = {
     "ffuf": 480.0,
-    "nikto": 180.0,
+    "nikto": 220.0,
     "testssl.sh": 300.0,
     "enum4linux-ng": 180.0,
     "ssh-audit": 60.0,

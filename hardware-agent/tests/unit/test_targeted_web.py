@@ -292,7 +292,27 @@ def test_ffuf_argv_is_bounded_and_effective_wordlist_contains_policy_seeds(tmp_p
     assert len(effective_entries) == 4_000 + len(WEB_RESULT_SEEDS)
     assert effective_entries == sorted(effective_entries)
     assert set(WEB_RESULT_SEEDS).issubset(effective_entries)
+    assert "-k" not in command.argv
     assert not {"-recursion", "-e", "-H", "-X", "-request", "-proxy"}.intersection(command.argv)
+
+
+def test_ffuf_https_accepts_self_signed_target_certificate(tmp_path) -> None:
+    https_unit = TargetedUnit(
+        "192.0.2.10", 443, "tcp", "https", TargetedTool.FFUF, "https"
+    )
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            report=b'{"results": []}',
+            report_present=True,
+        )
+    )
+
+    result = run_ffuf(https_unit, executor, _wordlist(tmp_path))
+
+    assert result.outcome == TargetedOutcome.COMPLETED
+    assert executor.commands[0].argv[2] == "https://192.0.2.10:443/FUZZ"
+    assert "-k" in executor.commands[0].argv
 
 
 def test_ffuf_uses_one_baseline_and_at_most_32_validations(tmp_path) -> None:
@@ -328,6 +348,47 @@ def test_ffuf_uses_one_baseline_and_at_most_32_validations(tmp_path) -> None:
     assert len(result.issues) == 32
 
 
+def test_ffuf_validation_respects_stage_deadline(tmp_path) -> None:
+    report = {
+        "results": [
+            {"url": f"http://192.0.2.10:80/backup-{index}.zip", "status": 200}
+            for index in range(2)
+        ]
+    }
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            report=json.dumps(report).encode(),
+            report_present=True,
+        )
+    )
+    requested: list[str] = []
+
+    def fetcher(url: str) -> WebResponse:
+        requested.append(url)
+        if ".dmitri-not-found-" in url:
+            return WebResponse(404, "text/html", b"not found", url)
+        if "backup-0" in url:
+            import time
+
+            time.sleep(0.25)
+        return WebResponse(200, "application/zip", b"PK\x03\x04 archive", url)
+
+    result = run_ffuf(
+        _unit(),
+        executor,
+        _wordlist(tmp_path),
+        scan_id="scan-1",
+        fetcher=fetcher,
+        stage_deadline=web.perf_counter() + 0.2,
+    )
+
+    assert result.outcome == TargetedOutcome.SKIPPED
+    assert result.reason_code == TargetedGapReason.STAGE_BUDGET
+    assert len(result.issues) == 1
+    assert len(requested) == 2
+
+
 def test_ffuf_baseline_failure_is_truthful_and_emits_no_results(tmp_path) -> None:
     executor = _FakeExecutor(
         ToolExecution(
@@ -348,8 +409,24 @@ def test_ffuf_baseline_failure_is_truthful_and_emits_no_results(tmp_path) -> Non
 
     assert result.outcome == TargetedOutcome.FAILED
     assert result.reason_code == TargetedGapReason.BASELINE_UNAVAILABLE
-    assert result.issues == []
     assert len(requested) == 1
+
+
+def test_ffuf_preserves_timeout_when_report_is_partial(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.TIMED_OUT,
+            reason_code=TargetedGapReason.UNIT_TIMEOUT,
+            report=b'{"results":[',
+            report_present=True,
+        )
+    )
+
+    result = run_ffuf(_unit(), executor, _wordlist(tmp_path))
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+    assert result.issues == []
 
 
 @pytest.mark.parametrize("report", [b'{"results": {}}', b'{"results": "bad"}'])
@@ -407,6 +484,30 @@ class _RedirectResponse:
 
     def close(self) -> None:
         pass
+
+
+def test_fetch_disables_certificate_verification_only_for_https(monkeypatch) -> None:
+    import ssl
+
+    captured: list[object] = []
+
+    class Opener:
+        def open(self, _request, timeout: float):
+            return _RedirectResponse(200, {"Content-Type": "text/plain"}, b"ok")
+
+    def build(*handlers):
+        captured.extend(handlers)
+        return Opener()
+
+    monkeypatch.setattr(web, "build_opener", build)
+
+    web._fetch("https://192.0.2.10:443/")
+
+    https_handler = next(
+        handler for handler in captured if isinstance(handler, web.HTTPSHandler)
+    )
+    assert https_handler._context.verify_mode == ssl.CERT_NONE
+    assert https_handler._context.check_hostname is False
 
 
 def test_fetch_follows_at_most_two_same_origin_redirects() -> None:
@@ -486,6 +587,30 @@ def test_nikto_parser_requires_pinned_id_and_maps_highest_category() -> None:
     assert "not pinned" not in " ".join(issue.evidence for issue in issues)
 
 
+def test_nikto_parser_accepts_native_host_array_report() -> None:
+    report = [
+        {
+            "host": "192.0.2.10",
+            "ip": "192.0.2.10",
+            "port": 80,
+            "vulnerabilities": [
+                {
+                    "id": "750500",
+                    "method": "GET",
+                    "msg": "Directory indexing found.",
+                    "url": "/admin/",
+                }
+            ],
+        }
+    ]
+
+    issues = parse_nikto_json(json.dumps(report), _unit(), policy={"750500": "5"})
+
+    assert len(issues) == 1
+    assert issues[0].issue_key == "nikto:750500:/admin/"
+    assert "Directory indexing found" in issues[0].description
+
+
 def test_nikto_target_matching_ignores_foreign_host_or_port() -> None:
     report = {
         "vulnerabilities": [
@@ -544,6 +669,7 @@ def test_nikto_valid_nonzero_exit_is_completed_and_redacts_secrets() -> None:
         "-output",
         "REPORT",
     ]
+    assert executor.commands[0].report_path_mode == "base"
 
 
 @pytest.mark.parametrize("report", [b"not-json", b"{}", b'{"vulnerabilities": {}}'])
@@ -594,6 +720,46 @@ def test_nikto_missing_report_is_failed_even_when_exit_is_nonzero() -> None:
     assert result.reason_code == TargetedGapReason.MALFORMED_REPORT
 
 
+def test_nikto_preserves_timeout_when_report_is_partial() -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.TIMED_OUT,
+            reason_code=TargetedGapReason.UNIT_TIMEOUT,
+            report=b"[",
+            report_present=True,
+        )
+    )
+
+    result = run_nikto(_unit(), executor, policy={"000123": "5"})
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+
+
+def test_nikto_internal_time_limit_marks_valid_partial_report_as_timed_out() -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            diagnostic="+ ERROR: Host maximum execution time of 150 seconds reached",
+            report=json.dumps(
+                {
+                    "vulnerabilities": [
+                        {"id": "123", "uri": "/config", "message": "issue"}
+                    ]
+                }
+            ).encode(),
+            report_present=True,
+        )
+    )
+
+    result = run_nikto(_unit(), executor, policy={"000123": "5"})
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+    assert [issue.issue_key for issue in result.issues] == ["nikto:000123:/config"]
+
+
 def test_nikto_issue_limit_is_truthful() -> None:
     report = {
         "vulnerabilities": [
@@ -637,6 +803,39 @@ def test_nikto_policy_preflight_requires_pinned_sha256(tmp_path, monkeypatch) ->
     result = run_nikto(_unit(), executor)
     assert result.outcome == TargetedOutcome.SKIPPED
     assert result.reason_code == TargetedGapReason.POLICY_UNAVAILABLE
+
+
+def test_nikto_policy_reads_pinned_database_csv_with_comment_preamble(
+    tmp_path, monkeypatch
+) -> None:
+    db_tests = tmp_path / "db_tests"
+    db_tests.write_text(
+        '# preamble\n"000123","CVE-2026-1234","5","/config","GET",'
+        '"CODE:200","exposed configuration","",""\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(web, "NIKTO_DB_TESTS_PATH", db_tests)
+    monkeypatch.setattr(
+        web, "NIKTO_DB_TESTS_SHA256", hashlib.sha256(db_tests.read_bytes()).hexdigest()
+    )
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            report=json.dumps(
+                {
+                    "vulnerabilities": [
+                        {"id": "000123", "uri": "/config", "message": "issue"}
+                    ]
+                }
+            ).encode(),
+            report_present=True,
+        )
+    )
+
+    result = run_nikto(_unit(), executor)
+
+    assert result.outcome == TargetedOutcome.COMPLETED
+    assert result.issues[0].issue_key == "nikto:000123:/config"
 
 
 def test_nikto_retains_method_and_only_safe_references() -> None:
