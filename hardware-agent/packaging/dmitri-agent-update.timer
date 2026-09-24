@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily check for a hardware-agent package upgrade
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

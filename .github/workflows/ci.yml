@@ -210,3 +210,33 @@ jobs:
           VITE_API_URL: http://localhost:8000
         working-directory: frontend
         run: npm run build
+
+  agent-version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Require a hardware-agent version bump
+        env:
+          PYTHONPATH: hardware-agent/src
+        run: python hardware-agent/scripts/check_agent_version.py origin/main
+
+  agent-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the hardware-agent deb
+        run: |
+          chmod +x hardware-agent/packaging/build-deb.sh hardware-agent/packaging/apt-upgrade-agent
+          hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
+          dpkg-deb -I /tmp/hardware-agent.deb | grep 'Version: 1.0.0'
+          dpkg-deb -c /tmp/hardware-agent.deb | grep 'usr/lib/dmitri/apt-upgrade-agent'
+

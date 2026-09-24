@@ -1,0 +1,10 @@
+#!/bin/sh
+# Skip the upgrade while nmap is running. An upgrade restarts dmitri-agent
+# and drops the in-process scan ledger.
+set -eu
+if pgrep -x nmap >/dev/null 2>&1; then
+    echo "hardware-agent: scan in progress, not upgrading"
+    exit 0
+fi
+apt-get update
+apt-get install -y --only-upgrade hardware-agent
