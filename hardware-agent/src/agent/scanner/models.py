@@ -67,10 +67,12 @@ class PortInfo:
 
 @dataclass(slots=True)
 class PortScanResult:
-    """Port inventory and OS evidence parsed from one Nmap host node."""
+    """Host identity, port inventory, and OS evidence from one Nmap host node."""
 
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None
+    mac: str | None = None
+    vendor: str | None = None
     skipped: bool = False
 
 

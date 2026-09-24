@@ -87,7 +87,8 @@ def upsert_hosts_for_scan(
                 host.ip = sh.ip
                 host.mac = sh.mac
                 host.hostname = sh.hostname
-                host.vendor = sh.vendor
+                if sh.vendor.strip().casefold() != "unknown":
+                    host.vendor = sh.vendor
                 if sh.operating_system_json is not None:
                     host.operating_system_json = sh.operating_system_json
                 host.open_ports_count = open_ports_count(session, sh.id)

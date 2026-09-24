@@ -157,6 +157,18 @@ def extract_ipv4(host_element: ET.Element) -> str | None:
     return None
 
 
+def extract_mac_vendor(host_element: ET.Element) -> tuple[str | None, str | None]:
+    """Return the MAC address and Nmap's vendor label, when present."""
+
+    for address_node in host_element.findall("address"):
+        if address_node.get("addrtype") == "mac":
+            return (
+                _optional_attribute(address_node, "addr"),
+                _optional_attribute(address_node, "vendor"),
+            )
+    return None, None
+
+
 def parse_host_scripts(host_element: ET.Element) -> list[ScriptResult]:
     """Parse hostscript output from a host XML node."""
 

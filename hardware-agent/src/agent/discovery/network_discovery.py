@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
+from agent.utils.nmap_xml import extract_mac_vendor
 
 
 def discover_hosts(
@@ -30,15 +31,12 @@ def _parse_host(host_element: ET.Element) -> HostInfo | None:
         return None
 
     ip = ""
-    mac: str | None = None
-    vendor = "unknown"
+    mac, observed_vendor = extract_mac_vendor(host_element)
+    vendor = observed_vendor or "unknown"
     for address_node in host_element.findall("address"):
         address_type = address_node.get("addrtype")
         if address_type == "ipv4":
             ip = address_node.get("addr", "")
-        elif address_type == "mac":
-            mac = address_node.get("addr")
-            vendor = address_node.get("vendor", "unknown")
 
     if not ip:
         return None
