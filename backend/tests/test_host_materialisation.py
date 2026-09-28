@@ -140,7 +140,7 @@ def test_new_mac_with_unknown_vendor_does_not_keep_previous_vendors_label(
         provisioned_agent,
     )
 
-    host = runtime_session.exec(select(HostRecord)).one()
+    host = runtime_session.exec(select(HostRecord).where(HostRecord.ip == ip)).one()
     assert host.mac == "00:00:00:00:00:02"
     assert host.vendor == "unknown"
 
@@ -165,7 +165,7 @@ def test_missing_mac_does_not_clear_existing_mac_or_vendor(
         provisioned_agent,
     )
 
-    host = runtime_session.exec(select(HostRecord)).one()
+    host = runtime_session.exec(select(HostRecord).where(HostRecord.ip == ip)).one()
     assert host.mac == mac
     assert host.vendor == "Known vendor"
 
