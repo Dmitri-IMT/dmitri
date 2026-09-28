@@ -51,6 +51,7 @@ from agent.scanner.errors import (
     TransientScanError,
     UnitScanError,
 )
+from agent.scanner.models import merge_mac_vendor
 from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.version import installed_version
@@ -189,10 +190,9 @@ def run_port_stage(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
                     )
-                    if result.mac:
-                        host.mac = result.mac
-                    if result.vendor and result.vendor.casefold() != "unknown":
-                        host.vendor = result.vendor
+                    host.mac, host.vendor = merge_mac_vendor(
+                        host.mac, host.vendor, result.mac, result.vendor
+                    )
                     host.operating_system = result.operating_system
                     if result.skipped:
                         hosts_skipped += 1
@@ -356,10 +356,9 @@ def run_deep_inspection_stage(
                 else:
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
-                    if result.mac and not host.mac:
-                        host.mac = result.mac
-                    if result.vendor and result.vendor.casefold() != "unknown":
-                        host.vendor = result.vendor
+                    host.mac, host.vendor = merge_mac_vendor(
+                        host.mac, host.vendor, result.mac, result.vendor
+                    )
                     if (
                         settings.scan_mode == "nspi"
                         and result.operating_system is not None

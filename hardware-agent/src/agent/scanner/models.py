@@ -76,6 +76,31 @@ class PortScanResult:
     skipped: bool = False
 
 
+def merge_mac_vendor(
+    existing_mac: str | None,
+    existing_vendor: str | None,
+    incoming_mac: str | None,
+    incoming_vendor: str | None,
+) -> tuple[str | None, str | None]:
+    """Merge MAC and vendor as one identity so a vendor never follows a new MAC."""
+
+    if not incoming_mac:
+        return existing_mac, existing_vendor
+    if incoming_mac == existing_mac:
+        vendor = (
+            incoming_vendor
+            if incoming_vendor and incoming_vendor.casefold() != "unknown"
+            else existing_vendor
+        )
+        return incoming_mac, vendor
+    vendor = (
+        incoming_vendor
+        if incoming_vendor and incoming_vendor.casefold() != "unknown"
+        else "unknown"
+    )
+    return incoming_mac, vendor
+
+
 @dataclass(slots=True)
 class HostInfo:
     """Discovered host enriched across the full scan pipeline."""

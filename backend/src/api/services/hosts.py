@@ -85,9 +85,11 @@ def upsert_hosts_for_scan(
             if scan_record.timestamp >= host.last_seen_at:
                 host.last_seen_at = scan_record.timestamp
                 host.ip = sh.ip
-                host.mac = sh.mac
+                mac_changed = sh.mac is not None and sh.mac != host.mac
+                if sh.mac is not None:
+                    host.mac = sh.mac
                 host.hostname = sh.hostname
-                if sh.vendor.strip().casefold() != "unknown":
+                if mac_changed or sh.vendor.strip().casefold() != "unknown":
                     host.vendor = sh.vendor
                 if sh.operating_system_json is not None:
                     host.operating_system_json = sh.operating_system_json

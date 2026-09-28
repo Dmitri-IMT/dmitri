@@ -113,6 +113,63 @@ def test_mac_absent_scan_host_resolves_by_ip(
     assert hosts[0].last_seen_at == timestamp_b
 
 
+def test_new_mac_with_unknown_vendor_does_not_keep_previous_vendors_label(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    timestamp_a = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    timestamp_b = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    ip = "192.168.1.25"
+    _persist(
+        runtime_session,
+        _scan(
+            uuid4(),
+            timestamp_a,
+            [_host(ip, "00:00:00:00:00:01", vendor="Previous vendor")],
+        ),
+        seeded_org,
+        provisioned_agent,
+    )
+    _persist(
+        runtime_session,
+        _scan(
+            uuid4(),
+            timestamp_b,
+            [_host(ip, "00:00:00:00:00:02", vendor="unknown")],
+        ),
+        seeded_org,
+        provisioned_agent,
+    )
+
+    host = runtime_session.exec(select(HostRecord)).one()
+    assert host.mac == "00:00:00:00:00:02"
+    assert host.vendor == "unknown"
+
+
+def test_missing_mac_does_not_clear_existing_mac_or_vendor(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    timestamp_a = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    timestamp_b = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    ip = "192.168.1.26"
+    mac = "00:00:00:00:00:03"
+    _persist(
+        runtime_session,
+        _scan(uuid4(), timestamp_a, [_host(ip, mac, vendor="Known vendor")]),
+        seeded_org,
+        provisioned_agent,
+    )
+    _persist(
+        runtime_session,
+        _scan(uuid4(), timestamp_b, [_host(ip, None, vendor="unknown")]),
+        seeded_org,
+        provisioned_agent,
+    )
+
+    host = runtime_session.exec(select(HostRecord)).one()
+    assert host.mac == mac
+    assert host.vendor == "Known vendor"
+
+
 def test_host_only_in_latest_scan_has_first_seen_equal_latest(
     runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:
