@@ -181,6 +181,7 @@ Pi treats **`command_id`** as idempotent: duplicate WS delivery → ack, do not 
 | **WSS** | `/api/v1/agents/{agent_id}/commands` | Pi daemon | Ed25519 signature on upgrade | Persistent connection; receive commands; send status |
 | **POST** | `/api/v1/agents/{agent_id}/commands` | Web | JWT | **Scan now** — body: `scan_mode`, `subnet` (frontend sends `quick` + the agent's `target_subnet`) |
 | **GET** | `/api/v1/agents` | Web | JWT | **List agents** — array of one in the MVP. ✅ shipped DMI-78 as `listAgents`; org-scoped, viewers included ([B11-C1](#b11--frontend-contract-asks-)) |
+| **POST** | `/api/v1/agents` | `provision-pi.sh` | JWT (admin) | **Register a Pi** — body `display_name`, `public_key` (64 hex). Inserts the `agents` row in the caller's org; returns `agent_id`. Same `register_agent()` as the vendor CLI. ✅ DMI-147 |
 | **GET** | `/api/v1/agents/{agent_id}` | Web | JWT | Agent detail — **`online`** (from WS registry), `last_seen_at`, `revoked_at`, `active_command_id`, `available_subnets`, `target_subnet`. ✅ implemented DMI-78; revocation state added by DMI-155 |
 | **PATCH** | `/api/v1/agents/{agent_id}` | Web | JWT (admin) | **Choose the network to scan** — body `target_subnet`; refuses a CIDR the Pi is not reporting (`422 subnet_not_reported`) or a Pi reporting none (`409 device_offline`). ✅ shipped DMI-78 |
 | **POST** | `/api/v1/agents/{agent_id}/revoke` | Web | JWT (admin) | Idempotently set `revoked_at`, then close the live socket with `4001 revoked`. ✅ shipped DMI-155 |

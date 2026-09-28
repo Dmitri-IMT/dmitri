@@ -119,8 +119,7 @@ def _records(
     scan_result = payload.get("scanResult") if isinstance(payload, Mapping) else None
     if isinstance(scan_result, list):
         flat_records = all(
-            isinstance(row, Mapping)
-            and {"id", "severity", "finding"}.issubset(row)
+            isinstance(row, Mapping) and {"id", "severity", "finding"}.issubset(row)
             for row in scan_result
         )
         if scan_result and not flat_records:
@@ -357,7 +356,8 @@ def run_testssl(
             TargetedOutcome.FAILED,
             exit_code=execution.exit_code,
             reason_code=reason,
-            diagnostic=execution.diagnostic or "testssl JSON report has an unsupported schema.",
+            diagnostic=execution.diagnostic
+            or "testssl JSON report has an unsupported schema.",
         )
     issues = parse_testssl_json(execution.report, unit)
     if (

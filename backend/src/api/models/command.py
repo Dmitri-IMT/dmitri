@@ -11,6 +11,9 @@ from api.models.persistence import UTC_TIMESTAMP, utc_now
 
 class Agent(SQLModel, table=True):
     __tablename__ = "agents"
+    __table_args__ = (
+        UniqueConstraint("org_id", "public_key", name="uq_agents_org_public_key"),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     org_id: UUID = Field(foreign_key="orgs.id", index=True)

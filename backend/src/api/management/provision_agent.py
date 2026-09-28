@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import secrets
 import sys
 from uuid import UUID
 
 from api.db.session import get_session
-from api.models.command import Agent
 from api.models.identity import Org
 from api.services import device_sig
+from api.services.agents import register_agent
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -61,18 +60,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"unknown org: {org_id}", file=sys.stderr)
             return 1
 
-        agent = Agent(
-            org_id=org_id,
+        agent = register_agent(
+            session,
+            org=org,
             display_name=args.display_name,
             public_key=public_key,
         )
-        if org.ot_digest_key is None:
-            org.ot_digest_key = secrets.token_hex(32)
-            session.add(org)
-
-        session.add(agent)
-        session.commit()
-        session.refresh(agent)
 
         print(f"agent_id={agent.id}")
         print(f"ot_digest_key={org.ot_digest_key}")

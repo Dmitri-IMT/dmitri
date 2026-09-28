@@ -7,7 +7,7 @@ import os
 from rich.text import Text
 from textual.widgets import Static
 
-APP_VERSION = "0.1.4"
+from agent.version import installed_version
 
 SPINNER_FRAMES = ("◐", "◓", "◑", "◒")
 
@@ -28,7 +28,7 @@ class DmitriHeader(Static):
     """
 
     def __init__(self) -> None:
-        super().__init__(f"Dmitri (v{APP_VERSION})")
+        super().__init__(f"Dmitri (v{installed_version()})")
 
 
 class CircleSpinner(Static):

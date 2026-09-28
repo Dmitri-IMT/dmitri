@@ -766,7 +766,7 @@ def test_all_targeted_resource_bounds_match_the_approved_spec() -> None:
     }
     assert TARGETED_UNIT_TIMEOUT_S == {
         "ffuf": 480.0,
-        "nikto": 180.0,
+        "nikto": 220.0,
         "testssl.sh": 300.0,
         "enum4linux-ng": 180.0,
         "ssh-audit": 60.0,

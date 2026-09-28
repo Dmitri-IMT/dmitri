@@ -78,7 +78,7 @@ def _require(environ: Mapping[str, str], name: str) -> str:
     return value.strip()
 
 
-def _parse_backend_url(raw: str) -> str:
+def parse_backend_url(raw: str) -> str:
     try:
         parts = urlsplit(raw)
         _ = parts.port
@@ -112,7 +112,7 @@ def _parse_device_id(raw: str) -> UUID:
         raise IngestConfigError("DEVICE_ID must be a UUID") from None
 
 
-def _parse_private_key(raw: str) -> bytes:
+def parse_private_key(raw: str) -> bytes:
     try:
         key = bytes.fromhex(raw)
     except ValueError:
@@ -127,9 +127,9 @@ def _parse_private_key(raw: str) -> bytes:
 def load_ingest_config(environ: Mapping[str, str] | None = None) -> IngestConfig:
     source = process_environ if environ is None else environ
     return IngestConfig(
-        backend_url=_parse_backend_url(_require(source, "BACKEND_URL")),
+        backend_url=parse_backend_url(_require(source, "BACKEND_URL")),
         device_id=_parse_device_id(_require(source, "DEVICE_ID")),
-        private_key=_parse_private_key(_require(source, "DEVICE_PRIVATE_KEY")),
+        private_key=parse_private_key(_require(source, "DEVICE_PRIVATE_KEY")),
     )
 
 

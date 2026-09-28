@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -542,3 +543,67 @@ class TestShutdown:
 
         assert client.closed is True
         assert ingest.closed is True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_upgrade_refuses_command_before_running() -> None:
+    import fcntl
+
+    from agent.scanner.scan_lock import scan_lock_path
+
+    daemon, client, scan, ingest = build()
+    subject = command()
+    with scan_lock_path().open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        await dispatch(daemon, subject)
+    assert client.frames(subject) == [("failed", "device_busy")]
+    assert not scan.calls
+    assert not ingest.calls
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_pending_terminal_status_keeps_lock_until_replay() -> None:
+    import fcntl
+
+    from agent.scanner.scan_lock import scan_lock_path
+
+    gate = threading.Event()
+    daemon, client, _, ingest = build(ingest=FakeIngest(gate=gate))
+    subject = command()
+    await daemon.handle_command(subject)
+    try:
+        assert await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+        with scan_lock_path().open("a") as handle:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        client.connected = False
+    finally:
+        gate.set()
+        await drain()
+    with scan_lock_path().open("a") as handle:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert daemon._active == subject.command_id
+        later = command()
+        await daemon.handle_command(later)
+        assert client.frames(later) == [("failed", "device_busy")]
+        client.connected = True
+        await daemon.replay_pending()
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert daemon._active is None
+    assert client.frames(subject)[-1] == ("done", None)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+@pytest.mark.asyncio
+async def test_missing_lock_is_scan_failure_not_contention() -> None:
+    from agent.scanner.scan_lock import scan_lock_path
+
+    scan_lock_path().unlink()
+    daemon, client, scan, _ = build()
+    subject = command()
+    await dispatch(daemon, subject)
+    assert client.frames(subject) == [("failed", "scan_failed")]
+    assert not scan.calls

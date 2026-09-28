@@ -16,10 +16,14 @@ def main() -> None:
         _run_tui()
     elif args[0] == "agent":
         _run_agent(args[1:])
+    elif args == ["provision"]:
+        from agent.transport.provision import main as provision
+
+        provision()
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         print(
-            "Usage: dmitri [start|agent [<mode> [<nspi-submode>] <subnet>]]",
+            "Usage: dmitri [start|provision|agent [<mode> [<nspi-submode>] <subnet>]]",
             file=sys.stderr,
         )
         raise SystemExit(2)

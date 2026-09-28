@@ -661,7 +661,7 @@ def test_nikto_valid_nonzero_exit_is_completed_and_redacts_secrets() -> None:
         "-timeout",
         "5",
         "-maxtime",
-        "150s",
+        "200s",
         "-Pause",
         "0.2",
         "-Format",

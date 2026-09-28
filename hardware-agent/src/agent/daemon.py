@@ -5,11 +5,13 @@ import logging
 import sys
 import threading
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
 from agent.headless import HeadlessScanResult, InvalidScanInput, run_headless_scan
+from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
 from agent.transport.command_channel import (
     AgentCommand,
     AgentStatus,
@@ -71,6 +73,7 @@ class AgentDaemon:
         self._active: UUID | None = None
         self._task: asyncio.Task[None] | None = None
         self._stop = _ScanStop()
+        self._upgrade_hold: ExitStack | None = None
 
     async def run(self) -> None:
         try:
@@ -87,10 +90,12 @@ class AgentDaemon:
 
     async def _cancel_active(self) -> None:
         task, self._task = self._task, None
-        if task is None or task.done():
-            return
-        self._stop.request()
-        await task
+        try:
+            if task is not None and not task.done():
+                self._stop.request()
+                await task
+        finally:
+            self._release_hold()
 
     async def handle_command(self, command: AgentCommand) -> None:
         if self._client.parked_reason is not None:
@@ -102,10 +107,27 @@ class AgentDaemon:
         if self._active is not None:
             await self._update(command.command_id, "failed", "device_busy")
             return
+        lock = ExitStack()
+        try:
+            lock.enter_context(scan_lock())
+        except UpgradeInProgressError:
+            lock.close()
+            await self._update(command.command_id, "failed", "device_busy")
+            return
+        except OSError:
+            lock.close()
+            LOGGER.exception("Cannot acquire appliance update lock")
+            await self._update(command.command_id, "failed", "scan_failed")
+            return
+        self._upgrade_hold = lock
         self._active = command.command_id
         self._stop = _ScanStop()
-        await self._update(command.command_id, "running")
-        self._task = asyncio.create_task(self._execute(command))
+        try:
+            await self._update(command.command_id, "running")
+            self._task = asyncio.create_task(self._execute(command))
+        except BaseException:
+            self._release_hold()
+            raise
 
     async def replay_pending(self) -> None:
         for command_id, record in list(self.ledger.items()):
@@ -118,8 +140,6 @@ class AgentDaemon:
         except Exception:
             LOGGER.exception("command %s ended unexpectedly", command.command_id)
             await self._update(command.command_id, "failed", "scan_failed")
-        finally:
-            self._active = None
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
@@ -191,6 +211,19 @@ class AgentDaemon:
                 error_code=record.error_code,
             )
         )
+        # Keep protection across a dropped connection until terminal replay.
+        if (
+            command_id == self._active
+            and not record.pending
+            and record.status in {"done", "failed"}
+        ):
+            self._release_hold()
+
+    def _release_hold(self) -> None:
+        if self._upgrade_hold is not None:
+            self._upgrade_hold.close()
+            self._upgrade_hold = None
+        self._active = None
 
 
 def run_daemon() -> None:

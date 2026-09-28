@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlmodel import Session, select, update
 from starlette.concurrency import run_in_threadpool
 
 from api.models.command import Agent
+from api.models.identity import Org
 from api.schemas.agents import AgentDetail, AgentSummary
 from api.services import agent_connections
 from api.services.commands import SubnetNotReportedError, active_command_for
@@ -27,6 +30,29 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
         "target_subnet": agent.target_subnet,
         "active_command_id": None if active is None else active.id,
     }
+
+
+def register_agent(
+    session: Session, *, org: Org, display_name: str, public_key: bytes
+) -> Agent:
+    """Register once per org/key; retries preserve identity and revocation."""
+    if org.ot_digest_key is None:
+        session.exec(
+            update(Org)
+            .where(Org.id == org.id, Org.ot_digest_key.is_(None))
+            .values(ot_digest_key=secrets.token_hex(32))
+        )
+    session.execute(
+        insert(Agent)
+        .values(org_id=org.id, display_name=display_name, public_key=public_key)
+        .on_conflict_do_nothing(constraint="uq_agents_org_public_key")
+    )
+    agent = session.exec(
+        select(Agent).where(Agent.org_id == org.id, Agent.public_key == public_key)
+    ).one()
+    session.commit()
+    session.refresh(agent)
+    return agent
 
 
 def list_agents(session: Session, *, org_id: UUID) -> list[AgentSummary]:
