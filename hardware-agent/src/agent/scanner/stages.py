@@ -55,8 +55,8 @@ from agent.scanner.errors import (
 )
 from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
-from agent.version import installed_version
 from agent.targeted.report import sanitize_evidence
+from agent.version import installed_version
 
 if TYPE_CHECKING:
     from agent.config import AgentSettings
@@ -361,8 +361,10 @@ def run_deep_inspection_stage(
                             "Deep inspection returned no result for %s.", host.ip
                         )
                     recovered = _recover_deep_stage_services(runner, settings, host)
-                    host.deep_inspection_outcome = "partial" if recovered else (
-                        "timed_out" if settings.scan_mode == "nspi" else "failed"
+                    host.deep_inspection_outcome = (
+                        "partial"
+                        if recovered
+                        else ("timed_out" if settings.scan_mode == "nspi" else "failed")
                     )
                     host.deep_inspection_reason = (
                         "nse_timeout"
@@ -749,7 +751,8 @@ def build_coverage_payload(
                     ),
                     policy_version=(
                         sanitize_evidence(item.policy_version, 64)
-                        if item.policy_version else None
+                        if item.policy_version
+                        else None
                     ),
                 )
                 for item in result.observations
@@ -776,7 +779,8 @@ def build_coverage_payload(
                 )
             )
     if (
-        interrupted_stage in {
+        interrupted_stage
+        in {
             "ports",
             "deep_inspection",
             "ot_inspection",
@@ -787,9 +791,7 @@ def build_coverage_payload(
         from agent.targeted.selection import select_targeted_units
 
         completed_ids = {
-            result.unit.identity
-            for host in hosts
-            for result in host.targeted_results
+            result.unit.identity for host in hosts for result in host.targeted_results
         }
         for unit in select_targeted_units(hosts, scan_mode=scan_mode):
             if unit.identity in completed_ids:

@@ -269,6 +269,9 @@ export const catalog = {
   'scans.coverageUnavailable': 'Check coverage was not recorded for this scan.',
   'scans.coverageCompleted': ({ completed, total }) =>
     `${completed} of ${total} checks completed`,
+  'scans.coverageUnlistedOmissions': ({ count }) =>
+    `${count} additional omitted checks are not listed individually.`,
+  'scans.coverageObservationEvidence': 'Evidence:',
   'scans.coveragePorts': 'Port scan',
   'scans.coverageDeepInspection': 'Deep inspection',
   'scans.coverageTargetedAssessment': 'Targeted assessment',

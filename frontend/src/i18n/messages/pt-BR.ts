@@ -285,6 +285,9 @@ export const catalog: Catalog = {
     'A cobertura das verificações não foi registrada para esta varredura.',
   'scans.coverageCompleted': ({ completed, total }) =>
     `${completed} de ${total} verificações concluídas`,
+  'scans.coverageUnlistedOmissions': ({ count }) =>
+    `${count} verificações omitidas adicionais não estão listadas individualmente.`,
+  'scans.coverageObservationEvidence': 'Evidência:',
   'scans.coveragePorts': 'Verificação de portas',
   'scans.coverageDeepInspection': 'Inspeção detalhada',
   'scans.coverageTargetedAssessment': 'Avaliação direcionada',

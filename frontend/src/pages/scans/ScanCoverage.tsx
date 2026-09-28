@@ -26,9 +26,15 @@ function endpoint(unit: CoverageUnit): string {
     : `${unit.ip}:${unit.port}/${unit.protocol ?? 'tcp'}`
 }
 
-function ScanCoverage({ coverage }: { coverage: CoverageUnit[] }) {
+function ScanCoverage({
+  coverage,
+  omittedUnlisted = 0,
+}: {
+  coverage: CoverageUnit[]
+  omittedUnlisted?: number
+}) {
   const { t } = useI18n()
-  if (coverage.length === 0) {
+  if (coverage.length === 0 && omittedUnlisted <= 0) {
     return (
       <p data-testid="scan-coverage-unavailable" className="text-body-md">
         {t('scans.coverageUnavailable')}
@@ -44,7 +50,16 @@ function ScanCoverage({ coverage }: { coverage: CoverageUnit[] }) {
 
   return (
     <div data-testid="scan-coverage" className="flex flex-col gap-6">
-      {[...endpoints].map(([address, units]) => {
+      {omittedUnlisted > 0 && (
+        <p data-testid="scan-coverage-unlisted-omissions" className="text-body-sm">
+          {t('scans.coverageUnlistedOmissions', { count: omittedUnlisted })}
+        </p>
+      )}
+      {coverage.length === 0 ? (
+        <p data-testid="scan-coverage-unavailable" className="text-body-md">
+          {t('scans.coverageUnavailable')}
+        </p>
+      ) : [...endpoints].map(([address, units]) => {
         const completed = units.filter(
           (unit) => unit.outcome === 'completed',
         ).length
@@ -80,6 +95,12 @@ function ScanCoverage({ coverage }: { coverage: CoverageUnit[] }) {
                       {unit.observations?.map((observation) => (
                         <li key={observation.observation_key}>
                           {observation.summary}
+                          {observation.evidence && (
+                            <p className="text-muted-foreground">
+                              {t('scans.coverageObservationEvidence')}{' '}
+                              <span className="font-mono">{observation.evidence}</span>
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ul>

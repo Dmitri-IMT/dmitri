@@ -365,7 +365,10 @@ class ScanRunner:
                 )
             )
             partial_result = (
-                port_units_skipped > 0 or deep_units_skipped > 0 or targeted_gaps
+                port_units_skipped > 0
+                or deep_units_skipped > 0
+                or targeted_gaps
+                or ot_inspection.stage_deadline_reached
             )
             payload = self._build_payload(
                 scan_id=scan_id,

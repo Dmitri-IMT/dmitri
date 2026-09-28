@@ -130,6 +130,29 @@ def test_nse_failure_with_service_recovery_marks_payload_partial(
     }
 
 
+def test_ot_deadline_marks_completed_scan_payload_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(stages, "run_port_stage", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(stages, "run_deep_inspection_stage", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        stages,
+        "run_ot_inspection_stage",
+        lambda *args, **kwargs: stages.OtInspectionResult(
+            stage_deadline_reached=True, stage_deadline_seconds=120
+        ),
+    )
+    runner, completed, errors, _ = _build_runner(
+        monkeypatch, hosts=_one_host(), scan_mode="nspi"
+    )
+
+    runner.run_blocking()
+
+    assert errors == []
+    assert completed[0].metadata["partial_result"] is True
+    assert completed[0].metadata["modbus_stage_deadline_reached"] is True
+
+
 def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() -> None:
     host = _one_host()[0]
     unit = TargetedUnit(host.ip, 80, "tcp", "http", TargetedTool.NIKTO)

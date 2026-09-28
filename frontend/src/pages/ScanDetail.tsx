@@ -116,6 +116,10 @@ function ScanDetail() {
         )
         const partial = metadata.partial_result === true
         const coverage = scan.coverage ?? []
+        const omittedUnlisted =
+          typeof metadata.targeted_units_omitted_unlisted === 'number'
+            ? metadata.targeted_units_omitted_unlisted
+            : 0
         const hasRecordedEvidence =
           scan.findings.length > 0 ||
           scan.exposures.length > 0 ||
@@ -274,7 +278,10 @@ function ScanDetail() {
                 )}
                 {(scan.status !== 'failed' || coverage.length > 0) && (
                   <ScanDetailSection title={t('scans.checkCoverage')}>
-                    <ScanCoverage coverage={coverage} />
+                    <ScanCoverage
+                      coverage={coverage}
+                      omittedUnlisted={omittedUnlisted}
+                    />
                   </ScanDetailSection>
                 )}
                 {scan.hosts.some(

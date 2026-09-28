@@ -304,6 +304,64 @@ describe('ScanDetail', () => {
     )
   })
 
+  it('shows unlisted omitted checks and observation evidence in coverage', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 4 },
+        coverage: [
+          {
+            ip: '192.168.1.10',
+            stage: 'targeted_assessment',
+            port: 80,
+            protocol: 'tcp',
+            tool: 'nikto',
+            outcome: 'completed',
+            evidence_source: 'targeted_tool',
+            issue_keys: [],
+            observations: [
+              {
+                observation_key: 'web:administration:/admin',
+                kind: 'administration',
+                summary: 'Administration interface found',
+                evidence: 'status=403; protected surface',
+                path: '/admin',
+                rule_id: 'ADMIN',
+                policy_version: 'v1',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '4 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent(
+      'status=403; protected surface',
+    )
+  })
+
+  it('shows the unlisted omission count when no individual units were stored', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 2 },
+        coverage: [],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '2 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent(
+      'Check coverage was not recorded for this scan.',
+    )
+  })
+
   it('shows the targeted section when targeted_units_planned is zero', async () => {
     scanDetail(
       completedScan({

@@ -274,6 +274,9 @@ export const catalog: Catalog = {
     'Для этого сканирования сведения об охвате проверок не сохранены.',
   'scans.coverageCompleted': ({ completed, total }) =>
     `Завершено проверок: ${completed} из ${total}`,
+  'scans.coverageUnlistedOmissions': ({ count }) =>
+    `${count} дополнительных пропущенных проверок не перечислены отдельно.`,
+  'scans.coverageObservationEvidence': 'Доказательство:',
   'scans.coveragePorts': 'Проверка портов',
   'scans.coverageDeepInspection': 'Углублённая проверка',
   'scans.coverageTargetedAssessment': 'Адресная проверка',
