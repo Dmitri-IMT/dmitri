@@ -51,7 +51,10 @@ function ScanCoverage({
   return (
     <div data-testid="scan-coverage" className="flex flex-col gap-6">
       {omittedUnlisted > 0 && (
-        <p data-testid="scan-coverage-unlisted-omissions" className="text-body-sm">
+        <p
+          data-testid="scan-coverage-unlisted-omissions"
+          className="text-body-sm"
+        >
           {t('scans.coverageUnlistedOmissions', { count: omittedUnlisted })}
         </p>
       )}
@@ -59,58 +62,62 @@ function ScanCoverage({
         <p data-testid="scan-coverage-unavailable" className="text-body-md">
           {t('scans.coverageUnavailable')}
         </p>
-      ) : [...endpoints].map(([address, units]) => {
-        const completed = units.filter(
-          (unit) => unit.outcome === 'completed',
-        ).length
-        return (
-          <section key={address} className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h3 className="font-mono text-title-xs">{address}</h3>
-              <p className="text-body-sm text-muted-foreground">
-                {t('scans.coverageCompleted', {
-                  completed,
-                  total: units.length,
-                })}
-              </p>
-            </div>
-            <ul className="flex flex-col gap-2">
-              {units.map((unit, index) => (
-                <li
-                  key={`${unit.stage}-${unit.tool ?? ''}-${index}`}
-                  className="rounded-md border border-border p-3 text-body-sm"
-                >
-                  <span className="font-medium">
-                    {unit.tool ?? t(stageKeys[unit.stage])}:{' '}
-                    {t(outcomeKeys[unit.outcome])}
-                  </span>
-                  {unit.reason_code && (
-                    <span className="text-muted-foreground">
-                      {' '}
-                      (<code>{unit.reason_code}</code>)
+      ) : (
+        [...endpoints].map(([address, units]) => {
+          const completed = units.filter(
+            (unit) => unit.outcome === 'completed',
+          ).length
+          return (
+            <section key={address} className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h3 className="font-mono text-title-xs">{address}</h3>
+                <p className="text-body-sm text-muted-foreground">
+                  {t('scans.coverageCompleted', {
+                    completed,
+                    total: units.length,
+                  })}
+                </p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {units.map((unit, index) => (
+                  <li
+                    key={`${unit.stage}-${unit.tool ?? ''}-${index}`}
+                    className="rounded-md border border-border p-3 text-body-sm"
+                  >
+                    <span className="font-medium">
+                      {unit.tool ?? t(stageKeys[unit.stage])}:{' '}
+                      {t(outcomeKeys[unit.outcome])}
                     </span>
-                  )}
-                  {(unit.observations?.length ?? 0) > 0 && (
-                    <ul className="list-disc pl-6">
-                      {unit.observations?.map((observation) => (
-                        <li key={observation.observation_key}>
-                          {observation.summary}
-                          {observation.evidence && (
-                            <p className="text-muted-foreground">
-                              {t('scans.coverageObservationEvidence')}{' '}
-                              <span className="font-mono">{observation.evidence}</span>
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )
-      })}
+                    {unit.reason_code && (
+                      <span className="text-muted-foreground">
+                        {' '}
+                        (<code>{unit.reason_code}</code>)
+                      </span>
+                    )}
+                    {(unit.observations?.length ?? 0) > 0 && (
+                      <ul className="list-disc pl-6">
+                        {unit.observations?.map((observation) => (
+                          <li key={observation.observation_key}>
+                            {observation.summary}
+                            {observation.evidence && (
+                              <p className="text-muted-foreground">
+                                {t('scans.coverageObservationEvidence')}{' '}
+                                <span className="font-mono">
+                                  {observation.evidence}
+                                </span>
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })
+      )}
     </div>
   )
 }

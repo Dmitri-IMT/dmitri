@@ -339,9 +339,7 @@ describe('ScanDetail', () => {
     expect(coverage).toHaveTextContent(
       '4 additional omitted checks are not listed individually.',
     )
-    expect(coverage).toHaveTextContent(
-      'status=403; protected surface',
-    )
+    expect(coverage).toHaveTextContent('status=403; protected surface')
   })
 
   it('shows the unlisted omission count when no individual units were stored', async () => {
