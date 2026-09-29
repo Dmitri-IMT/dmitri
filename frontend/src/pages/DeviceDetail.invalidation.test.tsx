@@ -106,4 +106,86 @@ describe('DeviceDetail command cache invalidation', () => {
       `/scans/${defaultCommand.scan_id}`,
     )
   })
+
+  it('refreshes the same product families once when a command is cancelled', async () => {
+    vi.useFakeTimers()
+    let commandReads = 0
+    let agentDetailReads = 0
+    let scanReads = 0
+    let hostReads = 0
+    let findingReads = 0
+    server.use(
+      http.get(`${baseURL}/agents`, () =>
+        HttpResponse.json({
+          data: [
+            { ...defaultAgent, active_command_id: defaultCommand.command_id },
+          ],
+        }),
+      ),
+      http.get(`${baseURL}/agents/:agentId`, () => {
+        agentDetailReads += 1
+        return HttpResponse.json({
+          ...defaultAgent,
+          active_command_id:
+            agentDetailReads === 1 ? defaultCommand.command_id : null,
+        })
+      }),
+      http.get(`${baseURL}/commands/:commandId`, () => {
+        commandReads += 1
+        const cancelled = commandReads > 1
+        return HttpResponse.json({
+          ...defaultCommand,
+          status: cancelled ? ('cancelled' as const) : ('queued' as const),
+          completed_at: cancelled ? new Date().toISOString() : null,
+        })
+      }),
+      http.get(`${baseURL}/scans`, () => {
+        scanReads += 1
+        return HttpResponse.json({ data: [], total: 0, page: 1 })
+      }),
+      http.get(`${baseURL}/hosts`, () => {
+        hostReads += 1
+        return HttpResponse.json({ data: [], total: 0, page: 1 })
+      }),
+      http.get(`${baseURL}/findings`, () => {
+        findingReads += 1
+        return HttpResponse.json({ data: [], total: 0, page: 1 })
+      }),
+    )
+    renderWithProviders(
+      <>
+        <Routes>
+          <Route path="/devices/:agentId" element={<DeviceDetail />} />
+        </Routes>
+        <Scans />
+        <Network />
+        <HostFindings hostId="host-for-invalidation" />
+      </>,
+      { route: agentRoute },
+    )
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Queued')).toBeInTheDocument()
+      expect(scanReads).toBe(3)
+      expect(hostReads).toBe(1)
+      expect(findingReads).toBe(1)
+      expect(agentDetailReads).toBe(1)
+    })
+    await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS)
+    await vi.waitFor(() => {
+      expect(screen.getByText('Scan stopped')).toBeInTheDocument()
+      expect(scanReads).toBe(6)
+      expect(hostReads).toBe(2)
+      expect(findingReads).toBe(2)
+      expect(agentDetailReads).toBe(2)
+    })
+
+    await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
+    expect(commandReads).toBe(2)
+    expect(scanReads).toBe(6)
+    expect(hostReads).toBe(2)
+    expect(findingReads).toBe(2)
+    expect(agentDetailReads).toBe(2)
+    expect(screen.getByTestId('agents-retry')).toBeInTheDocument()
+  })
 })

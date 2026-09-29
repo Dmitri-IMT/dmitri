@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createScanCommand, getAgent } from '@/api/agents'
 import { readApiError } from '@/api/apiError'
-import { COMMAND_POLL_INTERVAL_MS, getCommand } from '@/api/commands'
+import {
+  cancelCommand,
+  COMMAND_POLL_INTERVAL_MS,
+  getCommand,
+} from '@/api/commands'
 import { queryKeys } from '@/api/queryKeys'
 import { useToast } from '@/hooks/useToast'
 import { isTerminalCommandStatus } from '@/lib/commandStatus'
@@ -24,13 +28,18 @@ export type ScanCommand = {
   command: CommandDetail | null
   following: boolean
   triggering: boolean
+  cancelling: boolean
   trigger: (selection: ScanSelection) => Promise<TriggerOutcome>
+  cancel: () => Promise<void>
 }
 
 export function useScanCommand(agent: AgentDetail): ScanCommand {
   const queryClient = useQueryClient()
   const { show } = useToast()
   const [triggering, setTriggering] = useState(false)
+  const [cancellingCommandId, setCancellingCommandId] = useState<string | null>(
+    null,
+  )
   const [followedCommandId, setFollowedCommandId] = useState<string | null>(
     agent.active_command_id ?? null,
   )
@@ -38,6 +47,8 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     useState<string | null>(agent.active_command_id ?? null)
   const triggeringRef = useRef(false)
   const sweptCommandId = useRef<string | null>(null)
+  const cancellingRef = useRef(false)
+  const cancelRequestedCommandId = useRef<string | null>(null)
 
   const observedActiveCommandId = agent.active_command_id ?? null
   if (observedActiveCommandId !== lastObservedActiveCommandId) {
@@ -60,7 +71,7 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
 
   useEffect(() => {
     const command = commandQuery.data
-    if (command?.status !== 'done') return
+    if (command?.status !== 'done' && command?.status !== 'cancelled') return
     if (sweptCommandId.current === command.command_id) return
     sweptCommandId.current = command.command_id
 
@@ -71,6 +82,15 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
       queryKey: queryKeys.agents.detail(agent.agent_id),
     })
   }, [agent.agent_id, commandQuery.data, queryClient])
+
+  useEffect(() => {
+    const command = commandQuery.data
+    if (!command || command.status !== 'done') return
+    if (cancelRequestedCommandId.current !== command.command_id) return
+    cancelRequestedCommandId.current = null
+    setCancellingCommandId(null)
+    show('The scan finished before it could stop.')
+  }, [commandQuery.data, show])
 
   async function trigger(selection: ScanSelection): Promise<TriggerOutcome> {
     if (!agent.target_subnet || triggeringRef.current) return 'refused'
@@ -134,10 +154,50 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     }
   }
 
+  async function cancel(): Promise<void> {
+    const command = commandQuery.data
+    if (
+      !command ||
+      (command.status !== 'delivered' && command.status !== 'running') ||
+      cancellingRef.current
+    ) {
+      return
+    }
+
+    cancellingRef.current = true
+    setCancellingCommandId(command.command_id)
+    try {
+      const updatedCommand = await cancelCommand(command.command_id)
+      cancelRequestedCommandId.current = command.command_id
+      queryClient.setQueryData(
+        queryKeys.commands.detail(command.command_id),
+        updatedCommand,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.commands.detail(command.command_id),
+      })
+    } catch (error) {
+      setCancellingCommandId(null)
+      cancelRequestedCommandId.current = null
+      const { status, code } = readApiError(error)
+      if (status === 409 && code === 'command_not_cancellable') {
+        show('The scan is already uploading its results.')
+      } else {
+        show("Couldn't stop the scan.")
+      }
+    } finally {
+      cancellingRef.current = false
+    }
+  }
+
   return {
     command: commandQuery.data ?? null,
     following: followedCommandId !== null,
     triggering,
+    cancelling:
+      cancellingCommandId === commandQuery.data?.command_id &&
+      !isTerminalCommandStatus(commandQuery.data?.status),
     trigger,
+    cancel,
   }
 }

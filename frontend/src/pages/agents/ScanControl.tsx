@@ -59,6 +59,9 @@ function ScanControl({
         ref={statusRef}
         command={scanCommand.command}
         triggering={scanCommand.triggering}
+        cancelling={scanCommand.cancelling}
+        deviceName={agent.display_name}
+        onCancel={() => void scanCommand.cancel()}
         onRetry={() => void triggerScan()}
       />
     )

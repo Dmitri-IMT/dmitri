@@ -9,6 +9,7 @@ const COMMAND_STATUS_LABELS: Record<CommandStatus, string> = {
   uploading: 'Uploading results…',
   done: 'Done',
   failed: 'Scan failed',
+  cancelled: 'Scan stopped',
   expired: 'Not picked up',
 }
 
@@ -19,5 +20,21 @@ export function commandStatusLabel(status: CommandStatus): string {
 export function isTerminalCommandStatus(
   status: CommandStatus | undefined,
 ): boolean {
-  return status === 'done' || status === 'failed' || status === 'expired'
+  if (status === undefined) return false
+  switch (status) {
+    case 'done':
+    case 'failed':
+    case 'cancelled':
+    case 'expired':
+      return true
+    case 'queued':
+    case 'delivered':
+    case 'running':
+    case 'uploading':
+      return false
+    default: {
+      const _exhaustive: never = status
+      return _exhaustive
+    }
+  }
 }
