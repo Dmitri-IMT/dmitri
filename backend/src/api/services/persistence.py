@@ -28,7 +28,7 @@ from api.schemas.scan import (
 )
 from api.services.activity import append_scan_activity
 from api.services.ai.jobs import enqueue_auto_scan_analysis
-from api.services.command_lifecycle import is_terminal
+from api.services.command_lifecycle import accepts_late_ingest, is_terminal
 from api.services.commands import apply_status, command_for_scan
 from api.services.hosts import upsert_hosts_for_scan
 from api.services.industrial import persist_industrial_services
@@ -76,7 +76,7 @@ def ingest_scan(
         or command.org_id != identity.org_id
     ):
         raise ScanOwnershipError
-    if is_terminal(command.status) and command.status != "cancelled":
+    if is_terminal(command.status) and not accepts_late_ingest(command.status):
         raise ScanClosedError
     return persist_scan(
         session,
@@ -123,6 +123,7 @@ def persist_scan(
         scan_record.subnet = scan.subnet
         scan_record.scan_mode = scan.scan_mode
         scan_record.metadata_json = scan.metadata
+        scan_record.status = "completed"
         scan_record.assessment_policy_version = scan.assessment_policy_version
         scan_record.agent_id = agent_id
         session.add(scan_record)
@@ -201,22 +202,16 @@ def persist_scan(
 
     reconcile_scan_inventory(session, scan_record)
 
-    cancelled = (
-        command is not None and command.status == "cancelled"
-    ) or (
+    stopped_by_operator = (
         scan.metadata is not None
         and scan.metadata.get("terminated_by") == TERMINATED_BY_USER_CANCEL
     )
-    # Mark the scan completed before apply_status("cancelled") runs: its guard keeps
-    # a completed scan, so a stopped scan with results stays viewable.
-    scan_record.status = "completed"
-    session.add(scan_record)
 
     append_scan_activity(
         session,
         org_id=org_id,
         scan_id=scan.scan_id,
-        kind="scan_cancelled" if cancelled else "scan_finished",
+        kind="scan_cancelled" if stopped_by_operator else "scan_finished",
         scan_mode=scan_record.scan_mode,
         occurred_at=now,
     )
@@ -226,16 +221,14 @@ def persist_scan(
     # here also covers scans that produce no enrichment jobs at all.
     enqueue_auto_scan_analysis(session, scan.scan_id, commit=False)
 
-    if command is None:
-        session.commit()
-    elif command.status == "cancelled":
+    if command is None or accepts_late_ingest(command.status):
         session.commit()
     else:
         applied = apply_status(
             session,
             agent_id=agent_id,
             command_id=command.id,
-            status="cancelled" if cancelled else "done",
+            status="cancelled" if stopped_by_operator else "done",
             now=now,
         )
         if not applied:

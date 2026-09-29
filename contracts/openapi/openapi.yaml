@@ -4104,6 +4104,9 @@ components:
             - type: string
               format: date-time
             - type: 'null'
+        has_results:
+          type: boolean
+          default: false
     AgentDetail:
       type: object
       additionalProperties: false

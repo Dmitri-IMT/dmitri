@@ -194,15 +194,16 @@ def test_apply_status_applies_forward_rank(
 
 
 @pytest.mark.parametrize(
-    ("initial_scan_status", "expected_scan_status"),
-    [("pending", "cancelled"), ("completed", "completed")],
+    ("initial_scan_status", "expected_scan_status", "expected_activity"),
+    [("pending", "cancelled", 1), ("completed", "completed", 0)],
 )
-def test_apply_status_cancelled_preserves_completed_scan_and_records_activity(
+def test_apply_status_cancelled_mirrors_only_an_unfinished_scan(
     administrative_session: Session,
     provisioned_agent: Agent,
     seeded_org: Org,
     initial_scan_status: str,
     expected_scan_status: str,
+    expected_activity: int,
 ):
     scan = _seed_scan(administrative_session, seeded_org.id)
     scan.status = initial_scan_status
@@ -232,8 +233,7 @@ def test_apply_status_cancelled_preserves_completed_scan_and_records_activity(
     cancelled = _activity_rows(
         administrative_session, seeded_org.id, kind="scan_cancelled"
     )
-    assert len(cancelled) == 1
-    assert cancelled[0].subject_id == scan.scan_id
+    assert [row.subject_id for row in cancelled] == [scan.scan_id] * expected_activity
     assert _activity_rows(administrative_session, seeded_org.id, "scan_failed") == []
 
 

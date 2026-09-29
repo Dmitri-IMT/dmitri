@@ -265,7 +265,7 @@ def test_accepted_hello_sends_cancel_catch_up(monkeypatch):
         return [command_id]
 
     monkeypatch.setattr(
-        agent_ws, "cancelled_command_ids_for_agent", cancelled_commands
+        agent_ws, "pending_operator_cancels", cancelled_commands
     )
     asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
 
@@ -288,7 +288,7 @@ def test_revoked_hello_sends_no_cancel_frames(monkeypatch):
         return [UUID("22222222-2222-4222-8222-222222222222")]
 
     monkeypatch.setattr(
-        agent_ws, "cancelled_command_ids_for_agent", cancelled_commands
+        agent_ws, "pending_operator_cancels", cancelled_commands
     )
     ws = _connected_ws()
     session_factory = _tracking_session_factory(agent=_agent_stub(revoked_at=T0))

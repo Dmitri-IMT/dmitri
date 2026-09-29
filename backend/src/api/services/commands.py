@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, update
+from sqlalchemy import ColumnElement, case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
@@ -18,9 +18,11 @@ from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
 from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import (
+    CANCELLABLE,
     NON_TERMINAL,
     PI_OWNED,
     RANK,
+    UNFINISHED_SCAN,
     is_terminal,
     scan_status_for,
     status_rank,
@@ -83,21 +85,17 @@ def enqueue(
 def get_command_detail(
     session: Session, command_id: UUID, *, org_id: UUID
 ) -> CommandDetail | None:
-    command = session.exec(
-        select(Command).where(Command.id == command_id, Command.org_id == org_id)
-    ).first()
-    if command is None:
-        return None
-    return _command_detail(command)
+    return _load_command_detail(session, command_id=command_id, org_id=org_id)
 
 
-def cancelled_command_ids_for_agent(
+def pending_operator_cancels(
     session: Session, *, agent_id: UUID, now: datetime
 ) -> list[UUID]:
-    deadline_by_mode = {
-        mode: now - timedelta(seconds=seconds)
-        for mode, seconds in get_settings().command_max_duration_by_mode().items()
-    }
+    """Commands cancelled while the Pi was offline that it may still be running.
+
+    Cancel intent is not stored: a `cancelled` command whose scan got no results
+    and is still inside its mode's time limit is one the Pi has not heard about.
+    """
     return list(
         session.exec(
             select(Command.id)
@@ -107,13 +105,32 @@ def cancelled_command_ids_for_agent(
                 Command.status == "cancelled",
                 ScanRecord.status == "cancelled",
                 func.coalesce(Command.delivered_at, Command.created_at)
-                >= case(deadline_by_mode, value=Command.scan_mode),
+                >= _mode_deadline(now),
             )
         ).all()
     )
 
 
-def _command_detail(command: Command) -> CommandDetail:
+def _mode_deadline(now: datetime) -> ColumnElement[datetime]:
+    """The start time before which a command of its scan mode has run too long."""
+    deadline_by_mode = {
+        mode: now - timedelta(seconds=seconds)
+        for mode, seconds in get_settings().command_max_duration_by_mode().items()
+    }
+    return case(deadline_by_mode, value=Command.scan_mode)
+
+
+def _load_command_detail(
+    session: Session, *, command_id: UUID, org_id: UUID
+) -> CommandDetail | None:
+    row = session.exec(
+        select(Command, ScanRecord.status)
+        .outerjoin(ScanRecord, ScanRecord.scan_id == Command.scan_id)
+        .where(Command.id == command_id, Command.org_id == org_id)
+    ).first()
+    if row is None:
+        return None
+    command, scan_status = row
     return CommandDetail(
         command_id=command.id,
         scan_id=command.scan_id,
@@ -127,16 +144,14 @@ def _command_detail(command: Command) -> CommandDetail:
         delivered_at=command.delivered_at,
         started_at=command.started_at,
         completed_at=command.completed_at,
+        has_results=scan_status == "completed",
     )
 
 
 def _inspect_command_for_cancel(
     session: Session, *, command_id: UUID, org_id: UUID
 ) -> CommandDetail | None:
-    command = session.exec(
-        select(Command).where(Command.id == command_id, Command.org_id == org_id)
-    ).first()
-    detail = _command_detail(command) if command is not None else None
+    detail = _load_command_detail(session, command_id=command_id, org_id=org_id)
     session.rollback()
     return detail
 
@@ -148,13 +163,12 @@ def _retire_offline_command(
     org_id: UUID,
     now: datetime,
 ) -> tuple[CommandDetail, int] | None:
-    cancellable = tuple(status for status in NON_TERMINAL if status != "uploading")
     rows = _retire_commands(
         session,
         [
             Command.id == command_id,
             Command.org_id == org_id,
-            Command.status.in_(cancellable),
+            Command.status.in_(CANCELLABLE),
         ],
         values={"status": "cancelled", "completed_at": now, "error_code": None},
     )
@@ -167,7 +181,7 @@ def _retire_offline_command(
     detail = get_command_detail(session, command_id, org_id=org_id)
     if detail is None:
         return None
-    if detail.status == "uploading":
+    if not is_terminal(detail.status):
         raise CommandNotCancellableError
     return detail, 200
 
@@ -189,7 +203,7 @@ async def cancel_command(
         return None
     if is_terminal(detail.status):
         return detail, 200
-    if detail.status == "uploading":
+    if detail.status not in CANCELLABLE:
         raise CommandNotCancellableError
 
     socket = agent_connections.get_socket(detail.agent_id)
@@ -265,21 +279,14 @@ def apply_status(
         session.rollback()
         return False
 
-    scan_id, org_id, scan_mode = row[0], row[1], row[2]
-    if scan_id is not None:
-        scan_update = update(ScanRecord).where(ScanRecord.scan_id == scan_id)
-        if status == "cancelled":
-            scan_update = scan_update.where(ScanRecord.status != "completed")
-        session.execute(scan_update.values(status=scan_status_for(status)))
-        if status in {"failed", "cancelled"}:
-            append_scan_activity(
-                session,
-                org_id=org_id,
-                scan_id=scan_id,
-                kind=f"scan_{status}",
-                scan_mode=scan_mode,
-                occurred_at=now,
-            )
+    _mirror_command_on_scan(
+        session,
+        scan_id=row[0],
+        org_id=row[1],
+        scan_mode=row[2],
+        command_status=status,
+        now=now,
+    )
     session.commit()
     return True
 
@@ -327,17 +334,13 @@ def sweep_stale_commands(
 
     # Runs after the disconnect pass, so a dead agent keeps its more specific
     # reason. Only delivered commands are timed: queue wait is not scan time.
-    deadline_by_mode = {
-        mode: now - timedelta(seconds=seconds)
-        for mode, seconds in settings.command_max_duration_by_mode().items()
-    }
     rows += _retire_commands(
         session,
         [
             *non_terminal,
             Command.scan_id.is_not(None),
             func.coalesce(Command.delivered_at, Command.created_at)
-            < case(deadline_by_mode, value=Command.scan_mode),
+            < _mode_deadline(now),
         ],
         values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
     )
@@ -349,24 +352,49 @@ def sweep_stale_commands(
 
 def _mirror_retired_commands(session: Session, rows: list, *, now: datetime) -> None:
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
-        if scan_id is not None:
-            scan_where = [ScanRecord.scan_id == scan_id]
-            if command_status == "cancelled":
-                scan_where.append(ScanRecord.status != "completed")
-            session.execute(
-                update(ScanRecord)
-                .where(*scan_where)
-                .values(status=scan_status_for(command_status))
-            )
-            if command_status in {"failed", "cancelled"}:
-                append_scan_activity(
-                    session,
-                    org_id=command_org_id,
-                    scan_id=scan_id,
-                    kind=f"scan_{command_status}",
-                    scan_mode=command_scan_mode,
-                    occurred_at=now,
-                )
+        _mirror_command_on_scan(
+            session,
+            scan_id=scan_id,
+            org_id=command_org_id,
+            scan_mode=command_scan_mode,
+            command_status=command_status,
+            now=now,
+        )
+
+
+def _mirror_command_on_scan(
+    session: Session,
+    *,
+    scan_id: UUID | None,
+    org_id: UUID,
+    scan_mode: str,
+    command_status: str,
+    now: datetime,
+) -> None:
+    """Copy a command transition onto its scan while the scan is unfinished.
+
+    A scan ingest already completed keeps its status, so a late `failed` or
+    `cancelled` never hides results.
+    """
+    if scan_id is None:
+        return
+    mirrored = session.execute(
+        update(ScanRecord)
+        .where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.status.in_(UNFINISHED_SCAN),
+        )
+        .values(status=scan_status_for(command_status))
+    ).rowcount
+    if mirrored and command_status in {"failed", "cancelled"}:
+        append_scan_activity(
+            session,
+            org_id=org_id,
+            scan_id=scan_id,
+            kind=f"scan_{command_status}",
+            scan_mode=scan_mode,
+            occurred_at=now,
+        )
 
 
 def _retire_commands(session: Session, where: list, *, values: dict) -> list:

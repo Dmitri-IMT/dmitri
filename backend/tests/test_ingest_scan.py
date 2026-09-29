@@ -739,8 +739,21 @@ def test_user_cancel_partial_upload_completes_scan_and_cancels_command(
     )
 
 
-def test_late_partial_ingest_on_cancelled_command_completes_and_frees_device(
-    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+# A Pi cancelled while offline may still finish normally before it hears the
+# cancel: that upload is a finished scan, not a stopped one.
+@pytest.mark.parametrize(
+    ("metadata", "activity_kind"),
+    [
+        ({"terminated_by": "user_cancel"}, "scan_cancelled"),
+        ({"terminated_by": "completed"}, "scan_finished"),
+    ],
+)
+def test_late_ingest_on_cancelled_command_completes_and_frees_device(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+    metadata: dict[str, str],
+    activity_kind: str,
 ) -> None:
     scan_id = uuid4()
     now = datetime.now(timezone.utc)
@@ -763,7 +776,7 @@ def test_late_partial_ingest_on_cancelled_command_completes_and_frees_device(
     record = ingest_scan(
         runtime_session,
         _scan_with_findable_payload(scan_id).model_copy(
-            update={"metadata": {"terminated_by": "user_cancel"}}
+            update={"metadata": metadata}
         ),
         identity=AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id),
         now=now,
@@ -776,10 +789,8 @@ def test_late_partial_ingest_on_cancelled_command_completes_and_frees_device(
         commands_module.active_command_for(runtime_session, provisioned_agent.id)
         is None
     )
-    cancelled = _activity_rows(runtime_session, seeded_org.id, "scan_cancelled")
-    assert len(cancelled) == 1
-    assert cancelled[0].subject_id == scan_id
-    assert _activity_rows(runtime_session, seeded_org.id, "scan_finished") == []
+    activity = _activity_rows(runtime_session, seeded_org.id, activity_kind)
+    assert [row.subject_id for row in activity] == [scan_id]
 
 
 def test_normal_finish_writes_scan_finished_and_marks_command_done(

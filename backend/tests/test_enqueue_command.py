@@ -347,20 +347,27 @@ def test_offline_cancel_retires_scan_and_frees_agent(
     assert active is None
 
 
-def test_uploading_command_cannot_be_cancelled(
+# `queued` has no scan_id yet, so retiring it would break the commands CHECK.
+@pytest.mark.parametrize("status", ["queued", "uploading"])
+def test_command_outside_cancellable_states_cannot_be_cancelled(
     client: TestClient,
     administrative_session: Session,
     provisioned_agent: Agent,
     seeded_org: Org,
     bearer_headers,
+    status: str,
 ) -> None:
-    scan = _seed_scan(administrative_session, seeded_org.id)
+    scan_id = (
+        None
+        if status == "queued"
+        else _seed_scan(administrative_session, seeded_org.id).scan_id
+    )
     command = _seed_command(
         administrative_session,
         org_id=seeded_org.id,
         agent_id=provisioned_agent.id,
-        status="uploading",
-        scan_id=scan.scan_id,
+        status=status,
+        scan_id=scan_id,
     )
 
     response = client.post(

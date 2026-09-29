@@ -97,7 +97,7 @@ def test_cancel_catch_up_query_filters_agent_scan_state_and_duration(
         )
     administrative_session.commit()
 
-    command_ids = commands.cancelled_command_ids_for_agent(
+    command_ids = commands.pending_operator_cancels(
         administrative_session, agent_id=provisioned_agent.id, now=T0
     )
 
