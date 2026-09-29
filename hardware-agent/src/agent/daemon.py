@@ -36,25 +36,26 @@ class CommandRecord:
 
 
 class _ScanStop:
-    """Stops one command's scan from the event loop, before or after it binds."""
+    """Stops one command's scan from the event loop, before or after it binds.
+
+    Park (DMI-178) and an operator cancel are separate flags: a parked Pi stays
+    silent, a cancelled scan still uploads its partial result. A cancel that
+    lands after the runner finished is ignored, so the command ends `done`.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cancel: Callable[[], None] | None = None
-        self._reason: Literal["cancel", "park"] | None = None
         self._finished = False
-
-    @property
-    def reason(self) -> Literal["cancel", "park"] | None:
-        with self._lock:
-            return self._reason
+        self.cancelled = False
+        self.parked = False
 
     def bind(self, cancel: Callable[[], None]) -> None:
         with self._lock:
             if self._finished:
                 return
             self._cancel = cancel
-            requested = self._reason is not None
+            requested = self.cancelled or self.parked
         if requested:
             cancel()
 
@@ -63,11 +64,19 @@ class _ScanStop:
             self._finished = True
             self._cancel = None
 
-    def request(self, reason: Literal["cancel", "park"]) -> None:
+    def request_cancel(self) -> None:
         with self._lock:
-            if reason == "park" or (not self._finished and self._reason is None):
-                self._reason = reason
-            cancel = self._cancel if not self._finished else None
+            if self._finished:
+                return
+            self.cancelled = True
+            cancel = self._cancel
+        if cancel is not None:
+            cancel()
+
+    def request_park(self) -> None:
+        with self._lock:
+            self.parked = True
+            cancel = self._cancel
         if cancel is not None:
             cancel()
 
@@ -109,7 +118,7 @@ class AgentDaemon:
         task, self._task = self._task, None
         try:
             if task is not None and not task.done():
-                self._stop.request("park")
+                self._stop.request_park()
                 await task
         finally:
             self._release_hold()
@@ -151,7 +160,7 @@ class AgentDaemon:
         if record is None or record.status == "uploading":
             return
         if command_id == self._active and record.status == "running":
-            self._stop.request("cancel")
+            self._stop.request_cancel()
             return
         await self._send(command_id, record)
 
@@ -190,30 +199,28 @@ class AgentDaemon:
         except InvalidScanInput:
             await self._update(command.command_id, "failed", "invalid_command")
             return
-        stop_reason = stop.reason
-        if stop_reason == "park":
+        if stop.parked:
             return
         if result.payload is None:
-            await self._update(
-                command.command_id,
-                "cancelled" if stop_reason == "cancel" else "failed",
-                None if stop_reason == "cancel" else "scan_failed",
-            )
+            if stop.cancelled:
+                await self._update(command.command_id, "cancelled")
+            else:
+                await self._update(command.command_id, "failed", "scan_failed")
             return
-        cancelled_result = (
-            (result.payload.metadata or {}).get("terminated_by") == "user_cancel"
-        )
-        if result.result_path is None and not cancelled_result:
+        if result.result_path is None:
             await self._update(command.command_id, "failed", "result_unavailable")
             return
-        if result.outcome == "fatal" and not cancelled_result:
+        if result.outcome == "fatal":
             await self._update(command.command_id, "failed", "scan_failed")
             return
+        uploaded_status: CommandStatus = "cancelled" if stop.cancelled else "done"
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
         )
-        if stop.reason == "park":
+        # Park stays silent even after a cancel: an accepted upload already moved
+        # the command to its terminal status on the backend.
+        if stop.parked:
             return
         if submission.outcome == "accepted":
             LOGGER.info(
@@ -222,9 +229,7 @@ class AgentDaemon:
                 command.scan_id,
                 submission.status_code,
             )
-            await self._update(
-                command.command_id, "cancelled" if cancelled_result else "done"
-            )
+            await self._update(command.command_id, uploaded_status)
             return
         LOGGER.error(
             "scan upload failed: command=%s scan=%s outcome=%s status=%s attempts=%s",

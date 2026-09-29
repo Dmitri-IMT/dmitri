@@ -307,9 +307,7 @@ class TestFrameOrder:
 
         await dispatch(daemon, subject)
 
-        assert scan.calls == [
-            ("nspi", "192.168.1.0/24", "read_only_mapping")
-        ]
+        assert scan.calls == [("nspi", "192.168.1.0/24", "read_only_mapping")]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -373,9 +371,7 @@ class TestRemoteCancel:
     async def test_running_cancel_uploads_partial_and_allows_next_command(self) -> None:
         gate = threading.Event()
         partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
-        scan = FakeScan(
-            scan_result("partial", partial, result_path=None), scan_result(), gate=gate
-        )
+        scan = FakeScan(scan_result("partial", partial), scan_result(), gate=gate)
         active, later = command(), command()
 
         async def wait_until_started() -> None:
@@ -436,7 +432,7 @@ class TestRemoteCancel:
         gate = threading.Event()
         partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
         daemon, client, scan, ingest = build(
-            scan=FakeScan(scan_result("partial", partial, result_path=None), gate=gate),
+            scan=FakeScan(scan_result("partial", partial), gate=gate),
             ingest=FakeIngest("unavailable"),
         )
         subject = command()
