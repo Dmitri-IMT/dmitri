@@ -25,6 +25,7 @@ _SCAN_VERB = {
     "scan_started": "started",
     "scan_finished": "finished",
     "scan_failed": "didn't finish",
+    "scan_cancelled": "was stopped",
 }
 
 

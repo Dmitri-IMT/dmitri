@@ -47,27 +47,28 @@ def _rows(session: Session, org_id: UUID, kind: str) -> list[ActivityRecord]:
     )
 
 
+@pytest.mark.parametrize("kind", ["scan_started", "scan_cancelled"])
 def test_duplicate_append_on_guarded_kind_is_a_silent_no_op(
-    administrative_session: Session, seeded_org: Org
+    administrative_session: Session, seeded_org: Org, kind: str
 ) -> None:
     subject = uuid4()
     _append(
         administrative_session,
         seeded_org.id,
-        kind="scan_started",
+        kind=kind,
         subject_id=subject,
         payload={"scan_mode": "quick"},
     )
     _append(
         administrative_session,
         seeded_org.id,
-        kind="scan_started",
+        kind=kind,
         subject_id=subject,
         payload={"scan_mode": "quick"},
     )
     administrative_session.commit()
 
-    assert len(_rows(administrative_session, seeded_org.id, "scan_started")) == 1
+    assert len(_rows(administrative_session, seeded_org.id, kind)) == 1
 
 
 @pytest.mark.parametrize(
@@ -117,6 +118,12 @@ MATRIX = [
         {"scan_mode": "nspi"},
         "NSPi scan didn't finish",
         "NSPi scan didn't finish",
+    ),
+    (
+        "scan_cancelled",
+        {"scan_mode": "standard"},
+        "Standard scan was stopped",
+        "Standard scan was stopped",
     ),
     (
         "machine_first_seen",

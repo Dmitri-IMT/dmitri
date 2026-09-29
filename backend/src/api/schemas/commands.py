@@ -16,6 +16,7 @@ CommandStatus = Literal[
     "uploading",
     "done",
     "failed",
+    "cancelled",
     "expired",
 ]
 

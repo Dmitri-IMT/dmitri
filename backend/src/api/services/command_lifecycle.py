@@ -11,13 +11,14 @@ RANK: dict[str, int] = {
     "uploading": 3,
     "done": 4,
     "failed": 4,
+    "cancelled": 4,
     "expired": 4,
 }
 
 # Statuses only a Pi may report over the command channel.
-PI_OWNED = frozenset({"running", "uploading", "done", "failed"})
+PI_OWNED = frozenset({"running", "uploading", "done", "failed", "cancelled"})
 
-TERMINAL = frozenset({"done", "failed", "expired"})
+TERMINAL = frozenset({"done", "failed", "cancelled", "expired"})
 
 # The "agent is busy" set, matching the partial-unique-index predicate in
 # alembic/versions/20260731_13_command_delivery.py.
@@ -30,6 +31,7 @@ _SCAN_STATUS_BY_COMMAND_STATUS: dict[str, str] = {
     "uploading": "processing",
     "done": "completed",
     "failed": "failed",
+    "cancelled": "cancelled",
     "expired": "failed",
 }
 
