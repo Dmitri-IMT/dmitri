@@ -207,12 +207,15 @@ class AgentDaemon:
             else:
                 await self._update(command.command_id, "failed", "scan_failed")
             return
-        if result.result_path is None:
-            await self._update(command.command_id, "failed", "result_unavailable")
-            return
-        if result.outcome == "fatal":
-            await self._update(command.command_id, "failed", "scan_failed")
-            return
+        # A stopped scan still uploads its partial payload when the local copy
+        # failed to write: ingest needs only the payload (spec 049, decision 2).
+        if not stop.cancelled:
+            if result.result_path is None:
+                await self._update(command.command_id, "failed", "result_unavailable")
+                return
+            if result.outcome == "fatal":
+                await self._update(command.command_id, "failed", "scan_failed")
+                return
         uploaded_status: CommandStatus = "cancelled" if stop.cancelled else "done"
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
