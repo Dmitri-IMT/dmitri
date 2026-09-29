@@ -1,9 +1,6 @@
 import type { RefObject } from 'react'
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { skipToken, useQuery } from '@tanstack/react-query'
-import { queryKeys } from '@/api/queryKeys'
-import { getScan } from '@/api/scans'
 import AdminOnly from '@/components/AdminOnly'
 import Timestamp from '@/components/Timestamp'
 import { Button } from '@/components/ui/button'
@@ -51,15 +48,8 @@ function CommandStatus({
     command?.status === 'failed' ||
     command?.status === 'expired' ||
     command?.status === 'cancelled'
-  const cancelledScanId =
-    command?.status === 'cancelled' ? command.scan_id : null
-  const cancelledScanQuery = useQuery({
-    queryKey: queryKeys.scans.detail(cancelledScanId ?? ''),
-    queryFn: cancelledScanId ? () => getScan(cancelledScanId) : skipToken,
-  })
   const cancelledWithResults =
-    command?.status === 'cancelled' &&
-    cancelledScanQuery.data?.status === 'completed'
+    command?.status === 'cancelled' && command.has_results
   const showScanLink = done || cancelledWithResults
 
   function confirmStop() {

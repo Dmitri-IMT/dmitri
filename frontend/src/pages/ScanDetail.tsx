@@ -9,7 +9,7 @@ import PageHeader from '@/components/PageHeader'
 import ReadDetailGate from '@/components/ReadDetailGate'
 import { Card, CardContent } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
-import { isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
+import { isUnfinished } from '@/lib/scanStatus'
 import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
@@ -124,7 +124,7 @@ function ScanDetail() {
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
             ) : scan.status === 'cancelled' ? (
-              <ScanStoppedNotice />
+              <ScanStoppedNotice variant="empty" />
             ) : isUnfinished(scan.status) ? (
               <ScanUnfinishedNotice
                 scan={scan}
@@ -135,20 +135,7 @@ function ScanDetail() {
               />
             ) : (
               <>
-                {stoppedEarly && (
-                  <div
-                    data-testid="scan-stopped-early"
-                    className="flex flex-col gap-1"
-                  >
-                    <p className="text-body-md font-medium">
-                      {scanStatusLabel(scan.status, 'user_cancel')}
-                    </p>
-                    <p className="text-body-md text-muted-foreground">
-                      This scan was stopped early. It shows what was found
-                      before the stop.
-                    </p>
-                  </div>
-                )}
+                {stoppedEarly && <ScanStoppedNotice variant="partial" />}
                 <ScanAIAnalysis
                   scanId={scan.scan_id}
                   findings={scan.findings}

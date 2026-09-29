@@ -1198,6 +1198,8 @@ export interface components {
             delivered_at?: string | null;
             started_at?: string | null;
             completed_at?: string | null;
+            /** @default false */
+            has_results: boolean;
         };
         AgentDetail: {
             /** Format: uuid */
