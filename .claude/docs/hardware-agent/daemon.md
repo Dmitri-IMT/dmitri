@@ -4,7 +4,7 @@ title: daemon — the unattended command executor
 description: The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio, cancel]
-timestamp: 2026-09-29T00:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # daemon — the unattended command executor
@@ -37,7 +37,8 @@ payload then reports `cancelled`; park/revoke stays silent (no upload, no status
 | `.handle_cancel(command_id)` | The `on_cancel` callback. Active and `running` → `self._stop.request_cancel()`. In ledger (not uploading) → re-send the record. Unknown or `uploading` → no-op. | `daemon.py:149` |
 | `.replay_pending()` | The `on_connected` seam — resends pending status after hello, before any new command is acted on. | `daemon.py:158` |
 | `._execute(command)` | Owns the scan task; converts any exception to `failed` and clears `_active` in `finally` via `_release_hold` on terminal send. | `daemon.py:163` |
-| `._run_command(command)` | The state machine below. | `daemon.py:170` |
+| `._run_command(command)` | The state machine below. After the runner returns: silent return on park, else `_scan_outcome` picks the status once, and only `done`/`cancelled` with a payload upload. | `daemon.py` |
+| `_scan_outcome(result, *, cancelled)` | Pure map from a finished scan to `(status, error_code)`: `cancelled` whenever stopped; otherwise `failed/scan_failed` (no payload), `failed/result_unavailable`, `failed/scan_failed` (fatal), or `done`. | `daemon.py` |
 | `._send` / `._update` | Persist and deliver status; release the scan lock when a terminal `done` / `failed` / `cancelled` frame is accepted. | `daemon.py:241`, `:248` |
 | `run_daemon()` | Configures INFO logging to stdout, loads `load_ingest_config()` once, constructs both clients, and runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:271` |
 
@@ -76,8 +77,8 @@ the typed ingest outcome, status, and attempt count (`daemon.py:229-236`). The u
 message is deliberately excluded because it may echo credentials; private keys and bearer tokens
 must never enter the daemon log.
 
-The gate order in `_run_command` is payload → result path → fatal, not fatal first — except when
-`stop.cancelled`: a stopped scan skips the missing-path and fatal refusals, so a partial payload
+The gate order in `_scan_outcome` is payload → result path → fatal, not fatal first — except when
+the scan was cancelled: a stopped scan skips the missing-path and fatal refusals, so a partial payload
 still uploads when its local copy failed to write (ingest needs only the payload; spec 049
 decision 2). That is load-bearing: `run_headless_scan` only ever returns a `None` result
 path together with a `fatal` outcome on non-cancel failures, so checking `fatal` first would make

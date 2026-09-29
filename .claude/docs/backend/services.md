@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents, cancel]
-timestamp: 2026-09-29T00:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -43,7 +43,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 |------|--------------|-----|
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError` **except** `cancelled` (DMI-145 late partial), else fill it. | `backend/src/api/services/persistence.py` |
-| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan; always writes scan `completed` itself (ingest owns the completed scan). `metadata.terminated_by == TERMINATED_BY_USER_CANCEL` alone decides `scan_cancelled` vs `scan_finished` activity and `cancelled` vs `done` for a live command; an already-`cancelled` command stays as it is, so a normal finish after an offline cancel still reads as finished. | `backend/src/api/services/persistence.py` |
+| `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan; always writes scan `completed` itself (ingest owns the completed scan). `metadata.terminated_by == TERMINATED_BY_USER_CANCEL` alone decides `scan_cancelled` vs `scan_finished` activity and `cancelled` vs `done` for a live command; an already-`cancelled` command stays as it is, so a normal finish after an offline cancel still reads as finished. The close lives in `_close_scan`, which reads the command status `FOR UPDATE`, so an operator cancel that lands mid-ingest keeps the results instead of rolling them back. | `backend/src/api/services/persistence.py` |
 | `persist_industrial_services()` | Load existing services and units for the scan host once, upsert in memory, flush after services then after units. | `backend/src/api/services/industrial.py:42` |
 | `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
 | `finding_dedupe_key()` | `ip|protocol|port|unit_id or na|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |
@@ -200,7 +200,8 @@ ML/AI scoring is future work.
   foreign agent submitting a known `scan_id` gets a `ScanOwnershipError`, not a silent no-op. A
   repeated *owned* submission still writes nothing new.
 - **Ingest is one transaction with one commit.** Every write inside `persist_scan` is `flush()`ed,
-  never committed, until a single commit point: `session.commit()` for an unrequested scan, or
+  never committed, until a single commit point: `session.commit()` for an unrequested scan or a
+  `cancelled` command (re-read under a row lock in `_close_scan`), or
   `apply_status(...)` (which commits on success and rolls back on a zero-rowcount race) when filling
   a placeholder. Adding a `commit()` anywhere in that call tree breaks the all-or-nothing guarantee
   that `test_ingest_scan.py`'s two rollback tests exist to protect.

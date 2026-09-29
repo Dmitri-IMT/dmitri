@@ -5,6 +5,12 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-29
 
+* **Update**: PR #160 third review (DMI-145). Backend: `persist_scan` closes through `_close_scan`,
+  which reads the command status `FOR UPDATE`, so a cancel that lands mid-ingest keeps the results.
+  Pi: `_scan_outcome` maps a finished scan to one status before upload. Frontend: `useScanCommand`
+  keeps one `cancelIntentId`; the race toast moved into the sweep effect. Touched:
+  `backend/services.md`, `hardware-agent/daemon.md`, `frontend/devices-screen.md`.
+
 * **Update**: PR #160 second review (DMI-145). `terminated_by` is now the typed `TerminatedBy`
   (`completed`/`user_cancel`/`timeout`/`error`) read by `api/core/scan_read.scan_terminated_by`, on
   both `ScanSummary` and `ScanDetailResponse`; AI context maps from the same reader; Scan detail and
