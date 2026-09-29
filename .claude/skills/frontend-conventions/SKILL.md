@@ -59,6 +59,9 @@ Depth, with primary sources for every claim:
   its opacity, pointer events, and tab-order treatment must be specified.
 - **No control that navigates nowhere** — no `href`, `Link` or handler pointing at an unrouted
   path. If the destination is out of scope, the control is out of scope.
+- **Errors go to a toast.** When an action or request fails, call `useToast().show(message)`
+  (`src/hooks/useToast.ts`). Do not render static error text or an error section in the page,
+  unless the spec asks for an inline error.
 - **Roles come from the server** (`GET /users/me`), never decoded from a token. No `jwt-decode`
   or equivalent.
 - Accessible names on every interactive element; a real `<label htmlFor>` on every input; the
