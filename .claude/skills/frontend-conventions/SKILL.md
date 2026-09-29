@@ -34,7 +34,6 @@ Depth, with primary sources for every claim:
 | `enum` | `erasableSyntaxOnly` is on; enums emit runtime code | `as const` object + union |
 | `import { act } from 'react-dom/test-utils'` | `react-dom/test-utils` was removed in React 19 | `import { act } from 'react'` |
 | a `placeholder` as the only label | fails WCAG 3.3.2 and vanishes on input | `<label htmlFor>` |
-| a conditionally-mounted error region | a live region must pre-exist in the DOM to be announced | always render it, empty when clean |
 
 ## Data and types
 
@@ -59,6 +58,8 @@ Depth, with primary sources for every claim:
   its opacity, pointer events, and tab-order treatment must be specified.
 - **No control that navigates nowhere** — no `href`, `Link` or handler pointing at an unrouted
   path. If the destination is out of scope, the control is out of scope.
+- **Errors go to a toast.** When an action or request fails, call `useToast().show(message)`
+  (`src/hooks/useToast.ts`). Never render error text or an error section in the page.
 - **Roles come from the server** (`GET /users/me`), never decoded from a token. No `jwt-decode`
   or equivalent.
 - Accessible names on every interactive element; a real `<label htmlFor>` on every input; the

@@ -113,6 +113,35 @@ def test_mac_absent_scan_host_resolves_by_ip(
     assert hosts[0].last_seen_at == timestamp_b
 
 
+def test_unknown_vendor_does_not_replace_known_vendor_for_same_mac(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    timestamp_a = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    timestamp_b = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    ip = "192.168.1.25"
+    mac = "00:00:00:00:00:01"
+    _persist(
+        runtime_session,
+        _scan(uuid4(), timestamp_a, [_host(ip, mac, vendor="Known vendor")]),
+        seeded_org,
+        provisioned_agent,
+    )
+    _persist(
+        runtime_session,
+        _scan(uuid4(), timestamp_b, [_host(ip, mac, vendor="unknown")]),
+        seeded_org,
+        provisioned_agent,
+    )
+
+    host = runtime_session.exec(
+        select(HostRecord).where(
+            HostRecord.org_id == seeded_org.id, HostRecord.mac == mac
+        )
+    ).one()
+    assert host.last_seen_at == timestamp_b
+    assert host.vendor == "Known vendor"
+
+
 def test_host_only_in_latest_scan_has_first_seen_equal_latest(
     runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:

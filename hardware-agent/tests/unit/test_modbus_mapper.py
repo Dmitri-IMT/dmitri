@@ -14,7 +14,7 @@ from agent.ot.modbus.models import (
     ModbusUnit,
 )
 from agent.ot.policy import MappingProfile, OtAutomationPolicy
-from agent.scanner.models import HostInfo
+from agent.scanner.models import HostInfo, MacIdentity
 
 
 class _Session:
@@ -74,7 +74,9 @@ def test_unconfigured_policy_resolves_four_range_generic_baseline() -> None:
 
 def test_site_profile_wins_over_vendor_profile_and_reuses_discovered_units() -> None:
     host = HostInfo(
-        ip="192.168.10.30", hostname="plc", mac="00:11:22:33:44:55"
+        ip="192.168.10.30",
+        hostname="plc",
+        identity=MacIdentity(mac="00:11:22:33:44:55"),
     )
     vendor = MappingProfile(
         name="vendor",
