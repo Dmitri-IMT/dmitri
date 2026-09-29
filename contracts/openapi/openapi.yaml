@@ -2751,6 +2751,13 @@ components:
         - completed
         - failed
         - cancelled
+    TerminatedBy:
+      type: string
+      enum:
+        - completed
+        - user_cancel
+        - timeout
+        - error
     ScanMode:
       type: string
       enum:
@@ -3704,7 +3711,7 @@ components:
             - type: 'null'
         terminated_by:
           anyOf:
-            - type: string
+            - $ref: '#/components/schemas/TerminatedBy'
             - type: 'null'
     ScanDetailResponse:
       type: object
@@ -3793,6 +3800,10 @@ components:
           anyOf:
             - type: integer
               minimum: 0
+            - type: 'null'
+        terminated_by:
+          anyOf:
+            - $ref: '#/components/schemas/TerminatedBy'
             - type: 'null'
     ScanListResponse:
       type: object

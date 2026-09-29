@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from sqlmodel import Session, func, select
 
-from api.core.scan_read import scan_duration_seconds
+from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import Severity
 from api.models.persistence import (
     EpssRecord,
@@ -248,7 +248,7 @@ def build_scan_ai_context(
             TERMINATED_BY_USER_CANCEL: "operator",
             "timeout": "timeout",
             "error": "error",
-        }.get(metadata.get("terminated_by")),
+        }.get(scan_terminated_by(scan.metadata_json)),
         host_count=host_count,
         total_findings=risk.total_findings,
         scored_findings=risk.scored_findings,

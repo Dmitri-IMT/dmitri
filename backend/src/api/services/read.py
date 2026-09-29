@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
 from api.core.error_codes import scan_error_code
-from api.core.scan_read import scan_duration_seconds
+from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
@@ -284,6 +284,7 @@ def get_scan_detail(
         agent_id=scan.agent_id,
         box_name=agent.display_name if agent is not None else None,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
+        terminated_by=scan_terminated_by(scan.metadata_json),
     )
 
 
@@ -513,8 +514,6 @@ def _to_scan_summary(
     highest_severity: str | None,
     box_name: str | None,
 ) -> ScanSummary:
-    raw_terminated = (scan.metadata_json or {}).get("terminated_by")
-    terminated_by = raw_terminated if isinstance(raw_terminated, str) else None
     return ScanSummary(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -527,7 +526,7 @@ def _to_scan_summary(
         agent_id=scan.agent_id,
         box_name=box_name,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
-        terminated_by=terminated_by,
+        terminated_by=scan_terminated_by(scan.metadata_json),
     )
 
 

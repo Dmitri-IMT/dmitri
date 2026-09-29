@@ -198,9 +198,9 @@ def test_scan_summary_highest_severity_optional():
 
 @pytest.mark.parametrize(
     "terminated_by",
-    ["user_cancel", "timeout", "error", None],
+    ["completed", "user_cancel", "timeout", "error", None],
 )
-def test_scan_summary_terminated_by_accepts_strings(terminated_by):
+def test_scan_summary_terminated_by_accepts_runner_values(terminated_by):
     summary = ScanSummary.model_validate(
         _scan_summary_payload(terminated_by=terminated_by)
     )

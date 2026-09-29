@@ -743,6 +743,11 @@ def test_list_scans_terminated_by_from_metadata(
     assert by_id[missing.scan_id].terminated_by is None
     assert by_id[null_metadata.scan_id].terminated_by is None
     assert by_id[bad_type.scan_id].terminated_by is None
+    detail = read.get_scan_detail(
+        administrative_session, user_cancel.scan_id, org_id=org.id
+    )
+    assert detail is not None
+    assert detail.terminated_by == "user_cancel"
 
 
 def test_get_scan_detail_includes_box_and_duration(
