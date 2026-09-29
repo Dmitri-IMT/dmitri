@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -42,6 +43,65 @@ def _seed_queued_command(
     session.commit()
     session.refresh(command)
     return command
+
+
+def test_cancel_catch_up_query_filters_agent_scan_state_and_duration(
+    administrative_session: Session, provisioned_agent, seeded_org, monkeypatch
+):
+    other_agent = Agent(
+        org_id=seeded_org.id,
+        display_name="Other agent",
+        public_key=uuid4().bytes + uuid4().bytes,
+    )
+    administrative_session.add(other_agent)
+    administrative_session.flush()
+    monkeypatch.setattr(
+        commands,
+        "get_settings",
+        lambda: SimpleNamespace(
+            command_max_duration_by_mode=lambda: {"standard": 3600}
+        ),
+    )
+
+    eligible_id = uuid4()
+    cases = [
+        (provisioned_agent.id, "cancelled", T0 - timedelta(seconds=30), eligible_id),
+        (other_agent.id, "cancelled", T0 - timedelta(seconds=30), uuid4()),
+        (provisioned_agent.id, "completed", T0 - timedelta(seconds=30), uuid4()),
+        (provisioned_agent.id, "cancelled", T0 - timedelta(hours=2), uuid4()),
+    ]
+    for agent_id, scan_status, delivered_at, command_id in cases:
+        scan = ScanRecord(
+            scan_id=uuid4(),
+            org_id=seeded_org.id,
+            agent_id=agent_id,
+            timestamp=T0,
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            status=scan_status,
+        )
+        administrative_session.add(scan)
+        administrative_session.flush()
+        administrative_session.add(
+            Command(
+                id=command_id,
+                org_id=seeded_org.id,
+                agent_id=agent_id,
+                scan_id=scan.scan_id,
+                scan_mode="standard",
+                subnet="192.168.1.0/24",
+                status="cancelled",
+                created_at=delivered_at,
+                delivered_at=delivered_at,
+            )
+        )
+    administrative_session.commit()
+
+    command_ids = commands.cancelled_command_ids_for_agent(
+        administrative_session, agent_id=provisioned_agent.id, now=T0
+    )
+
+    assert command_ids == [eligible_id]
 
 
 def test_deliver_success_sets_delivered_at_and_stub_scan(

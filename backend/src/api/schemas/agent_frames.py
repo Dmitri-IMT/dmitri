@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, constr
 from api.schemas.commands import NspiOptions
 from api.schemas.scan import ScanMode, SubnetCIDR
 
-AgentStatus = Literal["running", "uploading", "done", "failed"]
+AgentStatus = Literal["running", "uploading", "done", "failed", "cancelled"]
 
 
 class AvailableSubnet(BaseModel):
@@ -45,6 +45,13 @@ class AgentCommandFrame(BaseModel):
     scan_mode: ScanMode
     subnet: SubnetCIDR
     nspi_options: NspiOptions | None = None
+
+
+class AgentCancelFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["cancel"]
+    command_id: UUID
 
 
 class AgentErrorFrame(BaseModel):

@@ -13,15 +13,19 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from api.models.command import Command
 from api.models.persistence import utc_now
-from api.schemas.agent_frames import AgentErrorFrame, AgentHelloFrame, AgentStatusFrame
+from api.schemas.agent_frames import (
+    AgentCancelFrame,
+    AgentErrorFrame,
+    AgentHelloFrame,
+    AgentStatusFrame,
+)
 from api.services import agent_connections
 from api.services.agent_presence import (
     SessionFactory,
     async_agent_is_revoked,
-    async_touch_unless_revoked,
     touch_unless_revoked,
 )
-from api.services.commands import apply_status
+from api.services.commands import apply_status, cancelled_command_ids_for_agent
 
 
 async def send_error(websocket: WebSocket, message: str) -> None:
@@ -139,7 +143,23 @@ async def handle_agent_frame(
     if isinstance(parsed, _Hello):
         # Gate before set_hello: a revoked device must not refresh the subnets
         # the registry feeds to AgentDetail and the trigger-time subnet check.
-        gate = await async_touch_unless_revoked(session_factory, agent_id, now)
+        # Catch-up shares this session so hello stays one open/close pair.
+        def sync_hello() -> tuple[Literal["ok", "revoked"], list[UUID]]:
+            session = session_factory()
+            try:
+                gate = touch_unless_revoked(session, agent_id, now)
+                if gate == "revoked":
+                    return "revoked", []
+                return (
+                    "ok",
+                    cancelled_command_ids_for_agent(
+                        session, agent_id=agent_id, now=now
+                    ),
+                )
+            finally:
+                session.close()
+
+        gate, command_ids = await run_in_threadpool(sync_hello)
         if gate == "revoked":
             await agent_connections.close_revoked(websocket)
             return
@@ -150,6 +170,11 @@ async def handle_agent_frame(
             available_subnets=parsed.frame.available_subnets,
             now=now,
         )
+        for command_id in command_ids:
+            if agent_connections.get_socket(agent_id) is not websocket:
+                return
+            frame = AgentCancelFrame(type="cancel", command_id=command_id)
+            await websocket.send_text(frame.model_dump_json())
         return
 
     outcome = await _apply_status_frame(

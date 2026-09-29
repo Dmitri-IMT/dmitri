@@ -8,10 +8,11 @@ from uuid import uuid4
 import pytest
 from api.db.session import get_session
 from api.main import app
+from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
-from api.schemas.agent_frames import AvailableSubnet
+from api.schemas.agent_frames import AgentCancelFrame, AvailableSubnet
 from api.services import agent_connections, commands
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -37,6 +38,10 @@ def client(administrative_session: Session) -> TestClient:
 
 def _commands_path(agent_id) -> str:
     return f"/api/v1/agents/{agent_id}/commands"
+
+
+def _cancel_path(command_id) -> str:
+    return f"/api/v1/commands/{command_id}/cancel"
 
 
 def _seed_command(
@@ -220,6 +225,183 @@ def test_cross_org_agent_returns_403(
     )
 
     assert response.status_code == 403
+
+
+def test_viewer_cannot_cancel_command(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "viewer"),
+    )
+
+    assert response.status_code == 403
+
+
+def test_other_org_command_is_not_found_for_cancel(
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    other_agent = _seed_other_org_agent(administrative_session)
+    scan = _seed_scan(administrative_session, other_agent.org_id)
+    command = _seed_command(
+        administrative_session,
+        org_id=other_agent.org_id,
+        agent_id=other_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 404
+
+
+def test_online_cancel_returns_202_and_sends_one_frame(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+    ws = AsyncMock()
+
+    async def register() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+
+    asyncio.run(register())
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "running"
+    assert ws.send_text.await_count == 1
+    frame = AgentCancelFrame.model_validate_json(ws.send_text.await_args.args[0])
+    assert frame.command_id == command.id
+
+
+def test_offline_cancel_retires_scan_and_frees_agent(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == "cancelled"
+    assert scan.status == "cancelled"
+    activities = administrative_session.exec(
+        select(ActivityRecord).where(
+            ActivityRecord.org_id == seeded_org.id,
+            ActivityRecord.subject_id == scan.scan_id,
+        )
+    ).all()
+    assert [activity.kind for activity in activities] == ["scan_cancelled"]
+    active = commands.active_command_for(administrative_session, provisioned_agent.id)
+    assert active is None
+
+
+def test_uploading_command_cannot_be_cancelled(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="uploading",
+        scan_id=scan.scan_id,
+    )
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "command_not_cancellable"
+
+
+def test_terminal_cancel_is_idempotent_and_sends_no_frame(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="cancelled",
+        scan_id=scan.scan_id,
+    )
+    ws = AsyncMock()
+
+    async def register() -> None:
+        await agent_connections.register(provisioned_agent.id, ws, now=T0)
+
+    asyncio.run(register())
+
+    response = client.post(
+        _cancel_path(command.id),
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    ws.send_text.assert_not_awaited()
 
 
 def test_device_busy_from_active_command(

@@ -13,7 +13,7 @@ from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
-from api.schemas.agent_frames import AgentCommandFrame
+from api.schemas.agent_frames import AgentCancelFrame, AgentCommandFrame
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
 from api.services.activity import append_scan_activity
@@ -42,6 +42,10 @@ class AgentNotFoundError(Exception):
 
 
 class SubnetNotReportedError(Exception):
+    pass
+
+
+class CommandNotCancellableError(Exception):
     pass
 
 
@@ -84,6 +88,32 @@ def get_command_detail(
     ).first()
     if command is None:
         return None
+    return _command_detail(command)
+
+
+def cancelled_command_ids_for_agent(
+    session: Session, *, agent_id: UUID, now: datetime
+) -> list[UUID]:
+    deadline_by_mode = {
+        mode: now - timedelta(seconds=seconds)
+        for mode, seconds in get_settings().command_max_duration_by_mode().items()
+    }
+    return list(
+        session.exec(
+            select(Command.id)
+            .join(ScanRecord, ScanRecord.scan_id == Command.scan_id)
+            .where(
+                Command.agent_id == agent_id,
+                Command.status == "cancelled",
+                ScanRecord.status == "cancelled",
+                func.coalesce(Command.delivered_at, Command.created_at)
+                >= case(deadline_by_mode, value=Command.scan_mode),
+            )
+        ).all()
+    )
+
+
+def _command_detail(command: Command) -> CommandDetail:
     return CommandDetail(
         command_id=command.id,
         scan_id=command.scan_id,
@@ -97,6 +127,87 @@ def get_command_detail(
         delivered_at=command.delivered_at,
         started_at=command.started_at,
         completed_at=command.completed_at,
+    )
+
+
+def _inspect_command_for_cancel(
+    session: Session, *, command_id: UUID, org_id: UUID
+) -> CommandDetail | None:
+    command = session.exec(
+        select(Command).where(Command.id == command_id, Command.org_id == org_id)
+    ).first()
+    detail = _command_detail(command) if command is not None else None
+    session.rollback()
+    return detail
+
+
+def _retire_offline_command(
+    session: Session,
+    *,
+    command_id: UUID,
+    org_id: UUID,
+    now: datetime,
+) -> tuple[CommandDetail, int] | None:
+    cancellable = tuple(status for status in NON_TERMINAL if status != "uploading")
+    rows = _retire_commands(
+        session,
+        [
+            Command.id == command_id,
+            Command.org_id == org_id,
+            Command.status.in_(cancellable),
+        ],
+        values={"status": "cancelled", "completed_at": now, "error_code": None},
+    )
+    if rows:
+        _mirror_retired_commands(session, rows, now=now)
+        session.commit()
+    else:
+        session.rollback()
+
+    detail = get_command_detail(session, command_id, org_id=org_id)
+    if detail is None:
+        return None
+    if detail.status == "uploading":
+        raise CommandNotCancellableError
+    return detail, 200
+
+
+async def cancel_command(
+    session: Session,
+    *,
+    org_id: UUID,
+    command_id: UUID,
+    now: datetime,
+) -> tuple[CommandDetail, int] | None:
+    detail = await run_in_threadpool(
+        _inspect_command_for_cancel,
+        session,
+        command_id=command_id,
+        org_id=org_id,
+    )
+    if detail is None:
+        return None
+    if is_terminal(detail.status):
+        return detail, 200
+    if detail.status == "uploading":
+        raise CommandNotCancellableError
+
+    socket = agent_connections.get_socket(detail.agent_id)
+    if socket is not None:
+        frame = AgentCancelFrame(type="cancel", command_id=command_id)
+        try:
+            await socket.send_text(frame.model_dump_json())
+        except Exception:
+            logger.exception("Failed to send cancel for command %s", command_id)
+        else:
+            return detail, 202
+
+    return await run_in_threadpool(
+        _retire_offline_command,
+        session,
+        command_id=command_id,
+        org_id=org_id,
+        now=now,
     )
 
 
@@ -156,17 +267,16 @@ def apply_status(
 
     scan_id, org_id, scan_mode = row[0], row[1], row[2]
     if scan_id is not None:
-        session.execute(
-            update(ScanRecord)
-            .where(ScanRecord.scan_id == scan_id)
-            .values(status=scan_status_for(status))
-        )
-        if status == "failed":
+        scan_update = update(ScanRecord).where(ScanRecord.scan_id == scan_id)
+        if status == "cancelled":
+            scan_update = scan_update.where(ScanRecord.status != "completed")
+        session.execute(scan_update.values(status=scan_status_for(status)))
+        if status in {"failed", "cancelled"}:
             append_scan_activity(
                 session,
                 org_id=org_id,
                 scan_id=scan_id,
-                kind="scan_failed",
+                kind=f"scan_{status}",
                 scan_mode=scan_mode,
                 occurred_at=now,
             )
@@ -240,17 +350,20 @@ def sweep_stale_commands(
 def _mirror_retired_commands(session: Session, rows: list, *, now: datetime) -> None:
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
         if scan_id is not None:
+            scan_where = [ScanRecord.scan_id == scan_id]
+            if command_status == "cancelled":
+                scan_where.append(ScanRecord.status != "completed")
             session.execute(
                 update(ScanRecord)
-                .where(ScanRecord.scan_id == scan_id)
+                .where(*scan_where)
                 .values(status=scan_status_for(command_status))
             )
-            if command_status == "failed":
+            if command_status in {"failed", "cancelled"}:
                 append_scan_activity(
                     session,
                     org_id=command_org_id,
                     scan_id=scan_id,
-                    kind="scan_failed",
+                    kind=f"scan_{command_status}",
                     scan_mode=command_scan_mode,
                     occurred_at=now,
                 )

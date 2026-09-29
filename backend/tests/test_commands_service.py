@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -140,6 +141,29 @@ def test_active_command_for_returns_delivered(
     assert found.id == command.id
 
 
+def test_cancel_command_rejects_uploading(
+    administrative_session: Session, provisioned_agent: Agent, seeded_org: Org
+):
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="uploading",
+        scan_id=scan.scan_id,
+    )
+
+    with pytest.raises(commands.CommandNotCancellableError):
+        asyncio.run(
+            commands.cancel_command(
+                administrative_session,
+                org_id=seeded_org.id,
+                command_id=command.id,
+                now=T0,
+            )
+        )
+
+
 def test_apply_status_applies_forward_rank(
     administrative_session: Session, provisioned_agent: Agent, seeded_org: Org
 ):
@@ -167,6 +191,50 @@ def test_apply_status_applies_forward_rank(
     assert command.started_at == T0
     assert command.delivered_at == T0
     assert scan.status == "accepted"
+
+
+@pytest.mark.parametrize(
+    ("initial_scan_status", "expected_scan_status"),
+    [("pending", "cancelled"), ("completed", "completed")],
+)
+def test_apply_status_cancelled_preserves_completed_scan_and_records_activity(
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    initial_scan_status: str,
+    expected_scan_status: str,
+):
+    scan = _seed_scan(administrative_session, seeded_org.id)
+    scan.status = initial_scan_status
+    administrative_session.add(scan)
+    administrative_session.commit()
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    applied = commands.apply_status(
+        administrative_session,
+        agent_id=provisioned_agent.id,
+        command_id=command.id,
+        status="cancelled",
+        now=T0,
+    )
+
+    assert applied is True
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan)
+    assert command.status == "cancelled"
+    assert scan.status == expected_scan_status
+    cancelled = _activity_rows(
+        administrative_session, seeded_org.id, kind="scan_cancelled"
+    )
+    assert len(cancelled) == 1
+    assert cancelled[0].subject_id == scan.scan_id
+    assert _activity_rows(administrative_session, seeded_org.id, "scan_failed") == []
 
 
 def test_apply_status_no_ops_on_duplicate(
