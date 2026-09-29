@@ -202,41 +202,67 @@ def persist_scan(
 
     reconcile_scan_inventory(session, scan_record)
 
-    stopped_by_operator = (
-        scan.metadata is not None
-        and scan.metadata.get("terminated_by") == TERMINATED_BY_USER_CANCEL
-    )
-
-    append_scan_activity(
-        session,
-        org_id=org_id,
-        scan_id=scan.scan_id,
-        kind="scan_cancelled" if stopped_by_operator else "scan_finished",
-        scan_mode=scan_record.scan_mode,
-        occurred_at=now,
-    )
-
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
     # Enrichment workers call this again when their jobs finish. Calling it
     # here also covers scans that produce no enrichment jobs at all.
     enqueue_auto_scan_analysis(session, scan.scan_id, commit=False)
 
-    if command is None or accepts_late_ingest(command.status):
-        session.commit()
-    else:
-        applied = apply_status(
-            session,
-            agent_id=agent_id,
-            command_id=command.id,
-            status="cancelled" if stopped_by_operator else "done",
-            now=now,
-        )
-        if not applied:
-            raise RuntimeError(
-                "command reached a terminal status between the terminal check and "
-                "commit"
-            )
+    _close_scan(session, scan, scan_record, command, agent_id=agent_id, now=now)
     return scan_record
+
+
+def _close_scan(
+    session: Session,
+    scan: ScanIngestRequest,
+    scan_record: ScanRecord,
+    command: Command | None,
+    *,
+    agent_id: UUID,
+    now: datetime,
+) -> None:
+    """Record the scan's end and settle its command in one transaction.
+
+    The scan is `completed` because its data arrived; the command follows the
+    operator (spec 049, decision 3). The command row stays locked until the
+    commit, so an operator cancel cannot land between the read and the write.
+    """
+    command_status = (
+        None
+        if command is None
+        else session.exec(
+            select(Command.status).where(Command.id == command.id).with_for_update()
+        ).one()
+    )
+    # The Pi's own account of the stop names the activity: a Pi cancelled while
+    # offline may still finish normally before it hears the cancel.
+    stopped_by_operator = (
+        scan.metadata is not None
+        and scan.metadata.get("terminated_by") == TERMINATED_BY_USER_CANCEL
+    )
+    append_scan_activity(
+        session,
+        org_id=scan_record.org_id,
+        scan_id=scan.scan_id,
+        kind="scan_cancelled" if stopped_by_operator else "scan_finished",
+        scan_mode=scan_record.scan_mode,
+        occurred_at=now,
+    )
+    if command is None or command_status is None or accepts_late_ingest(
+        command_status
+    ):
+        session.commit()
+        return
+    applied = apply_status(
+        session,
+        agent_id=agent_id,
+        command_id=command.id,
+        status="cancelled" if stopped_by_operator else "done",
+        now=now,
+    )
+    if not applied:
+        raise RuntimeError(
+            "command reached a terminal status between the terminal check and commit"
+        )
 
 
 def upsert_finding(

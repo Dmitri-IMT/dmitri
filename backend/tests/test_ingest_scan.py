@@ -917,6 +917,45 @@ def test_ingest_scan_rejects_completed_scan_owned_by_another_agent(
     assert len(hosts_after) == len(hosts_before)
 
 
+def test_persist_scan_keeps_results_when_cancel_lands_before_commit(
+    migrated_database, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    scan = _scan(scan_id)
+
+    with Session(migrated_database) as session:
+        command = _seed_placeholder(
+            session,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            scan_id=scan_id,
+            now=now,
+        )
+        command_id = command.id
+        # The operator cancel commits after ingest read the command as running.
+        with Session(migrated_database) as operator_session:
+            operator_command = operator_session.get(Command, command_id)
+            operator_command.status = "cancelled"
+            operator_command.completed_at = now
+            operator_session.add(operator_command)
+            operator_session.commit()
+
+        persist_scan(
+            session,
+            scan,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            command=command,
+            now=now,
+            existing=session.get(ScanRecord, scan_id),
+        )
+
+    with Session(migrated_database) as fresh_session:
+        assert fresh_session.get(ScanRecord, scan_id).status == "completed"
+        assert fresh_session.get(Command, command_id).status == "cancelled"
+
+
 def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
     migrated_database, seeded_org: Org, provisioned_agent: Agent
 ) -> None:
