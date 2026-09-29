@@ -135,4 +135,4 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 4. Humanity
 ---
 
-**ERROR Handling** never put static text and sections of code when an error happens, always use toasts for errors unless instructed otherwise.
+**ERROR Handling** never put static text and sections of code when an error happens, always use toasts for errors.
