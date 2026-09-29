@@ -1,21 +1,22 @@
 ---
 type: Module
 title: command-channel — the signed WebSocket client and shared signer
-description: "The signed device WebSocket: strict frames, short transient backoff, and hourly recovery from a typed parked state."
+description: "The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state."
 resource: hardware-agent/src/agent/transport/command_channel.py
-tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon]
-timestamp: 2026-09-19T00:00:00Z
+tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon, cancel]
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # command-channel — the signed WebSocket client
 
 ## Purpose
 
-`agent.transport.command_channel` (DMI-66, spec 026) is the device end of the backend's
-`GET /api/v1/agents/{device_id}/commands` WebSocket. It owns everything about the socket — URL
-conversion, the signed upgrade, frame validation, send serialization and reconnect timing — and
-nothing about scans. Command execution belongs to the [daemon](/hardware-agent/daemon.md); the
-client only hands it validated `AgentCommand`s and carries `AgentStatus` frames back.
+`agent.transport.command_channel` (DMI-66, spec 026; cancel DMI-145 / spec 049) is the device end of
+the backend's `GET /api/v1/agents/{device_id}/commands` WebSocket. It owns everything about the
+socket — URL conversion, the signed upgrade, frame validation, send serialization and reconnect
+timing — and nothing about scans. Command execution belongs to the
+[daemon](/hardware-agent/daemon.md); the client only hands it validated `AgentCommand`s and
+`AgentCancel`s and carries `AgentStatus` frames back.
 
 `agent.transport.signing` is the small shared helper it and the [ingest
 client](/hardware-agent/transport.md) both sign through. DMI-66 extracted it out of `ingest.py`
@@ -33,15 +34,17 @@ ingest. That split is the contract, not an implementation detail.
 | `AvailableSubnet` | `interface`, `cidr`, required `is_default_route`. Mirrors the contract component. | `command_channel.py:52` |
 | `AgentHello` | `type="hello"`, `agent_version`, `available_subnets`. | `command_channel.py:60` |
 | `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:92` |
-| `AgentStatus` | `type="status"`, `command_id`, `status`, nullable `error_code`. | `command_channel.py:109` |
-| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:155` |
-| `.run(on_command, on_connected=None, on_parked=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:190` |
-| `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:223` |
-| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:232`, `:236` |
-| `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:125` |
-| `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:134` |
-| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. A `finally` always cancels and awaits both child tasks so outer cancellation or `close()` cannot leave the hourly sleeper pending. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:294` |
-| `_parse_command(raw)` | Strict parse; returns `None` for anything that is not a valid `command` frame. | `command_channel.py:329` |
+| `AgentCancel` | `type="cancel"`, `command_id`. Backend → Pi stop frame (DMI-145). | `command_channel.py:111` |
+| `AgentStatus` | `type="status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`/`cancelled`), nullable `error_code`. | `command_channel.py:118` |
+| `InboundCommandFrame` | Discriminated union `AgentCommand \| AgentCancel` on `type`. | `command_channel.py:127` |
+| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:164` |
+| `.run(on_command, on_connected=None, on_parked=None, *, on_cancel=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. `on_cancel` receives each validated `AgentCancel.command_id`. | `command_channel.py:199` |
+| `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:233` |
+| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:243`, `:247` |
+| `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:134` |
+| `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:143` |
+| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. A `finally` always cancels and awaits both child tasks so outer cancellation or `close()` cannot leave the hourly sleeper pending. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:309` |
+| `_parse_command(raw)` | Strict parse of either inbound frame (`command` or `cancel`); returns `None` for anything else. Old Pi builds that only understood `command` drop unknown frames the same way. | `command_channel.py:343` |
 
 ### The upgrade envelope
 
@@ -87,7 +90,7 @@ The process stays alive throughout.
   [ingest client](/hardware-agent/transport.md).
 * Enumerates via [`detect_available_subnets`](/hardware-agent/utils.md).
 * Driven by [`AgentDaemon`](/hardware-agent/daemon.md), which supplies `on_command`,
-  `on_connected`, and the active-scan cancellation callback for `on_parked`.
+  `on_connected`, `on_cancel` (`handle_cancel`), and the park stop callback for `on_parked`.
 * Talks to the backend WS route and its frame schemas ([backend/schemas](/backend/schemas.md),
   [backend/services](/backend/services.md)); the normative shapes live in
   [contracts](/contracts.md).
@@ -126,3 +129,4 @@ The process stays alive throughout.
 [3] [spec 026 — Pi agent daemon](../../../specs/026-pi-agent-daemon/ARCHITECTURE.md)
 [4] [spec 026 — cross-process contract](../../../specs/026-pi-agent-daemon/INTEGRATION.md)
 [5] [spec 048 — parked channel recovery](../../../specs/048-parked-channel-recovery/TRUTH.md)
+[6] [spec 049 — remote scan cancel](../../../specs/049-remote-scan-cancel/plan.md)

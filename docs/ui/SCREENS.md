@@ -518,14 +518,17 @@ find anything*. This is honestly a table and it looks like one. *Re-specced 2026
   (`data: ScanSummary[]`, `total`, `page`). Server-driven sorting and pagination; **no
   client-side sorting.**
 - `ScanSummary`: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `status`, `host_count`,
-  `finding_count`, `highest_severity` (nullable).
+  `finding_count`, `highest_severity` (nullable), `terminated_by` (nullable; from scan metadata,
+  e.g. `"user_cancel"` when an operator stopped the scan after some results).
 - `POST /api/v1/agents/{agent_id}/commands` — `[Scan now]`, admin only, with the currently
   selected scan type.
 
-`ScanStatus` is `pending | accepted | processing | completed | failed`. A scan triggered here
-appears as `pending` **immediately** (the stub row is created at enqueue,
+`ScanStatus` is `pending | accepted | processing | completed | failed | cancelled`. A scan
+triggered here appears as `pending` **immediately** (the stub row is created at enqueue,
 [`BACKEND.md` B6](../roadmap/BACKEND.md#b6--pi-command-channel-)), so this list is live during a
-scan and must not look broken while a row is unfinished.
+scan and must not look broken while a row is unfinished. `cancelled` means the operator stopped
+before any results arrived; `completed` with `terminated_by == "user_cancel"` means stopped early
+with a partial upload kept.
 
 **Mode is a column, not a control.** The mode switcher above the table is cut. Filters stay cut
 from v1 ([`IDEAS.md`](IDEAS.md) → Scans).
@@ -549,8 +552,10 @@ from v1 ([`IDEAS.md`](IDEAS.md) → Scans).
 | Page title | "Scans" |
 | Columns | "When · Type · Status · Devices · Vulnerabilities · Highest severity" |
 | Status — completed | "Completed" |
+| Status — completed + `terminated_by == "user_cancel"` | "Stopped early" |
 | Status — pending/accepted/processing | "Running…" |
 | Status — failed | "Failed" |
+| Status — cancelled | "Stopped" |
 | Vulnerabilities cell — zero | "None" |
 | Highest severity — null on a completed scan | "—" |
 | Scan settings — section title | "Scan settings" |
@@ -608,6 +613,12 @@ work respectively.
   empty vulnerabilities section as though the answer were "nothing".
 - **Regular, failed:** the failure **is** the content. Show the reason and the next step; suppress
   the empty tables entirely.
+- **Regular, cancelled:** `status: cancelled` (stopped before any results). Show
+  `ScanStoppedNotice` only — "Stopped" plus "This scan was stopped before the Pi sent any results."
+  No AI panel, no findings, no counts.
+- **Regular, stopped early:** `status: completed` with `metadata.terminated_by == "user_cancel"`.
+  Normal results view plus the line "This scan was stopped early. It shows what was found before
+  the stop."
 - **Error:** page-level copy + `[Retry]`. 404 gets its own line.
 
 **Deep link:** `?finding=:findingId` — match the id in the already-loaded `findings`, scroll to
@@ -629,6 +640,8 @@ that row, open its panel. Absent or unmatched → render normally. No extra fetc
 | Unfinished | "This scan is still running." · "Vulnerabilities appear here when it finishes." |
 | Failed | "This scan didn't finish." · the plain-language reason · [Try another scan] (admin only) |
 | Failed, no `command_id` | "This scan didn't finish. No reason was recorded." |
+| Cancelled (no results) | "Stopped" · "This scan was stopped before the Pi sent any results." |
+| Stopped early | "This scan was stopped early. It shows what was found before the stop." |
 | Error | "Couldn't load this scan." · [Retry] |
 | 404 | "That scan doesn't exist." · [Back to scans] |
 
@@ -782,12 +795,15 @@ Each section is a **white card on the canvas with its heading inside**.
   typed by the operator** (B4).
 - `GET /api/v1/commands/{command_id}` → `CommandDetail`: `status`, `error_code`, `scan_id`. Poll
   **every 5s** while the status is pending.
+- `POST /api/v1/commands/{command_id}/cancel` → `CommandDetail` (admin). Connected Pi → `202` and a
+  cancel frame; offline or already terminal → `200`; `uploading` → `409 command_not_cancellable`.
 
-`CommandStatus` is `queued | delivered | running | uploading | done | failed | expired` — **seven**
-states, and the pill must render all of them. `expired` is a *backend*-set state (ADR-011): the Pi
-**never took the command** — delivery gave up, and the operator already saw the `503` toast. It is not
-the same event as `failed` and does not get the same words. **The split is `delivered_at` (C12):** a Pi
-that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
+`CommandStatus` is `queued | delivered | running | uploading | done | failed | cancelled | expired`
+— **eight** states. `cancelled` is the operator stop (DMI-145). `expired` is a *backend*-set state
+(ADR-011): the Pi **never took the command** — delivery gave up, and the operator already saw the
+`503` toast. It is not the same event as `failed` and does not get the same words. **The split is
+`delivered_at` (C12):** a Pi that dies *mid-scan* took the job, so it reports **`failed`**, not
+`expired`.
 
 **Three states** — this screen has more than three; each is designed, none inherited:
 - **Blank — no Pi at all.** No agent exists. **The admin cannot fix this themselves**: Pi
@@ -798,11 +814,13 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
   until a human says which network is the target — it is dual-homed and sees two (B4). `[Scan now]`
   is not shown; the choice is. This is also B2's missing first-run step.
 - **Ready (admin).** Online, network chosen → `[Scan now]`.
-- **Scanning.** A `StatusPill` on the row walks the lifecycle. The whole row stays readable; the
-  pill is the only thing that moves.
-- **Done.** Pill becomes `[View scan]` → SCAN DETAIL. Caches for scans/agents/findings invalidate.
+- **Scanning.** Status text walks the lifecycle. Admin **Stop scan** (confirm dialog) while
+  `delivered`/`running`; then "Stopping…" until terminal.
+- **Done.** Status becomes `[View scan]` → SCAN DETAIL. Caches for scans/agents/findings invalidate.
+- **Cancelled.** Operator stopped the scan. With saved results → `[View scan]` + `[Retry]` and the
+  saved-results hint; without results → `[Retry]` only. Same cache invalidation as Done.
 - **Failed.** The Pi took the command and it broke — a scan error, a failed upload, or the Pi going
-  dark **mid-scan**. Error pill carrying `error_code` + `[Retry]`.
+  dark **mid-scan**. Error copy carrying `error_code` + `[Retry]`.
 - **Expired.** The Pi **never took the command** — there was no open socket, or the one send
   attempt threw. Distinct from
   `failed` — the operator's next step is *check the box*, not *try again* — so it points at the Pi and
@@ -821,6 +839,12 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 | Row — offline | "Offline · last seen Tuesday 14:10" |
 | Row — network | "Scanning: Ethernet · 192.168.0.0/24" · [Change] |
 | Trigger | "Scan now" |
+| Stop scan (admin, delivered/running) | "Stop scan" |
+| Stop dialog title | "Stop the {mode} scan on {device}?" |
+| Stop dialog body | "The Pi stops within a few seconds and saves what it found so far." |
+| Stop dialog keep | "Keep scanning" |
+| Stop dialog confirm | "Stop scan" |
+| Stopping | "Stopping…" |
 | Needs-network heading | "Which network should Dmitri scan?" |
 | Needs-network body | "This box is connected to more than one network. Pick the one you want scanned — usually the office network, not the internet connection." |
 | Needs-network options | "Ethernet · 192.168.0.0/24" / "Wi-Fi · 10.12.0.0/16 (internet connection)" — **derived** from reported `interface` by prefix (`eth*`/`en*` → Ethernet, `wl*` → Wi-Fi; unfamiliar names render raw) |
@@ -830,11 +854,14 @@ that dies *mid-scan* took the job, so it reports **`failed`**, not `expired`.
 | Pill — running | "Scanning…" |
 | Pill — uploading | "Uploading results…" |
 | Pill — done | "View scan" |
+| Pill — cancelled | "Scan stopped" · with results: [View scan] + [Retry] + "You stopped this scan. Results found before the stop were saved." · without: [Retry] only |
 | Pill — failed | "Scan failed" pill + operator sentence from `scanFailureReason(error_code)` (not the raw code) · [Retry] |
 | Pill — expired | "Not picked up" pill + "The Pi never picked up the scan. Check that it's powered on and connected to the network." · [Retry] |
 | Hint under trigger | "A scan usually takes about 10 minutes." |
 | Toast — 503 `device_offline` | "Pi seems to be offline." |
 | Toast — 409 `device_busy` | "That Pi is already scanning. Showing the scan in progress." — only when the Pi's run is actually adopted |
+| Toast — 409 `command_not_cancellable` | "The scan is already uploading its results." |
+| Toast — finished before stop | "The scan finished before it could stop." |
 | Toast — any other refused trigger | "Couldn't start the scan." — including a busy Pi that reports no run to adopt |
 | Blank — heading | "No Pi connected yet." |
 | Blank — body | "Dmitri scans your network from a small box installed on site. Your installer sets it up — once it's online, it shows up here and you can run your first scan." |

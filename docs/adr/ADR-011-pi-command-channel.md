@@ -1,5 +1,10 @@
 # ADR-011: Pi command channel (WebSocket v1)
 
+> **Amendment 2026-09-27 (DMI-145, remote scan cancel):** the backend may send the Pi a
+> `cancel` frame for an active command. The Pi stops that scan, sends any partial result through
+> the existing ingest endpoint, then reports the terminal `cancelled` status. A `cancelled`
+> command may accept that late partial result; other terminal commands still reject late results.
+
 > **Amendment 2026-07-24 (algorithm):** this ADR reuses ADR-005's agent-auth rules on the WS
 > upgrade. [`ADR-005`](ADR-005-security-model.md) §1 was amended from **HMAC-SHA256** to **Ed25519
 > asymmetric signatures** (backend stores only the device's public key; ADR-015 retired). Wherever
@@ -120,6 +125,15 @@ Every frame is JSON with a required `type` field.
 }
 ```
 
+**Backend → Pi — `cancel`:**
+
+```json
+{
+  "type": "cancel",
+  "command_id": "uuid"
+}
+```
+
 **Pi → Backend — `status`:**
 
 ```json
@@ -160,10 +174,13 @@ the HTTP half of C2 and belongs to the frontend-contract-asks epic.
 > still do not. The chosen value is re-checked against the live report at trigger time, so a scan
 > naming a network the Pi is no longer reporting is refused rather than run.
 
-Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`.
+Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`, `cancelled`.
 
 - Backend sets `delivered` when the `command` frame is sent; Pi’s first `running` moves DB to `running`.
 - Large scan payloads are **not** sent on WS — only on `POST /api/v1/scans`.
+- After a remote cancel, the Pi reports `cancelled` after it stops the scan and uploads any partial
+  result. If the command was cancelled while the Pi was offline, a late partial result is still
+  accepted for that command.
 - Headless `fatal` maps to `failed`, including when scanning succeeded but the result could not be
   persisted. In that write-failure case the daemon may still hold the payload returned in memory,
   but there is no result JSON to upload.
@@ -172,12 +189,12 @@ Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`
 
 ### 4. Command lifecycle (HTTP + DB)
 
-`queued` → `delivered` → `running` → `uploading` → `done` | `failed` | `expired`
+`queued` → `delivered` → `running` → `uploading` → `done` | `failed` | `expired` | `cancelled`
 
 | State | Owner |
 |-------|--------|
 | `queued`, `delivered`, `expired` | Backend |
-| `running`, `uploading`, `done`, `failed` (reported) | Pi via WS (+ ingest for `done`) |
+| `running`, `uploading`, `done`, `failed`, `cancelled` (reported) | Pi via WS (+ ingest for `done` / `cancelled`) |
 
 **Enqueue:** `POST /api/v1/agents/{agent_id}/commands` creates a `commands` row only
 (`status=queued`, `scan_id` null). No stub scan yet.
@@ -223,13 +240,14 @@ A headless `fatal` is a Pi-reported `failed`, including a result-write failure a
 pipeline completed. The daemon may retain the returned payload in memory, but must not report
 `uploading` or `done` when no result JSON was persisted.
 
-**Late results are discarded.** Once a command is terminal, `POST /api/v1/scans` rejects a result
-for its scan with **`400`** (`ScanClosedError` in `services/persistence.py`) and the result is
-dropped. This is deliberate, not a race to be repaired: terminal status is what releases the
-one-active-scan-per-Pi lock above, so a replacement scan may already be running against the same
-agent, and reviving the old scan row would corrupt it. The agent keeps its local artifact, but
-nothing will accept it — recovery is a **new scan**, not a resubmission. Ingest clients must treat
-this `400` as final and must not retry or requeue it.
+**Late results are discarded**, except after operator cancellation. Once a command is terminal,
+`POST /api/v1/scans` rejects a result for its scan with **`400`** (`ScanClosedError` in
+`services/persistence.py`) and the result is dropped. A command in `cancelled` accepts a late
+partial result so an offline Pi can catch up after it reconnects. For other terminal commands,
+terminal status still releases the one-active-scan-per-Pi lock above, so a replacement scan may
+already be running against the same agent, and reviving the old scan row would corrupt it. The
+agent keeps its local artifact, but nothing will accept it — recovery is a **new scan**, not a
+resubmission. Ingest clients must treat this `400` as final and must not retry or requeue it.
 
 **Timeouts / stale sweep:** connection-loss grace is **config/env**
 (`COMMAND_DISCONNECT_GRACE_SECONDS`). The enrichment worker sweeps globally on its poll; enqueue
@@ -260,6 +278,7 @@ When ingest completes, same endpoint returns full scan (`status: completed` or `
 | POST | `/api/v1/agents/{agent_id}/commands` | JWT |
 | GET | `/api/v1/agents/{agent_id}` | JWT |
 | GET | `/api/v1/commands/{command_id}` | JWT |
+| POST | `/api/v1/commands/{command_id}/cancel` | JWT (admin); `202` online / `200` offline or terminal / `404` / `409 command_not_cancellable` |
 | GET | `/api/v1/hosts/…` | JWT |
 | POST | `/api/v1/scans` | Ed25519 signature |
 | GET | `/api/v1/scans/{scan_id}` | JWT |

@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -65,7 +65,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HostDetailResponse` | Host summary plus assessment status/version, latest-scan exposures, durable ports, latest industrial data, and scan history. | `backend/src/api/schemas/read.py:214` |
 | `ScanDetailResponse` assessment fields | `assessment_status`, nullable policy version, and stored `ExposureRead[]` distinguish current assessment from legacy unavailable data; exposure attention never changes finding counts. | `backend/src/api/schemas/read.py:225` |
 | `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/`error_code`/counts; `hosts`/`findings` are required. `error_code` is `ScanErrorCode \| None` and is **not** required — present as `null` on a non-failed scan, never bare on a failed one. | `backend/src/api/schemas/read.py:103` |
-| `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` (`subnet` is plain `str`, no CIDR pattern). | `backend/src/api/schemas/read.py:118` |
+| `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` + optional `terminated_by` (from scan metadata; e.g. `"user_cancel"`). `subnet` is plain `str`, no CIDR pattern. | `backend/src/api/schemas/read.py:250` |
 | `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |
 | `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page` plus `quiet_total` (whole-inventory quiet count, independent of the requested group). | `backend/src/api/schemas/read.py:171` |
 | `FindingListResponse` | `GET /findings`: paginated `data`/`total`/`page`. | `backend/src/api/schemas/read.py:147` |
@@ -120,13 +120,14 @@ authenticated caller or stored invite; list responses never publish token materi
 |------|-------------------|-----|
 | `AvailableSubnet` | `interface` (min length 1), `cidr` (`SubnetCIDR`), and — required since DMI-66 — `is_default_route`. A hello that omits it is rejected; the model stays in Pydantic's lax mode like its neighbours, so `1`/`"true"`/`"yes"` still coerce. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentHelloFrame` | `type: "hello"`, `agent_version`, `available_subnets`. | `backend/src/api/schemas/agent_frames.py` |
-| `AgentStatusFrame` | `type: "status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`), optional `error_code` as **`str \| None`** — not `ScanErrorCode`. Tightening it would drop a version-skewed Pi's failure report. | `backend/src/api/schemas/agent_frames.py` |
+| `AgentStatusFrame` | `type: "status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`/`cancelled`), optional `error_code` as **`str \| None`** — not `ScanErrorCode`. Tightening it would drop a version-skewed Pi's failure report. | `backend/src/api/schemas/agent_frames.py` |
 | `AgentCommandFrame` | `type: "command"`, `command_id`, `scan_id`, `scan_mode`, `subnet` — the outbound frame `deliver()` pushes down the socket. | `backend/src/api/schemas/agent_frames.py` |
+| `AgentCancelFrame` | `type: "cancel"`, `command_id` — outbound stop frame from `cancel_command` and hello catch-up (DMI-145). | `backend/src/api/schemas/agent_frames.py` |
 | `AgentErrorFrame` | `type: "error"`, `message` — graceful parse/validation failures on the WS channel. | `backend/src/api/schemas/agent_frames.py` |
 
-All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame schemas. Consumed by
+All six use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame schemas. Consumed by
 [`services/agent_ws.py`](/backend/services.md) for inbound dispatch and by
-[`services/commands.py`](/backend/services.md) for outbound delivery.
+[`services/commands.py`](/backend/services.md) for outbound delivery and cancel.
 
 ## Key classes / functions — `commands.py` (command-channel HTTP shapes)
 
@@ -134,7 +135,7 @@ All five use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame 
 |------|-------------------|-----|
 | `CreateCommandRequest` | `POST /agents/{agent_id}/commands` body — `scan_mode` (`ScanMode`) and `subnet` (`SubnetCIDR`). `extra="forbid"`. | `backend/src/api/schemas/commands.py:22` |
 | `CommandSummary` | The `201` response: `command_id`, optional `scan_id`, `agent_id`, `status`. | `backend/src/api/schemas/commands.py:29` |
-| `CommandDetail` | `GET /commands/{command_id}` — `CommandSummary`'s fields plus `scan_mode`, `subnet`, optional `error_code` (`ScanErrorCode \| None`), and the four lifecycle timestamps (`created_at` required; `delivered_at`/`started_at`/`completed_at` nullable). Off-contract stored strings are normalised to `"unknown"` in the service before this model is built, so they cannot 500. | `backend/src/api/schemas/commands.py:39` |
+| `CommandDetail` | `GET /commands/{command_id}` and cancel response — `CommandSummary`'s fields plus `scan_mode`, `subnet`, optional `error_code` (`ScanErrorCode \| None`), and the four lifecycle timestamps. Status includes `cancelled` (DMI-145). Off-contract stored strings are normalised to `"unknown"` in the service before this model is built. | `backend/src/api/schemas/commands.py` |
 
 **`scan_id` is optional on both `CommandSummary` and `CommandDetail`** — a `queued` or `expired`
 command has none. The published contract was amended to drop it from `required` on both schemas;

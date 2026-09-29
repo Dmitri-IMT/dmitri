@@ -4,7 +4,7 @@ title: Backend routers — reads, identity admin, ingest and commands
 description: The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-19T21:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -18,7 +18,8 @@ timestamp: 2026-09-19T21:00:00Z
 
 As of spec 017 / DMI-61 these four routes are no longer open. Each takes
 `caller: CallerIdentity = Depends(require_user)` and passes `org_id=caller.org_id` down into the read
-service, so the tenant boundary is enforced in SQL rather than in the handler.
+service, so the tenant boundary is enforced in SQL rather than in the handler. Remote cancel
+(DMI-145) adds admin `POST /commands/{id}/cancel`.
 
 ## Key classes / functions
 
@@ -47,8 +48,9 @@ service, so the tenant boundary is enforced in SQL rather than in the handler.
 | `revoke_agent_route()` | Admin-only `POST /api/v1/agents/{agent_id}/revoke`. Delegates to the async `revoke_agent()` service and maps `None` to 404 (missing and foreign ids alike). | `backend/src/api/routers/agents.py:106` |
 | `restore_agent_route()` | Admin-only `POST /api/v1/agents/{agent_id}/restore`. Clears revocation and returns the full detail; repeat restore is a 200 no-op. | `backend/src/api/routers/agents.py:120` |
 | `create_agent_command()` | `POST /api/v1/agents/{agent_id}/commands` behind `require_admin` → `201` + `CommandSummary`. Order: `sweep_stale_commands(agent_id=...)` → `active_command_for` busy check → the reported-subnet check → `enqueue` → `await deliver`. `IntegrityError` from the partial unique index maps to the **same** `409 device_busy`; `SubnetNotReportedError` → `422 subnet_not_reported`; `DeviceOfflineError` → `503 device_offline`. | `backend/src/api/routers/agents.py:144` |
-| `read_command()` | `GET /api/v1/commands/{command_id}` → `get_command_detail(...)` → `CommandDetail`, or `404` for an unknown id or another org's command. **Pure read** — the sweep is deliberately not called here. | `backend/src/api/routers/commands.py:17` |
-| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; `status` drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:181` |
+| `read_command()` | `GET /api/v1/commands/{command_id}` → `get_command_detail(...)` → `CommandDetail`, or `404` for an unknown id or another org's command. **Pure read** — the sweep is deliberately not called here. | `backend/src/api/routers/commands.py:18` |
+| `cancel_command_route()` | Admin-only `POST /api/v1/commands/{command_id}/cancel` (`cancelCommand`). Connected Pi → send `AgentCancelFrame`, return `202`. Offline or already terminal → retire/idempotent `200`. Missing/foreign → `404`. `uploading` → `409 command_not_cancellable`. | `backend/src/api/routers/commands.py:42` |
+| `connect_agent_commands()` | `WebSocket /api/v1/agents/{agent_id}/commands` — `require_agent_ws` → `accept()` → `agent_connections.register` + `mark_connected` → `run_agent_channel(session_factory, ...)` → `finally: unregister` + `mark_disconnected`. Inbound `hello`/`status`; after hello, catch-up may send `AgentCancelFrame`s; `status` drives `apply_status`, and commands are delivered outbound over this socket by `deliver`. | `backend/src/api/routers/agents.py:181` |
 
 ## How it connects
 

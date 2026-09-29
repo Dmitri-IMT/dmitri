@@ -3,6 +3,21 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-28
+
+* **Update**: DMI-145 / spec 049 remote scan cancel. Documented Pi `_ScanStop.request("cancel"|"park")`,
+  `handle_cancel`, `AgentCancel` / `on_cancel`, status `cancelled` with partial upload vs silent park;
+  backend `POST /commands/{id}/cancel`, lifecycle/ingest/activity/`scan_cancelled`, hello catch-up,
+  AI context v3 `partial_result`/`stopped_by`, Alembic head `20260927_37`; frontend Stop scan,
+  `ScanStoppedNotice`, scan/command status labels. KB: ARCHITECTURE §6, ADR-011 HTTP table row,
+  SCREENS.md `cancelled` + `terminated_by`. Touched: `hardware-agent/daemon.md`,
+  `hardware-agent/command-channel.md`, `hardware-agent/index.md`, `backend/services.md`,
+  `backend/routers.md`, `backend/schemas.md`, `backend/models.md`, `backend/migrations.md`,
+  `backend/ai.md`, `backend/index.md`, `frontend/command-status.md`, `frontend/scan-status.md`,
+  `frontend/devices-screen.md`, `frontend/screens.md`, `frontend/api.md`, `frontend/index.md`,
+  `index.md`, `docs/architecture/ARCHITECTURE.md`, `docs/adr/ADR-011-pi-command-channel.md`,
+  `docs/ui/SCREENS.md`, `contracts.md`.
+
 ## 2026-09-22
 
 * **Update**: DMI-179 fifth review round. `ScanDetailSection` takes `openToken` (finding id) instead of
