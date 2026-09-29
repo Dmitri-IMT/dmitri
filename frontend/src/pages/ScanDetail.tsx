@@ -9,7 +9,7 @@ import PageHeader from '@/components/PageHeader'
 import ReadDetailGate from '@/components/ReadDetailGate'
 import { Card, CardContent } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
-import { isUnfinished } from '@/lib/scanStatus'
+import { isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
 import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
@@ -20,6 +20,7 @@ import ScanDetailHeader, {
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
+import ScanStoppedNotice from '@/pages/scans/ScanStoppedNotice'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
@@ -114,6 +115,7 @@ function ScanDetail() {
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
         const partial = metadata.partial_result === true
+        const stoppedEarly = metadata.terminated_by === 'user_cancel'
 
         return (
           <>
@@ -121,6 +123,8 @@ function ScanDetail() {
             <ScanSummaryStrip scan={scan} />
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
+            ) : scan.status === 'cancelled' ? (
+              <ScanStoppedNotice />
             ) : isUnfinished(scan.status) ? (
               <ScanUnfinishedNotice
                 scan={scan}
@@ -131,6 +135,20 @@ function ScanDetail() {
               />
             ) : (
               <>
+                {stoppedEarly && (
+                  <div
+                    data-testid="scan-stopped-early"
+                    className="flex flex-col gap-1"
+                  >
+                    <p className="text-body-md font-medium">
+                      {scanStatusLabel(scan.status, 'user_cancel')}
+                    </p>
+                    <p className="text-body-md text-muted-foreground">
+                      This scan was stopped early. It shows what was found
+                      before the stop.
+                    </p>
+                  </div>
+                )}
                 <ScanAIAnalysis
                   scanId={scan.scan_id}
                   findings={scan.findings}

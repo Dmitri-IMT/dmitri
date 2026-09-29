@@ -72,9 +72,9 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
             testId="scan-summary-duration"
           />
         </div>
-        {scan.status !== 'failed' && !isUnfinished(scan.status) && (
-          <ScanReports scanId={scan.scan_id} />
-        )}
+        {scan.status !== 'failed' &&
+          scan.status !== 'cancelled' &&
+          !isUnfinished(scan.status) && <ScanReports scanId={scan.scan_id} />}
       </div>
     </div>
   )

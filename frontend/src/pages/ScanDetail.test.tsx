@@ -555,6 +555,102 @@ describe('ScanDetail', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows a stopped notice without AI or findings when the scan was cancelled', async () => {
+    scanDetail(
+      completedScan({
+        status: 'cancelled',
+        findings: [],
+        hosts: [],
+        finding_count: 0,
+        host_count: 0,
+        duration: null,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const stopped = await screen.findByTestId('scan-stopped')
+    expect(within(stopped).getByText('Stopped').tagName).toBe('P')
+    expect(stopped).toHaveTextContent(
+      'This scan was stopped before the Pi sent any results.',
+    )
+    expect(screen.queryByTestId(/^scan-ai-/)).not.toBeInTheDocument()
+    expectNoScanTables()
+    expect(screen.queryByTestId('scan-reports')).not.toBeInTheDocument()
+
+    const strip = screen.getByTestId('scan-summary-strip')
+    expect(strip).not.toHaveTextContent('Machines seen')
+    expect(strip).not.toHaveTextContent('Vulnerabilities')
+  })
+
+  it('keeps partial results and AI for a completed user-cancel scan', async () => {
+    server.use(
+      http.get('http://localhost:8000/api/v1/scans/:scanId/analysis', () =>
+        HttpResponse.json({
+          scan_id: SCAN_ID,
+          status: 'not_requested',
+        }),
+      ),
+    )
+    scanDetail(
+      withPartialResult(
+        completedScan({ findings: [phpCgiFinding], finding_count: 1 }),
+        'user_cancel',
+      ),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-stopped-early')
+    expect(notice).toHaveTextContent('Stopped early')
+    expect(notice).toHaveTextContent(
+      'This scan was stopped early. It shows what was found before the stop.',
+    )
+    expect(
+      await screen.findByTestId(
+        `findings-critical-row-${phpCgiFinding.finding_id}`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('scan-hosts-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('scan-stopped')).not.toBeInTheDocument()
+    expect(
+      await screen.findByTestId('scan-ai-not-requested'),
+    ).toBeInTheDocument()
+
+    const strip = screen.getByTestId('scan-summary-strip')
+    expect(strip).toHaveTextContent('Machines seen')
+    expect(strip).toHaveTextContent('Vulnerabilities')
+  })
+
+  it('hides the stopped-early notice for plain completed and timeout/error partials', async () => {
+    scanDetail(completedScan())
+    const view = renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
+
+    view.unmount()
+    scanDetail(withPartialResult(completedScan(), 'timeout'))
+    const timeoutView = renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
+
+    timeoutView.unmount()
+    scanDetail(withPartialResult(completedScan(), 'error'))
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
+  })
+
   it('shows the device_offline sentence on a failed scan and hides both tables', async () => {
     scanDetail(
       completedScan({
