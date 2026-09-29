@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -70,7 +70,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `AgentOfflineError` | "Cannot choose a network for a Pi that is reporting none" — router maps it to `409 device_offline`. Lives here, unlike `SubnetNotReportedError`. | `backend/src/api/services/agents.py:13` |
 | `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:44` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
-| `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/mac/hostname/vendor snapshot + `open_ports_count`/`highest_severity`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:24` |
+| `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/hostname snapshot + `open_ports_count`/`highest_severity`; `mac` only when the scan has one; `vendor` only when the MAC changed or the new vendor is not `"unknown"`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:24` |
 | `reconcile_scan_inventory()` / `reconcile_scan_host_inventory()` | Reconciles durable ports/findings. For the latest scan, current assessment copies type/profile/version; a newer legacy scan uses the old type fallback and clears the profile projection/version; older scans change neither. | `backend/src/api/services/inventory.py:20` |
 | `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` / `QUIET_AFTER_DAYS` | `1` / `20` / `7`. Quiet is last seen more than seven days ago. | `backend/src/api/services/read.py:49` |
 | `_HOST_SORT_COLUMNS` | Sortable host columns: `last_seen_at`, `hostname`, `vendor`, `ip` (`cast` to `INET`), `vulnerability_count`. **Not** `machine_type`. Always with a `HostRecord.id` tie-breaker. | `backend/src/api/services/read.py` |
@@ -205,7 +205,8 @@ ML/AI scoring is future work.
 - **Host identity is scan-order-sensitive.** `upsert_hosts_for_scan` only overwrites the `HostRecord`
   snapshot (ip/mac/hostname/vendor/open_ports_count/highest_severity) when the incoming scan's
   `timestamp` is `>=` the current `last_seen_at`; an out-of-order (backfilled) scan only extends
-  `first_seen_at`.
+  `first_seen_at`. Even a newest scan keeps a known vendor: a null `mac` never clears the stored one,
+  and an `"unknown"` vendor only replaces it when the MAC changed.
 - **`sort_by=ip` casts to `INET`, so host sorting is Postgres-only.** `HostRecord.ip` is a plain
   `str` column, and a text sort orders `192.168.0.1`, `.10`, `.2` — visibly wrong in a host
   inventory. `_HOST_SORT_COLUMNS["ip"]` therefore holds `cast(HostRecord.ip, INET)`

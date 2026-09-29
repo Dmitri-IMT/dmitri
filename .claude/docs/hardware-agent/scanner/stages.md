@@ -4,7 +4,7 @@ title: scanner/stages — port, deep, and OT inspection stages
 description: Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and HostInfo-to-HostPayload normalization.
 resource: hardware-agent/src/agent/scanner/stages.py
 tags: [hardware-agent, scanner, pipeline, threading, contingency]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # scanner/stages — port, deep & OT-inspection stages
@@ -20,8 +20,8 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:121` |
-| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. | `stages.py:229` |
+| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, folds the result's MAC/vendor into the host with `merge_mac_vendor`, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:126` |
+| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. A successful result's MAC/vendor is folded in with `merge_mac_vendor`. | `stages.py:237` |
 | `_recover_deep_stage_services()` | Reuses `detect_services` for recovery; treats a host-level Nmap error or timeout as unsuccessful recovery without stopping the scan. | `stages.py:99` |
 | `_stage_deadline_hit()` | Returns elapsed stage seconds when the stage clock is past, else `None`. | `stages.py:409` |
 | `run_ot_inspection_stage()` | Serial Modbus inventory or read-only mapping. Checks cancel and the stage ceiling at the start of each host; after the loop, if the run was not cancelled, emits `ot_stage_deadline` once. Each started host gets `host_deadline` (stage cap plus `MAX_OT_HOST_SECONDS`) for inventory and mapping. | `stages.py:418` |

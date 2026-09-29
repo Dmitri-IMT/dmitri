@@ -4,7 +4,7 @@ title: utils — network detection & Nmap XML parsing
 description: Local-network detection/connectivity checks and the Nmap/NSE XML parsers shared across the pipeline.
 resource: hardware-agent/src/agent/utils/network.py
 tags: [hardware-agent, utils, network, xml, parsing]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # utils — network & XML helpers
@@ -24,11 +24,12 @@ every discovery stage funnels Nmap's XML through it to produce [models](/hardwar
 | `AvailableSubnetInfo` | Dataclass of one usable subnet: `interface`, `cidr`, `is_default_route`. | `utils/network.py:51` |
 | `detect_available_subnets()` | Daemon-facing enumeration: every usable IPv4 interface as an `AvailableSubnetInfo`. Filters loopback, link-local, down interfaces, IPv6 and bad netmasks; dedupes by `(interface, cidr)`; canonicalizes to the network address. | `utils/network.py:59` |
 | `check_network_connectivity()` | Raises `NetworkUnreachableError` unless a non-loopback IPv4 interface is up. Called first in `ScanRunner._run()`. | `utils/network.py:105` |
-| `parse_ports()` | Parses `<port>`/service/script nodes into `PortInfo` (open/filtered only). | `utils/nmap_xml.py:11` |
-| `extract_ipv4()` | Pulls the IPv4 address from a host node. | `utils/nmap_xml.py:62` |
-| `parse_host_scripts()` | Parses `<hostscript>` entries into `ScriptResult`s. | `utils/nmap_xml.py:71` |
-| `parse_script()` | Parses one `<script>` node into a `ScriptResult`. | `utils/nmap_xml.py:83` |
-| `parse_nse_node()` | Recursively parses NSE structured tables into nested dicts/lists. | `utils/nmap_xml.py:100` |
+| `parse_ports()` | Parses `<port>`/service/script nodes into `PortInfo` (open/filtered only). | `utils/nmap_xml.py:95` |
+| `extract_ipv4()` | Pulls the IPv4 address from a host node. | `utils/nmap_xml.py:151` |
+| `extract_mac_vendor()` | Returns `(mac, vendor)` from the first `addrtype="mac"` address node, or `(None, None)`. Used by host, port and deep-inspection parsing. | `utils/nmap_xml.py:160` |
+| `parse_host_scripts()` | Parses `<hostscript>` entries into `ScriptResult`s. | `utils/nmap_xml.py:172` |
+| `parse_script()` | Parses one `<script>` node into a `ScriptResult`. | `utils/nmap_xml.py:184` |
+| `parse_nse_node()` | Recursively parses NSE structured tables into nested dicts/lists. | `utils/nmap_xml.py:201` |
 
 ## How it connects
 
