@@ -47,8 +47,9 @@ payload then reports `cancelled`; park/revoke stays silent (no upload, no status
 valid idle command → running
   ├─ stop.parked                                  → silent return (no ingest, no status)
   ├─ no payload, stop.cancelled                   → cancelled
-  ├─ no payload / fatal outcome / missing path    → failed   (no ingest call)
-  └─ completed | partial                          → uploading
+  ├─ no payload                                   → failed   (no ingest call)
+  ├─ fatal / missing path, not cancelled          → failed   (no ingest call)
+  └─ completed | partial | cancelled payload      → uploading
        ├─ stop.parked after upload                → silent return
        ├─ ingest accepted, stop.cancelled         → cancelled
        ├─ ingest accepted, otherwise              → done
@@ -61,7 +62,7 @@ valid idle command → running
 | `running, uploading, cancelled` | remote cancel with a partial payload, ingest `accepted` |
 | `running, cancelled` | remote cancel with no payload |
 | `running, failed/scan_failed` | `fatal`, missing payload without a cancel, or an unexpected scan exception |
-| `running, failed/result_unavailable` | payload exists, result was never persisted — no upload attempted, also after a cancel |
+| `running, failed/result_unavailable` | payload exists, result was never persisted — no upload attempted (a cancel uploads instead) |
 | `running, uploading, failed/ingest_failed` | any non-`accepted` ingest outcome |
 | `failed/device_busy` | a *different* command arrives while one is running or uploading |
 | *(none)* | park/revoke/shutdown stop — silent |
@@ -75,9 +76,10 @@ the typed ingest outcome, status, and attempt count (`daemon.py:229-236`). The u
 message is deliberately excluded because it may echo credentials; private keys and bearer tokens
 must never enter the daemon log.
 
-The gate order in `_run_command` is payload → result path → fatal, not fatal first — except a
-cancel partial (`terminated_by="user_cancel"`) skips the missing-path and fatal refusals so the
-upload can still run. That is load-bearing: `run_headless_scan` only ever returns a `None` result
+The gate order in `_run_command` is payload → result path → fatal, not fatal first — except when
+`stop.cancelled`: a stopped scan skips the missing-path and fatal refusals, so a partial payload
+still uploads when its local copy failed to write (ingest needs only the payload; spec 049
+decision 2). That is load-bearing: `run_headless_scan` only ever returns a `None` result
 path together with a `fatal` outcome on non-cancel failures, so checking `fatal` first would make
 `result_unavailable` unreachable.
 

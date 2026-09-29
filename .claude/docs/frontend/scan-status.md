@@ -41,7 +41,8 @@ severity order.
 - **`scanStatusPill` and `StatusPill` are gone** (spec 042). Status is semibold or body text only.
 - A completed scan with zero findings still shows the Completed label, not an em dash.
 - **Two stop labels.** Scan `cancelled` (no results) → **Stopped**. Scan `completed` +
-  `terminated_by == "user_cancel"` → **Stopped early**.
+  `terminated_by == "user_cancel"` → **Stopped early**. `scanStatusLabel` takes the generated
+  `TerminatedBy` type; list, history, and detail all read the top-level `terminated_by` field.
 
 # Citations
 

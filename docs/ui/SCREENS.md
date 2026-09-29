@@ -518,8 +518,9 @@ find anything*. This is honestly a table and it looks like one. *Re-specced 2026
   (`data: ScanSummary[]`, `total`, `page`). Server-driven sorting and pagination; **no
   client-side sorting.**
 - `ScanSummary`: `scan_id`, `timestamp`, `subnet`, `scan_mode`, `status`, `host_count`,
-  `finding_count`, `highest_severity` (nullable), `terminated_by` (nullable; from scan metadata,
-  e.g. `"user_cancel"` when an operator stopped the scan after some results).
+  `finding_count`, `highest_severity` (nullable), `terminated_by` (nullable `completed` |
+  `user_cancel` | `timeout` | `error`; `"user_cancel"` when an operator stopped the scan after some
+  results). `ScanDetailResponse` carries the same field.
 - `POST /api/v1/agents/{agent_id}/commands` — `[Scan now]`, admin only, with the currently
   selected scan type.
 
@@ -616,7 +617,7 @@ work respectively.
 - **Regular, cancelled:** `status: cancelled` (stopped before any results). Show
   `ScanStoppedNotice` only — "Stopped" plus "This scan was stopped before the Pi sent any results."
   No AI panel, no findings, no counts.
-- **Regular, stopped early:** `status: completed` with `metadata.terminated_by == "user_cancel"`.
+- **Regular, stopped early:** `status: completed` with `terminated_by == "user_cancel"`.
   Normal results view plus the line "This scan was stopped early. It shows what was found before
   the stop."
 - **Error:** page-level copy + `[Retry]`. 404 gets its own line.

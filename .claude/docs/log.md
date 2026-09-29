@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-29
 
+* **Update**: PR #160 second review (DMI-145). `terminated_by` is now the typed `TerminatedBy`
+  (`completed`/`user_cancel`/`timeout`/`error`) read by `api/core/scan_read.scan_terminated_by`, on
+  both `ScanSummary` and `ScanDetailResponse`; AI context maps from the same reader; Scan detail and
+  `scanStatusLabel` read the top-level field. Pi: a cancelled scan uploads its partial payload even
+  when the local result file failed to write. Touched: `hardware-agent/daemon.md`,
+  `backend/schemas.md`, `backend/ai.md`, `frontend/scan-status.md`, `frontend/screens.md`.
+
 * **Update**: PR #160 review (DMI-145). Pi `_ScanStop` now has separate `cancelled` / `parked`
   flags (`request_cancel`, `request_park`); `_run_command` classifies the stop once. Backend: ingest
   owns the `completed` scan; `_mirror_command_on_scan` changes only an `UNFINISHED_SCAN`; new
