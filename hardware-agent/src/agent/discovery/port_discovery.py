@@ -8,7 +8,12 @@ from dataclasses import replace
 from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
 from agent.scanner.models import PortInfo, PortScanResult
 from agent.scanner.nmap import NmapRunner
-from agent.utils.nmap_xml import extract_ipv4, parse_operating_system, parse_ports
+from agent.utils.nmap_xml import (
+    extract_ipv4,
+    extract_mac_identity,
+    parse_operating_system,
+    parse_ports,
+)
 
 NSPI_PASS1_ARGS = ["-Pn", "-T4", "-n", "--host-timeout", NSPI_HOST_TIMEOUT]
 NSPI_PASS2_ARGS = [
@@ -71,6 +76,7 @@ def merge_port_scan_results(
     return PortScanResult(
         ports=merge_ports(existing.ports, incoming.ports),
         operating_system=operating_system,
+        identity=existing.identity.merged_with(incoming.identity),
         skipped=existing.skipped or incoming.skipped,
     )
 
@@ -79,6 +85,7 @@ def _parse_port_scan_result(host_element: ET.Element) -> PortScanResult:
     return PortScanResult(
         ports=parse_ports(host_element),
         operating_system=parse_operating_system(host_element),
+        identity=extract_mac_identity(host_element),
     )
 
 

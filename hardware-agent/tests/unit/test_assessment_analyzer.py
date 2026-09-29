@@ -16,6 +16,7 @@ from agent.ot.modbus.models import (
 )
 from agent.scanner.models import (
     HostInfo,
+    MacIdentity,
     OperatingSystemInfo,
     PortInfo,
     ScriptResult,
@@ -524,7 +525,7 @@ def test_equal_richness_duplicate_endpoints_are_fully_deterministic() -> None:
                 HostInfo(
                     ip="192.168.1.20",
                     hostname="axis-camera",
-                    vendor="Axis Communications",
+                    identity=MacIdentity(vendor="Axis Communications"),
                     ports=list(ordered_ports),
                 )
             ]
@@ -572,7 +573,7 @@ def test_profile_score_thresholds_and_conflict_are_visible() -> None:
     confident_camera = HostInfo(
         ip="192.168.1.20",
         hostname="axis-camera",
-        vendor="Axis Communications",
+        identity=MacIdentity(vendor="Axis Communications"),
         ports=[_port(554, "rtsp", product="Axis camera")],
         operating_system=OperatingSystemInfo(
             name="Embedded Linux",
@@ -583,7 +584,7 @@ def test_profile_score_thresholds_and_conflict_are_visible() -> None:
     conflicting = HostInfo(
         ip="192.168.1.21",
         hostname="mixed",
-        vendor="Axis Communications",
+        identity=MacIdentity(vendor="Axis Communications"),
         ports=[_port(554, "rtsp"), _port(22, "ssh", product="server")],
         operating_system=OperatingSystemInfo(
             name="Linux",
@@ -608,8 +609,7 @@ def test_unknown_and_randomized_mac_never_invent_identity() -> None:
     host = HostInfo(
         ip="192.168.1.20",
         hostname="192.168.1.20",
-        mac="02:11:22:33:44:55",
-        vendor="Axis Communications",
+        identity=MacIdentity(mac="02:11:22:33:44:55", vendor="Axis Communications"),
         ports=[_port(65000)],
     )
 
@@ -943,7 +943,7 @@ def test_secret_bodies_are_omitted_and_all_assessment_values_are_bounded() -> No
     host = HostInfo(
         ip="192.168.1.20",
         hostname="camera-" + "h" * 300,
-        vendor="Axis Communications " + "v" * 300,
+        identity=MacIdentity(vendor="Axis Communications " + "v" * 300),
         ports=[
             _port(
                 554,
@@ -1238,7 +1238,7 @@ def test_cpe_and_certificate_can_supply_corroborated_product_family() -> None:
     certificate_host = HostInfo(
         ip="192.168.1.21",
         hostname="printer",
-        vendor="Brother",
+        identity=MacIdentity(vendor="Brother"),
         ports=[
             _port(
                 631,
@@ -1290,7 +1290,7 @@ def test_nested_nmap_certificate_common_name_supplies_bounded_family() -> None:
     host = HostInfo(
         ip="192.168.1.21",
         hostname="printer",
-        vendor="Brother",
+        identity=MacIdentity(vendor="Brother"),
         ports=parse_ports(host_element),
     )
 
@@ -1339,7 +1339,7 @@ def test_nested_certificate_common_names_are_bounded_and_only_subject_sets_famil
     host = HostInfo(
         ip="192.168.1.21",
         hostname="printer",
-        vendor="Brother",
+        identity=MacIdentity(vendor="Brother"),
         ports=parse_ports(host_element),
     )
 
@@ -1402,7 +1402,7 @@ def test_nested_certificate_fact_order_is_independent_of_xml_child_order() -> No
         host = HostInfo(
             ip="192.168.1.21",
             hostname="printer",
-            vendor="Brother",
+            identity=MacIdentity(vendor="Brother"),
             ports=parse_ports(host_element),
         )
         profile = assess_hosts([host]).device_profiles[host.ip]
@@ -1429,7 +1429,7 @@ def test_uncorroborated_or_unmatched_product_facts_cannot_invent_family() -> Non
     unmatched_certificate = HostInfo(
         ip="192.168.1.22",
         hostname="printer",
-        vendor="Brother",
+        identity=MacIdentity(vendor="Brother"),
         ports=[
             _port(
                 631,
@@ -1461,13 +1461,13 @@ def test_assessment_is_deterministic_and_does_not_perform_io(monkeypatch) -> Non
         HostInfo(
             ip="192.168.1.21",
             hostname="printer",
-            vendor="Brother",
+            identity=MacIdentity(vendor="Brother"),
             ports=[_port(9100, "jetdirect"), _port(631, "ipp")],
         ),
         HostInfo(
             ip="192.168.1.20",
             hostname="camera",
-            vendor="Axis Communications",
+            identity=MacIdentity(vendor="Axis Communications"),
             ports=[_port(8554, "rtsp"), _port(554, "rtsp")],
         ),
     ]

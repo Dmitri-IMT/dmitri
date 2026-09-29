@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 
 from agent.scanner.models import (
+    MacIdentity,
     OperatingSystemInfo,
     PortInfo,
     ScriptResult,
@@ -155,6 +156,18 @@ def extract_ipv4(host_element: ET.Element) -> str | None:
         if address_node.get("addrtype") == "ipv4":
             return address_node.get("addr")
     return None
+
+
+def extract_mac_identity(host_element: ET.Element) -> MacIdentity:
+    """Return the MAC address and Nmap's vendor label as one observation."""
+
+    for address_node in host_element.findall("address"):
+        if address_node.get("addrtype") == "mac":
+            return MacIdentity(
+                mac=_optional_attribute(address_node, "addr"),
+                vendor=_optional_attribute(address_node, "vendor") or "unknown",
+            )
+    return MacIdentity()
 
 
 def parse_host_scripts(host_element: ET.Element) -> list[ScriptResult]:

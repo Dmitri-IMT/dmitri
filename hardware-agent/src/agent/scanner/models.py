@@ -65,12 +65,30 @@ class PortInfo:
     scripts: list[ScriptResult] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class MacIdentity:
+    """One Nmap MAC observation: the address and the vendor paired with it."""
+
+    mac: str | None = None
+    vendor: str = "unknown"
+
+    def merged_with(self, incoming: MacIdentity) -> MacIdentity:
+        """Fold in a later observation; a vendor never follows a new MAC."""
+
+        if incoming.mac is None:
+            return self
+        if incoming.mac == self.mac and incoming.vendor.casefold() == "unknown":
+            return self
+        return incoming
+
+
 @dataclass(slots=True)
 class PortScanResult:
-    """Port inventory and OS evidence parsed from one Nmap host node."""
+    """Host identity, port inventory, and OS evidence from one Nmap host node."""
 
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None
+    identity: MacIdentity = MacIdentity()
     skipped: bool = False
 
 
@@ -80,8 +98,7 @@ class HostInfo:
 
     ip: str
     hostname: str
-    mac: str | None = None
-    vendor: str = "unknown"
+    identity: MacIdentity = MacIdentity()
     state: str = "up"
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None

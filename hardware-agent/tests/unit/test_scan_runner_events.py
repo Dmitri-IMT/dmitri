@@ -8,7 +8,7 @@ from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
 from agent.ot.modbus.models import ModbusService, ModbusUnit
 from agent.scanner import stages
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, MacIdentity, PortInfo, ServiceInfo
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.scanner.runner import ScanRunner
@@ -52,8 +52,7 @@ def _assessable_host() -> HostInfo:
     return HostInfo(
         ip="192.168.1.10",
         hostname="camera.local",
-        mac="00:11:22:33:44:55",
-        vendor="Acme",
+        identity=MacIdentity(mac="00:11:22:33:44:55", vendor="Acme"),
         ports=[
             PortInfo(
                 port=80,
@@ -74,8 +73,7 @@ def test_build_payload_assesses_each_mode_once_and_preserves_raw_inventory(
     original = (
         host.ip,
         host.hostname,
-        host.mac,
-        host.vendor,
+        host.identity,
         [
             (port.port, port.protocol, port.state, port.service.name)
             for port in host.ports
@@ -122,8 +120,7 @@ def test_build_payload_assesses_each_mode_once_and_preserves_raw_inventory(
     assert (
         host.ip,
         host.hostname,
-        host.mac,
-        host.vendor,
+        host.identity,
         [
             (port.port, port.protocol, port.state, port.service.name)
             for port in host.ports

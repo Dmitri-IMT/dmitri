@@ -8,7 +8,7 @@ from agent.ot.modbus.models import (
     ModbusUnit,
 )
 from agent.ot.policy import GENERIC_BASELINE_RANGES, MappingProfile, OtAutomationPolicy
-from agent.scanner.models import HostInfo
+from agent.scanner.models import HostInfo, MacIdentity
 
 
 def _identified_service() -> ModbusService:
@@ -119,7 +119,7 @@ def test_mac_match_can_widen_beyond_generic_baseline() -> None:
     host = HostInfo(
         ip="192.168.10.30",
         hostname="plc",
-        mac="00:11:22:33:44:55",
+        identity=MacIdentity(mac="00:11:22:33:44:55"),
     )
     service = _identified_service()
     wide = MappingProfile(
