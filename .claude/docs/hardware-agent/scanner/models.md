@@ -19,10 +19,11 @@ fills identity, the port stage sets `ports`, deep inspection merges services and
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `HostInfo` | A discovered host: `ip`, `hostname`, `mac`, `vendor` (default `"unknown"`), `state`, `ports`, `operating_system`, `host_scripts`, `industrial_services`, `targeted_results`. | `models.py:105` |
-| `HostInfo.open_ports` | Property returning only `state == "open"` ports — the ones that feed service/NSE stages. | `models.py:120` |
-| `PortScanResult` | One Nmap host node from the port stage: `ports`, `operating_system`, `mac`, `vendor`, `skipped`. | `models.py:69` |
-| `merge_mac_vendor()` | Merges MAC and vendor as one pair. No incoming MAC keeps the existing pair. Same MAC keeps the existing vendor unless the incoming one is known. A new MAC never inherits the old vendor: it takes the incoming vendor or `"unknown"`. | `models.py:79` |
+| `HostInfo` | A discovered host: `ip`, `hostname`, `identity` (`MacIdentity`), `state`, `ports`, `operating_system`, `host_scripts`, `industrial_services`, `targeted_results`. | `models.py:96` |
+| `HostInfo.open_ports` | Property returning only `state == "open"` ports — the ones that feed service/NSE stages. | `models.py:110` |
+| `MacIdentity` | Frozen value for one Nmap MAC observation: `mac` (or `None`) and `vendor` (default `"unknown"`). | `models.py:69` |
+| `MacIdentity.merged_with()` | Folds in a later observation. No incoming MAC keeps `self`. Same MAC with an `"unknown"` vendor keeps `self`. Otherwise the incoming value wins, so a new MAC never inherits the old vendor. | `models.py:75` |
+| `PortScanResult` | One Nmap host node from the port stage: `ports`, `operating_system`, `identity`, `skipped`. | `models.py:86` |
 | `PortInfo` | A port: `port`, `protocol`, `state`, `service`, `scripts`. | `models.py:58` |
 | `ServiceInfo` | A service fingerprint: `name`, `product`, `version`, `extra_info`, `cpes`. | `models.py:38` |
 | `ServiceInfo.banner` | Property joining product/version/extra_info into a compact string (or `None`). | `models.py:49` |
@@ -41,10 +42,13 @@ fills identity, the port stage sets `ports`, deep inspection merges services and
 
 - These models are the in-agent representation of a [host](/glossary.md); they become contract-shaped
   **`HostPayload`**s at `build_host_payload`.
-- **MAC and vendor travel as a pair.** Discovery, the port stage, and deep inspection each read the
-  MAC `<address>` node, and [stages](/hardware-agent/scanner/stages.md) folds each later reading into
-  the host with `merge_mac_vendor`. A stage whose XML has no MAC node cannot erase the discovery
-  vendor, and a vendor never carries over to a different MAC.
+- **MAC and vendor travel as one value.** Discovery, the port stage, and deep inspection each read
+  the MAC `<address>` node into a `MacIdentity`, and [stages](/hardware-agent/scanner/stages.md)
+  applies each later one with `host.identity = host.identity.merged_with(result.identity)`. A stage
+  whose XML has no MAC node cannot erase the discovery vendor, and a vendor never carries over to a
+  different MAC. Read the fields as `host.identity.mac` / `host.identity.vendor`.
+- The TUI device screen and the wire contract use `HostPayload`, which keeps flat `mac`/`vendor`
+  fields. `build_host_payload` flattens `identity` there.
 - `ScriptResult.data` is `Any` — the recursive NSE table parsed by
   [`parse_nse_node`](/hardware-agent/utils.md) into nested dicts/lists that
   [findings](/hardware-agent/normalize.md) walks.

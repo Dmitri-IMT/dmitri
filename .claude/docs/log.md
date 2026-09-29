@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-09-28
 
+* **Update**: PR #157 review. `merge_mac_vendor` and the loose `mac`/`vendor` fields are replaced by
+  the frozen `MacIdentity(mac, vendor)` value that owns `merged_with()`; `HostInfo` and
+  `PortScanResult` both hold `identity`. `extract_mac_vendor` became `extract_mac_identity`. Backend
+  `upsert_hosts_for_scan` drops the `mac_changed` branch: a different MAC is already a new host via
+  `identity_key`. Touched: `hardware-agent/scanner/models.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/discovery.md`, `hardware-agent/utils.md`, `backend/services.md`.
+
 * **Update**: Vendor evidence now survives later scan stages. New `extract_mac_vendor()` in
   `utils/nmap_xml.py`; `PortScanResult` gains `mac`/`vendor`; new `merge_mac_vendor()` in
   `scanner/models.py` keeps MAC and vendor paired. `run_port_stage` and `run_deep_inspection_stage`

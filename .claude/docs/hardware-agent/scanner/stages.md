@@ -20,8 +20,8 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, folds the result's MAC/vendor into the host with `merge_mac_vendor`, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:126` |
-| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. A successful result's MAC/vendor is folded in with `merge_mac_vendor`. | `stages.py:237` |
+| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, merges the result's `identity` into the host with `MacIdentity.merged_with`, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:125` |
+| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. A successful result's `identity` is merged in with `MacIdentity.merged_with`. | `stages.py:234` |
 | `_recover_deep_stage_services()` | Reuses `detect_services` for recovery; treats a host-level Nmap error or timeout as unsuccessful recovery without stopping the scan. | `stages.py:99` |
 | `_stage_deadline_hit()` | Returns elapsed stage seconds when the stage clock is past, else `None`. | `stages.py:409` |
 | `run_ot_inspection_stage()` | Serial Modbus inventory or read-only mapping. Checks cancel and the stage ceiling at the start of each host; after the loop, if the run was not cancelled, emits `ot_stage_deadline` once. Each started host gets `host_deadline` (stage cap plus `MAX_OT_HOST_SECONDS`) for inventory and mapping. | `stages.py:418` |

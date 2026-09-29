@@ -24,12 +24,12 @@ every discovery stage funnels Nmap's XML through it to produce [models](/hardwar
 | `AvailableSubnetInfo` | Dataclass of one usable subnet: `interface`, `cidr`, `is_default_route`. | `utils/network.py:51` |
 | `detect_available_subnets()` | Daemon-facing enumeration: every usable IPv4 interface as an `AvailableSubnetInfo`. Filters loopback, link-local, down interfaces, IPv6 and bad netmasks; dedupes by `(interface, cidr)`; canonicalizes to the network address. | `utils/network.py:59` |
 | `check_network_connectivity()` | Raises `NetworkUnreachableError` unless a non-loopback IPv4 interface is up. Called first in `ScanRunner._run()`. | `utils/network.py:105` |
-| `parse_ports()` | Parses `<port>`/service/script nodes into `PortInfo` (open/filtered only). | `utils/nmap_xml.py:95` |
-| `extract_ipv4()` | Pulls the IPv4 address from a host node. | `utils/nmap_xml.py:151` |
-| `extract_mac_vendor()` | Returns `(mac, vendor)` from the first `addrtype="mac"` address node, or `(None, None)`. Used by host, port and deep-inspection parsing. | `utils/nmap_xml.py:160` |
-| `parse_host_scripts()` | Parses `<hostscript>` entries into `ScriptResult`s. | `utils/nmap_xml.py:172` |
-| `parse_script()` | Parses one `<script>` node into a `ScriptResult`. | `utils/nmap_xml.py:184` |
-| `parse_nse_node()` | Recursively parses NSE structured tables into nested dicts/lists. | `utils/nmap_xml.py:201` |
+| `parse_ports()` | Parses `<port>`/service/script nodes into `PortInfo` (open/filtered only). | `utils/nmap_xml.py:96` |
+| `extract_ipv4()` | Pulls the IPv4 address from a host node. | `utils/nmap_xml.py:152` |
+| `extract_mac_identity()` | Returns a `MacIdentity` from the first `addrtype="mac"` address node (vendor `"unknown"` when absent), or an empty `MacIdentity()`. Used by host, port and deep-inspection parsing. | `utils/nmap_xml.py:161` |
+| `parse_host_scripts()` | Parses `<hostscript>` entries into `ScriptResult`s. | `utils/nmap_xml.py:173` |
+| `parse_script()` | Parses one `<script>` node into a `ScriptResult`. | `utils/nmap_xml.py:185` |
+| `parse_nse_node()` | Recursively parses NSE structured tables into nested dicts/lists. | `utils/nmap_xml.py:202` |
 
 ## How it connects
 
