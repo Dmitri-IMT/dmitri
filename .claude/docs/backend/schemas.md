@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -135,7 +135,7 @@ All six use `extra="forbid"` and mirror `contracts/openapi/openapi.yaml` frame s
 |------|-------------------|-----|
 | `CreateCommandRequest` | `POST /agents/{agent_id}/commands` body — `scan_mode` (`ScanMode`) and `subnet` (`SubnetCIDR`). `extra="forbid"`. | `backend/src/api/schemas/commands.py:22` |
 | `CommandSummary` | The `201` response: `command_id`, optional `scan_id`, `agent_id`, `status`. | `backend/src/api/schemas/commands.py:29` |
-| `CommandDetail` | `GET /commands/{command_id}` and cancel response — `CommandSummary`'s fields plus `scan_mode`, `subnet`, optional `error_code` (`ScanErrorCode \| None`), and the four lifecycle timestamps. Status includes `cancelled` (DMI-145). Off-contract stored strings are normalised to `"unknown"` in the service before this model is built. | `backend/src/api/schemas/commands.py` |
+| `CommandDetail` | `GET /commands/{command_id}` and cancel response — `CommandSummary`'s fields plus `scan_mode`, `subnet`, optional `error_code` (`ScanErrorCode \| None`), the four lifecycle timestamps, and `has_results` (scan `completed`). Status includes `cancelled` (DMI-145). Off-contract stored strings are normalised to `"unknown"` in the service before this model is built. | `backend/src/api/schemas/commands.py` |
 
 **`scan_id` is optional on both `CommandSummary` and `CommandDetail`** — a `queued` or `expired`
 command has none. The published contract was amended to drop it from `required` on both schemas;

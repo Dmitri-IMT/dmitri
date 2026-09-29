@@ -3,6 +3,20 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-29
+
+* **Update**: PR #160 review (DMI-145). Pi `_ScanStop` now has separate `cancelled` / `parked`
+  flags (`request_cancel`, `request_park`); `_run_command` classifies the stop once. Backend: ingest
+  owns the `completed` scan; `_mirror_command_on_scan` changes only an `UNFINISHED_SCAN`; new
+  `CANCELLABLE` and `accepts_late_ingest` in `command_lifecycle`; activity follows the payload's
+  `terminated_by` only; `cancelled_command_ids_for_agent` → `pending_operator_cancels` with shared
+  `_mode_deadline`; hello split into `_hello_gate` + `_send_pending_cancels`; `CommandDetail.has_results`.
+  Frontend: `CommandStatus` reads `has_results` (no scan fetch); `ScanStoppedNotice` gains
+  `variant`; Stop-scan tests moved to `DeviceDetail.cancel.test.tsx`. `AI_PROMPT_VERSION` doc fixed
+  to `"5"`. Touched: `hardware-agent/daemon.md`, `backend/services.md`, `backend/ai.md`,
+  `backend/schemas.md`, `frontend/api.md`, `frontend/devices-screen.md`, `frontend/screens.md`,
+  `frontend/scan-status.md`.
+
 ## 2026-09-28
 
 * **Update**: DMI-145 / spec 049 remote scan cancel. Documented Pi `_ScanStop.request("cancel"|"park")`,

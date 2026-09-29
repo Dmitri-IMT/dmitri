@@ -4,7 +4,7 @@ title: Devices list, detail, scan and revocation
 description: Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
 resource: frontend/src/pages/Devices.tsx
 tags: [frontend, agents, devices, commands, tanstack-query]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 
 # Devices list, detail, scan and revocation
@@ -43,7 +43,7 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
 | `watchedNetworkLabel()` / `resolveWatchedNetwork()` | Shared CIDR plus interface label and subnet lookup for read-only and live collapsed rows. | `frontend/src/pages/agents/watchedNetworkLabel.ts:7` |
 | `TargetSubnetSection` | Live detail only. Collapsed read line plus admin `[Change]`; open state drives the `AdminOnly` chooser PATCH. | `frontend/src/pages/agents/TargetSubnetSection.tsx:42` |
 | `ScanControl` | One slot: `[Scan now]` or `CommandStatus`. Trigger stays visible when offline; disabled only while POST in flight. Dispatches the `TriggerOutcome` and passes `selectedMode` into `trigger()`. | `frontend/src/pages/agents/ScanControl.tsx` |
-| `CommandStatus` | **One** left-aligned `role="status"` root that stays mounted from `Starting…` through every fetched state. Renders `commandStatusLabel` text — no pill chrome. While `delivered`/`running`, admin **Stop scan** opens a confirm dialog then calls `cancel()`. After confirm shows "Stopping…" until terminal. `cancelled` with a completed scan → **View scan** + **Retry** and the saved-results hint; without results → **Retry** only. | `frontend/src/pages/agents/CommandStatus.tsx` |
+| `CommandStatus` | **One** left-aligned `role="status"` root that stays mounted from `Starting…` through every fetched state. Renders `commandStatusLabel` text — no pill chrome. While `delivered`/`running`, admin **Stop scan** opens a confirm dialog then calls `cancel()`. After confirm shows "Stopping…" until terminal. `cancelled` with `has_results` → **View scan** + **Retry** and the saved-results hint; without results → **Retry** only. No scan fetch: the command carries `has_results`. | `frontend/src/pages/agents/CommandStatus.tsx` |
 | `FirstScanCta` / `FirstScanNote` | Admin link to `/devices` and viewer line for Home/Scans/Network blank states. | `frontend/src/components/FirstScanCta.tsx:6` |
 
 ## How it connects
@@ -57,7 +57,8 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
   page.
 - MSW defaults and per-test overrides: `mswHandlers.ts` fixtures + `test/agentsHarness.ts`. Tests
   split across `Devices.test.tsx`, `DeviceDetail.test.tsx`,
-  `DeviceDetail.command.test.tsx`, `DeviceDetail.invalidation.test.tsx`, and
+  `DeviceDetail.command.test.tsx`, `DeviceDetail.cancel.test.tsx` (Stop scan),
+  `DeviceDetail.invalidation.test.tsx`, and
   `DeviceDetail.revocation.test.tsx`.
 - Completion invalidates the read surfaces documented in [screens](./screens.md) without those
   screens polling.

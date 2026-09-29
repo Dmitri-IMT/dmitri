@@ -4,7 +4,7 @@ title: daemon — the unattended command executor
 description: The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio, cancel]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 
 # daemon — the unattended command executor
@@ -28,13 +28,13 @@ payload then reports `cancelled`; park/revoke stays silent (no upload, no status
 |------|--------------|-----|
 | `CommandStatus` | Wire statuses the daemon may report: `running`, `uploading`, `done`, `failed`, `cancelled`. | `daemon.py:28` |
 | `CommandRecord` | Ledger entry: `status`, optional `error_code`, and `pending` — whether that status still needs delivery after a disconnect. | `daemon.py:32` |
-| `_ScanStop` | Per-command, thread-safe stop latch. `bind()` runs on the worker with the runner's cancel function; `request(reason)` runs on the loop with `"cancel"` (remote) or `"park"` (park/revoke/shutdown). Whichever of bind/request comes second fires the cancel. `reason` is read after the scan returns. | `daemon.py:38` |
+| `_ScanStop` | Per-command, thread-safe stop latch with two separate flags. `bind()` runs on the worker with the runner's cancel function; `request_cancel()` (remote) and `request_park()` (park/revoke/shutdown) run on the loop. Whichever of bind/request comes second fires the cancel. `finish()` freezes `cancelled` once the runner returns, so a late cancel is ignored and the command ends `done`; a later park never erases an earlier cancel. | `daemon.py:38` |
 | `AgentDaemon(client, ingest, *, run_scan=run_headless_scan)` | The coordinator. `run_scan` is the injectable headless runner, which is why no literal `run_headless_scan(` call appears in this module. | `daemon.py:75` |
 | `.run()` | Wires `handle_command`, `replay_pending`, `_cancel_active` (as `on_parked`), and `handle_cancel` (as `on_cancel`) into the client loop; closes the socket and owned ingest client in `finally`. | `daemon.py:92` |
 | `.close()` | Stops and awaits the active command (park reason), then closes both clients. | `daemon.py:103` |
-| `._cancel_active()` | Park path: `self._stop.request("park")`, awaits the task so `_active` clears only after the worker returns. No upload and no status from a park stop. An upload already in progress may finish, but its return is ignored and no later status is reported. | `daemon.py:108` |
+| `._cancel_active()` | Park path: `self._stop.request_park()`, awaits the task so `_active` clears only after the worker returns. No upload and no status from a park stop. An upload already in progress may finish, but its return is ignored and no later status is reported. | `daemon.py:108` |
 | `.handle_command(command)` | The `on_command` callback: park guard, duplicate replay, busy rejection, then start the one owned task. | `daemon.py:117` |
-| `.handle_cancel(command_id)` | The `on_cancel` callback. Active and `running` → `self._stop.request("cancel")`. In ledger (not uploading) → re-send the record. Unknown or `uploading` → no-op. | `daemon.py:149` |
+| `.handle_cancel(command_id)` | The `on_cancel` callback. Active and `running` → `self._stop.request_cancel()`. In ledger (not uploading) → re-send the record. Unknown or `uploading` → no-op. | `daemon.py:149` |
 | `.replay_pending()` | The `on_connected` seam — resends pending status after hello, before any new command is acted on. | `daemon.py:158` |
 | `._execute(command)` | Owns the scan task; converts any exception to `failed` and clears `_active` in `finally` via `_release_hold` on terminal send. | `daemon.py:163` |
 | `._run_command(command)` | The state machine below. | `daemon.py:170` |
@@ -45,11 +45,12 @@ payload then reports `cancelled`; park/revoke stays silent (no upload, no status
 
 ```text
 valid idle command → running
-  ├─ park stop (reason "park")                    → silent return (no ingest, no status)
-  ├─ cancel stop, no payload                      → cancelled
-  ├─ fatal outcome / missing path (not cancel)    → failed   (no ingest call)
-  └─ completed | partial | cancel partial         → uploading
-       ├─ ingest accepted, user_cancel metadata   → cancelled
+  ├─ stop.parked                                  → silent return (no ingest, no status)
+  ├─ no payload, stop.cancelled                   → cancelled
+  ├─ no payload / fatal outcome / missing path    → failed   (no ingest call)
+  └─ completed | partial                          → uploading
+       ├─ stop.parked after upload                → silent return
+       ├─ ingest accepted, stop.cancelled         → cancelled
        ├─ ingest accepted, otherwise              → done
        └─ any other outcome                       → failed
 ```
@@ -57,10 +58,10 @@ valid idle command → running
 | Frames emitted | When |
 |---|---|
 | `running, uploading, done` | `completed` or non-cancel `partial`, ingest `accepted` |
-| `running, uploading, cancelled` | remote cancel with a partial payload, ingest `accepted` (`terminated_by="user_cancel"`) |
+| `running, uploading, cancelled` | remote cancel with a partial payload, ingest `accepted` |
 | `running, cancelled` | remote cancel with no payload |
-| `running, failed/scan_failed` | `fatal`, missing payload, or an unexpected scan exception (not cancel) |
-| `running, failed/result_unavailable` | payload exists, result was never persisted — no upload attempted |
+| `running, failed/scan_failed` | `fatal`, missing payload without a cancel, or an unexpected scan exception |
+| `running, failed/result_unavailable` | payload exists, result was never persisted — no upload attempted, also after a cancel |
 | `running, uploading, failed/ingest_failed` | any non-`accepted` ingest outcome |
 | `failed/device_busy` | a *different* command arrives while one is running or uploading |
 | *(none)* | park/revoke/shutdown stop — silent |
@@ -111,9 +112,10 @@ every intermediate row in command history.
   and the backend's disconnect grace + stale sweep own the eventual `failed`. Commands are never
   queued locally while disconnected.
 * A socket drop does **not** cancel a running scan. Status changes are recorded pending and replayed
-  on reconnect. Parking (and shutdown) stops a scan via `_cancel_active` → `request("park")`. A
-  remote cancel uses `handle_cancel` → `request("cancel")`, uploads the partial, then reports
-  `cancelled`. Only the park path is silent.
+  on reconnect. Parking (and shutdown) stops a scan via `_cancel_active` → `request_park()`. A
+  remote cancel uses `handle_cancel` → `request_cancel()`, uploads the partial, then reports
+  `cancelled`. Only the park path is silent — also after a cancel's upload, because an accepted
+  ingest already moved the command to its terminal status on the backend.
 * Ingest `forbidden` records `failed/ingest_failed`, makes one best-effort status send, then calls
   `park("upload_refused")`. The shared command-channel policy drops the socket, waits one hour, and
   redials; no new scan starts while parked.

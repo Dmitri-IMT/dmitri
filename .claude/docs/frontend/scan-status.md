@@ -4,7 +4,7 @@ title: frontend scan status and severity order
 description: scanStatusLabel maps every ScanStatus including cancelled and Stopped early; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 resource: frontend/src/lib/scanStatus.ts
 tags: [frontend, scans, severity, cancel]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 
 # frontend scan status and severity order
@@ -30,7 +30,7 @@ severity order.
 - Scan list `scanListColumns` and device history columns pass `terminated_by` into
   `scanStatusLabel` for the **Stopped early** label.
 - Scan detail uses `isUnfinished` for the still-running branch, `cancelled` for
-  `ScanStoppedNotice`, and `bySeverityDesc` before render.
+  `ScanStoppedNotice variant="empty"`, and `bySeverityDesc` before render.
 - Host findings reuse `bySeverityDesc`.
 - Failed-scan **sentences** stay in [scan-failure-reasons](./scan-failure-reasons.md), not here.
   Command lifecycle labels live in [command-status](./command-status.md).

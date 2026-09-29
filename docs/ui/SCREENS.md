@@ -793,10 +793,10 @@ Each section is a **white card on the canvas with its heading inside**.
 - `POST /api/v1/agents/{agent_id}/commands` → `CommandSummary`. Body is
   `{ scan_mode: "quick", subnet: <agent.target_subnet> }` — **both are supplied by the system, never
   typed by the operator** (B4).
-- `GET /api/v1/commands/{command_id}` → `CommandDetail`: `status`, `error_code`, `scan_id`. Poll
+- `GET /api/v1/commands/{command_id}` → `CommandDetail`: `status`, `error_code`, `scan_id`, `has_results`. Poll
   **every 5s** while the status is pending.
 - `POST /api/v1/commands/{command_id}/cancel` → `CommandDetail` (admin). Connected Pi → `202` and a
-  cancel frame; offline or already terminal → `200`; `uploading` → `409 command_not_cancellable`.
+  cancel frame; offline or already terminal → `200`; `queued` or `uploading` → `409 command_not_cancellable`.
 
 `CommandStatus` is `queued | delivered | running | uploading | done | failed | cancelled | expired`
 — **eight** states. `cancelled` is the operator stop (DMI-145). `expired` is a *backend*-set state
