@@ -19,6 +19,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import (
+    TERMINATED_BY_USER_CANCEL,
     ExposurePayload,
     FindingPayload,
     HostPayload,
@@ -75,7 +76,7 @@ def ingest_scan(
         or command.org_id != identity.org_id
     ):
         raise ScanOwnershipError
-    if is_terminal(command.status):
+    if is_terminal(command.status) and command.status != "cancelled":
         raise ScanClosedError
     return persist_scan(
         session,
@@ -200,11 +201,22 @@ def persist_scan(
 
     reconcile_scan_inventory(session, scan_record)
 
+    cancelled = (
+        command is not None and command.status == "cancelled"
+    ) or (
+        scan.metadata is not None
+        and scan.metadata.get("terminated_by") == TERMINATED_BY_USER_CANCEL
+    )
+    # Mark the scan completed before apply_status("cancelled") runs: its guard keeps
+    # a completed scan, so a stopped scan with results stays viewable.
+    scan_record.status = "completed"
+    session.add(scan_record)
+
     append_scan_activity(
         session,
         org_id=org_id,
         scan_id=scan.scan_id,
-        kind="scan_finished",
+        kind="scan_cancelled" if cancelled else "scan_finished",
         scan_mode=scan_record.scan_mode,
         occurred_at=now,
     )
@@ -216,17 +228,20 @@ def persist_scan(
 
     if command is None:
         session.commit()
+    elif command.status == "cancelled":
+        session.commit()
     else:
         applied = apply_status(
             session,
             agent_id=agent_id,
             command_id=command.id,
-            status="done",
+            status="cancelled" if cancelled else "done",
             now=now,
         )
         if not applied:
             raise RuntimeError(
-                "command moved past 'done' between the terminal check and commit"
+                "command reached a terminal status between the terminal check and "
+                "commit"
             )
     return scan_record
 

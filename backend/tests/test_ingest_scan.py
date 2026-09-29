@@ -650,8 +650,12 @@ def test_ingest_scan_rejects_placeholder_from_another_org(
     )
 
 
+@pytest.mark.parametrize("terminal_status", ["done", "failed", "expired"])
 def test_ingest_scan_rejects_terminal_command(
-    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+    terminal_status: str,
 ) -> None:
     scan_id = uuid4()
     now = datetime.now(timezone.utc)
@@ -662,9 +666,11 @@ def test_ingest_scan_rejects_terminal_command(
         scan_id=scan_id,
         now=now,
     )
-    command.status = "failed"
-    command.error_code = "device_offline"
-    command.completed_at = now
+    command.status = terminal_status
+    if terminal_status == "failed":
+        command.error_code = "device_offline"
+    if terminal_status in {"done", "failed"}:
+        command.completed_at = now
     runtime_session.add(command)
     runtime_session.commit()
 
@@ -675,8 +681,7 @@ def test_ingest_scan_rejects_terminal_command(
         ingest_scan(runtime_session, scan, identity=identity, now=now)
 
     runtime_session.refresh(command)
-    assert command.status == "failed"
-    assert command.error_code == "device_offline"
+    assert command.status == terminal_status
     placeholder = runtime_session.get(ScanRecord, scan_id)
     assert placeholder.status == "pending"
     assert (
@@ -692,6 +697,118 @@ def test_ingest_scan_rejects_terminal_command(
         ).first()
         is None
     )
+
+
+def test_user_cancel_partial_upload_completes_scan_and_cancels_command(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    command.status = "uploading"
+    runtime_session.add(command)
+    runtime_session.commit()
+    scan = _scan_with_findable_payload(scan_id).model_copy(
+        update={"metadata": {"terminated_by": "user_cancel"}}
+    )
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    record = ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(command)
+    assert record.status == "completed"
+    assert command.status == "cancelled"
+    assert len(
+        runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).all()
+    ) == 1
+    cancelled = _activity_rows(runtime_session, seeded_org.id, "scan_cancelled")
+    assert len(cancelled) == 1
+    assert cancelled[0].subject_id == scan_id
+    assert _activity_rows(runtime_session, seeded_org.id, "scan_finished") == []
+    assert (
+        commands_module.active_command_for(runtime_session, provisioned_agent.id)
+        is None
+    )
+
+
+def test_late_partial_ingest_on_cancelled_command_completes_and_frees_device(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    command.status = "cancelled"
+    command.completed_at = now
+    scan_record = runtime_session.get(ScanRecord, scan_id)
+    assert scan_record is not None
+    scan_record.status = "cancelled"
+    runtime_session.add(command)
+    runtime_session.add(scan_record)
+    runtime_session.commit()
+
+    record = ingest_scan(
+        runtime_session,
+        _scan_with_findable_payload(scan_id).model_copy(
+            update={"metadata": {"terminated_by": "user_cancel"}}
+        ),
+        identity=AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id),
+        now=now,
+    )
+
+    runtime_session.refresh(command)
+    assert record.status == "completed"
+    assert command.status == "cancelled"
+    assert (
+        commands_module.active_command_for(runtime_session, provisioned_agent.id)
+        is None
+    )
+    cancelled = _activity_rows(runtime_session, seeded_org.id, "scan_cancelled")
+    assert len(cancelled) == 1
+    assert cancelled[0].subject_id == scan_id
+    assert _activity_rows(runtime_session, seeded_org.id, "scan_finished") == []
+
+
+def test_normal_finish_writes_scan_finished_and_marks_command_done(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    command = _seed_placeholder(
+        runtime_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    command.status = "uploading"
+    runtime_session.add(command)
+    runtime_session.commit()
+    scan = _scan_with_findable_payload(scan_id)
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+
+    record = ingest_scan(runtime_session, scan, identity=identity, now=now)
+
+    runtime_session.refresh(command)
+    assert record.status == "completed"
+    assert command.status == "done"
+    finished = _activity_rows(runtime_session, seeded_org.id, "scan_finished")
+    assert len(finished) == 1
+    assert finished[0].subject_id == scan_id
+    assert _activity_rows(runtime_session, seeded_org.id, "scan_cancelled") == []
 
 
 def test_ingest_scan_repeated_submission_is_idempotent(
