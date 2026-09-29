@@ -13,6 +13,8 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     ConfigDict,
+    Field,
+    TypeAdapter,
     ValidationError,
     constr,
     model_validator,
@@ -106,13 +108,27 @@ class AgentCommand(BaseModel):
         return self
 
 
+class AgentCancel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["cancel"]
+    command_id: UUID
+
+
 class AgentStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["status"] = "status"
     command_id: UUID
-    status: Literal["running", "uploading", "done", "failed"]
+    status: Literal["running", "uploading", "done", "failed", "cancelled"]
     error_code: str | None = None
+
+
+InboundCommandFrame = Annotated[
+    AgentCommand | AgentCancel,
+    Field(discriminator="type"),
+]
+_INBOUND_COMMAND_FRAME_ADAPTER = TypeAdapter(InboundCommandFrame)
 
 
 def _websocket_origin(backend_url: str) -> str:
@@ -185,6 +201,8 @@ class CommandChannelClient:
         on_command: Callable[[AgentCommand], Awaitable[None]],
         on_connected: Callable[[], Awaitable[None]] | None = None,
         on_parked: Callable[[], Awaitable[None]] | None = None,
+        *,
+        on_cancel: Callable[[UUID], Awaitable[None]] | None = None,
     ) -> None:
         attempt = 0
         while not self._closed:
@@ -196,7 +214,7 @@ class CommandChannelClient:
                 continue
             self._ready = False
             try:
-                await self._serve_once(on_command, on_connected)
+                await self._serve_once(on_command, on_cancel, on_connected)
             except _TRANSPORT_ERRORS as exc:
                 if reason := _park_reason(exc):
                     self._set_parked(reason)
@@ -234,6 +252,7 @@ class CommandChannelClient:
     async def _serve_once(
         self,
         on_command: Callable[[AgentCommand], Awaitable[None]],
+        on_cancel: Callable[[UUID], Awaitable[None]] | None,
         on_connected: Callable[[], Awaitable[None]] | None,
     ) -> None:
         self._socket = await self._connect(self._url, self._proof_headers())
@@ -245,9 +264,12 @@ class CommandChannelClient:
         if self._parked_reason is not None:
             return
         while True:
-            command = _parse_command(await self._socket.recv())
-            if command is not None:
-                await on_command(command)
+            frame = _parse_command(await self._socket.recv())
+            if isinstance(frame, AgentCancel):
+                if on_cancel is not None:
+                    await on_cancel(frame.command_id)
+            elif frame is not None:
+                await on_command(frame)
 
     def _proof_headers(self) -> dict[str, str]:
         return build_device_signature_headers(
@@ -318,9 +340,9 @@ class CommandChannelClient:
         self._parked_reason = None
 
 
-def _parse_command(raw: object) -> AgentCommand | None:
+def _parse_command(raw: object) -> InboundCommandFrame | None:
     try:
-        return AgentCommand.model_validate_json(raw)
+        return _INBOUND_COMMAND_FRAME_ADAPTER.validate_json(raw)
     except (ValidationError, ValueError, TypeError):
         LOGGER.warning("discarding an invalid inbound frame")
         return None

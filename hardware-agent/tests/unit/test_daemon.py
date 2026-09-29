@@ -5,17 +5,23 @@ import logging
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from agent.daemon import AgentDaemon
 from agent.headless import HeadlessScanResult
-from agent.transport.command_channel import AgentCommand, AgentStatus, NspiOptions
+from agent.transport.command_channel import (
+    AgentCancel,
+    AgentCommand,
+    AgentStatus,
+    NspiOptions,
+)
 from agent.transport.ingest import SubmissionResult
 
 TIMEOUT = 5.0
-PAYLOAD = object()
+PAYLOAD = SimpleNamespace(metadata={})
 RESULT_PATH = Path("results/scan.json")
 NON_ACCEPTED = [
     "unauthorized",
@@ -126,10 +132,16 @@ class FakeClient:
         self.parked_reason: str | None = None
         self.closed = False
         self.connected = True
+        self.cancel_latencies: list[float] = []
         self._script = list(script or [])
 
     async def run(
-        self, on_command: Any, on_connected: Any = None, on_parked: Any = None
+        self,
+        on_command: Any,
+        on_connected: Any = None,
+        on_parked: Any = None,
+        *,
+        on_cancel: Any = None,
     ) -> None:
         for step in self._script:
             if self.parked_reason is not None:
@@ -145,6 +157,13 @@ class FakeClient:
                 self.connected = False
                 if on_parked is not None:
                     await on_parked()
+            elif isinstance(step, AgentCancel):
+                if on_cancel is not None:
+                    started_at = asyncio.get_running_loop().time()
+                    await on_cancel(step.command_id)
+                    self.cancel_latencies.append(
+                        asyncio.get_running_loop().time() - started_at
+                    )
             elif callable(step):
                 await step()
             else:
@@ -347,6 +366,163 @@ class TestResponsiveness:
         assert client.frames(active)[-1] == ("done", None)
         assert scan.calls == [(active.scan_mode, active.subnet, None)]
         assert len(ingest.calls) == 1
+
+
+class TestRemoteCancel:
+    @pytest.mark.asyncio
+    async def test_running_cancel_uploads_partial_and_allows_next_command(self) -> None:
+        gate = threading.Event()
+        partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
+        scan = FakeScan(
+            scan_result("partial", partial, result_path=None), scan_result(), gate=gate
+        )
+        active, later = command(), command()
+
+        async def wait_until_started() -> None:
+            await asyncio.to_thread(scan.started.wait, TIMEOUT)
+
+        daemon, client, _, ingest = build(
+            scan=scan,
+            script=[
+                "connect",
+                active,
+                wait_until_started,
+                AgentCancel(type="cancel", command_id=active.command_id),
+                drain,
+                later,
+                drain,
+            ],
+        )
+
+        await daemon.run()
+
+        assert scan.cancelled.is_set()
+        assert client.cancel_latencies[0] <= 15
+        assert client.frames(active) == [
+            ("running", None),
+            ("uploading", None),
+            ("cancelled", None),
+        ]
+        assert ingest.calls == [(partial, active.scan_id), (PAYLOAD, later.scan_id)]
+        assert client.frames(later) == [
+            ("running", None),
+            ("uploading", None),
+            ("done", None),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_cancel_without_payload_reports_cancelled_without_upload(
+        self,
+    ) -> None:
+        gate = threading.Event()
+        daemon, client, scan, ingest = build(
+            scan=FakeScan(
+                scan_result("fatal", payload=None, result_path=None), gate=gate
+            )
+        )
+        subject = command()
+
+        await daemon.handle_command(subject)
+        await asyncio.to_thread(scan.started.wait, TIMEOUT)
+        await asyncio.wait_for(daemon.handle_cancel(subject.command_id), timeout=15)
+        await drain()
+
+        assert scan.cancelled.is_set()
+        assert client.frames(subject) == [("running", None), ("cancelled", None)]
+        assert ingest.calls == []
+
+    @pytest.mark.asyncio
+    async def test_cancelled_partial_upload_failure_reports_ingest_failed(self) -> None:
+        gate = threading.Event()
+        partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
+        daemon, client, scan, ingest = build(
+            scan=FakeScan(scan_result("partial", partial, result_path=None), gate=gate),
+            ingest=FakeIngest("unavailable"),
+        )
+        subject = command()
+
+        await daemon.handle_command(subject)
+        await asyncio.to_thread(scan.started.wait, TIMEOUT)
+        await daemon.handle_cancel(subject.command_id)
+        await drain()
+
+        assert scan.cancelled.is_set()
+        assert ingest.calls == [(partial, subject.scan_id)]
+        assert client.frames(subject) == [
+            ("running", None),
+            ("uploading", None),
+            ("failed", "ingest_failed"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_completed_scan_wins_cancel_race_and_reports_done(self) -> None:
+        gate = threading.Event()
+        daemon, client, scan, ingest = build(scan=FakeScan(gate=gate))
+        subject = command()
+
+        await daemon.handle_command(subject)
+        await asyncio.to_thread(scan.started.wait, TIMEOUT)
+        stop = daemon._stop
+        original_finish = stop.finish
+        stop_finished = threading.Event()
+        resume_scan = threading.Event()
+
+        def finish() -> None:
+            original_finish()
+            stop_finished.set()
+            resume_scan.wait(TIMEOUT)
+
+        stop.finish = finish
+        gate.set()
+        assert await asyncio.to_thread(stop_finished.wait, TIMEOUT)
+        await daemon.handle_cancel(subject.command_id)
+        assert not scan.cancelled.is_set()
+        resume_scan.set()
+        await drain()
+
+        assert ingest.calls == [(PAYLOAD, subject.scan_id)]
+        assert client.frames(subject) == [
+            ("running", None),
+            ("uploading", None),
+            ("done", None),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_unknown_and_finished_cancels_do_not_stop_a_scan(self) -> None:
+        daemon, client, scan, _ = build()
+        finished = command()
+
+        await daemon.handle_cancel(uuid4())
+        await dispatch(daemon, finished)
+        await daemon.handle_cancel(finished.command_id)
+
+        assert not scan.cancelled.is_set()
+        assert client.frames(finished) == [
+            ("running", None),
+            ("uploading", None),
+            ("done", None),
+            ("done", None),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_uploading_cancel_does_not_stop_or_interrupt_upload(self) -> None:
+        gate = threading.Event()
+        daemon, client, scan, ingest = build(ingest=FakeIngest(gate=gate))
+        subject = command()
+
+        await daemon.handle_command(subject)
+        await asyncio.to_thread(ingest.started.wait, TIMEOUT)
+        await daemon.handle_cancel(subject.command_id)
+        assert not scan.cancelled.is_set()
+        gate.set()
+        await drain()
+
+        assert len(ingest.calls) == 1
+        assert client.frames(subject) == [
+            ("running", None),
+            ("uploading", None),
+            ("done", None),
+        ]
 
 
 class TestIdempotency:

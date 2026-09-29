@@ -25,7 +25,7 @@ from agent.transport.ingest import (
 
 LOGGER = logging.getLogger(__name__)
 
-CommandStatus = Literal["running", "uploading", "done", "failed"]
+CommandStatus = Literal["running", "uploading", "done", "failed", "cancelled"]
 
 
 @dataclass(slots=True)
@@ -41,19 +41,33 @@ class _ScanStop:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cancel: Callable[[], None] | None = None
-        self.requested = False
+        self._reason: Literal["cancel", "park"] | None = None
+        self._finished = False
+
+    @property
+    def reason(self) -> Literal["cancel", "park"] | None:
+        with self._lock:
+            return self._reason
 
     def bind(self, cancel: Callable[[], None]) -> None:
         with self._lock:
+            if self._finished:
+                return
             self._cancel = cancel
-            requested = self.requested
+            requested = self._reason is not None
         if requested:
             cancel()
 
-    def request(self) -> None:
+    def finish(self) -> None:
         with self._lock:
-            self.requested = True
-            cancel = self._cancel
+            self._finished = True
+            self._cancel = None
+
+    def request(self, reason: Literal["cancel", "park"]) -> None:
+        with self._lock:
+            if reason == "park" or (not self._finished and self._reason is None):
+                self._reason = reason
+            cancel = self._cancel if not self._finished else None
         if cancel is not None:
             cancel()
 
@@ -78,7 +92,10 @@ class AgentDaemon:
     async def run(self) -> None:
         try:
             await self._client.run(
-                self.handle_command, self.replay_pending, self._cancel_active
+                self.handle_command,
+                self.replay_pending,
+                self._cancel_active,
+                on_cancel=self.handle_cancel,
             )
         finally:
             await self.close()
@@ -92,7 +109,7 @@ class AgentDaemon:
         task, self._task = self._task, None
         try:
             if task is not None and not task.done():
-                self._stop.request()
+                self._stop.request("park")
                 await task
         finally:
             self._release_hold()
@@ -129,6 +146,15 @@ class AgentDaemon:
             self._release_hold()
             raise
 
+    async def handle_cancel(self, command_id: UUID) -> None:
+        record = self.ledger.get(command_id)
+        if record is None or record.status == "uploading":
+            return
+        if command_id == self._active and record.status == "running":
+            self._stop.request("cancel")
+            return
+        await self._send(command_id, record)
+
     async def replay_pending(self) -> None:
         for command_id, record in list(self.ledger.items()):
             if record.pending:
@@ -143,37 +169,51 @@ class AgentDaemon:
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
+
+        def run_scan() -> HeadlessScanResult:
+            try:
+                return self._run_scan(
+                    command.scan_mode,
+                    command.subnet,
+                    nspi_submode=(
+                        command.nspi_options.submode
+                        if command.nspi_options is not None
+                        else None
+                    ),
+                    bind_cancel=stop.bind,
+                )
+            finally:
+                stop.finish()
+
         try:
-            result = await asyncio.to_thread(
-                self._run_scan,
-                command.scan_mode,
-                command.subnet,
-                nspi_submode=(
-                    command.nspi_options.submode
-                    if command.nspi_options is not None
-                    else None
-                ),
-                bind_cancel=stop.bind,
-            )
+            result = await asyncio.to_thread(run_scan)
         except InvalidScanInput:
             await self._update(command.command_id, "failed", "invalid_command")
             return
-        if stop.requested:
+        stop_reason = stop.reason
+        if stop_reason == "park":
             return
         if result.payload is None:
-            await self._update(command.command_id, "failed", "scan_failed")
+            await self._update(
+                command.command_id,
+                "cancelled" if stop_reason == "cancel" else "failed",
+                None if stop_reason == "cancel" else "scan_failed",
+            )
             return
-        if result.result_path is None:
+        cancelled_result = (
+            (result.payload.metadata or {}).get("terminated_by") == "user_cancel"
+        )
+        if result.result_path is None and not cancelled_result:
             await self._update(command.command_id, "failed", "result_unavailable")
             return
-        if result.outcome == "fatal":
+        if result.outcome == "fatal" and not cancelled_result:
             await self._update(command.command_id, "failed", "scan_failed")
             return
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
         )
-        if stop.requested:
+        if stop.reason == "park":
             return
         if submission.outcome == "accepted":
             LOGGER.info(
@@ -182,7 +222,9 @@ class AgentDaemon:
                 command.scan_id,
                 submission.status_code,
             )
-            await self._update(command.command_id, "done")
+            await self._update(
+                command.command_id, "cancelled" if cancelled_result else "done"
+            )
             return
         LOGGER.error(
             "scan upload failed: command=%s scan=%s outcome=%s status=%s attempts=%s",
@@ -215,7 +257,7 @@ class AgentDaemon:
         if (
             command_id == self._active
             and not record.pending
-            and record.status in {"done", "failed"}
+            and record.status in {"done", "failed", "cancelled"}
         ):
             self._release_hold()
 
