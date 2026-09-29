@@ -1,10 +1,11 @@
 import type { components } from '@/types/openapi'
 
 type ScanStatus = components['schemas']['ScanStatus']
+type TerminatedBy = components['schemas']['TerminatedBy']
 
 export function scanStatusLabel(
   status: ScanStatus,
-  terminatedBy?: string | null,
+  terminatedBy?: TerminatedBy | null,
 ): string {
   if (status === 'completed' && terminatedBy === 'user_cancel') {
     return 'Stopped early'

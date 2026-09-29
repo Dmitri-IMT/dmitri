@@ -759,6 +759,8 @@ export interface components {
         /** @enum {string} */
         ScanStatus: "pending" | "accepted" | "processing" | "completed" | "failed" | "cancelled";
         /** @enum {string} */
+        TerminatedBy: "completed" | "user_cancel" | "timeout" | "error";
+        /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
         NspiSubmode: "inventory" | "read_only_mapping" | "active_validation";
@@ -1072,7 +1074,7 @@ export interface components {
             agent_id?: string | null;
             box_name?: string | null;
             duration?: number | null;
-            terminated_by?: string | null;
+            terminated_by?: components["schemas"]["TerminatedBy"] | null;
         };
         ScanDetailResponse: {
             /** Format: uuid */
@@ -1098,6 +1100,7 @@ export interface components {
             agent_id?: string | null;
             box_name?: string | null;
             duration?: number | null;
+            terminated_by?: components["schemas"]["TerminatedBy"] | null;
         };
         ScanListResponse: {
             data: components["schemas"]["ScanSummary"][];

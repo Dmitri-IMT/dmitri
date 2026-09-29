@@ -115,7 +115,7 @@ function ScanDetail() {
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
         const partial = metadata.partial_result === true
-        const stoppedEarly = metadata.terminated_by === 'user_cancel'
+        const stoppedEarly = scan.terminated_by === 'user_cancel'
 
         return (
           <>
