@@ -236,6 +236,22 @@ def test_failed_latest_scan_notices_and_stays_out_of_events(
     assert snapshot.events.data == []
 
 
+def test_latest_successful_scan_carries_terminated_by(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Terminated Home Org")
+    scan = make_scan(administrative_session, org.id, timestamp=NOW)
+    scan.metadata_json = {"terminated_by": "user_cancel", "elapsed_seconds": 9}
+    administrative_session.add(scan)
+    administrative_session.commit()
+
+    snapshot = _snapshot(administrative_session, org.id)
+
+    assert snapshot.latest_successful_scan is not None
+    assert snapshot.latest_successful_scan.scan_id == scan.scan_id
+    assert snapshot.latest_successful_scan.terminated_by == "user_cancel"
+
+
 def test_events_is_an_empty_page(administrative_session: Session) -> None:
     org, _ = _seed_attention(
         administrative_session, name="Events Empty", severities=["high"]

@@ -939,6 +939,7 @@ paths:
         |-------|-----------|--------|
         | `hello` | Pi → backend, on connect | `AgentHelloFrame` |
         | `command` | backend → Pi | `AgentCommandFrame` |
+        | `cancel` | backend → Pi | `AgentCancelFrame` |
         | `status` | Pi → backend | `AgentStatusFrame` |
         | `error` | backend → Pi | `AgentErrorFrame` |
 
@@ -1188,6 +1189,41 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/commands/{command_id}/cancel:
+    post:
+      tags:
+        - commands
+      summary: Cancel a scan command
+      description: Admins stop a cancellable scan. Connected agents receive a cancel frame; offline commands are retired immediately.
+      operationId: cancelCommand
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: The command was retired offline or was already terminal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandDetail'
+        '202':
+          description: The cancel frame was sent to the connected agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/CommandNotCancellable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/auth/login:
     post:
@@ -2115,6 +2151,31 @@ components:
                   code: device_busy
                   message: That Pi is already scanning.
                   details: {}
+    CommandNotCancellable:
+      description: The command is already uploading scan results and cannot be stopped.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        const: command_not_cancellable
+          examples:
+            commandNotCancellable:
+              value:
+                error:
+                  code: command_not_cancellable
+                  message: The scan is already uploading its results.
+                  details: {}
     DeviceOfflineError:
       description: |
         The command was never recorded as delivered — there was no open socket, the agent is
@@ -2689,6 +2750,7 @@ components:
         - processing
         - completed
         - failed
+        - cancelled
     ScanMode:
       type: string
       enum:
@@ -2730,6 +2792,7 @@ components:
         - uploading
         - done
         - failed
+        - cancelled
         - expired
     ScanErrorCode:
       type: string
@@ -3639,6 +3702,10 @@ components:
             - type: integer
               minimum: 0
             - type: 'null'
+        terminated_by:
+          anyOf:
+            - type: string
+            - type: 'null'
     ScanDetailResponse:
       type: object
       additionalProperties: false
@@ -4264,10 +4331,26 @@ components:
             - uploading
             - done
             - failed
+            - cancelled
         error_code:
           type:
             - string
             - 'null'
+    AgentCancelFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Backend → Pi.** Requests that the Pi stop the active scan identified by `command_id`.
+      required:
+        - type
+        - command_id
+      properties:
+        type:
+          type: string
+          const: cancel
+        command_id:
+          type: string
+          format: uuid
     AgentErrorFrame:
       type: object
       additionalProperties: false
@@ -5205,6 +5288,7 @@ components:
         - scan_started
         - scan_finished
         - scan_failed
+        - scan_cancelled
         - machine_first_seen
         - role_changed
         - member_invited

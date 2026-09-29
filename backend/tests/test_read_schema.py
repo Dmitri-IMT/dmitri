@@ -196,6 +196,22 @@ def test_scan_summary_highest_severity_optional():
     assert summary.highest_severity is None
 
 
+@pytest.mark.parametrize(
+    "terminated_by",
+    ["user_cancel", "timeout", "error", None],
+)
+def test_scan_summary_terminated_by_accepts_strings(terminated_by):
+    summary = ScanSummary.model_validate(
+        _scan_summary_payload(terminated_by=terminated_by)
+    )
+    assert summary.terminated_by == terminated_by
+
+
+def test_scan_summary_terminated_by_optional():
+    without = ScanSummary.model_validate(_scan_summary_payload())
+    assert without.terminated_by is None
+
+
 def test_scan_summary_rejects_extra_fields():
     with pytest.raises(pydantic.ValidationError):
         ScanSummary.model_validate(_scan_summary_payload(extra_field="nope"))

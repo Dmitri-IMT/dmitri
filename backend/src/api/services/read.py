@@ -513,6 +513,8 @@ def _to_scan_summary(
     highest_severity: str | None,
     box_name: str | None,
 ) -> ScanSummary:
+    raw_terminated = (scan.metadata_json or {}).get("terminated_by")
+    terminated_by = raw_terminated if isinstance(raw_terminated, str) else None
     return ScanSummary(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -525,6 +527,7 @@ def _to_scan_summary(
         agent_id=scan.agent_id,
         box_name=box_name,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
+        terminated_by=terminated_by,
     )
 
 

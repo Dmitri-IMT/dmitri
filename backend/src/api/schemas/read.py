@@ -25,7 +25,9 @@ from .scan import (
     ExposureRole,
 )
 
-ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
+ScanStatus = Literal[
+    "pending", "accepted", "processing", "completed", "failed", "cancelled"
+]
 AssessmentStatus = Literal["available", "unavailable"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[
@@ -259,6 +261,7 @@ class ScanSummary(BaseModel):
     agent_id: UUID | None = None
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
+    terminated_by: str | None = None
 
 
 class ScanListResponse(BaseModel):
