@@ -6,11 +6,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import replace
 
 from agent.config import NSPI_HOST_TIMEOUT, NSPI_PORTS
-from agent.scanner.models import PortInfo, PortScanResult, merge_mac_vendor
+from agent.scanner.models import PortInfo, PortScanResult
 from agent.scanner.nmap import NmapRunner
 from agent.utils.nmap_xml import (
     extract_ipv4,
-    extract_mac_vendor,
+    extract_mac_identity,
     parse_operating_system,
     parse_ports,
 )
@@ -73,26 +73,19 @@ def merge_port_scan_results(
     ):
         operating_system = incoming.operating_system
 
-    mac, vendor = merge_mac_vendor(
-        existing.mac, existing.vendor, incoming.mac, incoming.vendor
-    )
-
     return PortScanResult(
         ports=merge_ports(existing.ports, incoming.ports),
         operating_system=operating_system,
-        mac=mac,
-        vendor=vendor,
+        identity=existing.identity.merged_with(incoming.identity),
         skipped=existing.skipped or incoming.skipped,
     )
 
 
 def _parse_port_scan_result(host_element: ET.Element) -> PortScanResult:
-    mac, vendor = extract_mac_vendor(host_element)
     return PortScanResult(
         ports=parse_ports(host_element),
         operating_system=parse_operating_system(host_element),
-        mac=mac,
-        vendor=vendor,
+        identity=extract_mac_identity(host_element),
     )
 
 

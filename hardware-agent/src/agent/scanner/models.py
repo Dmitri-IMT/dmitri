@@ -65,40 +65,31 @@ class PortInfo:
     scripts: list[ScriptResult] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class MacIdentity:
+    """One Nmap MAC observation: the address and the vendor paired with it."""
+
+    mac: str | None = None
+    vendor: str = "unknown"
+
+    def merged_with(self, incoming: MacIdentity) -> MacIdentity:
+        """Fold in a later observation; a vendor never follows a new MAC."""
+
+        if incoming.mac is None:
+            return self
+        if incoming.mac == self.mac and incoming.vendor.casefold() == "unknown":
+            return self
+        return incoming
+
+
 @dataclass(slots=True)
 class PortScanResult:
     """Host identity, port inventory, and OS evidence from one Nmap host node."""
 
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None
-    mac: str | None = None
-    vendor: str | None = None
+    identity: MacIdentity = MacIdentity()
     skipped: bool = False
-
-
-def merge_mac_vendor(
-    existing_mac: str | None,
-    existing_vendor: str | None,
-    incoming_mac: str | None,
-    incoming_vendor: str | None,
-) -> tuple[str | None, str | None]:
-    """Merge MAC and vendor as one identity so a vendor never follows a new MAC."""
-
-    if not incoming_mac:
-        return existing_mac, existing_vendor
-    if incoming_mac == existing_mac:
-        vendor = (
-            incoming_vendor
-            if incoming_vendor and incoming_vendor.casefold() != "unknown"
-            else existing_vendor
-        )
-        return incoming_mac, vendor
-    vendor = (
-        incoming_vendor
-        if incoming_vendor and incoming_vendor.casefold() != "unknown"
-        else "unknown"
-    )
-    return incoming_mac, vendor
 
 
 @dataclass(slots=True)
@@ -107,8 +98,7 @@ class HostInfo:
 
     ip: str
     hostname: str
-    mac: str | None = None
-    vendor: str = "unknown"
+    identity: MacIdentity = MacIdentity()
     state: str = "up"
     ports: list[PortInfo] = field(default_factory=list)
     operating_system: OperatingSystemInfo | None = None

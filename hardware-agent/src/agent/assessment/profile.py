@@ -172,8 +172,8 @@ def _service_signals(host: HostInfo) -> list[_Signal]:
 
 def _profile_host(host: HostInfo) -> tuple[MachineType, DeviceProfilePayload]:
     signals = _service_signals(host)
-    locally_administered = _is_locally_administered(host.mac)
-    vendor = _safe_text(host.vendor, MAX_EVIDENCE_VALUE_CHARS)
+    locally_administered = _is_locally_administered(host.identity.mac)
+    vendor = _safe_text(host.identity.vendor, MAX_EVIDENCE_VALUE_CHARS)
     vendor_known = vendor is not None and vendor.casefold() != "unknown"
     manufacturer = None if locally_administered else vendor if vendor_known else None
     conflicts: list[str] = []
