@@ -81,6 +81,25 @@ class _ScanStop:
             cancel()
 
 
+def _scan_outcome(
+    result: HeadlessScanResult, *, cancelled: bool
+) -> tuple[CommandStatus, str | None]:
+    """The status a finished scan ends with. `done` and `cancelled` upload first.
+
+    A stopped scan uploads whatever payload it has, even when the local copy
+    failed to write: ingest needs only the payload (spec 049, decision 2).
+    """
+    if cancelled:
+        return "cancelled", None
+    if result.payload is None:
+        return "failed", "scan_failed"
+    if result.result_path is None:
+        return "failed", "result_unavailable"
+    if result.outcome == "fatal":
+        return "failed", "scan_failed"
+    return "done", None
+
+
 class AgentDaemon:
     def __init__(
         self,
@@ -201,22 +220,10 @@ class AgentDaemon:
             return
         if stop.parked:
             return
-        if result.payload is None:
-            if stop.cancelled:
-                await self._update(command.command_id, "cancelled")
-            else:
-                await self._update(command.command_id, "failed", "scan_failed")
+        status, error_code = _scan_outcome(result, cancelled=stop.cancelled)
+        if status == "failed" or result.payload is None:
+            await self._update(command.command_id, status, error_code)
             return
-        # A stopped scan still uploads its partial payload when the local copy
-        # failed to write: ingest needs only the payload (spec 049, decision 2).
-        if not stop.cancelled:
-            if result.result_path is None:
-                await self._update(command.command_id, "failed", "result_unavailable")
-                return
-            if result.outcome == "fatal":
-                await self._update(command.command_id, "failed", "scan_failed")
-                return
-        uploaded_status: CommandStatus = "cancelled" if stop.cancelled else "done"
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
@@ -232,7 +239,7 @@ class AgentDaemon:
                 command.scan_id,
                 submission.status_code,
             )
-            await self._update(command.command_id, uploaded_status)
+            await self._update(command.command_id, status)
             return
         LOGGER.error(
             "scan upload failed: command=%s scan=%s outcome=%s status=%s attempts=%s",
