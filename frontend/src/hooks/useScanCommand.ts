@@ -37,9 +37,9 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
   const queryClient = useQueryClient()
   const { show } = useToast()
   const [triggering, setTriggering] = useState(false)
-  const [cancellingCommandId, setCancellingCommandId] = useState<string | null>(
-    null,
-  )
+  // The command the operator asked to stop. Cleared on error; a terminal
+  // command no longer reads as cancelling.
+  const [cancelIntentId, setCancelIntentId] = useState<string | null>(null)
   const [followedCommandId, setFollowedCommandId] = useState<string | null>(
     agent.active_command_id ?? null,
   )
@@ -47,8 +47,6 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     useState<string | null>(agent.active_command_id ?? null)
   const triggeringRef = useRef(false)
   const sweptCommandId = useRef<string | null>(null)
-  const cancellingRef = useRef(false)
-  const cancelRequestedCommandId = useRef<string | null>(null)
 
   const observedActiveCommandId = agent.active_command_id ?? null
   if (observedActiveCommandId !== lastObservedActiveCommandId) {
@@ -74,6 +72,9 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     if (command?.status !== 'done' && command?.status !== 'cancelled') return
     if (sweptCommandId.current === command.command_id) return
     sweptCommandId.current = command.command_id
+    if (command.status === 'done' && command.command_id === cancelIntentId) {
+      show('The scan finished before it could stop.')
+    }
 
     void queryClient.invalidateQueries({ queryKey: queryKeys.scans.all })
     void queryClient.invalidateQueries({ queryKey: queryKeys.hosts.all })
@@ -81,16 +82,7 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agents.detail(agent.agent_id),
     })
-  }, [agent.agent_id, commandQuery.data, queryClient])
-
-  useEffect(() => {
-    const command = commandQuery.data
-    if (!command || command.status !== 'done') return
-    if (cancelRequestedCommandId.current !== command.command_id) return
-    cancelRequestedCommandId.current = null
-    setCancellingCommandId(null)
-    show('The scan finished before it could stop.')
-  }, [commandQuery.data, show])
+  }, [agent.agent_id, cancelIntentId, commandQuery.data, queryClient, show])
 
   async function trigger(selection: ScanSelection): Promise<TriggerOutcome> {
     if (!agent.target_subnet || triggeringRef.current) return 'refused'
@@ -159,16 +151,14 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     if (
       !command ||
       (command.status !== 'delivered' && command.status !== 'running') ||
-      cancellingRef.current
+      cancelIntentId === command.command_id
     ) {
       return
     }
 
-    cancellingRef.current = true
-    setCancellingCommandId(command.command_id)
+    setCancelIntentId(command.command_id)
     try {
       const updatedCommand = await cancelCommand(command.command_id)
-      cancelRequestedCommandId.current = command.command_id
       queryClient.setQueryData(
         queryKeys.commands.detail(command.command_id),
         updatedCommand,
@@ -177,16 +167,13 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
         queryKey: queryKeys.commands.detail(command.command_id),
       })
     } catch (error) {
-      setCancellingCommandId(null)
-      cancelRequestedCommandId.current = null
+      setCancelIntentId(null)
       const { status, code } = readApiError(error)
       if (status === 409 && code === 'command_not_cancellable') {
         show('The scan is already uploading its results.')
       } else {
         show("Couldn't stop the scan.")
       }
-    } finally {
-      cancellingRef.current = false
     }
   }
 
@@ -195,7 +182,7 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
     following: followedCommandId !== null,
     triggering,
     cancelling:
-      cancellingCommandId === commandQuery.data?.command_id &&
+      cancelIntentId === commandQuery.data?.command_id &&
       !isTerminalCommandStatus(commandQuery.data?.status),
     trigger,
     cancel,
