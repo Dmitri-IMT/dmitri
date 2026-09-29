@@ -30,9 +30,10 @@ from api.schemas.read import (
     ScanStatus,
     SeverityBreakdown,
 )
+from api.schemas.scan import TERMINATED_BY_USER_CANCEL
 from api.services.read import get_scan_risk_summary
 
-AI_CONTEXT_VERSION = "2"
+AI_CONTEXT_VERSION = "3"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
@@ -60,9 +61,11 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
     duration_seconds: Annotated[int | None, Field(ge=0)]
+    partial_result: bool = False
+    stopped_by: Literal["operator", "timeout", "error"] | None = None
     host_count: Annotated[int, Field(ge=0)]
     total_findings: Annotated[int, Field(ge=0)]
     scored_findings: Annotated[int, Field(ge=0)]
@@ -101,7 +104,7 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
@@ -114,7 +117,7 @@ class ScanChatContext(BaseModel):
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
 
@@ -122,7 +125,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["3"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -235,10 +238,17 @@ def build_scan_ai_context(
         epss_by_cve=epss_by_cve,
         kev_by_cve=kev_by_cve,
     )
+    metadata = scan.metadata_json or {}
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
+        partial_result=metadata.get("partial_result") is True,
+        stopped_by={
+            TERMINATED_BY_USER_CANCEL: "operator",
+            "timeout": "timeout",
+            "error": "error",
+        }.get(metadata.get("terminated_by")),
         host_count=host_count,
         total_findings=risk.total_findings,
         scored_findings=risk.scored_findings,
