@@ -58,6 +58,48 @@ def reconcile_scan_inventory(session: Session, scan_record: ScanRecord) -> None:
             _reconcile_machine(session, scan_record, scan_host, host)
 
 
+def rebuild_host_inventory(session: Session, host_ids: list[UUID]) -> None:
+    if not host_ids:
+        return
+
+    hosts = session.exec(select(HostRecord).where(HostRecord.id.in_(host_ids))).all()
+    for host in hosts:
+        for row in session.exec(
+            select(HostPortRecord).where(HostPortRecord.host_id == host.id)
+        ).all():
+            session.delete(row)
+        for row in session.exec(
+            select(HostFindingRecord).where(HostFindingRecord.host_id == host.id)
+        ).all():
+            session.delete(row)
+        host.open_ports_count = 0
+        host.highest_severity = None
+        host.vulnerability_count = 0
+        session.add(host)
+
+    scan_ids = session.exec(
+        select(ScanRecord.scan_id)
+        .join(ScanHostRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
+        .where(ScanHostRecord.host_id.in_(host_ids))
+        .group_by(ScanRecord.scan_id, ScanRecord.timestamp, ScanRecord.created_at)
+        .order_by(*_LATEST_SCAN_HOST_ORDER[::-1])
+    ).all()
+    for scan_id in scan_ids:
+        scan = session.get(ScanRecord, scan_id)
+        if scan is None:
+            continue
+        scan_hosts = session.exec(
+            select(ScanHostRecord).where(
+                ScanHostRecord.scan_id == scan.scan_id,
+                ScanHostRecord.host_id.in_(host_ids),
+            )
+        ).all()
+        for scan_host in scan_hosts:
+            host = _host_for(session, scan_host)
+            if host is not None:
+                _reconcile_machine(session, scan, scan_host, host)
+
+
 def reconcile_scan_host_inventory(session: Session, scan_host: ScanHostRecord) -> None:
     host = _host_for(session, scan_host)
     scan_record = session.get(ScanRecord, scan_host.scan_id)

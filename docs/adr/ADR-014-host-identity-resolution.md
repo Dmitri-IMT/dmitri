@@ -24,6 +24,12 @@ Resolve host identity, **within an `org`**, by:
 - **MAC when the scan observed one** — identity key `mac:<MAC>`.
 - **IP when it did not** — identity key `ip:<IP>`.
 
+**Collision exception (2026-09-29):** when a scan observes the same MAC on multiple IPs, those
+observations represent separate Hosts and use `ip:<IP>` keys. Once a MAC has been split this way,
+later observations for it remain IP-keyed so the records do not merge again. A normal MAC moving
+between IPs across scans still follows the original MAC-keyed rule until a simultaneous collision
+is observed.
+
 Uniqueness is `(org_id, identity_key)`. The durable Host's `first_seen_at` is the earliest observing
 scan's timestamp and never increases; `last_seen_at` and the mutable attributes track the most recent
 observation.
@@ -32,6 +38,12 @@ This is the **simple rule**, chosen over a reconciliation-based one (e.g. matchi
 observation to an existing Host by its most-recent IP). The deployment is LAN-primary — the Pi
 scans its own segment, where MAC is present for essentially every live host — so the failure modes
 below are edge cases in practice, and CLAUDE.md's simplicity-first bias applies.
+
+The collision exception handles virtual machines and locally administered addresses that can
+share a reported MAC. Existing affected observations can be relinked with the backend maintenance
+command `backend-repair-host-identities`; it previews affected scan/MAC/IP groups by default. Pass
+`--apply` to relink scan history and rebuild the affected host inventory projections. The repair is
+idempotent.
 
 ## Consequences
 
