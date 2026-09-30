@@ -38,6 +38,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
 * [devices-screen](./devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
+* [scan-partial-warning](./scan-partial-warning.md) — Partial scan coverage control beside duration, with an accessible per-tool details dialog.
 * [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
 * [context-ai](./context-ai.md) — One-shot "Explain with AI" (finding, host) via ContextChat's presetQuestion mode against `/ai/chat`, askable once per mount. GlobalAssistant (the floating multi-turn assistant) was deleted.
 * [home-ai-overview](./home-ai-overview.md) — Home teaser for the latest successful scan's analysis status.

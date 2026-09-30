@@ -4,7 +4,7 @@ title: frontend AI overview card
 description: Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
 resource: frontend/src/pages/scans/ScanAIAnalysis.tsx
 tags: [frontend, ai, scans, tanstack-query]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 
 # frontend AI overview card
@@ -18,7 +18,7 @@ borderless purple ghost button labelled "Scan reports" that opens a menu ("Expla
 into the existing preview dialog. It uses its own query
 (`queryKeys.scans.analysis(scanId, language)`), not the scan payload. `language` comes from
 [`useI18n`](./i18n.md) and is sent as `?language=` on GET and POST, so switching language reads a
-different analysis row (often `not_requested`). `unavailable` renders nothing.
+different analysis row (often `not_requested`). `unavailable` renders an informational card explaining that analysis is disabled or unavailable; it does not fabricate a summary.
 `not_requested` and `failed` show footer button `Explain this scan` (`scan-ai-request`).
 `pending`/`processing` poll every 3s for at most 5 minutes (`aria-live="polite"`). `completed`
 renders the executive summary, then `Disclosure` sections for the plain-language summary, priority

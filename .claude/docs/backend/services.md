@@ -4,7 +4,7 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
@@ -43,7 +43,7 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError` and a terminal one with `ScanClosedError`, else fill it. | `backend/src/api/services/persistence.py:35` |
 | `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan (`scan_mode`, `status`), persists each host→port (writing `ServiceRecord` + `CPERecord`s) building `scan_host_index`/`port_index`, persists industrial observations, upserts each agent finding (including `modbus_unit_id`), calls `upsert_hosts_for_scan`, then `reconcile_scan_inventory`, then enqueues enrichment jobs and — when `AI_AUTO_ANALYSIS` is on — the `en` AI analysis row (`enqueue_auto_scan_analysis(commit=False)`) — all in **one transaction with a single commit point**. Also persists the assessment policy version, per-scan device profiles, and endpoint exposures; each exposure must resolve to that scan's host and exact port. | `backend/src/api/services/persistence.py:84` |
 | `persist_industrial_services()` | Load existing services and units for the scan host once, upsert in memory, flush after services then after units. | `backend/src/api/services/industrial.py:42` |
-| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references/source-labels, take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:161` |
+| `upsert_finding()` | Dedups on `finding_dedupe_key`. New → insert (initial confidence `probable` if `cve_id` else `tentative`) + `refresh_risk_snapshot`. Existing → merge references, source labels, and distinct evidence; take `_max_severity`/`_max_confidence`, prefer the higher cvss, re-run risk. | `backend/src/api/services/persistence.py:234` |
 | `finding_dedupe_key()` | `ip|protocol|port|unit_id or na|(cve_id or lowercased title)`. | `backend/src/api/services/persistence.py:244` |
 | `_persist_scan_host()` | Inserts one `ScanHostRecord` (`ip`/`mac`/`hostname`/`vendor`) for the scan. | `backend/src/api/services/persistence.py:262` |
 | `_enqueue_enrichment_jobs()` | One `nvd_cpe` job per `(port, CPE)`; per finding with a `cve_id` → `nvd_cve` + `kev_cve` + `epss_cve`, dedup via a `seen` set. | `backend/src/api/services/persistence.py:302` |
@@ -70,7 +70,9 @@ The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are docu
 | `AgentOfflineError` | "Cannot choose a network for a Pi that is reporting none" — router maps it to `409 device_offline`. Lives here, unlike `SubnetNotReportedError`. | `backend/src/api/services/agents.py:13` |
 | `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:44` |
 | `identity_key()` | `mac:<MAC upper>` if a MAC is present, else `ip:<ip>` — the durable-identity key. | `backend/src/api/services/hosts.py:17` |
-| `upsert_hosts_for_scan()` | For every `ScanHostRecord` in the scan: looks up a `HostRecord` by `(org_id, identity_key)`; creates one on first sight, else updates it **only if this scan is the newest seen so far** (extends `first_seen_at`, and on newest overwrites the ip/hostname snapshot + `open_ports_count`/`highest_severity`; `mac` only when the scan has one; `vendor` only when the new vendor is not `"unknown"`); sets `scan_host.host_id`. | `backend/src/api/services/hosts.py:24` |
+| `upsert_hosts_for_scan()` | Detects a MAC associated with multiple IPs in the same scan and uses per-IP identity for that ambiguous MAC; otherwise resolves by `(org_id, identity_key)`. A single device changing IP between scans therefore retains its MAC identity. | `backend/src/api/services/hosts.py:28` |
+| `find_ambiguous_mac_identities()` / `repair_ambiguous_mac_identities()` | Finds historical scans where distinct IP observations share a MAC and host id; repair relinks each IP's history, then rebuilds inventory. The management command defaults to a dry run and accepts `--apply` to commit. | `backend/src/api/services/hosts.py:141`, `:153` |
+| `_split_ambiguous_mac_hosts()` / `rebuild_host_inventory()` | Splits durable hosts by IP for an ambiguous MAC, preserves each IP's scan history and latest profile, then reconstructs host ports and findings from those observations. | `backend/src/api/services/hosts.py:175`, `backend/src/api/services/inventory.py:61` |
 | `reconcile_scan_inventory()` / `reconcile_scan_host_inventory()` | Reconciles durable ports/findings. For the latest scan, current assessment copies type/profile/version; a newer legacy scan uses the old type fallback and clears the profile projection/version; older scans change neither. | `backend/src/api/services/inventory.py:20` |
 | `DEFAULT_PAGE` / `DEFAULT_PER_PAGE` / `QUIET_AFTER_DAYS` | `1` / `20` / `7`. Quiet is last seen more than seven days ago. | `backend/src/api/services/read.py:49` |
 | `_HOST_SORT_COLUMNS` | Sortable host columns: `last_seen_at`, `hostname`, `vendor`, `ip` (`cast` to `INET`), `vulnerability_count`. **Not** `machine_type`. Always with a `HostRecord.id` tie-breaker. | `backend/src/api/services/read.py` |
@@ -207,6 +209,8 @@ ML/AI scoring is future work.
   `timestamp` is `>=` the current `last_seen_at`; an out-of-order (backfilled) scan only extends
   `first_seen_at`. Even a newest scan keeps a known vendor: an `"unknown"` vendor never replaces it. A
   different MAC is a different `identity_key`, so it creates a new host instead of updating this one.
+  When two IPs share a MAC within one scan, the backend uses each IP as identity for that MAC and
+  repairs matching historical observations; the regular MAC identity remains for non-ambiguous scans.
 - **`sort_by=ip` casts to `INET`, so host sorting is Postgres-only.** `HostRecord.ip` is a plain
   `str` column, and a text sort orders `192.168.0.1`, `.10`, `.2` — visibly wrong in a host
   inventory. `_HOST_SORT_COLUMNS["ip"]` therefore holds `cast(HostRecord.ip, INET)`

@@ -3,6 +3,17 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-09-30
+
+* **Update**: Shared-MAC host identity now splits simultaneous IP observations and includes a
+  dry-run/apply history repair; inventory projections rebuild from each IP's scan history. Finding
+  upserts retain distinct evidence. Host detail and scan host rows display structured OS data;
+  partial scan coverage has a dialog beside duration, and unavailable AI analysis has an
+  informational card. Generic single-word service labels no longer set product family. Added the
+  partial coverage component map. Touched: `backend/services.md`, `backend/management.md`,
+  `hardware-agent/assessment.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/scan-ai.md`, `frontend/scan-partial-warning.md`, `frontend/index.md`.
+
 ## 2026-09-28
 
 * **Update**: PR #157 review. `merge_mac_vendor` and the loose `mac`/`vendor` fields are replaced by
