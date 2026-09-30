@@ -60,9 +60,22 @@ function buildColumns(
       ),
     },
     {
+      key: 'operating_system',
+      label: 'Operating system',
+      width: 'w-11/50',
+      render: (host) => (
+        <span
+          className="block truncate"
+          title={host.operating_system?.name ?? 'Unknown'}
+        >
+          {host.operating_system?.name ?? 'Unknown'}
+        </span>
+      ),
+    },
+    {
       key: 'ports',
       label: t('common.services'),
-      width: 'w-7/50',
+      width: 'w-5/50',
       align: 'right',
       render: (host) => (
         <span className="block tabular-nums">{host.ports.length}</span>

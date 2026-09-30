@@ -157,7 +157,7 @@ describe('ScanAIAnalysis', () => {
     expect(getCount).toBe(getsAfterCompleted)
   }, 20_000)
 
-  it('stays out of the page when AI is unavailable', async () => {
+  it('explains when an AI overview is unavailable', async () => {
     let requests = 0
     server.use(
       http.get(`${baseURL}/scans/:scanId/analysis`, () => {
@@ -165,12 +165,12 @@ describe('ScanAIAnalysis', () => {
         return HttpResponse.json(unavailable)
       }),
     )
-    const { container } = renderAnalysis()
+    renderAnalysis()
 
     await waitFor(() => expect(requests).toBe(1))
-    expect(
-      container.querySelector('[data-testid^="scan-ai-"]'),
-    ).not.toBeInTheDocument()
+    expect(await screen.findByTestId('scan-ai-unavailable')).toHaveTextContent(
+      'AI summaries are disabled for this scan.',
+    )
   })
 
   it('contains provider failure without hiding the scan results', async () => {
@@ -256,8 +256,6 @@ describe('ScanAIAnalysis', () => {
 
     shouldFail = false
     await user.click(screen.getByTestId('scan-ai-retry'))
-    await waitFor(() =>
-      expect(screen.queryByTestId('scan-ai-error')).not.toBeInTheDocument(),
-    )
+    expect(await screen.findByTestId('scan-ai-unavailable')).toBeInTheDocument()
   })
 })

@@ -36,6 +36,35 @@ export const catalog: Catalog = {
   'scans.running': 'Esta varredura ainda está em andamento.',
   'scans.liveProgress':
     'O progresso é atualizado automaticamente enquanto a varredura acontece.',
+  'scans.partialWarningTitle': 'Atenção: scan parcial',
+  'scans.partialWarningToggle': 'Mostrar detalhes do scan parcial',
+  'scans.partialResults': 'Algumas verificações não foram concluídas.',
+  'scans.targetedChecks': 'Verificações direcionadas',
+  'scans.targetedToolCoverage': 'Cobertura por ferramenta',
+  'scans.coveragePlanned': 'Planejadas',
+  'scans.coverageCompleted': 'Concluídas',
+  'scans.coverageFailed': 'Falharam',
+  'scans.coverageTimedOut': 'Expiraram',
+  'scans.coverageSkipped': 'Ignoradas',
+  'scans.coverageGaps': 'Motivo da cobertura incompleta',
+  'scans.gapReasonToolUnavailable': 'ferramenta não instalada ou indisponível',
+  'scans.gapReasonDependencyUnavailable': 'dependência necessária indisponível',
+  'scans.gapReasonIncompatibleTool': 'ferramenta incompatível com o alvo',
+  'scans.gapReasonWordlistUnavailable':
+    'lista de palavras necessária indisponível',
+  'scans.gapReasonPolicyUnavailable': 'política necessária indisponível',
+  'scans.gapReasonPlanLimit': 'limite do plano de scan atingido',
+  'scans.gapReasonStageBudget': 'tempo reservado para a etapa esgotado',
+  'scans.gapReasonOutputLimit': 'limite de saída da ferramenta atingido',
+  'scans.gapReasonIssueLimit': 'limite de problemas atingido',
+  'scans.gapReasonValidationLimit': 'limite de validações atingido',
+  'scans.gapReasonBaselineUnavailable': 'dados de referência indisponíveis',
+  'scans.gapReasonMalformedReport': 'ferramenta retornou um relatório inválido',
+  'scans.gapReasonWrongTarget':
+    'resultado da ferramenta não corresponde ao alvo',
+  'scans.gapReasonSpawnError': 'não foi possível iniciar a ferramenta',
+  'scans.gapReasonExecutionError': 'falha durante a execução da ferramenta',
+  'scans.gapReasonUnitTimeout': 'verificação excedeu o tempo limite',
   'network.title': 'Rede',
   'network.caption': 'Equipamentos da sua rede',
   'network.error': 'Não foi possível carregar sua rede.',
@@ -205,6 +234,8 @@ export const catalog: Catalog = {
   'ai.loadFailed': 'Não foi possível carregar o resumo.',
   'ai.notRequestedOverview':
     'Obtenha um resumo desta varredura em linguagem simples.',
+  'ai.unavailableOverview':
+    'O resumo por IA está desativado para esta varredura. Os resultados continuam disponíveis.',
   'ai.preparingOverview':
     'Preparando um resumo desta varredura em linguagem simples.',
   'ai.completedDescription':

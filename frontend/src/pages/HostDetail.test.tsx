@@ -65,7 +65,13 @@ function expectPageError() {
 
 describe('HostDetail', () => {
   it('presents the assessed profile and attack surface before vulnerabilities without replacing observed identity', async () => {
-    const host = withHostAssessment(HOST_WITH_PORTS)
+    const host = withHostAssessment(HOST_WITH_PORTS, {
+      operating_system: {
+        name: 'Linux 2.6.9 - 2.6.33',
+        accuracy: 100,
+        cpes: [],
+      },
+    })
     hostDetail(host, [])
     renderPage(`/network/${host.host_id}`)
 
@@ -75,6 +81,12 @@ describe('HostDetail', () => {
     expect(profile).toHaveTextContent('Product familySmart TV')
     expect(profile).toHaveTextContent('ModelUnknown')
     expect(profile).toHaveTextContent('Profile confidenceHigh')
+    expect(screen.getByTestId('host-operating-system')).toHaveTextContent(
+      'Linux 2.6.9 - 2.6.33',
+    )
+    expect(
+      screen.getByTestId('host-operating-system-accuracy'),
+    ).toHaveTextContent('100%')
     expect(screen.getByTestId('host-detail-meta')).toHaveTextContent(
       host.vendor,
     )
@@ -149,10 +161,35 @@ describe('HostDetail', () => {
     expect(
       await screen.findByTestId('host-profile-unavailable'),
     ).toHaveTextContent('Unavailable')
+    expect(screen.getByTestId('host-operating-system')).toHaveTextContent(
+      'Unknown',
+    )
     expect(screen.getByTestId('host-exposures-unavailable')).toHaveTextContent(
       'Unavailable',
     )
     expect(screen.getByTestId('host-detail')).toHaveTextContent(HOST.ip)
+  })
+
+  it('shows the detected operating system when device profiling is unavailable', async () => {
+    hostDetail(
+      {
+        ...HOST,
+        operating_system: {
+          name: 'Linux 2.6.9 - 2.6.33',
+          accuracy: 100,
+          cpes: [],
+        },
+      },
+      [],
+    )
+    renderPage(`/network/${HOST.host_id}`)
+
+    expect(
+      await screen.findByTestId('host-operating-system'),
+    ).toHaveTextContent('Linux 2.6.9 - 2.6.33')
+    expect(
+      screen.getByTestId('host-operating-system-accuracy'),
+    ).toHaveTextContent('100%')
   })
 
   it('navigates a related exposure vulnerability to its scan and finding', async () => {

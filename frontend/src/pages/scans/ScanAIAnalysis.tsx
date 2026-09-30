@@ -137,7 +137,18 @@ function ScanAIAnalysis({
 
   switch (query.data.status) {
     case 'unavailable':
-      return null
+      return (
+        <Card data-testid="scan-ai-unavailable">
+          <CardHeader>
+            <h2 className="text-title-sm">{t('ai.overview')}</h2>
+          </CardHeader>
+          <CardContent>
+            <p className="text-body-md text-muted-foreground">
+              {t('ai.unavailableOverview')}
+            </p>
+          </CardContent>
+        </Card>
+      )
     case 'not_requested':
       return (
         <Card data-testid="scan-ai-not-requested">

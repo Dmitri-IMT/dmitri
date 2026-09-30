@@ -59,19 +59,46 @@ function ProfileEvidence({ profile }: { profile: DeviceProfile }) {
 function HostProfile({ host }: { host: HostDetailResponse }) {
   if (host.assessment_status === 'unavailable' || !host.device_profile) {
     return (
-      <p data-testid="host-profile-unavailable" className="text-body-md">
-        Unavailable — this scan predates device profiling. Re-run the scan to
-        produce this data.
-      </p>
+      <div className="flex flex-col gap-6">
+        <dl className="grid grid-cols-1 gap-3 text-body-md sm:grid-cols-2 sm:gap-8">
+          <dt className="text-muted-foreground">Operating system</dt>
+          <dd data-testid="host-operating-system">
+            {host.operating_system?.name ?? 'Unknown'}
+          </dd>
+          {host.operating_system && (
+            <>
+              <dt className="text-muted-foreground">Nmap accuracy</dt>
+              <dd data-testid="host-operating-system-accuracy">
+                {host.operating_system.accuracy}%
+              </dd>
+            </>
+          )}
+        </dl>
+        <p data-testid="host-profile-unavailable" className="text-body-md">
+          Unavailable. Device profiling is not available for this scan. Re-run
+          the scan to produce this data.
+        </p>
+      </div>
     )
   }
-
   const profile = host.device_profile
   const typeLabel = MACHINE_TYPE_LABELS[host.machine_type] ?? 'Unknown'
 
   return (
     <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-1 gap-3 text-body-md sm:grid-cols-2 sm:gap-8">
+        <dt className="text-muted-foreground">Operating system</dt>
+        <dd data-testid="host-operating-system">
+          {host.operating_system?.name ?? 'Unknown'}
+        </dd>
+        {host.operating_system && (
+          <>
+            <dt className="text-muted-foreground">Nmap accuracy</dt>
+            <dd data-testid="host-operating-system-accuracy">
+              {host.operating_system.accuracy}%
+            </dd>
+          </>
+        )}
         <dt className="text-muted-foreground">Likely type</dt>
         <dd>{typeLabel}</dd>
         <dt className="text-muted-foreground">Manufacturer</dt>
