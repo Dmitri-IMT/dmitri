@@ -481,7 +481,11 @@ def _profile_host(host: HostInfo) -> tuple[MachineType, DeviceProfilePayload]:
             fact
             for fact in product_values
             if fact.kind == "industrial"
-            or (corroborated and machine_type in fact.machine_types)
+            or (
+                corroborated
+                and machine_type in fact.machine_types
+                and (fact.kind != "version" or len(fact.value.split()) > 1)
+            )
         ]
         if eligible_products:
             ordered_products = sorted(

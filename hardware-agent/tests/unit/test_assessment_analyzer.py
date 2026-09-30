@@ -605,6 +605,30 @@ def test_profile_score_thresholds_and_conflict_are_visible() -> None:
     )
 
 
+def test_single_remote_access_service_label_is_not_a_product_family() -> None:
+    host = HostInfo(
+        ip="192.168.1.22",
+        hostname="metasploitable",
+        ports=[
+            _port(22, "ssh"),
+            _port(445, "microsoft-ds"),
+            _port(5900, "vnc", product="VNC"),
+        ],
+        operating_system=OperatingSystemInfo(
+            name="Linux 2.6.9 - 2.6.33",
+            accuracy=100,
+            device_type="general purpose",
+        ),
+    )
+
+    profile = assess_hosts([host]).device_profiles[host.ip]
+
+    assert profile.product_family is None
+    assert "Available evidence does not support a product family." in (
+        profile.limitations
+    )
+
+
 def test_unknown_and_randomized_mac_never_invent_identity() -> None:
     host = HostInfo(
         ip="192.168.1.20",
