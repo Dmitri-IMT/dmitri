@@ -266,8 +266,6 @@ export const catalog: Catalog = {
   'settings.latency': 'Задержка',
   'settings.noRequests': 'Запросов к ИИ пока нет.',
   'settings.usagePages': 'Страницы использования ИИ',
-  'scans.partialEvidence':
-    'Данные сканирования неполные. Некоторые проверки не завершились, поэтому результаты ниже охватывают не все службы.',
   'scans.failedEvidence': 'Наблюдения, сохранённые до сбоя сканирования:',
   'scans.checkCoverage': 'Охват проверок',
   'scans.coverageUnavailable':

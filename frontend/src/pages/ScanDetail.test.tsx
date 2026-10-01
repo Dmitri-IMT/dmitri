@@ -912,29 +912,17 @@ describe('ScanDetail', () => {
     ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
   })
 
-  it('shows partial evidence above the results and keeps no-findings copy honest', async () => {
+  it('keeps no-findings copy honest on partial evidence', async () => {
     const completedPartial = withPartialResult(
       completedScan({ findings: [], finding_count: 0 }),
       'completed',
     )
     scanDetail(completedPartial)
-    const view = renderPage(`/scans/${SCAN_ID}`)
+    renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
       'No confirmed vulnerabilities in accepted evidence.',
     )
-    expect(screen.getByTestId('scan-partial-notice')).toHaveTextContent(
-      'This scan has partial evidence.',
-    )
-
-    view.unmount()
-    scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
-    renderPage(`/scans/${SCAN_ID}`)
-
-    await screen.findByTestId(
-      `findings-critical-row-${phpCgiFinding.finding_id}`,
-    )
-    expect(screen.getByTestId('scan-partial-notice')).toBeInTheDocument()
   })
 
   it('keeps observations from a failed scan visible', async () => {

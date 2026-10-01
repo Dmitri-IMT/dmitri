@@ -262,8 +262,6 @@ export const catalog = {
   'settings.latency': 'Latency',
   'settings.noRequests': 'No AI requests recorded yet.',
   'settings.usagePages': 'AI usage pages',
-  'scans.partialEvidence':
-    'This scan has partial evidence. Some checks did not finish, so the results below do not cover every service.',
   'scans.failedEvidence': 'Observations recorded before the scan failed:',
   'scans.checkCoverage': 'Check coverage',
   'scans.coverageUnavailable': 'Check coverage was not recorded for this scan.',

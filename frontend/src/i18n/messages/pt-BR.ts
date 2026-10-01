@@ -276,8 +276,6 @@ export const catalog: Catalog = {
   'settings.latency': 'Latência',
   'settings.noRequests': 'Nenhuma solicitação de IA registrada ainda.',
   'settings.usagePages': 'Páginas de uso de IA',
-  'scans.partialEvidence':
-    'Esta varredura tem evidências parciais. Algumas verificações não terminaram, então os resultados abaixo não cobrem todos os serviços.',
   'scans.failedEvidence':
     'Observações registradas antes da falha da varredura:',
   'scans.checkCoverage': 'Cobertura das verificações',

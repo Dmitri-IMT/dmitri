@@ -132,14 +132,6 @@ function ScanDetail() {
           <>
             <ScanDetailHeader scan={scan} />
             <ScanSummaryStrip scan={scan} />
-            {partial && (
-              <div
-                data-testid="scan-partial-notice"
-                className="rounded-md border border-border bg-muted p-4 text-body-md"
-              >
-                {t('scans.partialEvidence')}
-              </div>
-            )}
             {scan.status === 'failed' && (
               <ScanFailedNotice errorCode={scan.error_code} />
             )}
