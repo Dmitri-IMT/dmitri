@@ -38,6 +38,10 @@ No SSH.
    - No results (stopped before any upload) → scan status `cancelled`.
 4. **Backend does not wait for the Pi.** Connected Pi → send the cancel frame, return 202. The Pi
    uploads, then confirms `cancelled`. Offline Pi → mark `cancelled` at once, return 200.
+   Accepted race (2026-10-01): after an offline cancel the device reads as free before the Pi
+   hears the cancel. A scan started while the reconnected Pi is still stopping ends `failed` /
+   `device_busy`; the operator starts it again. Rare for one Pi, so the backend does not wait
+   for the Pi's confirmation.
 5. **A late upload for a `cancelled` command is accepted** (today any terminal command gets
    400 `ScanClosedError`). This keeps the partial results from an offline cancel.
 6. **Offline catch-up runs on connect.** `replay_pending()` re-sends only undelivered statuses,
