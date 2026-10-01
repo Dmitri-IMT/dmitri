@@ -665,6 +665,91 @@ def test_list_scans_duration_and_box_name(
     assert by_id[unattributed.scan_id].duration is None
 
 
+def test_list_scans_terminated_by_from_metadata(
+    administrative_session: Session,
+) -> None:
+    org = make_org(administrative_session, "Terminated By Org")
+    now = datetime(2026, 6, 3, tzinfo=timezone.utc)
+    user_cancel = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="standard",
+        status="completed",
+        metadata_json={"terminated_by": "user_cancel", "elapsed_seconds": 12},
+    )
+    timeout = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="standard",
+        status="completed",
+        metadata_json={"terminated_by": "timeout", "elapsed_seconds": 30},
+    )
+    error = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="standard",
+        status="completed",
+        metadata_json={"terminated_by": "error", "elapsed_seconds": 5},
+    )
+    missing = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json={"elapsed_seconds": 8},
+    )
+    null_metadata = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json=None,
+    )
+    bad_type = ScanRecord(
+        scan_id=uuid4(),
+        org_id=org.id,
+        timestamp=now,
+        subnet="10.2.0.0/24",
+        scan_mode="quick",
+        status="completed",
+        metadata_json={"terminated_by": ["user_cancel"]},
+    )
+    administrative_session.add(user_cancel)
+    administrative_session.add(timeout)
+    administrative_session.add(error)
+    administrative_session.add(missing)
+    administrative_session.add(null_metadata)
+    administrative_session.add(bad_type)
+    administrative_session.commit()
+
+    result = read.list_scans(
+        administrative_session, org_id=org.id, per_page=100, sort_order="asc"
+    )
+    by_id = {row.scan_id: row for row in result.data}
+
+    assert by_id[user_cancel.scan_id].terminated_by == "user_cancel"
+    assert by_id[timeout.scan_id].terminated_by == "timeout"
+    assert by_id[error.scan_id].terminated_by == "error"
+    assert by_id[missing.scan_id].terminated_by is None
+    assert by_id[null_metadata.scan_id].terminated_by is None
+    assert by_id[bad_type.scan_id].terminated_by is None
+    detail = read.get_scan_detail(
+        administrative_session, user_cancel.scan_id, org_id=org.id
+    )
+    assert detail is not None
+    assert detail.terminated_by == "user_cancel"
+
+
 def test_get_scan_detail_includes_box_and_duration(
     administrative_session: Session,
 ) -> None:

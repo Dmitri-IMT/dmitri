@@ -9,3 +9,10 @@ export async function getCommand(commandId: string): Promise<CommandDetail> {
   const response = await apiClient.get<CommandDetail>(`/commands/${commandId}`)
   return response.data
 }
+
+export async function cancelCommand(commandId: string): Promise<CommandDetail> {
+  const response = await apiClient.post<CommandDetail>(
+    `/commands/${commandId}/cancel`,
+  )
+  return response.data
+}

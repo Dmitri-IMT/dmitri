@@ -65,7 +65,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "2"
+    assert context.context_version == "3"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
@@ -84,6 +84,44 @@ def test_context_uses_ranked_bounded_enriched_findings(
     assert top.epss_percentile == 0.99
     assert top.is_kev is True
     assert top.known_ransomware is True
+
+
+@pytest.mark.parametrize(
+    ("terminated_by", "stopped_by"),
+    [
+        ("user_cancel", "operator"),
+        ("timeout", "timeout"),
+        ("error", "error"),
+        (None, None),
+    ],
+)
+def test_context_maps_partial_scan_termination(
+    administrative_session,
+    terminated_by,
+    stopped_by,
+):
+    seeded = seed_read_graph(administrative_session)
+    seeded["scan"].metadata_json = {
+        "partial_result": True,
+        "terminated_by": terminated_by,
+    }
+
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+
+    assert context is not None
+    assert context.context_version == "3"
+    assert context.partial_result is True
+    assert context.stopped_by == stopped_by
+
+
+def test_context_marks_complete_scan_as_not_partial(administrative_session):
+    seeded = seed_read_graph(administrative_session)
+
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+
+    assert context is not None
+    assert context.partial_result is False
+    assert context.stopped_by is None
 
 
 def test_context_sends_only_public_facts_and_placeholders(

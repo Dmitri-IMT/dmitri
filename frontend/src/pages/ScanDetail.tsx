@@ -20,6 +20,7 @@ import ScanDetailHeader, {
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
+import ScanStoppedNotice from '@/pages/scans/ScanStoppedNotice'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
@@ -114,6 +115,7 @@ function ScanDetail() {
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
         const partial = metadata.partial_result === true
+        const stoppedEarly = scan.terminated_by === 'user_cancel'
 
         return (
           <>
@@ -121,6 +123,8 @@ function ScanDetail() {
             <ScanSummaryStrip scan={scan} />
             {scan.status === 'failed' ? (
               <ScanFailedNotice errorCode={scan.error_code} />
+            ) : scan.status === 'cancelled' ? (
+              <ScanStoppedNotice variant="empty" />
             ) : isUnfinished(scan.status) ? (
               <ScanUnfinishedNotice
                 scan={scan}
@@ -131,6 +135,7 @@ function ScanDetail() {
               />
             ) : (
               <>
+                {stoppedEarly && <ScanStoppedNotice variant="partial" />}
                 <ScanAIAnalysis
                   scanId={scan.scan_id}
                   findings={scan.findings}

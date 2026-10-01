@@ -235,6 +235,86 @@ describe('DeviceDetail', () => {
     expect(within(failedRow).getAllByRole('cell')[3]).toHaveTextContent('—')
   })
 
+  it('labels stopped, stopped-early, and completed rows in device history', async () => {
+    const stoppedEarly: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '66666666-6666-4666-8666-666666666666',
+      terminated_by: 'user_cancel',
+    }
+    const cancelled: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '44444444-4444-4444-8444-444444444444',
+      status: 'cancelled',
+      host_count: 0,
+      finding_count: 0,
+      highest_severity: null,
+      duration: null,
+      terminated_by: null,
+    }
+    const plainCompleted: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '55555555-5555-4555-8555-555555555555',
+      terminated_by: null,
+    }
+    const timeoutPartial: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '33333333-3333-4333-8333-333333333334',
+      terminated_by: 'timeout',
+    }
+    const errorPartial: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '22222222-2222-4222-8222-222222222222',
+      terminated_by: 'error',
+    }
+    server.use(
+      http.get(`${baseURL}/scans`, () =>
+        HttpResponse.json({
+          data: [
+            stoppedEarly,
+            cancelled,
+            plainCompleted,
+            timeoutPartial,
+            errorPartial,
+          ],
+          total: 5,
+          page: 1,
+        } satisfies ScanListResponse),
+      ),
+    )
+    renderDeviceDetail()
+
+    const stoppedEarlyRow = await screen.findByTestId(
+      `device-scan-history-table-row-${stoppedEarly.scan_id}`,
+    )
+    expect(within(stoppedEarlyRow).getAllByRole('cell')[2]).toHaveTextContent(
+      /^Stopped early$/,
+    )
+    const cancelledRow = screen.getByTestId(
+      `device-scan-history-table-row-${cancelled.scan_id}`,
+    )
+    expect(within(cancelledRow).getAllByRole('cell')[2]).toHaveTextContent(
+      /^Stopped$/,
+    )
+    const completedRow = screen.getByTestId(
+      `device-scan-history-table-row-${plainCompleted.scan_id}`,
+    )
+    expect(within(completedRow).getAllByRole('cell')[2]).toHaveTextContent(
+      /^Completed$/,
+    )
+    const timeoutRow = screen.getByTestId(
+      `device-scan-history-table-row-${timeoutPartial.scan_id}`,
+    )
+    expect(within(timeoutRow).getAllByRole('cell')[2]).toHaveTextContent(
+      /^Completed$/,
+    )
+    const errorRow = screen.getByTestId(
+      `device-scan-history-table-row-${errorPartial.scan_id}`,
+    )
+    expect(within(errorRow).getAllByRole('cell')[2]).toHaveTextContent(
+      /^Completed$/,
+    )
+  })
+
   it('names the scan history pagination for its own surface', async () => {
     server.use(
       http.get(`${baseURL}/scans`, () =>

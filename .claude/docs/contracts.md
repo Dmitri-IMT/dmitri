@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # Shared contracts
@@ -51,14 +51,18 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
 - `GET /api/v1/commands/{command_id}` — `CommandDetail`. **Wired** (DMI-64). `scan_id` is optional
   on both `CommandSummary` and `CommandDetail`: a `queued` or `expired` command has no linked scan.
   `error_code` is optional `ScanErrorCode | null` (DMI-75 / spec 032): eight published values;
-  an off-contract stored string reads as `"unknown"`.
+  an off-contract stored string reads as `"unknown"`. `CommandStatus` includes `cancelled` (DMI-145).
+- `POST /api/v1/commands/{command_id}/cancel` (`cancelCommand`) — admin stop. **Wired** (DMI-145).
+  `202` when a cancel frame is sent; `200` when offline-retired or already terminal; `409`
+  `command_not_cancellable` while `uploading`; `404` when missing/foreign.
 - `GET /api/v1/agents/{agent_id}/commands` — **WebSocket** command channel (Ed25519; frames
-  `hello`/`command`/`status`). Scan results never travel this socket. **Both ends wired** — the
+  `hello`/`command`/`cancel`/`status`). Scan results never travel this socket. **Both ends wired** — the
   backend since DMI-64, the Pi client since DMI-66
   ([command-channel](/hardware-agent/command-channel.md)). `AvailableSubnet` gained a **required**
   `is_default_route` in DMI-66, so a hello that omits it is an invalid frame on every side:
   contract, backend Pydantic model, and generated frontend type.
   Private close codes and upgrade `403` now park the Pi for one hour instead of ending the daemon.
+  DMI-145 adds outbound `cancel` and inbound status value `cancelled`.
 - `GET /api/v1/users` (`listOrgUsers`) — admin-only member list, ordered by recent activity;
   `OrgMember` exposes `last_seen_at` but no login history or status.
 - `PATCH /api/v1/users/{user_id}` (`updateUserRole`) — admin-only role change; `409 self_target`

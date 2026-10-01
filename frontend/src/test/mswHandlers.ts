@@ -156,6 +156,7 @@ export const defaultCommand: CommandDetail = {
   delivered_at: null,
   started_at: null,
   completed_at: null,
+  has_results: false,
 }
 export const commandFixture = defaultCommand
 

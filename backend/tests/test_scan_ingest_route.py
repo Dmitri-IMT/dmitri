@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -7,6 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from api.db.session import get_session
 from api.main import app
+from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import (
@@ -221,6 +223,71 @@ def test_request_and_scan_both_complete(
     scan_record = administrative_session.get(ScanRecord, scan_id)
     assert command.status == "done"
     assert scan_record.status == "completed"
+    activity = administrative_session.exec(
+        select(ActivityRecord).where(
+            ActivityRecord.org_id == seeded_org.id,
+            ActivityRecord.subject_id == scan_id,
+        )
+    ).all()
+    assert [row.kind for row in activity].count("scan_finished") == 1
+    assert "scan_cancelled" not in [row.kind for row in activity]
+
+
+def test_late_partial_upload_after_offline_cancel_is_accepted(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+    seeded_org: Org,
+) -> None:
+    private_key, _ = agent_keypair
+    now = utc_now()
+    scan_id = uuid4()
+    command = _seed_placeholder(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+
+    asyncio.run(
+        commands.cancel_command(
+            administrative_session,
+            org_id=seeded_org.id,
+            command_id=command.id,
+            now=now,
+        )
+    )
+    administrative_session.refresh(command)
+    scan_record = administrative_session.get(ScanRecord, scan_id)
+    assert command.status == "cancelled"
+    assert scan_record.status == "cancelled"
+
+    payload = _payload(scan_id, hosts=[_host()], findings=[_finding()])
+    payload["metadata"] = {"terminated_by": "user_cancel"}
+    response = _post(
+        client, private_key=private_key, device_id=provisioned_agent.id, payload=payload
+    )
+
+    assert response.status_code == 202
+    administrative_session.refresh(command)
+    administrative_session.refresh(scan_record)
+    assert command.status == "cancelled"
+    assert scan_record.status == "completed"
+    assert len(
+        administrative_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).all()
+    ) == 1
+    activity = administrative_session.exec(
+        select(ActivityRecord).where(
+            ActivityRecord.org_id == seeded_org.id,
+            ActivityRecord.subject_id == scan_id,
+        )
+    ).all()
+    assert [row.kind for row in activity].count("scan_cancelled") == 1
+    assert "scan_finished" not in [row.kind for row in activity]
 
 
 def test_late_progress_report_after_completion_is_a_no_op(
@@ -648,6 +715,53 @@ def test_late_results_after_write_off_refused_400_and_nothing_written(
             select(EnrichmentJobRecord).where(
                 EnrichmentJobRecord.scan_id == scan_id
             )
+        ).first()
+        is None
+    )
+
+
+@pytest.mark.parametrize("terminal_status", ["done", "failed", "expired"])
+def test_upload_after_done_failed_or_expired_command_is_refused_400(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+    seeded_org: Org,
+    terminal_status: str,
+) -> None:
+    private_key, _ = agent_keypair
+    now = utc_now()
+    scan_id = uuid4()
+    command = _seed_placeholder(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    command.status = terminal_status
+    if terminal_status == "failed":
+        command.error_code = "device_offline"
+    if terminal_status in {"done", "failed"}:
+        command.completed_at = now
+    administrative_session.add(command)
+    administrative_session.commit()
+
+    response = _post(
+        client,
+        private_key=private_key,
+        device_id=provisioned_agent.id,
+        payload=_payload(scan_id, hosts=[_host()], findings=[_finding()]),
+    )
+
+    assert response.status_code == 400
+    administrative_session.refresh(command)
+    scan_record = administrative_session.get(ScanRecord, scan_id)
+    assert command.status == terminal_status
+    assert scan_record.status == "pending"
+    assert (
+        administrative_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
         ).first()
         is None
     )

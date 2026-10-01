@@ -14,6 +14,7 @@ ActivityKind = Literal[
     "scan_started",
     "scan_finished",
     "scan_failed",
+    "scan_cancelled",
     "machine_first_seen",
     "role_changed",
     "member_invited",

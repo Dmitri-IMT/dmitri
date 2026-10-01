@@ -4,7 +4,11 @@ import json
 
 import httpx
 import pytest
-from api.schemas.ai import ProviderAIChatResponse, ProviderScanAIAnalysis
+from api.schemas.ai import (
+    ProviderAIChatResponse,
+    ProviderScanAIAnalysis,
+    ProviderScanAIChildAnalysis,
+)
 from api.schemas.read import SeverityBreakdown
 from api.services.ai.context import (
     AIFindingContext,
@@ -16,10 +20,14 @@ from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
 TEST_TOKEN = "test-token"
 
 
-def _context() -> ScanAIContext:
+def _context(
+    *, partial_result: bool = False, stopped_by: str | None = None
+) -> ScanAIContext:
     return ScanAIContext(
         scan_mode="quick",
         duration_seconds=10,
+        partial_result=partial_result,
+        stopped_by=stopped_by,
         host_count=1,
         total_findings=0,
         scored_findings=0,
@@ -89,11 +97,71 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"2"' in payload["messages"][1]["content"]
+    assert '"context_version":"3"' in payload["messages"][1]["content"]
+    assert not payload["messages"][1]["content"].startswith("Coverage limit:")
     assert "scan_id" not in payload["messages"][1]["content"]
     usage = provider.drain_usage_events()
     assert usage[0].operation == "scan_analysis"
     assert usage[0].input_tokens is None
+
+
+@pytest.mark.parametrize(
+    ("stopped_by", "reason"),
+    [
+        ("operator", "An operator stopped the scan early."),
+        ("timeout", "A time limit stopped the scan."),
+        ("error", "An error stopped the scan early."),
+    ],
+)
+def test_partial_scan_prompt_opens_with_coverage_limit(stopped_by, reason):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": _analysis().model_dump_json()}}]},
+        )
+
+    _provider(handler).analyze_scan(
+        _context(partial_result=True, stopped_by=stopped_by)
+    )
+
+    payload = captured["payload"]
+    user_prompt = payload["messages"][1]["content"]
+    assert user_prompt.startswith(
+        f"Coverage limit: this scan is partial. {reason} A missing finding is not "
+        "evidence that a vulnerability is absent."
+    )
+    assert "Never infer that the scan is clean" in payload["messages"][0]["content"]
+
+
+def test_groq_provider_keeps_coverage_notice_on_chunk_and_repair():
+    prompts = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        prompts.append(json.loads(request.content)["messages"][1]["content"])
+        child = ProviderScanAIChildAnalysis(
+            priority_actions=[],
+            important_findings=[],
+            uncertainties=[],
+        )
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": child.model_dump_json()}}]},
+        )
+
+    provider = _provider(handler)
+    context = _context(partial_result=True, stopped_by="timeout")
+    provider.analyze_chunk(context)
+    provider.repair_chunk(context, ("important_findings:style",))
+
+    assert len(prompts) == 2
+    for prompt in prompts:
+        assert prompt.startswith(
+            "Coverage limit: this scan is partial. A time limit stopped the scan. "
+            "A missing finding is not evidence that a vulnerability is absent."
+        )
 
 
 def test_groq_provider_records_usage_without_prompt_content():

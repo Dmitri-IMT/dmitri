@@ -246,6 +246,7 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
   - `POST /api/v1/agents/{agent_id}/revoke`, `POST /api/v1/agents/{agent_id}/restore` → Revogar e restaurar um dispositivo (admin)
   - `POST /api/v1/agents/{agent_id}/commands` → Disparar um scan (**Scan now**)
   - `GET /api/v1/commands/{command_id}` → Ciclo de vida do comando enfileirado
+  - `POST /api/v1/commands/{command_id}/cancel` → Parar um scan em andamento (admin; `202` com Pi online, `200` offline ou já terminal, `404`, `409 command_not_cancellable` se `uploading`)
 - **Formato**: JSON completo (request e response)
 - **Contrato**: Tipos TypeScript gerados via `openapi-typescript` a partir do contrato publicado em `contracts/openapi/openapi.yaml`
 - **Leituras de avaliação**: os detalhes de scan e host incluem status/versão da avaliação,

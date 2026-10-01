@@ -16,7 +16,7 @@ type ScanSummary = components['schemas']['ScanSummary']
 function statusCell(scan: ScanSummary): ReactNode {
   return (
     <span data-testid={`scans-status-${scan.scan_id}`}>
-      {scanStatusLabel(scan.status)}
+      {scanStatusLabel(scan.status, scan.terminated_by)}
     </span>
   )
 }

@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-09-28T00:00:00Z
 ---
 
 # Backend ORM models
@@ -77,7 +77,7 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `ActivityRecord` → `activity` | Int autoincrement PK (paging tiebreaker). `org_id` FK. `kind` CHECK of nine literals. `occurred_at` is the API clock. Nullable `actor_user_id` with **no FK** so rows survive user delete. JSONB `payload`. | `backend/src/api/models/activity.py:30` |
+| `ActivityRecord` → `activity` | Int autoincrement PK (paging tiebreaker). `org_id` FK. `kind` CHECK of ten literals (includes `scan_cancelled` since DMI-145). `occurred_at` is the API clock. Nullable `actor_user_id` with **no FK** so rows survive user delete. JSONB `payload`. | `backend/src/api/models/activity.py:31` |
 
 ## How it connects
 

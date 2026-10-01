@@ -11,6 +11,12 @@
 > substitutes local display values in answers before persistence or API response, matching
 > `materialize_scan_ai_analysis`.
 
+> **Amendment 2026-09-27 (partial scan coverage):** Scan-analysis context version 3 includes
+> `partial_result` and `stopped_by` (`operator`, `timeout`, `error`, or null). For partial
+> results, every analysis prompt opens with the coverage limit and tells the model that missing
+> findings do not prove the absence of vulnerabilities. A cancelled scan with no results has no
+> AI analysis.
+
 ## Context
 
 PR #144 added an optional Groq-backed analysis of a completed scan. The product

@@ -225,6 +225,58 @@ describe('Scans', () => {
     }
   })
 
+  it('labels stopped, stopped-early, and completed rows from status and terminated_by', async () => {
+    const stoppedEarly: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '66666666-6666-4666-8666-666666666666',
+      terminated_by: 'user_cancel',
+    }
+    const cancelled: ScanSummary = {
+      ...failedScan,
+      scan_id: '44444444-4444-4444-8444-444444444444',
+      status: 'cancelled',
+    }
+    const plainCompleted: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '55555555-5555-4555-8555-555555555555',
+      terminated_by: null,
+    }
+    const timeoutPartial: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '33333333-3333-4333-8333-333333333334',
+      terminated_by: 'timeout',
+    }
+    const errorPartial: ScanSummary = {
+      ...latestSuccessfulScan,
+      scan_id: '22222222-2222-4222-8222-222222222222',
+      terminated_by: 'error',
+    }
+    scanList([
+      stoppedEarly,
+      cancelled,
+      plainCompleted,
+      timeoutPartial,
+      errorPartial,
+    ])
+    renderWithProviders(<Scans />, { route: '/scans' })
+
+    expect(
+      await screen.findByTestId(`scans-status-${stoppedEarly.scan_id}`),
+    ).toHaveTextContent(/^Stopped early$/)
+    expect(
+      screen.getByTestId(`scans-status-${cancelled.scan_id}`),
+    ).toHaveTextContent(/^Stopped$/)
+    expect(
+      screen.getByTestId(`scans-status-${plainCompleted.scan_id}`),
+    ).toHaveTextContent(/^Completed$/)
+    expect(
+      screen.getByTestId(`scans-status-${timeoutPartial.scan_id}`),
+    ).toHaveTextContent(/^Completed$/)
+    expect(
+      screen.getByTestId(`scans-status-${errorPartial.scan_id}`),
+    ).toHaveTextContent(/^Completed$/)
+  })
+
   it('shows rows 21–25 after advancing a page, and none of rows 1–20', async () => {
     const user = userEvent.setup()
     const firstPage = scanFixtures.slice(0, 20)
