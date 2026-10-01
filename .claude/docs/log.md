@@ -7,8 +7,8 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 * **Update**: PR #159 Cursor review, points 1–2. Inventory closes unseen findings only when
   `partial_result` is exactly `false`; new `read.is_cve_correlation` is the one owner of the
-  NVD/vulners correlation rule (`_to_finding_read` now calls `effective_finding_confidence`; AI
-  `evidence_basis` calls the helper); `AI_PROMPT_VERSION` → `"6"`. Touched: `backend/services.md`,
+  NVD/vulners correlation rule (`_to_finding_read`, `effective_finding_confidence`, and AI
+  `evidence_basis` all call it); `AI_PROMPT_VERSION` → `"6"`. Touched: `backend/services.md`,
   `backend/ai.md`.
 
 * **Update**: PR #159 scan evidence coverage, merged with main. Pi emits per-endpoint

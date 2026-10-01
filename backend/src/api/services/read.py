@@ -863,7 +863,11 @@ def _to_finding_read(
         detected_at=finding.created_at,
         risk_score=risk.risk_score if risk else None,
         exploitability=risk.exploitability if risk else None,
-        confidence=effective_finding_confidence(finding),
+        confidence=(
+            "probable"
+            if is_cve_correlation(finding.cve_id, finding.source)
+            else risk.confidence if risk else None
+        ),
         risk_rationale=risk.rationale if risk else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
