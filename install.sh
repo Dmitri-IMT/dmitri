@@ -190,8 +190,7 @@ sync_python_deps() {
 }
 
 provision_targeted_tools() {
-  # The external targeted tools are a Pi runtime concern. Keep the general
-  # developer install portable and make failures non-fatal with clear guidance.
+  # The external targeted tools are required for complete scans on the Pi.
   if [[ "$AGENT_ONLY" -eq 0 ]]; then
     return 0
   fi
@@ -200,26 +199,33 @@ provision_targeted_tools() {
     return 0
   fi
 
+  local arch
+  if command -v dpkg >/dev/null 2>&1; then
+    arch="$(dpkg --print-architecture)"
+  else
+    arch="$(uname -m)"
+  fi
+  case "$arch" in
+    armhf | arm64 | armv6l | armv7l | aarch64) ;;
+    *) note "Targeted-tool provisioning is supported on Raspberry Pi armhf/arm64 only; skipping on ${arch}."; return 0 ;;
+  esac
+
   local provisioner="${REPO_ROOT}/hardware-agent/scripts/provision-targeted-tools.sh"
   if [[ ! -x "$provisioner" ]]; then
-    warn "Targeted-tool provisioner is missing or not executable: ${provisioner}"
-    return 0
+    echo "error: Targeted-tool provisioner is missing or not executable: ${provisioner}" >&2
+    exit 1
   fi
 
   info "Provisioning pinned service-targeted tools (Raspberry Pi Linux)..."
   if [[ "${EUID}" -eq 0 ]]; then
-    if "$provisioner"; then
-      TARGETED_TOOLS_OK=1
-    else
-      warn "Targeted-tool provisioning failed; scans will report targeted coverage gaps."
-    fi
+    "$provisioner" || { echo "error: Targeted-tool provisioning failed" >&2; exit 1; }
   elif ! command -v sudo >/dev/null 2>&1; then
-    warn "Targeted-tool provisioning needs root/network access; run: sudo ${provisioner}"
-  elif sudo "$provisioner"; then
-    TARGETED_TOOLS_OK=1
+    echo "error: Targeted-tool provisioning needs sudo: ${provisioner}" >&2
+    exit 1
   else
-    warn "Targeted-tool provisioning failed; scans will report targeted coverage gaps."
+    sudo "$provisioner" || { echo "error: Targeted-tool provisioning failed" >&2; exit 1; }
   fi
+  TARGETED_TOOLS_OK=1
 }
 
 seed_backend_env() {
@@ -541,9 +547,6 @@ EOF
   if [[ "$AGENT_ONLY" -eq 1 ]]; then
     if [[ "$TARGETED_TOOLS_OK" -eq 1 ]]; then
       note "Targeted service tools: provisioned and verified."
-    else
-      warn "Targeted service tools are not ready. Run: sudo hardware-agent/scripts/provision-targeted-tools.sh"
-      note "Use --verify-only to check an existing Pi installation."
     fi
   fi
 
