@@ -4,7 +4,7 @@ title: frontend package overview
 description: The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 resource: frontend/
 tags: [frontend, spa, react, vite, auth, router]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # frontend package overview
@@ -38,7 +38,7 @@ both fail fast when it is absent, so hosted builds cannot silently target localh
 | `src/pages/`, `src/components/` | Screens (auth, Home, Scans, ScanDetail, Network, HostDetail, Devices, DeviceDetail, Settings, Users, NotFound), shells, top bar, `DataTable` and friends. | [screens](./screens.md), [tables](./tables.md) |
 | `src/api/home.ts`, `src/hooks/useHome.ts` | `getHome` and the one-query Home snapshot hook. | [review](./review.md) |
 | `src/lib/scanStatus.ts`, `src/lib/severity.ts` | Scan-status labels / count hiding, and the load-bearing `bySeverityDesc` comparator. | [scan-status](./scan-status.md) |
-| `src/lib/commandStatus.ts` | Command lifecycle labels and the terminal predicate for the device-detail poll. | [command-status](./command-status.md) |
+| `src/lib/commandStatus.ts` | Command lifecycle labels and the settled predicate for the device-detail poll. | [command-status](./command-status.md) |
 | `src/lib/scanModes.ts`, `src/lib/hostLastSeen.ts` | Scan-mode labels/order/default; host last-seen quiet-row helpers. | [devices-screen](./devices-screen.md), [screens](./screens.md) |
 | `src/hooks/useScanCommand.ts`, `src/pages/agents/`, `src/pages/Devices.tsx`, `src/pages/DeviceDetail.tsx` | Command follow/poll/trigger and device-detail sections. | [devices-screen](./devices-screen.md) |
 | `src/lib/detailState.ts`, `src/pages/hosts/HostFindings.tsx` | The shared detail-route state reader, and the host's second read owning its own section states. | [host-detail](./host-detail.md) |

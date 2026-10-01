@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-09-29T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # frontend API layer
@@ -53,7 +53,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail` (includes `has_results`). Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `cancelCommand(commandId)` | `POST /commands/{id}/cancel` → `CommandDetail` (`202`/`200`). Used by [devices-screen](./devices-screen.md)'s `useScanCommand.cancel`. | `frontend/src/api/commands.ts:13` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
-| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done` or `cancelled`. | `frontend/src/api/queryKeys.ts:8` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done` or `cancelled`, and again when a cancelled command gains results. | `frontend/src/api/queryKeys.ts:8` |
 
 ## How it connects
 

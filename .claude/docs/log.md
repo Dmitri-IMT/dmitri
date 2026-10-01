@@ -3,6 +3,14 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-01
+
+* **Update**: PR #160 fourth review (DMI-145). Backend: `persist_scan` locks the command row before
+  the scan row, so ingest and offline cancel take locks in the same order. Frontend: new
+  `isSettledCommand`; `useScanCommand` polls a cancelled command until it has results and sweeps
+  once per outcome. Touched: `backend/services.md`, `frontend/command-status.md`,
+  `frontend/devices-screen.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/index.md`.
+
 ## 2026-09-29
 
 * **Update**: PR #160 third review (DMI-145). Backend: `persist_scan` closes through `_close_scan`,
