@@ -22,7 +22,7 @@ not a missing client or backend route.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery/cancel, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
 * [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
 
 ## Auth
@@ -33,4 +33,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI chat scopes, usage telemetry, analysis coverage columns, per-language analyses, and attack-surface profiles. Head is `20260920_33`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, and scan_cancelled activity. Head is `20260927_37`.

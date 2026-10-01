@@ -133,3 +133,6 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 2. Brevity
 3. Clarity
 4. Humanity
+---
+
+**ERROR Handling** never put static text and sections of code when an error happens, always use toasts for errors.

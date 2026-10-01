@@ -11,13 +11,23 @@ RANK: dict[str, int] = {
     "uploading": 3,
     "done": 4,
     "failed": 4,
+    "cancelled": 4,
     "expired": 4,
 }
 
 # Statuses only a Pi may report over the command channel.
-PI_OWNED = frozenset({"running", "uploading", "done", "failed"})
+PI_OWNED = frozenset({"running", "uploading", "done", "failed", "cancelled"})
 
-TERMINAL = frozenset({"done", "failed", "expired"})
+TERMINAL = frozenset({"done", "failed", "cancelled", "expired"})
+
+# Statuses an operator may still stop. `queued` lasts only inside the trigger
+# request, and `uploading` already carries the results.
+CANCELLABLE: tuple[str, ...] = ("delivered", "running")
+
+# Scan statuses a command transition may still overwrite. Ingest owns the
+# `completed` scan: once results land, the scan follows its data and the command
+# follows the operator (spec 049, decision 3).
+UNFINISHED_SCAN: tuple[str, ...] = ("pending", "accepted", "processing")
 
 # The "agent is busy" set, matching the partial-unique-index predicate in
 # alembic/versions/20260731_13_command_delivery.py.
@@ -30,12 +40,18 @@ _SCAN_STATUS_BY_COMMAND_STATUS: dict[str, str] = {
     "uploading": "processing",
     "done": "completed",
     "failed": "failed",
+    "cancelled": "cancelled",
     "expired": "failed",
 }
 
 
 def is_terminal(status: str) -> bool:
     return status in TERMINAL
+
+
+def accepts_late_ingest(status: str) -> bool:
+    """A cancelled command still takes the partial results the Pi uploads."""
+    return status == "cancelled"
 
 
 def status_rank(status: str) -> int:

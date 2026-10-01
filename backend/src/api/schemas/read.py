@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, constr
 from api.core.error_codes import ScanErrorCode
 from api.core.machine_type import MachineType
 from api.core.scan_mode import ScanMode
+from api.core.scan_read import TerminatedBy
 from api.core.severity import Severity
 
 from .industrial import (
@@ -26,7 +27,9 @@ from .scan import (
     ExposureRole,
 )
 
-ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
+ScanStatus = Literal[
+    "pending", "accepted", "processing", "completed", "failed", "cancelled"
+]
 AssessmentStatus = Literal["available", "unavailable"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[
@@ -246,6 +249,7 @@ class ScanDetailResponse(BaseModel):
     agent_id: UUID | None = None
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
+    terminated_by: TerminatedBy | None = None
 
 
 class ScanSummary(BaseModel):
@@ -263,6 +267,7 @@ class ScanSummary(BaseModel):
     agent_id: UUID | None = None
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
+    terminated_by: TerminatedBy | None = None
 
 
 class ScanListResponse(BaseModel):

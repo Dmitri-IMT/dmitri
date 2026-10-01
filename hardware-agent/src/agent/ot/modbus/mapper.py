@@ -87,7 +87,7 @@ def resolve_mapping_plan(
         if selector_matches(
             profile.selector,
             ip=host.ip,
-            mac=host.mac,
+            mac=host.identity.mac,
             vendors=vendors,
             products=products,
         )

@@ -3,6 +3,75 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-01
+
+* **Update**: PR #160 fifth review (DMI-145). `persist_scan` checks a closed command under the row
+  lock before any write, and settles a live command through the non-committing
+  `transition_command`; `_close_scan` commits once. Touched: `backend/services.md`.
+
+* **Update**: PR #160 fourth review (DMI-145). Backend: `persist_scan` locks the command row before
+  the scan row, so ingest and offline cancel take locks in the same order. Frontend: new
+  `isSettledCommand`; `useScanCommand` polls a cancelled command until it has results and sweeps
+  once per outcome. Touched: `backend/services.md`, `frontend/command-status.md`,
+  `frontend/devices-screen.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/index.md`.
+
+## 2026-09-29
+
+* **Update**: PR #160 third review (DMI-145). Backend: `persist_scan` closes through `_close_scan`,
+  which reads the command status `FOR UPDATE`, so a cancel that lands mid-ingest keeps the results.
+  Pi: `_scan_outcome` maps a finished scan to one status before upload. Frontend: `useScanCommand`
+  keeps one `cancelIntentId`; the race toast moved into the sweep effect. Touched:
+  `backend/services.md`, `hardware-agent/daemon.md`, `frontend/devices-screen.md`.
+
+* **Update**: PR #160 second review (DMI-145). `terminated_by` is now the typed `TerminatedBy`
+  (`completed`/`user_cancel`/`timeout`/`error`) read by `api/core/scan_read.scan_terminated_by`, on
+  both `ScanSummary` and `ScanDetailResponse`; AI context maps from the same reader; Scan detail and
+  `scanStatusLabel` read the top-level field. Pi: a cancelled scan uploads its partial payload even
+  when the local result file failed to write. Touched: `hardware-agent/daemon.md`,
+  `backend/schemas.md`, `backend/ai.md`, `frontend/scan-status.md`, `frontend/screens.md`.
+
+* **Update**: PR #160 review (DMI-145). Pi `_ScanStop` now has separate `cancelled` / `parked`
+  flags (`request_cancel`, `request_park`); `_run_command` classifies the stop once. Backend: ingest
+  owns the `completed` scan; `_mirror_command_on_scan` changes only an `UNFINISHED_SCAN`; new
+  `CANCELLABLE` and `accepts_late_ingest` in `command_lifecycle`; activity follows the payload's
+  `terminated_by` only; `cancelled_command_ids_for_agent` → `pending_operator_cancels` with shared
+  `_mode_deadline`; hello split into `_hello_gate` + `_send_pending_cancels`; `CommandDetail.has_results`.
+  Frontend: `CommandStatus` reads `has_results` (no scan fetch); `ScanStoppedNotice` gains
+  `variant`; Stop-scan tests moved to `DeviceDetail.cancel.test.tsx`. `AI_PROMPT_VERSION` doc fixed
+  to `"5"`. Touched: `hardware-agent/daemon.md`, `backend/services.md`, `backend/ai.md`,
+  `backend/schemas.md`, `frontend/api.md`, `frontend/devices-screen.md`, `frontend/screens.md`,
+  `frontend/scan-status.md`.
+
+## 2026-09-28
+
+* **Update**: DMI-145 / spec 049 remote scan cancel. Documented Pi `_ScanStop.request("cancel"|"park")`,
+  `handle_cancel`, `AgentCancel` / `on_cancel`, status `cancelled` with partial upload vs silent park;
+  backend `POST /commands/{id}/cancel`, lifecycle/ingest/activity/`scan_cancelled`, hello catch-up,
+  AI context v3 `partial_result`/`stopped_by`, Alembic head `20260927_37`; frontend Stop scan,
+  `ScanStoppedNotice`, scan/command status labels. KB: ARCHITECTURE §6, ADR-011 HTTP table row,
+  SCREENS.md `cancelled` + `terminated_by`. Touched: `hardware-agent/daemon.md`,
+  `hardware-agent/command-channel.md`, `hardware-agent/index.md`, `backend/services.md`,
+  `backend/routers.md`, `backend/schemas.md`, `backend/models.md`, `backend/migrations.md`,
+  `backend/ai.md`, `backend/index.md`, `frontend/command-status.md`, `frontend/scan-status.md`,
+  `frontend/devices-screen.md`, `frontend/screens.md`, `frontend/api.md`, `frontend/index.md`,
+  `index.md`, `docs/architecture/ARCHITECTURE.md`, `docs/adr/ADR-011-pi-command-channel.md`,
+  `docs/ui/SCREENS.md`, `contracts.md`.
+
+* **Update**: PR #157 review. `merge_mac_vendor` and the loose `mac`/`vendor` fields are replaced by
+  the frozen `MacIdentity(mac, vendor)` value that owns `merged_with()`; `HostInfo` and
+  `PortScanResult` both hold `identity`. `extract_mac_vendor` became `extract_mac_identity`. Backend
+  `upsert_hosts_for_scan` drops the `mac_changed` branch: a different MAC is already a new host via
+  `identity_key`. Touched: `hardware-agent/scanner/models.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/discovery.md`, `hardware-agent/utils.md`, `backend/services.md`.
+
+* **Update**: Vendor evidence now survives later scan stages. New `extract_mac_vendor()` in
+  `utils/nmap_xml.py`; `PortScanResult` gains `mac`/`vendor`; new `merge_mac_vendor()` in
+  `scanner/models.py` keeps MAC and vendor paired. `run_port_stage` and `run_deep_inspection_stage`
+  fold each stage's MAC/vendor into the host. Backend `upsert_hosts_for_scan` no longer clears a
+  stored `mac` with null, and keeps a known vendor unless the MAC changed. Refreshed drifted
+  `path:line` refs. Touched: `hardware-agent/scanner/models.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/discovery.md`, `hardware-agent/utils.md`, `backend/services.md`.
+
 ## 2026-09-22
 
 * **Update**: DMI-179 fifth review round. `ScanDetailSection` takes `openToken` (finding id) instead of

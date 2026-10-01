@@ -26,7 +26,7 @@ export const deviceScanHistoryColumns: DataTableColumn<ScanSummary>[] = [
     key: 'status',
     label: 'Status',
     width: 'w-11/50',
-    render: (scan) => scanStatusLabel(scan.status),
+    render: (scan) => scanStatusLabel(scan.status, scan.terminated_by),
   },
   {
     key: 'duration',

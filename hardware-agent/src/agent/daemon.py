@@ -25,7 +25,7 @@ from agent.transport.ingest import (
 
 LOGGER = logging.getLogger(__name__)
 
-CommandStatus = Literal["running", "uploading", "done", "failed"]
+CommandStatus = Literal["running", "uploading", "done", "failed", "cancelled"]
 
 
 @dataclass(slots=True)
@@ -36,26 +36,68 @@ class CommandRecord:
 
 
 class _ScanStop:
-    """Stops one command's scan from the event loop, before or after it binds."""
+    """Stops one command's scan from the event loop, before or after it binds.
+
+    Park (DMI-178) and an operator cancel are separate flags: a parked Pi stays
+    silent, a cancelled scan still uploads its partial result. A cancel that
+    lands after the runner finished is ignored, so the command ends `done`.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cancel: Callable[[], None] | None = None
-        self.requested = False
+        self._finished = False
+        self.cancelled = False
+        self.parked = False
 
     def bind(self, cancel: Callable[[], None]) -> None:
         with self._lock:
+            if self._finished:
+                return
             self._cancel = cancel
-            requested = self.requested
+            requested = self.cancelled or self.parked
         if requested:
             cancel()
 
-    def request(self) -> None:
+    def finish(self) -> None:
         with self._lock:
-            self.requested = True
+            self._finished = True
+            self._cancel = None
+
+    def request_cancel(self) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self.cancelled = True
             cancel = self._cancel
         if cancel is not None:
             cancel()
+
+    def request_park(self) -> None:
+        with self._lock:
+            self.parked = True
+            cancel = self._cancel
+        if cancel is not None:
+            cancel()
+
+
+def _scan_outcome(
+    result: HeadlessScanResult, *, cancelled: bool
+) -> tuple[CommandStatus, str | None]:
+    """The status a finished scan ends with. `done` and `cancelled` upload first.
+
+    A stopped scan uploads whatever payload it has, even when the local copy
+    failed to write: ingest needs only the payload (spec 049, decision 2).
+    """
+    if cancelled:
+        return "cancelled", None
+    if result.payload is None:
+        return "failed", "scan_failed"
+    if result.result_path is None:
+        return "failed", "result_unavailable"
+    if result.outcome == "fatal":
+        return "failed", "scan_failed"
+    return "done", None
 
 
 class AgentDaemon:
@@ -78,7 +120,10 @@ class AgentDaemon:
     async def run(self) -> None:
         try:
             await self._client.run(
-                self.handle_command, self.replay_pending, self._cancel_active
+                self.handle_command,
+                self.replay_pending,
+                self._cancel_active,
+                on_cancel=self.handle_cancel,
             )
         finally:
             await self.close()
@@ -92,7 +137,7 @@ class AgentDaemon:
         task, self._task = self._task, None
         try:
             if task is not None and not task.done():
-                self._stop.request()
+                self._stop.request_park()
                 await task
         finally:
             self._release_hold()
@@ -129,6 +174,15 @@ class AgentDaemon:
             self._release_hold()
             raise
 
+    async def handle_cancel(self, command_id: UUID) -> None:
+        record = self.ledger.get(command_id)
+        if record is None or record.status == "uploading":
+            return
+        if command_id == self._active and record.status == "running":
+            self._stop.request_cancel()
+            return
+        await self._send(command_id, record)
+
     async def replay_pending(self) -> None:
         for command_id, record in list(self.ledger.items()):
             if record.pending:
@@ -143,37 +197,40 @@ class AgentDaemon:
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
+
+        def run_scan() -> HeadlessScanResult:
+            try:
+                return self._run_scan(
+                    command.scan_mode,
+                    command.subnet,
+                    nspi_submode=(
+                        command.nspi_options.submode
+                        if command.nspi_options is not None
+                        else None
+                    ),
+                    bind_cancel=stop.bind,
+                )
+            finally:
+                stop.finish()
+
         try:
-            result = await asyncio.to_thread(
-                self._run_scan,
-                command.scan_mode,
-                command.subnet,
-                nspi_submode=(
-                    command.nspi_options.submode
-                    if command.nspi_options is not None
-                    else None
-                ),
-                bind_cancel=stop.bind,
-            )
+            result = await asyncio.to_thread(run_scan)
         except InvalidScanInput:
             await self._update(command.command_id, "failed", "invalid_command")
             return
-        if stop.requested:
+        if stop.parked:
             return
-        if result.payload is None:
-            await self._update(command.command_id, "failed", "scan_failed")
-            return
-        if result.result_path is None:
-            await self._update(command.command_id, "failed", "result_unavailable")
-            return
-        if result.outcome == "fatal":
-            await self._update(command.command_id, "failed", "scan_failed")
+        status, error_code = _scan_outcome(result, cancelled=stop.cancelled)
+        if status == "failed" or result.payload is None:
+            await self._update(command.command_id, status, error_code)
             return
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
         )
-        if stop.requested:
+        # Park stays silent even after a cancel: an accepted upload already moved
+        # the command to its terminal status on the backend.
+        if stop.parked:
             return
         if submission.outcome == "accepted":
             LOGGER.info(
@@ -182,7 +239,7 @@ class AgentDaemon:
                 command.scan_id,
                 submission.status_code,
             )
-            await self._update(command.command_id, "done")
+            await self._update(command.command_id, status)
             return
         LOGGER.error(
             "scan upload failed: command=%s scan=%s outcome=%s status=%s attempts=%s",
@@ -215,7 +272,7 @@ class AgentDaemon:
         if (
             command_id == self._active
             and not record.pending
-            and record.status in {"done", "failed"}
+            and record.status in {"done", "failed", "cancelled"}
         ):
             self._release_hold()
 

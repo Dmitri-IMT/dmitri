@@ -21,6 +21,7 @@ import ScanDetailHeader, {
 import ScanFailedNotice from '@/pages/scans/ScanFailedNotice'
 import ScanHostsTable from '@/pages/scans/ScanHostsTable'
 import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
+import ScanStoppedNotice from '@/pages/scans/ScanStoppedNotice'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import ServiceTargetedFindings, {
@@ -125,6 +126,7 @@ function ScanDetail() {
           scan.exposures.length > 0 ||
           scan.hosts.length > 0 ||
           coverage.length > 0
+        const stoppedEarly = scan.terminated_by === 'user_cancel'
 
         return (
           <>
@@ -141,7 +143,9 @@ function ScanDetail() {
             {scan.status === 'failed' && (
               <ScanFailedNotice errorCode={scan.error_code} />
             )}
-            {isUnfinished(scan.status) ? (
+            {scan.status === 'cancelled' ? (
+              <ScanStoppedNotice variant="empty" />
+            ) : isUnfinished(scan.status) ? (
               <ScanUnfinishedNotice
                 scan={scan}
                 onCheck={() => {
@@ -156,6 +160,7 @@ function ScanDetail() {
                 }
                 className="flex flex-col gap-8"
               >
+                {stoppedEarly && <ScanStoppedNotice variant="partial" />}
                 {scan.status === 'failed' && (
                   <p className="text-body-md text-muted-foreground">
                     {t('scans.failedEvidence')}

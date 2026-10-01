@@ -199,6 +199,7 @@ def run_port_stage(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
                     )
+                    host.identity = host.identity.merged_with(result.identity)
                     host.operating_system = result.operating_system
                     if result.skipped:
                         hosts_skipped += 1
@@ -398,6 +399,7 @@ def run_deep_inspection_stage(
                     host.deep_inspection_evidence_source = "nmap_nse"
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
+                    host.identity = host.identity.merged_with(result.identity)
                     if (
                         settings.scan_mode == "nspi"
                         and result.operating_system is not None
@@ -591,9 +593,9 @@ def build_host_payload(
 ) -> HostPayload:
     return HostPayload(
         ip=host.ip,
-        mac=host.mac,
+        mac=host.identity.mac,
         hostname=host.hostname or host.ip,
-        vendor=host.vendor or "unknown",
+        vendor=host.identity.vendor,
         operating_system=(
             OperatingSystemDetection(
                 name=host.operating_system.name,

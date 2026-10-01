@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 from api.models.command import Agent
-from api.schemas.agent_frames import AgentErrorFrame
+from api.schemas.agent_frames import AgentCancelFrame, AgentErrorFrame
 from api.services import agent_connections, agent_ws
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
@@ -103,6 +103,9 @@ def _tracking_session_factory(
             session.get.side_effect = get_error
         else:
             session.get.return_value = loaded
+        exec_result = MagicMock()
+        exec_result.all.return_value = []
+        session.exec.return_value = exec_result
         if configure is not None:
             configure(session)
         open_sessions.append(session)
@@ -249,6 +252,54 @@ def test_parse_frame_accepts_hello_and_status_without_io():
     assert hello.frame.agent_version
     assert isinstance(status, agent_ws._Status)
     assert status.frame.command_id == COMMAND_ID
+
+
+def test_accepted_hello_sends_cancel_catch_up(monkeypatch):
+    command_id = UUID("22222222-2222-4222-8222-222222222222")
+    calls = []
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory()
+
+    def cancelled_commands(session, *, agent_id, now):
+        calls.append((session, agent_id, now))
+        return [command_id]
+
+    monkeypatch.setattr(
+        agent_ws, "pending_operator_cancels", cancelled_commands
+    )
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(_hello_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    ws.send_text.assert_awaited_once()
+    frame = AgentCancelFrame.model_validate_json(ws.send_text.await_args.args[0])
+    assert frame.command_id == command_id
+    assert calls[0][1:] == (AGENT_ID, T1)
+    assert calls[0][0] is session_factory.open_sessions[0]
+    assert len(session_factory.open_sessions) == 1
+    assert session_factory.closed_sessions == session_factory.open_sessions
+
+
+def test_revoked_hello_sends_no_cancel_frames(monkeypatch):
+    calls = []
+
+    def cancelled_commands(session, *, agent_id, now):
+        calls.append((session, agent_id, now))
+        return [UUID("22222222-2222-4222-8222-222222222222")]
+
+    monkeypatch.setattr(
+        agent_ws, "pending_operator_cancels", cancelled_commands
+    )
+    ws = _connected_ws()
+    session_factory = _tracking_session_factory(agent=_agent_stub(revoked_at=T0))
+    asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
+
+    asyncio.run(_handle(_hello_payload(), session_factory, ws, agent_id=AGENT_ID))
+
+    assert calls == []
+    ws.send_text.assert_not_awaited()
+    ws.close.assert_awaited_once_with(code=4001, reason="revoked")
+    assert session_factory.closed_sessions == session_factory.open_sessions
 
 
 @pytest.mark.parametrize("raw_text", INVALID_FRAMES)

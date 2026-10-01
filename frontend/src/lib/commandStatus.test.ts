@@ -11,6 +11,7 @@ const EXPECTED_LABELS: Record<CommandStatus, string> = {
   uploading: 'Uploading results…',
   done: 'Done',
   failed: 'Scan failed',
+  cancelled: 'Scan stopped',
   expired: 'Not picked up',
 }
 
@@ -27,7 +28,7 @@ describe('commandStatusLabel', () => {
 })
 
 describe('isTerminalCommandStatus', () => {
-  it.each<CommandStatus>(['done', 'failed', 'expired'])(
+  it.each<CommandStatus>(['done', 'failed', 'cancelled', 'expired'])(
     'returns true for %s',
     (status) => {
       expect(isTerminalCommandStatus(status)).toBe(true)

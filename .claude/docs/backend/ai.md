@@ -4,7 +4,7 @@ title: Backend AI — scan analysis, contextual chat, usage telemetry
 description: Groq-backed scan overviews per scan and output language (on-demand, or auto at ingest and after enrichment), scoped Q&A on scans/hosts/findings, and org-scoped provider usage rows without storing prompts or answers in ai_usage.
 resource: backend/src/api/services/ai/jobs.py
 tags: [backend, ai, groq, worker, scans, chat, telemetry]
-timestamp: 2026-09-19T21:00:00Z
+timestamp: 2026-09-29T00:00:00Z
 ---
 
 # Backend AI — scan analysis, contextual chat, usage telemetry
@@ -61,7 +61,8 @@ Each language is a separate job and a separate provider run.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `ai_is_available()` / `build_ai_provider()` | Gate and construct `GroqProvider`. Accept `AI_API_KEY` as a `SecretStr` or a plain string. | `backend/src/api/services/ai/groq.py:466`, `:479` |
-| `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Scan path: `analyze_scan`, chunked `analyze_chunk`, `repair_*`, `synthesize_scan`. Chat: `answer_question`. Every method takes keyword `language`; `_language_name()` maps it to English / Brazilian Portuguese / Russian in the system prompt. `AI_PROMPT_VERSION` is `"4"`. Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py:73`, `:419`, `:22` |
+| `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Scan path: `analyze_scan`, chunked `analyze_chunk`, `repair_*`, `synthesize_scan`. Chat: `answer_question`. Every method takes keyword `language`; `_language_name()` maps it to English / Brazilian Portuguese / Russian in the system prompt. `AI_PROMPT_VERSION` is `"5"`. Partial scans prepend `_coverage_notice` from `partial_result` / `stopped_by` (DMI-145). Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py` |
+| `ScanAIContext` | Scan-analysis context version `"3"`: includes `partial_result` and `stopped_by` (`operator` \| `timeout` \| `error` \| null), mapped from `scan_terminated_by` (the same typed reader the scan list and detail use). A `cancelled` scan with no results gets no analysis. | `backend/src/api/services/ai/context.py:60` |
 | `drain_provider_usage()` / `persist_usage_events()` | Move provider events into `AIUsageRecord` rows (org/scan/user when known). | `backend/src/api/services/ai/telemetry.py:12`, `:17` |
 | `answer_interactive_question()` | Calls `GroqProvider.answer_question`, then `materialize_chat_response` (finding refs to UUIDs and placeholder text to display values). | `backend/src/api/services/ai/chat.py` |
 | `build_scan_chat_bundle()` / `build_host_chat_bundle()` / `build_finding_chat_bundle()` | Placeholder-only JSON for chat (`finding_N`, `machine_N`, `service_N`); no subnet, UUIDs, or raw evidence to Groq. | `backend/src/api/services/ai/chat.py` |

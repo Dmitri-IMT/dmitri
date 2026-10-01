@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from sqlmodel import Session, func, select
 
-from api.core.scan_read import scan_duration_seconds
+from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import Severity
 from api.models.persistence import (
     EpssRecord,
@@ -30,6 +30,7 @@ from api.schemas.read import (
     ScanStatus,
     SeverityBreakdown,
 )
+from api.schemas.scan import TERMINATED_BY_USER_CANCEL
 from api.services.read import get_scan_risk_summary
 
 AI_CONTEXT_VERSION = "3"
@@ -68,6 +69,8 @@ class ScanAIContext(BaseModel):
     evidence_completeness: Literal["complete", "partial", "unknown"] = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     duration_seconds: Annotated[int | None, Field(ge=0)]
+    partial_result: bool = False
+    stopped_by: Literal["operator", "timeout", "error"] | None = None
     host_count: Annotated[int, Field(ge=0)]
     total_findings: Annotated[int, Field(ge=0)]
     scored_findings: Annotated[int, Field(ge=0)]
@@ -247,6 +250,7 @@ def build_scan_ai_context(
         epss_by_cve=epss_by_cve,
         kev_by_cve=kev_by_cve,
     )
+    metadata = scan.metadata_json or {}
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
@@ -262,6 +266,12 @@ def build_scan_ai_context(
             for unit in (scan.coverage_json or [])
         ),
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
+        partial_result=metadata.get("partial_result") is True,
+        stopped_by={
+            TERMINATED_BY_USER_CANCEL: "operator",
+            "timeout": "timeout",
+            "error": "error",
+        }.get(scan_terminated_by(scan.metadata_json)),
         host_count=host_count,
         total_findings=risk.total_findings,
         scored_findings=risk.scored_findings,

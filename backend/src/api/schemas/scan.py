@@ -56,6 +56,9 @@ ExposureRole = Literal[
 ExposureAttention = Literal["informational", "review", "priority"]
 ExposureConfidence = Literal["low", "medium", "high"]
 
+# metadata.terminated_by value the Pi runner writes when an operator stops a scan.
+TERMINATED_BY_USER_CANCEL = "user_cancel"
+
 AssessmentText = constr(min_length=1, max_length=160, strip_whitespace=True)
 AssessmentReason = constr(min_length=1, max_length=240, strip_whitespace=True)
 

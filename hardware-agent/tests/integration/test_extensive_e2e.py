@@ -12,7 +12,7 @@ from agent.assessment.policy import LOCAL_ASSESSMENT_POLICY_VERSION
 from agent.config import AgentSettings
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.findings import extract_findings
-from agent.scanner.models import HostInfo
+from agent.scanner.models import HostInfo, MacIdentity
 from agent.scanner.stages import (
     build_host_payload,
     run_deep_inspection_stage,
@@ -191,8 +191,7 @@ def test_extensive_responsibility_split_preserves_deterministic_evidence() -> No
     host = HostInfo(
         ip=ip,
         hostname="edge-gateway.lab",
-        mac="02:00:00:00:01:30",
-        vendor="Lab Hardware Ltd",
+        identity=MacIdentity(mac="02:00:00:00:01:30", vendor="Lab Hardware Ltd"),
     )
     settings = AgentSettings(
         scan_mode="extensive",
@@ -230,7 +229,7 @@ def test_extensive_responsibility_split_preserves_deterministic_evidence() -> No
     assert calls[1].count("-sV") == 1
     assert calls[1][-3:] == ["-p", "21,443", ip]
 
-    assert (host.hostname, host.mac, host.vendor) == (
+    assert (host.hostname, host.identity.mac, host.identity.vendor) == (
         "edge-gateway.lab",
         "02:00:00:00:01:30",
         "Lab Hardware Ltd",
