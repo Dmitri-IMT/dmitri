@@ -22,7 +22,7 @@ from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "5"
+AI_PROMPT_VERSION = "6"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied

@@ -863,11 +863,7 @@ def _to_finding_read(
         detected_at=finding.created_at,
         risk_score=risk.risk_score if risk else None,
         exploitability=risk.exploitability if risk else None,
-        confidence=(
-            "probable"
-            if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}
-            else risk.confidence if risk else None
-        ),
+        confidence=effective_finding_confidence(finding),
         risk_rationale=risk.rationale if risk else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
@@ -887,8 +883,12 @@ def _port_check_complete(scan: ScanRecord, ip: str) -> bool:
     return (scan.metadata_json or {}).get("partial_result") is False
 
 
+def is_cve_correlation(cve_id: str | None, source: str | None) -> bool:
+    return bool(cve_id) and source in {"nmap_vulners", "nvd"}
+
+
 def effective_finding_confidence(finding: FindingRecord) -> str:
-    if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}:
+    if is_cve_correlation(finding.cve_id, finding.source):
         return "probable"
     return finding.confidence
 

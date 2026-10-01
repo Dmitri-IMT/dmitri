@@ -31,7 +31,7 @@ from api.schemas.read import (
     SeverityBreakdown,
 )
 from api.schemas.scan import TERMINATED_BY_USER_CANCEL
-from api.services.read import get_scan_risk_summary
+from api.services.read import get_scan_risk_summary, is_cve_correlation
 
 AI_CONTEXT_VERSION = "3"
 
@@ -189,7 +189,7 @@ def build_finding_contexts(
                 confidence=finding.confidence,
                 evidence_basis=(
                     "cve_correlation"
-                    if finding.cve_id and finding.source in {"nmap_vulners", "nvd"}
+                    if is_cve_correlation(finding.cve_id, finding.source)
                     else "target_observation"
                 ),
                 risk_score=finding.risk_score,

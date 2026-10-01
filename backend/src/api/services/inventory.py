@@ -199,7 +199,7 @@ def _reconcile_findings(
         session.add(existing)
 
     evidence_complete = (
-        (scan_record.metadata_json or {}).get("partial_result") is not True
+        (scan_record.metadata_json or {}).get("partial_result") is False
     )
     if is_latest and evidence_complete:
         for row in known.values():
