@@ -17,6 +17,12 @@ known follow-up will immediately remove. Build each feature in its intended comp
 that is not possible within the requested scope or current constraints, state the limitation and
 ask the user to decide how to proceed rather than silently shipping temporary code.
 
+## No comments
+
+Do not add code comments, docstrings, or JSDoc blocks in new or changed code. Put the
+reasoning in the commit message or PR description instead. Leave existing comments alone
+unless your change makes one false.
+
 ## Formatting and lint gates
 
 **Never run a repo-wide formatter.** Not `ruff format`, not `black .`, not `./lint.sh`
