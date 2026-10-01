@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Shared contracts
@@ -112,7 +112,9 @@ The OpenAPI `ScanIngestRequest` uses `HostPayload` (`hosts[]`); `ScanIngestAccep
 now `POST`ed as `hosts[]`, per contract asks C1–C5). Read responses add: `ScanHostView` — the
 `HostPayload` shape plus a **required** `host_id` (C9, resolved host identity per host observation
 in a scan); `HostSummary` / `HostDetailResponse` — list/detail rows with `machine_type` and
-`vulnerability_count`; `HostListResponse.quiet_total`; `HostPort` (durable services, no `state`);
+`vulnerability_count`; `HostListResponse.quiet_total`; `HostPort` (durable services, no `state`,
+nullable `observed_in_latest_scan`); `ScanSummary.partial_result`; `ScanDetailResponse.coverage`
+(`CoverageUnitPayload[]`, also accepted on `ScanIngestRequest.coverage`);
 `FindingRead.host_hostname` plus life timestamps. `GET /hosts` takes `group=active|quiet` (default
 active). `HostSortBy` includes `vulnerability_count` and not `machine_type`.
 

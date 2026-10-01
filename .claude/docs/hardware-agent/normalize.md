@@ -4,7 +4,7 @@ title: normalize — contracts & findings extraction
 description: The Pydantic scan payloads for observations, profiles, exposures and findings, plus the NSE finding extractor.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -21,7 +21,8 @@ only range status and an optional keyed digest cross this boundary.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanPayload` | Top-level result including optional `assessment_policy_version` and `exposures`; absence marks a legacy scan whose assessment is unavailable. | `contracts.py:263` |
+| `ScanPayload` | Top-level result including optional `assessment_policy_version` and `exposures`; absence marks a legacy scan whose assessment is unavailable. `coverage` (default `[]`) lists what each check reached. | `contracts.py:302` |
+| `CoverageUnitPayload` / `CoverageObservationPayload` | One checked unit per `ip` + `stage` with `outcome`, `reason_code`, `evidence_source`, `issue_keys`, and bounded `observations`. Mirrored by the backend schema. | `contracts.py:279` |
 | `HostPayload` | A host on the wire: original observations plus optional `machine_type` and `device_profile`. | `contracts.py:233` |
 | `AssessmentEvidencePayload` | Bounded evidence item with a closed kind, source, and normalized value. | `contracts.py:64` |
 | `ExposurePayload` | One open endpoint's role, attention, confidence, reason, and evidence; separate from findings. | `contracts.py:93` |

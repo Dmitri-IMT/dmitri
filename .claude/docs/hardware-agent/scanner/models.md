@@ -4,7 +4,7 @@ title: scanner/models — in-memory scan dataclasses
 description: The in-memory scan dataclasses HostInfo, PortInfo, ServiceInfo, and ScriptResult that carry state across pipeline stages.
 resource: hardware-agent/src/agent/scanner/models.py
 tags: [hardware-agent, scanner, models, dataclasses]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # scanner/models — in-memory scan models
@@ -19,7 +19,7 @@ fills identity, the port stage sets `ports`, deep inspection merges services and
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `HostInfo` | A discovered host: `ip`, `hostname`, `identity` (`MacIdentity`), `state`, `ports`, `operating_system`, `host_scripts`, `industrial_services`, `targeted_results`. | `models.py:96` |
+| `HostInfo` | A discovered host: `ip`, `hostname`, `identity` (`MacIdentity`), `state`, `ports`, `operating_system`, `host_scripts`, `industrial_services`, `targeted_results`, plus the stage outcomes `build_coverage_payload` reads: `port_scan_outcome`/`port_scan_reason` and `deep_inspection_outcome`/`deep_inspection_reason`/`deep_inspection_evidence_source`. | `models.py:96` |
 | `HostInfo.open_ports` | Property returning only `state == "open"` ports — the ones that feed service/NSE stages. | `models.py:110` |
 | `MacIdentity` | Frozen value for one Nmap MAC observation: `mac` (or `None`) and `vendor` (default `"unknown"`). | `models.py:69` |
 | `MacIdentity.merged_with()` | Folds in a later observation. No incoming MAC keeps `self`. Same MAC with an `"unknown"` vendor keeps `self`. Otherwise the incoming value wins, so a new MAC never inherits the old vendor. | `models.py:75` |

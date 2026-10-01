@@ -5,6 +5,20 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-01
 
+* **Update**: PR #159 scan evidence coverage, merged with main. Pi emits per-endpoint
+  `coverage` (`build_coverage_payload`, `CoverageUnitPayload`) and new `HostInfo` stage outcomes;
+  targeted plan-limit omissions become skipped units. Backend stores `scans.coverage_json`, returns
+  `coverage` / `ScanSummary.partial_result` / `HostPort.observed_in_latest_scan`, reads NVD/vulners
+  CVEs as `probable`, skips fixing unseen findings on partial scans, and adds AI
+  `evidence_completeness` / `incomplete_check_count` / `evidence_basis`. Migration renamed to
+  `20260928_38` (parent `20260927_37`), now head. Frontend: `ScanCoverage`, partial and failed-scan
+  evidence on Scan Detail, AI evidence-limit lines, port freshness labels. Touched:
+  `backend/migrations.md`, `backend/models.md`, `backend/schemas.md`, `backend/services.md`,
+  `backend/ai.md`, `backend/index.md`, `index.md`, `contracts.md`, `hardware-agent/normalize.md`,
+  `hardware-agent/scanner/models.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/stages.md`, `frontend/screens.md`, `frontend/scan-ai.md`,
+  `frontend/home-ai-overview.md`.
+
 * **Update**: PR #160 fifth review (DMI-145). `persist_scan` checks a closed command under the row
   lock before any write, and settles a live command through the non-committing
   `transition_command`; `_close_scan` commits once. Touched: `backend/services.md`.

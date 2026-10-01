@@ -4,7 +4,7 @@ title: scanner/stages — port, deep, and OT inspection stages
 description: Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and HostInfo-to-HostPayload normalization.
 resource: hardware-agent/src/agent/scanner/stages.py
 tags: [hardware-agent, scanner, pipeline, threading, contingency]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # scanner/stages — port, deep & OT-inspection stages
@@ -28,7 +28,8 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 | `_run_unit_with_retry()` | Retries a unit of work on `TransientScanError` up to `retries + 1` times, then raises `UnitScanError`. | `stages.py:70` |
 | `build_host_payload()` | Maps original host, OS, port, and industrial observations into `HostPayload`; optional assessment fields are attached later by the runner. | `stages.py:538` |
 | `nmap_arguments_summary()` | Describes port-only enumeration, the primary deep `-sV`/NSE command, and selected OT submode. | `stages.py:628` |
-| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters and the stage-deadline signal. | `stages.py:659` |
+| `build_coverage_payload()` | Turns each host's recorded port-scan and deep-inspection outcome, plus its targeted results, into `CoverageUnitPayload[]`. Units still pending when the scan stops get a reason from `terminated_by` (`scan_cancelled`/`scan_timeout`/`scan_error`). | `stages.py:687` |
+| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters, the stage-deadline signal, and `targeted_units_omitted_unlisted` (plan-limit omissions not listed in coverage). `ports_open` counts open ports only. | `stages.py:847` |
 | `set_runner_stage()` | Tags a `LoggedNmapRunner` with the current stage name; no-op for a plain runner. | `stages.py:83` |
 
 ## How it connects
