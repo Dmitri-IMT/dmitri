@@ -9,10 +9,7 @@ import {
 } from '@/api/commands'
 import { queryKeys } from '@/api/queryKeys'
 import { useToast } from '@/hooks/useToast'
-import {
-  isSettledCommand,
-  isTerminalCommandStatus,
-} from '@/lib/commandStatus'
+import { isSettledCommand, isTerminalCommandStatus } from '@/lib/commandStatus'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
