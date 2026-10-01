@@ -9,7 +9,10 @@ import {
 } from '@/api/commands'
 import { queryKeys } from '@/api/queryKeys'
 import { useToast } from '@/hooks/useToast'
-import { isTerminalCommandStatus } from '@/lib/commandStatus'
+import {
+  isSettledCommand,
+  isTerminalCommandStatus,
+} from '@/lib/commandStatus'
 import type { components } from '@/types/openapi'
 
 type AgentDetail = components['schemas']['AgentDetail']
@@ -46,7 +49,7 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
   const [lastObservedActiveCommandId, setLastObservedActiveCommandId] =
     useState<string | null>(agent.active_command_id ?? null)
   const triggeringRef = useRef(false)
-  const sweptCommandId = useRef<string | null>(null)
+  const sweptOutcome = useRef<string | null>(null)
 
   const observedActiveCommandId = agent.active_command_id ?? null
   if (observedActiveCommandId !== lastObservedActiveCommandId) {
@@ -62,16 +65,15 @@ export function useScanCommand(agent: AgentDetail): ScanCommand {
       ? () => getCommand(followedCommandId)
       : skipToken,
     refetchInterval: (query) =>
-      isTerminalCommandStatus(query.state.data?.status)
-        ? false
-        : COMMAND_POLL_INTERVAL_MS,
+      isSettledCommand(query.state.data) ? false : COMMAND_POLL_INTERVAL_MS,
   })
 
   useEffect(() => {
     const command = commandQuery.data
     if (command?.status !== 'done' && command?.status !== 'cancelled') return
-    if (sweptCommandId.current === command.command_id) return
-    sweptCommandId.current = command.command_id
+    const outcome = `${command.command_id}:${command.status}:${command.has_results}`
+    if (sweptOutcome.current === outcome) return
+    sweptOutcome.current = outcome
     if (command.status === 'done' && command.command_id === cancelIntentId) {
       show('The scan finished before it could stop.')
     }

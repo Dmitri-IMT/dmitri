@@ -107,8 +107,9 @@ describe('DeviceDetail command cache invalidation', () => {
     )
   })
 
-  it('refreshes the same product families once when a command is cancelled', async () => {
+  it('refreshes once when a command is cancelled and again when late results land', async () => {
     vi.useFakeTimers()
+    let lateResults = false
     let commandReads = 0
     let agentDetailReads = 0
     let scanReads = 0
@@ -137,6 +138,7 @@ describe('DeviceDetail command cache invalidation', () => {
           ...defaultCommand,
           status: cancelled ? ('cancelled' as const) : ('queued' as const),
           completed_at: cancelled ? new Date().toISOString() : null,
+          has_results: lateResults,
         })
       }),
       http.get(`${baseURL}/scans`, () => {
@@ -181,11 +183,29 @@ describe('DeviceDetail command cache invalidation', () => {
     })
 
     await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
-    expect(commandReads).toBe(2)
+    expect(commandReads).toBe(5)
     expect(scanReads).toBe(6)
     expect(hostReads).toBe(2)
     expect(findingReads).toBe(2)
     expect(agentDetailReads).toBe(2)
     expect(screen.getByTestId('agents-retry')).toBeInTheDocument()
+    expect(screen.queryByTestId('agents-view-scan')).not.toBeInTheDocument()
+
+    lateResults = true
+    await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS)
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('agents-view-scan')).toHaveAttribute(
+        'href',
+        `/scans/${defaultCommand.scan_id}`,
+      )
+      expect(scanReads).toBe(9)
+      expect(hostReads).toBe(3)
+      expect(findingReads).toBe(3)
+      expect(agentDetailReads).toBe(3)
+    })
+
+    await vi.advanceTimersByTimeAsync(COMMAND_POLL_INTERVAL_MS * 3)
+    expect(commandReads).toBe(6)
+    expect(scanReads).toBe(9)
   })
 })

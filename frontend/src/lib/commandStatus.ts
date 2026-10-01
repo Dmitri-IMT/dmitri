@@ -1,5 +1,6 @@
 import type { components } from '@/types/openapi'
 
+type CommandDetail = components['schemas']['CommandDetail']
 type CommandStatus = components['schemas']['CommandStatus']
 
 const COMMAND_STATUS_LABELS: Record<CommandStatus, string> = {
@@ -37,4 +38,11 @@ export function isTerminalCommandStatus(
       return _exhaustive
     }
   }
+}
+
+export function isSettledCommand(command: CommandDetail | undefined): boolean {
+  if (command === undefined || !isTerminalCommandStatus(command.status)) {
+    return false
+  }
+  return command.status !== 'cancelled' || command.has_results
 }
