@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision the external service-targeted tools on Raspberry Pi OS Bookworm.
+# Provision the external service-targeted tools on Raspberry Pi OS Bookworm or Trixie.
 # Scans never call this script.  --verify-only performs local checks only.
 set -euo pipefail
 
@@ -15,7 +15,8 @@ readonly NIKTO_COMMIT="69681e2e4213c15b85a90c53b2169ecb2a88fb01"
 readonly NIKTO_DB_SHA256="e221b0ab6db1b3dec26a11674a68216fc6ee690b8b20f07056d4e4ae33ed30a2"
 readonly ENUM4LINUX_VERSION="1.3.10"
 readonly ENUM4LINUX_COMMIT="f34e7bb3bc2bcd10267a7257fb3658154434ccf4"
-readonly TESTSSL_VERSION="3.0.8+dfsg-1"
+readonly TESTSSL_BOOKWORM_VERSION="3.0.8+dfsg-1"
+readonly TESTSSL_TRIXIE_VERSION="3.2.1+dfsg-1"
 readonly DIRB_MAX_BYTES=1048576
 readonly DIRB_MIN_ENTRIES=4000
 readonly DIRB_MAX_ENTRIES=10000
@@ -23,6 +24,8 @@ readonly DIRB_MAX_ENTRIES=10000
 VERIFY_ONLY=0
 TMP_DIR=""
 CHECK_FAILURES=0
+TESTSSL_VERSION=""
+OS_CODENAME=""
 
 info() { printf '==> %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -32,7 +35,7 @@ usage() {
   cat <<'EOF'
 Usage: provision-targeted-tools.sh [--verify-only]
 
-Install the pinned service-targeted tools on Raspberry Pi OS Bookworm.
+Install the pinned service-targeted tools on Raspberry Pi OS Bookworm or Trixie.
   --verify-only  Check architecture, versions, capabilities, and DIRB locally.
                  This mode does not use apt, git, curl, or any network access.
 EOF
@@ -64,6 +67,18 @@ require_arm_arch() {
   esac
 }
 
+select_testssl_version() {
+  [[ -r /etc/os-release ]] || die "cannot identify OS release: /etc/os-release is missing"
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  OS_CODENAME="${VERSION_CODENAME:-}"
+  case "$OS_CODENAME" in
+    bookworm) TESTSSL_VERSION="$TESTSSL_BOOKWORM_VERSION" ;;
+    trixie) TESTSSL_VERSION="$TESTSSL_TRIXIE_VERSION" ;;
+    *) die "unsupported OS release ${OS_CODENAME:-unknown}; targeted tools support Bookworm or Trixie" ;;
+  esac
+}
+
 require_root_for_install() {
   [[ "$VERIFY_ONLY" -eq 1 || "${EUID}" -eq 0 ]] || die "installation requires root; re-run with sudo (or use --verify-only)"
 }
@@ -76,7 +91,7 @@ cleanup() {
 trap cleanup EXIT
 
 install_apt_dependencies() {
-  info "Installing Bookworm runtime dependencies"
+  info "Installing ${OS_CODENAME} runtime dependencies"
   apt-get update
   apt-get install -y --no-install-recommends \
     ca-certificates curl git perl libnet-ssleay-perl libio-socket-ssl-perl \
@@ -240,8 +255,8 @@ check_package_exact_version() {
 }
 
 check_python_package_exact_version() {
-  local label="$1" package="$2" expected="$3" actual
-  actual="$("${AGENT_DIR}/.venv/bin/python" -c 'import importlib.metadata, sys; print(importlib.metadata.version(sys.argv[1]))' "$package" 2>/dev/null)" || actual=""
+  local label="$1" package="$2" expected="$3" python="$4" actual
+  actual="$("$python" -c 'import importlib.metadata, sys; print(importlib.metadata.version(sys.argv[1]))' "$package" 2>/dev/null)" || actual=""
   if [[ "$actual" == "$expected" ]]; then
     printf 'PASS  %s\n' "$label"
     return 0
@@ -305,7 +320,7 @@ ffuf_archive_matches_binary() {
 }
 
 check_capabilities() {
-  local arch="$1" ffuf_bin nikto_bin testssl_bin enum_bin ssh_bin dirb ffuf_sha256 ffuf_archive
+  local arch="$1" ffuf_bin nikto_bin testssl_bin enum_bin ssh_bin ssh_python dirb ffuf_sha256 ffuf_archive
   if [[ "$arch" == armhf ]]; then
     ffuf_sha256="$FFUF_ARMHF_SHA256"
   else
@@ -320,10 +335,15 @@ check_capabilities() {
   nikto_bin="$(command -v nikto || true)"
   testssl_bin="$(command -v testssl || command -v testssl.sh || true)"
   enum_bin="$(command -v enum4linux-ng || true)"
-  ssh_bin="$(command -v ssh-audit || true)"
-  if [[ -z "$ssh_bin" && -x "${AGENT_DIR}/.venv/bin/ssh-audit" ]]; then
-    ssh_bin="${AGENT_DIR}/.venv/bin/ssh-audit"
-  fi
+  ssh_bin=""
+  ssh_python=""
+  for venv in "${AGENT_DIR}/.venv" /opt/dmitri-agent/.venv; do
+    if [[ -x "${venv}/bin/ssh-audit" && -x "${venv}/bin/python" ]]; then
+      ssh_bin="${venv}/bin/ssh-audit"
+      ssh_python="${venv}/bin/python"
+      break
+    fi
+  done
 
   if [[ -n "$ffuf_bin" ]]; then
     check_command_exact_version "ffuf ${FFUF_VERSION}" "$FFUF_VERSION" "$ffuf_bin" -V || true
@@ -377,7 +397,7 @@ check_capabilities() {
 
   if [[ -n "$ssh_bin" ]]; then
     local ssh_version ssh_help
-    check_python_package_exact_version "ssh-audit 3.9.0" ssh-audit "3.9.0" || true
+    check_python_package_exact_version "ssh-audit 3.9.0" ssh-audit "3.9.0" "$ssh_python" || true
     ssh_version="$({ timeout 30s "$ssh_bin" --version; } 2>&1 || true)"
     ssh_help="$({ timeout 30s "$ssh_bin" --help; } 2>&1 || true)"
     if [[ -n "$ssh_version" ]] && grep -Fq -- '-j' <<<"$ssh_help" && grep -Fq -- '--skip-rate-test' <<<"$ssh_help"; then
@@ -387,7 +407,7 @@ check_capabilities() {
       CHECK_FAILURES=$((CHECK_FAILURES + 1))
     fi
   else
-    printf 'FAIL  ssh-audit executable unavailable; run uv sync --extra dev\n' >&2
+    printf 'FAIL  ssh-audit executable unavailable in the checkout or installed agent venv\n' >&2
     CHECK_FAILURES=$((CHECK_FAILURES + 1))
   fi
 
@@ -401,7 +421,12 @@ check_capabilities() {
 
 run_local_smoke_tests() {
   local venv_python="${AGENT_DIR}/.venv/bin/python"
-  [[ -x "$venv_python" ]] || die "${venv_python} is required for local targeted-tool smoke tests; run uv sync --extra dev"
+  if [[ ! -f "${AGENT_DIR}/tests/unit/test_targeted_web.py" ]] \
+    || [[ ! -x "$venv_python" ]] \
+    || ! "$venv_python" -c 'import pytest' >/dev/null 2>&1; then
+    info "Development smoke tests unavailable; run uv sync --extra dev in a source checkout to run them"
+    return 0
+  fi
   info "Running offline targeted parser and fake-listener smoke tests"
   (cd "$AGENT_DIR" && "$venv_python" -m pytest -q \
     tests/unit/test_targeted_web.py \
@@ -435,6 +460,7 @@ install_all() {
 }
 
 ARCH="$(require_arm_arch)"
+select_testssl_version
 if [[ "$VERIFY_ONLY" -eq 1 ]]; then
   verify_only "$ARCH"
 else
