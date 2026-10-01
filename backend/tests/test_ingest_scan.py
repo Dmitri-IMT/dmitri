@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -950,6 +952,70 @@ def test_persist_scan_keeps_results_when_cancel_lands_before_commit(
             now=now,
             existing=session.get(ScanRecord, scan_id),
         )
+
+    with Session(migrated_database) as fresh_session:
+        assert fresh_session.get(ScanRecord, scan_id).status == "completed"
+        assert fresh_session.get(Command, command_id).status == "cancelled"
+
+
+def test_persist_scan_locks_command_before_scan_row(
+    migrated_database, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+
+    with Session(migrated_database) as session:
+        command_id = _seed_placeholder(
+            session,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            scan_id=scan_id,
+            now=now,
+        ).id
+
+    def ingest() -> None:
+        with Session(migrated_database) as session:
+            session.execute(text("SET LOCAL lock_timeout = '5s'"))
+            persist_scan(
+                session,
+                _scan(scan_id),
+                org_id=seeded_org.id,
+                agent_id=provisioned_agent.id,
+                command=session.get(Command, command_id),
+                now=now,
+                existing=session.get(ScanRecord, scan_id),
+            )
+
+    with Session(migrated_database) as operator_session, ThreadPoolExecutor(
+        max_workers=1
+    ) as pool:
+        operator_session.execute(
+            text("SELECT 1 FROM commands WHERE id = :id FOR UPDATE"),
+            {"id": command_id},
+        )
+        future = pool.submit(ingest)
+        deadline = time.monotonic() + 5
+        while not operator_session.execute(
+            text(
+                "SELECT count(*) FROM pg_stat_activity "
+                "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+            )
+        ).scalar_one():
+            assert time.monotonic() < deadline, "ingest never waited on the lock"
+            time.sleep(0.02)
+        operator_session.execute(
+            text("SELECT 1 FROM scans WHERE scan_id = :id FOR UPDATE NOWAIT"),
+            {"id": scan_id},
+        )
+        operator_session.execute(
+            text(
+                "UPDATE commands SET status = 'cancelled', completed_at = :now "
+                "WHERE id = :id"
+            ),
+            {"id": command_id, "now": now},
+        )
+        operator_session.commit()
+        future.result(timeout=10)
 
     with Session(migrated_database) as fresh_session:
         assert fresh_session.get(ScanRecord, scan_id).status == "completed"

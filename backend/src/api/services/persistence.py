@@ -99,6 +99,13 @@ def persist_scan(
     now: datetime,
     existing: ScanRecord | None,
 ) -> ScanRecord:
+    command_status = (
+        None
+        if command is None
+        else session.exec(
+            select(Command.status).where(Command.id == command.id).with_for_update()
+        ).one()
+    )
     if existing is None:
         scan_record = ScanRecord(
             scan_id=scan.scan_id,
@@ -207,7 +214,15 @@ def persist_scan(
     # here also covers scans that produce no enrichment jobs at all.
     enqueue_auto_scan_analysis(session, scan.scan_id, commit=False)
 
-    _close_scan(session, scan, scan_record, command, agent_id=agent_id, now=now)
+    _close_scan(
+        session,
+        scan,
+        scan_record,
+        command,
+        command_status,
+        agent_id=agent_id,
+        now=now,
+    )
     return scan_record
 
 
@@ -216,6 +231,7 @@ def _close_scan(
     scan: ScanIngestRequest,
     scan_record: ScanRecord,
     command: Command | None,
+    command_status: str | None,
     *,
     agent_id: UUID,
     now: datetime,
@@ -226,13 +242,6 @@ def _close_scan(
     operator (spec 049, decision 3). The command row stays locked until the
     commit, so an operator cancel cannot land between the read and the write.
     """
-    command_status = (
-        None
-        if command is None
-        else session.exec(
-            select(Command.status).where(Command.id == command.id).with_for_update()
-        ).one()
-    )
     # The Pi's own account of the stop names the activity: a Pi cancelled while
     # offline may still finish normally before it hears the cancel.
     stopped_by_operator = (
