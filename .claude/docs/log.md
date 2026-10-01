@@ -5,6 +5,10 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-01
 
+* **Update**: PR #160 fifth review (DMI-145). `persist_scan` checks a closed command under the row
+  lock before any write, and settles a live command through the non-committing
+  `transition_command`; `_close_scan` commits once. Touched: `backend/services.md`.
+
 * **Update**: PR #160 fourth review (DMI-145). Backend: `persist_scan` locks the command row before
   the scan row, so ingest and offline cancel take locks in the same order. Frontend: new
   `isSettledCommand`; `useScanCommand` polls a cancelled command until it has results and sweeps

@@ -29,7 +29,7 @@ from api.schemas.scan import (
 from api.services.activity import append_scan_activity
 from api.services.ai.jobs import enqueue_auto_scan_analysis
 from api.services.command_lifecycle import accepts_late_ingest, is_terminal
-from api.services.commands import apply_status, command_for_scan
+from api.services.commands import command_for_scan, transition_command
 from api.services.hosts import upsert_hosts_for_scan
 from api.services.industrial import persist_industrial_services
 from api.services.inventory import reconcile_scan_inventory
@@ -76,8 +76,6 @@ def ingest_scan(
         or command.org_id != identity.org_id
     ):
         raise ScanOwnershipError
-    if is_terminal(command.status) and not accepts_late_ingest(command.status):
-        raise ScanClosedError
     return persist_scan(
         session,
         scan,
@@ -106,6 +104,12 @@ def persist_scan(
             select(Command.status).where(Command.id == command.id).with_for_update()
         ).one()
     )
+    if (
+        command_status is not None
+        and is_terminal(command_status)
+        and not accepts_late_ingest(command_status)
+    ):
+        raise ScanClosedError
     if existing is None:
         scan_record = ScanRecord(
             scan_id=scan.scan_id,
@@ -256,22 +260,19 @@ def _close_scan(
         scan_mode=scan_record.scan_mode,
         occurred_at=now,
     )
-    if command is None or command_status is None or accepts_late_ingest(
-        command_status
+    if (
+        command is not None
+        and command_status is not None
+        and not accepts_late_ingest(command_status)
     ):
-        session.commit()
-        return
-    applied = apply_status(
-        session,
-        agent_id=agent_id,
-        command_id=command.id,
-        status="cancelled" if stopped_by_operator else "done",
-        now=now,
-    )
-    if not applied:
-        raise RuntimeError(
-            "command reached a terminal status between the terminal check and commit"
+        transition_command(
+            session,
+            agent_id=agent_id,
+            command_id=command.id,
+            status="cancelled" if stopped_by_operator else "done",
+            now=now,
         )
+    session.commit()
 
 
 def upsert_finding(

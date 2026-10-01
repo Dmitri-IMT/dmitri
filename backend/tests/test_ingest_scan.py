@@ -1022,7 +1022,7 @@ def test_persist_scan_locks_command_before_scan_row(
         assert fresh_session.get(Command, command_id).status == "cancelled"
 
 
-def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
+def test_persist_scan_case_c_writes_nothing_for_a_closed_command(
     migrated_database, seeded_org: Org, provisioned_agent: Agent
 ) -> None:
     scan_id = uuid4()
@@ -1059,7 +1059,7 @@ def test_persist_scan_case_c_rolls_back_completely_when_apply_status_fails(
         session.refresh(command)
         command_id = command.id
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ScanClosedError):
             persist_scan(
                 session,
                 scan,

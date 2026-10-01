@@ -246,6 +246,30 @@ def apply_status(
     now: datetime,
     error_code: str | None = None,
 ) -> bool:
+    applied = transition_command(
+        session,
+        agent_id=agent_id,
+        command_id=command_id,
+        status=status,
+        now=now,
+        error_code=error_code,
+    )
+    if applied:
+        session.commit()
+    else:
+        session.rollback()
+    return applied
+
+
+def transition_command(
+    session: Session,
+    *,
+    agent_id: UUID,
+    command_id: UUID,
+    status: str,
+    now: datetime,
+    error_code: str | None = None,
+) -> bool:
     if status not in PI_OWNED:
         return False
 
@@ -276,7 +300,6 @@ def apply_status(
     )
     row = result.first()
     if row is None:
-        session.rollback()
         return False
 
     _mirror_command_on_scan(
@@ -287,7 +310,6 @@ def apply_status(
         command_status=status,
         now=now,
     )
-    session.commit()
     return True
 
 
