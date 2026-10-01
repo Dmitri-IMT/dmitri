@@ -38,7 +38,7 @@ Per-layer gates:
 |-------|------|
 | `hardware-agent/` | `uv run pytest`; black + ruff run from the pre-push hooks |
 | `backend/` | `./database.sh` first (see below), then `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
-| `frontend/` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
+| `frontend/` | `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build` |
 
 **Always run `./database.sh --test` before the backend suite.** `DATABASE_URL_TEST` must
 point at live `dmitri_test`. If it is unset, pytest collection fails with exit code 4.
