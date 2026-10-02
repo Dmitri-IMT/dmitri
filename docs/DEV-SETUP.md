@@ -63,6 +63,9 @@ dmitri
 ```
 
 `hardware-agent/install.sh` is a thin wrapper that runs `./install.sh --agent-only`.
+On Raspberry Pi armhf/arm64, that mode installs and verifies the service-targeted
+tools and DIRB wordlist. It exits with an error if provisioning fails, so a
+successful install means those scan capabilities are available.
 
 Manual steps below remain valid if you prefer not to use the scripts.
 

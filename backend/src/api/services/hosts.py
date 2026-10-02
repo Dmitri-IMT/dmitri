@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from api.core.severity import SEVERITY_ORDER
@@ -29,6 +34,9 @@ def upsert_hosts_for_scan(
         select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_record.scan_id)
     ).all()
 
+    split_macs = _split_macs(session, scan_record.org_id, scan_host_records)
+    retarget_split_mac_hosts(session, scan_record.org_id, split_macs)
+
     org_has_prior_completed = (
         session.exec(
             select(ScanRecord.scan_id)
@@ -44,7 +52,7 @@ def upsert_hosts_for_scan(
     )
 
     for sh in scan_host_records:
-        key = identity_key(sh.mac, sh.ip)
+        key = scan_identity_key(sh.mac, sh.ip, split_macs)
         host = session.exec(
             select(HostRecord).where(
                 HostRecord.org_id.is_not_distinct_from(scan_record.org_id),
@@ -81,21 +89,83 @@ def upsert_hosts_for_scan(
                     ),
                 )
         else:
-            host.first_seen_at = min(host.first_seen_at, scan_record.timestamp)
-            if scan_record.timestamp >= host.last_seen_at:
-                host.last_seen_at = scan_record.timestamp
-                host.ip = sh.ip
-                if sh.mac is not None:
-                    host.mac = sh.mac
-                host.hostname = sh.hostname
-                if sh.vendor.strip().casefold() != "unknown":
-                    host.vendor = sh.vendor
-                if sh.operating_system_json is not None:
-                    host.operating_system_json = sh.operating_system_json
-                host.open_ports_count = open_ports_count(session, sh.id)
-                host.highest_severity = highest_severity(session, sh.id)
+            apply_observation(session, host, sh, scan_record.timestamp)
 
         sh.host_id = host.id
+
+
+def apply_observation(
+    session: Session, host: HostRecord, sh: ScanHostRecord, observed_at: datetime
+) -> None:
+    host.first_seen_at = min(host.first_seen_at, observed_at)
+    if observed_at >= host.last_seen_at:
+        host.last_seen_at = observed_at
+        host.ip = sh.ip
+        if sh.mac is not None:
+            host.mac = sh.mac
+        host.hostname = sh.hostname
+        if sh.vendor.strip().casefold() != "unknown":
+            host.vendor = sh.vendor
+        if sh.operating_system_json is not None:
+            host.operating_system_json = sh.operating_system_json
+        host.open_ports_count = open_ports_count(session, sh.id)
+        host.highest_severity = highest_severity(session, sh.id)
+
+
+def scan_identity_key(mac: str | None, ip: str, split_macs: set[str]) -> str:
+    if mac and mac.upper() not in split_macs:
+        return identity_key(mac, ip)
+    return identity_key(None, ip)
+
+
+def retarget_split_mac_hosts(
+    session: Session, org_id: UUID | None, split_macs: set[str]
+) -> None:
+    if not split_macs:
+        return
+    mac_hosts = session.exec(
+        select(HostRecord).where(
+            HostRecord.org_id.is_not_distinct_from(org_id),
+            HostRecord.identity_key.in_([f"mac:{mac}" for mac in split_macs]),
+        )
+    ).all()
+    for host in mac_hosts:
+        key = identity_key(None, host.ip)
+        taken = session.exec(
+            select(HostRecord.id).where(
+                HostRecord.org_id.is_not_distinct_from(org_id),
+                HostRecord.identity_key == key,
+            )
+        ).first()
+        if taken is None:
+            host.identity_key = key
+            session.add(host)
+    session.flush()
+
+
+def _split_macs(
+    session: Session, org_id: UUID | None, scan_hosts: list[ScanHostRecord]
+) -> set[str]:
+    ips_by_mac: dict[str, set[str]] = defaultdict(set)
+    for scan_host in scan_hosts:
+        if scan_host.mac:
+            ips_by_mac[scan_host.mac.upper()].add(scan_host.ip)
+    if not ips_by_mac:
+        return set()
+    split = {mac for mac, ips in ips_by_mac.items() if len(ips) > 1}
+    mac = func.upper(HostRecord.mac)
+    split.update(
+        session.exec(
+            select(mac)
+            .where(
+                HostRecord.org_id.is_not_distinct_from(org_id),
+                HostRecord.identity_key.like("ip:%"),
+                mac.in_(ips_by_mac),
+            )
+            .distinct()
+        ).all()
+    )
+    return split
 
 
 def open_ports_count(session: Session, scan_host_id: int | None) -> int:

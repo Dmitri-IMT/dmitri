@@ -116,6 +116,8 @@ in a scan); `HostSummary` / `HostDetailResponse` — list/detail rows with `mach
 nullable `observed_in_latest_scan`); required `evidence_completeness` (`EvidenceCompleteness`:
 `complete`/`partial`/`unknown`) on `ScanSummary` and `ScanDetailResponse`; `ScanDetailResponse.coverage`
 (`CoverageUnitPayload[]`, also accepted on `ScanIngestRequest.coverage`);
+`ScanDetailResponse.targeted_coverage` (`TargetedToolCoverage[]` with `TargetedCoverageGap[]`,
+read-only, decoded from `metadata.targeted_coverage`);
 `FindingRead.host_hostname` plus life timestamps. `GET /hosts` takes `group=active|quiet` (default
 active). `HostSortBy` includes `vulnerability_count` and not `machine_type`.
 

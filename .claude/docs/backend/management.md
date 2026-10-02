@@ -1,20 +1,21 @@
 ---
 type: Entry Point
-title: Backend management commands — org bootstrap, agent provisioning
-description: The two operator CLIs — backend-bootstrap-org (first org + admin invite) and backend-provision-agent (device public key + org OT digest key).
+title: Backend management commands — bootstrap, provisioning, identity repair
+description: Operator CLIs for org bootstrap, agent provisioning, and dry-run or applied repair of hosts with ambiguous shared MAC addresses.
 resource: backend/src/api/management/bootstrap_org.py
 tags: [backend, cli, operations, provisioning, invites, agents]
-timestamp: 2026-09-12T21:23:47Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 
-# Backend management commands — org bootstrap, agent provisioning
+# Backend management commands — bootstrap, provisioning, identity repair
 
 ## Purpose
 
-Two `argparse` console scripts (spec 017 / DMI-61) that solve the chicken-and-egg problems the HTTP
+Three `argparse` console scripts that solve the chicken-and-egg problems the HTTP
 API cannot: creating the **first** org and its admin when no admin exists yet to authenticate, and
-registering a device's **public key** before that device can authenticate. Both are vendor-operated,
-run out of band, and expose **no HTTP routes**.
+registering a device's **public key** before that device can authenticate. The third inspects and
+repairs historical host identities when multiple IPs share a MAC in one scan. All are
+operator-run out of band and expose **no HTTP routes**.
 
 ## Key classes / functions
 
@@ -24,6 +25,7 @@ run out of band, and expose **no HTTP routes**.
 | `_SilentMailer` | A local no-op satisfying the `Mailer` protocol, passed to `create_invite` so the bootstrap path emails nothing at all and the raw admin token never reaches a `logger` call. The command prints the token itself. | `backend/src/api/management/bootstrap_org.py:14` |
 | `provision_agent.main()` | Validates the org and device public key, inserts the `Agent`, creates an org OT digest key if absent, and prints `agent_id` and `ot_digest_key` to stdout. Reuses the same key for later agents in that org. | `backend/src/api/management/provision_agent.py:33` |
 | `_decode_public_key()` | Hex→32 raw bytes, or `None` for anything malformed. | `backend/src/api/management/provision_agent.py:22` |
+| `repair_host_identities.main()` | Lists ambiguous MAC groups without writing by default; `--apply` relinks scan history, rebuilds host inventory, and commits. | `backend/src/api/management/repair_host_identities.py:10` |
 
 ## How it connects
 
@@ -33,7 +35,8 @@ run out of band, and expose **no HTTP routes**.
 - **Downstream** — `bootstrap_org` calls `create_invite` in [invites](/backend/auth.md);
   `provision_agent` writes the `agents.public_key` that [device auth](/backend/device-auth.md)
   verifies against, and can mint a keypair via `device_sig.generate_keypair()`.
-- **Console scripts** — `backend-bootstrap-org` and `backend-provision-agent` in
+- **Console scripts** — `backend-bootstrap-org`, `backend-provision-agent`, and
+  `backend-repair-host-identities` in
   `[project.scripts]` (`backend/pyproject.toml`), asserted structurally by a test.
 
 ## Notes / gotchas

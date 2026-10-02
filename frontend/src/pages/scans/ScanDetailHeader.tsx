@@ -3,6 +3,7 @@ import BackLink from '@/components/BackLink'
 import EmptyMark from '@/components/EmptyMark'
 import Timestamp from '@/components/Timestamp'
 import ScanReports from '@/pages/scans/ScanReports'
+import ScanPartialWarning from '@/pages/scans/ScanPartialWarning'
 import { formatScanDuration } from '@/lib/scanDuration'
 import { SCAN_MODE_LABEL } from '@/lib/scanModes'
 import { hidesCounts, isUnfinished, scanStatusLabel } from '@/lib/scanStatus'
@@ -42,7 +43,7 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
     <div data-testid="scan-assessment-summary">
       <div
         data-testid="scan-summary-strip"
-        className="flex items-center justify-between gap-12 border-y border-border py-4"
+        className="flex flex-wrap items-center justify-between gap-6 border-y border-border py-4"
       >
         <div className="flex min-w-0 flex-wrap gap-12">
           <StripEntry
@@ -71,6 +72,7 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
             value={durationCopy ?? <EmptyMark />}
             testId="scan-summary-duration"
           />
+          <ScanPartialWarning scan={scan} />
         </div>
         {scan.status !== 'failed' &&
           scan.status !== 'cancelled' &&

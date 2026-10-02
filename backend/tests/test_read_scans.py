@@ -179,6 +179,11 @@ def test_partial_current_scan_keeps_assessment_available(
     seeded["scan"].metadata_json = {
         "partial_result": True,
         "terminated_by": "completed",
+        "targeted_coverage": (
+            "ffuf:c=0,f=0,t=0,s=6,gaps=wordlist_unavailable:6;"
+            "nikto:c=1,f=0,t=2,s=6,gaps=tool_unavailable:4|dependency_unavail;"
+            "nuclei:c=3,f="
+        ),
     }
     for scan_host in (seeded["scan_host"],):
         scan_host.machine_type = "unknown"
@@ -200,6 +205,24 @@ def test_partial_current_scan_keeps_assessment_available(
     assert response.status_code == 200
     assert response.json()["assessment_status"] == "available"
     assert response.json()["metadata"]["partial_result"] is True
+    assert response.json()["targeted_coverage"] == [
+        {
+            "tool": "ffuf",
+            "completed": 0,
+            "failed": 0,
+            "timed_out": 0,
+            "skipped": 6,
+            "gaps": [{"reason": "wordlist_unavailable", "count": 6}],
+        },
+        {
+            "tool": "nikto",
+            "completed": 1,
+            "failed": 0,
+            "timed_out": 2,
+            "skipped": 6,
+            "gaps": [{"reason": "tool_unavailable", "count": 4}],
+        },
+    ]
 
 
 def test_get_scan_by_id_returns_scan_host_operating_system_snapshot(

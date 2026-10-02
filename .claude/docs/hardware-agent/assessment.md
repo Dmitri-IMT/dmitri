@@ -4,7 +4,7 @@ title: assessment — local attack-surface and device profiling
 description: The deterministic, versioned local policy that turns accepted scan evidence into endpoint exposures and conservative device profiles.
 resource: hardware-agent/src/agent/assessment/analyzer.py
 tags: [hardware-agent, assessment, attack-surface, profiling, policy]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 
 # assessment — local attack-surface and device profiling
@@ -25,7 +25,7 @@ reclassified.
 | `ExposureRole` / `ExposureAttention` | Closed role and operator-attention vocabularies; attention is not vulnerability severity. | `hardware-agent/src/agent/assessment/policy.py:20` |
 | `AssessmentResult` | Immutable result containing host profiles and endpoint exposures. | `hardware-agent/src/agent/assessment/analyzer.py:63` |
 | `assess_hosts()` | Deduplicates open endpoints deterministically, profiles every host, and emits one exposure per accepted open endpoint. | `hardware-agent/src/agent/assessment/analyzer.py:937` |
-| `_profile_host()` | Combines bounded manufacturer, hostname, OS, service, product, CPE, certificate, and industrial signals; records conflicts and limitations instead of inventing identity. | `hardware-agent/src/agent/assessment/analyzer.py:308` |
+| `_profile_host()` | Combines bounded manufacturer, hostname, OS, service, product, CPE, certificate, and industrial signals; records conflicts and limitations instead of inventing identity. One-word service-version labels such as `VNC` are not collected as product-family candidates. | `hardware-agent/src/agent/assessment/profile.py:258` |
 | `_exposure_for()` | Assigns endpoint role, confidence, reason, evidence, and informational/review/priority attention. | `hardware-agent/src/agent/assessment/analyzer.py:812` |
 
 ## How it connects

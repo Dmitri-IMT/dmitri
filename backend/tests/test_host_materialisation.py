@@ -5,20 +5,26 @@ from uuid import uuid4
 
 from api.models.command import Agent
 from api.models.identity import Org
-from api.models.persistence import HostRecord, ScanHostRecord
-from api.schemas.scan import HostPayload, ScanIngestRequest
+from api.models.persistence import HostFindingRecord, HostRecord, ScanHostRecord
+from api.schemas.scan import FindingPayload, HostPayload, ScanIngestRequest
+from api.services.host_repair import repair_ambiguous_mac_identities
 from api.services.persistence import persist_scan
 from sqlmodel import Session, select
 
 
-def _scan(scan_id, timestamp: datetime, hosts: list[HostPayload]) -> ScanIngestRequest:
+def _scan(
+    scan_id,
+    timestamp: datetime,
+    hosts: list[HostPayload],
+    findings: list[FindingPayload] | None = None,
+) -> ScanIngestRequest:
     return ScanIngestRequest(
         scan_id=scan_id,
         timestamp=timestamp,
         subnet="192.168.1.0/24",
         scan_mode="standard",
         hosts=hosts,
-        findings=[],
+        findings=findings or [],
     )
 
 
@@ -93,6 +99,110 @@ def test_same_mac_across_scans_materialises_single_host(
     scan_hosts = runtime_session.exec(select(ScanHostRecord)).all()
     assert len(scan_hosts) == 2
     assert all(sh.host_id == host.id for sh in scan_hosts)
+
+
+def test_same_mac_on_two_ips_in_one_scan_splits_hosts(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    mac = "36:D5:B4:1F:F5:E8"
+    prior_scan = _scan(
+        uuid4(),
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        [_host("172.20.10.8", mac, operating_system=_os("Windows 11", 91))],
+    )
+    _persist(runtime_session, prior_scan, seeded_org, provisioned_agent)
+
+    scan_id = uuid4()
+    scan = _scan(
+        scan_id,
+        datetime(2026, 2, 1, tzinfo=timezone.utc),
+        [
+            _host("172.20.10.2", mac, operating_system=_os("Linux 2.6", 100)),
+            _host("172.20.10.8", mac, operating_system=_os("Windows 11", 91)),
+        ],
+        findings=[
+            FindingPayload(
+                ip="172.20.10.2",
+                severity="critical",
+                title="VM vulnerability",
+                description="VM issue",
+                recommendation="Patch the VM",
+                evidence="VM evidence",
+            )
+        ],
+    )
+    _persist(runtime_session, scan, seeded_org, provisioned_agent)
+
+    hosts = runtime_session.exec(
+        select(HostRecord).where(HostRecord.org_id == seeded_org.id)
+    ).all()
+    by_ip = {host.ip: host for host in hosts}
+    assert set(by_ip) == {"172.20.10.2", "172.20.10.8"}
+    assert by_ip["172.20.10.2"].id != by_ip["172.20.10.8"].id
+    assert by_ip["172.20.10.2"].operating_system_json["name"] == "Linux 2.6"
+    assert by_ip["172.20.10.8"].operating_system_json["name"] == "Windows 11"
+    assert by_ip["172.20.10.2"].vulnerability_count == 1
+    assert by_ip["172.20.10.8"].vulnerability_count == 0
+    host_finding = runtime_session.exec(
+        select(HostFindingRecord).where(
+            HostFindingRecord.host_id == by_ip["172.20.10.2"].id
+        )
+    ).one()
+    assert host_finding.fixed_at is None
+
+    scan_hosts = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+    ).all()
+    assert {item.ip: item.host_id for item in scan_hosts} == {
+        "172.20.10.2": by_ip["172.20.10.2"].id,
+        "172.20.10.8": by_ip["172.20.10.8"].id,
+    }
+    historical_scan_host = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == prior_scan.scan_id)
+    ).one()
+    assert historical_scan_host.host_id == by_ip["172.20.10.8"].id
+
+
+def test_repair_ambiguous_mac_identities_splits_existing_history(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    mac = "36:D5:B4:1F:F5:E8"
+    scan_id = uuid4()
+    scan = _scan(
+        scan_id,
+        datetime(2026, 2, 1, tzinfo=timezone.utc),
+        [
+            _host("172.20.10.2", mac, operating_system=_os("Linux", 100)),
+            _host("172.20.10.8", mac, operating_system=_os("Windows 11", 91)),
+        ],
+    )
+    _persist(runtime_session, scan, seeded_org, provisioned_agent)
+
+    scan_hosts = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+    ).all()
+    original_hosts = runtime_session.exec(select(HostRecord)).all()
+    vm_host = next(host for host in original_hosts if host.ip == "172.20.10.2")
+    windows_host = next(host for host in original_hosts if host.ip == "172.20.10.8")
+    for scan_host in scan_hosts:
+        scan_host.host_id = windows_host.id
+    runtime_session.flush()
+
+    assert repair_ambiguous_mac_identities(runtime_session) == 1
+
+    repaired_hosts = runtime_session.exec(select(HostRecord)).all()
+    repaired_by_ip = {host.ip: host for host in repaired_hosts}
+    assert repaired_by_ip["172.20.10.8"].id == windows_host.id
+    assert repaired_by_ip["172.20.10.2"].operating_system_json["name"] == "Linux"
+    assert repaired_by_ip["172.20.10.8"].operating_system_json["name"] == "Windows 11"
+    repaired_scan_hosts = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+    ).all()
+    assert {item.ip: item.host_id for item in repaired_scan_hosts} == {
+        "172.20.10.2": vm_host.id,
+        "172.20.10.8": windows_host.id,
+    }
+    assert repair_ambiguous_mac_identities(runtime_session) == 0
 
 
 def test_mac_absent_scan_host_resolves_by_ip(

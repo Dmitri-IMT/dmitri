@@ -355,7 +355,9 @@ def upsert_finding(
     existing.source_labels_json = sorted(
         set(existing.source_labels_json).union(source_labels)
     )
-    existing.evidence = _merge_evidence(existing.evidence, evidence_suffix)
+    existing.evidence = _merge_evidence(
+        _merge_evidence(existing.evidence, finding.evidence), evidence_suffix
+    )
     if modbus_unit_id is not None:
         existing.modbus_unit_id = modbus_unit_id
     existing.updated_at = now

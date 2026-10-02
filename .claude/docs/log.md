@@ -5,6 +5,22 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: PR #161 Cursor review. Ingest host identity is now a key rule
+  (`scan_identity_key`, `_split_macs`, `retarget_split_mac_hosts`) with one upsert loop and no
+  history rewrite; the repair walk moved to `api/services/host_repair.py` and finds collisions with
+  one SQL `GROUP BY`. `ScanDetailResponse.targeted_coverage` carries typed per-tool coverage decoded
+  by `parse_targeted_coverage`; `ScanPartialWarning` no longer parses the agent string.
+  `HostProfile` renders the OS block once. The agent drops one-word version products when it
+  collects product-family facts; agent version 1.0.4. Touched: `backend/services.md`,
+  `contracts.md`, `frontend/scan-partial-warning.md`, `frontend/host-detail.md`,
+  `hardware-agent/assessment.md`.
+
+* **Update**: Merged main (PRs #159, #160) into `fix/scan-host-identity-and-profile`. The Scan Detail
+  row keeps main's `scanDetailView` description and adds `ScanPartialWarning` in the summary strip;
+  host-identity service rows sit beside main's completeness-gated reconcile row, with refreshed
+  `hosts.py` / `inventory.py` line refs. Touched: `backend/services.md`, `frontend/screens.md`,
+  `frontend/index.md`.
+
 * **Update**: PR #159 Cursor review, OT coverage and selection. The OT stage records an
   `ot_inspection` coverage unit per Modbus host (`modbus_inspection` evidence source, new in the
   contract, backend schema, OpenAPI, and the SPA stage label); the runner adds an OT `not_run` row
@@ -31,6 +47,10 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   Touched: `frontend/screens.md`.
 
 ## 2026-10-01
+
+* **Update**: `install.sh --agent-only` now provisions the service-targeted tools on Pi
+  armhf/arm64 and exits on failure; the provisioner supports Bookworm and Trixie. Added the
+  install-table row and refreshed stale `install.sh` line refs. Touched: `infra/deployment.md`.
 
 * **Update**: PR #159 Cursor review, items 2–3. New `api/services/scan_evidence.py` owns both
   evidence policies: `is_cve_correlation` (enrichment + AI `evidence_basis`) and
@@ -77,6 +97,17 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `isSettledCommand`; `useScanCommand` polls a cancelled command until it has results and sweeps
   once per outcome. Touched: `backend/services.md`, `frontend/command-status.md`,
   `frontend/devices-screen.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/index.md`.
+
+## 2026-09-30
+
+* **Update**: Shared-MAC host identity now splits simultaneous IP observations and includes a
+  dry-run/apply history repair; inventory projections rebuild from each IP's scan history. Finding
+  upserts retain distinct evidence. Host detail and scan host rows display structured OS data;
+  partial scan coverage has a dialog beside duration, and unavailable AI analysis has an
+  informational card. Generic single-word service labels no longer set product family. Added the
+  partial coverage component map. Touched: `backend/services.md`, `backend/management.md`,
+  `hardware-agent/assessment.md`, `frontend/host-detail.md`, `frontend/screens.md`,
+  `frontend/scan-ai.md`, `frontend/scan-partial-warning.md`, `frontend/index.md`.
 
 ## 2026-09-29
 

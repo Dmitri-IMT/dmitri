@@ -64,7 +64,11 @@ from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
-from api.services.scan_evidence import evidence_completeness, parse_coverage
+from api.services.scan_evidence import (
+    evidence_completeness,
+    parse_coverage,
+    parse_targeted_coverage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +300,7 @@ def get_scan_detail(
         ),
         metadata=scan.metadata_json,
         coverage=coverage,
+        targeted_coverage=parse_targeted_coverage(scan.metadata_json),
         status=scan.status,
         evidence_completeness=evidence_completeness(scan.metadata_json, coverage),
         command_id=command.id if command else None,

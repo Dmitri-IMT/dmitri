@@ -4,7 +4,7 @@ title: Deployment (install scripts + Railway)
 description: Dev-environment installers, the local Pi simulator, and the three-service Railway + Supabase topology.
 resource: install.sh
 tags: [infra, deployment, railway, install, env]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Deployment (install scripts + Railway)
@@ -51,16 +51,17 @@ follow Root Directory.
 
 | Responsibility | Where |
 |----------------|-------|
-| Install `uv` (via astral.sh installer) if missing | `install.sh:51-71` |
-| Install `nmap` (brew / apt / dnf; winget / choco on Windows) | `install.sh:126-165` |
-| `uv sync --extra dev` for `hardware-agent` (and `backend` unless `--agent-only`) | `install.sh:167-175` |
-| Install a `dmitri` launcher into `~/.local/bin` on PATH | `install.sh:110-124` |
-| Seed `backend/.env` from `backend/.env.example` (never overwrites) | `install.sh:191-208` |
-| Start local Supabase, recreate scratch `dmitri_test` DB (needs Docker + Supabase CLI) | `install.sh:257-283` |
-| Run Alembic (`DATABASE_URL_DIRECT` set in shell only) after tests | `install.sh:235-255` |
-| Optional pre-commit pre-push hooks (`--hooks`) | `install.sh:285-292` |
-| Post-install pytest smoke checks (skip with `--skip-verify`) | `install.sh:312-336` |
-| Print the local Vite origin required for the backend CORS allowlist and emailed auth links | `install.sh:465-489` |
+| Install `uv` (via astral.sh installer) if missing | `install.sh:66-86` |
+| Install `nmap` (brew / apt / dnf; winget / choco on Windows) | `install.sh:141-180` |
+| `uv sync --extra dev` for `hardware-agent` (and `backend` unless `--agent-only`) | `install.sh:182-190` |
+| `--agent-only` on Pi armhf/arm64: run `hardware-agent/scripts/provision-targeted-tools.sh` (Bookworm or Trixie); any failure exits the install | `install.sh:192-229` |
+| Install a `dmitri` launcher into `~/.local/bin` on PATH | `install.sh:125-139` |
+| Seed `backend/.env` from `backend/.env.example` (never overwrites) | `install.sh:231-248` |
+| Start local Supabase, recreate scratch `dmitri_test` DB (needs Docker + Supabase CLI) | `install.sh:411-445` |
+| Run Alembic (`DATABASE_URL_DIRECT` set in shell only) after tests | `install.sh:389-409` |
+| Optional pre-commit pre-push hooks (`--hooks`) | `install.sh:447-454` |
+| Post-install pytest smoke checks (skip with `--skip-verify`) | `install.sh:474-503` |
+| Print the local Vite origin required for the backend CORS allowlist and emailed auth links | `install.sh:505-559` |
 
 Flags: `--agent-only` (Pi-friendly; skips backend infra), `--skip-verify`, `--hooks`
 (`-AgentOnly` / `-SkipVerify` / `-Hooks` in PowerShell).

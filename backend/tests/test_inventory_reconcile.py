@@ -212,6 +212,29 @@ def test_first_seen_is_set_once_and_survives_redetection(
     assert row.last_seen_at == T2
 
 
+def test_duplicate_finding_keeps_each_distinct_evidence_observation(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    first = _finding("weak tls cipher configuration", port=25)
+    first.evidence = "3DES vulnerable to SWEET32"
+    second = _finding("weak tls cipher configuration", port=25)
+    second.evidence = "DES vulnerable to SWEET32"
+
+    _scan_and_reconcile(
+        runtime_session,
+        identity,
+        ts=T1,
+        hosts=[_host(ports=[_port(25, "smtp")])],
+        findings=[first, second],
+    )
+
+    rows = runtime_session.exec(select(FindingRecord)).all()
+    assert len(rows) == 1
+    assert "3DES vulnerable to SWEET32" in rows[0].evidence
+    assert "DES vulnerable to SWEET32" in rows[0].evidence
+
+
 def test_absent_finding_is_fixed_and_a_returning_one_reopens(
     runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:

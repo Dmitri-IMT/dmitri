@@ -28,6 +28,22 @@ Pi, registers the device, and writes `/etc/dmitri/agent.env`. The script then st
 The package installs `dmitri-agent.service` and the daily update timer
 ([ADR-021](adr/ADR-021-pi-agent-updates.md)).
 
+For service-targeted scans, install the additional tools from the same checkout
+after the agent package is installed:
+
+```bash
+sudo hardware-agent/scripts/provision-targeted-tools.sh
+sudo hardware-agent/scripts/provision-targeted-tools.sh --verify-only
+```
+
+The script supports Raspberry Pi OS Bookworm and Trixie on armhf or arm64. It
+selects the matching Debian `testssl.sh` package version and verifies the
+installed tools, pinned sources, and DIRB wordlist. The verification runs
+development smoke tests only when the checkout has a dev virtual environment
+with `pytest`; the production agent does not contain `pytest` or tests. To run
+those smoke tests before deployment, use `uv sync --extra dev` in
+`hardware-agent/` and run the script with `--verify-only` on an ARM Linux host.
+
 Run it again on an already provisioned Pi and it installs the package from the
 checkout; the package restarts the agent. It does not generate a new key. This is also
 how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
