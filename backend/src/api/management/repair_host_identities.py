@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from api.db.session import get_session
-from api.services.hosts import (
+from api.services.host_repair import (
     find_ambiguous_mac_identities,
     repair_ambiguous_mac_identities,
 )

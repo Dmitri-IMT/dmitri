@@ -7,7 +7,7 @@ from api.models.command import Agent
 from api.models.identity import Org
 from api.models.persistence import HostFindingRecord, HostRecord, ScanHostRecord
 from api.schemas.scan import FindingPayload, HostPayload, ScanIngestRequest
-from api.services.hosts import repair_ambiguous_mac_identities
+from api.services.host_repair import repair_ambiguous_mac_identities
 from api.services.persistence import persist_scan
 from sqlmodel import Session, select
 
@@ -101,7 +101,7 @@ def test_same_mac_across_scans_materialises_single_host(
     assert all(sh.host_id == host.id for sh in scan_hosts)
 
 
-def test_same_mac_on_two_ips_in_one_scan_splits_and_rebuilds_inventory(
+def test_same_mac_on_two_ips_in_one_scan_splits_hosts(
     runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
 ) -> None:
     mac = "36:D5:B4:1F:F5:E8"
