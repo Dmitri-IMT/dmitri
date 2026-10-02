@@ -3,6 +3,12 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-01
+
+* **Update**: `install.sh --agent-only` now provisions the service-targeted tools on Pi
+  armhf/arm64 and exits on failure; the provisioner supports Bookworm and Trixie. Added the
+  install-table row and refreshed stale `install.sh` line refs. Touched: `infra/deployment.md`.
+
 ## 2026-09-30
 
 * **Update**: Shared-MAC host identity now splits simultaneous IP observations and includes a
