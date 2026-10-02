@@ -587,6 +587,19 @@ def test_nikto_parser_requires_pinned_id_and_maps_highest_category() -> None:
     assert "not pinned" not in " ".join(issue.evidence for issue in issues)
 
 
+def test_nikto_parser_bounds_issue_key_for_long_uri() -> None:
+    long_uri = "/" + "a" * 600
+    issues = parse_nikto_json(
+        {"vulnerabilities": [{"id": "123", "uri": long_uri, "message": "finding"}]},
+        _unit(),
+        policy={"000123": "5"},
+    )
+
+    assert len(issues) == 1
+    assert len(issues[0].issue_key) == 256
+    assert issues[0].issue_key.startswith("nikto:000123:/")
+
+
 def test_nikto_parser_accepts_native_host_array_report() -> None:
     report = [
         {

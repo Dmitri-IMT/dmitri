@@ -119,6 +119,7 @@ def persist_scan(
             subnet=scan.subnet,
             scan_mode=scan.scan_mode,
             metadata_json=scan.metadata,
+            coverage_json=[unit.model_dump(mode="json") for unit in scan.coverage],
             assessment_policy_version=scan.assessment_policy_version,
             status="completed",
         )
@@ -134,6 +135,9 @@ def persist_scan(
         scan_record.subnet = scan.subnet
         scan_record.scan_mode = scan.scan_mode
         scan_record.metadata_json = scan.metadata
+        scan_record.coverage_json = [
+            unit.model_dump(mode="json") for unit in scan.coverage
+        ]
         scan_record.status = "completed"
         scan_record.assessment_policy_version = scan.assessment_policy_version
         scan_record.agent_id = agent_id

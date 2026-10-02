@@ -304,6 +304,62 @@ describe('ScanDetail', () => {
     )
   })
 
+  it('shows unlisted omitted checks and observation evidence in coverage', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 4 },
+        coverage: [
+          {
+            ip: '192.168.1.10',
+            stage: 'targeted_assessment',
+            port: 80,
+            protocol: 'tcp',
+            tool: 'nikto',
+            outcome: 'completed',
+            evidence_source: 'targeted_tool',
+            issue_keys: [],
+            observations: [
+              {
+                observation_key: 'web:administration:/admin',
+                kind: 'administration',
+                summary: 'Administration interface found',
+                evidence: 'status=403; protected surface',
+                path: '/admin',
+                rule_id: 'ADMIN',
+                policy_version: 'v1',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '4 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent('status=403; protected surface')
+  })
+
+  it('shows the unlisted omission count when no individual units were stored', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 2 },
+        coverage: [],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '2 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent(
+      'Check coverage was not recorded for this scan.',
+    )
+  })
+
   it('shows the targeted section when targeted_units_planned is zero', async () => {
     scanDetail(
       completedScan({
@@ -376,6 +432,7 @@ describe('ScanDetail', () => {
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
+      'Check coverage',
       'Machines seen',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
@@ -829,27 +886,78 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-no-exposures')).not.toBeInTheDocument()
   })
 
-  it('drops the partial-evidence banner but keeps the no-findings copy honest', async () => {
+  it('counts open and filtered ports separately for each machine', async () => {
+    scanDetail(
+      completedScan({
+        hosts: [
+          {
+            ...nas,
+            ports: [
+              ...nas.ports,
+              {
+                port: 445,
+                protocol: 'tcp',
+                state: 'filtered',
+                service: 'microsoft-ds',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    expect(
+      await screen.findByTestId(`scan-hosts-table-row-${NAS_HOST_ID}`),
+    ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
+  })
+
+  it('keeps no-findings copy honest on partial evidence', async () => {
     const completedPartial = withPartialResult(
       completedScan({ findings: [], finding_count: 0 }),
       'completed',
     )
     scanDetail(completedPartial)
-    const view = renderPage(`/scans/${SCAN_ID}`)
+    renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
       'No confirmed vulnerabilities in accepted evidence.',
     )
-    expect(screen.queryByTestId('scan-partial-notice')).not.toBeInTheDocument()
+  })
 
-    view.unmount()
-    scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
+  it('does not call a scan clean when its completeness is unknown', async () => {
+    scanDetail(
+      completedScan({
+        findings: [],
+        finding_count: 0,
+        evidence_completeness: 'unknown',
+      }),
+    )
     renderPage(`/scans/${SCAN_ID}`)
 
-    await screen.findByTestId(
-      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities in accepted evidence.',
     )
-    expect(screen.queryByTestId('scan-partial-notice')).not.toBeInTheDocument()
+  })
+
+  it('keeps observations from a failed scan visible', async () => {
+    scanDetail(
+      completedScan({
+        status: 'failed',
+        error_code: 'device_offline',
+        exposures: [relatedExposure],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const evidence = await screen.findByTestId('scan-failed-evidence')
+    expect(evidence).toHaveTextContent(
+      'Observations recorded before the scan failed',
+    )
+    expect(within(evidence).getByTestId('scan-hosts-table')).toBeInTheDocument()
+    expect(
+      within(evidence).getByTestId('scan-exposures-table'),
+    ).toBeInTheDocument()
   })
 
   it('keeps loading and request errors free of false zero claims', async () => {

@@ -100,6 +100,7 @@ def test_cancelled_status_is_accepted_by_public_and_agent_schemas():
             "subnet": "10.0.0.0/24",
             "scan_mode": "standard",
             "status": "cancelled",
+            "evidence_completeness": "unknown",
             "host_count": 0,
             "finding_count": 0,
         }

@@ -16,6 +16,7 @@ from api.models.persistence import (
     ScanRecord,
 )
 from api.schemas.scan import (
+    CoverageUnitPayload,
     FindingPayload,
     HostPayload,
     PortPayload,
@@ -101,6 +102,7 @@ def _request(
         scan_mode="standard",
         hosts=hosts,
         findings=findings,
+        metadata={"partial_result": False},
     )
 
 
@@ -246,6 +248,102 @@ def test_absent_finding_is_fixed_and_a_returning_one_reopens(
     runtime_session.refresh(row)
     assert row.fixed_at is None
     assert row.first_seen_at == T1
+    runtime_session.refresh(machine)
+    assert machine.vulnerability_count == 1
+
+
+def test_partial_scan_does_not_fix_unchecked_finding(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    ports = [_port(22, "ssh")]
+    _scan_and_reconcile(
+        runtime_session,
+        identity,
+        ts=T1,
+        hosts=[_host(ports=ports)],
+        findings=[_finding("weak ssh")],
+    )
+    machine = _machine(runtime_session)
+    key = _key("weak ssh")
+
+    partial = _request(T2, [_host(ports=ports)], [])
+    partial.metadata = {"partial_result": True}
+    partial_record = ingest_scan(runtime_session, partial, identity=identity, now=T2)
+    reconcile_scan_inventory(runtime_session, partial_record)
+    runtime_session.flush()
+
+    row = _host_finding(runtime_session, machine.id, key)
+    assert row is not None
+    assert row.fixed_at is None
+    assert row.last_seen_at == T1
+    runtime_session.refresh(machine)
+    assert machine.vulnerability_count == 1
+
+    _scan_and_reconcile(
+        runtime_session, identity, ts=T3, hosts=[_host(ports=ports)]
+    )
+    runtime_session.refresh(row)
+    assert row.fixed_at == T3
+
+
+def test_scan_with_a_coverage_gap_does_not_fix_unchecked_finding(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    ports = [_port(22, "ssh")]
+    _scan_and_reconcile(
+        runtime_session,
+        identity,
+        ts=T1,
+        hosts=[_host(ports=ports)],
+        findings=[_finding("weak ssh")],
+    )
+    machine = _machine(runtime_session)
+    key = _key("weak ssh")
+
+    gap = _request(T2, [_host(ports=ports)], [])
+    gap.coverage = [
+        CoverageUnitPayload(
+            ip=gap.hosts[0].ip,
+            stage="deep_inspection",
+            outcome="timed_out",
+            evidence_source="port_discovery",
+        )
+    ]
+    gap_record = ingest_scan(runtime_session, gap, identity=identity, now=T2)
+    reconcile_scan_inventory(runtime_session, gap_record)
+    runtime_session.flush()
+
+    row = _host_finding(runtime_session, machine.id, key)
+    assert row is not None
+    assert row.fixed_at is None
+
+
+def test_scan_without_partial_result_does_not_fix_unchecked_finding(
+    runtime_session: Session, seeded_org: Org, provisioned_agent: Agent
+) -> None:
+    identity = _identity(seeded_org, provisioned_agent)
+    ports = [_port(22, "ssh")]
+    _scan_and_reconcile(
+        runtime_session,
+        identity,
+        ts=T1,
+        hosts=[_host(ports=ports)],
+        findings=[_finding("weak ssh")],
+    )
+    machine = _machine(runtime_session)
+    key = _key("weak ssh")
+
+    unknown = _request(T2, [_host(ports=ports)], [])
+    unknown.metadata = None
+    unknown_record = ingest_scan(runtime_session, unknown, identity=identity, now=T2)
+    reconcile_scan_inventory(runtime_session, unknown_record)
+    runtime_session.flush()
+
+    row = _host_finding(runtime_session, machine.id, key)
+    assert row is not None
+    assert row.fixed_at is None
     runtime_session.refresh(machine)
     assert machine.vulnerability_count == 1
 
@@ -766,7 +864,8 @@ def test_cve_enrichment_leaves_machine_inventory_untouched(
     runtime_session.refresh(machine)
     runtime_session.refresh(host_finding)
     assert finding.cvss_score == 8.1
-    assert finding.confidence == "confirmed"
+    assert finding.confidence == "probable"
+    assert "target applicability is unverified" in finding.evidence
     assert (
         machine.vulnerability_count,
         host_finding.first_seen_at,

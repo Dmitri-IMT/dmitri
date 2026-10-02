@@ -4,7 +4,7 @@ title: frontend AI overview card
 description: Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
 resource: frontend/src/pages/scans/ScanAIAnalysis.tsx
 tags: [frontend, ai, scans, tanstack-query]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # frontend AI overview card
@@ -31,7 +31,7 @@ this card.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis` with `params: { language }`. | `frontend/src/api/scans.ts:67`, `:78` |
-| `ScanAIAnalysis` | Exhaustive `switch` on `status`; receives `findings` for title lookup. | `frontend/src/pages/scans/ScanAIAnalysis.tsx:25` |
+| `ScanAIAnalysis` | Exhaustive `switch` on `status`; receives `findings` for title lookup. Takes a required `completeness` (`EvidenceCompleteness`). A ready analysis shows the `scan-ai-evidence-limit` line (`ai.evidenceLimit`, plus `ai.partialLimit` or `ai.unknownLimit` from `lib/evidenceCompleteness.evidenceLimitKey`). | `frontend/src/pages/scans/ScanAIAnalysis.tsx:25` |
 | `handleRequest` | Disables the button, POSTs for the current language, writes that language's cache entry, 409 → refetch. | `frontend/src/pages/scans/ScanAIAnalysis.tsx:59` |
 | `ScanDetail` | Mounts the card only on the completed branch. | `frontend/src/pages/ScanDetail.tsx:84` |
 | `downloadScanReport` / `ScanReports` | PDF download with `params: { language }`, so the explained report matches the UI language. `ScanReports` renders inside [`ScanSummaryStrip`](./screens.md) (DMI-179), not as a section here or a card at the page's end — see Purpose. | `frontend/src/api/scans.ts:89` |

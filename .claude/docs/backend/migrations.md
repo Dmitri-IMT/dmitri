@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, and scan_cancelled activity. Head is `20260927_37`.
+description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Backend database migrations
@@ -31,8 +31,9 @@ observations land as `20260912_22`; `20260912_23` merges those heads; `20260912_
 downgrade deletes all but one row per scan, keeping `en` first); `20260920_33` adds assessment
 snapshots and endpoint exposures; `20260922_34`–`20260924_36` add AI runtime grants, agent
 registration identity, and AI table security; `20260927_37` rebuilds `ck_activity_kind` and the
-`uq_activity_org_kind_subject` partial index to include `scan_cancelled` (DMI-145). Head is
-`20260927_37`.
+`uq_activity_org_kind_subject` partial index to include `scan_cancelled` (DMI-145); `20260928_38`
+adds `scans.coverage_json` and downgrades historical NVD/vulners CVE confidence to `probable`. Head
+is `20260928_38`.
 
 ## Key classes / functions
 
@@ -72,7 +73,8 @@ registration identity, and AI table security; `20260927_37` rebuilds `ck_activit
 | `upgrade()` (rev `20260912_25`, `enrichment_retries`) | Enrichment job retry columns. | `backend/alembic/versions/20260912_25_enrichment_retries.py` |
 | `upgrade()` (rev `20260912_26`, `ai_scan_analysis_retries`) | Adds indexed `ai_scan_analyses.next_attempt_at`; renames `last_error_code` to `last_error`, so both job tables share the `claim_jobs` columns. | `backend/alembic/versions/20260912_26_ai_scan_analysis_retries.py` |
 | `upgrade()` (rev `20260920_33`, `attack_surface_profiles`) | Adds nullable assessment fields to scans/scan_hosts/hosts and creates `exposures` with endpoint FKs, uniqueness, checks, indexes, RLS, and runtime grants. No historical backfill. | `backend/alembic/versions/20260920_33_attack_surface_profiles.py` |
-| `upgrade()` (rev `20260927_37`, `scan_cancelled_activity`) | Rebuilds `ck_activity_kind` and the `uq_activity_org_kind_subject` partial index to include `scan_cancelled` (joins `UNIQUE_KINDS` like `scan_finished` / `scan_failed`). Parent `20260924_36`. Current head. | `backend/alembic/versions/20260927_37_scan_cancelled_activity.py` |
+| `upgrade()` (rev `20260927_37`, `scan_cancelled_activity`) | Rebuilds `ck_activity_kind` and the `uq_activity_org_kind_subject` partial index to include `scan_cancelled` (joins `UNIQUE_KINDS` like `scan_finished` / `scan_failed`). Parent `20260924_36`. | `backend/alembic/versions/20260927_37_scan_cancelled_activity.py` |
+| `upgrade()` (rev `20260928_38`, `scan_evidence_coverage`) | Adds `scans.coverage_json` (JSON, server default `[]`). Rewrites `nmap_vulners`/`nvd` CVE findings from `confirmed` to `probable`, replaces the old "NVD validated this CVE." evidence note, and recomputes the matching confirmed `risk_snapshots`. `downgrade()` only drops the column; the data rewrite is not reversed. Parent `20260927_37`. Current head. | `backend/alembic/versions/20260928_38_scan_evidence_coverage.py` |
 
 ## How it connects
 
@@ -130,8 +132,8 @@ registration identity, and AI table security; `20260927_37` rebuilds `ck_activit
   Do not rewrite released revisions. `20260912_22` adds `industrial_services`, `modbus_units`,
   `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
   `20260912_24` adds `ai_scan_analyses`. `20260912_25` adds enrichment retries, `20260912_26`
-  adds AI retries, `20260920_33` adds attack-surface profiles, and `20260927_37` is the current
-  head (`scan_cancelled` activity kind).
+  adds AI retries, `20260920_33` adds attack-surface profiles, `20260927_37` adds the `scan_cancelled`
+  activity kind, and `20260928_38` (scan evidence coverage) is the current head.
   `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations

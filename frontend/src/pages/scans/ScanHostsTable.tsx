@@ -64,9 +64,18 @@ function buildColumns(
       label: t('common.services'),
       width: 'w-7/50',
       align: 'right',
-      render: (host) => (
-        <span className="block tabular-nums">{host.ports.length}</span>
-      ),
+      render: (host) => {
+        const open = host.ports.filter((port) => port.state === 'open').length
+        const filtered = host.ports.filter(
+          (port) => port.state === 'filtered',
+        ).length
+        return (
+          <span className="block tabular-nums">
+            {t('scans.openPorts')}: {open}
+            {filtered > 0 && `, ${t('scans.filteredPorts')}: ${filtered}`}
+          </span>
+        )
+      },
     },
   ]
 }

@@ -1114,9 +1114,13 @@ def _parse_nikto_issues(
         evidence = sanitize_evidence(
             f"{WEB_RESULT_POLICY_VERSION}:nikto:{identifier}; method={method_text or 'unknown'}; path={path}; {sanitize_evidence(message)}"
         )
+        issue_key = f"nikto:{identifier}:{path}"
+        if len(issue_key) > 256:
+            digest = hashlib.sha256(issue_key.encode("utf-8")).hexdigest()[:16]
+            issue_key = f"{issue_key[:239]}:{digest}"
         issues.append(
             TargetedIssue(
-                f"nikto:{identifier}:{path}",
+                issue_key,
                 f"Nikto web security issue {identifier}",
                 sanitize_evidence(message),
                 severity,

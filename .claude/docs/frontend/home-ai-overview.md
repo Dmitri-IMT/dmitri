@@ -4,7 +4,7 @@ title: frontend Home AI overview teaser
 description: Home card for the latest successful scan's analysis status — links to Scan Detail when overview is missing, pending, or ready.
 resource: frontend/src/pages/home/HomeAIOverview.tsx
 tags: [frontend, ai, home]
-timestamp: 2026-09-19T21:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # frontend Home AI overview teaser
@@ -22,7 +22,7 @@ analysis was never requested.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `HomeAIOverview` | Status-specific teaser; does not POST analysis from Home. | `frontend/src/pages/home/HomeAIOverview.tsx:9` |
+| `HomeAIOverview` | Status-specific teaser; does not POST analysis from Home. Shows the `home-ai-evidence-limit` line, plus the `evidenceLimitKey(latest_successful_scan.evidence_completeness)` line (`ai.partialLimit` or `ai.unknownLimit`). | `frontend/src/pages/home/HomeAIOverview.tsx:9` |
 | `Home` | Passes `snapshot.latest_successful_scan`. | `frontend/src/pages/Home.tsx:102` |
 
 ## How it connects

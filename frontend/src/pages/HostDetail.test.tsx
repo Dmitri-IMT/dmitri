@@ -87,7 +87,7 @@ describe('HostDetail', () => {
       'Attack surface',
       'Ask about Machine',
       'Vulnerabilities',
-      'Services running on this machine',
+      'Ports observed on this machine',
       'Industrial services',
       'Scan history',
     ])
@@ -208,10 +208,10 @@ describe('HostDetail', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.getByTestId('host-no-ports')).toHaveTextContent(
-      'No services are running on this machine.',
+      'No ports have been recorded for this machine.',
     )
     expect(
-      screen.getByRole('heading', { name: 'Services running on this machine' }),
+      screen.getByRole('heading', { name: 'Ports observed on this machine' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: 'Scan history' }),
@@ -299,6 +299,9 @@ describe('HostDetail', () => {
     renderPage(`/network/${HOST_WITH_PORTS.host_id}`)
 
     const table = await screen.findByTestId('host-ports-table')
+    expect(
+      screen.getByRole('table', { name: 'Ports observed on this machine' }),
+    ).toBe(table)
     expect(screen.queryByTestId('host-no-ports')).not.toBeInTheDocument()
     for (const row of within(table).getAllByRole('row')) {
       expect(within(row).queryByRole('button')).not.toBeInTheDocument()
@@ -425,7 +428,7 @@ describe('HostDetail', () => {
       HOST.hostname,
     )
     expect(
-      screen.getByRole('heading', { name: 'Services running on this machine' }),
+      screen.getByRole('heading', { name: 'Ports observed on this machine' }),
     ).toBeInTheDocument()
     expect(screen.getByTestId('host-no-ports')).toBeInTheDocument()
     expect(
@@ -572,7 +575,7 @@ describe('HostDetail', () => {
     expect(seen).not.toHaveTextContent('last seen')
   })
 
-  it('tells a service last seen before the machine apart by its date alone', async () => {
+  it('distinguishes current, historical, and unverified port observations', async () => {
     const host = metaHost({
       last_seen_at: agoIso(5 * 60 * 1000),
       ports: [
@@ -583,6 +586,7 @@ describe('HostDetail', () => {
           version: 'nginx 1.18.0',
           first_seen_at: agoIso(9 * WEEK_MS),
           last_seen_at: agoIso(5 * 60 * 1000),
+          observed_in_latest_scan: true,
         },
         {
           port: 23,
@@ -591,6 +595,16 @@ describe('HostDetail', () => {
           version: null,
           first_seen_at: agoIso(9 * WEEK_MS),
           last_seen_at: agoIso(3 * WEEK_MS),
+          observed_in_latest_scan: false,
+        },
+        {
+          port: 25,
+          protocol: 'tcp',
+          service: 'smtp',
+          version: null,
+          first_seen_at: agoIso(9 * WEEK_MS),
+          last_seen_at: agoIso(3 * WEEK_MS),
+          observed_in_latest_scan: null,
         },
       ],
     })
@@ -606,14 +620,15 @@ describe('HostDetail', () => {
 
     const openRow = screen.getByTestId('host-ports-table-row-443/tcp')
     const closedRow = screen.getByTestId('host-ports-table-row-23/tcp')
+    const unknownRow = screen.getByTestId('host-ports-table-row-25/tcp')
+    expect(openRow).toHaveTextContent('Observed in latest scan')
+    expect(closedRow).toHaveTextContent('Historical observation')
+    expect(unknownRow).toHaveTextContent('Not verified in latest scan')
     expect(within(openRow).getAllByRole('cell')[3]).toHaveTextContent(/min ago/)
     expect(within(closedRow).getAllByRole('cell')[3]).toHaveTextContent(
       /^[A-Z][a-z]{2} \d{1,2}, \d{2}:\d{2}$/,
     )
 
-    expect(closedRow).not.toHaveTextContent(
-      /closed|inactive|stale|gone|no longer|not seen/i,
-    )
     expect(closedRow).not.toHaveAttribute('data-tone')
     expect(closedRow).not.toHaveClass('line-through')
     expect(closedRow).not.toHaveClass('text-muted-foreground')

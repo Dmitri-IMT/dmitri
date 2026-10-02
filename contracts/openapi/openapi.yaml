@@ -2758,6 +2758,16 @@ components:
         - user_cancel
         - timeout
         - error
+    EvidenceCompleteness:
+      type: string
+      enum:
+        - complete
+        - partial
+        - unknown
+      description: Whether the scan's evidence covers every check. `partial` when
+        the Pi reported `partial_result` or any coverage unit did not complete;
+        `complete` when it reported no partial result and coverage has no gap;
+        otherwise `unknown`.
     ScanMode:
       type: string
       enum:
@@ -3103,6 +3113,12 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        observed_in_latest_scan:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Observed In Latest Scan
+          default: null
         first_seen_at:
           type: string
           format: date-time
@@ -3589,6 +3605,141 @@ components:
             - 'null'
           minimum: 0
           maximum: 255
+    CoverageObservationPayload:
+      properties:
+        observation_key:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Observation Key
+        kind:
+          type: string
+          enum:
+          - administration
+          - api_surface
+          - service_identity
+          - device_identity
+          title: Kind
+        summary:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Summary
+        evidence:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Evidence
+        path:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Path
+        rule_id:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Rule Id
+        policy_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Policy Version
+      additionalProperties: false
+      type: object
+      required:
+      - observation_key
+      - kind
+      - summary
+      - evidence
+      title: CoverageObservationPayload
+    CoverageUnitPayload:
+      properties:
+        ip:
+          type: string
+          format: ipv4
+          title: Ip
+        stage:
+          type: string
+          enum:
+          - ports
+          - deep_inspection
+          - ot_inspection
+          - targeted_assessment
+          title: Stage
+        port:
+          anyOf:
+          - type: integer
+            maximum: 65535.0
+            minimum: 1.0
+          - type: 'null'
+          title: Port
+        protocol:
+          anyOf:
+          - type: string
+            enum:
+            - tcp
+            - udp
+          - type: 'null'
+          title: Protocol
+        tool:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Tool
+        outcome:
+          type: string
+          enum:
+          - completed
+          - partial
+          - failed
+          - timed_out
+          - skipped
+          title: Outcome
+        reason_code:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Reason Code
+        evidence_source:
+          type: string
+          enum:
+          - nmap_nse
+          - service_recovery
+          - nmap_ports
+          - port_discovery
+          - modbus_inspection
+          - targeted_tool
+          - targeted_tool_partial_report
+          - not_run
+          title: Evidence Source
+        issue_keys:
+          items:
+            type: string
+            maxLength: 256
+            minLength: 1
+          type: array
+          title: Issue Keys
+        observations:
+          items:
+            $ref: '#/components/schemas/CoverageObservationPayload'
+          type: array
+          title: Observations
+      additionalProperties: false
+      type: object
+      required:
+      - ip
+      - stage
+      - outcome
+      - evidence_source
+      title: CoverageUnitPayload
     ScanIngestRequest:
       type: object
       additionalProperties: false
@@ -3621,6 +3772,11 @@ components:
           items:
             $ref: '#/components/schemas/FindingPayload'
           default: []
+        coverage:
+          items:
+            $ref: '#/components/schemas/CoverageUnitPayload'
+          type: array
+          title: Coverage
         metadata:
           type:
             - object
@@ -3670,6 +3826,7 @@ components:
         - subnet
         - scan_mode
         - status
+        - evidence_completeness
         - host_count
         - finding_count
       properties:
@@ -3685,6 +3842,8 @@ components:
           $ref: '#/components/schemas/ScanMode'
         status:
           $ref: '#/components/schemas/ScanStatus'
+        evidence_completeness:
+          $ref: '#/components/schemas/EvidenceCompleteness'
         host_count:
           type: integer
           minimum: 0
@@ -3727,6 +3886,7 @@ components:
         - assessment_policy_version
         - exposures
         - status
+        - evidence_completeness
         - host_count
         - finding_count
       properties:
@@ -3770,8 +3930,15 @@ components:
                   - type: number
                   - type: boolean
             - type: 'null'
+        coverage:
+          items:
+            $ref: '#/components/schemas/CoverageUnitPayload'
+          type: array
+          title: Coverage
         status:
           $ref: '#/components/schemas/ScanStatus'
+        evidence_completeness:
+          $ref: '#/components/schemas/EvidenceCompleteness'
         command_id:
           anyOf:
             - type: string

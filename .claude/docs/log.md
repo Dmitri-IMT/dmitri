@@ -3,7 +3,70 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-02
+
+* **Update**: PR #159 Cursor review, OT coverage and selection. The OT stage records an
+  `ot_inspection` coverage unit per Modbus host (`modbus_inspection` evidence source, new in the
+  contract, backend schema, OpenAPI, and the SPA stage label); the runner adds an OT `not_run` row
+  only when the OT stage had not started. Targeted plan and omitted sample share `_keep_best`.
+  Touched: `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/models.md`, `backend/schemas.md`.
+
+* **Update**: PR #159 Cursor review. `ScanAIContext.partial_result` removed: AI context version
+  `"4"` carries only `evidence_completeness`; `split_context` and the synthesis aggregate no longer
+  copy the boolean; chat reads `ScanDetailResponse.evidence_completeness`. ADR-020 amended.
+  Touched: `backend/ai.md`, `docs/adr/ADR-020-ai-scan-analysis.md`.
+
+* **Update**: PR #159 Cursor review, completeness shape. `EvidenceCompleteness` is a contract
+  schema; `ScanSummary` and `ScanDetailResponse` carry a required `evidence_completeness` and
+  `ScanSummary.partial_result` is gone. The SPA reads the enum: `scanDetailView.completeness`,
+  `ScanAIAnalysis` `completeness` prop, `HomeAIOverview`, shared `lib/evidenceCompleteness`
+  (`ai.unknownLimit` added). An `unknown` scan no longer gets the "no vulnerabilities in this
+  scan" copy. Touched: `backend/schemas.md`, `contracts.md`, `frontend/screens.md`,
+  `frontend/scan-ai.md`, `frontend/home-ai-overview.md`.
+
+* **Update**: PR #159 Cursor review, point 4. Scan Detail status logic moved into the pure view
+  model `scanDetailView(scan)` (`body`, `failed`, `partial`, `stoppedEarly`, `sections`); the page
+  only renders it and the per-section `status !== 'failed'` gates are gone. Behavior unchanged.
+  Touched: `frontend/screens.md`.
+
 ## 2026-10-01
+
+* **Update**: PR #159 Cursor review, items 2–3. New `api/services/scan_evidence.py` owns both
+  evidence policies: `is_cve_correlation` (enrichment + AI `evidence_basis`) and
+  `evidence_completeness` / `incomplete_check_count` / `parse_coverage` (inventory, port freshness, AI
+  context, chat, Groq notice). Finding read and risk summary return the stored confidence again;
+  `effective_finding_confidence` and the read overlay are gone. The Groq notice now also warns on
+  `unknown` completeness. Touched: `backend/services.md`, `backend/ai.md`.
+
+* **Update**: PR #159 Cursor review, point 3. Coverage is recorded at the source: typed
+  `StageCoverage` on `HostInfo.stage_coverage` replaces the five string fields; `_record_deep_gap`
+  merges the three deep-recovery branches; the targeted stage records units a cancel or overall
+  deadline stopped (`TargetedGapReason.SCAN_CANCELLED` / `SCAN_TIMEOUT`); `ScanRunner._record_not_run`
+  marks never-reached stages, with one targeted line per host instead of re-selecting units;
+  `normalize/coverage.extract_coverage` replaces `stages.build_coverage_payload`. Touched:
+  `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/models.md`,
+  `hardware-agent/scanner/runner.md`, `hardware-agent/normalize.md`.
+
+* **Update**: PR #159 Cursor review, points 1–2. Inventory closes unseen findings only when
+  `partial_result` is exactly `false`; new `read.is_cve_correlation` is the one owner of the
+  NVD/vulners correlation rule (`_to_finding_read`, `effective_finding_confidence`, and AI
+  `evidence_basis` all call it); `AI_PROMPT_VERSION` → `"6"`. Touched: `backend/services.md`,
+  `backend/ai.md`.
+
+* **Update**: PR #159 scan evidence coverage, merged with main. Pi emits per-endpoint
+  `coverage` (`build_coverage_payload`, `CoverageUnitPayload`) and new `HostInfo` stage outcomes;
+  targeted plan-limit omissions become skipped units. Backend stores `scans.coverage_json`, returns
+  `coverage` / `ScanSummary.partial_result` / `HostPort.observed_in_latest_scan`, reads NVD/vulners
+  CVEs as `probable`, skips fixing unseen findings on partial scans, and adds AI
+  `evidence_completeness` / `incomplete_check_count` / `evidence_basis`. Migration renamed to
+  `20260928_38` (parent `20260927_37`), now head. Frontend: `ScanCoverage`, partial and failed-scan
+  evidence on Scan Detail, AI evidence-limit lines, port freshness labels. Touched:
+  `backend/migrations.md`, `backend/models.md`, `backend/schemas.md`, `backend/services.md`,
+  `backend/ai.md`, `backend/index.md`, `index.md`, `contracts.md`, `hardware-agent/normalize.md`,
+  `hardware-agent/scanner/models.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/stages.md`, `frontend/screens.md`, `frontend/scan-ai.md`,
+  `frontend/home-ai-overview.md`.
 
 * **Update**: PR #160 fifth review (DMI-145). `persist_scan` checks a closed command under the row
   lock before any write, and settles a live command through the non-committing

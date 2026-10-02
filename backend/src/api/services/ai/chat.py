@@ -35,6 +35,7 @@ from api.services.ai.context import (
     replace_ai_references,
 )
 from api.services.ai.groq import AIProviderError
+from api.services.scan_evidence import incomplete_check_count
 
 MAX_CHAT_HISTORY = 10
 MAX_CHAT_FINDINGS = 5
@@ -76,6 +77,8 @@ def build_scan_chat_bundle(
         provider_context=ScanChatContext(
             scan_mode=detail.scan_mode,
             status=detail.status,
+            evidence_completeness=detail.evidence_completeness,
+            incomplete_check_count=incomplete_check_count(detail.coverage),
             host_count=detail.host_count,
             aggregate=ChatAggregate(
                 total_findings=risk.total_findings,

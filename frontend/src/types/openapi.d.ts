@@ -760,6 +760,11 @@ export interface components {
         ScanStatus: "pending" | "accepted" | "processing" | "completed" | "failed" | "cancelled";
         /** @enum {string} */
         TerminatedBy: "completed" | "user_cancel" | "timeout" | "error";
+        /**
+         * @description Whether the scan's evidence covers every check. `partial` when the Pi reported `partial_result` or any coverage unit did not complete; `complete` when it reported no partial result and coverage has no gap; otherwise `unknown`.
+         * @enum {string}
+         */
+        EvidenceCompleteness: "complete" | "partial" | "unknown";
         /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
@@ -868,6 +873,11 @@ export interface components {
             protocol: "tcp" | "udp";
             service: string;
             version?: string | null;
+            /**
+             * Observed In Latest Scan
+             * @default null
+             */
+            observed_in_latest_scan: boolean | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -1033,6 +1043,61 @@ export interface components {
             references: string[];
             unit_id?: number | null;
         };
+        /** CoverageObservationPayload */
+        CoverageObservationPayload: {
+            /** Observation Key */
+            observation_key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "administration" | "api_surface" | "service_identity" | "device_identity";
+            /** Summary */
+            summary: string;
+            /** Evidence */
+            evidence: string;
+            /** Path */
+            path?: string | null;
+            /** Rule Id */
+            rule_id?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+        };
+        /** CoverageUnitPayload */
+        CoverageUnitPayload: {
+            /**
+             * Ip
+             * Format: ipv4
+             */
+            ip: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment";
+            /** Port */
+            port?: number | null;
+            /** Protocol */
+            protocol?: ("tcp" | "udp") | null;
+            /** Tool */
+            tool?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "completed" | "partial" | "failed" | "timed_out" | "skipped";
+            /** Reason Code */
+            reason_code?: string | null;
+            /**
+             * Evidence Source
+             * @enum {string}
+             */
+            evidence_source: "nmap_nse" | "service_recovery" | "nmap_ports" | "port_discovery" | "modbus_inspection" | "targeted_tool" | "targeted_tool_partial_report" | "not_run";
+            /** Issue Keys */
+            issue_keys?: string[];
+            /** Observations */
+            observations?: components["schemas"]["CoverageObservationPayload"][];
+        };
         ScanIngestRequest: {
             /** Format: uuid */
             scan_id: string;
@@ -1044,6 +1109,8 @@ export interface components {
             hosts: components["schemas"]["HostPayload"][];
             /** @default [] */
             findings: components["schemas"]["FindingPayload"][];
+            /** Coverage */
+            coverage?: components["schemas"]["CoverageUnitPayload"][];
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
@@ -1068,6 +1135,7 @@ export interface components {
             subnet: string;
             scan_mode: components["schemas"]["ScanMode"];
             status: components["schemas"]["ScanStatus"];
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             host_count: number;
             finding_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
@@ -1092,7 +1160,10 @@ export interface components {
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
+            /** Coverage */
+            coverage?: components["schemas"]["CoverageUnitPayload"][];
             status: components["schemas"]["ScanStatus"];
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             command_id?: string | null;
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             host_count: number;

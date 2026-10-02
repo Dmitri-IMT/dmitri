@@ -73,6 +73,7 @@ export function withPartialResult(
   return {
     ...scan,
     terminated_by: terminatedBy,
+    evidence_completeness: 'partial',
     metadata: {
       ...(scan.metadata ?? {}),
       partial_result: true,

@@ -196,6 +196,21 @@ def _unit_order_key(unit: TargetedUnit) -> tuple[object, int, str, int]:
     return (ip_address(unit.ip), unit.port, unit.protocol, _TOOL_ORDER[unit.tool])
 
 
+def _keep_best(units: Iterable[TargetedUnit]) -> list[TargetedUnit]:
+    kept: list[TargetedUnit] = []
+    for unit in units:
+        if len(kept) < TARGETED_MAX_UNITS:
+            kept.append(unit)
+            continue
+        worst_index = max(
+            range(len(kept)), key=lambda index: _unit_order_key(kept[index])
+        )
+        if _unit_order_key(unit) < _unit_order_key(kept[worst_index]):
+            kept[worst_index] = unit
+    kept.sort(key=_unit_order_key)
+    return kept
+
+
 def select_targeted_units(
     hosts: Iterable[HostInfo],
     *,
@@ -207,22 +222,14 @@ def select_targeted_units(
     if scan_mode not in TARGETED_MODES:
         return []
 
-    # Keep only the best 96 units.  Eligible units are streamed from the compact
-    # endpoint aggregation, so plan memory cannot grow with eligible-unit count.
-    selected: list[TargetedUnit] = []
     eligible_by_tool = {tool: 0 for tool in TargetedTool}
-    for unit in _eligible_units(hosts):
-        eligible_by_tool[unit.tool] += 1
-        if len(selected) < TARGETED_MAX_UNITS:
-            selected.append(unit)
-            continue
-        worst_index = max(
-            range(len(selected)), key=lambda index: _unit_order_key(selected[index])
-        )
-        if _unit_order_key(unit) < _unit_order_key(selected[worst_index]):
-            selected[worst_index] = unit
 
-    selected.sort(key=_unit_order_key)
+    def counted() -> Iterator[TargetedUnit]:
+        for unit in _eligible_units(hosts):
+            eligible_by_tool[unit.tool] += 1
+            yield unit
+
+    selected = _keep_best(counted())
     if summary is not None:
         planned_by_tool = {tool: 0 for tool in TargetedTool}
         for unit in selected:
@@ -239,3 +246,12 @@ def select_targeted_units(
             summary.plan_limit_by_tool[tool] += tool_omitted
             summary.gap_by_tool[tool][TargetedGapReason.PLAN_LIMIT] += tool_omitted
     return selected
+
+
+def select_omitted_targeted_units(
+    hosts: Iterable[HostInfo], selected: list[TargetedUnit]
+) -> list[TargetedUnit]:
+    selected_ids = {unit.identity for unit in selected}
+    return _keep_best(
+        unit for unit in _eligible_units(hosts) if unit.identity not in selected_ids
+    )

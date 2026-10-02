@@ -63,6 +63,7 @@ def _scan_summary_payload(**overrides: object) -> dict:
         "subnet": "192.168.1.0/24",
         "scan_mode": "standard",
         "status": "completed",
+        "evidence_completeness": "complete",
         "host_count": 12,
         "finding_count": 4,
         "highest_severity": "critical",
@@ -174,6 +175,7 @@ def test_scan_detail_response_nests_scan_host_view_and_finding_read():
             "assessment_policy_version": None,
             "exposures": [],
             "status": "completed",
+            "evidence_completeness": "complete",
             "host_count": 1,
             "finding_count": 0,
         }

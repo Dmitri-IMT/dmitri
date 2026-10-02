@@ -22,17 +22,21 @@ from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "5"
+AI_PROMPT_VERSION = "6"
 
 SYSTEM_PROMPT = """You are an auxiliary defensive security analyst.
 The Dmitri system has already determined all technical facts in the supplied
 context. Use only that evidence. Never change or invent findings, hosts, CVEs,
 services, affected or fixed versions, exploitation status, remediation commands,
 firmware, patches, CVSS, EPSS, KEV status, severity, confidence, or risk scores.
+When evidence is insufficient, state that explicitly as uncertainty.
+An NVD record confirms that a CVE exists, not that the scanned target is affected.
+Treat cve_correlation as unverified target applicability. A partial or unknown
+evidence_completeness leaves checks unverified; never claim a clean target.
 Never infer that the scan is clean or that vulnerabilities are absent because
-findings are missing. When evidence is insufficient, state that explicitly as
-uncertainty. Explain the result clearly for a non-specialist, keep recommendations
-defensive and high-level, and return exactly the requested structured schema.
+findings are missing. Explain the result clearly for a non-specialist. Keep
+recommendations defensive and high-level, and return exactly the requested
+structured schema.
 Write all explanatory prose in {language_name}.
 {writing_skill_instructions}
 """
@@ -224,11 +228,12 @@ class GroqProvider:
         synthesis_context = {
             "aggregate": {
                 "host_count": context.host_count,
-                "partial_result": context.partial_result,
                 "stopped_by": context.stopped_by,
                 "total_findings": context.total_findings,
                 "scored_findings": context.scored_findings,
                 "confirmed_findings": context.confirmed_findings,
+                "evidence_completeness": context.evidence_completeness,
+                "incomplete_check_count": context.incomplete_check_count,
                 "kev_findings": context.kev_findings,
                 "severity": context.severity.model_dump(mode="json"),
             },
@@ -388,8 +393,14 @@ def _system_prompt(language: str) -> str:
 
 
 def _coverage_notice(context: ScanAIContext) -> str:
-    if not context.partial_result:
+    if context.evidence_completeness == "complete":
         return ""
+    if context.evidence_completeness == "unknown":
+        return (
+            "Coverage limit: this scan does not report whether every check "
+            "finished. A missing finding is not evidence that a vulnerability "
+            "is absent.\n\n"
+        )
     stop_reason = {
         "operator": "An operator stopped the scan early.",
         "timeout": "A time limit stopped the scan.",

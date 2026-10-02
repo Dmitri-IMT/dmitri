@@ -352,7 +352,7 @@ def test_worker_processes_pending_jobs_separately(
     risk_snapshots = runtime_session.exec(select(RiskSnapshotRecord)).all()
     assert all(job.status == "completed" for job in jobs_after)
     assert all(job.attempts == 1 for job in jobs_after)
-    assert any(finding.confidence == "confirmed" for finding in findings_after)
+    assert all(finding.confidence != "confirmed" for finding in findings_after)
     assert any("nvd" in finding.source_labels_json for finding in findings_after)
     assert any("kev" in finding.source_labels_json for finding in findings_after)
     assert any("epss" in finding.source_labels_json for finding in findings_after)

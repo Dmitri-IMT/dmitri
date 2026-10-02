@@ -110,8 +110,7 @@ export const catalog: Catalog = {
   'common.weeks': 'semanas',
   'common.machinesSeen': 'Equipamentos encontrados',
   'common.industrialServices': 'Servi\u00e7os industriais',
-  'common.servicesRunning':
-    'Servi\u00e7os em execu\u00e7\u00e3o neste equipamento',
+  'common.servicesRunning': 'Portas observadas neste equipamento',
   'common.scanHistory': 'Hist\u00f3rico de varreduras',
   'common.machine': 'Equipamento',
   'common.vendor': 'Fabricante',
@@ -123,8 +122,7 @@ export const catalog: Catalog = {
   'common.addressSpace': 'Espa\u00e7o de endere\u00e7os',
   'common.range': 'Faixa',
   'common.result': 'Resultado',
-  'common.noServices':
-    'Nenhum servi\u00e7o est\u00e1 em execu\u00e7\u00e3o neste equipamento.',
+  'common.noServices': 'Nenhuma porta foi registrada neste equipamento.',
   'common.noIndustrialServices':
     'Nenhum servi\u00e7o industrial foi detectado neste equipamento.',
   'common.noAddressRanges': 'Nenhuma faixa de endere\u00e7os foi mapeada.',
@@ -278,4 +276,34 @@ export const catalog: Catalog = {
   'settings.latency': 'Latência',
   'settings.noRequests': 'Nenhuma solicitação de IA registrada ainda.',
   'settings.usagePages': 'Páginas de uso de IA',
+  'scans.failedEvidence':
+    'Observações registradas antes da falha da varredura:',
+  'scans.checkCoverage': 'Cobertura das verificações',
+  'scans.coverageUnavailable':
+    'A cobertura das verificações não foi registrada para esta varredura.',
+  'scans.coverageCompleted': ({ completed, total }) =>
+    `${completed} de ${total} verificações concluídas`,
+  'scans.coverageUnlistedOmissions': ({ count }) =>
+    `${count} verificações omitidas adicionais não estão listadas individualmente.`,
+  'scans.coverageObservationEvidence': 'Evidência:',
+  'scans.coveragePorts': 'Verificação de portas',
+  'scans.coverageDeepInspection': 'Inspeção detalhada',
+  'scans.coverageOtInspection': 'Inspeção OT',
+  'scans.coverageTargetedAssessment': 'Avaliação direcionada',
+  'scans.coverageOutcomeCompleted': 'concluída',
+  'scans.coverageOutcomePartial': 'parcial',
+  'scans.coverageOutcomeFailed': 'falhou',
+  'scans.coverageOutcomeTimedOut': 'tempo esgotado',
+  'scans.coverageOutcomeSkipped': 'não executada',
+  'scans.openPorts': 'Portas abertas',
+  'scans.filteredPorts': 'Portas filtradas',
+  'scans.currentPort': 'Observada na última varredura',
+  'scans.historicalPort': 'Observação anterior',
+  'scans.unknownPort': 'Não verificada na última varredura',
+  'home.detected': 'Observado',
+  'ai.evidenceLimit':
+    'Correspondências de CVE e registros da NVD não confirmam que uma vulnerabilidade afeta os equipamentos verificados. Confirme o software e a versão afetados.',
+  'ai.partialLimit': 'Algumas verificações desta varredura não terminaram.',
+  'ai.unknownLimit':
+    'Esta varredura não informa se todas as verificações terminaram.',
 }

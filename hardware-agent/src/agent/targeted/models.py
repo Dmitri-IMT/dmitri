@@ -47,6 +47,8 @@ class TargetedGapReason(StrEnum):
     SPAWN_ERROR = "spawn_error"
     EXECUTION_ERROR = "execution_error"
     UNIT_TIMEOUT = "unit_timeout"
+    SCAN_CANCELLED = "scan_cancelled"
+    SCAN_TIMEOUT = "scan_timeout"
 
 
 TargetedSeverity = Literal["low", "medium", "high", "critical"]
@@ -138,6 +140,7 @@ class TargetedStageSummary:
     eligible: int = 0
     planned: int = 0
     omitted: int = 0
+    omitted_unlisted: int = 0
     completed: int = 0
     failed: int = 0
     timed_out: int = 0
