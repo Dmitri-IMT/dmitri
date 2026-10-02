@@ -47,6 +47,8 @@ class TargetedGapReason(StrEnum):
     SPAWN_ERROR = "spawn_error"
     EXECUTION_ERROR = "execution_error"
     UNIT_TIMEOUT = "unit_timeout"
+    SCAN_CANCELLED = "scan_cancelled"
+    SCAN_TIMEOUT = "scan_timeout"
 
 
 TargetedSeverity = Literal["low", "medium", "high", "critical"]

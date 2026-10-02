@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agent.config import AgentSettings
 from agent.scanner.errors import BudgetExceeded, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo, StageCoverage
 from agent.scanner.stages import run_deep_inspection_stage
 
 
@@ -73,9 +73,9 @@ def test_deep_stage_recovers_service_evidence_when_nse_returns_none(
 
     assert runner.calls == 1
     assert incomplete == 1
-    assert host.deep_inspection_outcome == "partial"
-    assert host.deep_inspection_reason == "nse_timeout"
-    assert host.deep_inspection_evidence_source == "service_recovery"
+    assert host.stage_coverage == [
+        StageCoverage("deep_inspection", "partial", "service_recovery", "nse_timeout")
+    ]
     assert host.ports[0].service.name == "modbus"
     assert host.ports[0].service.banner == "Modbus TCP 1.0"
     done = next(event for event in reporter.events if event.kind == "deep_stage_done")
@@ -100,8 +100,9 @@ def test_deep_stage_recovers_after_unit_scan_error(monkeypatch) -> None:
 
     assert runner.calls == 1
     assert incomplete == 1
-    assert host.deep_inspection_outcome == "partial"
-    assert host.deep_inspection_reason == "nse_failed"
+    assert host.stage_coverage == [
+        StageCoverage("deep_inspection", "partial", "service_recovery", "nse_failed")
+    ]
     assert host.ports[0].service.name == "modbus"
 
 
@@ -127,6 +128,9 @@ def test_deep_stage_keeps_port_evidence_when_recovery_also_empty(monkeypatch) ->
 
     assert skipped == 1
     assert host.ports[0].service.name == original_name
+    assert host.stage_coverage == [
+        StageCoverage("deep_inspection", "timed_out", "port_discovery", "nse_timeout")
+    ]
 
 
 def test_deep_stage_continues_when_recovery_probe_fails(monkeypatch) -> None:

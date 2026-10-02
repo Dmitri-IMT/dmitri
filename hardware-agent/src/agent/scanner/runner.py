@@ -22,6 +22,7 @@ from agent.config import (
 )
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
+from agent.normalize.coverage import extract_coverage
 from agent.normalize.findings import extract_findings
 from agent.ot.modbus.client import ModbusClientController
 from agent.ot.policy import OtAutomationPolicy, load_ot_policy
@@ -32,6 +33,7 @@ from agent.scanner.errors import (
     FatalScanError,
     ScanCancelled,
 )
+from agent.scanner.models import CoverageStage, HostInfo, StageCoverage
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
 from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
@@ -148,12 +150,7 @@ class ScanRunner:
             scan_mode=self.scan_mode,
             hosts=hosts_payload,
             findings=findings,
-            coverage=stages.build_coverage_payload(
-                hosts,
-                interrupted_stage=interrupted_stage,
-                terminated_by=terminated_by,
-                scan_mode=settings.scan_mode,
-            ),
+            coverage=extract_coverage(hosts),
             assessment_policy_version=LOCAL_ASSESSMENT_POLICY_VERSION,
             exposures=assessment.exposures,
             metadata=stages.build_metadata(
@@ -195,6 +192,12 @@ class ScanRunner:
         ):
             self._emit(ScanEvent(kind="failed", message=message))
             return
+        _record_not_run(
+            hosts,
+            interrupted_stage=interrupted_stage,
+            terminated_by=terminated_by,
+            targeted=self.scan_mode in TARGETED_MODES,
+        )
         try:
             payload = self._build_payload(
                 scan_id=scan_id,
@@ -473,3 +476,47 @@ class ScanRunner:
         finally:
             with self._runner_lock:
                 self._active_runner = None
+
+
+_STAGE_ORDER = (
+    "discovery",
+    "ports",
+    "deep_inspection",
+    "ot_inspection",
+    "targeted_assessment",
+    "normalize",
+)
+_STOP_REASONS = {
+    "user_cancel": "scan_cancelled",
+    "timeout": "scan_timeout",
+    "error": "scan_error",
+}
+
+
+def _record_not_run(
+    hosts: list[HostInfo],
+    *,
+    interrupted_stage: str | None,
+    terminated_by: str,
+    targeted: bool,
+) -> None:
+    if interrupted_stage not in _STAGE_ORDER:
+        return
+    reached = _STAGE_ORDER.index(interrupted_stage)
+    reason = _STOP_REASONS[terminated_by]
+    for host in hosts:
+        recorded = {record.stage for record in host.stage_coverage}
+        pending: list[CoverageStage] = []
+        if reached <= _STAGE_ORDER.index("ports") and "ports" not in recorded:
+            pending.append("ports")
+        if host.open_ports:
+            if (
+                reached <= _STAGE_ORDER.index("deep_inspection")
+                and "deep_inspection" not in recorded
+            ):
+                pending.append("deep_inspection")
+            if targeted and reached < _STAGE_ORDER.index("targeted_assessment"):
+                pending.append("targeted_assessment")
+        host.stage_coverage.extend(
+            StageCoverage(stage, "skipped", "not_run", reason) for stage in pending
+        )

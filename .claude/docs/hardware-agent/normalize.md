@@ -13,7 +13,7 @@ timestamp: 2026-10-01T00:00:00Z
 
 `normalize/` turns the agent's in-memory scan state into the shared wire contract. `contracts.py`
 holds the Pydantic models serialized to disk and uploaded; `findings.py` walks parsed
-NSE output and emits structured `FindingPayload`s. The `ScanPayload` is the cross-component boundary
+NSE output and emits structured `FindingPayload`s; `coverage.py` flattens recorded stage and targeted results into `CoverageUnitPayload`s. The `ScanPayload` is the cross-component boundary
 object that binds the agent to the backend ingest route. Modbus process values remain on the Pi;
 only range status and an optional keyed digest cross this boundary.
 
@@ -31,6 +31,7 @@ only range status and an optional keyed digest cross this boundary.
 | `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:106`, `:90` |
 | `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:68` |
 | `FindingPayload` | A vulnerability/observation with optional `unit_id` for Modbus attribution. | `contracts.py:128` |
+| `extract_coverage()` | Flattens each host's `stage_coverage` and `targeted_results` into `CoverageUnitPayload[]`, sanitizing targeted observations. Targeted units skipped by a scan stop (`scan_cancelled`/`scan_timeout`) report `evidence_source="not_run"`. | `coverage.py:15` |
 | `extract_findings()` | Walks host scripts, port scripts, and per-unit Modbus read findings. Dedups by `(ip, port, unit_id, script, cve/title)`. | `findings.py:17` |
 | `_extract_modbus_read_findings()` | One finding per unit that has a readable range, with that `unit_id`. NSE findings omit `unit_id`. | `findings.py:39` |
 | `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:703` |

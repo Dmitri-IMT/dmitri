@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from agent.ot.modbus.models import ModbusService
 
@@ -92,6 +92,21 @@ class PortScanResult:
     skipped: bool = False
 
 
+CoverageStage = Literal["ports", "deep_inspection", "targeted_assessment"]
+CoverageOutcome = Literal["completed", "partial", "failed", "timed_out", "skipped"]
+StageEvidenceSource = Literal[
+    "nmap_ports", "nmap_nse", "service_recovery", "port_discovery", "not_run"
+]
+
+
+@dataclass(frozen=True, slots=True)
+class StageCoverage:
+    stage: CoverageStage
+    outcome: CoverageOutcome
+    evidence_source: StageEvidenceSource
+    reason_code: str | None = None
+
+
 @dataclass(slots=True)
 class HostInfo:
     """Discovered host enriched across the full scan pipeline."""
@@ -105,11 +120,7 @@ class HostInfo:
     host_scripts: list[ScriptResult] = field(default_factory=list)
     industrial_services: list[ModbusService] = field(default_factory=list)
     targeted_results: list[TargetedUnitResult] = field(default_factory=list)
-    port_scan_outcome: str | None = None
-    port_scan_reason: str | None = None
-    deep_inspection_outcome: str | None = None
-    deep_inspection_reason: str | None = None
-    deep_inspection_evidence_source: str | None = None
+    stage_coverage: list[StageCoverage] = field(default_factory=list)
 
     @property
     def open_ports(self) -> list[PortInfo]:

@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from agent.normalize.contracts import ScanPayload
+from agent.normalize.coverage import extract_coverage
 from agent.scanner import stages
 from agent.scanner.errors import (
     BudgetExceeded,
@@ -12,9 +13,9 @@ from agent.scanner.errors import (
     ScanCancelled,
     UnitScanError,
 )
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo, StageCoverage
 from agent.scanner.nmap import NmapRunner
-from agent.scanner.runner import ScanRunner
+from agent.scanner.runner import ScanRunner, _record_not_run
 from agent.targeted.models import (
     TargetedGapReason,
     TargetedIssue,
@@ -38,9 +39,7 @@ class _FakeRunner(NmapRunner):
     def __init__(self) -> None:
         self.nmap_path = "fake-nmap"
 
-    def run_xml(
-        self, arguments: list[str], timeout: float | None = None
-    ) -> ET.Element:
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         return ET.fromstring("<nmaprun/>")
 
 
@@ -67,9 +66,7 @@ def _build_runner(
     if deep_stage is not None:
         monkeypatch.setattr(stages, "run_deep_inspection_stage", deep_stage)
     if targeted_stage is not None:
-        monkeypatch.setattr(
-            "agent.scanner.runner.run_targeted_stage", targeted_stage
-        )
+        monkeypatch.setattr("agent.scanner.runner.run_targeted_stage", targeted_stage)
     completed: list[ScanPayload] = []
     errors: list[Exception] = []
     reporter = _FakeReporter()
@@ -162,26 +159,36 @@ def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() ->
             TargetedOutcome.TIMED_OUT,
             issues=[
                 TargetedIssue(
-                    "web:exposure", "Exposure", "Description", "high",
-                    "Recommendation", "Evidence",
+                    "web:exposure",
+                    "Exposure",
+                    "Description",
+                    "high",
+                    "Recommendation",
+                    "Evidence",
                 )
             ],
             observations=[
                 TargetedObservation(
-                    "web:administration:/admin", "administration",
-                    "Administration interface found", "status=403; protected surface",
-                    path="/admin", rule_id="admin", policy_version="v1",
+                    "web:administration:/admin",
+                    "administration",
+                    "Administration interface found",
+                    "status=403; protected surface",
+                    path="/admin",
+                    rule_id="admin",
+                    policy_version="v1",
                 )
             ],
             reason_code=TargetedGapReason.UNIT_TIMEOUT,
         )
     )
 
-    coverage = stages.build_coverage_payload([host])
+    coverage = extract_coverage([host])
 
     assert len(coverage) == 1
     assert (str(coverage[0].ip), coverage[0].port, coverage[0].tool) == (
-        host.ip, 80, "nikto",
+        host.ip,
+        80,
+        "nikto",
     )
     assert coverage[0].outcome == "timed_out"
     assert coverage[0].reason_code == "unit_timeout"
@@ -190,49 +197,71 @@ def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() ->
     assert coverage[0].observations[0].evidence == "status=403; protected surface"
 
 
-def test_interrupted_stages_record_known_pending_units() -> None:
+def _stop(host: HostInfo, stage: str, terminated_by: str, *, targeted: bool):
+    _record_not_run(
+        [host],
+        interrupted_stage=stage,
+        terminated_by=terminated_by,
+        targeted=targeted,
+    )
+    return [
+        (unit.stage, unit.outcome, unit.reason_code, unit.evidence_source)
+        for unit in extract_coverage([host])
+    ]
+
+
+def test_stop_records_stages_that_never_ran() -> None:
     host = _one_host()[0]
-    pending_ports = stages.build_coverage_payload(
-        [host], interrupted_stage="ports", terminated_by="user_cancel"
-    )
-    assert [(unit.stage, unit.outcome, unit.reason_code) for unit in pending_ports] == [
-        ("ports", "skipped", "scan_cancelled")
+    assert _stop(host, "ports", "user_cancel", targeted=True) == [
+        ("ports", "skipped", "scan_cancelled", "not_run")
     ]
-    assert pending_ports[0].evidence_source == "not_run"
 
+    host = _one_host()[0]
     host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
-    pending_after_ports = stages.build_coverage_payload(
-        [host],
-        interrupted_stage="ports",
-        terminated_by="user_cancel",
-        scan_mode="extensive",
-    )
-    assert any(
-        unit.stage == "deep_inspection" and unit.outcome == "skipped"
-        for unit in pending_after_ports
-    )
-    assert any(
-        unit.stage == "targeted_assessment" and unit.outcome == "skipped"
-        for unit in pending_after_ports
-    )
-    pending_deep = stages.build_coverage_payload(
-        [host], interrupted_stage="deep_inspection", terminated_by="timeout"
-    )
-    assert [(unit.stage, unit.outcome, unit.reason_code) for unit in pending_deep] == [
-        ("deep_inspection", "skipped", "scan_timeout")
+    assert _stop(host, "ports", "user_cancel", targeted=True) == [
+        ("ports", "skipped", "scan_cancelled", "not_run"),
+        ("deep_inspection", "skipped", "scan_cancelled", "not_run"),
+        ("targeted_assessment", "skipped", "scan_cancelled", "not_run"),
+    ]
+    targeted_line = extract_coverage([host])[-1]
+    assert (targeted_line.port, targeted_line.tool) == (None, None)
+
+    host = _one_host()[0]
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    assert _stop(host, "deep_inspection", "timeout", targeted=False) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run")
     ]
 
-    pending_targeted = stages.build_coverage_payload(
-        [host],
-        interrupted_stage="targeted_assessment",
-        terminated_by="error",
-        scan_mode="extensive",
+
+def test_stop_keeps_recorded_stages_and_leaves_targeted_stage_to_itself() -> None:
+    host = _one_host()[0]
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    host.stage_coverage.append(StageCoverage("ports", "completed", "nmap_ports"))
+    host.stage_coverage.append(
+        StageCoverage("deep_inspection", "completed", "nmap_nse")
     )
-    assert {(unit.port, unit.tool, unit.reason_code) for unit in pending_targeted} == {
-        (80, "ffuf", "scan_error"),
-        (80, "nikto", "scan_error"),
-    }
-    assert all(unit.evidence_source == "not_run" for unit in pending_targeted)
+    assert _stop(host, "targeted_assessment", "error", targeted=True) == [
+        ("ports", "completed", None, "nmap_ports"),
+        ("deep_inspection", "completed", None, "nmap_nse"),
+    ]
+
+
+def test_targeted_unit_skipped_by_a_stop_reports_not_run() -> None:
+    host = _one_host()[0]
+    unit = TargetedUnit(host.ip, 80, "tcp", "http", TargetedTool.NIKTO)
+    host.targeted_results.append(
+        TargetedUnitResult(
+            unit,
+            TargetedOutcome.SKIPPED,
+            reason_code=TargetedGapReason.SCAN_CANCELLED,
+        )
+    )
+
+    [coverage] = extract_coverage([host])
+
+    assert (coverage.port, coverage.tool, coverage.outcome) == (80, "nikto", "skipped")
+    assert coverage.reason_code == "scan_cancelled"
+    assert coverage.evidence_source == "not_run"
 
 
 class TestPostDiscoveryFatal:
@@ -392,9 +421,7 @@ class TestZeroHosts:
         assert meta["terminated_by"] == "completed"
         assert "interrupted_stage" not in meta
 
-    def test_zero_hosts_has_no_devices(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_zero_hosts_has_no_devices(self, monkeypatch: pytest.MonkeyPatch) -> None:
         runner, completed, _, _ = _build_runner(monkeypatch, hosts=[])
         runner._run()
 

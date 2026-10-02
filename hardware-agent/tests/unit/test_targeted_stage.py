@@ -277,3 +277,40 @@ def test_cancellation_stops_new_units_and_omits_stage_done(
         "targeted_stage_started",
         "targeted_unit_done",
     ]
+    assert summary.skipped == len(units) - 1
+    assert [
+        (result.outcome, result.reason_code) for result in host.targeted_results[1:]
+    ] == [(TargetedOutcome.SKIPPED, TargetedGapReason.SCAN_CANCELLED)] * (
+        len(units) - 1
+    )
+
+
+def test_overall_deadline_records_remaining_units_as_scan_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    units = _units()
+    _install_plan(monkeypatch, units)
+    monkeypatch.setattr(stage, "_stage_deadline", lambda *args, **kwargs: 0.0)
+    monkeypatch.setattr(stage, "perf_counter", lambda: 1.0)
+    monkeypatch.setattr(
+        stage,
+        "_adapter_for",
+        lambda tool: pytest.fail("an overall-deadline stop must not spawn an adapter"),
+    )
+    reporter = _Reporter()
+    host = _host()
+
+    summary = stage.run_targeted_stage(
+        [host],
+        scan_mode="extensive",
+        reporter=reporter,
+        executor=_Executor(),
+        overall_deadline=0.0,
+    )
+
+    assert summary.skipped == len(units)
+    assert all(
+        result.reason_code == TargetedGapReason.SCAN_TIMEOUT
+        for result in host.targeted_results
+    )
+    assert [event.kind for event in reporter.events] == ["targeted_stage_started"]

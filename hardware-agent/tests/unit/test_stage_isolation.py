@@ -5,7 +5,13 @@ from xml.etree.ElementTree import Element
 
 from agent.config import AgentSettings, subprocess_timeout_for
 from agent.scanner.errors import BudgetExceeded, TransientScanError, UnitScanError
-from agent.scanner.models import HostInfo, PortInfo, PortScanResult, ScriptResult
+from agent.scanner.models import (
+    HostInfo,
+    PortInfo,
+    PortScanResult,
+    ScriptResult,
+    StageCoverage,
+)
 from agent.scanner.progress import STAGE_WEIGHTS, ScanEvent, target_pct
 from agent.scanner.stages import (
     build_metadata,
@@ -51,9 +57,12 @@ def test_port_batch_missing_host_result_is_isolated_and_reported(monkeypatch) ->
     )
 
     assert skipped == 1
-    assert hosts[0].port_scan_outcome == "failed"
-    assert hosts[0].port_scan_reason == "port_no_result"
-    assert hosts[1].port_scan_outcome == "completed"
+    assert hosts[0].stage_coverage == [
+        StageCoverage("ports", "failed", "nmap_ports", "port_no_result")
+    ]
+    assert hosts[1].stage_coverage == [
+        StageCoverage("ports", "completed", "nmap_ports")
+    ]
     assert [port.port for port in hosts[1].ports] == [443]
     assert [event.ip for event in reporter.events if event.kind == "unit_failed"] == [
         "10.0.0.1"
@@ -101,10 +110,7 @@ def _make_ports_fake(
             exc = failures.get(ip)
             if exc is not None:
                 raise exc
-        return {
-            ip: PortScanResult(ports=ports_by_ip.get(ip, []))
-            for ip in ips
-        }
+        return {ip: PortScanResult(ports=ports_by_ip.get(ip, [])) for ip in ips}
 
     return fake
 

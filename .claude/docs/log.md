@@ -5,6 +5,15 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-01
 
+* **Update**: PR #159 Cursor review, point 3. Coverage is recorded at the source: typed
+  `StageCoverage` on `HostInfo.stage_coverage` replaces the five string fields; `_record_deep_gap`
+  merges the three deep-recovery branches; the targeted stage records units a cancel or overall
+  deadline stopped (`TargetedGapReason.SCAN_CANCELLED` / `SCAN_TIMEOUT`); `ScanRunner._record_not_run`
+  marks never-reached stages, with one targeted line per host instead of re-selecting units;
+  `normalize/coverage.extract_coverage` replaces `stages.build_coverage_payload`. Touched:
+  `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/models.md`,
+  `hardware-agent/scanner/runner.md`, `hardware-agent/normalize.md`.
+
 * **Update**: PR #159 Cursor review, points 1–2. Inventory closes unseen findings only when
   `partial_result` is exactly `false`; new `read.is_cve_correlation` is the one owner of the
   NVD/vulners correlation rule (`_to_finding_read`, `effective_finding_confidence`, and AI

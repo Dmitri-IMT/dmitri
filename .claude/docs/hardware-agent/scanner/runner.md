@@ -25,9 +25,10 @@ and translates every failure mode into a completed payload, partial payload, or 
 | `start()` / `run_blocking()` | Run `_run()` on a daemon thread or inline, respectively. | `runner.py:69`, `runner.py:73` |
 | `request_cancel()` | Cancels active Nmap and Modbus work. | `runner.py:76` |
 | `_check_cancel()` / `_check_deadline()` | Raise the existing cancellation/budget signals. | `runner.py:88`, `runner.py:92` |
-| `_build_payload()` | Normalizes accepted host evidence, runs the pure local assessment once, and assembles profiles, exposures, findings, coverage (`build_coverage_payload`), and metadata into one `ScanPayload`. | `runner.py:118` |
-| `_finalize_partial()` | Builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:139` |
-| `_run()` | Drives discovery → ports → deep inspection → NSPi OT inspection → normalization; a completed scan with skipped port/deep units carries `partial_result=true` and `terminated_by="completed"`. | `runner.py:222` |
+| `_build_payload()` | Normalizes accepted host evidence, runs the pure local assessment once, and assembles profiles, exposures, findings, coverage (`extract_coverage`), and metadata into one `ScanPayload`. | `runner.py:120` |
+| `_finalize_partial()` | Calls `_record_not_run`, then builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:172` |
+| `_record_not_run()` | On a stop, appends a `skipped`/`not_run` `StageCoverage` (reason `scan_cancelled`/`scan_timeout`/`scan_error`) for each stage the host never reached: `ports` when missing, `deep_inspection` for hosts with open ports, and — in targeted modes, only if the targeted stage had not started — one `targeted_assessment` line per host with open ports (no port or tool; nothing is re-selected). | `runner.py:496` |
+| `_run()` | Drives discovery → ports → deep inspection → NSPi OT inspection → normalization; a completed scan with skipped port/deep units carries `partial_result=true` and `terminated_by="completed"`. | `runner.py:225` |
 
 ## How it connects
 
