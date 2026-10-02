@@ -195,7 +195,9 @@ class CoverageUnitPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ip: IPv4Address
-    stage: Literal["ports", "deep_inspection", "targeted_assessment"]
+    stage: Literal[
+        "ports", "deep_inspection", "ot_inspection", "targeted_assessment"
+    ]
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
     tool: constr(min_length=1, max_length=64) | None = None
@@ -203,7 +205,7 @@ class CoverageUnitPayload(BaseModel):
     reason_code: constr(min_length=1, max_length=64) | None = None
     evidence_source: Literal[
         "nmap_nse", "service_recovery", "nmap_ports", "port_discovery",
-        "targeted_tool", "targeted_tool_partial_report", "not_run",
+        "modbus_inspection", "targeted_tool", "targeted_tool_partial_report", "not_run",
     ]
     issue_keys: list[constr(min_length=1, max_length=256)] = Field(default_factory=list)
     observations: list[CoverageObservationPayload] = Field(default_factory=list)

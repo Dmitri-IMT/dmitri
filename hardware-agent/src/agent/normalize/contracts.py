@@ -280,7 +280,7 @@ class CoverageUnitPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ip: IPv4Address
-    stage: Literal["ports", "deep_inspection", "targeted_assessment"]
+    stage: Literal["ports", "deep_inspection", "ot_inspection", "targeted_assessment"]
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
     protocol: Literal["tcp", "udp"] | None = None
     tool: constr(min_length=1, max_length=64) | None = None
@@ -291,6 +291,7 @@ class CoverageUnitPayload(BaseModel):
         "nmap_nse",
         "service_recovery",
         "port_discovery",
+        "modbus_inspection",
         "targeted_tool",
         "targeted_tool_partial_report",
         "not_run",

@@ -1074,7 +1074,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "ports" | "deep_inspection" | "targeted_assessment";
+            stage: "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment";
             /** Port */
             port?: number | null;
             /** Protocol */
@@ -1092,7 +1092,7 @@ export interface components {
              * Evidence Source
              * @enum {string}
              */
-            evidence_source: "nmap_nse" | "service_recovery" | "nmap_ports" | "port_discovery" | "targeted_tool" | "targeted_tool_partial_report" | "not_run";
+            evidence_source: "nmap_nse" | "service_recovery" | "nmap_ports" | "port_discovery" | "modbus_inspection" | "targeted_tool" | "targeted_tool_partial_report" | "not_run";
             /** Issue Keys */
             issue_keys?: string[];
             /** Observations */

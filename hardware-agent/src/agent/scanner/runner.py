@@ -25,6 +25,7 @@ from agent.normalize.contracts import ScanPayload
 from agent.normalize.coverage import extract_coverage
 from agent.normalize.findings import extract_findings
 from agent.ot.modbus.client import ModbusClientController
+from agent.ot.modbus.inventory import has_modbus_candidate
 from agent.ot.policy import OtAutomationPolicy, load_ot_policy
 from agent.scanner import stages
 from agent.scanner.errors import (
@@ -196,6 +197,7 @@ class ScanRunner:
             hosts,
             interrupted_stage=interrupted_stage,
             terminated_by=terminated_by,
+            ot=self.scan_mode == "nspi",
             targeted=self.scan_mode in TARGETED_MODES,
         )
         try:
@@ -498,6 +500,7 @@ def _record_not_run(
     *,
     interrupted_stage: str | None,
     terminated_by: str,
+    ot: bool,
     targeted: bool,
 ) -> None:
     if interrupted_stage not in _STAGE_ORDER:
@@ -515,6 +518,12 @@ def _record_not_run(
                 and "deep_inspection" not in recorded
             ):
                 pending.append("deep_inspection")
+            if (
+                ot
+                and reached < _STAGE_ORDER.index("ot_inspection")
+                and has_modbus_candidate(host)
+            ):
+                pending.append("ot_inspection")
             if targeted and reached < _STAGE_ORDER.index("targeted_assessment"):
                 pending.append("targeted_assessment")
         host.stage_coverage.extend(

@@ -92,10 +92,17 @@ class PortScanResult:
     skipped: bool = False
 
 
-CoverageStage = Literal["ports", "deep_inspection", "targeted_assessment"]
+CoverageStage = Literal[
+    "ports", "deep_inspection", "ot_inspection", "targeted_assessment"
+]
 CoverageOutcome = Literal["completed", "partial", "failed", "timed_out", "skipped"]
 StageEvidenceSource = Literal[
-    "nmap_ports", "nmap_nse", "service_recovery", "port_discovery", "not_run"
+    "nmap_ports",
+    "nmap_nse",
+    "service_recovery",
+    "port_discovery",
+    "modbus_inspection",
+    "not_run",
 ]
 
 

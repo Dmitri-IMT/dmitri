@@ -3667,6 +3667,7 @@ components:
           enum:
           - ports
           - deep_inspection
+          - ot_inspection
           - targeted_assessment
           title: Stage
         port:
@@ -3714,6 +3715,7 @@ components:
           - service_recovery
           - nmap_ports
           - port_discovery
+          - modbus_inspection
           - targeted_tool
           - targeted_tool_partial_report
           - not_run

@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: PR #159 Cursor review, OT coverage and selection. The OT stage records an
+  `ot_inspection` coverage unit per Modbus host (`modbus_inspection` evidence source, new in the
+  contract, backend schema, OpenAPI, and the SPA stage label); the runner adds an OT `not_run` row
+  only when the OT stage had not started. Targeted plan and omitted sample share `_keep_best`.
+  Touched: `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/models.md`, `backend/schemas.md`.
+
 * **Update**: PR #159 Cursor review. `ScanAIContext.partial_result` removed: AI context version
   `"4"` carries only `evidence_completeness`; `split_context` and the synthesis aggregate no longer
   copy the boolean; chat reads `ScanDetailResponse.evidence_completeness`. ADR-020 amended.

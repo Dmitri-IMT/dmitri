@@ -197,11 +197,19 @@ def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() ->
     assert coverage[0].observations[0].evidence == "status=403; protected surface"
 
 
-def _stop(host: HostInfo, stage: str, terminated_by: str, *, targeted: bool):
+def _stop(
+    host: HostInfo,
+    stage: str,
+    terminated_by: str,
+    *,
+    targeted: bool,
+    ot: bool = False,
+):
     _record_not_run(
         [host],
         interrupted_stage=stage,
         terminated_by=terminated_by,
+        ot=ot,
         targeted=targeted,
     )
     return [
@@ -230,6 +238,32 @@ def test_stop_records_stages_that_never_ran() -> None:
     host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
     assert _stop(host, "deep_inspection", "timeout", targeted=False) == [
         ("deep_inspection", "skipped", "scan_timeout", "not_run")
+    ]
+
+
+def test_stop_before_ot_records_ot_only_for_modbus_hosts() -> None:
+    modbus = _one_host()[0]
+    modbus.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus"))]
+    assert _stop(modbus, "deep_inspection", "timeout", targeted=False, ot=True) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run"),
+        ("ot_inspection", "skipped", "scan_timeout", "not_run"),
+    ]
+
+    web = _one_host()[0]
+    web.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    assert _stop(web, "deep_inspection", "timeout", targeted=False, ot=True) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run")
+    ]
+
+    modbus = _one_host()[0]
+    modbus.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus"))]
+    modbus.stage_coverage.append(StageCoverage("ports", "completed", "nmap_ports"))
+    modbus.stage_coverage.append(
+        StageCoverage("deep_inspection", "completed", "nmap_nse")
+    )
+    assert _stop(modbus, "ot_inspection", "user_cancel", targeted=False, ot=True) == [
+        ("ports", "completed", None, "nmap_ports"),
+        ("deep_inspection", "completed", None, "nmap_nse"),
     ]
 
 

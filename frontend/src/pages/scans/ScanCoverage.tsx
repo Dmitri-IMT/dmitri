@@ -9,6 +9,7 @@ type CoverageUnit = NonNullable<
 const stageKeys: Record<CoverageUnit['stage'], MessageKey> = {
   ports: 'scans.coveragePorts',
   deep_inspection: 'scans.coverageDeepInspection',
+  ot_inspection: 'scans.coverageOtInspection',
   targeted_assessment: 'scans.coverageTargetedAssessment',
 }
 

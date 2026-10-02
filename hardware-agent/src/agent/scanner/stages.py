@@ -452,6 +452,20 @@ def _stage_deadline_hit(
     return _elapsed_stage_seconds(stage_deadline, stage_started)
 
 
+def _ot_host_coverage(
+    cancel_event: threading.Event | None, host_deadline: float | None
+) -> StageCoverage:
+    if cancel_event is not None and cancel_event.is_set():
+        return StageCoverage(
+            "ot_inspection", "partial", "modbus_inspection", "scan_cancelled"
+        )
+    if host_deadline is not None and perf_counter() >= host_deadline:
+        return StageCoverage(
+            "ot_inspection", "partial", "modbus_inspection", "ot_host_deadline"
+        )
+    return StageCoverage("ot_inspection", "completed", "modbus_inspection")
+
+
 def run_ot_inspection_stage(
     settings: AgentSettings,
     hosts: list[HostInfo],
@@ -487,10 +501,13 @@ def run_ot_inspection_stage(
     digest_key = load_digest_key()
     stage_started = perf_counter()
     stage_deadline = min_not_none(deadline, stage_started + MAX_OT_STAGE_SECONDS)
-    for host in eligible_hosts:
+    stopped_at: int | None = None
+    for index, host in enumerate(eligible_hosts):
         if cancel_event is not None and cancel_event.is_set():
+            stopped_at = index
             break
         if _stage_deadline_hit(stage_deadline, stage_started) is not None:
+            stopped_at = index
             break
         host_deadline = min_not_none(
             stage_deadline,
@@ -520,6 +537,7 @@ def run_ot_inspection_stage(
                     digest_key=digest_key,
                 )
         correlate_fc43_fingerprints(host)
+        host.stage_coverage.append(_ot_host_coverage(cancel_event, host_deadline))
         hosts_done += 1
         _emit(
             reporter,
@@ -536,6 +554,12 @@ def run_ot_inspection_stage(
             ),
         )
     cancelled = cancel_event is not None and cancel_event.is_set()
+    if stopped_at is not None:
+        reason = "scan_cancelled" if cancelled else "stage_budget"
+        for host in eligible_hosts[stopped_at:]:
+            host.stage_coverage.append(
+                StageCoverage("ot_inspection", "skipped", "not_run", reason)
+            )
     if not cancelled:
         deadline_seconds = _stage_deadline_hit(stage_deadline, stage_started)
         if deadline_seconds is not None:

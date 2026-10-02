@@ -272,6 +272,7 @@ export const catalog = {
   'scans.coverageObservationEvidence': 'Evidence:',
   'scans.coveragePorts': 'Port scan',
   'scans.coverageDeepInspection': 'Deep inspection',
+  'scans.coverageOtInspection': 'OT inspection',
   'scans.coverageTargetedAssessment': 'Targeted assessment',
   'scans.coverageOutcomeCompleted': 'completed',
   'scans.coverageOutcomePartial': 'partial',
