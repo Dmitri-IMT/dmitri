@@ -57,32 +57,8 @@ function ProfileEvidence({ profile }: { profile: DeviceProfile }) {
 }
 
 function HostProfile({ host }: { host: HostDetailResponse }) {
-  if (host.assessment_status === 'unavailable' || !host.device_profile) {
-    return (
-      <div className="flex flex-col gap-6">
-        <dl className="grid grid-cols-1 gap-3 text-body-md sm:grid-cols-2 sm:gap-8">
-          <dt className="text-muted-foreground">Operating system</dt>
-          <dd data-testid="host-operating-system">
-            {host.operating_system?.name ?? 'Unknown'}
-          </dd>
-          {host.operating_system && (
-            <>
-              <dt className="text-muted-foreground">Nmap accuracy</dt>
-              <dd data-testid="host-operating-system-accuracy">
-                {host.operating_system.accuracy}%
-              </dd>
-            </>
-          )}
-        </dl>
-        <p data-testid="host-profile-unavailable" className="text-body-md">
-          Unavailable. Device profiling is not available for this scan. Re-run
-          the scan to produce this data.
-        </p>
-      </div>
-    )
-  }
-  const profile = host.device_profile
-  const typeLabel = MACHINE_TYPE_LABELS[host.machine_type] ?? 'Unknown'
+  const profile =
+    host.assessment_status === 'unavailable' ? null : host.device_profile
 
   return (
     <div className="flex flex-col gap-6">
@@ -99,24 +75,35 @@ function HostProfile({ host }: { host: HostDetailResponse }) {
             </dd>
           </>
         )}
-        <dt className="text-muted-foreground">Likely type</dt>
-        <dd>{typeLabel}</dd>
-        <dt className="text-muted-foreground">Manufacturer</dt>
-        <dd>{profileValue(profile.manufacturer)}</dd>
-        <dt className="text-muted-foreground">Product family</dt>
-        <dd>{profileValue(profile.product_family)}</dd>
-        <dt className="text-muted-foreground">Model</dt>
-        <dd>{profileValue(profile.model)}</dd>
-        <dt className="text-muted-foreground">Profile confidence</dt>
-        <dd>{CONFIDENCE_LABEL[profile.confidence]}</dd>
+        {profile && (
+          <>
+            <dt className="text-muted-foreground">Likely type</dt>
+            <dd>{MACHINE_TYPE_LABELS[host.machine_type] ?? 'Unknown'}</dd>
+            <dt className="text-muted-foreground">Manufacturer</dt>
+            <dd>{profileValue(profile.manufacturer)}</dd>
+            <dt className="text-muted-foreground">Product family</dt>
+            <dd>{profileValue(profile.product_family)}</dd>
+            <dt className="text-muted-foreground">Model</dt>
+            <dd>{profileValue(profile.model)}</dd>
+            <dt className="text-muted-foreground">Profile confidence</dt>
+            <dd>{CONFIDENCE_LABEL[profile.confidence]}</dd>
+          </>
+        )}
       </dl>
-      <Disclosure
-        label="Why this profile?"
-        testId="host-profile-evidence"
-        caretTestId="host-profile-evidence-caret"
-      >
-        <ProfileEvidence profile={profile} />
-      </Disclosure>
+      {profile ? (
+        <Disclosure
+          label="Why this profile?"
+          testId="host-profile-evidence"
+          caretTestId="host-profile-evidence-caret"
+        >
+          <ProfileEvidence profile={profile} />
+        </Disclosure>
+      ) : (
+        <p data-testid="host-profile-unavailable" className="text-body-md">
+          Unavailable. Device profiling is not available for this scan. Re-run
+          the scan to produce this data.
+        </p>
+      )}
     </div>
   )
 }
