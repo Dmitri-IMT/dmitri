@@ -228,7 +228,6 @@ class GroqProvider:
         synthesis_context = {
             "aggregate": {
                 "host_count": context.host_count,
-                "partial_result": context.partial_result,
                 "stopped_by": context.stopped_by,
                 "total_findings": context.total_findings,
                 "scored_findings": context.scored_findings,

@@ -87,14 +87,14 @@ def _synthesis() -> ProviderScanAIAnalysis:
 
 def test_split_context_preserves_private_reference_maps():
     context = _context()
-    context.partial_result = True
+    context.evidence_completeness = "partial"
     context.stopped_by = "timeout"
     chunks = split_context(context, child_findings=1)
 
     assert [len(chunk.top_findings) for chunk in chunks] == [1, 1]
     assert set(chunks[0]._finding_ids_by_ref) == {"finding_1"}
     assert set(chunks[1]._finding_ids_by_ref) == {"finding_2"}
-    assert all(chunk.partial_result is True for chunk in chunks)
+    assert all(chunk.evidence_completeness == "partial" for chunk in chunks)
     assert all(chunk.stopped_by == "timeout" for chunk in chunks)
 
 
@@ -164,19 +164,19 @@ def test_child_failure_is_reported_to_synthesizer():
 
 def test_bounded_child_and_repair_keep_partial_coverage():
     context = _context()
-    context.partial_result = True
+    context.evidence_completeness = "partial"
     context.stopped_by = "error"
     received = {"child": [], "repair": []}
 
     class Provider(_BoundedProvider):
         def analyze_chunk(self, chunk, *, language="en"):
-            received["child"].append((chunk.partial_result, chunk.stopped_by))
+            received["child"].append((chunk.evidence_completeness, chunk.stopped_by))
             child = _child(chunk.top_findings[0].finding_ref)
             child.important_findings[0].why_it_matters = "The device needs review."
             return child
 
         def repair_chunk(self, chunk, violation_codes, *, language="en"):
-            received["repair"].append((chunk.partial_result, chunk.stopped_by))
+            received["repair"].append((chunk.evidence_completeness, chunk.stopped_by))
             return _child(chunk.top_findings[0].finding_ref)
 
         def synthesize_scan(
@@ -187,5 +187,5 @@ def test_bounded_child_and_repair_keep_partial_coverage():
     _, coverage = run_bounded_analysis(Provider(), context, child_findings=1)
 
     assert coverage.analyzed_findings == 2
-    assert received["child"] == [(True, "error"), (True, "error")]
-    assert received["repair"] == [(True, "error"), (True, "error")]
+    assert received["child"] == [("partial", "error"), ("partial", "error")]
+    assert received["repair"] == [("partial", "error"), ("partial", "error")]

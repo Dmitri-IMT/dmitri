@@ -40,7 +40,7 @@ from api.services.scan_evidence import (
     parse_coverage,
 )
 
-AI_CONTEXT_VERSION = "3"
+AI_CONTEXT_VERSION = "4"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
@@ -71,12 +71,11 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["3"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
     evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     duration_seconds: Annotated[int | None, Field(ge=0)]
-    partial_result: bool = False
     stopped_by: Literal["operator", "timeout", "error"] | None = None
     host_count: Annotated[int, Field(ge=0)]
     total_findings: Annotated[int, Field(ge=0)]
@@ -116,7 +115,7 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["3"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
@@ -131,7 +130,7 @@ class ScanChatContext(BaseModel):
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["3"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
 
@@ -139,7 +138,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["3"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -258,14 +257,12 @@ def build_scan_ai_context(
         kev_by_cve=kev_by_cve,
     )
     coverage = parse_coverage(scan.coverage_json)
-    completeness = evidence_completeness(scan.metadata_json, coverage)
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
-        evidence_completeness=completeness,
+        evidence_completeness=evidence_completeness(scan.metadata_json, coverage),
         incomplete_check_count=incomplete_check_count(coverage),
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
-        partial_result=completeness == "partial",
         stopped_by={
             TERMINATED_BY_USER_CANCEL: "operator",
             "timeout": "timeout",

@@ -5,6 +5,11 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: PR #159 Cursor review. `ScanAIContext.partial_result` removed: AI context version
+  `"4"` carries only `evidence_completeness`; `split_context` and the synthesis aggregate no longer
+  copy the boolean; chat reads `ScanDetailResponse.evidence_completeness`. ADR-020 amended.
+  Touched: `backend/ai.md`, `docs/adr/ADR-020-ai-scan-analysis.md`.
+
 * **Update**: PR #159 Cursor review, completeness shape. `EvidenceCompleteness` is a contract
   schema; `ScanSummary` and `ScanDetailResponse` carry a required `evidence_completeness` and
   `ScanSummary.partial_result` is gone. The SPA reads the enum: `scanDetailView.completeness`,

@@ -65,7 +65,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "3"
+    assert context.context_version == "4"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
@@ -109,18 +109,19 @@ def test_context_maps_partial_scan_termination(
     context = build_scan_ai_context(administrative_session, seeded["scan"])
 
     assert context is not None
-    assert context.context_version == "3"
-    assert context.partial_result is True
+    assert context.context_version == "4"
+    assert context.evidence_completeness == "partial"
     assert context.stopped_by == stopped_by
 
 
-def test_context_marks_complete_scan_as_not_partial(administrative_session):
+def test_context_marks_complete_scan_as_complete(administrative_session):
     seeded = seed_read_graph(administrative_session)
+    seeded["scan"].metadata_json = {"partial_result": False}
 
     context = build_scan_ai_context(administrative_session, seeded["scan"])
 
     assert context is not None
-    assert context.partial_result is False
+    assert context.evidence_completeness == "complete"
     assert context.stopped_by is None
 
 

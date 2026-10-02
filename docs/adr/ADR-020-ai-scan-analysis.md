@@ -17,6 +17,12 @@
 > findings do not prove the absence of vulnerabilities. A cancelled scan with no results has no
 > AI analysis.
 
+> **Amendment 2026-10-02 (evidence completeness):** Scan-analysis context version 4 replaces
+> `partial_result` with `evidence_completeness` (`complete`, `partial`, or `unknown`) and adds
+> `incomplete_check_count`. Both come from the scan's metadata and coverage. The coverage-limit
+> notice opens every prompt when completeness is `partial` or `unknown`; `stopped_by` still gives
+> the stop reason.
+
 ## Context
 
 PR #144 added an optional Groq-backed analysis of a completed scan. The product

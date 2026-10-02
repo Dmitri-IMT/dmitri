@@ -27,7 +27,6 @@ def _context(
         scan_mode="quick",
         evidence_completeness=completeness,
         duration_seconds=10,
-        partial_result=completeness == "partial",
         stopped_by=stopped_by,
         host_count=1,
         total_findings=0,
@@ -98,7 +97,7 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"3"' in payload["messages"][1]["content"]
+    assert '"context_version":"4"' in payload["messages"][1]["content"]
     assert not payload["messages"][1]["content"].startswith("Coverage limit:")
     assert "scan_id" not in payload["messages"][1]["content"]
     usage = provider.drain_usage_events()
