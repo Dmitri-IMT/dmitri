@@ -24,6 +24,7 @@ import ScanIndustrialServices from '@/pages/scans/ScanIndustrialServices'
 import ScanStoppedNotice from '@/pages/scans/ScanStoppedNotice'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
+import { isTargetedFinding, scanDetailView } from '@/pages/scans/scanDetailView'
 import ServiceTargetedFindings, {
   targetedFindingsTableTestId,
 } from '@/pages/scans/ServiceTargetedFindings'
@@ -34,12 +35,6 @@ type FindingRecord = components['schemas']['FindingRecord']
 type Severity = components['schemas']['Severity']
 
 const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
-
-const TARGETED_SOURCE = 'targeted_service_assessment'
-
-function isTargetedFinding(finding: FindingRecord): boolean {
-  return finding.source === TARGETED_SOURCE
-}
 
 function ScanDetail() {
   const { t } = useI18n()
@@ -107,37 +102,24 @@ function ScanDetail() {
             (finding: FindingRecord) => finding.severity === severity,
           ),
         })).filter((group) => group.findings.length > 0)
+        const view = scanDetailView(scan)
         const metadata = scan.metadata ?? {}
-        const hasTargetedSection =
-          metadata.targeted_units_planned != null ||
-          scan.findings.some(isTargetedFinding)
         const opensTargetedDeepLink = scan.findings.some(
           (finding) =>
             isTargetedFinding(finding) && finding.finding_id === openFindingId,
         )
-        const partial = metadata.partial_result === true
-        const coverage = scan.coverage ?? []
         const omittedUnlisted =
           typeof metadata.targeted_units_omitted_unlisted === 'number'
             ? metadata.targeted_units_omitted_unlisted
             : 0
-        const hasRecordedEvidence =
-          scan.findings.length > 0 ||
-          scan.exposures.length > 0 ||
-          scan.hosts.length > 0 ||
-          coverage.length > 0
-        const stoppedEarly = scan.terminated_by === 'user_cancel'
 
         return (
           <>
             <ScanDetailHeader scan={scan} />
             <ScanSummaryStrip scan={scan} />
-            {scan.status === 'failed' && (
-              <ScanFailedNotice errorCode={scan.error_code} />
-            )}
-            {scan.status === 'cancelled' ? (
-              <ScanStoppedNotice variant="empty" />
-            ) : isUnfinished(scan.status) ? (
+            {view.failed && <ScanFailedNotice errorCode={scan.error_code} />}
+            {view.body === 'stopped' && <ScanStoppedNotice variant="empty" />}
+            {view.body === 'progress' && (
               <ScanUnfinishedNotice
                 scan={scan}
                 onCheck={() => {
@@ -145,33 +127,33 @@ function ScanDetail() {
                 }}
                 isChecking={query.isFetching}
               />
-            ) : scan.status !== 'failed' || hasRecordedEvidence ? (
+            )}
+            {view.body === 'evidence' && (
               <div
-                data-testid={
-                  scan.status === 'failed' ? 'scan-failed-evidence' : undefined
-                }
+                data-testid={view.failed ? 'scan-failed-evidence' : undefined}
                 className="flex flex-col gap-8"
               >
-                {stoppedEarly && <ScanStoppedNotice variant="partial" />}
-                {scan.status === 'failed' && (
+                {view.stoppedEarly && <ScanStoppedNotice variant="partial" />}
+                {view.failed && (
                   <p className="text-body-md text-muted-foreground">
                     {t('scans.failedEvidence')}
                   </p>
                 )}
-                {scan.status !== 'failed' && (
+                {view.sections.aiAnalysis && (
                   <ScanAIAnalysis
                     scanId={scan.scan_id}
                     findings={scan.findings}
-                    partial={partial}
+                    partial={view.partial}
                   />
                 )}
-                {groups.length === 0 && scan.status !== 'failed' ? (
+                {view.sections.noFindings && (
                   <p data-testid="scan-no-findings" className="text-body-md">
-                    {partial
+                    {view.partial
                       ? t('common.noVulnerabilitiesAcceptedEvidence')
                       : t('common.noVulnerabilitiesInScan')}
                   </p>
-                ) : groups.length > 0 ? (
+                )}
+                {groups.length > 0 && (
                   <div className="flex flex-col gap-8">
                     {groups.map((group) => {
                       const opensForDeepLink = group.findings.some(
@@ -207,8 +189,8 @@ function ScanDetail() {
                       )
                     })}
                   </div>
-                ) : null}
-                {(scan.status !== 'failed' || scan.exposures.length > 0) && (
+                )}
+                {view.sections.attackSurface && (
                   <ScanDetailSection title={t('common.attackSurface')}>
                     {scan.assessment_status === 'unavailable' ? (
                       <div
@@ -255,7 +237,7 @@ function ScanDetail() {
                     )}
                   </ScanDetailSection>
                 )}
-                {hasTargetedSection && (
+                {view.sections.targeted && (
                   <ScanDetailSection
                     key="targeted"
                     title="Service Targeted Tools"
@@ -273,22 +255,20 @@ function ScanDetail() {
                     />
                   </ScanDetailSection>
                 )}
-                {(scan.status !== 'failed' || coverage.length > 0) && (
+                {view.sections.coverage && (
                   <ScanDetailSection title={t('scans.checkCoverage')}>
                     <ScanCoverage
-                      coverage={coverage}
+                      coverage={scan.coverage ?? []}
                       omittedUnlisted={omittedUnlisted}
                     />
                   </ScanDetailSection>
                 )}
-                {scan.hosts.some(
-                  (host) => host.industrial_services.length > 0,
-                ) && (
+                {view.sections.industrial && (
                   <ScanDetailSection title={t('common.industrialServices')}>
                     <ScanIndustrialServices hosts={scan.hosts} />
                   </ScanDetailSection>
                 )}
-                {(scan.status !== 'failed' || scan.hosts.length > 0) && (
+                {view.sections.machines && (
                   <ScanDetailSection title={t('common.machinesSeen')}>
                     {scan.hosts.length === 0 ? (
                       <p className="text-body-md">
@@ -300,7 +280,7 @@ function ScanDetail() {
                   </ScanDetailSection>
                 )}
               </div>
-            ) : null}
+            )}
           </>
         )
       }}

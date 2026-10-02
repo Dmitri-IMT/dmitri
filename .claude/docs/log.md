@@ -3,6 +3,13 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-02
+
+* **Update**: PR #159 Cursor review, point 4. Scan Detail status logic moved into the pure view
+  model `scanDetailView(scan)` (`body`, `failed`, `partial`, `stoppedEarly`, `sections`); the page
+  only renders it and the per-section `status !== 'failed'` gates are gone. Behavior unchanged.
+  Touched: `frontend/screens.md`.
+
 ## 2026-10-01
 
 * **Update**: PR #159 Cursor review, items 2–3. New `api/services/scan_evidence.py` owns both
