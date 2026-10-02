@@ -5,6 +5,16 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: PR #161 Cursor review. Ingest host identity is now a key rule
+  (`scan_identity_key`, `_split_macs`, `retarget_split_mac_hosts`) with one upsert loop and no
+  history rewrite; the repair walk moved to `api/services/host_repair.py` and finds collisions with
+  one SQL `GROUP BY`. `ScanDetailResponse.targeted_coverage` carries typed per-tool coverage decoded
+  by `parse_targeted_coverage`; `ScanPartialWarning` no longer parses the agent string.
+  `HostProfile` renders the OS block once. The agent drops one-word version products when it
+  collects product-family facts; agent version 1.0.4. Touched: `backend/services.md`,
+  `contracts.md`, `frontend/scan-partial-warning.md`, `frontend/host-detail.md`,
+  `hardware-agent/assessment.md`.
+
 * **Update**: Merged main (PRs #159, #160) into `fix/scan-host-identity-and-profile`. The Scan Detail
   row keeps main's `scanDetailView` description and adds `ScanPartialWarning` in the summary strip;
   host-identity service rows sit beside main's completeness-gated reconcile row, with refreshed

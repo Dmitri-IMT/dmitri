@@ -25,7 +25,7 @@ reclassified.
 | `ExposureRole` / `ExposureAttention` | Closed role and operator-attention vocabularies; attention is not vulnerability severity. | `hardware-agent/src/agent/assessment/policy.py:20` |
 | `AssessmentResult` | Immutable result containing host profiles and endpoint exposures. | `hardware-agent/src/agent/assessment/analyzer.py:63` |
 | `assess_hosts()` | Deduplicates open endpoints deterministically, profiles every host, and emits one exposure per accepted open endpoint. | `hardware-agent/src/agent/assessment/analyzer.py:937` |
-| `_profile_host()` | Combines bounded manufacturer, hostname, OS, service, product, CPE, certificate, and industrial signals; records conflicts and limitations instead of inventing identity. Generic one-word service-version labels such as `VNC` do not qualify by themselves as a product family. | `hardware-agent/src/agent/assessment/profile.py:481` |
+| `_profile_host()` | Combines bounded manufacturer, hostname, OS, service, product, CPE, certificate, and industrial signals; records conflicts and limitations instead of inventing identity. One-word service-version labels such as `VNC` are not collected as product-family candidates. | `hardware-agent/src/agent/assessment/profile.py:258` |
 | `_exposure_for()` | Assigns endpoint role, confidence, reason, evidence, and informational/review/priority attention. | `hardware-agent/src/agent/assessment/analyzer.py:812` |
 
 ## How it connects
