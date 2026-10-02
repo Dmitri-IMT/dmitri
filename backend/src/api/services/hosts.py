@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func
@@ -88,21 +89,27 @@ def upsert_hosts_for_scan(
                     ),
                 )
         else:
-            host.first_seen_at = min(host.first_seen_at, scan_record.timestamp)
-            if scan_record.timestamp >= host.last_seen_at:
-                host.last_seen_at = scan_record.timestamp
-                host.ip = sh.ip
-                if sh.mac is not None:
-                    host.mac = sh.mac
-                host.hostname = sh.hostname
-                if sh.vendor.strip().casefold() != "unknown":
-                    host.vendor = sh.vendor
-                if sh.operating_system_json is not None:
-                    host.operating_system_json = sh.operating_system_json
-                host.open_ports_count = open_ports_count(session, sh.id)
-                host.highest_severity = highest_severity(session, sh.id)
+            apply_observation(session, host, sh, scan_record.timestamp)
 
         sh.host_id = host.id
+
+
+def apply_observation(
+    session: Session, host: HostRecord, sh: ScanHostRecord, observed_at: datetime
+) -> None:
+    host.first_seen_at = min(host.first_seen_at, observed_at)
+    if observed_at >= host.last_seen_at:
+        host.last_seen_at = observed_at
+        host.ip = sh.ip
+        if sh.mac is not None:
+            host.mac = sh.mac
+        host.hostname = sh.hostname
+        if sh.vendor.strip().casefold() != "unknown":
+            host.vendor = sh.vendor
+        if sh.operating_system_json is not None:
+            host.operating_system_json = sh.operating_system_json
+        host.open_ports_count = open_ports_count(session, sh.id)
+        host.highest_severity = highest_severity(session, sh.id)
 
 
 def scan_identity_key(mac: str | None, ip: str, split_macs: set[str]) -> str:

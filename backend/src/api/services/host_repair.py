@@ -6,7 +6,11 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from api.models.persistence import HostRecord, ScanHostRecord, ScanRecord
-from api.services.hosts import identity_key, retarget_split_mac_hosts
+from api.services.hosts import (
+    apply_observation,
+    identity_key,
+    retarget_split_mac_hosts,
+)
 from api.services.inventory import rebuild_host_inventory
 
 
@@ -65,21 +69,19 @@ def _split_mac_history(
                 org_id=org_id,
                 identity_key=identity_key(None, scan_host.ip),
                 ip=scan_host.ip,
+                mac=scan_host.mac,
                 hostname=scan_host.hostname,
                 vendor=scan_host.vendor,
+                operating_system_json=scan_host.operating_system_json,
                 open_ports_count=0,
                 first_seen_at=scan.timestamp,
                 last_seen_at=scan.timestamp,
             )
+            session.add(host)
+            session.flush()
+        else:
+            apply_observation(session, host, scan_host, scan.timestamp)
         hosts[scan_host.ip] = host
-        host.mac = scan_host.mac
-        host.hostname = scan_host.hostname
-        host.vendor = scan_host.vendor
-        host.operating_system_json = scan_host.operating_system_json
-        host.first_seen_at = min(host.first_seen_at, scan.timestamp)
-        host.last_seen_at = scan.timestamp
-        session.add(host)
-        session.flush()
         scan_host.host_id = host.id
         session.add(scan_host)
     return {host.id for host in hosts.values()}
