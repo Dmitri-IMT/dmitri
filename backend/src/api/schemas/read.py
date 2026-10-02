@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, constr
 from api.core.error_codes import ScanErrorCode
 from api.core.machine_type import MachineType
 from api.core.scan_mode import ScanMode
+from api.core.scan_read import TerminatedBy
 from api.core.severity import Severity
 
 from .industrial import (
@@ -19,13 +20,17 @@ from .industrial import (
 from .operating_system import OperatingSystemDetection
 from .scan import (
     AssessmentEvidencePayload,
+    CoverageUnitPayload,
     DeviceProfilePayload,
+    EvidenceCompleteness,
     ExposureAttention,
     ExposureConfidence,
     ExposureRole,
 )
 
-ScanStatus = Literal["pending", "accepted", "processing", "completed", "failed"]
+ScanStatus = Literal[
+    "pending", "accepted", "processing", "completed", "failed", "cancelled"
+]
 AssessmentStatus = Literal["available", "unavailable"]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[
@@ -54,6 +59,7 @@ class HostPort(BaseModel):
     version: str | None = None
     first_seen_at: datetime
     last_seen_at: datetime
+    observed_in_latest_scan: bool | None = None
 
 
 class ModbusDeviceIdentificationView(ModbusDeviceIdentificationPayload):
@@ -235,7 +241,9 @@ class ScanDetailResponse(BaseModel):
     assessment_policy_version: constr(min_length=1) | None
     exposures: list[ExposureRead]
     metadata: dict[str, str | int | float | bool] | None = None
+    coverage: list[CoverageUnitPayload] = Field(default_factory=list)
     status: ScanStatus
+    evidence_completeness: EvidenceCompleteness
     command_id: UUID | None = None
     error_code: ScanErrorCode | None = None
     host_count: Annotated[int, Field(ge=0)]
@@ -243,6 +251,7 @@ class ScanDetailResponse(BaseModel):
     agent_id: UUID | None = None
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
+    terminated_by: TerminatedBy | None = None
 
 
 class ScanSummary(BaseModel):
@@ -253,12 +262,14 @@ class ScanSummary(BaseModel):
     subnet: str
     scan_mode: ScanMode
     status: ScanStatus
+    evidence_completeness: EvidenceCompleteness
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None
     agent_id: UUID | None = None
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
+    terminated_by: TerminatedBy | None = None
 
 
 class ScanListResponse(BaseModel):

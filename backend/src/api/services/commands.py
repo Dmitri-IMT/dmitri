@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, update
+from sqlalchemy import ColumnElement, case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
@@ -13,14 +13,16 @@ from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
-from api.schemas.agent_frames import AgentCommandFrame
+from api.schemas.agent_frames import AgentCancelFrame, AgentCommandFrame
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
 from api.services.activity import append_scan_activity
 from api.services.command_lifecycle import (
+    CANCELLABLE,
     NON_TERMINAL,
     PI_OWNED,
     RANK,
+    UNFINISHED_SCAN,
     is_terminal,
     scan_status_for,
     status_rank,
@@ -42,6 +44,10 @@ class AgentNotFoundError(Exception):
 
 
 class SubnetNotReportedError(Exception):
+    pass
+
+
+class CommandNotCancellableError(Exception):
     pass
 
 
@@ -79,11 +85,52 @@ def enqueue(
 def get_command_detail(
     session: Session, command_id: UUID, *, org_id: UUID
 ) -> CommandDetail | None:
-    command = session.exec(
-        select(Command).where(Command.id == command_id, Command.org_id == org_id)
+    return _load_command_detail(session, command_id=command_id, org_id=org_id)
+
+
+def pending_operator_cancels(
+    session: Session, *, agent_id: UUID, now: datetime
+) -> list[UUID]:
+    """Commands cancelled while the Pi was offline that it may still be running.
+
+    Cancel intent is not stored: a `cancelled` command whose scan got no results
+    and is still inside its mode's time limit is one the Pi has not heard about.
+    """
+    return list(
+        session.exec(
+            select(Command.id)
+            .join(ScanRecord, ScanRecord.scan_id == Command.scan_id)
+            .where(
+                Command.agent_id == agent_id,
+                Command.status == "cancelled",
+                ScanRecord.status == "cancelled",
+                func.coalesce(Command.delivered_at, Command.created_at)
+                >= _mode_deadline(now),
+            )
+        ).all()
+    )
+
+
+def _mode_deadline(now: datetime) -> ColumnElement[datetime]:
+    """The start time before which a command of its scan mode has run too long."""
+    deadline_by_mode = {
+        mode: now - timedelta(seconds=seconds)
+        for mode, seconds in get_settings().command_max_duration_by_mode().items()
+    }
+    return case(deadline_by_mode, value=Command.scan_mode)
+
+
+def _load_command_detail(
+    session: Session, *, command_id: UUID, org_id: UUID
+) -> CommandDetail | None:
+    row = session.exec(
+        select(Command, ScanRecord.status)
+        .outerjoin(ScanRecord, ScanRecord.scan_id == Command.scan_id)
+        .where(Command.id == command_id, Command.org_id == org_id)
     ).first()
-    if command is None:
+    if row is None:
         return None
+    command, scan_status = row
     return CommandDetail(
         command_id=command.id,
         scan_id=command.scan_id,
@@ -97,6 +144,84 @@ def get_command_detail(
         delivered_at=command.delivered_at,
         started_at=command.started_at,
         completed_at=command.completed_at,
+        has_results=scan_status == "completed",
+    )
+
+
+def _inspect_command_for_cancel(
+    session: Session, *, command_id: UUID, org_id: UUID
+) -> CommandDetail | None:
+    detail = _load_command_detail(session, command_id=command_id, org_id=org_id)
+    session.rollback()
+    return detail
+
+
+def _retire_offline_command(
+    session: Session,
+    *,
+    command_id: UUID,
+    org_id: UUID,
+    now: datetime,
+) -> tuple[CommandDetail, int] | None:
+    rows = _retire_commands(
+        session,
+        [
+            Command.id == command_id,
+            Command.org_id == org_id,
+            Command.status.in_(CANCELLABLE),
+        ],
+        values={"status": "cancelled", "completed_at": now, "error_code": None},
+    )
+    if rows:
+        _mirror_retired_commands(session, rows, now=now)
+        session.commit()
+    else:
+        session.rollback()
+
+    detail = get_command_detail(session, command_id, org_id=org_id)
+    if detail is None:
+        return None
+    if not is_terminal(detail.status):
+        raise CommandNotCancellableError
+    return detail, 200
+
+
+async def cancel_command(
+    session: Session,
+    *,
+    org_id: UUID,
+    command_id: UUID,
+    now: datetime,
+) -> tuple[CommandDetail, int] | None:
+    detail = await run_in_threadpool(
+        _inspect_command_for_cancel,
+        session,
+        command_id=command_id,
+        org_id=org_id,
+    )
+    if detail is None:
+        return None
+    if is_terminal(detail.status):
+        return detail, 200
+    if detail.status not in CANCELLABLE:
+        raise CommandNotCancellableError
+
+    socket = agent_connections.get_socket(detail.agent_id)
+    if socket is not None:
+        frame = AgentCancelFrame(type="cancel", command_id=command_id)
+        try:
+            await socket.send_text(frame.model_dump_json())
+        except Exception:
+            logger.exception("Failed to send cancel for command %s", command_id)
+        else:
+            return detail, 202
+
+    return await run_in_threadpool(
+        _retire_offline_command,
+        session,
+        command_id=command_id,
+        org_id=org_id,
+        now=now,
     )
 
 
@@ -113,6 +238,30 @@ def command_for_scan(session: Session, scan_id: UUID) -> Command | None:
 
 
 def apply_status(
+    session: Session,
+    *,
+    agent_id: UUID,
+    command_id: UUID,
+    status: str,
+    now: datetime,
+    error_code: str | None = None,
+) -> bool:
+    applied = transition_command(
+        session,
+        agent_id=agent_id,
+        command_id=command_id,
+        status=status,
+        now=now,
+        error_code=error_code,
+    )
+    if applied:
+        session.commit()
+    else:
+        session.rollback()
+    return applied
+
+
+def transition_command(
     session: Session,
     *,
     agent_id: UUID,
@@ -151,26 +300,16 @@ def apply_status(
     )
     row = result.first()
     if row is None:
-        session.rollback()
         return False
 
-    scan_id, org_id, scan_mode = row[0], row[1], row[2]
-    if scan_id is not None:
-        session.execute(
-            update(ScanRecord)
-            .where(ScanRecord.scan_id == scan_id)
-            .values(status=scan_status_for(status))
-        )
-        if status == "failed":
-            append_scan_activity(
-                session,
-                org_id=org_id,
-                scan_id=scan_id,
-                kind="scan_failed",
-                scan_mode=scan_mode,
-                occurred_at=now,
-            )
-    session.commit()
+    _mirror_command_on_scan(
+        session,
+        scan_id=row[0],
+        org_id=row[1],
+        scan_mode=row[2],
+        command_status=status,
+        now=now,
+    )
     return True
 
 
@@ -217,17 +356,13 @@ def sweep_stale_commands(
 
     # Runs after the disconnect pass, so a dead agent keeps its more specific
     # reason. Only delivered commands are timed: queue wait is not scan time.
-    deadline_by_mode = {
-        mode: now - timedelta(seconds=seconds)
-        for mode, seconds in settings.command_max_duration_by_mode().items()
-    }
     rows += _retire_commands(
         session,
         [
             *non_terminal,
             Command.scan_id.is_not(None),
             func.coalesce(Command.delivered_at, Command.created_at)
-            < case(deadline_by_mode, value=Command.scan_mode),
+            < _mode_deadline(now),
         ],
         values={"status": "failed", "completed_at": now, "error_code": "scan_timeout"},
     )
@@ -239,21 +374,49 @@ def sweep_stale_commands(
 
 def _mirror_retired_commands(session: Session, rows: list, *, now: datetime) -> None:
     for scan_id, command_status, command_org_id, command_scan_mode in rows:
-        if scan_id is not None:
-            session.execute(
-                update(ScanRecord)
-                .where(ScanRecord.scan_id == scan_id)
-                .values(status=scan_status_for(command_status))
-            )
-            if command_status == "failed":
-                append_scan_activity(
-                    session,
-                    org_id=command_org_id,
-                    scan_id=scan_id,
-                    kind="scan_failed",
-                    scan_mode=command_scan_mode,
-                    occurred_at=now,
-                )
+        _mirror_command_on_scan(
+            session,
+            scan_id=scan_id,
+            org_id=command_org_id,
+            scan_mode=command_scan_mode,
+            command_status=command_status,
+            now=now,
+        )
+
+
+def _mirror_command_on_scan(
+    session: Session,
+    *,
+    scan_id: UUID | None,
+    org_id: UUID,
+    scan_mode: str,
+    command_status: str,
+    now: datetime,
+) -> None:
+    """Copy a command transition onto its scan while the scan is unfinished.
+
+    A scan ingest already completed keeps its status, so a late `failed` or
+    `cancelled` never hides results.
+    """
+    if scan_id is None:
+        return
+    mirrored = session.execute(
+        update(ScanRecord)
+        .where(
+            ScanRecord.scan_id == scan_id,
+            ScanRecord.status.in_(UNFINISHED_SCAN),
+        )
+        .values(status=scan_status_for(command_status))
+    ).rowcount
+    if mirrored and command_status in {"failed", "cancelled"}:
+        append_scan_activity(
+            session,
+            org_id=org_id,
+            scan_id=scan_id,
+            kind=f"scan_{command_status}",
+            scan_mode=scan_mode,
+            occurred_at=now,
+        )
 
 
 def _retire_commands(session: Session, where: list, *, values: dict) -> list:

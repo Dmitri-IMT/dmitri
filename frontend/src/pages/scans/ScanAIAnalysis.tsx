@@ -12,8 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import type { components } from '@/types/openapi'
 import useI18n from '@/i18n/useI18n'
+import { evidenceLimitKey } from '@/lib/evidenceCompleteness'
 
 type FindingRecord = components['schemas']['FindingRecord']
+type EvidenceCompleteness = components['schemas']['EvidenceCompleteness']
 
 const ANALYSIS_POLL_INTERVAL_MS = 3_000
 const ANALYSIS_POLL_MAX_MS = 5 * 60 * 1_000
@@ -25,11 +27,14 @@ function waitingForAnalysis(status: ScanAIAnalysisResponse['status']): boolean {
 function ScanAIAnalysis({
   scanId,
   findings,
+  completeness,
 }: {
   scanId: string
   findings: FindingRecord[]
+  completeness: EvidenceCompleteness
 }) {
   const { language, t } = useI18n()
+  const limitKey = evidenceLimitKey(completeness)
   const queryClient = useQueryClient()
   const pollingStartedAtRef = useRef<number | null>(null)
   const [isRequesting, setIsRequesting] = useState(false)
@@ -193,6 +198,13 @@ function ScanAIAnalysis({
             </p>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
+            <p
+              data-testid="scan-ai-evidence-limit"
+              className="text-body-sm text-muted-foreground"
+            >
+              {t('ai.evidenceLimit')}
+              {limitKey != null && ` ${t(limitKey)}`}
+            </p>
             <Disclosure
               label={t('ai.showOverview')}
               testId="scan-ai-overview-toggle"

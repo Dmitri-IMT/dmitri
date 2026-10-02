@@ -152,6 +152,7 @@ async def drive(
     client: CommandChannelClient,
     on_connected: Any = None,
     on_parked: Any = None,
+    on_cancel: Any = None,
 ) -> list[AgentCommand]:
     commands: list[AgentCommand] = []
 
@@ -159,7 +160,7 @@ async def drive(
         commands.append(command)
 
     with contextlib.suppress(Halt):
-        await client.run(record, on_connected, on_parked)
+        await client.run(record, on_connected, on_parked, on_cancel=on_cancel)
     return commands
 
 
@@ -266,6 +267,7 @@ class TestInboundValidation:
             "{not json",
             json.dumps({"type": "error", "error_code": "boom"}),
             command_frame(type="status"),
+            json.dumps({"type": "cancel", "command_id": "not-a-uuid"}),
             command_frame(priority="high"),
             command_frame(command_id="not-a-uuid"),
             command_frame(scan_mode="turbo"),
@@ -304,6 +306,19 @@ class TestInboundValidation:
         assert commands[0].nspi_options.submode == "read_only_mapping"
 
     @pytest.mark.asyncio
+    async def test_cancel_frame_is_dispatched_to_callback(self) -> None:
+        dialer = Dialer([json.dumps({"type": "cancel", "command_id": str(COMMAND_ID)})])
+        client = build_client(dialer)
+        cancelled: list[UUID] = []
+
+        async def record_cancel(command_id: UUID) -> None:
+            cancelled.append(command_id)
+
+        await drive(client, on_cancel=record_cancel)
+
+        assert cancelled == [COMMAND_ID]
+
+    @pytest.mark.asyncio
     async def test_nspi_options_on_general_mode_is_rejected(self) -> None:
         dialer = Dialer(
             [
@@ -322,6 +337,25 @@ class TestInboundValidation:
 
 
 class TestSending:
+    @pytest.mark.asyncio
+    async def test_cancelled_status_is_serialized(self) -> None:
+        dialer = Dialer([])
+        client = build_client(dialer)
+
+        async def on_connected() -> None:
+            assert await client.send_status(
+                AgentStatus(command_id=COMMAND_ID, status="cancelled")
+            )
+
+        await drive(client, on_connected)
+
+        assert json.loads(dialer.sockets[0].sent[1]) == {
+            "type": "status",
+            "command_id": str(COMMAND_ID),
+            "status": "cancelled",
+            "error_code": None,
+        }
+
     @pytest.mark.asyncio
     async def test_concurrent_sends_are_serialized(self) -> None:
         dialer = Dialer([])

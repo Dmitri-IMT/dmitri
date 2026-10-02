@@ -754,6 +754,8 @@ def test_target_models_have_stable_values_and_serialization() -> None:
         "spawn_error",
         "execution_error",
         "unit_timeout",
+        "scan_cancelled",
+        "scan_timeout",
     ]
     assert "tunnel" not in {field.name for field in fields(ScriptResult)}
 

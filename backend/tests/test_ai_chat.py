@@ -58,6 +58,7 @@ def _scan_detail(findings: list[FindingRead], host_count: int) -> ScanDetailResp
         assessment_policy_version=None,
         exposures=[],
         status="completed",
+        evidence_completeness="complete",
         host_count=host_count,
         finding_count=len(findings),
     )

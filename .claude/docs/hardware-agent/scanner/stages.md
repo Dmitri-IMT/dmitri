@@ -4,7 +4,7 @@ title: scanner/stages — port, deep, and OT inspection stages
 description: Threaded Nmap stages, serial bounded OT inspection, retry/circuit-breaker policy, and HostInfo-to-HostPayload normalization.
 resource: hardware-agent/src/agent/scanner/stages.py
 tags: [hardware-agent, scanner, pipeline, threading, contingency]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # scanner/stages — port, deep & OT-inspection stages
@@ -20,15 +20,16 @@ when too large a fraction of units fail — the mechanical half of the ADR-010 c
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, merges the result's `identity` into the host with `MacIdentity.merged_with`, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. | `stages.py:125` |
-| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. A successful result's `identity` is merged in with `MacIdentity.merged_with`. | `stages.py:234` |
+| `run_port_stage()` | Batches hosts, runs port-only discovery, attaches ports + OS evidence, merges the result's `identity` into the host with `MacIdentity.merged_with`, reports per-host skips, and returns their count. The breaker uses skipped hosts / total hosts. Appends one `ports` `StageCoverage` per host as its batch result lands. | `stages.py:126` |
+| `run_deep_inspection_stage()` | Runs the primary `-sV` + NSE pass per eligible host. On a failed or empty result, a bounded service-only recovery probe may retain evidence; a failed recovery counts as an incomplete host. A successful result's `identity` is merged in with `MacIdentity.merged_with`, and the host gets a `completed`/`nmap_nse` `StageCoverage`. | `stages.py:286` |
 | `_recover_deep_stage_services()` | Reuses `detect_services` for recovery; treats a host-level Nmap error or timeout as unsuccessful recovery without stopping the scan. | `stages.py:99` |
 | `_stage_deadline_hit()` | Returns elapsed stage seconds when the stage clock is past, else `None`. | `stages.py:409` |
-| `run_ot_inspection_stage()` | Serial Modbus inventory or read-only mapping. Checks cancel and the stage ceiling at the start of each host; after the loop, if the run was not cancelled, emits `ot_stage_deadline` once. Each started host gets `host_deadline` (stage cap plus `MAX_OT_HOST_SECONDS`) for inventory and mapping. | `stages.py:418` |
+| `run_ot_inspection_stage()` | Serial Modbus inventory or read-only mapping. Checks cancel and the stage ceiling at the start of each host; after the loop, if the run was not cancelled, emits `ot_stage_deadline` once. Each started host gets `host_deadline` (stage cap plus `MAX_OT_HOST_SECONDS`) for inventory and mapping. Appends one `ot_inspection` `StageCoverage` per Modbus host: `completed`/`modbus_inspection`, or `partial` (`_ot_host_coverage`: `scan_cancelled` or `ot_host_deadline`) when the host was cut short; hosts the loop never reached get `skipped`/`not_run` with `scan_cancelled` or `stage_budget`. | `stages.py:418` |
 | `_run_unit_with_retry()` | Retries a unit of work on `TransientScanError` up to `retries + 1` times, then raises `UnitScanError`. | `stages.py:70` |
 | `build_host_payload()` | Maps original host, OS, port, and industrial observations into `HostPayload`; optional assessment fields are attached later by the runner. | `stages.py:538` |
 | `nmap_arguments_summary()` | Describes port-only enumeration, the primary deep `-sV`/NSE command, and selected OT submode. | `stages.py:628` |
-| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters and the stage-deadline signal. | `stages.py:659` |
+| `_record_deep_gap()` | One path for the three deep-inspection gaps (timeout, `UnitScanError`, empty result): runs service recovery, appends one `deep_inspection` `StageCoverage` (`partial`/`service_recovery` when recovered, else the gap outcome/`port_discovery`), and emits `unit_timed_out` or `unit_failed` when nothing was recovered. | `stages.py:258` |
+| `build_metadata()` | Assembles general scan metadata plus NSPi/Modbus counters, the stage-deadline signal, and `targeted_units_omitted_unlisted` (plan-limit omissions not listed in coverage). `ports_open` counts open ports only. | `stages.py:703` |
 | `set_runner_stage()` | Tags a `LoggedNmapRunner` with the current stage name; no-op for a plain runner. | `stages.py:83` |
 
 ## How it connects

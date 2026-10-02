@@ -46,6 +46,9 @@ class ScanRecord(SQLModel, table=True):
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    coverage_json: list[dict[str, Any]] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
     assessment_policy_version: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
 

@@ -370,6 +370,7 @@ Other scripts:
 | `npm run dev` | Vite dev server with HMR on `:5173` |
 | `npm test` | Vitest suite (MSW-mocked; **no** backend needed) |
 | `npm run lint` | ESLint |
+| `npm run format:check` | Prettier check (CI gate) |
 | `npm run typecheck` | `tsc -b --noEmit` |
 | `npm run build` | Type-check then production build |
 | `npm run gen:types` | Regenerate `src/types/openapi.d.ts` from `contracts/openapi/openapi.yaml` |

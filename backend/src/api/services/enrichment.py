@@ -23,6 +23,7 @@ from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
 from api.services.risk import refresh_risk_snapshot
+from api.services.scan_evidence import is_cve_correlation
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,8 @@ def _process_cve_job(
     if not matches:
         return
     match = matches[0]
-    finding_record.confidence = "confirmed"
+    if is_cve_correlation(finding_record.cve_id, finding_record.source):
+        finding_record.confidence = "probable"
     finding_record.cvss_score = match["cvss_score"] or finding_record.cvss_score
     finding_record.severity = match["severity"]
     finding_record.references_json = sorted(
@@ -222,8 +224,9 @@ def _process_cve_job(
     finding_record.source_labels_json = sorted(
         set(finding_record.source_labels_json).union({"nvd"})
     )
-    if "NVD validated this CVE." not in finding_record.evidence:
-        finding_record.evidence = f"{finding_record.evidence} | NVD validated this CVE."
+    nvd_note = "NVD lists this CVE; target applicability is unverified."
+    if nvd_note not in finding_record.evidence:
+        finding_record.evidence = f"{finding_record.evidence} | {nvd_note}"
     finding_record.updated_at = datetime.now(timezone.utc)
     session.add(finding_record)
     refresh_risk_snapshot(session, finding_record)

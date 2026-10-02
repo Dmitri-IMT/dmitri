@@ -14,7 +14,16 @@ function ScanUnfinishedNotice({
   scan: ScanDetailResponse
 }) {
   const { t } = useI18n()
-  const ports = scan.hosts.reduce((total, host) => total + host.ports.length, 0)
+  const openPorts = scan.hosts.reduce(
+    (total, host) =>
+      total + host.ports.filter((port) => port.state === 'open').length,
+    0,
+  )
+  const filteredPorts = scan.hosts.reduce(
+    (total, host) =>
+      total + host.ports.filter((port) => port.state === 'filtered').length,
+    0,
+  )
   const industrial = scan.hosts.reduce(
     (total, host) => total + host.industrial_services.length,
     0,
@@ -36,7 +45,11 @@ function ScanUnfinishedNotice({
         aria-live="polite"
       >
         <ProgressMetric label={t('common.machines')} value={scan.host_count} />
-        <ProgressMetric label={t('common.services')} value={ports} />
+        <ProgressMetric label={t('scans.openPorts')} value={openPorts} />
+        <ProgressMetric
+          label={t('scans.filteredPorts')}
+          value={filteredPorts}
+        />
         <ProgressMetric
           label={t('common.industrialServices')}
           value={industrial}

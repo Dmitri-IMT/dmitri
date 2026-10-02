@@ -85,6 +85,7 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/agents/{agent_id}/commands", "OPTIONS"),
     ("/api/v1/commands/{command_id}", "GET"),
     ("/api/v1/commands/{command_id}", "OPTIONS"),
+    ("/api/v1/commands/{command_id}/cancel", "POST"),
 }
 
 

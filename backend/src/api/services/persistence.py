@@ -19,6 +19,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import (
+    TERMINATED_BY_USER_CANCEL,
     ExposurePayload,
     FindingPayload,
     HostPayload,
@@ -27,8 +28,8 @@ from api.schemas.scan import (
 )
 from api.services.activity import append_scan_activity
 from api.services.ai.jobs import enqueue_auto_scan_analysis
-from api.services.command_lifecycle import is_terminal
-from api.services.commands import apply_status, command_for_scan
+from api.services.command_lifecycle import accepts_late_ingest, is_terminal
+from api.services.commands import command_for_scan, transition_command
 from api.services.hosts import upsert_hosts_for_scan
 from api.services.industrial import persist_industrial_services
 from api.services.inventory import reconcile_scan_inventory
@@ -75,8 +76,6 @@ def ingest_scan(
         or command.org_id != identity.org_id
     ):
         raise ScanOwnershipError
-    if is_terminal(command.status):
-        raise ScanClosedError
     return persist_scan(
         session,
         scan,
@@ -98,6 +97,19 @@ def persist_scan(
     now: datetime,
     existing: ScanRecord | None,
 ) -> ScanRecord:
+    command_status = (
+        None
+        if command is None
+        else session.exec(
+            select(Command.status).where(Command.id == command.id).with_for_update()
+        ).one()
+    )
+    if (
+        command_status is not None
+        and is_terminal(command_status)
+        and not accepts_late_ingest(command_status)
+    ):
+        raise ScanClosedError
     if existing is None:
         scan_record = ScanRecord(
             scan_id=scan.scan_id,
@@ -107,6 +119,7 @@ def persist_scan(
             subnet=scan.subnet,
             scan_mode=scan.scan_mode,
             metadata_json=scan.metadata,
+            coverage_json=[unit.model_dump(mode="json") for unit in scan.coverage],
             assessment_policy_version=scan.assessment_policy_version,
             status="completed",
         )
@@ -122,6 +135,10 @@ def persist_scan(
         scan_record.subnet = scan.subnet
         scan_record.scan_mode = scan.scan_mode
         scan_record.metadata_json = scan.metadata
+        scan_record.coverage_json = [
+            unit.model_dump(mode="json") for unit in scan.coverage
+        ]
+        scan_record.status = "completed"
         scan_record.assessment_policy_version = scan.assessment_policy_version
         scan_record.agent_id = agent_id
         session.add(scan_record)
@@ -200,35 +217,66 @@ def persist_scan(
 
     reconcile_scan_inventory(session, scan_record)
 
-    append_scan_activity(
-        session,
-        org_id=org_id,
-        scan_id=scan.scan_id,
-        kind="scan_finished",
-        scan_mode=scan_record.scan_mode,
-        occurred_at=now,
-    )
-
     _enqueue_enrichment_jobs(session, scan.scan_id, port_index.values())
     # Enrichment workers call this again when their jobs finish. Calling it
     # here also covers scans that produce no enrichment jobs at all.
     enqueue_auto_scan_analysis(session, scan.scan_id, commit=False)
 
-    if command is None:
-        session.commit()
-    else:
-        applied = apply_status(
+    _close_scan(
+        session,
+        scan,
+        scan_record,
+        command,
+        command_status,
+        agent_id=agent_id,
+        now=now,
+    )
+    return scan_record
+
+
+def _close_scan(
+    session: Session,
+    scan: ScanIngestRequest,
+    scan_record: ScanRecord,
+    command: Command | None,
+    command_status: str | None,
+    *,
+    agent_id: UUID,
+    now: datetime,
+) -> None:
+    """Record the scan's end and settle its command in one transaction.
+
+    The scan is `completed` because its data arrived; the command follows the
+    operator (spec 049, decision 3). The command row stays locked until the
+    commit, so an operator cancel cannot land between the read and the write.
+    """
+    # The Pi's own account of the stop names the activity: a Pi cancelled while
+    # offline may still finish normally before it hears the cancel.
+    stopped_by_operator = (
+        scan.metadata is not None
+        and scan.metadata.get("terminated_by") == TERMINATED_BY_USER_CANCEL
+    )
+    append_scan_activity(
+        session,
+        org_id=scan_record.org_id,
+        scan_id=scan.scan_id,
+        kind="scan_cancelled" if stopped_by_operator else "scan_finished",
+        scan_mode=scan_record.scan_mode,
+        occurred_at=now,
+    )
+    if (
+        command is not None
+        and command_status is not None
+        and not accepts_late_ingest(command_status)
+    ):
+        transition_command(
             session,
             agent_id=agent_id,
             command_id=command.id,
-            status="done",
+            status="cancelled" if stopped_by_operator else "done",
             now=now,
         )
-        if not applied:
-            raise RuntimeError(
-                "command moved past 'done' between the terminal check and commit"
-            )
-    return scan_record
+    session.commit()
 
 
 def upsert_finding(

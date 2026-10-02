@@ -3,11 +3,90 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-02
+
+* **Update**: Merged main (PRs #159, #160) into `fix/scan-host-identity-and-profile`. The Scan Detail
+  row keeps main's `scanDetailView` description and adds `ScanPartialWarning` in the summary strip;
+  host-identity service rows sit beside main's completeness-gated reconcile row, with refreshed
+  `hosts.py` / `inventory.py` line refs. Touched: `backend/services.md`, `frontend/screens.md`,
+  `frontend/index.md`.
+
+* **Update**: PR #159 Cursor review, OT coverage and selection. The OT stage records an
+  `ot_inspection` coverage unit per Modbus host (`modbus_inspection` evidence source, new in the
+  contract, backend schema, OpenAPI, and the SPA stage label); the runner adds an OT `not_run` row
+  only when the OT stage had not started. Targeted plan and omitted sample share `_keep_best`.
+  Touched: `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/models.md`, `backend/schemas.md`.
+
+* **Update**: PR #159 Cursor review. `ScanAIContext.partial_result` removed: AI context version
+  `"4"` carries only `evidence_completeness`; `split_context` and the synthesis aggregate no longer
+  copy the boolean; chat reads `ScanDetailResponse.evidence_completeness`. ADR-020 amended.
+  Touched: `backend/ai.md`, `docs/adr/ADR-020-ai-scan-analysis.md`.
+
+* **Update**: PR #159 Cursor review, completeness shape. `EvidenceCompleteness` is a contract
+  schema; `ScanSummary` and `ScanDetailResponse` carry a required `evidence_completeness` and
+  `ScanSummary.partial_result` is gone. The SPA reads the enum: `scanDetailView.completeness`,
+  `ScanAIAnalysis` `completeness` prop, `HomeAIOverview`, shared `lib/evidenceCompleteness`
+  (`ai.unknownLimit` added). An `unknown` scan no longer gets the "no vulnerabilities in this
+  scan" copy. Touched: `backend/schemas.md`, `contracts.md`, `frontend/screens.md`,
+  `frontend/scan-ai.md`, `frontend/home-ai-overview.md`.
+
+* **Update**: PR #159 Cursor review, point 4. Scan Detail status logic moved into the pure view
+  model `scanDetailView(scan)` (`body`, `failed`, `partial`, `stoppedEarly`, `sections`); the page
+  only renders it and the per-section `status !== 'failed'` gates are gone. Behavior unchanged.
+  Touched: `frontend/screens.md`.
+
 ## 2026-10-01
 
 * **Update**: `install.sh --agent-only` now provisions the service-targeted tools on Pi
   armhf/arm64 and exits on failure; the provisioner supports Bookworm and Trixie. Added the
   install-table row and refreshed stale `install.sh` line refs. Touched: `infra/deployment.md`.
+
+* **Update**: PR #159 Cursor review, items 2–3. New `api/services/scan_evidence.py` owns both
+  evidence policies: `is_cve_correlation` (enrichment + AI `evidence_basis`) and
+  `evidence_completeness` / `incomplete_check_count` / `parse_coverage` (inventory, port freshness, AI
+  context, chat, Groq notice). Finding read and risk summary return the stored confidence again;
+  `effective_finding_confidence` and the read overlay are gone. The Groq notice now also warns on
+  `unknown` completeness. Touched: `backend/services.md`, `backend/ai.md`.
+
+* **Update**: PR #159 Cursor review, point 3. Coverage is recorded at the source: typed
+  `StageCoverage` on `HostInfo.stage_coverage` replaces the five string fields; `_record_deep_gap`
+  merges the three deep-recovery branches; the targeted stage records units a cancel or overall
+  deadline stopped (`TargetedGapReason.SCAN_CANCELLED` / `SCAN_TIMEOUT`); `ScanRunner._record_not_run`
+  marks never-reached stages, with one targeted line per host instead of re-selecting units;
+  `normalize/coverage.extract_coverage` replaces `stages.build_coverage_payload`. Touched:
+  `hardware-agent/scanner/stages.md`, `hardware-agent/scanner/models.md`,
+  `hardware-agent/scanner/runner.md`, `hardware-agent/normalize.md`.
+
+* **Update**: PR #159 Cursor review, points 1–2. Inventory closes unseen findings only when
+  `partial_result` is exactly `false`; new `read.is_cve_correlation` is the one owner of the
+  NVD/vulners correlation rule (`_to_finding_read`, `effective_finding_confidence`, and AI
+  `evidence_basis` all call it); `AI_PROMPT_VERSION` → `"6"`. Touched: `backend/services.md`,
+  `backend/ai.md`.
+
+* **Update**: PR #159 scan evidence coverage, merged with main. Pi emits per-endpoint
+  `coverage` (`build_coverage_payload`, `CoverageUnitPayload`) and new `HostInfo` stage outcomes;
+  targeted plan-limit omissions become skipped units. Backend stores `scans.coverage_json`, returns
+  `coverage` / `ScanSummary.partial_result` / `HostPort.observed_in_latest_scan`, reads NVD/vulners
+  CVEs as `probable`, skips fixing unseen findings on partial scans, and adds AI
+  `evidence_completeness` / `incomplete_check_count` / `evidence_basis`. Migration renamed to
+  `20260928_38` (parent `20260927_37`), now head. Frontend: `ScanCoverage`, partial and failed-scan
+  evidence on Scan Detail, AI evidence-limit lines, port freshness labels. Touched:
+  `backend/migrations.md`, `backend/models.md`, `backend/schemas.md`, `backend/services.md`,
+  `backend/ai.md`, `backend/index.md`, `index.md`, `contracts.md`, `hardware-agent/normalize.md`,
+  `hardware-agent/scanner/models.md`, `hardware-agent/scanner/runner.md`,
+  `hardware-agent/scanner/stages.md`, `frontend/screens.md`, `frontend/scan-ai.md`,
+  `frontend/home-ai-overview.md`.
+
+* **Update**: PR #160 fifth review (DMI-145). `persist_scan` checks a closed command under the row
+  lock before any write, and settles a live command through the non-committing
+  `transition_command`; `_close_scan` commits once. Touched: `backend/services.md`.
+
+* **Update**: PR #160 fourth review (DMI-145). Backend: `persist_scan` locks the command row before
+  the scan row, so ingest and offline cancel take locks in the same order. Frontend: new
+  `isSettledCommand`; `useScanCommand` polls a cancelled command until it has results and sweeps
+  once per outcome. Touched: `backend/services.md`, `frontend/command-status.md`,
+  `frontend/devices-screen.md`, `frontend/api.md`, `frontend/overview.md`, `frontend/index.md`.
 
 ## 2026-09-30
 
@@ -20,7 +99,47 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   `hardware-agent/assessment.md`, `frontend/host-detail.md`, `frontend/screens.md`,
   `frontend/scan-ai.md`, `frontend/scan-partial-warning.md`, `frontend/index.md`.
 
+## 2026-09-29
+
+* **Update**: PR #160 third review (DMI-145). Backend: `persist_scan` closes through `_close_scan`,
+  which reads the command status `FOR UPDATE`, so a cancel that lands mid-ingest keeps the results.
+  Pi: `_scan_outcome` maps a finished scan to one status before upload. Frontend: `useScanCommand`
+  keeps one `cancelIntentId`; the race toast moved into the sweep effect. Touched:
+  `backend/services.md`, `hardware-agent/daemon.md`, `frontend/devices-screen.md`.
+
+* **Update**: PR #160 second review (DMI-145). `terminated_by` is now the typed `TerminatedBy`
+  (`completed`/`user_cancel`/`timeout`/`error`) read by `api/core/scan_read.scan_terminated_by`, on
+  both `ScanSummary` and `ScanDetailResponse`; AI context maps from the same reader; Scan detail and
+  `scanStatusLabel` read the top-level field. Pi: a cancelled scan uploads its partial payload even
+  when the local result file failed to write. Touched: `hardware-agent/daemon.md`,
+  `backend/schemas.md`, `backend/ai.md`, `frontend/scan-status.md`, `frontend/screens.md`.
+
+* **Update**: PR #160 review (DMI-145). Pi `_ScanStop` now has separate `cancelled` / `parked`
+  flags (`request_cancel`, `request_park`); `_run_command` classifies the stop once. Backend: ingest
+  owns the `completed` scan; `_mirror_command_on_scan` changes only an `UNFINISHED_SCAN`; new
+  `CANCELLABLE` and `accepts_late_ingest` in `command_lifecycle`; activity follows the payload's
+  `terminated_by` only; `cancelled_command_ids_for_agent` → `pending_operator_cancels` with shared
+  `_mode_deadline`; hello split into `_hello_gate` + `_send_pending_cancels`; `CommandDetail.has_results`.
+  Frontend: `CommandStatus` reads `has_results` (no scan fetch); `ScanStoppedNotice` gains
+  `variant`; Stop-scan tests moved to `DeviceDetail.cancel.test.tsx`. `AI_PROMPT_VERSION` doc fixed
+  to `"5"`. Touched: `hardware-agent/daemon.md`, `backend/services.md`, `backend/ai.md`,
+  `backend/schemas.md`, `frontend/api.md`, `frontend/devices-screen.md`, `frontend/screens.md`,
+  `frontend/scan-status.md`.
+
 ## 2026-09-28
+
+* **Update**: DMI-145 / spec 049 remote scan cancel. Documented Pi `_ScanStop.request("cancel"|"park")`,
+  `handle_cancel`, `AgentCancel` / `on_cancel`, status `cancelled` with partial upload vs silent park;
+  backend `POST /commands/{id}/cancel`, lifecycle/ingest/activity/`scan_cancelled`, hello catch-up,
+  AI context v3 `partial_result`/`stopped_by`, Alembic head `20260927_37`; frontend Stop scan,
+  `ScanStoppedNotice`, scan/command status labels. KB: ARCHITECTURE §6, ADR-011 HTTP table row,
+  SCREENS.md `cancelled` + `terminated_by`. Touched: `hardware-agent/daemon.md`,
+  `hardware-agent/command-channel.md`, `hardware-agent/index.md`, `backend/services.md`,
+  `backend/routers.md`, `backend/schemas.md`, `backend/models.md`, `backend/migrations.md`,
+  `backend/ai.md`, `backend/index.md`, `frontend/command-status.md`, `frontend/scan-status.md`,
+  `frontend/devices-screen.md`, `frontend/screens.md`, `frontend/api.md`, `frontend/index.md`,
+  `index.md`, `docs/architecture/ARCHITECTURE.md`, `docs/adr/ADR-011-pi-command-channel.md`,
+  `docs/ui/SCREENS.md`, `contracts.md`.
 
 * **Update**: PR #157 review. `merge_mac_vendor` and the loose `mac`/`vendor` fields are replaced by
   the frozen `MacIdentity(mac, vendor)` value that owns `merged_with()`; `HostInfo` and

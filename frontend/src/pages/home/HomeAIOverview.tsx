@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { HomeSnapshot } from '@/api/home'
 import useI18n from '@/i18n/useI18n'
+import { evidenceLimitKey } from '@/lib/evidenceCompleteness'
 
 function HomeAIOverview({
   latestScan,
@@ -84,6 +85,7 @@ function HomeAIOverview({
 
   if (analysis.status !== 'completed') return null
 
+  const limitKey = evidenceLimitKey(latestScan.evidence_completeness)
   return (
     <Card data-testid="home-ai-overview">
       <CardHeader>
@@ -93,6 +95,13 @@ function HomeAIOverview({
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <p
+          data-testid="home-ai-evidence-limit"
+          className="text-body-sm text-muted-foreground"
+        >
+          {t('ai.evidenceLimit')}
+          {limitKey != null && ` ${t(limitKey)}`}
+        </p>
         <p className="text-title-xs">{analysis.analysis.executive_summary}</p>
         <p className="max-w-prose text-body-md">
           {analysis.analysis.plain_language_summary}

@@ -67,11 +67,13 @@ export function withoutAssessment(
 
 export function withPartialResult(
   scan: ScanDetailResponse,
-  terminatedBy: 'completed' | 'user_cancel' | 'timeout' | 'error',
+  terminatedBy: components['schemas']['TerminatedBy'],
   interruptedStage?: string,
 ): ScanDetailResponse {
   return {
     ...scan,
+    terminated_by: terminatedBy,
+    evidence_completeness: 'partial',
     metadata: {
       ...(scan.metadata ?? {}),
       partial_result: true,

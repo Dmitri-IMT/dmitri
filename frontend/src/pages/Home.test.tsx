@@ -239,6 +239,11 @@ describe('Home', () => {
       screen.getByTestId(`home-table-row-${criticalFinding.finding_id}`),
     ).toBeInTheDocument()
     expect(
+      within(screen.getByTestId(`home-table-row-${criticalFinding.finding_id}`))
+        .getByText(/Observed/)
+        .querySelector('time'),
+    ).toHaveAttribute('datetime', criticalFinding.detected_at)
+    expect(
       screen.getByTestId(`home-table-row-${highFinding.finding_id}`),
     ).toBeInTheDocument()
 

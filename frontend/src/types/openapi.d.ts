@@ -373,6 +373,7 @@ export interface paths {
          *     |-------|-----------|--------|
          *     | `hello` | Pi → backend, on connect | `AgentHelloFrame` |
          *     | `command` | backend → Pi | `AgentCommandFrame` |
+         *     | `cancel` | backend → Pi | `AgentCancelFrame` |
          *     | `status` | Pi → backend | `AgentStatusFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
          *
@@ -488,6 +489,26 @@ export interface paths {
         delete?: never;
         /** CORS preflight for command detail */
         options: operations["optionsCommandById"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/commands/{command_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a scan command
+         * @description Admins stop a cancellable scan. Connected agents receive a cancel frame; offline commands are retired immediately.
+         */
+        post: operations["cancelCommand"];
+        delete?: never;
+        options?: never;
         head?: never;
         patch?: never;
         trace?: never;
@@ -736,7 +757,14 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        ScanStatus: "pending" | "accepted" | "processing" | "completed" | "failed";
+        ScanStatus: "pending" | "accepted" | "processing" | "completed" | "failed" | "cancelled";
+        /** @enum {string} */
+        TerminatedBy: "completed" | "user_cancel" | "timeout" | "error";
+        /**
+         * @description Whether the scan's evidence covers every check. `partial` when the Pi reported `partial_result` or any coverage unit did not complete; `complete` when it reported no partial result and coverage has no gap; otherwise `unknown`.
+         * @enum {string}
+         */
+        EvidenceCompleteness: "complete" | "partial" | "unknown";
         /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
@@ -754,7 +782,7 @@ export interface components {
             change_ticket?: string | null;
         };
         /** @enum {string} */
-        CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "expired";
+        CommandStatus: "queued" | "delivered" | "running" | "uploading" | "done" | "failed" | "cancelled" | "expired";
         /** @enum {string} */
         ScanErrorCode: "device_offline" | "device_busy" | "agent_disconnected" | "scan_failed" | "scan_timeout" | "invalid_command" | "result_unavailable" | "ingest_failed" | "unknown";
         /** @enum {string} */
@@ -845,6 +873,11 @@ export interface components {
             protocol: "tcp" | "udp";
             service: string;
             version?: string | null;
+            /**
+             * Observed In Latest Scan
+             * @default null
+             */
+            observed_in_latest_scan: boolean | null;
             /** Format: date-time */
             first_seen_at: string;
             /** Format: date-time */
@@ -1010,6 +1043,61 @@ export interface components {
             references: string[];
             unit_id?: number | null;
         };
+        /** CoverageObservationPayload */
+        CoverageObservationPayload: {
+            /** Observation Key */
+            observation_key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "administration" | "api_surface" | "service_identity" | "device_identity";
+            /** Summary */
+            summary: string;
+            /** Evidence */
+            evidence: string;
+            /** Path */
+            path?: string | null;
+            /** Rule Id */
+            rule_id?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+        };
+        /** CoverageUnitPayload */
+        CoverageUnitPayload: {
+            /**
+             * Ip
+             * Format: ipv4
+             */
+            ip: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment";
+            /** Port */
+            port?: number | null;
+            /** Protocol */
+            protocol?: ("tcp" | "udp") | null;
+            /** Tool */
+            tool?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "completed" | "partial" | "failed" | "timed_out" | "skipped";
+            /** Reason Code */
+            reason_code?: string | null;
+            /**
+             * Evidence Source
+             * @enum {string}
+             */
+            evidence_source: "nmap_nse" | "service_recovery" | "nmap_ports" | "port_discovery" | "modbus_inspection" | "targeted_tool" | "targeted_tool_partial_report" | "not_run";
+            /** Issue Keys */
+            issue_keys?: string[];
+            /** Observations */
+            observations?: components["schemas"]["CoverageObservationPayload"][];
+        };
         ScanIngestRequest: {
             /** Format: uuid */
             scan_id: string;
@@ -1021,6 +1109,8 @@ export interface components {
             hosts: components["schemas"]["HostPayload"][];
             /** @default [] */
             findings: components["schemas"]["FindingPayload"][];
+            /** Coverage */
+            coverage?: components["schemas"]["CoverageUnitPayload"][];
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
@@ -1045,12 +1135,14 @@ export interface components {
             subnet: string;
             scan_mode: components["schemas"]["ScanMode"];
             status: components["schemas"]["ScanStatus"];
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             host_count: number;
             finding_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
             agent_id?: string | null;
             box_name?: string | null;
             duration?: number | null;
+            terminated_by?: components["schemas"]["TerminatedBy"] | null;
         };
         ScanDetailResponse: {
             /** Format: uuid */
@@ -1068,7 +1160,10 @@ export interface components {
             metadata?: {
                 [key: string]: string | number | boolean;
             } | null;
+            /** Coverage */
+            coverage?: components["schemas"]["CoverageUnitPayload"][];
             status: components["schemas"]["ScanStatus"];
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             command_id?: string | null;
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             host_count: number;
@@ -1076,6 +1171,7 @@ export interface components {
             agent_id?: string | null;
             box_name?: string | null;
             duration?: number | null;
+            terminated_by?: components["schemas"]["TerminatedBy"] | null;
         };
         ScanListResponse: {
             data: components["schemas"]["ScanSummary"][];
@@ -1176,6 +1272,8 @@ export interface components {
             delivered_at?: string | null;
             started_at?: string | null;
             completed_at?: string | null;
+            /** @default false */
+            has_results: boolean;
         };
         AgentDetail: {
             /** Format: uuid */
@@ -1269,8 +1367,15 @@ export interface components {
             /** Format: uuid */
             command_id: string;
             /** @enum {string} */
-            status: "running" | "uploading" | "done" | "failed";
+            status: "running" | "uploading" | "done" | "failed" | "cancelled";
             error_code?: string | null;
+        };
+        /** @description **Backend → Pi.** Requests that the Pi stop the active scan identified by `command_id`. */
+        AgentCancelFrame: {
+            /** @constant */
+            type: "cancel";
+            /** Format: uuid */
+            command_id: string;
         };
         /**
          * @description **Backend → Pi.** Sent when an inbound frame cannot be parsed or fails validation
@@ -1617,7 +1722,7 @@ export interface components {
         /** @enum {string} */
         HomeNoticeKind: "failed_scan";
         /** @enum {string} */
-        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
+        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "scan_cancelled" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
         HomeEvent: {
             kind: components["schemas"]["HomeEventKind"];
             text: string;
@@ -1757,6 +1862,20 @@ export interface components {
                     error: {
                         /** @constant */
                         code: "device_busy";
+                    };
+                };
+            };
+        };
+        /** @description The command is already uploading scan results and cannot be stopped. */
+        CommandNotCancellable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @constant */
+                        code: "command_not_cancellable";
                     };
                 };
             };
@@ -3149,6 +3268,42 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    cancelCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command_id: components["parameters"]["CommandId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The command was retired offline or was already terminal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandDetail"];
+                };
+            };
+            /** @description The cancel frame was sent to the connected agent. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["CommandNotCancellable"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     login: {

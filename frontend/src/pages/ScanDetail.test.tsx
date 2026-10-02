@@ -304,6 +304,62 @@ describe('ScanDetail', () => {
     )
   })
 
+  it('shows unlisted omitted checks and observation evidence in coverage', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 4 },
+        coverage: [
+          {
+            ip: '192.168.1.10',
+            stage: 'targeted_assessment',
+            port: 80,
+            protocol: 'tcp',
+            tool: 'nikto',
+            outcome: 'completed',
+            evidence_source: 'targeted_tool',
+            issue_keys: [],
+            observations: [
+              {
+                observation_key: 'web:administration:/admin',
+                kind: 'administration',
+                summary: 'Administration interface found',
+                evidence: 'status=403; protected surface',
+                path: '/admin',
+                rule_id: 'ADMIN',
+                policy_version: 'v1',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '4 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent('status=403; protected surface')
+  })
+
+  it('shows the unlisted omission count when no individual units were stored', async () => {
+    scanDetail(
+      completedScan({
+        metadata: { targeted_units_omitted_unlisted: 2 },
+        coverage: [],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const coverage = await screen.findByTestId('scan-coverage')
+    expect(coverage).toHaveTextContent(
+      '2 additional omitted checks are not listed individually.',
+    )
+    expect(coverage).toHaveTextContent(
+      'Check coverage was not recorded for this scan.',
+    )
+  })
+
   it('shows the targeted section when targeted_units_planned is zero', async () => {
     scanDetail(
       completedScan({
@@ -376,6 +432,7 @@ describe('ScanDetail', () => {
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
+      'Check coverage',
       'Machines seen',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
@@ -553,6 +610,102 @@ describe('ScanDetail', () => {
     expect(
       screen.queryByTestId(`finding-panel-${UNKNOWN_FINDING_ID}`),
     ).not.toBeInTheDocument()
+  })
+
+  it('shows a stopped notice without AI or findings when the scan was cancelled', async () => {
+    scanDetail(
+      completedScan({
+        status: 'cancelled',
+        findings: [],
+        hosts: [],
+        finding_count: 0,
+        host_count: 0,
+        duration: null,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const stopped = await screen.findByTestId('scan-stopped')
+    expect(within(stopped).getByText('Stopped').tagName).toBe('P')
+    expect(stopped).toHaveTextContent(
+      'This scan was stopped before the Pi sent any results.',
+    )
+    expect(screen.queryByTestId(/^scan-ai-/)).not.toBeInTheDocument()
+    expectNoScanTables()
+    expect(screen.queryByTestId('scan-reports')).not.toBeInTheDocument()
+
+    const strip = screen.getByTestId('scan-summary-strip')
+    expect(strip).not.toHaveTextContent('Machines seen')
+    expect(strip).not.toHaveTextContent('Vulnerabilities')
+  })
+
+  it('keeps partial results and AI for a completed user-cancel scan', async () => {
+    server.use(
+      http.get('http://localhost:8000/api/v1/scans/:scanId/analysis', () =>
+        HttpResponse.json({
+          scan_id: SCAN_ID,
+          status: 'not_requested',
+        }),
+      ),
+    )
+    scanDetail(
+      withPartialResult(
+        completedScan({ findings: [phpCgiFinding], finding_count: 1 }),
+        'user_cancel',
+      ),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-stopped-early')
+    expect(notice).toHaveTextContent('Stopped early')
+    expect(notice).toHaveTextContent(
+      'This scan was stopped early. It shows what was found before the stop.',
+    )
+    expect(
+      await screen.findByTestId(
+        `findings-critical-row-${phpCgiFinding.finding_id}`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('scan-hosts-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('scan-stopped')).not.toBeInTheDocument()
+    expect(
+      await screen.findByTestId('scan-ai-not-requested'),
+    ).toBeInTheDocument()
+
+    const strip = screen.getByTestId('scan-summary-strip')
+    expect(strip).toHaveTextContent('Machines seen')
+    expect(strip).toHaveTextContent('Vulnerabilities')
+  })
+
+  it('hides the stopped-early notice for plain completed and timeout/error partials', async () => {
+    scanDetail(completedScan())
+    const view = renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
+
+    view.unmount()
+    scanDetail(withPartialResult(completedScan(), 'timeout'))
+    const timeoutView = renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
+
+    timeoutView.unmount()
+    scanDetail(withPartialResult(completedScan(), 'error'))
+    renderPage(`/scans/${SCAN_ID}`)
+
+    await screen.findByTestId(
+      `findings-critical-row-${phpCgiFinding.finding_id}`,
+    )
+    expect(screen.queryByTestId('scan-stopped-early')).not.toBeInTheDocument()
+    expect(screen.queryByText('Stopped early')).not.toBeInTheDocument()
   })
 
   it('shows the device_offline sentence on a failed scan and hides both tables', async () => {
@@ -746,6 +899,32 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-no-exposures')).not.toBeInTheDocument()
   })
 
+  it('counts open and filtered ports separately for each machine', async () => {
+    scanDetail(
+      completedScan({
+        hosts: [
+          {
+            ...nas,
+            ports: [
+              ...nas.ports,
+              {
+                port: 445,
+                protocol: 'tcp',
+                state: 'filtered',
+                service: 'microsoft-ds',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    expect(
+      await screen.findByTestId(`scan-hosts-table-row-${NAS_HOST_ID}`),
+    ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
+  })
+
   it('shows partial coverage and keeps the no-findings copy honest', async () => {
     const completedPartial = withPartialResult(
       completedScan({ findings: [], finding_count: 0 }),
@@ -796,6 +975,41 @@ describe('ScanDetail', () => {
     )
     expect(
       await screen.findByTestId('scan-partial-warning-trigger'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not call a scan clean when its completeness is unknown', async () => {
+    scanDetail(
+      completedScan({
+        findings: [],
+        finding_count: 0,
+        evidence_completeness: 'unknown',
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities in accepted evidence.',
+    )
+  })
+
+  it('keeps observations from a failed scan visible', async () => {
+    scanDetail(
+      completedScan({
+        status: 'failed',
+        error_code: 'device_offline',
+        exposures: [relatedExposure],
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const evidence = await screen.findByTestId('scan-failed-evidence')
+    expect(evidence).toHaveTextContent(
+      'Observations recorded before the scan failed',
+    )
+    expect(within(evidence).getByTestId('scan-hosts-table')).toBeInTheDocument()
+    expect(
+      within(evidence).getByTestId('scan-exposures-table'),
     ).toBeInTheDocument()
   })
 

@@ -102,17 +102,19 @@ subnet, então escala com o tamanho da subnet (muitos hosts), não com o modo.
   tabela de decisão, em vez de tratar toda falha como fatal.
 - Preservar resultados parciais respeita o tempo do operador em varreduras longas e torna
   cancelamento/timeout outcomes de primeira classe, não perdas silenciosas.
-- Reutilizar estados terminais e campos de metadata já existentes evita mudança de schema e mantém
-  o contrato com o backend estável.
+- Reutilizar estados terminais e campos de metadata já existentes evita criar um novo estado
+  terminal. A cobertura por unidade usa um campo opcional no payload, compatível com agentes
+  anteriores, e um campo persistido na API.
 
 ## Consequências
 
 - Varreduras longas não travam mais indefinidamente; um passo parado é limitado por timeout.
 - Uma única unidade ruim não desperdiça a varredura inteira.
 - Resultados parciais ficam visíveis e salváveis, claramente marcados como "Partial".
-- **Em aberto:** se o contrato de ingestão do backend aceita payloads `partial_result=True` ou se
-  varreduras parciais permanecem locais (relatório §9). Para a v1, varreduras parciais permanecem
-  **locais**; resolver o contrato está fora do escopo do agente e não bloqueia este trabalho.
+- O backend aceita payloads `partial_result=True`. Eles são persistidos como scans parciais e não
+  fecham achados ausentes na reconciliação do inventário. A cobertura por estágio e unidade,
+  quando enviada, fica disponível no detalhe do scan. Consulte
+  `docs/implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md`.
 
 ## Relacionado
 

@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import INET
 from sqlmodel import Session, func, select
 
 from api.core.error_codes import scan_error_code
-from api.core.scan_read import scan_duration_seconds
+from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import SEVERITY_ORDER, Severity
 from api.models.command import Agent
 from api.models.persistence import (
@@ -64,6 +64,7 @@ from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
+from api.services.scan_evidence import evidence_completeness, parse_coverage
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,23 @@ def get_host_detail(
 
     summary = _to_host_summary(host)
     unreadable = list(summary.unreadable_fields)
+    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
+    latest_scan_host = latest_pair[0] if latest_pair else None
+    latest_scan = latest_pair[1] if latest_pair else None
+    port_check_complete = (
+        _port_check_complete(latest_scan, latest_scan_host.ip)
+        if latest_scan is not None and latest_scan_host is not None
+        else False
+    )
+    latest_open_ports = {
+        (row.port, row.protocol)
+        for row in session.exec(
+            select(PortRecord).where(
+                PortRecord.scan_host_id == latest_scan_host.id,
+                PortRecord.state == "open",
+            )
+        ).all()
+    } if latest_scan_host is not None else set()
     ports = [
         HostPort(
             port=row.port,
@@ -150,6 +168,11 @@ def get_host_detail(
             version=row.version,
             first_seen_at=row.first_seen_at,
             last_seen_at=row.last_seen_at,
+            observed_in_latest_scan=(
+                True
+                if (row.port, row.protocol) in latest_open_ports
+                else False if port_check_complete else None
+            ),
         )
         for row in session.exec(
             select(HostPortRecord)
@@ -157,9 +180,6 @@ def get_host_detail(
             .order_by(HostPortRecord.port.asc())
         ).all()
     ]
-    latest_pair = latest_scan_host_for_host(session, host_id, org_id=org_id)
-    latest_scan_host = latest_pair[0] if latest_pair else None
-    latest_scan = latest_pair[1] if latest_pair else None
     industrial_services = (
         _industrial_service_views(session, latest_scan_host.id, unreadable)
         if latest_scan_host
@@ -257,6 +277,7 @@ def get_scan_detail(
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
+    coverage = parse_coverage(scan.coverage_json)
     return ScanDetailResponse(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -274,7 +295,9 @@ def get_scan_detail(
             else []
         ),
         metadata=scan.metadata_json,
+        coverage=coverage,
         status=scan.status,
+        evidence_completeness=evidence_completeness(scan.metadata_json, coverage),
         command_id=command.id if command else None,
         error_code=scan_error_code(
             scan.status, command.error_code if command else None
@@ -284,6 +307,7 @@ def get_scan_detail(
         agent_id=scan.agent_id,
         box_name=agent.display_name if agent is not None else None,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
+        terminated_by=scan_terminated_by(scan.metadata_json),
     )
 
 
@@ -519,12 +543,16 @@ def _to_scan_summary(
         subnet=scan.subnet,
         scan_mode=scan.scan_mode,
         status=scan.status,
+        evidence_completeness=evidence_completeness(
+            scan.metadata_json, parse_coverage(scan.coverage_json)
+        ),
         host_count=host_count,
         finding_count=finding_count,
         highest_severity=highest_severity,
         agent_id=scan.agent_id,
         box_name=box_name,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
+        terminated_by=scan_terminated_by(scan.metadata_json),
     )
 
 
@@ -842,4 +870,16 @@ def _to_finding_read(
         last_seen_at=life.last_seen_at if life else None,
         fixed_at=life.fixed_at if life else None,
     )
+
+
+def _port_check_complete(scan: ScanRecord, ip: str) -> bool:
+    coverage = parse_coverage(scan.coverage_json)
+    if coverage:
+        outcomes = [
+            unit.outcome
+            for unit in coverage
+            if unit.stage == "ports" and str(unit.ip) == ip
+        ]
+        return bool(outcomes) and all(outcome == "completed" for outcome in outcomes)
+    return evidence_completeness(scan.metadata_json, coverage) == "complete"
 

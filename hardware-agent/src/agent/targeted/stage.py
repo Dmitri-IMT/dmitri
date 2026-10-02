@@ -20,7 +20,10 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
-from agent.targeted.selection import select_targeted_units
+from agent.targeted.selection import (
+    select_omitted_targeted_units,
+    select_targeted_units,
+)
 from agent.targeted.smb import run_enum4linux
 from agent.targeted.ssh import run_ssh_audit
 from agent.targeted.tls import run_testssl
@@ -110,12 +113,16 @@ def _deadline_scope(
     return "stage"
 
 
-def _skipped_result(unit: TargetedUnit) -> TargetedUnitResult:
-    return TargetedUnitResult(
-        unit,
-        TargetedOutcome.SKIPPED,
-        reason_code=TargetedGapReason.STAGE_BUDGET,
-    )
+def _skip_units(
+    units: list[TargetedUnit],
+    reason: TargetedGapReason,
+    host_by_ip: dict[str, HostInfo],
+    summary: TargetedStageSummary,
+) -> None:
+    for unit in units:
+        result = TargetedUnitResult(unit, TargetedOutcome.SKIPPED, reason_code=reason)
+        host_by_ip[unit.ip].targeted_results.append(result)
+        _record(summary, result)
 
 
 def run_targeted_stage(
@@ -149,22 +156,38 @@ def run_targeted_stage(
     )
 
     host_by_ip = {host.ip: host for host in hosts}
+    if summary.omitted:
+        omitted_units = select_omitted_targeted_units(hosts, units)
+        summary.omitted_unlisted = summary.omitted - len(omitted_units)
+        for unit in omitted_units:
+            host_by_ip[unit.ip].targeted_results.append(
+                TargetedUnitResult(
+                    unit,
+                    TargetedOutcome.SKIPPED,
+                    reason_code=TargetedGapReason.PLAN_LIMIT,
+                )
+            )
     active_executor = executor or TargetedExecutor()
     stage_deadline = _stage_deadline(scan_mode, overall_deadline)
     interrupted = False
     for index, unit in enumerate(units):
         if cancel_event is not None and cancel_event.is_set():
+            _skip_units(
+                units[index:], TargetedGapReason.SCAN_CANCELLED, host_by_ip, summary
+            )
             interrupted = True
             break
         now = perf_counter()
         if now >= stage_deadline:
             if _deadline_scope(stage_deadline, overall_deadline) == "overall":
+                _skip_units(
+                    units[index:], TargetedGapReason.SCAN_TIMEOUT, host_by_ip, summary
+                )
                 interrupted = True
                 break
-            for remaining in units[index:]:
-                result = _skipped_result(remaining)
-                host_by_ip[remaining.ip].targeted_results.append(result)
-                _record(summary, result)
+            _skip_units(
+                units[index:], TargetedGapReason.STAGE_BUDGET, host_by_ip, summary
+            )
             break
 
         adapter = _adapter_for(unit.tool)
@@ -177,7 +200,15 @@ def run_targeted_stage(
             if unit.tool == TargetedTool.FFUF:
                 adapter_kwargs.update(wordlist=wordlist, scan_id=scan_id)
             result = adapter(unit, active_executor, **adapter_kwargs)
-        except (ScanCancelled, BudgetExceeded):
+        except ScanCancelled:
+            _skip_units(
+                units[index:], TargetedGapReason.SCAN_CANCELLED, host_by_ip, summary
+            )
+            raise
+        except BudgetExceeded:
+            _skip_units(
+                units[index:], TargetedGapReason.SCAN_TIMEOUT, host_by_ip, summary
+            )
             raise
         except Exception as exc:  # one adapter must not stop later units
             result = TargetedUnitResult(
@@ -202,6 +233,12 @@ def run_targeted_stage(
 
         if result.outcome == TargetedOutcome.TIMED_OUT and overall_deadline is not None:
             if perf_counter() >= overall_deadline:
+                _skip_units(
+                    units[index + 1 :],
+                    TargetedGapReason.SCAN_TIMEOUT,
+                    host_by_ip,
+                    summary,
+                )
                 interrupted = True
                 break
 

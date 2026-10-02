@@ -4,7 +4,7 @@ title: scanner/runner — ScanRunner
 description: ScanRunner — the worker thread, cancellation, deadline guards, and the _run() pipeline body that drives the whole scan.
 resource: hardware-agent/src/agent/scanner/runner.py
 tags: [hardware-agent, scanner, pipeline, threading]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # scanner/runner — ScanRunner
@@ -25,9 +25,10 @@ and translates every failure mode into a completed payload, partial payload, or 
 | `start()` / `run_blocking()` | Run `_run()` on a daemon thread or inline, respectively. | `runner.py:69`, `runner.py:73` |
 | `request_cancel()` | Cancels active Nmap and Modbus work. | `runner.py:76` |
 | `_check_cancel()` / `_check_deadline()` | Raise the existing cancellation/budget signals. | `runner.py:88`, `runner.py:92` |
-| `_build_payload()` | Normalizes accepted host evidence, runs the pure local assessment once, and assembles profiles, exposures, findings, and metadata into one `ScanPayload`. | `runner.py:102` |
-| `_finalize_partial()` | Builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:139` |
-| `_run()` | Drives discovery → ports → deep inspection → NSPi OT inspection → normalization; a completed scan with skipped port/deep units carries `partial_result=true` and `terminated_by="completed"`. | `runner.py:184` |
+| `_build_payload()` | Normalizes accepted host evidence, runs the pure local assessment once, and assembles profiles, exposures, findings, coverage (`extract_coverage`), and metadata into one `ScanPayload`. | `runner.py:120` |
+| `_finalize_partial()` | Calls `_record_not_run`, then builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:172` |
+| `_record_not_run()` | On a stop, appends a `skipped`/`not_run` `StageCoverage` (reason `scan_cancelled`/`scan_timeout`/`scan_error`) for each stage the host never reached: `ports` when missing, `deep_inspection` for hosts with open ports, `ot_inspection` in NSPi mode for hosts with a Modbus candidate when the OT stage had not started, and — in targeted modes, only if the targeted stage had not started — one `targeted_assessment` line per host with open ports (no port or tool; nothing is re-selected). | `runner.py:496` |
+| `_run()` | Drives discovery → ports → deep inspection → NSPi OT inspection → normalization; a completed scan with skipped port/deep units carries `partial_result=true` and `terminated_by="completed"`. | `runner.py:225` |
 
 ## How it connects
 
@@ -54,7 +55,8 @@ and translates every failure mode into a completed payload, partial payload, or 
   `FatalScanError` before discovery → hard `failed`; after discovery → partial `error`;
   `CircuitBreakerError` → `error`; other `BudgetExceeded` → `timeout`; `ScanCancelled` →
   `user_cancel`; any other exception with hosts in hand → partial `error`.
-- A skipped port batch or eligible deep-inspection host sets `partial_result=true` when the
+- A skipped port batch, an eligible deep-inspection host, a targeted gap, or a reached OT
+  inspection stage deadline sets `partial_result=true` when the
   pipeline finishes, with `terminated_by="completed"` and no `interrupted_stage`. Cancellation,
   timeout, and errors keep their cause and interrupted stage instead.
 - The network info passed into metadata is a placeholder (`ip="0.0.0.0"`, `interface="tui"`);

@@ -87,7 +87,7 @@ function ScanPartialWarning({ scan }: { scan: ScanDetailResponse }) {
   const coverage = targetedCoverage(scan.metadata.targeted_coverage)
   const targetedCounts = [
     ['targeted_units_planned', t('scans.coveragePlanned')],
-    ['targeted_units_completed', t('scans.coverageCompleted')],
+    ['targeted_units_completed', t('scans.coverageCompletedLabel')],
     ['targeted_units_failed', t('scans.coverageFailed')],
     ['targeted_units_timed_out', t('scans.coverageTimedOut')],
     ['targeted_units_skipped', t('scans.coverageSkipped')],
@@ -145,7 +145,7 @@ function ScanPartialWarning({ scan }: { scan: ScanDetailResponse }) {
                     <dl className="grid grid-cols-2 gap-3 text-body-sm">
                       <div>
                         <dt className="text-muted-foreground">
-                          {t('scans.coverageCompleted')}
+                          {t('scans.coverageCompletedLabel')}
                         </dt>
                         <dd>{item.completed}</dd>
                       </div>

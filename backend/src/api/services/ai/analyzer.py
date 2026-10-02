@@ -81,7 +81,10 @@ def split_context(
         selected = findings[start : start + child_findings]
         chunk = ScanAIContext(
             scan_mode=context.scan_mode,
+            evidence_completeness=context.evidence_completeness,
+            incomplete_check_count=context.incomplete_check_count,
             duration_seconds=context.duration_seconds,
+            stopped_by=context.stopped_by,
             host_count=context.host_count,
             total_findings=context.total_findings,
             scored_findings=context.scored_findings,

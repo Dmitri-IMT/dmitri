@@ -13,15 +13,19 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from api.models.command import Command
 from api.models.persistence import utc_now
-from api.schemas.agent_frames import AgentErrorFrame, AgentHelloFrame, AgentStatusFrame
+from api.schemas.agent_frames import (
+    AgentCancelFrame,
+    AgentErrorFrame,
+    AgentHelloFrame,
+    AgentStatusFrame,
+)
 from api.services import agent_connections
 from api.services.agent_presence import (
     SessionFactory,
     async_agent_is_revoked,
-    async_touch_unless_revoked,
     touch_unless_revoked,
 )
-from api.services.commands import apply_status
+from api.services.commands import apply_status, pending_operator_cancels
 
 
 async def send_error(websocket: WebSocket, message: str) -> None:
@@ -118,6 +122,30 @@ async def _apply_status_frame(
     return await run_in_threadpool(sync_work)
 
 
+def _hello_gate(
+    session_factory: SessionFactory, agent_id: UUID, now: datetime
+) -> tuple[Literal["ok", "revoked"], list[UUID]]:
+    """Touch presence and collect the cancels the Pi missed, in one session."""
+    session = session_factory()
+    try:
+        if touch_unless_revoked(session, agent_id, now) == "revoked":
+            return "revoked", []
+        return "ok", pending_operator_cancels(session, agent_id=agent_id, now=now)
+    finally:
+        session.close()
+
+
+async def _send_pending_cancels(
+    websocket: WebSocket, agent_id: UUID, command_ids: list[UUID]
+) -> None:
+    for command_id in command_ids:
+        # A newer connection for this agent owns the catch-up from here.
+        if agent_connections.get_socket(agent_id) is not websocket:
+            return
+        frame = AgentCancelFrame(type="cancel", command_id=command_id)
+        await websocket.send_text(frame.model_dump_json())
+
+
 async def handle_agent_frame(
     session_factory: SessionFactory,
     websocket: WebSocket,
@@ -139,7 +167,9 @@ async def handle_agent_frame(
     if isinstance(parsed, _Hello):
         # Gate before set_hello: a revoked device must not refresh the subnets
         # the registry feeds to AgentDetail and the trigger-time subnet check.
-        gate = await async_touch_unless_revoked(session_factory, agent_id, now)
+        gate, pending_cancels = await run_in_threadpool(
+            _hello_gate, session_factory, agent_id, now
+        )
         if gate == "revoked":
             await agent_connections.close_revoked(websocket)
             return
@@ -150,6 +180,7 @@ async def handle_agent_frame(
             available_subnets=parsed.frame.available_subnets,
             now=now,
         )
+        await _send_pending_cancels(websocket, agent_id, pending_cancels)
         return
 
     outcome = await _apply_status_frame(

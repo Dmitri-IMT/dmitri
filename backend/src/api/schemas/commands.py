@@ -16,6 +16,7 @@ CommandStatus = Literal[
     "uploading",
     "done",
     "failed",
+    "cancelled",
     "expired",
 ]
 
@@ -82,3 +83,5 @@ class CommandDetail(BaseModel):
     delivered_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    # True once ingest completed the scan, including a stopped scan's partial results.
+    has_results: bool = False

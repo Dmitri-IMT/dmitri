@@ -17,6 +17,12 @@ known follow-up will immediately remove. Build each feature in its intended comp
 that is not possible within the requested scope or current constraints, state the limitation and
 ask the user to decide how to proceed rather than silently shipping temporary code.
 
+## No comments
+
+Do not add code comments, docstrings, or JSDoc blocks in new or changed code. Put the
+reasoning in the commit message or PR description instead. Leave existing comments alone
+unless your change makes one false.
+
 ## Formatting and lint gates
 
 **Never run a repo-wide formatter.** Not `ruff format`, not `black .`, not `./lint.sh`
@@ -32,7 +38,7 @@ Per-layer gates:
 |-------|------|
 | `hardware-agent/` | `uv run pytest`; black + ruff run from the pre-push hooks |
 | `backend/` | `./database.sh` first (see below), then `uv run ruff check src tests` and `uv run pytest` — never `ruff format` |
-| `frontend/` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` |
+| `frontend/` | `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build` |
 
 **Always run `./database.sh --test` before the backend suite.** `DATABASE_URL_TEST` must
 point at live `dmitri_test`. If it is unset, pytest collection fails with exit code 4.

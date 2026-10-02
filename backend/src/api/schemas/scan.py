@@ -56,6 +56,9 @@ ExposureRole = Literal[
 ExposureAttention = Literal["informational", "review", "priority"]
 ExposureConfidence = Literal["low", "medium", "high"]
 
+# metadata.terminated_by value the Pi runner writes when an operator stops a scan.
+TERMINATED_BY_USER_CANCEL = "user_cancel"
+
 AssessmentText = constr(min_length=1, max_length=160, strip_whitespace=True)
 AssessmentReason = constr(min_length=1, max_length=240, strip_whitespace=True)
 
@@ -171,6 +174,43 @@ class FindingPayload(BaseModel):
     unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
 
 
+EvidenceCompleteness = Literal["complete", "partial", "unknown"]
+
+
+class CoverageObservationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observation_key: constr(min_length=1, max_length=512)
+    kind: Literal[
+        "administration", "api_surface", "service_identity", "device_identity"
+    ]
+    summary: constr(min_length=1, max_length=512)
+    evidence: constr(min_length=1, max_length=512)
+    path: constr(max_length=256) | None = None
+    rule_id: constr(max_length=128) | None = None
+    policy_version: constr(max_length=64) | None = None
+
+
+class CoverageUnitPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ip: IPv4Address
+    stage: Literal[
+        "ports", "deep_inspection", "ot_inspection", "targeted_assessment"
+    ]
+    port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
+    protocol: Literal["tcp", "udp"] | None = None
+    tool: constr(min_length=1, max_length=64) | None = None
+    outcome: Literal["completed", "partial", "failed", "timed_out", "skipped"]
+    reason_code: constr(min_length=1, max_length=64) | None = None
+    evidence_source: Literal[
+        "nmap_nse", "service_recovery", "nmap_ports", "port_discovery",
+        "modbus_inspection", "targeted_tool", "targeted_tool_partial_report", "not_run",
+    ]
+    issue_keys: list[constr(min_length=1, max_length=256)] = Field(default_factory=list)
+    observations: list[CoverageObservationPayload] = Field(default_factory=list)
+
+
 class ScanIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -180,6 +220,7 @@ class ScanIngestRequest(BaseModel):
     scan_mode: ScanMode
     hosts: list[HostPayload]
     findings: list[FindingPayload]
+    coverage: list[CoverageUnitPayload] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] | None = None
     assessment_policy_version: constr(min_length=1, strip_whitespace=True) | None = None
     exposures: list[ExposurePayload] = Field(default_factory=list)

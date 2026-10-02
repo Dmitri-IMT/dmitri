@@ -86,7 +86,11 @@ function serve(payload: ScanAIAnalysisResponse) {
 
 function renderAnalysis() {
   return renderWithProviders(
-    <ScanAIAnalysis scanId={scanId} findings={[criticalFinding]} />,
+    <ScanAIAnalysis
+      scanId={scanId}
+      findings={[criticalFinding]}
+      completeness="complete"
+    />,
   )
 }
 

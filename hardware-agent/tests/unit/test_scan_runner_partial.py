@@ -4,19 +4,25 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from agent.normalize.contracts import ScanPayload
+from agent.normalize.coverage import extract_coverage
 from agent.scanner import stages
 from agent.scanner.errors import (
     BudgetExceeded,
     CircuitBreakerError,
     FatalScanError,
     ScanCancelled,
+    UnitScanError,
 )
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo, StageCoverage
 from agent.scanner.nmap import NmapRunner
-from agent.scanner.runner import ScanRunner
+from agent.scanner.runner import ScanRunner, _record_not_run
 from agent.targeted.models import (
+    TargetedGapReason,
     TargetedIssue,
+    TargetedObservation,
     TargetedOutcome,
+    TargetedTool,
+    TargetedUnit,
     TargetedUnitResult,
 )
 
@@ -33,9 +39,7 @@ class _FakeRunner(NmapRunner):
     def __init__(self) -> None:
         self.nmap_path = "fake-nmap"
 
-    def run_xml(
-        self, arguments: list[str], timeout: float | None = None
-    ) -> ET.Element:
+    def run_xml(self, arguments: list[str], timeout: float | None = None) -> ET.Element:
         return ET.fromstring("<nmaprun/>")
 
 
@@ -62,9 +66,7 @@ def _build_runner(
     if deep_stage is not None:
         monkeypatch.setattr(stages, "run_deep_inspection_stage", deep_stage)
     if targeted_stage is not None:
-        monkeypatch.setattr(
-            "agent.scanner.runner.run_targeted_stage", targeted_stage
-        )
+        monkeypatch.setattr("agent.scanner.runner.run_targeted_stage", targeted_stage)
     completed: list[ScanPayload] = []
     errors: list[Exception] = []
     reporter = _FakeReporter()
@@ -77,6 +79,223 @@ def _build_runner(
         runner=_FakeRunner(),
     )
     return runner, completed, errors, reporter
+
+
+def test_nse_failure_with_service_recovery_marks_payload_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = _one_host()[0]
+
+    def ports(*args, **kwargs):
+        host.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus-tcp"))]
+        return 0
+
+    def nse_failure(*args, **kwargs):
+        raise UnitScanError("NSE failed")
+
+    monkeypatch.setattr(stages, "run_nse_vulnerability_scan", nse_failure)
+    monkeypatch.setattr(
+        stages,
+        "detect_services",
+        lambda *args, **kwargs: [
+            PortInfo(port=502, service=ServiceInfo(name="modbus", product="PLC"))
+        ],
+    )
+    runner, completed, errors, _ = _build_runner(
+        monkeypatch, hosts=[host], port_stage=ports
+    )
+    runner.run_blocking()
+
+    assert errors == []
+    assert completed[0].metadata["partial_result"] is True
+    assert completed[0].metadata["terminated_by"] == "completed"
+    assert completed[0].hosts[0].ports[0].service == "modbus"
+    deep_coverage = next(
+        unit for unit in completed[0].coverage if unit.stage == "deep_inspection"
+    )
+    assert deep_coverage.model_dump(mode="json") == {
+        "ip": host.ip,
+        "stage": "deep_inspection",
+        "port": None,
+        "protocol": None,
+        "tool": None,
+        "outcome": "partial",
+        "reason_code": "nse_failed",
+        "evidence_source": "service_recovery",
+        "issue_keys": [],
+        "observations": [],
+    }
+
+
+def test_ot_deadline_marks_completed_scan_payload_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(stages, "run_port_stage", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(stages, "run_deep_inspection_stage", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        stages,
+        "run_ot_inspection_stage",
+        lambda *args, **kwargs: stages.OtInspectionResult(
+            stage_deadline_reached=True, stage_deadline_seconds=120
+        ),
+    )
+    runner, completed, errors, _ = _build_runner(
+        monkeypatch, hosts=_one_host(), scan_mode="nspi"
+    )
+
+    runner.run_blocking()
+
+    assert errors == []
+    assert completed[0].metadata["partial_result"] is True
+    assert completed[0].metadata["modbus_stage_deadline_reached"] is True
+
+
+def test_targeted_timeout_retains_endpoint_observation_and_issue_provenance() -> None:
+    host = _one_host()[0]
+    unit = TargetedUnit(host.ip, 80, "tcp", "http", TargetedTool.NIKTO)
+    host.targeted_results.append(
+        TargetedUnitResult(
+            unit,
+            TargetedOutcome.TIMED_OUT,
+            issues=[
+                TargetedIssue(
+                    "web:exposure",
+                    "Exposure",
+                    "Description",
+                    "high",
+                    "Recommendation",
+                    "Evidence",
+                )
+            ],
+            observations=[
+                TargetedObservation(
+                    "web:administration:/admin",
+                    "administration",
+                    "Administration interface found",
+                    "status=403; protected surface",
+                    path="/admin",
+                    rule_id="admin",
+                    policy_version="v1",
+                )
+            ],
+            reason_code=TargetedGapReason.UNIT_TIMEOUT,
+        )
+    )
+
+    coverage = extract_coverage([host])
+
+    assert len(coverage) == 1
+    assert (str(coverage[0].ip), coverage[0].port, coverage[0].tool) == (
+        host.ip,
+        80,
+        "nikto",
+    )
+    assert coverage[0].outcome == "timed_out"
+    assert coverage[0].reason_code == "unit_timeout"
+    assert coverage[0].evidence_source == "targeted_tool_partial_report"
+    assert coverage[0].issue_keys == ["web:exposure"]
+    assert coverage[0].observations[0].evidence == "status=403; protected surface"
+
+
+def _stop(
+    host: HostInfo,
+    stage: str,
+    terminated_by: str,
+    *,
+    targeted: bool,
+    ot: bool = False,
+):
+    _record_not_run(
+        [host],
+        interrupted_stage=stage,
+        terminated_by=terminated_by,
+        ot=ot,
+        targeted=targeted,
+    )
+    return [
+        (unit.stage, unit.outcome, unit.reason_code, unit.evidence_source)
+        for unit in extract_coverage([host])
+    ]
+
+
+def test_stop_records_stages_that_never_ran() -> None:
+    host = _one_host()[0]
+    assert _stop(host, "ports", "user_cancel", targeted=True) == [
+        ("ports", "skipped", "scan_cancelled", "not_run")
+    ]
+
+    host = _one_host()[0]
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    assert _stop(host, "ports", "user_cancel", targeted=True) == [
+        ("ports", "skipped", "scan_cancelled", "not_run"),
+        ("deep_inspection", "skipped", "scan_cancelled", "not_run"),
+        ("targeted_assessment", "skipped", "scan_cancelled", "not_run"),
+    ]
+    targeted_line = extract_coverage([host])[-1]
+    assert (targeted_line.port, targeted_line.tool) == (None, None)
+
+    host = _one_host()[0]
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    assert _stop(host, "deep_inspection", "timeout", targeted=False) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run")
+    ]
+
+
+def test_stop_before_ot_records_ot_only_for_modbus_hosts() -> None:
+    modbus = _one_host()[0]
+    modbus.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus"))]
+    assert _stop(modbus, "deep_inspection", "timeout", targeted=False, ot=True) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run"),
+        ("ot_inspection", "skipped", "scan_timeout", "not_run"),
+    ]
+
+    web = _one_host()[0]
+    web.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    assert _stop(web, "deep_inspection", "timeout", targeted=False, ot=True) == [
+        ("deep_inspection", "skipped", "scan_timeout", "not_run")
+    ]
+
+    modbus = _one_host()[0]
+    modbus.ports = [PortInfo(port=502, service=ServiceInfo(name="modbus"))]
+    modbus.stage_coverage.append(StageCoverage("ports", "completed", "nmap_ports"))
+    modbus.stage_coverage.append(
+        StageCoverage("deep_inspection", "completed", "nmap_nse")
+    )
+    assert _stop(modbus, "ot_inspection", "user_cancel", targeted=False, ot=True) == [
+        ("ports", "completed", None, "nmap_ports"),
+        ("deep_inspection", "completed", None, "nmap_nse"),
+    ]
+
+
+def test_stop_keeps_recorded_stages_and_leaves_targeted_stage_to_itself() -> None:
+    host = _one_host()[0]
+    host.ports = [PortInfo(port=80, service=ServiceInfo(name="http"))]
+    host.stage_coverage.append(StageCoverage("ports", "completed", "nmap_ports"))
+    host.stage_coverage.append(
+        StageCoverage("deep_inspection", "completed", "nmap_nse")
+    )
+    assert _stop(host, "targeted_assessment", "error", targeted=True) == [
+        ("ports", "completed", None, "nmap_ports"),
+        ("deep_inspection", "completed", None, "nmap_nse"),
+    ]
+
+
+def test_targeted_unit_skipped_by_a_stop_reports_not_run() -> None:
+    host = _one_host()[0]
+    unit = TargetedUnit(host.ip, 80, "tcp", "http", TargetedTool.NIKTO)
+    host.targeted_results.append(
+        TargetedUnitResult(
+            unit,
+            TargetedOutcome.SKIPPED,
+            reason_code=TargetedGapReason.SCAN_CANCELLED,
+        )
+    )
+
+    [coverage] = extract_coverage([host])
+
+    assert (coverage.port, coverage.tool, coverage.outcome) == (80, "nikto", "skipped")
+    assert coverage.reason_code == "scan_cancelled"
+    assert coverage.evidence_source == "not_run"
 
 
 class TestPostDiscoveryFatal:
@@ -236,9 +455,7 @@ class TestZeroHosts:
         assert meta["terminated_by"] == "completed"
         assert "interrupted_stage" not in meta
 
-    def test_zero_hosts_has_no_devices(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_zero_hosts_has_no_devices(self, monkeypatch: pytest.MonkeyPatch) -> None:
         runner, completed, _, _ = _build_runner(monkeypatch, hosts=[])
         runner._run()
 

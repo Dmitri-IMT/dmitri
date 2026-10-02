@@ -28,8 +28,8 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
 * [hardware-agent/ot](./hardware-agent/ot.md) — Modbus inspection package, digest, read-only client, OT stage.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
-* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process executes one remote scan, cancels active work when parked, and resumes after the command channel recovers.
-* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: strict frames, short transient backoff, and hourly recovery from a typed parked state.
+* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
+* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state.
 * [hardware-agent/transport](./hardware-agent/transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 
 ### Scan engine — `scanner/`
@@ -57,9 +57,9 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 * [backend/models](./backend/models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 * [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
-* [backend/services](./backend/services.md) — Backend business logic for ingest, reads, enrichment, command delivery, presence, and idempotent device revoke/restore.
+* [backend/services](./backend/services.md) — Backend business logic for ingest, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
 * [backend/ai](./backend/ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through industrial observations, AI scan analyses, and job retries. Head is `20260912_26`.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 
@@ -72,9 +72,9 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/network/devices), nested admin Users, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
-* [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus to a label; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
-* [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus to a label; isTerminalCommandStatus stops the device-detail command poll.
-* [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning plus admin revoke/restore and hides controls while revoked.
+* [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus including cancelled and Stopped early; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
+* [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus including cancelled; isTerminalCommandStatus stops the device-detail command poll.
+* [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
 * [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 from agent.assessment.policy import MachineType
 from agent.config import (
@@ -51,6 +51,7 @@ from agent.scanner.errors import (
     TransientScanError,
     UnitScanError,
 )
+from agent.scanner.models import StageCoverage
 from agent.scanner.nmap import LoggedNmapRunner
 from agent.scanner.progress import ScanEvent
 from agent.version import installed_version
@@ -170,11 +171,19 @@ def run_port_stage(
             except BudgetExceeded:
                 hosts_skipped += len(batch)
                 for ip in batch:
+                    host_map[ip].stage_coverage.append(
+                        StageCoverage(
+                            "ports", "timed_out", "nmap_ports", "port_timeout"
+                        )
+                    )
                     _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
                 LOGGER.warning("Port scan timed out for batch %s.", batch)
             except UnitScanError:
                 hosts_skipped += len(batch)
                 for ip in batch:
+                    host_map[ip].stage_coverage.append(
+                        StageCoverage("ports", "failed", "nmap_ports", "port_failed")
+                    )
                     _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
                 LOGGER.warning("Port scan failed for batch %s.", batch)
             else:
@@ -182,9 +191,15 @@ def run_port_stage(
                     host = host_map[ip]
                     result = results.get(ip)
                     if result is None:
-                        raise UnitScanError(
-                            f"Port scan did not return results for {ip}"
+                        hosts_skipped += 1
+                        host.stage_coverage.append(
+                            StageCoverage(
+                                "ports", "failed", "nmap_ports", "port_no_result"
+                            )
                         )
+                        _emit(reporter, ScanEvent(kind="unit_failed", ip=ip))
+                        LOGGER.warning("Port scan returned no result for %s.", ip)
+                        continue
                     host.ports = sorted(
                         result.ports,
                         key=lambda port: (port.port, port.protocol),
@@ -193,11 +208,20 @@ def run_port_stage(
                     host.operating_system = result.operating_system
                     if result.skipped:
                         hosts_skipped += 1
+                        host.stage_coverage.append(
+                            StageCoverage(
+                                "ports", "partial", "nmap_ports", "port_host_timeout"
+                            )
+                        )
                         _emit(reporter, ScanEvent(kind="unit_timed_out", ip=ip))
                         LOGGER.warning(
                             "Port scan hit the host timeout for %s; "
                             "partial evidence kept.",
                             ip,
+                        )
+                    else:
+                        host.stage_coverage.append(
+                            StageCoverage("ports", "completed", "nmap_ports")
                         )
                     LOGGER.info(
                         "Port scan finished for %s with %s ports.",
@@ -217,7 +241,7 @@ def run_port_stage(
                 raise CircuitBreakerError(
                     f"Port stage aborted: {hosts_skipped}/{len(hosts)} units failed"
                 )
-    ports_open = sum(len(host.ports) for host in hosts)
+    ports_open = sum(len(host.open_ports) for host in hosts)
     _emit(
         reporter,
         ScanEvent(
@@ -229,6 +253,34 @@ def run_port_stage(
         ),
     )
     return hosts_skipped
+
+
+def _record_deep_gap(
+    runner: NmapRunner,
+    settings: AgentSettings,
+    host: HostInfo,
+    reporter: ScanReporter | None,
+    outcome: Literal["failed", "timed_out"],
+    reason: str,
+) -> bool:
+    recovered = _recover_deep_stage_services(runner, settings, host)
+    host.stage_coverage.append(
+        StageCoverage(
+            "deep_inspection",
+            "partial" if recovered else outcome,
+            "service_recovery" if recovered else "port_discovery",
+            reason,
+        )
+    )
+    if recovered:
+        LOGGER.info("Deep inspection recovered service evidence for %s.", host.ip)
+    else:
+        kind = "unit_timed_out" if outcome == "timed_out" else "unit_failed"
+        _emit(reporter, ScanEvent(kind=kind, ip=host.ip))
+        LOGGER.warning(
+            "Deep inspection service recovery found nothing for %s.", host.ip
+        )
+    return recovered
 
 
 def run_deep_inspection_stage(
@@ -258,6 +310,7 @@ def run_deep_inspection_stage(
     )
     hosts_done = 0
     hosts_skipped = 0
+    hosts_incomplete = 0
     nspi_options = (
         {
             "script_timeout": NSPI_SCRIPT_TIMEOUT,
@@ -296,61 +349,39 @@ def run_deep_inspection_stage(
                 raise
             except BudgetExceeded:
                 LOGGER.warning("Deep inspection timed out for %s.", host.ip)
-                if _recover_deep_stage_services(runner, settings, host):
-                    LOGGER.info(
-                        "Deep inspection recovered service evidence for %s.",
-                        host.ip,
-                    )
-                else:
+                hosts_incomplete += 1
+                if not _record_deep_gap(
+                    runner, settings, host, reporter, "timed_out", "nse_timeout"
+                ):
                     hosts_skipped += 1
-                    _emit(reporter, ScanEvent(kind="unit_timed_out", ip=host.ip))
-                    LOGGER.warning(
-                        "Deep inspection service recovery found nothing for %s.",
-                        host.ip,
-                    )
             except UnitScanError:
                 LOGGER.warning("Deep inspection failed for %s.", host.ip)
-                if _recover_deep_stage_services(runner, settings, host):
-                    LOGGER.info(
-                        "Deep inspection recovered service evidence for %s.",
-                        host.ip,
-                    )
-                else:
+                hosts_incomplete += 1
+                if not _record_deep_gap(
+                    runner, settings, host, reporter, "failed", "nse_failed"
+                ):
                     hosts_skipped += 1
-                    _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
-                    LOGGER.warning(
-                        "Deep inspection service recovery found nothing for %s.",
-                        host.ip,
-                    )
             else:
                 if result is None:
                     if settings.scan_mode == "nspi":
                         LOGGER.warning(
                             "Deep inspection hit the host timeout for %s.", host.ip
                         )
+                        outcome, reason = "timed_out", "nse_timeout"
                     else:
                         LOGGER.warning(
                             "Deep inspection returned no result for %s.", host.ip
                         )
-                    if _recover_deep_stage_services(runner, settings, host):
-                        LOGGER.info(
-                            "Deep inspection recovered service evidence for %s.",
-                            host.ip,
-                        )
-                    else:
+                        outcome, reason = "failed", "nse_no_result"
+                    hosts_incomplete += 1
+                    if not _record_deep_gap(
+                        runner, settings, host, reporter, outcome, reason
+                    ):
                         hosts_skipped += 1
-                        if settings.scan_mode == "nspi":
-                            _emit(
-                                reporter,
-                                ScanEvent(kind="unit_timed_out", ip=host.ip),
-                            )
-                        else:
-                            _emit(reporter, ScanEvent(kind="unit_failed", ip=host.ip))
-                        LOGGER.warning(
-                            "Deep inspection service recovery found nothing for %s.",
-                            host.ip,
-                        )
                 else:
+                    host.stage_coverage.append(
+                        StageCoverage("deep_inspection", "completed", "nmap_nse")
+                    )
                     host.ports = merge_ports(host.ports, result.ports)
                     host.host_scripts = result.host_scripts
                     host.identity = host.identity.merged_with(result.identity)
@@ -399,7 +430,7 @@ def run_deep_inspection_stage(
             units_total=hosts_total,
         ),
     )
-    return hosts_skipped
+    return hosts_incomplete
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,6 +450,20 @@ def _stage_deadline_hit(
     if stage_deadline is None or perf_counter() < stage_deadline:
         return None
     return _elapsed_stage_seconds(stage_deadline, stage_started)
+
+
+def _ot_host_coverage(
+    cancel_event: threading.Event | None, host_deadline: float | None
+) -> StageCoverage:
+    if cancel_event is not None and cancel_event.is_set():
+        return StageCoverage(
+            "ot_inspection", "partial", "modbus_inspection", "scan_cancelled"
+        )
+    if host_deadline is not None and perf_counter() >= host_deadline:
+        return StageCoverage(
+            "ot_inspection", "partial", "modbus_inspection", "ot_host_deadline"
+        )
+    return StageCoverage("ot_inspection", "completed", "modbus_inspection")
 
 
 def run_ot_inspection_stage(
@@ -456,10 +501,13 @@ def run_ot_inspection_stage(
     digest_key = load_digest_key()
     stage_started = perf_counter()
     stage_deadline = min_not_none(deadline, stage_started + MAX_OT_STAGE_SECONDS)
-    for host in eligible_hosts:
+    stopped_at: int | None = None
+    for index, host in enumerate(eligible_hosts):
         if cancel_event is not None and cancel_event.is_set():
+            stopped_at = index
             break
         if _stage_deadline_hit(stage_deadline, stage_started) is not None:
+            stopped_at = index
             break
         host_deadline = min_not_none(
             stage_deadline,
@@ -489,6 +537,7 @@ def run_ot_inspection_stage(
                     digest_key=digest_key,
                 )
         correlate_fc43_fingerprints(host)
+        host.stage_coverage.append(_ot_host_coverage(cancel_event, host_deadline))
         hosts_done += 1
         _emit(
             reporter,
@@ -505,6 +554,12 @@ def run_ot_inspection_stage(
             ),
         )
     cancelled = cancel_event is not None and cancel_event.is_set()
+    if stopped_at is not None:
+        reason = "scan_cancelled" if cancelled else "stage_budget"
+        for host in eligible_hosts[stopped_at:]:
+            host.stage_coverage.append(
+                StageCoverage("ot_inspection", "skipped", "not_run", reason)
+            )
     if not cancelled:
         deadline_seconds = _stage_deadline_hit(stage_deadline, stage_started)
         if deadline_seconds is not None:
@@ -763,6 +818,7 @@ def build_metadata(
                 "targeted_units_eligible": targeted_summary.eligible,
                 "targeted_units_planned": targeted_summary.planned,
                 "targeted_units_omitted": targeted_summary.omitted,
+                "targeted_units_omitted_unlisted": targeted_summary.omitted_unlisted,
                 "targeted_units_completed": targeted_summary.completed,
                 "targeted_units_failed": targeted_summary.failed,
                 "targeted_units_timed_out": targeted_summary.timed_out,

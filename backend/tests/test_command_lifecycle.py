@@ -11,7 +11,16 @@ from api.services.command_lifecycle import (
     status_rank,
 )
 
-STATUSES = ["queued", "delivered", "running", "uploading", "done", "failed", "expired"]
+STATUSES = [
+    "queued",
+    "delivered",
+    "running",
+    "uploading",
+    "done",
+    "failed",
+    "cancelled",
+    "expired",
+]
 
 
 def test_rank_covers_every_status():
@@ -25,13 +34,14 @@ def test_non_terminal_is_rank_ordered_and_excludes_terminal():
 
 def test_pi_owned_statuses_outrank_delivered():
     assert all(status_rank(s) > status_rank("delivered") for s in PI_OWNED)
+    assert "cancelled" in PI_OWNED
 
 
 def test_terminal_statuses_share_the_top_rank():
     assert {status_rank(s) for s in TERMINAL} == {max(RANK.values())}
 
 
-@pytest.mark.parametrize("status", ["done", "failed", "expired"])
+@pytest.mark.parametrize("status", ["done", "failed", "cancelled", "expired"])
 def test_is_terminal_true_for_terminal_statuses(status):
     assert is_terminal(status) is True
 
@@ -50,6 +60,7 @@ def test_is_terminal_false_for_non_terminal_statuses(status):
         ("uploading", "processing"),
         ("done", "completed"),
         ("failed", "failed"),
+        ("cancelled", "cancelled"),
         ("expired", "failed"),
     ],
 )

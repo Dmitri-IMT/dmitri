@@ -11,7 +11,7 @@ from agent.ot.modbus.models import (
     ModbusUnit,
 )
 from agent.ot.policy import MAX_OT_HOST_SECONDS, MAX_OT_STAGE_SECONDS, min_not_none
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo
+from agent.scanner.models import HostInfo, PortInfo, ServiceInfo, StageCoverage
 from agent.scanner.stages import (
     build_host_payload,
     build_metadata,
@@ -87,6 +87,11 @@ def test_ot_stage_runs_only_for_nspi_and_is_serial(monkeypatch) -> None:
         "ot_stage_done",
     ]
     assert all(host.industrial_services for host in hosts)
+    assert all(
+        host.stage_coverage
+        == [StageCoverage("ot_inspection", "completed", "modbus_inspection")]
+        for host in hosts
+    )
 
 
 def test_non_nspi_ot_stage_is_noop(monkeypatch) -> None:
@@ -221,6 +226,9 @@ def test_ot_stage_cancel_does_not_emit_deadline() -> None:
 
     assert not ot_inspection.stage_deadline_reached
     assert ot_inspection.stage_deadline_seconds is None
+    assert host.stage_coverage == [
+        StageCoverage("ot_inspection", "skipped", "not_run", "scan_cancelled")
+    ]
     assert not any(event.kind == "ot_stage_deadline" for event in reporter.events)
     assert "modbus_stage_deadline_reached" not in build_metadata(
         runner=_Runner(),
@@ -264,6 +272,10 @@ def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
     assert len(deadline_events) == 1
     assert "Time limit reached during Modbus inventory" in deadline_events[0].message
     assert deadline_events[0].units_skipped >= 1
+    assert all(len(host.stage_coverage) == 1 for host in hosts)
+    assert StageCoverage(
+        "ot_inspection", "skipped", "not_run", "stage_budget"
+    ) in [host.stage_coverage[0] for host in hosts]
 
     metadata = build_metadata(
         runner=_Runner(),
@@ -310,6 +322,15 @@ def test_ot_host_deadline_allows_remaining_hosts(monkeypatch) -> None:
     ]
     assert len(inspected) == 2
     assert all(host.industrial_services for host in hosts)
+    assert all(
+        host.stage_coverage
+        == [
+            StageCoverage(
+                "ot_inspection", "partial", "modbus_inspection", "ot_host_deadline"
+            )
+        ]
+        for host in hosts
+    )
     assert not any(event.kind == "ot_stage_deadline" for event in reporter.events)
 
     metadata = build_metadata(

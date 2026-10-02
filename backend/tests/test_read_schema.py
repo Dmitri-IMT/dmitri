@@ -63,6 +63,7 @@ def _scan_summary_payload(**overrides: object) -> dict:
         "subnet": "192.168.1.0/24",
         "scan_mode": "standard",
         "status": "completed",
+        "evidence_completeness": "complete",
         "host_count": 12,
         "finding_count": 4,
         "highest_severity": "critical",
@@ -174,6 +175,7 @@ def test_scan_detail_response_nests_scan_host_view_and_finding_read():
             "assessment_policy_version": None,
             "exposures": [],
             "status": "completed",
+            "evidence_completeness": "complete",
             "host_count": 1,
             "finding_count": 0,
         }
@@ -194,6 +196,22 @@ def test_scan_summary_highest_severity_optional():
     )
 
     assert summary.highest_severity is None
+
+
+@pytest.mark.parametrize(
+    "terminated_by",
+    ["completed", "user_cancel", "timeout", "error", None],
+)
+def test_scan_summary_terminated_by_accepts_runner_values(terminated_by):
+    summary = ScanSummary.model_validate(
+        _scan_summary_payload(terminated_by=terminated_by)
+    )
+    assert summary.terminated_by == terminated_by
+
+
+def test_scan_summary_terminated_by_optional():
+    without = ScanSummary.model_validate(_scan_summary_payload())
+    assert without.terminated_by is None
 
 
 def test_scan_summary_rejects_extra_fields():

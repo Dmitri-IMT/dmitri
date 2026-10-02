@@ -11,6 +11,18 @@
 > substitutes local display values in answers before persistence or API response, matching
 > `materialize_scan_ai_analysis`.
 
+> **Amendment 2026-09-27 (partial scan coverage):** Scan-analysis context version 3 includes
+> `partial_result` and `stopped_by` (`operator`, `timeout`, `error`, or null). For partial
+> results, every analysis prompt opens with the coverage limit and tells the model that missing
+> findings do not prove the absence of vulnerabilities. A cancelled scan with no results has no
+> AI analysis.
+
+> **Amendment 2026-10-02 (evidence completeness):** Scan-analysis context version 4 replaces
+> `partial_result` with `evidence_completeness` (`complete`, `partial`, or `unknown`) and adds
+> `incomplete_check_count`. Both come from the scan's metadata and coverage. The coverage-limit
+> notice opens every prompt when completeness is `partial` or `unknown`; `stopped_by` still gives
+> the stop reason.
+
 ## Context
 
 PR #144 added an optional Groq-backed analysis of a completed scan. The product
@@ -74,6 +86,16 @@ The provider response refers to findings only through `finding_N` placeholders.
 The backend rejects unknown references, maps valid references to persisted IDs,
 and replaces placeholders with local display values before it stores or returns
 the analysis.
+
+The context also carries each finding's public evidence basis (`cve_correlation`
+or `target_observation`), aggregate evidence completeness (`complete`, `partial`
+or `unknown`) and the count of incomplete coverage units. It does not send the
+coverage entries, port/service map or raw observations. The provider must treat a
+CVE correlation as unverified target applicability and partial or unknown
+coverage as insufficient to claim that a target is clean.
+This change advances the provider context version to `3` and the prompt version
+to `4`. Stored analyses keep their original content; the UI shows the evidence
+limit beside completed analyses, including older records.
 
 ### 7. Prompt-injection containment
 

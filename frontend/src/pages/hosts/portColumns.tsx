@@ -22,6 +22,15 @@ export function portColumns(
           <span className="block truncate font-mono text-muted-foreground">
             {port.port}
           </span>
+          <span className="block text-body-sm text-muted-foreground">
+            {t(
+              port.observed_in_latest_scan === true
+                ? 'scans.currentPort'
+                : port.observed_in_latest_scan === false
+                  ? 'scans.historicalPort'
+                  : 'scans.unknownPort',
+            )}
+          </span>
         </>
       ),
     },

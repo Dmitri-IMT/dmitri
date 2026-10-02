@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import sqlalchemy as sa
 from api.models import command  # noqa: F401
 from api.models.persistence import SQLModel
+from api.schemas.agent_frames import AgentStatusFrame
+from api.schemas.commands import CommandSummary
+from api.schemas.read import ScanSummary
 
 
 def test_agent_table_registers_on_metadata():
@@ -78,3 +83,36 @@ def test_agent_nonce_timestamp_columns_are_timezone_aware():
     assert table.c.expires_at.type.timezone is True
     assert isinstance(table.c.created_at.type, sa.DateTime)
     assert table.c.created_at.type.timezone is True
+
+
+def test_cancelled_status_is_accepted_by_public_and_agent_schemas():
+    command_summary = CommandSummary.model_validate(
+        {
+            "command_id": UUID("11111111-1111-4111-8111-111111111111"),
+            "agent_id": UUID("22222222-2222-4222-8222-222222222222"),
+            "status": "cancelled",
+        }
+    )
+    scan_summary = ScanSummary.model_validate(
+        {
+            "scan_id": UUID("33333333-3333-4333-8333-333333333333"),
+            "timestamp": "2026-09-27T12:00:00Z",
+            "subnet": "10.0.0.0/24",
+            "scan_mode": "standard",
+            "status": "cancelled",
+            "evidence_completeness": "unknown",
+            "host_count": 0,
+            "finding_count": 0,
+        }
+    )
+    status_frame = AgentStatusFrame.model_validate(
+        {
+            "type": "status",
+            "command_id": "44444444-4444-4444-8444-444444444444",
+            "status": "cancelled",
+        }
+    )
+
+    assert command_summary.status == "cancelled"
+    assert scan_summary.status == "cancelled"
+    assert status_frame.status == "cancelled"

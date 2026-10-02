@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from sqlmodel import Session, func, select
 
-from api.core.scan_read import scan_duration_seconds
+from api.core.scan_read import scan_duration_seconds, scan_terminated_by
 from api.core.severity import Severity
 from api.models.persistence import (
     EpssRecord,
@@ -30,9 +30,17 @@ from api.schemas.read import (
     ScanStatus,
     SeverityBreakdown,
 )
+from api.schemas.scan import TERMINATED_BY_USER_CANCEL
 from api.services.read import get_scan_risk_summary
+from api.services.scan_evidence import (
+    EvidenceCompleteness,
+    evidence_completeness,
+    incomplete_check_count,
+    is_cve_correlation,
+    parse_coverage,
+)
 
-AI_CONTEXT_VERSION = "2"
+AI_CONTEXT_VERSION = "4"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
@@ -49,6 +57,9 @@ class AIFindingContext(BaseModel):
     cvss_score: Annotated[float | None, Field(ge=0, le=10)]
     severity: Severity
     confidence: Literal["tentative", "probable", "confirmed"] | None
+    evidence_basis: Literal["cve_correlation", "target_observation"] = (
+        "target_observation"
+    )
     risk_score: Annotated[float | None, Field(ge=0, le=100)]
     exploitability: Annotated[float | None, Field(ge=0, le=1)]
     epss_score: Annotated[float | None, Field(ge=0, le=1)]
@@ -60,9 +71,12 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
+    evidence_completeness: EvidenceCompleteness = "unknown"
+    incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     duration_seconds: Annotated[int | None, Field(ge=0)]
+    stopped_by: Literal["operator", "timeout", "error"] | None = None
     host_count: Annotated[int, Field(ge=0)]
     total_findings: Annotated[int, Field(ge=0)]
     scored_findings: Annotated[int, Field(ge=0)]
@@ -101,10 +115,12 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
+    evidence_completeness: EvidenceCompleteness = "unknown"
+    incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     host_count: Annotated[int, Field(ge=0)]
     aggregate: ChatAggregate
     top_findings: list[AIFindingContext]
@@ -114,7 +130,7 @@ class ScanChatContext(BaseModel):
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
 
@@ -122,7 +138,7 @@ class FindingChatContext(BaseModel):
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["2"] = AI_CONTEXT_VERSION
+    context_version: Literal["4"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -177,6 +193,11 @@ def build_finding_contexts(
                 cvss_score=finding.cvss_score,
                 severity=finding.severity,
                 confidence=finding.confidence,
+                evidence_basis=(
+                    "cve_correlation"
+                    if is_cve_correlation(finding.cve_id, finding.source)
+                    else "target_observation"
+                ),
                 risk_score=finding.risk_score,
                 exploitability=finding.exploitability,
                 epss_score=epss.epss_score if epss is not None else None,
@@ -235,10 +256,18 @@ def build_scan_ai_context(
         epss_by_cve=epss_by_cve,
         kev_by_cve=kev_by_cve,
     )
+    coverage = parse_coverage(scan.coverage_json)
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
+        evidence_completeness=evidence_completeness(scan.metadata_json, coverage),
+        incomplete_check_count=incomplete_check_count(coverage),
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
+        stopped_by={
+            TERMINATED_BY_USER_CANCEL: "operator",
+            "timeout": "timeout",
+            "error": "error",
+        }.get(scan_terminated_by(scan.metadata_json)),
         host_count=host_count,
         total_findings=risk.total_findings,
         scored_findings=risk.scored_findings,

@@ -3,6 +3,7 @@ import DataTable, { type DataTableColumn } from '@/components/DataTable'
 import EmptyMark from '@/components/EmptyMark'
 import Pagination from '@/components/Pagination'
 import SeverityWord from '@/components/SeverityWord'
+import Timestamp from '@/components/Timestamp'
 import { HOME_ATTENTION_PER_PAGE } from '@/api/home'
 import type { components } from '@/types/openapi'
 import useI18n from '@/i18n/useI18n'
@@ -34,6 +35,9 @@ function attentionColumns(t: ReturnType<typeof useI18n>['t']) {
               {finding.cve_id}
             </span>
           )}
+          <span className="block text-body-sm text-muted-foreground">
+            {t('home.detected')} <Timestamp value={finding.detected_at} />
+          </span>
         </>
       ),
     },
