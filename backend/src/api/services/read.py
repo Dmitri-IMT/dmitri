@@ -64,6 +64,7 @@ from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
+from api.services.scan_evidence import evidence_completeness, parse_coverage
 
 logger = logging.getLogger(__name__)
 
@@ -485,8 +486,7 @@ def get_scan_risk_summary(
         total_findings=len(rows),
         scored_findings=len(scores),
         confirmed_findings=sum(
-            effective_finding_confidence(row.FindingRecord) == "confirmed"
-            for row in rows
+            row.FindingRecord.confidence == "confirmed" for row in rows
         ),
         kev_findings=sum(
             row.FindingRecord.cve_id is not None
@@ -863,11 +863,7 @@ def _to_finding_read(
         detected_at=finding.created_at,
         risk_score=risk.risk_score if risk else None,
         exploitability=risk.exploitability if risk else None,
-        confidence=(
-            "probable"
-            if is_cve_correlation(finding.cve_id, finding.source)
-            else risk.confidence if risk else None
-        ),
+        confidence=risk.confidence if risk else None,
         risk_rationale=risk.rationale if risk else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
@@ -877,22 +873,13 @@ def _to_finding_read(
 
 
 def _port_check_complete(scan: ScanRecord, ip: str) -> bool:
-    if scan.coverage_json:
+    coverage = parse_coverage(scan.coverage_json)
+    if coverage:
         outcomes = [
-            unit.get("outcome")
-            for unit in scan.coverage_json
-            if unit.get("stage") == "ports" and unit.get("ip") == ip
+            unit.outcome
+            for unit in coverage
+            if unit.stage == "ports" and str(unit.ip) == ip
         ]
         return bool(outcomes) and all(outcome == "completed" for outcome in outcomes)
-    return (scan.metadata_json or {}).get("partial_result") is False
-
-
-def is_cve_correlation(cve_id: str | None, source: str | None) -> bool:
-    return bool(cve_id) and source in {"nmap_vulners", "nvd"}
-
-
-def effective_finding_confidence(finding: FindingRecord) -> str:
-    if is_cve_correlation(finding.cve_id, finding.source):
-        return "probable"
-    return finding.confidence
+    return evidence_completeness(scan.metadata_json, coverage) == "complete"
 

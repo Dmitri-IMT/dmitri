@@ -23,6 +23,7 @@ from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
 from api.services.risk import refresh_risk_snapshot
+from api.services.scan_evidence import is_cve_correlation
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def _process_cve_job(
     if not matches:
         return
     match = matches[0]
-    if finding_record.source in {"nmap_vulners", "nvd"}:
+    if is_cve_correlation(finding_record.cve_id, finding_record.source):
         finding_record.confidence = "probable"
     finding_record.cvss_score = match["cvss_score"] or finding_record.cvss_score
     finding_record.severity = match["severity"]

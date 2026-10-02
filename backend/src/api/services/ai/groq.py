@@ -394,8 +394,14 @@ def _system_prompt(language: str) -> str:
 
 
 def _coverage_notice(context: ScanAIContext) -> str:
-    if not context.partial_result:
+    if context.evidence_completeness == "complete":
         return ""
+    if context.evidence_completeness == "unknown":
+        return (
+            "Coverage limit: this scan does not report whether every check "
+            "finished. A missing finding is not evidence that a vulnerability "
+            "is absent.\n\n"
+        )
     stop_reason = {
         "operator": "An operator stopped the scan early.",
         "timeout": "A time limit stopped the scan.",

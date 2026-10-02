@@ -31,7 +31,14 @@ from api.schemas.read import (
     SeverityBreakdown,
 )
 from api.schemas.scan import TERMINATED_BY_USER_CANCEL
-from api.services.read import get_scan_risk_summary, is_cve_correlation
+from api.services.read import get_scan_risk_summary
+from api.services.scan_evidence import (
+    EvidenceCompleteness,
+    evidence_completeness,
+    incomplete_check_count,
+    is_cve_correlation,
+    parse_coverage,
+)
 
 AI_CONTEXT_VERSION = "3"
 
@@ -66,7 +73,7 @@ class ScanAIContext(BaseModel):
 
     context_version: Literal["3"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
-    evidence_completeness: Literal["complete", "partial", "unknown"] = "unknown"
+    evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     duration_seconds: Annotated[int | None, Field(ge=0)]
     partial_result: bool = False
@@ -113,7 +120,7 @@ class ScanChatContext(BaseModel):
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
-    evidence_completeness: Literal["complete", "partial", "unknown"] = "unknown"
+    evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
     host_count: Annotated[int, Field(ge=0)]
     aggregate: ChatAggregate
@@ -250,23 +257,15 @@ def build_scan_ai_context(
         epss_by_cve=epss_by_cve,
         kev_by_cve=kev_by_cve,
     )
-    metadata = scan.metadata_json or {}
+    coverage = parse_coverage(scan.coverage_json)
+    completeness = evidence_completeness(scan.metadata_json, coverage)
 
     context = ScanAIContext(
         scan_mode=scan.scan_mode,
-        evidence_completeness=(
-            "partial"
-            if (scan.metadata_json or {}).get("partial_result") is True
-            else "complete"
-            if (scan.metadata_json or {}).get("partial_result") is False
-            else "unknown"
-        ),
-        incomplete_check_count=sum(
-            unit.get("outcome") != "completed"
-            for unit in (scan.coverage_json or [])
-        ),
+        evidence_completeness=completeness,
+        incomplete_check_count=incomplete_check_count(coverage),
         duration_seconds=scan_duration_seconds(scan.status, scan.metadata_json),
-        partial_result=metadata.get("partial_result") is True,
+        partial_result=completeness == "partial",
         stopped_by={
             TERMINATED_BY_USER_CANCEL: "operator",
             "timeout": "timeout",

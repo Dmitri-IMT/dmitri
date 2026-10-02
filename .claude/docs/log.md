@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-01
 
+* **Update**: PR #159 Cursor review, items 2–3. New `api/services/scan_evidence.py` owns both
+  evidence policies: `is_cve_correlation` (enrichment + AI `evidence_basis`) and
+  `evidence_completeness` / `incomplete_check_count` / `parse_coverage` (inventory, port freshness, AI
+  context, chat, Groq notice). Finding read and risk summary return the stored confidence again;
+  `effective_finding_confidence` and the read overlay are gone. The Groq notice now also warns on
+  `unknown` completeness. Touched: `backend/services.md`, `backend/ai.md`.
+
 * **Update**: PR #159 Cursor review, point 3. Coverage is recorded at the source: typed
   `StageCoverage` on `HostInfo.stage_coverage` replaces the five string fields; `_record_deep_gap`
   merges the three deep-recovery branches; the targeted stage records units a cancel or overall

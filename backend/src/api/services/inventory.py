@@ -16,6 +16,7 @@ from api.models.persistence import (
     ScanRecord,
     ServiceRecord,
 )
+from api.services.scan_evidence import evidence_completeness, parse_coverage
 
 _LATEST_SCAN_HOST_ORDER = (
     ScanRecord.timestamp.desc(),
@@ -199,7 +200,10 @@ def _reconcile_findings(
         session.add(existing)
 
     evidence_complete = (
-        (scan_record.metadata_json or {}).get("partial_result") is False
+        evidence_completeness(
+            scan_record.metadata_json, parse_coverage(scan_record.coverage_json)
+        )
+        == "complete"
     )
     if is_latest and evidence_complete:
         for row in known.values():

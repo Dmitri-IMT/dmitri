@@ -21,12 +21,13 @@ TEST_TOKEN = "test-token"
 
 
 def _context(
-    *, partial_result: bool = False, stopped_by: str | None = None
+    *, completeness: str = "complete", stopped_by: str | None = None
 ) -> ScanAIContext:
     return ScanAIContext(
         scan_mode="quick",
+        evidence_completeness=completeness,
         duration_seconds=10,
-        partial_result=partial_result,
+        partial_result=completeness == "partial",
         stopped_by=stopped_by,
         host_count=1,
         total_findings=0,
@@ -124,7 +125,7 @@ def test_partial_scan_prompt_opens_with_coverage_limit(stopped_by, reason):
         )
 
     _provider(handler).analyze_scan(
-        _context(partial_result=True, stopped_by=stopped_by)
+        _context(completeness="partial", stopped_by=stopped_by)
     )
 
     payload = captured["payload"]
@@ -134,6 +135,24 @@ def test_partial_scan_prompt_opens_with_coverage_limit(stopped_by, reason):
         "evidence that a vulnerability is absent."
     )
     assert "Never infer that the scan is clean" in payload["messages"][0]["content"]
+
+
+def test_groq_provider_warns_when_completeness_is_unknown():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": _analysis().model_dump_json()}}]},
+        )
+
+    _provider(handler).analyze_scan(_context(completeness="unknown"))
+
+    assert captured["payload"]["messages"][1]["content"].startswith(
+        "Coverage limit: this scan does not report whether every check finished. "
+        "A missing finding is not evidence that a vulnerability is absent."
+    )
 
 
 def test_groq_provider_keeps_coverage_notice_on_chunk_and_repair():
@@ -152,7 +171,7 @@ def test_groq_provider_keeps_coverage_notice_on_chunk_and_repair():
         )
 
     provider = _provider(handler)
-    context = _context(partial_result=True, stopped_by="timeout")
+    context = _context(completeness="partial", stopped_by="timeout")
     provider.analyze_chunk(context)
     provider.repair_chunk(context, ("important_findings:style",))
 
