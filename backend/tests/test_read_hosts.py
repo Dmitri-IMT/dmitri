@@ -545,7 +545,12 @@ def test_host_port_freshness_requires_completed_port_check(
     scan = seeded["scan"]
     scan.metadata_json = {"partial_result": True}
     scan.coverage_json = [
-        {"ip": seeded["host"].ip, "stage": "ports", "outcome": "completed"}
+        {
+            "ip": seeded["host"].ip,
+            "stage": "ports",
+            "outcome": "completed",
+            "evidence_source": "nmap_ports",
+        }
     ]
     administrative_session.commit()
 
@@ -559,13 +564,23 @@ def test_host_port_freshness_requires_completed_port_check(
     assert freshness() == {80: True, 23: False}
 
     scan.coverage_json = [
-        {"ip": seeded["host"].ip, "stage": "ports", "outcome": "partial"}
+        {
+            "ip": seeded["host"].ip,
+            "stage": "ports",
+            "outcome": "partial",
+            "evidence_source": "nmap_ports",
+        }
     ]
     administrative_session.commit()
     assert freshness() == {80: True, 23: None}
 
     scan.coverage_json = [
-        {"ip": "192.168.1.99", "stage": "ports", "outcome": "completed"}
+        {
+            "ip": "192.168.1.99",
+            "stage": "ports",
+            "outcome": "completed",
+            "evidence_source": "nmap_ports",
+        }
     ]
     administrative_session.commit()
     assert freshness() == {80: True, 23: None}
