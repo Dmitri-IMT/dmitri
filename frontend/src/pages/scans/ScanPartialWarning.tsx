@@ -13,14 +13,6 @@ import type { MessageKey } from '@/i18n/messages/catalog.types'
 import type { components } from '@/types/openapi'
 
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
-type TargetedCoverage = {
-  tool: string
-  completed: number
-  failed: number
-  timedOut: number
-  skipped: number
-  gaps: string[]
-}
 
 const GAP_REASON_MESSAGES: Record<string, MessageKey> = {
   tool_unavailable: 'scans.gapReasonToolUnavailable',
@@ -41,50 +33,11 @@ const GAP_REASON_MESSAGES: Record<string, MessageKey> = {
   unit_timeout: 'scans.gapReasonUnitTimeout',
 }
 
-function targetedCoverage(value: unknown): TargetedCoverage[] {
-  if (typeof value !== 'string') return []
-
-  return value
-    .split(';')
-    .filter(Boolean)
-    .map((entry) => {
-      const separator = entry.indexOf(':')
-      const tool = entry.slice(0, separator)
-      const detail = entry.slice(separator + 1)
-      const [counts = '', gaps] = detail.split(',gaps=', 2)
-      const values: Record<string, number> = {
-        c: 0,
-        f: 0,
-        t: 0,
-        s: 0,
-      }
-      for (const item of counts.split(',')) {
-        const [key, count] = item.split('=', 2)
-        if (key in values && count !== undefined) {
-          values[key] = Number(count) || 0
-        }
-      }
-      return {
-        tool,
-        completed: values.c,
-        failed: values.f,
-        timedOut: values.t,
-        skipped: values.s,
-        gaps: gaps
-          ? gaps.split('|').map((gap) => {
-              const [reason, count] = gap.split(':', 2)
-              return count === undefined ? reason : `${reason}:${count}`
-            })
-          : [],
-      }
-    })
-}
-
 function ScanPartialWarning({ scan }: { scan: ScanDetailResponse }) {
   const { t } = useI18n()
   if (scan.metadata?.partial_result !== true) return null
 
-  const coverage = targetedCoverage(scan.metadata.targeted_coverage)
+  const coverage = scan.targeted_coverage ?? []
   const targetedCounts = [
     ['targeted_units_planned', t('scans.coveragePlanned')],
     ['targeted_units_completed', t('scans.coverageCompletedLabel')],
@@ -143,46 +96,28 @@ function ScanPartialWarning({ scan }: { scan: ScanDetailResponse }) {
                   >
                     <h4 className="font-medium">{item.tool}</h4>
                     <dl className="grid grid-cols-2 gap-3 text-body-sm">
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t('scans.coverageCompletedLabel')}
-                        </dt>
-                        <dd>{item.completed}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t('scans.coverageFailed')}
-                        </dt>
-                        <dd>{item.failed}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t('scans.coverageTimedOut')}
-                        </dt>
-                        <dd>{item.timedOut}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t('scans.coverageSkipped')}
-                        </dt>
-                        <dd>{item.skipped}</dd>
-                      </div>
+                      {[
+                        [t('scans.coverageCompletedLabel'), item.completed],
+                        [t('scans.coverageFailed'), item.failed],
+                        [t('scans.coverageTimedOut'), item.timed_out],
+                        [t('scans.coverageSkipped'), item.skipped],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
                     </dl>
                     {item.gaps.length > 0 && (
                       <p className="text-body-sm text-muted-foreground">
                         {t('scans.coverageGaps')}:{' '}
                         {item.gaps
-                          .map((gap) => {
-                            const separator = gap.lastIndexOf(':')
-                            const reason = gap.slice(0, separator)
-                            const count = gap.slice(separator + 1)
+                          .map(({ reason, count }) => {
                             const messageKey = GAP_REASON_MESSAGES[reason]
                             const reasonLabel = messageKey
                               ? t(messageKey)
                               : reason.replaceAll('_', ' ')
-                            return separator === -1
-                              ? gap.replaceAll('_', ' ')
-                              : `${reasonLabel} (${count})`
+                            return `${reasonLabel} (${count})`
                           })
                           .join(', ')}
                       </p>

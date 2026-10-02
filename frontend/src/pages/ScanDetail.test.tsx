@@ -937,9 +937,28 @@ describe('ScanDetail', () => {
       targeted_units_failed: 0,
       targeted_units_timed_out: 1,
       targeted_units_skipped: 13,
-      targeted_coverage:
-        'ffuf:c=0,f=0,t=0,s=6,gaps=wordlist_unavailable:6;nikto:c=0,f=0,t=0,s=6,gaps=tool_unavailable:4|dependency_unavailable:2',
     }
+    completedPartial.targeted_coverage = [
+      {
+        tool: 'ffuf',
+        completed: 0,
+        failed: 0,
+        timed_out: 0,
+        skipped: 6,
+        gaps: [{ reason: 'wordlist_unavailable', count: 6 }],
+      },
+      {
+        tool: 'nikto',
+        completed: 0,
+        failed: 0,
+        timed_out: 0,
+        skipped: 6,
+        gaps: [
+          { reason: 'tool_unavailable', count: 4 },
+          { reason: 'dependency_unavailable', count: 2 },
+        ],
+      },
+    ]
     scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 

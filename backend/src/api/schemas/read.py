@@ -228,6 +228,24 @@ class HostDetailResponse(HostSummary):
     scan_history: list[HostScanHistoryEntry]
 
 
+class TargetedCoverageGap(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    count: Annotated[int, Field(ge=0)]
+
+
+class TargetedToolCoverage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    completed: Annotated[int, Field(ge=0)]
+    failed: Annotated[int, Field(ge=0)]
+    timed_out: Annotated[int, Field(ge=0)]
+    skipped: Annotated[int, Field(ge=0)]
+    gaps: list[TargetedCoverageGap]
+
+
 class ScanDetailResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -242,6 +260,7 @@ class ScanDetailResponse(BaseModel):
     exposures: list[ExposureRead]
     metadata: dict[str, str | int | float | bool] | None = None
     coverage: list[CoverageUnitPayload] = Field(default_factory=list)
+    targeted_coverage: list[TargetedToolCoverage] = Field(default_factory=list)
     status: ScanStatus
     evidence_completeness: EvidenceCompleteness
     command_id: UUID | None = None

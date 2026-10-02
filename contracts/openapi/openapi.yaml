@@ -3935,6 +3935,13 @@ components:
             $ref: '#/components/schemas/CoverageUnitPayload'
           type: array
           title: Coverage
+        targeted_coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetedToolCoverage'
+          description: Per-tool targeted-check outcomes, decoded from the agent's
+            `metadata.targeted_coverage` summary. Empty when the scan ran no
+            targeted checks.
         status:
           $ref: '#/components/schemas/ScanStatus'
         evidence_completeness:
@@ -3972,6 +3979,47 @@ components:
           anyOf:
             - $ref: '#/components/schemas/TerminatedBy'
             - type: 'null'
+    TargetedToolCoverage:
+      type: object
+      additionalProperties: false
+      required:
+        - tool
+        - completed
+        - failed
+        - timed_out
+        - skipped
+        - gaps
+      properties:
+        tool:
+          type: string
+        completed:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        timed_out:
+          type: integer
+          minimum: 0
+        skipped:
+          type: integer
+          minimum: 0
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetedCoverageGap'
+    TargetedCoverageGap:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+        - count
+      properties:
+        reason:
+          type: string
+        count:
+          type: integer
+          minimum: 0
     ScanListResponse:
       type: object
       additionalProperties: false

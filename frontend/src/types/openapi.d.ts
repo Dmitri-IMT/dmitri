@@ -1162,6 +1162,8 @@ export interface components {
             } | null;
             /** Coverage */
             coverage?: components["schemas"]["CoverageUnitPayload"][];
+            /** @description Per-tool targeted-check outcomes, decoded from the agent's `metadata.targeted_coverage` summary. Empty when the scan ran no targeted checks. */
+            targeted_coverage?: components["schemas"]["TargetedToolCoverage"][];
             status: components["schemas"]["ScanStatus"];
             evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             command_id?: string | null;
@@ -1172,6 +1174,18 @@ export interface components {
             box_name?: string | null;
             duration?: number | null;
             terminated_by?: components["schemas"]["TerminatedBy"] | null;
+        };
+        TargetedToolCoverage: {
+            tool: string;
+            completed: number;
+            failed: number;
+            timed_out: number;
+            skipped: number;
+            gaps: components["schemas"]["TargetedCoverageGap"][];
+        };
+        TargetedCoverageGap: {
+            reason: string;
+            count: number;
         };
         ScanListResponse: {
             data: components["schemas"]["ScanSummary"][];
