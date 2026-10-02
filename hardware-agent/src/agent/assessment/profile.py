@@ -255,7 +255,7 @@ def _profile_host(host: HostInfo) -> tuple[MachineType, DeviceProfilePayload]:
         product = _safe_text(port.service.product, MAX_EVIDENCE_VALUE_CHARS)
         if product:
             candidates = _matching_type_tokens(product)
-            if candidates:
+            if candidates and len(product.split()) > 1:
                 product_values.append(
                     _ProductFact(endpoint, product, "version", frozenset(candidates))
                 )
@@ -481,11 +481,7 @@ def _profile_host(host: HostInfo) -> tuple[MachineType, DeviceProfilePayload]:
             fact
             for fact in product_values
             if fact.kind == "industrial"
-            or (
-                corroborated
-                and machine_type in fact.machine_types
-                and (fact.kind != "version" or len(fact.value.split()) > 1)
-            )
+            or (corroborated and machine_type in fact.machine_types)
         ]
         if eligible_products:
             ordered_products = sorted(
