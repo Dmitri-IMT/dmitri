@@ -174,6 +174,9 @@ class FindingPayload(BaseModel):
     unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
 
 
+EvidenceCompleteness = Literal["complete", "partial", "unknown"]
+
+
 class CoverageObservationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

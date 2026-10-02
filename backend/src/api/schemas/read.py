@@ -22,6 +22,7 @@ from .scan import (
     AssessmentEvidencePayload,
     CoverageUnitPayload,
     DeviceProfilePayload,
+    EvidenceCompleteness,
     ExposureAttention,
     ExposureConfidence,
     ExposureRole,
@@ -242,6 +243,7 @@ class ScanDetailResponse(BaseModel):
     metadata: dict[str, str | int | float | bool] | None = None
     coverage: list[CoverageUnitPayload] = Field(default_factory=list)
     status: ScanStatus
+    evidence_completeness: EvidenceCompleteness
     command_id: UUID | None = None
     error_code: ScanErrorCode | None = None
     host_count: Annotated[int, Field(ge=0)]
@@ -260,7 +262,7 @@ class ScanSummary(BaseModel):
     subnet: str
     scan_mode: ScanMode
     status: ScanStatus
-    partial_result: bool | None = None
+    evidence_completeness: EvidenceCompleteness
     host_count: Annotated[int, Field(ge=0)]
     finding_count: Annotated[int, Field(ge=0)]
     highest_severity: Severity | None = None

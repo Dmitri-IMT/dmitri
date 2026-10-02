@@ -72,14 +72,11 @@ describe('scanDetailView', () => {
     })
   })
 
-  it('reads partial evidence and an operator stop', () => {
+  it('reads evidence completeness and an operator stop', () => {
     const view = scanDetailView(
-      scan({
-        terminated_by: 'user_cancel',
-        metadata: { partial_result: true },
-      }),
+      scan({ terminated_by: 'user_cancel', evidence_completeness: 'partial' }),
     )
-    expect(view.partial).toBe(true)
+    expect(view.completeness).toBe('partial')
     expect(view.stoppedEarly).toBe(true)
   })
 

@@ -277,6 +277,7 @@ def get_scan_detail(
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
+    coverage = parse_coverage(scan.coverage_json)
     return ScanDetailResponse(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -294,8 +295,9 @@ def get_scan_detail(
             else []
         ),
         metadata=scan.metadata_json,
-        coverage=scan.coverage_json or [],
+        coverage=coverage,
         status=scan.status,
+        evidence_completeness=evidence_completeness(scan.metadata_json, coverage),
         command_id=command.id if command else None,
         error_code=scan_error_code(
             scan.status, command.error_code if command else None
@@ -541,10 +543,8 @@ def _to_scan_summary(
         subnet=scan.subnet,
         scan_mode=scan.scan_mode,
         status=scan.status,
-        partial_result=(
-            scan.metadata_json["partial_result"]
-            if isinstance((scan.metadata_json or {}).get("partial_result"), bool)
-            else None
+        evidence_completeness=evidence_completeness(
+            scan.metadata_json, parse_coverage(scan.coverage_json)
         ),
         host_count=host_count,
         finding_count=finding_count,

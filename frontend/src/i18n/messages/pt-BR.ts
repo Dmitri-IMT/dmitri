@@ -303,4 +303,6 @@ export const catalog: Catalog = {
   'ai.evidenceLimit':
     'Correspondências de CVE e registros da NVD não confirmam que uma vulnerabilidade afeta os equipamentos verificados. Confirme o software e a versão afetados.',
   'ai.partialLimit': 'Algumas verificações desta varredura não terminaram.',
+  'ai.unknownLimit':
+    'Esta varredura não informa se todas as verificações terminaram.',
 }

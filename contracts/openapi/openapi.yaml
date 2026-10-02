@@ -2758,6 +2758,16 @@ components:
         - user_cancel
         - timeout
         - error
+    EvidenceCompleteness:
+      type: string
+      enum:
+        - complete
+        - partial
+        - unknown
+      description: Whether the scan's evidence covers every check. `partial` when
+        the Pi reported `partial_result` or any coverage unit did not complete;
+        `complete` when it reported no partial result and coverage has no gap;
+        otherwise `unknown`.
     ScanMode:
       type: string
       enum:
@@ -3814,6 +3824,7 @@ components:
         - subnet
         - scan_mode
         - status
+        - evidence_completeness
         - host_count
         - finding_count
       properties:
@@ -3829,11 +3840,8 @@ components:
           $ref: '#/components/schemas/ScanMode'
         status:
           $ref: '#/components/schemas/ScanStatus'
-        partial_result:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Partial Result
+        evidence_completeness:
+          $ref: '#/components/schemas/EvidenceCompleteness'
         host_count:
           type: integer
           minimum: 0
@@ -3876,6 +3884,7 @@ components:
         - assessment_policy_version
         - exposures
         - status
+        - evidence_completeness
         - host_count
         - finding_count
       properties:
@@ -3926,6 +3935,8 @@ components:
           title: Coverage
         status:
           $ref: '#/components/schemas/ScanStatus'
+        evidence_completeness:
+          $ref: '#/components/schemas/EvidenceCompleteness'
         command_id:
           anyOf:
             - type: string

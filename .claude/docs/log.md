@@ -5,6 +5,14 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: PR #159 Cursor review, completeness shape. `EvidenceCompleteness` is a contract
+  schema; `ScanSummary` and `ScanDetailResponse` carry a required `evidence_completeness` and
+  `ScanSummary.partial_result` is gone. The SPA reads the enum: `scanDetailView.completeness`,
+  `ScanAIAnalysis` `completeness` prop, `HomeAIOverview`, shared `lib/evidenceCompleteness`
+  (`ai.unknownLimit` added). An `unknown` scan no longer gets the "no vulnerabilities in this
+  scan" copy. Touched: `backend/schemas.md`, `contracts.md`, `frontend/screens.md`,
+  `frontend/scan-ai.md`, `frontend/home-ai-overview.md`.
+
 * **Update**: PR #159 Cursor review, point 4. Scan Detail status logic moved into the pure view
   model `scanDetailView(scan)` (`body`, `failed`, `partial`, `stoppedEarly`, `sections`); the page
   only renders it and the per-section `status !== 'failed'` gates are gone. Behavior unchanged.

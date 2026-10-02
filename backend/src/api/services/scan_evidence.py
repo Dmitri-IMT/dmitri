@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import TypeAdapter
 
-from api.schemas.scan import CoverageUnitPayload
-
-EvidenceCompleteness = Literal["complete", "partial", "unknown"]
+from api.schemas.scan import CoverageUnitPayload, EvidenceCompleteness
 
 _CVE_CORRELATION_SOURCES = frozenset({"nmap_vulners", "nvd"})
 _COVERAGE = TypeAdapter(list[CoverageUnitPayload])

@@ -287,4 +287,5 @@ export const catalog = {
   'ai.evidenceLimit':
     'CVE matches and NVD records do not confirm that a vulnerability applies to scanned machines. Verify the affected software and version.',
   'ai.partialLimit': 'Some checks in this scan did not finish.',
+  'ai.unknownLimit': 'This scan does not report whether every check finished.',
 } satisfies Record<string, Value>

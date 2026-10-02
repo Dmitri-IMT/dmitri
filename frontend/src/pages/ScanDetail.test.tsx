@@ -925,6 +925,21 @@ describe('ScanDetail', () => {
     )
   })
 
+  it('does not call a scan clean when its completeness is unknown', async () => {
+    scanDetail(
+      completedScan({
+        findings: [],
+        finding_count: 0,
+        evidence_completeness: 'unknown',
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    expect(await screen.findByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities in accepted evidence.',
+    )
+  })
+
   it('keeps observations from a failed scan visible', async () => {
     scanDetail(
       completedScan({

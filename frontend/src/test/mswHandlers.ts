@@ -205,6 +205,7 @@ export const latestScan: ScanSummary = {
   subnet: '192.168.1.0/24',
   scan_mode: 'standard',
   status: 'processing',
+  evidence_completeness: 'unknown',
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
@@ -219,6 +220,7 @@ export const latestSuccessfulScan: ScanSummary = {
   subnet: '192.168.1.0/24',
   scan_mode: 'standard',
   status: 'completed',
+  evidence_completeness: 'complete',
   host_count: 12,
   finding_count: 2,
   highest_severity: 'critical',
@@ -309,6 +311,7 @@ export const scanFixtures: ScanSummary[] = [
       subnet: `10.${index}.0.0/24`,
       scan_mode: scanModes[index % scanModes.length],
       status,
+      evidence_completeness: finished ? 'complete' : 'unknown',
       host_count: finished ? 5 + index : 0,
       finding_count: finished ? index % 4 : 0,
       highest_severity:

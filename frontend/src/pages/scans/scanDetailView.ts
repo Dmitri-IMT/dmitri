@@ -3,6 +3,7 @@ import type { components } from '@/types/openapi'
 
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
 type FindingRecord = components['schemas']['FindingRecord']
+type EvidenceCompleteness = components['schemas']['EvidenceCompleteness']
 
 const TARGETED_SOURCE = 'targeted_service_assessment'
 
@@ -15,7 +16,7 @@ export type ScanDetailBody = 'stopped' | 'progress' | 'evidence' | 'none'
 export interface ScanDetailView {
   body: ScanDetailBody
   failed: boolean
-  partial: boolean
+  completeness: EvidenceCompleteness
   stoppedEarly: boolean
   sections: {
     aiAnalysis: boolean
@@ -50,7 +51,7 @@ export function scanDetailView(scan: ScanDetailResponse): ScanDetailView {
   return {
     body,
     failed,
-    partial: metadata.partial_result === true,
+    completeness: scan.evidence_completeness,
     stoppedEarly: scan.terminated_by === 'user_cancel',
     sections: {
       aiAnalysis: !failed,

@@ -143,14 +143,14 @@ function ScanDetail() {
                   <ScanAIAnalysis
                     scanId={scan.scan_id}
                     findings={scan.findings}
-                    partial={view.partial}
+                    completeness={view.completeness}
                   />
                 )}
                 {view.sections.noFindings && (
                   <p data-testid="scan-no-findings" className="text-body-md">
-                    {view.partial
-                      ? t('common.noVulnerabilitiesAcceptedEvidence')
-                      : t('common.noVulnerabilitiesInScan')}
+                    {view.completeness === 'complete'
+                      ? t('common.noVulnerabilitiesInScan')
+                      : t('common.noVulnerabilitiesAcceptedEvidence')}
                   </p>
                 )}
                 {groups.length > 0 && (

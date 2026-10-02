@@ -760,6 +760,11 @@ export interface components {
         ScanStatus: "pending" | "accepted" | "processing" | "completed" | "failed" | "cancelled";
         /** @enum {string} */
         TerminatedBy: "completed" | "user_cancel" | "timeout" | "error";
+        /**
+         * @description Whether the scan's evidence covers every check. `partial` when the Pi reported `partial_result` or any coverage unit did not complete; `complete` when it reported no partial result and coverage has no gap; otherwise `unknown`.
+         * @enum {string}
+         */
+        EvidenceCompleteness: "complete" | "partial" | "unknown";
         /** @enum {string} */
         ScanMode: "quick" | "standard" | "extensive" | "nspi" | "max";
         /** @enum {string} */
@@ -1130,8 +1135,7 @@ export interface components {
             subnet: string;
             scan_mode: components["schemas"]["ScanMode"];
             status: components["schemas"]["ScanStatus"];
-            /** Partial Result */
-            partial_result?: boolean | null;
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             host_count: number;
             finding_count: number;
             highest_severity?: components["schemas"]["Severity"] | null;
@@ -1159,6 +1163,7 @@ export interface components {
             /** Coverage */
             coverage?: components["schemas"]["CoverageUnitPayload"][];
             status: components["schemas"]["ScanStatus"];
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
             command_id?: string | null;
             error_code?: components["schemas"]["ScanErrorCode"] | null;
             host_count: number;
