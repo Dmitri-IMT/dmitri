@@ -941,6 +941,7 @@ paths:
         | `command` | backend → Pi | `AgentCommandFrame` |
         | `cancel` | backend → Pi | `AgentCancelFrame` |
         | `status` | Pi → backend | `AgentStatusFrame` |
+        | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
         | `error` | backend → Pi | `AgentErrorFrame` |
 
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
@@ -3911,6 +3912,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FindingRecord'
+        progress:
+          anyOf:
+            - $ref: '#/components/schemas/ScanProgressRead'
+            - type: 'null'
+          description: Latest progress snapshot while the scan is unfinished; final scan data is authoritative after ingest.
         assessment_status:
           $ref: '#/components/schemas/AssessmentStatus'
         assessment_policy_version:
@@ -4539,7 +4545,7 @@ components:
       type: object
       additionalProperties: false
       description: |
-        **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+        **Pi → backend.** Command lifecycle reports. Scan results are never sent on the socket — they go to
         `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
         here.
       required:
@@ -4565,6 +4571,139 @@ components:
           type:
             - string
             - 'null'
+    AgentProgressFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Pi → backend.** One compact, sequenced progress snapshot for an active command. The full
+        scan payload is sent separately to `POST /api/v1/scans`.
+      required:
+        - type
+        - command_id
+        - scan_id
+        - sequence
+        - progress
+      properties:
+        type:
+          type: string
+          const: progress
+        command_id:
+          type: string
+          format: uuid
+        scan_id:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          minimum: 1
+        progress:
+          $ref: '#/components/schemas/ScanProgressSnapshot'
+    ScanProgressSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - percent
+        - machines
+        - open_ports
+        - filtered_ports
+        - industrial_services
+        - vulnerabilities
+      properties:
+        stage:
+          type: string
+          enum:
+            - discovery
+            - ports
+            - deep_inspection
+            - ot_inspection
+            - targeted_assessment
+            - normalization
+            - uploading
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 99
+        machines:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        open_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        filtered_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        industrial_services:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        vulnerabilities:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+    ScanProgressRead:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - percent
+        - machines
+        - open_ports
+        - filtered_ports
+        - industrial_services
+        - vulnerabilities
+        - updated_at
+      properties:
+        stage:
+          type: string
+          enum:
+            - discovery
+            - ports
+            - deep_inspection
+            - ot_inspection
+            - targeted_assessment
+            - normalization
+            - uploading
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 99
+        machines:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        open_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        filtered_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        industrial_services:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        vulnerabilities:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        updated_at:
+          type: string
+          format: date-time
     AgentCancelFrame:
       type: object
       additionalProperties: false

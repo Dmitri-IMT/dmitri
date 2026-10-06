@@ -288,6 +288,48 @@ def test_scan_read_degrades_malformed_persisted_operating_system_snapshot(
     assert "operating_system" in row.unreadable_fields
 
 
+def test_scan_read_exposes_progress_only_while_unfinished(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    scan = seeded["scan"]
+    scan.status = "processing"
+    scan.progress_json = {
+        "stage": "ports",
+        "percent": 35,
+        "machines": 3,
+        "open_ports": 0,
+        "filtered_ports": 2,
+        "industrial_services": None,
+        "vulnerabilities": None,
+    }
+    scan.progress_updated_at = datetime.now(timezone.utc)
+    administrative_session.add(scan)
+    administrative_session.commit()
+
+    detail = get_scan_detail(
+        administrative_session,
+        scan.scan_id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.progress is not None
+    assert detail.progress.percent == 35
+    assert detail.progress.machines == 3
+    assert detail.progress.open_ports == 0
+
+    scan.status = "completed"
+    administrative_session.add(scan)
+    administrative_session.commit()
+    completed = get_scan_detail(
+        administrative_session,
+        scan.scan_id,
+        org_id=seeded["org"].id,
+    )
+    assert completed is not None
+    assert completed.progress is None
+
+
 def test_get_scan_by_id_failed_body_has_error_code_and_command_id(
     client: TestClient, administrative_session: Session, bearer_headers
 ) -> None:

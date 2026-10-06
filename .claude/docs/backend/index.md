@@ -16,13 +16,13 @@ not a missing client or backend route.
 
 ## Data model
 
-* [Backend ORM models](./models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
-* [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
+* [Backend ORM models](./models.md) — The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+* [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 * [Scan failure-code vocabulary](./error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery/cancel, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, guarded live progress intake, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery/cancel, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
 * [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
 
 ## Auth
@@ -33,4 +33,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, and live scan progress. Head is `20261002_39`.

@@ -5,6 +5,15 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-02
 
+* **Update**: Live scan progress now travels as compact, sequenced WebSocket snapshots from the
+  Pi, is persisted separately from result metadata, and appears on unfinished scan details with
+  nullable counts and stage-based progress. The final normalized payload corrects interim counts
+  before upload. Touched: `backend/schemas.md`, `backend/services.md`, `backend/models.md`,
+  `backend/migrations.md`, `hardware-agent/command-channel.md`, `hardware-agent/daemon.md`,
+  `hardware-agent/scanner/progress.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/scanner/live-progress.md`,
+  `frontend/screens.md`.
+
 * **Update**: PR #161 Cursor review. Ingest host identity is now a key rule
   (`scan_identity_key`, `_split_macs`, `retarget_split_mac_hosts`) with one upsert loop and no
   history rewrite; the repair walk moved to `api/services/host_repair.py` and finds collisions with

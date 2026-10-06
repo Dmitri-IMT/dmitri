@@ -1093,6 +1093,64 @@ describe('ScanDetail', () => {
     expect(screen.queryByTestId('scan-unfinished')).not.toBeInTheDocument()
   })
 
+  it('shows unknown live counters and an indeterminate bar before the first report', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: null,
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines—')
+    expect(notice).toHaveTextContent('Open ports—')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).not.toHaveTextContent('%')
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')
+  })
+
+  it('renders live stage, percentage, and confirmed zero counts', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: {
+          stage: 'ports',
+          percent: 35,
+          machines: 3,
+          open_ports: 0,
+          filtered_ports: 2,
+          industrial_services: 0,
+          vulnerabilities: null,
+          updated_at: '2026-10-02T12:00:00Z',
+        },
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines3')
+    expect(notice).toHaveTextContent('Open ports0')
+    expect(notice).toHaveTextContent('Filtered ports2')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent('35%')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent(
+      'Checking ports',
+    )
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '35',
+    )
+  })
+
   it('sends a machines-seen row to that machine instead of expanding it', async () => {
     const user = userEvent.setup()
     scanDetail(completedScan())

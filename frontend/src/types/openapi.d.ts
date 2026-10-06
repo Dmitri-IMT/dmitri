@@ -375,6 +375,7 @@ export interface paths {
          *     | `command` | backend → Pi | `AgentCommandFrame` |
          *     | `cancel` | backend → Pi | `AgentCancelFrame` |
          *     | `status` | Pi → backend | `AgentStatusFrame` |
+         *     | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
          *
          *     Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
@@ -1154,6 +1155,8 @@ export interface components {
             /** @description Machines discovered by this scan. Items reuse the ingest `HostPayload` shape; they gain a `host_id` under contract ask C9. */
             hosts: components["schemas"]["ScanHostView"][];
             findings: components["schemas"]["FindingRecord"][];
+            /** @description Latest progress snapshot while the scan is unfinished; final scan data is authoritative after ingest. */
+            progress?: components["schemas"]["ScanProgressRead"] | null;
             assessment_status: components["schemas"]["AssessmentStatus"];
             assessment_policy_version: string | null;
             exposures: components["schemas"]["ExposureRead"][];
@@ -1371,7 +1374,7 @@ export interface components {
             nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         /**
-         * @description **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+         * @description **Pi → backend.** Command lifecycle reports. Scan results are never sent on the socket — they go to
          *     `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
          *     here.
          */
@@ -1383,6 +1386,42 @@ export interface components {
             /** @enum {string} */
             status: "running" | "uploading" | "done" | "failed" | "cancelled";
             error_code?: string | null;
+        };
+        /**
+         * @description **Pi → backend.** One compact, sequenced progress snapshot for an active command. The full
+         *     scan payload is sent separately to `POST /api/v1/scans`.
+         */
+        AgentProgressFrame: {
+            /** @constant */
+            type: "progress";
+            /** Format: uuid */
+            command_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            sequence: number;
+            progress: components["schemas"]["ScanProgressSnapshot"];
+        };
+        ScanProgressSnapshot: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+        };
+        ScanProgressRead: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description **Backend → Pi.** Requests that the Pi stop the active scan identified by `command_id`. */
         AgentCancelFrame: {
