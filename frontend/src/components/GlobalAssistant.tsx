@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { useLocation } from 'react-router'
 import { BotIcon } from 'lucide-react'
 import ContextChat from '@/components/ContextChat'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,6 @@ type AssistantContext = {
 
 function GlobalAssistant() {
   const location = useLocation()
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const { t } = useI18n()
   const context = useMemo<AssistantContext | null>(() => {
@@ -39,6 +38,8 @@ function GlobalAssistant() {
     return null
   }, [location.pathname, t])
 
+  if (!context) return null
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -54,29 +55,12 @@ function GlobalAssistant() {
         <DialogHeader>
           <DialogTitle>{t('ai.askDmitri')}</DialogTitle>
         </DialogHeader>
-        {context ? (
-          <ContextChat
-            key={`${context.scope}:${context.contextId}`}
-            scope={context.scope}
-            contextId={context.contextId}
-            title={t('ai.askAbout', { label: context.label })}
-          />
-        ) : (
-          <div className="flex flex-col gap-4">
-            <p className="text-body-md text-muted-foreground">
-              {t('ai.chooseScan')}
-            </p>
-            <Button
-              type="button"
-              onClick={() => {
-                setOpen(false)
-                navigate('/scans')
-              }}
-            >
-              {t('ai.viewScans')}
-            </Button>
-          </div>
-        )}
+        <ContextChat
+          key={`${context.scope}:${context.contextId}`}
+          scope={context.scope}
+          contextId={context.contextId}
+          title={t('ai.askAbout', { label: context.label })}
+        />
       </DialogContent>
     </Dialog>
   )
