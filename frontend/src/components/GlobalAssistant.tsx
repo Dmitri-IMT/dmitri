@@ -51,7 +51,7 @@ function GlobalAssistant() {
           {t('ai.assistant')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[min(90vh,48rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-assistant-dialog overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t('ai.askDmitri')}</DialogTitle>
         </DialogHeader>
