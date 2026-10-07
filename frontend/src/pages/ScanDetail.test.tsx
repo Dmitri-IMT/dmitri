@@ -427,15 +427,43 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
+      'Vulnerabilities: 4',
       'Critical: 1 vulnerability',
       'High: 1 vulnerability',
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
-      'Check coverage',
       'Machines seen',
+      'Check coverage',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+  })
+
+  it('opens one vulnerabilities card before revealing the severity cards', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const vulnerabilitiesToggle = await screen.findByRole('button', {
+      name: 'Toggle scan vulnerabilities',
+    })
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(vulnerabilitiesToggle)
+
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Toggle critical vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle high vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle medium vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle low vulnerabilities' }),
+    ).toBeInTheDocument()
   })
 
   it('renders the summary strip, and drops the counts a failed scan cannot know', async () => {

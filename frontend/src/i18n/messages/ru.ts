@@ -148,6 +148,9 @@ export const catalog: Catalog = {
   'common.nextPage': 'Следующая страница',
   'common.pageNumber': ({ page }) => 'Страница ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.vulnerabilitiesInScanTitle': ({ count }) => 'Уязвимости: ' + count,
+  'common.vulnerabilitiesInScanToggle':
+    'Показать или скрыть уязвимости сканирования',
   'common.severityGroupTitle': ({ severity, count }) => {
     const n = Number(count)
     const word =

@@ -160,6 +160,9 @@ export const catalog: Catalog = {
   'common.nextPage': 'Próxima página',
   'common.pageNumber': ({ page }) => 'Página ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.vulnerabilitiesInScanTitle': ({ count }) =>
+    'Vulnerabilidades: ' + count,
+  'common.vulnerabilitiesInScanToggle': 'Alternar vulnerabilidades do scan',
   'common.severityGroupTitle': ({ severity, count }) =>
     SEVERITY[severity] +
     ': ' +
