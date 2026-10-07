@@ -3,6 +3,19 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-06
+
+* **Creation**: `backend/reports.md` maps the educational report assembly, localized copy,
+  PDF chapters and navigation, count charts, conditional incident diagram and full finding register.
+* **Update**: Explained reports now include every device, distinguish observations from CVE
+  associations, describe conditional service impacts and correction checks, and read local advisory
+  cache data without new requests. Zero-alert devices retain coverage caveats. Updated backend
+  index, services and AI links; documented primary security references in
+  `docs/research/scan-report-design-references.md`. Existing report routes and setup commands remain valid.
+* **Update**: Added a clickable table of contents with page numbers for report chapters, all devices
+  and every explained group. Stable PDF bookmarks let its multi-pass build resolve final page numbers.
+  Technical PDF downloads keep their existing single-pass content.
+
 ## 2026-10-02
 
 * **Update**: Live scan progress now travels as compact, sequenced WebSocket snapshots from the
@@ -144,6 +157,23 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   to `"5"`. Touched: `hardware-agent/daemon.md`, `backend/services.md`, `backend/ai.md`,
   `backend/schemas.md`, `frontend/api.md`, `frontend/devices-screen.md`, `frontend/screens.md`,
   `frontend/scan-status.md`.
+
+## 2026-09-29
+
+* **Update**: Explained scan PDFs now combine a plain-language summary, scan metrics, vector bar
+  charts for severity and affected equipment, prioritized finding details, methodology and scan
+  limitations in English, Portuguese and Russian. Technical report downloads remain available.
+  Touched: `backend/services.md`.
+
+* **Update**: Scan report downloads failed with HTTP 500 because the API image lacked the Unicode
+  font required by PDF rendering. Railway Railpack and the local simulator now install DejaVu Sans;
+  documented the runtime requirement. Touched: `backend/services.md`.
+
+* **Update**: Scan analysis prompt and repair behavior. The worker uses the requested language,
+  repairs structured validation and style failures with codes rather than rejected prose, and
+  completes missing KEV actions deterministically before rechecking grounding and style. Failed
+  retries use the current prompt and writing-skill versions. Documented the active single-request
+  analysis path and retained bounded-analysis helper. Touched: `backend/ai.md`.
 
 ## 2026-09-28
 

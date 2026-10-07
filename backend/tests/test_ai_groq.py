@@ -181,6 +181,36 @@ def test_groq_provider_keeps_coverage_notice_on_chunk_and_repair():
             "A missing finding is not evidence that a vulnerability is absent."
         )
 
+def test_scan_analysis_operations_use_small_completion_budgets():
+    captured = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        captured.append(payload["max_completion_tokens"])
+        user_prompt = payload["messages"][1]["content"]
+        content = (
+            json.dumps(
+                {
+                    "priority_actions": [],
+                    "important_findings": [],
+                    "uncertainties": [],
+                }
+            )
+            if "CHUNK_CONTEXT_JSON:" in user_prompt
+            else _analysis().model_dump_json()
+        )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": content}}]}
+        )
+
+    provider = _provider(handler)
+    context = _context()
+    child = provider.analyze_chunk(context)
+    provider.repair_chunk(context, ("style",))
+    provider.synthesize_scan(context, [child.model_dump(mode="json")], ())
+
+    assert captured == [1_536, 1_536, 1_200]
+
 
 def test_groq_provider_records_usage_without_prompt_content():
     provider = _provider(
@@ -232,6 +262,9 @@ def test_groq_provider_sends_requested_analysis_language(language, expected):
     assert f"Write all explanatory prose in {expected}." in captured["payload"][
         "messages"
     ][0]["content"]
+    system_prompt = captured["payload"]["messages"][0]["content"]
+    assert "Write calmly in the requested language" in system_prompt
+    assert "Write calm, plain English" not in system_prompt
 
 
 def test_groq_provider_repair_sends_codes_not_rejected_prose():
@@ -254,11 +287,18 @@ def test_groq_provider_repair_sends_codes_not_rejected_prose():
 
     _provider(handler).repair_analysis(
         _context(),
-        ("executive_summary:safety_certification",),
+        (
+            "executive_summary:safety_certification",
+            "analysis contains an unknown reference",
+            "analysis contains duplicate finding references",
+        ),
     )
 
     repair_prompt = captured["payload"]["messages"][1]["content"]
     assert "executive_summary:safety_certification" in repair_prompt
+    assert "do not describe a network, machine, or service as safe" in repair_prompt
+    assert "use only finding_N and machine_N references" in repair_prompt
+    assert "one important finding explanation per finding_ref" in repair_prompt
     assert "Your network is safe." not in repair_prompt
 
 

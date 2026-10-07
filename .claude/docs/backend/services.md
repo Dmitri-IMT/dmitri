@@ -4,12 +4,15 @@ title: Backend services — persistence, host identity, read, enrichment, risk
 description: Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents, cancel]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-06T00:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
 
 ## Purpose
+
+The [report services](/backend/reports.md) turn completed scan and risk projections into
+localized explained/technical PDFs, with complete inventories and evidence-aware teaching material.
 
 `services/` is where the backend actually does its work. `persistence.py` writes an ingested
 `ScanIngestRequest` into the [tables](/backend/models.md), resolves host identity, and enqueues
@@ -35,12 +38,17 @@ stores the chosen `target_subnet`, and owns the idempotent admin revoke/restore 
 `users.py` owns account removal plus member listing and role changes. `org_lock.py` supplies the
 transaction-scoped per-org advisory lock that serializes admin-reducing role changes.
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
-[auth](/backend/auth.md).
+[auth](/backend/auth.md). `reports.py` assembles a plain-language report from scan, risk and
+optional AI data; `report_pdf.py` renders the explained report with metric cards, direct-label
+bar charts, prioritized findings and caveats, or emits the separate technical JSON PDF. Both
+layouts require a system Unicode font (DejaVu Sans is installed in the Railway and simulator
+images).
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
+| `build_scan_report()` / `render_scan_report_pdf()` | Builds a language-specific explained report from deterministic scan/risk data plus optional AI explanations, or a technical report; the PDF download adds summary metrics, severity and affected-device bar charts, prioritized finding details, method and limitations. | `backend/src/api/services/reports.py:20`, `backend/src/api/services/report_pdf.py:135` |
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError`, else fill it; `persist_scan` refuses a terminal command with `ScanClosedError` **except** `cancelled` (DMI-145 late partial), read under the row lock before any write. | `backend/src/api/services/persistence.py` |
 | `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan; always writes scan `completed` itself (ingest owns the completed scan). `metadata.terminated_by == TERMINATED_BY_USER_CANCEL` alone decides `scan_cancelled` vs `scan_finished` activity and `cancelled` vs `done` for a live command; an already-`cancelled` command stays as it is, so a normal finish after an offline cancel still reads as finished. `persist_scan` reads the command status `FOR UPDATE` before it writes the scan row, matching the command → scan lock order of offline cancel and the sweep (no deadlock), and hands it to `_close_scan`, so an operator cancel that lands mid-ingest keeps the results instead of rolling them back. Stores `scan.coverage` in `ScanRecord.coverage_json` on both insert and fill. | `backend/src/api/services/persistence.py` |

@@ -5,7 +5,7 @@ import { renderWithProviders } from '@/test/renderWithProviders'
 import AppShell from './AppShell'
 
 describe('AppShell', () => {
-  it('renders no floating assistant button on any route', async () => {
+  it('renders the floating assistant button on any route', async () => {
     renderWithProviders(
       <Routes>
         <Route element={<AppShell />}>
@@ -16,7 +16,7 @@ describe('AppShell', () => {
 
     await screen.findByTestId('top-bar')
     expect(
-      screen.queryByRole('button', { name: /assistant/i }),
-    ).not.toBeInTheDocument()
+      await screen.findByRole('button', { name: /assistant/i }),
+    ).toBeInTheDocument()
   })
 })

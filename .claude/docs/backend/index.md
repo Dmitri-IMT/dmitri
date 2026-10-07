@@ -22,8 +22,9 @@ not a missing client or backend route.
 
 ## Services
 
+* [Backend explained and technical scan reports](./reports.md) — Localized educational PDFs with clickable contents and page numbers, complete device inventories, evidence-aware explanations, charts, remediation checks and the full finding register.
 * [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, guarded live progress intake, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery/cancel, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
-* [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
+* [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), bounded structured repair and KEV coverage, scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
 
 ## Auth
 

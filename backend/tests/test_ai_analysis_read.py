@@ -7,10 +7,12 @@ from api.core.config import get_settings
 from api.main import app
 from api.models.persistence import AIScanAnalysisRecord
 from api.schemas.ai import ScanAIAnalysis
+from api.services.ai.groq import AI_PROMPT_VERSION
 from api.services.ai.jobs import (
     AIAnalysisAlreadyRequestedError,
     request_scan_ai_analysis,
 )
+from api.services.ai.writing import WRITING_SKILL_VERSION
 from pydantic import SecretStr
 from read_factories import seed_read_graph
 from sqlalchemy.exc import IntegrityError
@@ -249,6 +251,8 @@ def test_analysis_request_retries_failed_job(
     assert record.status == "pending"
     assert record.attempts == 0
     assert record.last_error is None
+    assert record.prompt_version == AI_PROMPT_VERSION
+    assert record.writing_skill_version == WRITING_SKILL_VERSION
     assert record.started_at is None
     assert record.completed_at is None
 
