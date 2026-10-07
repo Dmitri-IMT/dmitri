@@ -214,12 +214,34 @@ def test_technical_report_download_has_attachment_header(
     )
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.headers["content-type"].startswith("application/json")
     assert "attachment; filename=\"dmitri-scan-" in response.headers[
         "content-disposition"
     ]
-    assert response.content.startswith(b"%PDF-")
-    assert response.headers["content-disposition"].endswith('.pdf"')
+    assert response.headers["content-disposition"].endswith('.json"')
+    payload = response.json()
+    assert payload["kind"] == "technical"
+    assert payload["content_type"] == "application/json"
+    assert payload["sections"]["scan"]["scan_id"] == str(seeded["scan"].scan_id)
+
+
+def test_technical_report_preview_returns_downloadable_json_shape(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/technical",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["filename"].endswith("-technical.json")
+    assert payload["content_type"] == "application/json"
+    assert payload["sections"]["scan"]["scan_id"] == str(seeded["scan"].scan_id)
 
 
 @pytest.mark.parametrize("language", ["pt-BR", "en", "ru"])

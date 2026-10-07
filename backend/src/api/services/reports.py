@@ -57,13 +57,16 @@ def build_scan_report(
         sections["education"] = build_report_education(
             detail, language, advisories=advisories, enrichment=enrichment
         )
+    extension = "pdf" if kind == "explained" else "json"
     return ScanReportResponse(
         scan_id=scan_id,
         kind=kind,
         language=language,
         generated_at=generated_at,
-        filename=f"dmitri-scan-{scan_id}-{kind}.pdf",
-        content_type="application/pdf",
+        filename=f"dmitri-scan-{scan_id}-{kind}.{extension}",
+        content_type=(
+            "application/pdf" if kind == "explained" else "application/json"
+        ),
         sections=sections,
     )
 

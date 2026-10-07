@@ -19,5 +19,5 @@ class ScanReportResponse(BaseModel):
     language: AILanguage
     generated_at: datetime
     filename: str
-    content_type: Literal["application/pdf"]
+    content_type: Literal["application/pdf", "application/json"]
     sections: dict[str, Any]

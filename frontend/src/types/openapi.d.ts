@@ -136,7 +136,7 @@ export interface paths {
         };
         /**
          * Read a scan report
-         * @description Returns a deterministic explained or technical report for a completed scan.
+         * @description Returns the explained or technical report data for a completed scan.
          */
         get: operations["getScanReport"];
         put?: never;
@@ -210,7 +210,7 @@ export interface paths {
         };
         /**
          * Download a scan report
-         * @description Downloads the explained or technical report as a PDF.
+         * @description Downloads the explained report as PDF or the technical report as raw JSON.
          */
         get: operations["downloadScanReport"];
         put?: never;
@@ -1624,7 +1624,7 @@ export interface components {
             generated_at: string;
             filename: string;
             /** @enum {string} */
-            content_type: "application/pdf";
+            content_type: "application/pdf" | "application/json";
             sections: {
                 [key: string]: unknown;
             };
@@ -2751,7 +2751,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Downloadable PDF report. */
+            /** @description Downloadable PDF report or raw JSON report. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -2759,6 +2759,7 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": string;
+                    "application/json": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

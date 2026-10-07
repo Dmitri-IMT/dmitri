@@ -421,7 +421,7 @@ paths:
       tags:
         - scans
       summary: Read a scan report
-      description: Returns a deterministic explained or technical report for a completed scan.
+      description: Returns the explained or technical report data for a completed scan.
       operationId: getScanReport
       security:
         - FrontendBearerAuth: []
@@ -567,7 +567,7 @@ paths:
       tags:
         - scans
       summary: Download a scan report
-      description: Downloads the explained or technical report as a PDF.
+      description: Downloads the explained report as PDF or the technical report as raw JSON.
       operationId: downloadScanReport
       security:
         - FrontendBearerAuth: []
@@ -587,13 +587,17 @@ paths:
             default: en
       responses:
         '200':
-          description: Downloadable PDF report.
+          description: Downloadable PDF report or raw JSON report.
           headers:
             Content-Disposition:
               schema:
                 type: string
           content:
             application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/json:
               schema:
                 type: string
                 format: binary
@@ -5329,7 +5333,7 @@ components:
           type: string
         content_type:
           type: string
-          enum: [application/pdf]
+          enum: [application/pdf, application/json]
         sections:
           type: object
           additionalProperties: true
