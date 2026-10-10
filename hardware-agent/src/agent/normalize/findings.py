@@ -273,23 +273,28 @@ def _extract_generic_findings(
     port: PortInfo | None,
     script: ScriptResult,
 ) -> list[FindingPayload]:
-    generic = _extract_generic_vuln_table_findings(host, port, script)
-    if generic:
+    recognized, generic = _extract_generic_vuln_table_findings(host, port, script)
+    if recognized:
         return generic
 
     cves = sorted(set(CVE_PATTERN.findall(script.output)))
-    if not cves:
+    lowered_output = script.output.casefold()
+    if not cves or any(
+        marker in lowered_output
+        for marker in ("not vulnerable", "unable to test", "could not test", "error")
+    ):
         return []
 
     return [
         _base_finding(
             host,
             port,
-            severity="high",
+            severity="low",
             title=f"{cve.upper()} reported by {script.script_id}",
             description=(
-                f"The NSE script {script.script_id} reported {cve.upper()} for "
-                f"{_service_label(port)} on {host.ip}."
+                f"The NSE script {script.script_id} mentioned {cve.upper()} for "
+                f"{_service_label(port)} on {host.ip}; no structured positive result "
+                "was recorded."
             ),
             recommendation=(
                 "Review the affected service and apply the vendor patch or mitigation "
@@ -738,23 +743,37 @@ def _extract_generic_vuln_table_findings(
     host: HostInfo,
     port: PortInfo | None,
     script: ScriptResult,
-) -> list[FindingPayload]:
+) -> tuple[bool, list[FindingPayload]]:
     findings: list[FindingPayload] = []
+    recognized = False
     for candidate in _walk_mappings(script.data):
-        title = _lookup(candidate, "title")
-        description = _lookup(candidate, "description")
-        state = (_lookup(candidate, "state") or "").lower()
-        if not title or not description:
+        has_state_or_ids = any(
+            str(key).casefold() in {"state", "ids"} for key in candidate
+        )
+        state_value = _lookup(candidate, "state")
+        ids = _lookup(candidate, "ids")
+        if not has_state_or_ids:
             continue
-        if "vuln" not in state and "exploit" not in state and "dos" not in state:
+        recognized = True
+        state = " ".join(str(state_value or "").split()).casefold()
+        if state not in {
+            "vulnerable",
+            "vulnerable (dos)",
+            "vulnerable (exploitable)",
+        }:
             continue
 
-        ids = candidate.get("IDS") or candidate.get("ids")
-        cve_id = None
-        if isinstance(ids, Mapping):
-            raw_cve = ids.get("CVE") or ids.get("cve")
-            if isinstance(raw_cve, str) and CVE_PATTERN.fullmatch(raw_cve):
-                cve_id = raw_cve.upper()
+        title = _lookup(candidate, "title")
+        description = _lookup(candidate, "description")
+        cves = _structured_cves(ids)
+        cve_id = cves[0] if cves else None
+        if not title:
+            title = cve_id or f"NSE positive result from {script.script_id}"
+        if not description:
+            description = (
+                f"The NSE script {script.script_id} declared a positive result; "
+                "the available structured record has no description."
+            )
 
         check_results = candidate.get("check_results") or candidate.get("check-results")
         evidence = _stringify(check_results) or script.output or str(title)
@@ -777,7 +796,40 @@ def _extract_generic_vuln_table_findings(
                 references=_extract_urls(_stringify(candidate)),
             )
         )
-    return findings
+    return recognized, findings
+
+
+def _structured_cves(value: Any) -> list[str]:
+    found: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if str(key).casefold() == "cve":
+                candidates = (
+                    nested
+                    if isinstance(nested, Sequence)
+                    and not isinstance(nested, (str, bytes))
+                    else [nested]
+                )
+                for candidate in candidates:
+                    if isinstance(candidate, str):
+                        normalized = _normalize_structured_cve(candidate)
+                        if normalized:
+                            found.add(normalized)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for nested in value:
+            found.update(_structured_cves(nested))
+    elif isinstance(value, str):
+        normalized = _normalize_structured_cve(value)
+        if normalized:
+            found.add(normalized)
+    return sorted(found)
+
+
+def _normalize_structured_cve(value: str) -> str | None:
+    normalized = value.strip()
+    if normalized.casefold().startswith("cve:"):
+        normalized = normalized[4:]
+    return normalized.upper() if CVE_PATTERN.fullmatch(normalized) else None
 
 
 def _base_finding(

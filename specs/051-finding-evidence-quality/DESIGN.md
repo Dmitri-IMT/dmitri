@@ -1,6 +1,6 @@
 ﻿# Design — Qualidade da evidência dos achados
 
-Status: proposta aguardando aprovação · Entrega A · 2026-10-10
+Status: aprovado pelo usuário em 2026-10-10, ao solicitar avanço após revisar a proposta e a prévia · Entrega A
 
 **Prévia visual:** [preview.html](preview.html) — página HTML estática para revisão no navegador, sem dependências de aplicação. [Captura desktop](preview-desktop.png) mostra o topo da página; os demais estados estão no HTML completo.
 

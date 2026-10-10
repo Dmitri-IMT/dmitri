@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 import yaml
+
 from api.core import home_constants
 from api.main import app
 
@@ -31,6 +32,10 @@ ERROR_RESPONSE_ROUTES = {
 
 SCHEMA_NAMES = (
     "AssessmentEvidencePayload",
+    "FindingEvidenceObservationPayload",
+    "FindingEvidenceMethodCounts",
+    "FindingEvidenceConfidenceCounts",
+    "FindingEvidenceSummary",
     "DeviceProfilePayload",
     "ExposurePayload",
     "ExposureRead",
@@ -379,6 +384,142 @@ def test_assessment_field_limits_match_contract(
             app_spec["components"]["schemas"][schema_name]["properties"][field],
         )
         assert contract_field[key] == app_field[key] == expected
+
+
+def test_finding_evidence_contract_limits_match_openapi_and_backend() -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+    observation = contract["components"]["schemas"][
+        "FindingEvidenceObservationPayload"
+    ]
+    app_observation = app_spec["components"]["schemas"][
+        "FindingEvidenceObservationPayload"
+    ]
+
+    assert observation["additionalProperties"] is False
+    assert app_observation["additionalProperties"] is False
+    assert set(observation["properties"]) == set(app_observation["properties"])
+    assert set(observation["properties"]) == {
+        "ip",
+        "port",
+        "protocol",
+        "unit_id",
+        "condition_key",
+        "method",
+        "result",
+        "source",
+        "source_script",
+        "rule_id",
+        "rule_version",
+        "evidence",
+        "facts",
+    }
+
+    for schema in (observation, app_observation):
+        properties = schema["properties"]
+        port = next(
+            part
+            for part in properties["port"]["anyOf"]
+            if part.get("type") == "integer"
+        )
+        unit_id = next(
+            part
+            for part in properties["unit_id"]["anyOf"]
+            if part.get("type") == "integer"
+        )
+        assert port["minimum"] == 1
+        assert port["maximum"] == 65535
+        assert unit_id["minimum"] == 0
+        assert unit_id["maximum"] == 255
+        for name, maximum in (
+            ("condition_key", 256),
+            ("source", 64),
+            ("source_script", 64),
+            ("rule_id", 128),
+            ("rule_version", 64),
+            ("evidence", 512),
+        ):
+            prop = _resolve_ref(
+                contract if schema is observation else app_spec,
+                properties[name],
+            )
+            if "anyOf" in prop:
+                prop = next(
+                    part for part in prop["anyOf"] if part.get("type") == "string"
+                )
+            assert prop["maxLength"] == maximum
+        facts = properties["facts"]
+        assert facts["maxProperties"] == 8
+        string_fact = next(
+            part
+            for part in facts["additionalProperties"]["anyOf"]
+            if part.get("type") == "string"
+        )
+        assert string_fact["maxLength"] == 160
+        assert facts["propertyNames"]["maxLength"] == 64
+
+    finding = contract["components"]["schemas"]["FindingPayload"]
+    assert finding["additionalProperties"] is False
+    assert finding["properties"]["issue_key"] == {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 256,
+        "default": None,
+    }
+    assert finding["properties"]["evidence_observations"]["maxItems"] == 16
+    ingest = contract["components"]["schemas"]["ScanIngestRequest"]
+    assert ingest["additionalProperties"] is False
+    assert ingest["properties"]["finding_observations"]["maxItems"] == 512
+
+
+def test_finding_evidence_read_summary_is_additive_and_counts_records() -> None:
+    contract = _load_contract()
+    summary = contract["components"]["schemas"]["FindingEvidenceSummary"]
+    methods = contract["components"]["schemas"]["FindingEvidenceMethodCounts"]
+    confidence = contract["components"]["schemas"]["FindingEvidenceConfidenceCounts"]
+
+    assert summary["additionalProperties"] is False
+    assert set(summary["required"]) == {
+        "scope",
+        "total_records",
+        "by_method",
+        "by_confidence",
+        "conflicting_records",
+        "demonstrated_records",
+    }
+    assert summary["properties"]["scope"]["enum"] == [
+        "scan",
+        "filtered_findings",
+    ]
+    for name in ("total_records", "conflicting_records", "demonstrated_records"):
+        field = summary["properties"][name]
+        assert field["type"] == "integer"
+        assert field["minimum"] == 0
+    assert set(methods["properties"]) == {
+        "version_correlation",
+        "configuration_observation",
+        "specific_check",
+        "textual_reference",
+        "unknown",
+    }
+    assert set(confidence["properties"]) == {
+        "tentative",
+        "probable",
+        "confirmed",
+        "unknown",
+    }
+    for schema in (methods, confidence):
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == set(schema["properties"])
+        assert all(
+            item["type"] == "integer" and item["minimum"] == 0
+            for item in schema["properties"].values()
+        )
+
+    for schema_name in ("ScanDetailResponse", "FindingListResponse"):
+        assert "evidence_summary" in contract["components"]["schemas"][
+            schema_name
+        ]["properties"]
 
 
 @pytest.mark.parametrize(

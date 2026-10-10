@@ -1,6 +1,6 @@
 # TRUTH — Qualidade da evidência dos achados
 
-Status: proposta aguardando aprovação. Entrega A. Data: 2026-10-10.
+Status: aprovado pelo usuário em 2026-10-10, ao solicitar avanço para a próxima etapa. Entrega A.
 
 ## Narrativa
 

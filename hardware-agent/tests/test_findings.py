@@ -300,7 +300,152 @@ def test_unmapped_script_with_cve_uses_generic_fallback() -> None:
     finding = findings[0]
     assert finding.cve_id == "CVE-2021-1234"
     assert finding.source_script == "some-unmapped-script"
-    assert finding.severity == "high"
+    assert finding.severity == "low"
+    assert "no structured positive result" in finding.description
+    assert finding.title == "CVE-2021-1234 reported by some-unmapped-script"
+    assert finding.references == []
+
+
+def _generic_nse_host(data: object, output: str = "") -> HostInfo:
+    return HostInfo(
+        ip="192.168.0.81",
+        hostname="host",
+        ports=[
+            PortInfo(
+                port=445,
+                service=ServiceInfo(name="microsoft-ds"),
+                scripts=[ScriptResult("unmapped-nse", output, data)],
+            )
+        ],
+    )
+
+
+def test_structured_negative_without_description_blocks_text_fallback() -> None:
+    findings = extract_findings(
+        [_generic_nse_host({"state": " NOT   VULNERABLE "}, "CVE-2020-1234")]
+    )
+
+    assert findings == []
+
+
+def test_structured_ids_maps_and_lists_are_accepted_only_for_positive_state() -> None:
+    data = [
+        {
+            "state": "VULNERABLE",
+            "title": "First issue",
+            "IDS": {"CVE": "CVE-2020-1234"},
+        },
+        {
+            "state": "vulnerable (DoS)",
+            "ids": [{"CVE": "CVE-2021-2345"}],
+            "title": "Second issue",
+        },
+        {"state": "LIKELY VULNERABLE", "title": "Candidate", "ids": ["CVE-2022-3456"]},
+        {
+            "state": "NOT VULNERABLE",
+            "IDS": {"CVE": "CVE-2023-4567"},
+        },
+    ]
+
+    findings = extract_findings([_generic_nse_host(data, "CVE-2023-4567")])
+
+    assert [(finding.title, finding.cve_id) for finding in findings] == [
+        ("First issue", "CVE-2020-1234"),
+        ("Second issue", "CVE-2021-2345"),
+    ]
+
+
+def test_malformed_structured_result_blocks_text_fallback() -> None:
+    findings = extract_findings(
+        [_generic_nse_host({"state": ["VULNERABLE"]}, "CVE-2020-1234")]
+    )
+
+    assert findings == []
+
+
+def test_malformed_nested_record_does_not_change_mixed_sibling_results() -> None:
+    data = [
+        {
+            "state": "NOT VULNERABLE",
+            "ids": {"CVE": "CVE-2020-1234"},
+            "details": {"state": ["VULNERABLE"]},
+        },
+        {
+            "state": "VULNERABLE",
+            "title": "Independent positive record",
+            "ids": {"CVE": "CVE-2021-2345"},
+        },
+    ]
+
+    findings = extract_findings(
+        [_generic_nse_host(data, "Advisory CVE-2022-3456")]
+    )
+
+    assert [(finding.title, finding.cve_id) for finding in findings] == [
+        ("Independent positive record", "CVE-2021-2345")
+    ]
+
+
+def test_null_structured_fields_block_text_fallback() -> None:
+    for data in (
+        {"state": None},
+        {"IDS": None},
+        {"state": None, "ids": None},
+    ):
+        assert extract_findings(
+            [_generic_nse_host(data, "Advisory CVE-2020-1234")]
+        ) == []
+
+
+def test_unknown_structured_result_blocks_text_fallback() -> None:
+    data = {
+        "state": "UNKNOWN (unable to test)",
+        "IDS": {"CVE": "CVE-2020-1234"},
+    }
+
+    assert extract_findings([_generic_nse_host(data, "CVE-2022-3456")]) == []
+
+
+def test_cve_in_reference_or_child_record_does_not_inherit_positive_state() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Positive parent record",
+        "references": ["https://example.test/CVE-2020-1234"],
+        "details": {"ids": {"CVE": "CVE-2021-2345"}},
+    }
+
+    findings = extract_findings([_generic_nse_host(data)])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Positive parent record"
+    assert findings[0].cve_id is None
+    assert findings[0].references == ["https://example.test/CVE-2020-1234"]
+
+
+def test_native_ms17_positive_state_does_not_require_check_results() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Remote Code Execution vulnerability in Microsoft SMBv1 servers",
+        "IDS": ["CVE:CVE-2017-0143"],
+    }
+
+    findings = extract_findings([_generic_nse_host(data)])
+
+    assert len(findings) == 1
+    assert findings[0].cve_id == "CVE-2017-0143"
+
+
+def test_native_nmap_ids_list_prefix_is_parsed_strictly() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Native vulnerability record",
+        "IDS": ["CVE:CVE-2020-1234", "BID:1234"],
+    }
+
+    findings = extract_findings([_generic_nse_host(data)])
+
+    assert len(findings) == 1
+    assert findings[0].cve_id == "CVE-2020-1234"
 
 
 def _ssl_cert_host(

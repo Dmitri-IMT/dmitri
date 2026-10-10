@@ -1,7 +1,13 @@
 # INTEGRATION — Contrato e consumidores da evidência
 
-Status: proposta para aprovação. Entrega A, 2026-10-10. Complementa `ARCHITECTURE.md` e
-`DESIGN.md`; todos os nomes abaixo são decisões propostas para implementação posterior.
+> Clarificação focal em 2026-10-10: [ISSUE_KEY_DECISION.md](ISSUE_KEY_DECISION.md)
+> complementa este contrato com `FindingPayload.issue_key` opcional e metadados
+> persistidos para conservar seu vínculo. A opção A foi autorizada pela
+> orquestração; a implementação precisa de testes e revisão focal. As tabelas
+> abaixo não esgotam os campos acrescentados por essa clarificação.
+
+Status: aprovado pelo usuário em 2026-10-10, ao solicitar avanço para a próxima etapa. Entrega A. Complementa `ARCHITECTURE.md` e
+`DESIGN.md`; os nomes abaixo orientam a implementação.
 
 ## Contrato aditivo
 

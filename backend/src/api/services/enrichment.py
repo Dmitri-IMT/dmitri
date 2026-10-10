@@ -12,9 +12,10 @@ from api.models.persistence import (
     FindingRecord,
     PortRecord,
     ScanHostRecord,
+    ScanRecord,
     ServiceRecord,
 )
-from api.schemas.scan import FindingPayload
+from api.schemas.scan import FindingEvidenceObservationPayload, FindingPayload
 from api.services.ai.jobs import enqueue_auto_scan_analysis
 from api.services.epss import EpssClient, upsert_epss_record
 from api.services.inventory import reconcile_scan_host_inventory
@@ -23,7 +24,6 @@ from api.services.kev import KevClient, upsert_kev_record
 from api.services.nvd import NvdClient, NvdTemporaryError, parse_nvd_matches
 from api.services.persistence import upsert_finding
 from api.services.risk import refresh_risk_snapshot
-from api.services.scan_evidence import is_cve_correlation
 
 logger = logging.getLogger(__name__)
 
@@ -156,11 +156,34 @@ def _process_cpe_job(
     if port_record is None:
         return
     device = session.get(ScanHostRecord, port_record.scan_host_id)
+    scan_record = session.get(ScanRecord, job.scan_id)
     service = session.exec(
         select(ServiceRecord).where(ServiceRecord.port_id == port_record.id)
     ).first()
     payload = client.query_by_cpe(session, job.target_value)
     for match in parse_nvd_matches(payload):
+        cpe_observations = (
+            [
+                FindingEvidenceObservationPayload(
+                    ip=device.ip if device is not None else None,
+                    port=port_record.port,
+                    protocol=port_record.protocol,
+                    condition_key=match["cve_id"],
+                    method="version_correlation",
+                    result="positive",
+                    source="nvd_enrichment",
+                    rule_id="catalog:nvd-cpe",
+                    rule_version="1",
+                    evidence=(
+                        f"NVD returned {match['cve_id']} for observed CPE "
+                        f"{job.target_value}."
+                    ),
+                    facts={"cpe": job.target_value, "cve_id": match["cve_id"]},
+                )
+            ]
+            if len(job.target_value) <= 160
+            else []
+        )
         finding = FindingPayload(
             ip=device.ip if device is not None else None,
             port=port_record.port,
@@ -182,11 +205,26 @@ def _process_cpe_job(
                 f"on {device.ip if device is not None else 'unknown host'}."
             ),
             references=match["references"],
+            evidence_observations=cpe_observations,
         )
         upsert_finding(
             session,
             scan_id=job.scan_id,
             finding=finding,
+            finding_evidence_policy_version="1",
+            standalone_observations=(
+                [
+                    FindingEvidenceObservationPayload.model_validate(value)
+                    for value in scan_record.finding_observations_json or []
+                ]
+                if scan_record is not None
+                else []
+            ),
+            standalone_observations_truncated=(
+                scan_record.finding_observations_truncated
+                if scan_record is not None
+                else False
+            ),
             scan_host_record=device,
             port_record=port_record,
             confidence="probable",
@@ -214,8 +252,6 @@ def _process_cve_job(
     if not matches:
         return
     match = matches[0]
-    if is_cve_correlation(finding_record.cve_id, finding_record.source):
-        finding_record.confidence = "probable"
     finding_record.cvss_score = match["cvss_score"] or finding_record.cvss_score
     finding_record.severity = match["severity"]
     finding_record.references_json = sorted(

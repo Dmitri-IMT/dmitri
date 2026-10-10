@@ -1,6 +1,13 @@
 # ARCHITECTURE — Qualidade da evidência dos achados
 
-Status: proposta para aprovação. Entrega A, 2026-10-10. Sem implementação ou `TASKS.md`.
+> Clarificação focal de implementação em 2026-10-10: opção A para o vínculo de
+> configuração, autorizada pela orquestração; não representa nova aprovação humana.
+> Ver [ISSUE_KEY_DECISION.md](ISSUE_KEY_DECISION.md). `issue_key` cruza o contrato e é
+> metadado da evidência persistida. `dedupe_key`, identidade de inventário e
+> `HostFindingRecord` conservam a definição atual. A pendência de implementação e
+> revisão focal não altera os estados das tarefas neste documento.
+
+Status: aprovado pelo usuário em 2026-10-10, ao solicitar avanço para a próxima etapa. Entrega A; execução registrada em `TASKS.md`.
 
 ## Contexto verificado
 
