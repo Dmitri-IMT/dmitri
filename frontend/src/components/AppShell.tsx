@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router'
 import ToastProvider from '@/components/Toast'
 import TopBar from '@/components/TopBar'
+import GlobalAssistant from '@/components/GlobalAssistant'
 
 function AppShell() {
   return (
@@ -10,6 +11,7 @@ function AppShell() {
         <main className="mx-auto w-full min-w-0 max-w-frame flex-1 px-4 py-12">
           <Outlet />
         </main>
+        <GlobalAssistant />
       </div>
     </ToastProvider>
   )

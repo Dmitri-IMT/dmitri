@@ -15,13 +15,14 @@ from agent.headless import HeadlessScanResult
 from agent.transport.command_channel import (
     AgentCancel,
     AgentCommand,
+    AgentProgress,
     AgentStatus,
     NspiOptions,
 )
 from agent.transport.ingest import SubmissionResult
 
 TIMEOUT = 5.0
-PAYLOAD = SimpleNamespace(metadata={})
+PAYLOAD = SimpleNamespace(metadata={}, hosts=[], findings=[])
 RESULT_PATH = Path("results/scan.json")
 NON_ACCEPTED = [
     "unauthorized",
@@ -66,6 +67,7 @@ class FakeScan:
         mode: str,
         subnet: str,
         *,
+        reporter: Any = None,
         nspi_submode: str | None = None,
         bind_cancel: Any = None,
     ) -> HeadlessScanResult:
@@ -73,6 +75,11 @@ class FakeScan:
         self.threads.append(threading.get_ident())
         if bind_cancel is not None:
             bind_cancel(self._cancel)
+        if reporter is not None:
+            from agent.scanner.progress import ScanEvent
+
+            reporter.emit(ScanEvent(kind="discovery_started"))
+            reporter.emit(ScanEvent(kind="hosts_found", hosts_total=2))
         self.started.set()
         if self._gate is not None:
             self._gate.wait(TIMEOUT)
@@ -129,6 +136,9 @@ class FakeClient:
     def __init__(self, script: list[Any] | None = None) -> None:
         self.sent: list[AgentStatus] = []
         self.delivered: list[AgentStatus] = []
+        self.sent_progress: list[AgentProgress] = []
+        self.delivered_progress: list[AgentProgress] = []
+        self.order: list[tuple[str, Any]] = []
         self.parked_reason: str | None = None
         self.closed = False
         self.connected = True
@@ -171,9 +181,18 @@ class FakeClient:
 
     async def send_status(self, status: AgentStatus) -> bool:
         self.sent.append(status)
+        self.order.append(("status", status))
         if not self.connected:
             return False
         self.delivered.append(status)
+        return True
+
+    async def send_progress(self, progress: AgentProgress) -> bool:
+        self.sent_progress.append(progress)
+        self.order.append(("progress", progress))
+        if not self.connected:
+            return False
+        self.delivered_progress.append(progress)
         return True
 
     async def park(self, reason: str) -> None:
@@ -220,6 +239,37 @@ async def dispatch(daemon: AgentDaemon, subject: AgentCommand) -> None:
 
 
 class TestFrameOrder:
+    @pytest.mark.asyncio
+    async def test_progress_is_compact_and_final_snapshot_precedes_upload(self) -> None:
+        daemon, client, _, _ = build()
+        subject = command()
+
+        await dispatch(daemon, subject)
+
+        assert client.delivered_progress
+        assert client.delivered_progress[-1].progress.stage == "uploading"
+        assert client.delivered_progress[-1].progress.percent == 99
+        assert client.delivered_progress[-1].progress.machines == 0
+        assert client.delivered_progress[-1].progress.vulnerabilities == 0
+        assert all(
+            left.sequence < right.sequence
+            for left, right in zip(
+                client.delivered_progress, client.delivered_progress[1:]
+            )
+        )
+        uploading_index = next(
+            index
+            for index, (kind, frame) in enumerate(client.order)
+            if kind == "status" and frame.status == "uploading"
+        )
+        final_progress_index = next(
+            index
+            for index, (kind, frame) in enumerate(client.order)
+            if kind == "progress" and frame.progress.stage == "uploading"
+        )
+        assert final_progress_index < uploading_index
+        assert subject.command_id not in daemon._latest_progress
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("result", "expected", "uploads"),
@@ -345,6 +395,39 @@ class TestFrameOrder:
 
 class TestResponsiveness:
     @pytest.mark.asyncio
+    async def test_reconnect_replays_only_the_newest_active_snapshot(self) -> None:
+        gate = threading.Event()
+        daemon, client, scan, _ = build(scan=FakeScan(gate=gate))
+        subject = command()
+
+        await daemon.handle_command(subject)
+        await asyncio.to_thread(scan.started.wait, TIMEOUT)
+        for _ in range(20):
+            await asyncio.sleep(0.01)
+            if client.delivered_progress and (
+                client.delivered_progress[-1]
+                == daemon._latest_progress[subject.command_id]
+            ):
+                break
+        latest = daemon._latest_progress[subject.command_id]
+
+        client.connected = False
+        client.sent_progress.clear()
+        client.delivered_progress.clear()
+        await daemon.replay_pending()
+        assert client.sent_progress == [latest]
+        assert client.delivered_progress == []
+
+        client.connected = True
+        client.sent_progress.clear()
+        await daemon.replay_pending()
+        assert client.sent_progress == [latest]
+        assert client.delivered_progress[-1] == latest
+
+        gate.set()
+        await drain()
+
+    @pytest.mark.asyncio
     async def test_receive_loop_answers_while_a_scan_blocks(self) -> None:
         gate = threading.Event()
         daemon, client, scan, ingest = build(scan=FakeScan(gate=gate))
@@ -370,7 +453,9 @@ class TestRemoteCancel:
     @pytest.mark.asyncio
     async def test_running_cancel_uploads_partial_and_allows_next_command(self) -> None:
         gate = threading.Event()
-        partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
+        partial = SimpleNamespace(
+            metadata={"terminated_by": "user_cancel"}, hosts=[], findings=[]
+        )
         scan = FakeScan(
             scan_result("fatal", partial, result_path=None), scan_result(), gate=gate
         )
@@ -432,7 +517,9 @@ class TestRemoteCancel:
     @pytest.mark.asyncio
     async def test_cancelled_partial_upload_failure_reports_ingest_failed(self) -> None:
         gate = threading.Event()
-        partial = SimpleNamespace(metadata={"terminated_by": "user_cancel"})
+        partial = SimpleNamespace(
+            metadata={"terminated_by": "user_cancel"}, hosts=[], findings=[]
+        )
         daemon, client, scan, ingest = build(
             scan=FakeScan(scan_result("fatal", partial, result_path=None), gate=gate),
             ingest=FakeIngest("unavailable"),

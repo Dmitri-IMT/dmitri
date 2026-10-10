@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: daemon — the unattended command executor
-description: The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
+description: The long-lived device process runs one remote scan, streams compact progress snapshots, stops on park or remote cancel, uploads partials for cancel, and resumes after reconnect.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio, cancel]
-timestamp: 2026-09-29T12:00:00Z
+timestamp: 2026-10-02T20:00:00Z
 ---
 
 # daemon — the unattended command executor
@@ -19,28 +19,28 @@ that carries work in, and the [headless scan](/hardware-agent/cli.md) +
 
 It adds **no** scan pipeline. It calls `run_headless_scan` as the one-shot CLI does, adding only the
 `bind_cancel` hook that lets parking **or** a remote cancel stop the scan, and applies the
-backend's `scan_id` only at the existing ingest override. A remote cancel uploads any partial
-payload then reports `cancelled`; park/revoke stays silent (no upload, no status).
+backend's `scan_id` only at the existing ingest override. `LiveProgressReporter` converts scan
+events to compact snapshots and hands them from the worker thread to this asyncio loop. A remote
+cancel uploads any partial payload then reports `cancelled`; park/revoke stays silent (no upload,
+no status).
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `CommandStatus` | Wire statuses the daemon may report: `running`, `uploading`, `done`, `failed`, `cancelled`. | `daemon.py:28` |
-| `CommandRecord` | Ledger entry: `status`, optional `error_code`, and `pending` — whether that status still needs delivery after a disconnect. | `daemon.py:32` |
-| `_ScanStop` | Per-command, thread-safe stop latch with two separate flags. `bind()` runs on the worker with the runner's cancel function; `request_cancel()` (remote) and `request_park()` (park/revoke/shutdown) run on the loop. Whichever of bind/request comes second fires the cancel. `finish()` freezes `cancelled` once the runner returns, so a late cancel is ignored and the command ends `done`; a later park never erases an earlier cancel. | `daemon.py:38` |
-| `AgentDaemon(client, ingest, *, run_scan=run_headless_scan)` | The coordinator. `run_scan` is the injectable headless runner, which is why no literal `run_headless_scan(` call appears in this module. | `daemon.py:75` |
-| `.run()` | Wires `handle_command`, `replay_pending`, `_cancel_active` (as `on_parked`), and `handle_cancel` (as `on_cancel`) into the client loop; closes the socket and owned ingest client in `finally`. | `daemon.py:92` |
-| `.close()` | Stops and awaits the active command (park reason), then closes both clients. | `daemon.py:103` |
-| `._cancel_active()` | Park path: `self._stop.request_park()`, awaits the task so `_active` clears only after the worker returns. No upload and no status from a park stop. An upload already in progress may finish, but its return is ignored and no later status is reported. | `daemon.py:108` |
-| `.handle_command(command)` | The `on_command` callback: park guard, duplicate replay, busy rejection, then start the one owned task. | `daemon.py:117` |
-| `.handle_cancel(command_id)` | The `on_cancel` callback. Active and `running` → `self._stop.request_cancel()`. In ledger (not uploading) → re-send the record. Unknown or `uploading` → no-op. | `daemon.py:149` |
-| `.replay_pending()` | The `on_connected` seam — resends pending status after hello, before any new command is acted on. | `daemon.py:158` |
-| `._execute(command)` | Owns the scan task; converts any exception to `failed` and clears `_active` in `finally` via `_release_hold` on terminal send. | `daemon.py:163` |
-| `._run_command(command)` | The state machine below. After the runner returns: silent return on park, else `_scan_outcome` picks the status once, and only `done`/`cancelled` with a payload upload. | `daemon.py` |
+| `CommandStatus` | Wire statuses the daemon may report: `running`, `uploading`, `done`, `failed`, `cancelled`. | `daemon.py:31` |
+| `CommandRecord` | Ledger entry: `status`, optional `error_code`, and `pending` — whether that status still needs delivery after a disconnect. | `daemon.py:35` |
+| `_ScanStop` | Per-command, thread-safe stop latch with separate cancel and park flags. | `daemon.py:41` |
+| `AgentDaemon(client, ingest, *, run_scan=run_headless_scan)` | The coordinator. `run_scan` is the injectable headless runner, which is why no literal `run_headless_scan(` call appears in this module. | `daemon.py:106` |
+| `.run()` | Wires command, reconnect replay, park, and cancel callbacks into the client loop; closes the socket and ingest client in `finally`. | `daemon.py:126` |
+| `.close()` / `._cancel_active()` | Stops and awaits active work on shutdown, then closes both clients. Park/revoke remains silent. | `daemon.py:137`, `:142` |
+| `.handle_command(command)` / `.handle_cancel(command_id)` | Enforces park, duplicate, and busy guards; routes remote cancel to the active scan stop latch. | `daemon.py:151`, `:183` |
+| `.replay_pending()` | After each hello, resends pending status and the newest progress snapshot only for active commands. | `daemon.py:192` |
+| `._run_command(command)` | Runs the headless scan with `LiveProgressReporter`, flushes reconciled payload counts before `uploading`, then performs HTTP ingest. | `daemon.py:207` |
+| `._record_progress()` / `._send_progress()` | Sequence and retain one compact snapshot per active command; send only on the asyncio loop, and discard progress after a terminal status. | `daemon.py:311`, `:349` |
 | `_scan_outcome(result, *, cancelled)` | Pure map from a finished scan to `(status, error_code)`: `cancelled` whenever stopped; otherwise `failed/scan_failed` (no payload), `failed/result_unavailable`, `failed/scan_failed` (fatal), or `done`. | `daemon.py` |
-| `._send` / `._update` | Persist and deliver status; release the scan lock when a terminal `done` / `failed` / `cancelled` frame is accepted. | `daemon.py:241`, `:248` |
-| `run_daemon()` | Configures INFO logging to stdout, loads `load_ingest_config()` once, constructs both clients, and runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:271` |
+| `._send` / `._update` | Deliver status; clear per-command progress state on terminal status and release the scan lock when terminal delivery succeeds. | `daemon.py:284`, `:295` |
+| `run_daemon()` | Configures INFO logging to stdout, loads `load_ingest_config()` once, constructs both clients, and runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:366` |
 
 ## The state machine
 
@@ -89,6 +89,14 @@ path together with a `fatal` outcome on non-cancel failures, so checking `fatal`
 The receive loop never runs nmap or HTTP. Both blocking calls — `run_headless_scan` and
 `ScanIngestClient.submit` — go through `asyncio.to_thread`, which is what keeps the socket
 answering duplicates, busy rejections, and cancel frames while a scan subprocess is mid-flight.
+
+The daemon passes `LiveProgressReporter` through `run_headless_scan(reporter=...)`. The scanner
+worker hands compact snapshots to the asyncio loop with `call_soon_threadsafe`; only that loop
+sends `AgentProgress` over the existing WebSocket. In-stage reports are coalesced to at most one
+per two seconds, while stage boundaries and the final reconciled snapshot are sent promptly. The
+final snapshot is sent before `uploading`; it corrects interim counts from the normalized payload
+and stays below 100%. The daemon keeps only the latest snapshot and replays it after reconnect while
+the command remains active.
 
 ### The early-`running` frame
 

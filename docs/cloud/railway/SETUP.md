@@ -65,6 +65,10 @@ The `api` and `worker` services build with **Railpack** (Railway's default build
 repo root (`/backend/railway.api.toml`, `/backend/railway.worker.toml` — the config path does
 **not** follow Root Directory).
 
+`backend/railpack.json` adds `fonts-dejavu-core` to the runtime image. The API needs this Unicode
+font to render downloadable scan reports in Portuguese and Russian. This setting is in the shared
+`/backend` build context used by both API and worker services.
+
 ## Frontend static service (DMI-91)
 
 Configure the `frontend` service in the `nspi` environment with:
