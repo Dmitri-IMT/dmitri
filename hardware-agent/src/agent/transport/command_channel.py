@@ -124,6 +124,36 @@ class AgentStatus(BaseModel):
     error_code: str | None = None
 
 
+class AgentProgressSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal[
+        "discovery",
+        "ports",
+        "deep_inspection",
+        "ot_inspection",
+        "targeted_assessment",
+        "normalization",
+        "uploading",
+    ]
+    percent: int = Field(ge=0, le=99)
+    machines: int | None = Field(ge=0)
+    open_ports: int | None = Field(ge=0)
+    filtered_ports: int | None = Field(ge=0)
+    industrial_services: int | None = Field(ge=0)
+    vulnerabilities: int | None = Field(ge=0)
+
+
+class AgentProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["progress"] = "progress"
+    command_id: UUID
+    scan_id: UUID
+    sequence: int = Field(ge=1)
+    progress: AgentProgressSnapshot
+
+
 InboundCommandFrame = Annotated[
     AgentCommand | AgentCancel,
     Field(discriminator="type"),
@@ -237,6 +267,16 @@ class CommandChannelClient:
             return False
         except _TRANSPORT_ERRORS as exc:
             LOGGER.warning("status frame not delivered: %s", _describe(exc))
+            return False
+        return True
+
+    async def send_progress(self, progress: AgentProgress) -> bool:
+        try:
+            await self._send(progress)
+        except _NotConnected:
+            return False
+        except _TRANSPORT_ERRORS as exc:
+            LOGGER.warning("progress frame not delivered: %s", _describe(exc))
             return False
         return True
 

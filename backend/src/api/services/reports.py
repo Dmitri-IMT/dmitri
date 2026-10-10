@@ -4,13 +4,17 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlmodel import Session
+from sqlalchemy import func
+from sqlmodel import Session, select
 
+from api.models.persistence import EnrichmentJobRecord, NvdCacheRecord
 from api.schemas.ai import AILanguage, ScanAIAnalysisCompleted
 from api.schemas.read import ScanDetailResponse, ScanRiskSummaryResponse
 from api.schemas.reports import ReportKind, ScanReportResponse
 from api.services.ai.jobs import get_scan_ai_analysis
+from api.services.nvd import parse_nvd_matches
 from api.services.read import get_scan_detail, get_scan_risk_summary
+from api.services.report_education import build_report_education
 
 
 class ReportNotReadyError(ValueError):
@@ -48,15 +52,53 @@ def build_scan_report(
         if kind == "explained"
         else _technical_sections(detail, risk, analysis)
     )
+    if kind == "explained":
+        advisories, enrichment = _educational_evidence(session, detail)
+        sections["education"] = build_report_education(
+            detail, language, advisories=advisories, enrichment=enrichment
+        )
+    extension = "pdf" if kind == "explained" else "json"
     return ScanReportResponse(
         scan_id=scan_id,
         kind=kind,
         language=language,
         generated_at=generated_at,
-        filename=f"dmitri-scan-{scan_id}-{kind}.pdf",
-        content_type="application/pdf",
+        filename=f"dmitri-scan-{scan_id}-{kind}.{extension}",
+        content_type=(
+            "application/pdf" if kind == "explained" else "application/json"
+        ),
         sections=sections,
     )
+
+
+def _educational_evidence(
+    session: Session, detail: ScanDetailResponse
+) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+    """Read already stored advisory data; exporting a report never fetches it."""
+    codes = {finding.cve_id for finding in detail.findings if finding.cve_id}
+    advisories: dict[str, dict[str, Any]] = {}
+    if codes:
+        cached = session.exec(
+            select(NvdCacheRecord).where(
+                NvdCacheRecord.query_kind == "cve",
+                NvdCacheRecord.query_value.in_(codes),
+            )
+        ).all()
+        for record in cached:
+            for advisory in parse_nvd_matches(record.response_json):
+                if advisory["cve_id"] in codes:
+                    advisories[advisory["cve_id"]] = {
+                        **advisory, "fetched_at": record.fetched_at.isoformat()
+                    }
+    statuses = dict(session.exec(
+        select(EnrichmentJobRecord.status, func.count(EnrichmentJobRecord.id))
+        .where(EnrichmentJobRecord.scan_id == detail.scan_id)
+        .group_by(EnrichmentJobRecord.status)
+    ).all())
+    return advisories, {
+        "pending": statuses.get("pending", 0) + statuses.get("running", 0),
+        "failed": statuses.get("failed", 0),
+    }
 
 
 def _explained_sections(
@@ -70,27 +112,225 @@ def _explained_sections(
         if isinstance(analysis, ScanAIAnalysisCompleted)
         else None
     )
+    host_names = {str(host.ip): host.hostname for host in detail.hosts}
+    findings_by_host: dict[str, dict[str, Any]] = {}
+    for finding in detail.findings:
+        address = str(finding.host_ip) if finding.host_ip is not None else None
+        if address is None:
+            continue
+        host = findings_by_host.setdefault(
+            address,
+            {
+                "hostname": finding.host_hostname or host_names.get(address) or address,
+                "address": address,
+                "findings": 0,
+            },
+        )
+        host["findings"] += 1
+
+    ai_explanations = (
+        {
+            item.finding_id: item
+            for item in completed.analysis.important_findings
+        }
+        if completed is not None
+        else {}
+    )
+    important_findings = []
+    ranked_findings = list(risk.top_findings)
+    attention_severity = {
+        "critical": "critical",
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+    }.get(_attention_level(risk))
+    attention_finding = next(
+        (
+            finding
+            for finding in detail.findings
+            if finding.severity == attention_severity
+        ),
+        None,
+    )
+    selected_findings = ranked_findings[:5]
+    if (
+        attention_finding is not None
+        and all(
+            finding.finding_id != attention_finding.finding_id
+            for finding in selected_findings
+        )
+    ):
+        selected_findings = ranked_findings[:4] + [attention_finding]
+
+    for finding in selected_findings:
+        explanation = ai_explanations.get(finding.finding_id)
+        address = str(finding.host_ip) if finding.host_ip is not None else None
+        important_findings.append(
+            {
+                "title": finding.title,
+                "hostname": finding.host_hostname
+                or (host_names.get(address) if address else None),
+                "address": address,
+                "severity": finding.severity,
+                "service": finding.service,
+                "port": finding.port,
+                "cvss_score": finding.cvss_score,
+                "cve_id": finding.cve_id,
+                "description": finding.description,
+                "plain_language_explanation": (
+                    explanation.plain_language_explanation
+                    if explanation is not None
+                    else None
+                ),
+                "why_it_matters": (
+                    explanation.why_it_matters if explanation is not None else None
+                ),
+                "recommendation": (
+                    explanation.recommendation
+                    if explanation is not None
+                    else finding.recommendation
+                ),
+                "evidence": finding.evidence,
+                "uncertainty": (
+                    explanation.uncertainty if explanation is not None else None
+                ),
+            }
+        )
+
+    limitations = (
+        list(completed.analysis.uncertainties)
+        if completed is not None
+        else [_fallback_limitation(language)]
+    )
+    limitations.extend(_method_limitations(language, detail.assessment_status))
+
     return {
+        "ai_explanation_available": completed is not None,
         "overview": (
             completed.analysis.plain_language_summary
             if completed is not None
             else _fallback_overview(language, detail.host_count, detail.finding_count)
         ),
         "attention_level": _attention_level(risk),
+        "metrics": {
+            "hosts_scanned": detail.host_count,
+            "finding_records": risk.total_findings,
+            "unique_cve_ids": len(
+                {finding.cve_id.upper()
+                 for finding in detail.findings if finding.cve_id}
+            ),
+            "open_ports": sum(
+                port.state == "open"
+                for host in detail.hosts
+                for port in host.ports
+            ),
+        },
+        "severity_counts": {
+            "critical": risk.severity.critical,
+            "high": risk.severity.high,
+            "medium": risk.severity.medium,
+            "low": risk.severity.low,
+        },
+        "top_hosts": sorted(
+            findings_by_host.values(),
+            key=lambda host: (
+                -host["findings"], host["hostname"].casefold(), host["address"]
+            ),
+        )[:5],
+        "important_findings": important_findings,
+        "scan_timestamp": detail.timestamp,
+        "scope": detail.subnet,
+        "scan_mode": detail.scan_mode,
+        "assessment_status": detail.assessment_status,
+        "method": _method_text(language),
         "what_to_do_first": (
             [
                 action.model_dump(mode="json")
                 for action in completed.analysis.priority_actions
             ]
-            if completed is not None
-            else [_fallback_action(language)]
+            if completed is not None and completed.analysis.priority_actions
+            else [
+                {
+                    "priority": _priority_for_severity(finding["severity"]),
+                    "title": finding["title"],
+                    "description": finding["recommendation"],
+                }
+                for finding in important_findings[:3]
+            ]
+            or [_fallback_action(language)]
         ),
-        "limitations": (
-            completed.analysis.uncertainties
-            if completed is not None
-            else [_fallback_limitation(language)]
-        ),
+        "limitations": limitations,
     }
+
+
+def _method_text(language: AILanguage) -> str:
+    return {
+        "en": (
+            "The scan checks devices and services that respond on the network, "
+            "using the selected mode. It records observations and known security "
+            "issues; it does not test every possible weakness."
+        ),
+        "pt-BR": (
+            "A varredura verifica os equipamentos e serviços que respondem na "
+            "rede, conforme o modo escolhido. Ela registra observações e problemas "
+            "de segurança conhecidos, mas não testa todas as falhas possíveis."
+        ),
+        "ru": (
+            "Сканирование проверяет устройства и службы, отвечающие в сети, "
+            "в выбранном режиме. Оно фиксирует наблюдения и известные проблемы "
+            "безопасности, но не проверяет все возможные уязвимости."
+        ),
+    }[language]
+
+
+def _priority_for_severity(severity: str) -> str:
+    return {
+        "critical": "immediate",
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+    }.get(severity, "medium")
+
+
+def _method_limitations(language: AILanguage, assessment_status: str) -> list[str]:
+    common = {
+        "en": [
+            "A scan is a snapshot of what responded at that time; it cannot "
+            "prove that a device was never compromised.",
+            "Finding records are observations, not a count of unique "
+            "vulnerabilities. CVSS describes a technical issue and is not "
+            "a measure of the network's overall risk.",
+        ],
+        "pt-BR": [
+            "A varredura mostra o que respondeu naquele momento; ela não "
+            "comprova que um equipamento nunca foi invadido.",
+            "Achados são registros de observações, não uma contagem de "
+            "vulnerabilidades únicas. O CVSS descreve uma falha técnica "
+            "e não mede o risco geral da rede.",
+        ],
+        "ru": [
+            "Сканирование отражает ответы устройств в конкретный момент "
+            "и не доказывает, что устройство никогда не было взломано.",
+            "Записи о находках являются наблюдениями, а не подсчетом "
+            "уникальных уязвимостей. CVSS описывает техническую проблему, "
+            "но не общий риск сети.",
+        ],
+    }[language]
+    if assessment_status == "unavailable":
+        common.append(
+            {
+                "en": "Device exposure assessment was unavailable for this scan.",
+                "pt-BR": (
+                    "A avaliação de exposição dos equipamentos não estava "
+                    "disponível nesta varredura."
+                ),
+                "ru": (
+                    "Оценка открытых служб устройств для этого "
+                    "сканирования недоступна."
+                ),
+            }[language]
+        )
+    return common
 
 
 def _technical_sections(
@@ -99,6 +339,9 @@ def _technical_sections(
     analysis: object,
 ) -> dict[str, Any]:
     return {
+        "scan_timestamp": detail.timestamp,
+        "scope": detail.subnet,
+        "scan_mode": detail.scan_mode,
         "scan": detail.model_dump(mode="json"),
         "risk_summary": risk.model_dump(mode="json"),
         "ai_analysis": (
@@ -123,20 +366,26 @@ def _attention_level(risk: ScanRiskSummaryResponse) -> str:
 
 def _fallback_overview(language: AILanguage, hosts: int, findings: int) -> str:
     return {
-        "en": f"The scan observed {hosts} machines and {findings} vulnerabilities.",
-        "pt-BR": (
-            f"A varredura encontrou {hosts} equipamentos e "
-            f"{findings} vulnerabilidades."
+        "en": (
+            f"The scan observed {hosts} devices and returned "
+            f"{findings} finding records."
         ),
-        "ru": f"Сканирование обнаружило устройств: {hosts}; уязвимостей: {findings}.",
+        "pt-BR": (
+            f"A varredura observou {hosts} equipamentos e retornou "
+            f"{findings} registros de achados."
+        ),
+        "ru": (
+            f"Сканирование обнаружило устройств: {hosts}; "
+            f"записей о находках: {findings}."
+        ),
     }[language]
 
 
 def _fallback_action(language: AILanguage) -> str:
     return {
-        "en": "Ask an IT professional to review the vulnerabilities.",
-        "pt-BR": "Peça a um profissional de TI para revisar as vulnerabilidades.",
-        "ru": "Попросите ИТ-специалиста проверить уязвимости.",
+        "en": "Ask an IT professional to review the findings.",
+        "pt-BR": "Peça a um profissional de TI para revisar os achados.",
+        "ru": "Попросите специалиста по ИТ проверить находки.",
     }[language]
 
 

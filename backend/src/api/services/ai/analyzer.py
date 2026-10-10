@@ -55,7 +55,12 @@ def run_bounded_analysis(
         refs = [finding.finding_ref for finding in chunk.top_findings]
         try:
             child = _run_child(provider, chunk, language=language)
-        except (AIProviderError, WritingStyleViolation, ValueError):
+        except AIProviderError as exc:
+            if exc.code == "provider_rate_limited":
+                raise
+            failed_refs.extend(refs)
+            continue
+        except (WritingStyleViolation, ValueError):
             failed_refs.extend(refs)
             continue
         children.append(child.model_dump(mode="json"))

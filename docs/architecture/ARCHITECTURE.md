@@ -230,7 +230,7 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
 - **Autenticação**: JWT Bearer Token (access token short-lived) + refresh token em httpOnly cookie
 - **Métodos principais**:
   - `GET /api/v1/scans` → Lista de scans realizados
-  - `GET /api/v1/scans/{scan_id}` → Detalhes de um scan específico
+  - `GET /api/v1/scans/{scan_id}` → Detalhes do scan; enquanto estiver em andamento, inclui o estágio, o percentual e as contagens confirmadas mais recentes enviados pelo Pi
   - `GET /api/v1/hosts` → Inventário de máquinas descobertas na rede
   - `GET /api/v1/hosts/{host_id}` → Detalhes de uma máquina
   - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)

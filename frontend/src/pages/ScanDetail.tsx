@@ -153,42 +153,56 @@ function ScanDetail() {
                       : t('common.noVulnerabilitiesAcceptedEvidence')}
                   </p>
                 )}
-                {groups.length > 0 && (
-                  <div className="flex flex-col gap-8">
-                    {groups.map((group) => {
-                      const opensForDeepLink = group.findings.some(
+                {severityFindings.length > 0 && (
+                  <ScanDetailSection
+                    title={t('common.vulnerabilitiesInScanTitle', {
+                      count: severityFindings.length,
+                    })}
+                    openToken={
+                      severityFindings.some(
                         (finding) => finding.finding_id === openFindingId,
                       )
-                      return (
-                        <ScanDetailSection
-                          key={group.severity}
-                          title={t('common.severityGroupTitle', {
-                            severity: group.severity,
-                            count: group.findings.length,
-                          })}
-                          openToken={
-                            opensForDeepLink
-                              ? (openFindingId ?? undefined)
-                              : undefined
-                          }
-                          triggerAriaLabel={t('common.severityGroupToggle', {
-                            severity: group.severity,
-                          })}
-                        >
-                          <FindingsTable
-                            findings={group.findings}
-                            variant="scan"
-                            testId={`findings-${group.severity}`}
-                            caption={t('common.severityGroupCaption', {
+                        ? (openFindingId ?? undefined)
+                        : undefined
+                    }
+                    triggerAriaLabel={t('common.vulnerabilitiesInScanToggle')}
+                  >
+                    <div className="flex flex-col gap-8">
+                      {groups.map((group) => {
+                        const opensForDeepLink = group.findings.some(
+                          (finding) => finding.finding_id === openFindingId,
+                        )
+                        return (
+                          <ScanDetailSection
+                            key={group.severity}
+                            title={t('common.severityGroupTitle', {
+                              severity: group.severity,
+                              count: group.findings.length,
+                            })}
+                            openToken={
+                              opensForDeepLink
+                                ? (openFindingId ?? undefined)
+                                : undefined
+                            }
+                            triggerAriaLabel={t('common.severityGroupToggle', {
                               severity: group.severity,
                             })}
-                            openFindingId={openFindingId}
-                            onOpenFindingChange={setOpenFindingId}
-                          />
-                        </ScanDetailSection>
-                      )
-                    })}
-                  </div>
+                          >
+                            <FindingsTable
+                              findings={group.findings}
+                              variant="scan"
+                              testId={`findings-${group.severity}`}
+                              caption={t('common.severityGroupCaption', {
+                                severity: group.severity,
+                              })}
+                              openFindingId={openFindingId}
+                              onOpenFindingChange={setOpenFindingId}
+                            />
+                          </ScanDetailSection>
+                        )
+                      })}
+                    </div>
+                  </ScanDetailSection>
                 )}
                 {view.sections.attackSurface && (
                   <ScanDetailSection title={t('common.attackSurface')}>
@@ -255,14 +269,6 @@ function ScanDetail() {
                     />
                   </ScanDetailSection>
                 )}
-                {view.sections.coverage && (
-                  <ScanDetailSection title={t('scans.checkCoverage')}>
-                    <ScanCoverage
-                      coverage={scan.coverage ?? []}
-                      omittedUnlisted={omittedUnlisted}
-                    />
-                  </ScanDetailSection>
-                )}
                 {view.sections.industrial && (
                   <ScanDetailSection title={t('common.industrialServices')}>
                     <ScanIndustrialServices hosts={scan.hosts} />
@@ -277,6 +283,14 @@ function ScanDetail() {
                     ) : (
                       <ScanHostsTable hosts={scan.hosts} />
                     )}
+                  </ScanDetailSection>
+                )}
+                {view.sections.coverage && (
+                  <ScanDetailSection title={t('scans.checkCoverage')}>
+                    <ScanCoverage
+                      coverage={scan.coverage ?? []}
+                      omittedUnlisted={omittedUnlisted}
+                    />
                   </ScanDetailSection>
                 )}
               </div>

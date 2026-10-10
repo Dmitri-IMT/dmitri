@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -16,6 +17,8 @@ from api.models.persistence import (
     ScanRecord,
 )
 from api.schemas.ai import (
+    AIProviderRecommendedAction,
+    ProviderScanAIAnalysis,
     ScanAIAnalysis,
     ScanAIAnalysisCompleted,
     ScanAIAnalysisFailed,
@@ -24,7 +27,7 @@ from api.schemas.ai import (
     ScanAIAnalysisResponse,
     ScanAIAnalysisUnavailable,
 )
-from api.services.ai.analyzer import AnalysisCoverage, run_bounded_analysis
+from api.services.ai.analyzer import AnalysisCoverage
 from api.services.ai.context import (
     AI_CONTEXT_VERSION,
     ScanAIContext,
@@ -40,6 +43,7 @@ from api.services.ai.groq import (
 )
 from api.services.ai.telemetry import drain_provider_usage, persist_usage_events
 from api.services.ai.validation import (
+    AIAnalysisValidationError,
     sanitize_scan_ai_analysis,
     validate_provider_analysis,
 )
@@ -154,6 +158,8 @@ def request_scan_ai_analysis(
         record.status = "pending"
         record.attempts = 0
         record.last_error = None
+        record.prompt_version = AI_PROMPT_VERSION
+        record.writing_skill_version = WRITING_SKILL_VERSION
         record.next_attempt_at = None
         record.analysis_json = None
         record.context_hash = None
@@ -306,7 +312,12 @@ def _process_claimed_analysis(
     retry_delay_seconds: float,
     now: datetime,
 ) -> None:
-    def fail(code: str, retryable: bool) -> None:
+    def fail(
+        code: str,
+        retryable: bool,
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
         failed_scan = session.get(ScanRecord, record.scan_id)
         persist_usage_events(
             session,
@@ -319,7 +330,7 @@ def _process_claimed_analysis(
             error=code,
             retryable=retryable,
             max_attempts=max_attempts,
-            delay_seconds=retry_delay_seconds,
+            delay_seconds=max(retry_delay_seconds, retry_after_seconds or 0),
             now=now,
         )
         session.add(record)
@@ -329,6 +340,7 @@ def _process_claimed_analysis(
     if scan is None or scan.org_id is None:
         return fail("scan_unavailable", False)
 
+    phase = "context_build"
     try:
         context = build_scan_ai_context(
             session, scan, max_findings=max_findings
@@ -336,41 +348,95 @@ def _process_claimed_analysis(
         provider_analysis = None
         coverage = AnalysisCoverage(0, 0, 0)
         if context is not None:
-            provider_analysis, coverage = run_bounded_analysis(
-                provider, context, language=record.language
+            phase = "provider_analysis"
+            provider_analysis = provider.analyze_scan(
+                context, language=record.language
             )
+            coverage = AnalysisCoverage(
+                analyzed_findings=len(context.top_findings),
+                failed_findings=0,
+                total_findings=len(context.top_findings),
+            )
+            phase = "provider_validation"
+            provider_analysis = _validate_analysis_with_repair(
+                provider,
+                context,
+                provider_analysis,
+                language=record.language,
+            )
+            phase = "writing_validation"
             try:
-                provider_analysis = validate_provider_analysis(
-                    context, provider_analysis
-                )
                 lint_provider_analysis(provider_analysis)
             except WritingStyleViolation as exc:
                 provider_analysis = provider.repair_analysis(
                     context, exc.codes, language=record.language
                 )
-                provider_analysis = validate_provider_analysis(
-                    context, provider_analysis
+                provider_analysis = _validate_repaired_analysis(
+                    context, provider_analysis, language=record.language
                 )
                 lint_provider_analysis(provider_analysis)
+        phase = "materialization"
         analysis = (
             None
             if context is None or provider_analysis is None
             else materialize_scan_ai_analysis(context, provider_analysis)
         )
     except AIProviderError as exc:
-        return fail(exc.code, exc.retryable)
-    except WritingStyleViolation:
+        return fail(
+            exc.code,
+            exc.retryable,
+            retry_after_seconds=exc.retry_after_seconds,
+        )
+    except WritingStyleViolation as exc:
+        logger.warning(
+            "AI analysis rejected scan_id=%s phase=%s code=writing_style violations=%s",
+            record.scan_id,
+            phase,
+            exc.codes,
+        )
         return fail("style_violation", False)
     except ScanAINotReadyError:
+        logger.warning(
+            "AI analysis rejected scan_id=%s phase=%s code=scan_not_ready",
+            record.scan_id,
+            phase,
+        )
         return fail("invalid_analysis", False)
-    except ValueError:
+    except ValueError as exc:
+        if isinstance(exc, AIAnalysisValidationError):
+            code = {
+                "analysis omits a KEV finding from actions": "missing_kev_action",
+                "analysis contains an unknown reference": "unknown_reference",
+                "analysis contains duplicate finding references": (
+                    "duplicate_finding_reference"
+                ),
+            }.get(str(exc), "analysis_validation")
+        elif isinstance(exc, ValidationError):
+            code = "invalid_provider_model"
+        else:
+            code = "value_error"
+        logger.warning(
+            "AI analysis rejected scan_id=%s phase=%s code=%s",
+            record.scan_id,
+            phase,
+            code,
+        )
         return fail("invalid_analysis", False)
     except Exception:
-        logger.exception("AI analysis job failed scan_id=%s", record.scan_id)
+        logger.error(
+            "AI analysis job failed scan_id=%s phase=%s code=internal_error",
+            record.scan_id,
+            phase,
+        )
         return fail("internal_error", False)
     if context is None or analysis is None:
         return fail("scan_unavailable", False)
     if not _is_grounded(context, analysis):
+        logger.warning(
+            "AI analysis rejected scan_id=%s phase=grounding "
+            "code=duplicate_finding_reference",
+            record.scan_id,
+        )
         return fail("invalid_analysis", False)
 
     persist_usage_events(
@@ -398,6 +464,91 @@ def _is_grounded(context: ScanAIContext, analysis: ScanAIAnalysis) -> bool:
         *(action.related_finding_ids for action in analysis.priority_actions)
     )
     return referenced <= allowed and len(explained) == len(set(explained))
+
+
+def _validate_analysis_with_repair(
+    provider: GroqProvider,
+    context: ScanAIContext,
+    analysis: ProviderScanAIAnalysis,
+    *,
+    language: str,
+) -> ProviderScanAIAnalysis:
+    try:
+        return _validate_grounded_provider_analysis(context, analysis)
+    except AIAnalysisValidationError as exc:
+        repaired = provider.repair_analysis(
+            context, (str(exc),), language=language
+        )
+        return _validate_repaired_analysis(context, repaired, language=language)
+
+
+def _validate_repaired_analysis(
+    context: ScanAIContext,
+    repaired: ProviderScanAIAnalysis,
+    *,
+    language: str,
+) -> ProviderScanAIAnalysis:
+    try:
+        return _validate_grounded_provider_analysis(context, repaired)
+    except AIAnalysisValidationError as exc:
+        if str(exc) != "analysis omits a KEV finding from actions":
+            raise
+
+    covered = {
+        reference
+        for action in repaired.priority_actions
+        for reference in action.related_finding_refs
+    }
+    fallback_text = {
+        "en": (
+            "Review KEV vulnerability",
+            "Apply the available vendor fix and reduce exposure while it is reviewed.",
+        ),
+        "pt-BR": (
+            "Revisar vulnerabilidade no KEV",
+            "Aplicar a corre\u00e7\u00e3o dispon\u00edvel e reduzir a "
+            "exposi\u00e7\u00e3o enquanto ela \u00e9 revisada.",
+        ),
+        "ru": (
+            "Проверить уязвимость KEV",
+            "Применить доступное исправление и уменьшить открытость до завершения "
+            "проверки.",
+        ),
+    }.get(
+        language, ("Review KEV vulnerability", "Apply the available vendor fix.")
+    )
+    actions = list(repaired.priority_actions)
+    actions.extend(
+        AIProviderRecommendedAction(
+            priority="immediate",
+            title=fallback_text[0],
+            description=fallback_text[1],
+            related_finding_refs=[finding.finding_ref],
+        )
+        for finding in context.top_findings
+        if finding.is_kev and finding.finding_ref not in covered
+    )
+    return _validate_grounded_provider_analysis(
+        context, repaired.model_copy(update={"priority_actions": actions})
+    )
+
+
+def _validate_grounded_provider_analysis(
+    context: ScanAIContext,
+    analysis: ProviderScanAIAnalysis,
+) -> ProviderScanAIAnalysis:
+    normalized = validate_provider_analysis(context, analysis)
+    try:
+        materialized = materialize_scan_ai_analysis(context, normalized)
+    except ValueError as exc:
+        raise AIAnalysisValidationError(
+            "analysis contains an unknown reference"
+        ) from exc
+    if not _is_grounded(context, materialized):
+        raise AIAnalysisValidationError(
+            "analysis contains duplicate finding references"
+        )
+    return normalized
 
 
 def _context_hash(context: ScanAIContext) -> str:

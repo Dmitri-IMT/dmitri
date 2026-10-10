@@ -17,6 +17,7 @@ from api.schemas.agent_frames import (
     AgentCancelFrame,
     AgentErrorFrame,
     AgentHelloFrame,
+    AgentProgressFrame,
     AgentStatusFrame,
 )
 from api.services import agent_connections
@@ -26,6 +27,7 @@ from api.services.agent_presence import (
     touch_unless_revoked,
 )
 from api.services.commands import apply_status, pending_operator_cancels
+from api.services.scan_progress import apply_progress
 
 
 async def send_error(websocket: WebSocket, message: str) -> None:
@@ -44,11 +46,16 @@ class _Status:
 
 
 @dataclass(frozen=True)
+class _Progress:
+    frame: AgentProgressFrame
+
+
+@dataclass(frozen=True)
 class _Reject:
     message: str
 
 
-_Parsed = _Hello | _Status | _Reject
+_Parsed = _Hello | _Status | _Progress | _Reject
 
 
 def _parse_frame(raw_text: str) -> _Parsed:
@@ -73,6 +80,12 @@ def _parse_frame(raw_text: str) -> _Parsed:
             return _Status(AgentStatusFrame.model_validate(data))
         except ValidationError:
             return _Reject("invalid status frame")
+
+    if frame_type == "progress":
+        try:
+            return _Progress(AgentProgressFrame.model_validate(data))
+        except ValidationError:
+            return _Reject("invalid progress frame")
 
     if frame_type == "command":
         return _Reject("invalid inbound frame")
@@ -116,6 +129,31 @@ async def _apply_status_frame(
                 if not exists:
                     return "unknown_command"
             return "ok"
+        finally:
+            session.close()
+
+    return await run_in_threadpool(sync_work)
+
+
+async def _apply_progress_frame(
+    session_factory: SessionFactory,
+    *,
+    agent_id: UUID,
+    frame: AgentProgressFrame,
+    now: datetime,
+) -> Literal["ok", "unknown_command", "revoked"]:
+    def sync_work() -> Literal["ok", "unknown_command", "revoked"]:
+        session = session_factory()
+        try:
+            if touch_unless_revoked(session, agent_id, now) == "revoked":
+                return "revoked"
+            result = apply_progress(
+                session,
+                agent_id=agent_id,
+                frame=frame,
+                now=now,
+            )
+            return result
         finally:
             session.close()
 
@@ -181,6 +219,18 @@ async def handle_agent_frame(
             now=now,
         )
         await _send_pending_cancels(websocket, agent_id, pending_cancels)
+        return
+
+    if isinstance(parsed, _Progress):
+        outcome = await _apply_progress_frame(
+            session_factory, agent_id=agent_id, frame=parsed.frame, now=now
+        )
+        if outcome == "revoked":
+            await agent_connections.close_revoked(websocket)
+            return
+        await agent_connections.touch(agent_id, websocket, now=now)
+        if outcome == "unknown_command":
+            await send_error(websocket, "unknown command_id")
         return
 
     outcome = await _apply_status_frame(

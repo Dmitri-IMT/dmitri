@@ -36,6 +36,8 @@ class ScanEvent:
     batches_done: int = 0
     batches_total: int = 0
     ports_open: int = 0
+    ports_filtered: int = 0
+    industrial_services: int = 0
     ip: str | None = None
     units_skipped: int = 0
     units_total: int = 0

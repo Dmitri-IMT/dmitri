@@ -1,7 +1,10 @@
 name: dmitri-sim
 
 x-backend: &backend
-  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  build:
+    context: ../..
+    dockerfile: docker/pi-simulator/backend.Dockerfile
+  image: dmitri-sim-backend:local
   working_dir: /app
   env_file: .env
   environment:

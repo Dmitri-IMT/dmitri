@@ -10,4 +10,5 @@ drives the whole pipeline; the rest are the pieces it composes. Source lives at
 * [models](./models.md) — The in-memory scan dataclasses: `HostInfo`, `PortInfo`, `ServiceInfo`, `ScriptResult`.
 * [errors](./errors.md) — The scan exception hierarchy that encodes the contingency policy (fatal / unit / transient / cancelled / budget / circuit-breaker).
 * [progress](./progress.md) — `ScanEvent` stream, the `ScanReporter` protocol, and the `ProgressMapper` that turns events into a monotonic 0–100% for the UI.
+* [live progress](./live-progress.md) — maps scan events to compact, throttled snapshots for the remote daemon.
 * [workspace](./workspace.md) — The on-disk `results/` + `logs/` layout: result serialization, run-folder logging, and pruning.

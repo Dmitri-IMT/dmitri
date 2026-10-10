@@ -113,6 +113,7 @@ class TestRunPortStageReporter:
         expected = sum(len(host.ports) for host in hosts)
         assert done_events[0].ports_open == expected
         assert done_events[0].ports_open == 7
+        assert done_events[0].ports_filtered == 0
 
     def test_runs_without_reporter(self) -> None:
         host_ports = {"10.0.0.1": [22], "10.0.0.2": [80]}

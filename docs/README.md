@@ -62,6 +62,8 @@
 | [`implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`](implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md) | Work on the AI/assessment roadmap |
 | [`implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md`](implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md) | Understand scan coverage, partial-scan reconciliation, CVE confidence and evidence display corrections |
 
+| [`research/scan-report-design-references.md`](research/scan-report-design-references.md) | Review market patterns and evidence caveats used by the downloadable scan reports |
+
 ### UI & setup (`ui/`, root)
 
 | File | Read it when you need to… |
