@@ -148,9 +148,6 @@ export const catalog: Catalog = {
   'common.nextPage': 'Следующая страница',
   'common.pageNumber': ({ page }) => 'Страница ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
-  'common.vulnerabilitiesInScanTitle': ({ count }) => 'Уязвимости: ' + count,
-  'common.vulnerabilitiesInScanToggle':
-    'Показать или скрыть уязвимости сканирования',
   'common.severityGroupTitle': ({ severity, count }) => {
     const n = Number(count)
     const word =
@@ -318,13 +315,6 @@ export const catalog: Catalog = {
   'scans.coverageOutcomeSkipped': 'пропущена',
   'scans.openPorts': 'Открытые порты',
   'scans.filteredPorts': 'Фильтрованные порты',
-  'scans.stage.discovery': 'Поиск устройств',
-  'scans.stage.ports': 'Проверка портов',
-  'scans.stage.deep_inspection': 'Проверка устройств',
-  'scans.stage.ot_inspection': 'Проверка промышленных служб',
-  'scans.stage.targeted_assessment': 'Целевые проверки',
-  'scans.stage.normalization': 'Подготовка результатов',
-  'scans.stage.uploading': 'Отправка результатов',
   'scans.currentPort': 'Наблюдался в последнем сканировании',
   'scans.historicalPort': 'Предыдущее наблюдение',
   'scans.unknownPort': 'Не проверен в последнем сканировании',

@@ -86,7 +86,6 @@ def test_ot_stage_runs_only_for_nspi_and_is_serial(monkeypatch) -> None:
         "modbus_host_inspected",
         "ot_stage_done",
     ]
-    assert reporter.events[-1].industrial_services == 2
     assert all(host.industrial_services for host in hosts)
     assert all(
         host.stage_coverage
@@ -274,9 +273,9 @@ def test_ot_stage_deadline_emits_event_and_metadata(monkeypatch) -> None:
     assert "Time limit reached during Modbus inventory" in deadline_events[0].message
     assert deadline_events[0].units_skipped >= 1
     assert all(len(host.stage_coverage) == 1 for host in hosts)
-    assert StageCoverage("ot_inspection", "skipped", "not_run", "stage_budget") in [
-        host.stage_coverage[0] for host in hosts
-    ]
+    assert StageCoverage(
+        "ot_inspection", "skipped", "not_run", "stage_budget"
+    ) in [host.stage_coverage[0] for host in hosts]
 
     metadata = build_metadata(
         runner=_Runner(),

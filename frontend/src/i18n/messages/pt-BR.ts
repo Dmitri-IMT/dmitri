@@ -160,9 +160,6 @@ export const catalog: Catalog = {
   'common.nextPage': 'Próxima página',
   'common.pageNumber': ({ page }) => 'Página ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
-  'common.vulnerabilitiesInScanTitle': ({ count }) =>
-    'Vulnerabilidades: ' + count,
-  'common.vulnerabilitiesInScanToggle': 'Alternar vulnerabilidades do scan',
   'common.severityGroupTitle': ({ severity, count }) =>
     SEVERITY[severity] +
     ': ' +
@@ -331,13 +328,6 @@ export const catalog: Catalog = {
   'scans.coverageOutcomeSkipped': 'não executada',
   'scans.openPorts': 'Portas abertas',
   'scans.filteredPorts': 'Portas filtradas',
-  'scans.stage.discovery': 'Procurando dispositivos',
-  'scans.stage.ports': 'Verificando portas',
-  'scans.stage.deep_inspection': 'Inspecionando dispositivos',
-  'scans.stage.ot_inspection': 'Inspecionando serviços industriais',
-  'scans.stage.targeted_assessment': 'Executando verificações direcionadas',
-  'scans.stage.normalization': 'Preparando resultados',
-  'scans.stage.uploading': 'Enviando resultados',
   'scans.currentPort': 'Observada na última varredura',
   'scans.historicalPort': 'Observação anterior',
   'scans.unknownPort': 'Não verificada na última varredura',

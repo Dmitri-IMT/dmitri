@@ -83,8 +83,14 @@ export function ScanSummaryStrip({ scan }: { scan: ScanDetailResponse }) {
 }
 
 function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
-  const { t } = useI18n()
-  const progress = scan.progress
+  const progress =
+    scan.status === 'pending'
+      ? 15
+      : scan.status === 'accepted'
+        ? 35
+        : scan.status === 'processing'
+          ? 70
+          : 100
   return (
     <div data-testid="scan-detail-header" className="flex flex-col gap-4">
       <BackLink fallback="/scans" />
@@ -95,9 +101,9 @@ function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
         <div className="flex flex-col gap-2" data-testid="scan-progress">
           <div className="flex items-center justify-between text-body-sm">
             <span className="font-medium">{scanStatusLabel(scan.status)}</span>
-            {progress && (
+            {scan.status !== 'failed' && (
               <span className="tabular-nums text-muted-foreground">
-                {progress.percent}%
+                {progress}%
               </span>
             )}
           </div>
@@ -107,21 +113,13 @@ function ScanDetailHeader({ scan }: { scan: ScanDetailResponse }) {
             aria-label="Scan progress"
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={progress?.percent}
-            aria-valuetext={
-              progress ? `${t(`scans.stage.${progress.stage}`)}` : undefined
-            }
+            aria-valuenow={progress}
           >
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progress ? 'bg-primary' : 'w-1/3 animate-pulse bg-primary/70'}`}
-              style={progress ? { width: `${progress.percent}%` } : undefined}
+              className={`h-full rounded-full transition-all duration-500 ${scan.status === 'failed' ? 'bg-destructive' : 'bg-primary'}`}
+              style={{ width: `${progress}%` }}
             />
           </div>
-          {progress && (
-            <span className="text-caption-md text-muted-foreground">
-              {t(`scans.stage.${progress.stage}`)}
-            </span>
-          )}
         </div>
       )}
     </div>

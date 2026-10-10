@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import api.services.worker as worker_module
 import pytest
-from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord, KevRecord
+from api.models.persistence import AIScanAnalysisRecord, EnrichmentJobRecord
 from api.schemas.ai import (
     AIProviderFindingExplanation,
     AIProviderRecommendedAction,
     ProviderScanAIAnalysis,
 )
-from api.schemas.read import SeverityBreakdown
-from api.services.ai.context import AIFindingContext, ScanAIContext
 from api.services.ai.groq import AIProviderError
-from api.services.ai.jobs import (
-    _validate_analysis_with_repair,
-    process_ready_ai_analyses,
-)
+from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.worker import run_ai_worker_once
 from pydantic import ValidationError
 from read_factories import (
@@ -90,14 +84,13 @@ def _run(session, provider, *, now, max_attempts=2, retry_delay_seconds=0):
     )
 
 
-def _pending_analysis(session, scan, *, language="en"):
+def _pending_analysis(session, scan):
     record = AIScanAnalysisRecord(
         scan_id=scan.scan_id,
         provider="groq",
         model="openai/gpt-oss-120b",
         context_version="1",
         prompt_version="1",
-        language=language,
     )
     session.add(record)
     session.commit()
@@ -135,17 +128,6 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
         def analyze_scan(self, context, language="en"):
             received.append(context)
             return _analysis()
-
-        def analyze_chunk(self, context, *, language="en"):
-            raise AssertionError("scan analysis should use one provider request")
-
-        def repair_chunk(self, context, violation_codes, *, language="en"):
-            raise AssertionError("scan analysis should not repair finding chunks")
-
-        def synthesize_scan(
-            self, context, child_results, failed_refs, *, language="en"
-        ):
-            raise AssertionError("scan analysis should not synthesize child requests")
 
     now = datetime.now(timezone.utc)
     assert _run(administrative_session, FakeProvider(), now=now) == 1
@@ -192,36 +174,6 @@ def test_grounded_analysis_completes(administrative_session):
     assert received[0].top_findings[0].finding_ref == "finding_1"
 
 
-def test_unknown_provider_reference_is_repaired_before_materialization(
-    administrative_session,
-):
-    scan, _ = _scan_with_finding(administrative_session)
-    _pending_analysis(administrative_session, scan)
-    rejected = _grounded_analysis("finding_99")
-    repaired = _grounded_analysis()
-    received_codes = []
-
-    class RepairingProvider:
-        def analyze_scan(self, context, language="en"):
-            return rejected
-
-        def repair_analysis(self, context, violation_codes, language="en"):
-            received_codes.extend(violation_codes)
-            return repaired
-
-    assert (
-        _run(
-            administrative_session,
-            RepairingProvider(),
-            now=datetime.now(timezone.utc),
-        )
-        == 1
-    )
-    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
-    assert record.status == "completed"
-    assert "analysis contains an unknown reference" in received_codes
-
-
 @pytest.mark.parametrize(
     "defect", ["invented_explanation", "invented_action", "duplicate_explanation"]
 )
@@ -238,9 +190,6 @@ def test_ungrounded_analysis_fails(administrative_session, defect):
 
     class FakeProvider:
         def analyze_scan(self, context, language="en"):
-            return analysis
-
-        def repair_analysis(self, context, violation_codes, language="en"):
             return analysis
 
     now = datetime.now(timezone.utc)
@@ -384,48 +333,6 @@ def test_style_violation_is_repaired_once(administrative_session):
     assert "executive_summary:safety_certification" in received_codes
 
 
-def test_style_repair_gets_deterministic_kev_action_in_pt_br(
-    administrative_session,
-):
-    scan, finding = _scan_with_finding(administrative_session)
-    finding.cve_id = "CVE-2026-0001"
-    administrative_session.add(finding)
-    administrative_session.add(KevRecord(cve_id=finding.cve_id))
-    administrative_session.commit()
-    _pending_analysis(administrative_session, scan, language="pt-BR")
-
-    rejected = _grounded_analysis()
-    rejected.executive_summary = "Your network is safe."
-    repaired = _grounded_analysis()
-    repaired.priority_actions = []
-    calls = []
-
-    class RepairingProvider:
-        def analyze_scan(self, context, language="en"):
-            calls.append(("analysis", language))
-            return rejected
-
-        def repair_analysis(self, context, violation_codes, language="en"):
-            calls.append(("repair", language))
-            return repaired
-
-    assert (
-        _run(
-            administrative_session,
-            RepairingProvider(),
-            now=datetime.now(timezone.utc),
-        )
-        == 1
-    )
-    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
-    assert record.status == "completed"
-    assert calls == [("analysis", "pt-BR"), ("repair", "pt-BR")]
-    assert len(record.analysis_json["priority_actions"]) == 1
-    assert record.analysis_json["priority_actions"][0]["title"] == (
-        "Revisar vulnerabilidade no KEV"
-    )
-
-
 def test_second_style_violation_fails_the_job(administrative_session):
     scan, _ = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
@@ -450,56 +357,6 @@ def test_second_style_violation_fails_the_job(administrative_session):
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
     assert record.status == "failed"
     assert record.last_error == "style_violation"
-
-
-def test_missing_kev_action_is_repaired_before_analysis_is_rejected():
-    context = ScanAIContext(
-        scan_mode="quick",
-        duration_seconds=1,
-        host_count=1,
-        total_findings=1,
-        scored_findings=1,
-        confirmed_findings=1,
-        kev_findings=1,
-        average_risk_score=90,
-        max_risk_score=90,
-        severity=SeverityBreakdown(critical=1),
-        top_findings=[
-            AIFindingContext(
-                finding_ref="finding_1",
-                machine_ref="machine_1",
-                cve_id="CVE-2026-0001",
-                cvss_score=9.8,
-                severity="critical",
-                confidence="confirmed",
-                risk_score=90,
-                exploitability=1,
-                epss_score=0.9,
-                epss_percentile=0.99,
-                is_kev=True,
-                known_ransomware=False,
-            )
-        ],
-    )
-    context._finding_ids_by_ref = {"finding_1": uuid4()}
-    context._display_values_by_ref = {
-        "finding_1": "CVE-2026-0001 vulnerability",
-        "machine_1": "Test machine",
-    }
-    missing_action = _analysis()
-    received_codes = []
-
-    class RepairingProvider:
-        def repair_analysis(self, context, violation_codes, *, language="en"):
-            received_codes.extend(violation_codes)
-            return _grounded_analysis()
-
-    validated = _validate_analysis_with_repair(
-        RepairingProvider(), context, missing_action, language="en"
-    )
-
-    assert validated.priority_actions[0].related_finding_refs == ["finding_1"]
-    assert "analysis omits a KEV finding from actions" in received_codes
 
 
 def test_retry_waits_for_configured_delay(administrative_session):

@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend wire schemas
-description: The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
+description: The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -65,8 +65,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
 | `HostDetailResponse` | Host summary plus assessment status/version, latest-scan exposures, durable ports, latest industrial data, and scan history. | `backend/src/api/schemas/read.py:214` |
 | `ScanDetailResponse` assessment fields | `assessment_status`, nullable policy version, and stored `ExposureRead[]` distinguish current assessment from legacy unavailable data; exposure attention never changes finding counts. | `backend/src/api/schemas/read.py:225` |
-| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + required `hosts`/`findings`, status, command id, counts, and optional nullable `progress` for unfinished scans. `progress` contains a validated stage, percent, nullable counters, and server receipt time. | `backend/src/api/schemas/read.py:250` |
-| `AgentProgressFrame` / `ScanProgressSnapshot` / `ScanProgressRead` | Strict WebSocket snapshot (`stage`, 0–99 percent, nullable machines/open/filtered/industrial/vulnerability counts) and the optional scan-detail projection with server `updated_at`. | `backend/src/api/schemas/agent_frames.py`, `backend/src/api/schemas/scan_progress.py` |
+| `ScanDetailResponse` | `GET /scans/{scan_id}`: scan header + `hosts` (`ScanHostView[]`) + `findings` + `status`/`command_id`/`error_code`/counts; `hosts`/`findings` are required. `error_code` is `ScanErrorCode \| None` and is **not** required — present as `null` on a non-failed scan, never bare on a failed one. Carries the same typed `terminated_by` as `ScanSummary`, so the detail screen does not read it from `metadata`. `coverage` returns the stored `CoverageUnitPayload[]` (`[]` for older scans), and `evidence_completeness` is computed from it the same way as on `ScanSummary`. | `backend/src/api/schemas/read.py:230` |
 | `ScanSummary` | One row in `GET /scans`: identity + counts + optional `highest_severity` + optional `terminated_by` (`TerminatedBy`: `completed`/`user_cancel`/`timeout`/`error`, read from scan metadata by `api/core/scan_read.scan_terminated_by`; off-contract values become `null`). `subnet` is plain `str`, no CIDR pattern. `evidence_completeness` (`complete`/`partial`/`unknown`, from `scan_evidence.evidence_completeness` over metadata and coverage) is the one completeness field on the read API; there is no `partial_result` field. | `backend/src/api/schemas/read.py:255` |
 | `ScanListResponse` | `GET /scans`: paginated `data`/`total`/`page` (no `per_page` in envelope). | `backend/src/api/schemas/read.py:131` |
 | `HostListResponse` | `GET /hosts`: paginated `data`/`total`/`page` plus `quiet_total` (whole-inventory quiet count, independent of the requested group). | `backend/src/api/schemas/read.py:171` |

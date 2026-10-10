@@ -11,7 +11,7 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 
 ## Scan engine (scanner)
 
-* [scanner package](./scanner/index.md) — The split scan engine: runner, stages, Nmap execution, models, errors, progress snapshots, and workspace layout.
+* [scanner package](./scanner/index.md) — The split scan engine: runner, stages, Nmap execution, models, errors, progress, and workspace layout.
 
 ## Discovery & normalization
 
@@ -22,7 +22,7 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 
 ## Remote control & upload
 
-* [daemon](./daemon.md) — The long-lived device process runs one remote scan, streams compact progress snapshots, stops on park or remote cancel, uploads partials for cancel, and resumes after reconnect.
+* [daemon](./daemon.md) — The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
 * [command-channel](./command-channel.md) — The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state.
 * [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Wired to the daemon since DMI-66.
 

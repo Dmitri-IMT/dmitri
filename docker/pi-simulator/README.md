@@ -3,7 +3,6 @@
 The simulator runs the real `dmitri agent` daemon, a local backend and database, and a
 Samba target on a fixed Docker bridge. State is deliberately ephemeral: scans accumulate
 until `./simulator.sh stop`, which removes the volumes.
-The local backend image includes DejaVu Sans so API-generated PDF reports support Unicode.
 
 ## Local mode
 

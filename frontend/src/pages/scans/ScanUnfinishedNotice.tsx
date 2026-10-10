@@ -14,7 +14,20 @@ function ScanUnfinishedNotice({
   scan: ScanDetailResponse
 }) {
   const { t } = useI18n()
-  const progress = scan.progress
+  const openPorts = scan.hosts.reduce(
+    (total, host) =>
+      total + host.ports.filter((port) => port.state === 'open').length,
+    0,
+  )
+  const filteredPorts = scan.hosts.reduce(
+    (total, host) =>
+      total + host.ports.filter((port) => port.state === 'filtered').length,
+    0,
+  )
+  const industrial = scan.hosts.reduce(
+    (total, host) => total + host.industrial_services.length,
+    0,
+  )
   return (
     <div
       data-testid="scan-unfinished"
@@ -31,25 +44,19 @@ function ScanUnfinishedNotice({
         className="grid w-full max-w-xl grid-cols-2 gap-3 text-left sm:grid-cols-4"
         aria-live="polite"
       >
-        <ProgressMetric
-          label={t('common.machines')}
-          value={progress?.machines ?? null}
-        />
-        <ProgressMetric
-          label={t('scans.openPorts')}
-          value={progress?.open_ports ?? null}
-        />
+        <ProgressMetric label={t('common.machines')} value={scan.host_count} />
+        <ProgressMetric label={t('scans.openPorts')} value={openPorts} />
         <ProgressMetric
           label={t('scans.filteredPorts')}
-          value={progress?.filtered_ports ?? null}
+          value={filteredPorts}
         />
         <ProgressMetric
           label={t('common.industrialServices')}
-          value={progress?.industrial_services ?? null}
+          value={industrial}
         />
         <ProgressMetric
           label={t('common.vulnerabilities')}
-          value={progress?.vulnerabilities ?? null}
+          value={scan.finding_count}
         />
       </div>
       <Button
@@ -65,17 +72,11 @@ function ScanUnfinishedNotice({
   )
 }
 
-function ProgressMetric({
-  label,
-  value,
-}: {
-  label: string
-  value: number | null
-}) {
+function ProgressMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <p className="text-caption-md uppercase text-muted-foreground">{label}</p>
-      <p className="text-title-sm tabular-nums">{value ?? '—'}</p>
+      <p className="text-title-sm tabular-nums">{value}</p>
     </div>
   )
 }

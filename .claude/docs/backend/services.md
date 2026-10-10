@@ -1,18 +1,15 @@
 ---
 type: Module
 title: Backend services — persistence, host identity, read, enrichment, risk
-description: Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
+description: Backend business logic for ingest, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
 resource: backend/src/api/services/persistence.py
 tags: [backend, services, persistence, ingest, read, enrichment, worker, risk, command-channel, presence, tenancy, agents, cancel]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-01T12:00:00Z
 ---
 
 # Backend services — persistence, host identity, read, enrichment, risk
 
 ## Purpose
-
-The [report services](/backend/reports.md) turn completed scan and risk projections into
-localized explained/technical PDFs, with complete inventories and evidence-aware teaching material.
 
 `services/` is where the backend actually does its work. `persistence.py` writes an ingested
 `ScanIngestRequest` into the [tables](/backend/models.md), resolves host identity, and enqueues
@@ -38,17 +35,12 @@ stores the chosen `target_subnet`, and owns the idempotent admin revoke/restore 
 `users.py` owns account removal plus member listing and role changes. `org_lock.py` supplies the
 transaction-scoped per-org advisory lock that serializes admin-reducing role changes.
 The auth services (`auth.py`, `tokens.py`, `passwords.py`, `mailer.py`) are documented in
-[auth](/backend/auth.md). `reports.py` assembles a plain-language report from scan, risk and
-optional AI data; `report_pdf.py` renders the explained report with metric cards, direct-label
-bar charts, prioritized findings and caveats, or emits the separate technical JSON PDF. Both
-layouts require a system Unicode font (DejaVu Sans is installed in the Railway and simulator
-images).
+[auth](/backend/auth.md).
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `build_scan_report()` / `render_scan_report_pdf()` | Builds a language-specific explained report from deterministic scan/risk data plus optional AI explanations, or a technical report; the PDF download adds summary metrics, severity and affected-device bar charts, prioritized finding details, method and limitations. | `backend/src/api/services/reports.py:20`, `backend/src/api/services/report_pdf.py:135` |
 | `ScanOwnershipError` / `ScanClosedError` | The two ingest refusals, mapped by the router to `403` / `400`. | `backend/src/api/services/persistence.py:27`, `:31` |
 | `ingest_scan()` | The ingest gate. Three cases on `session.get(ScanRecord, scan_id)`: **A** unknown id → `persist_scan(command=None)`, creating an unrequested scan complete; **B** already `completed` → verify `agent_id`/`org_id` match (else `ScanOwnershipError`) and return it untouched, so a late progress report is a no-op; **C** placeholder → `command_for_scan`, reject a missing/foreign command with `ScanOwnershipError`, else fill it; `persist_scan` refuses a terminal command with `ScanClosedError` **except** `cancelled` (DMI-145 late partial), read under the row lock before any write. | `backend/src/api/services/persistence.py` |
 | `persist_scan()` | Keyword signature `(session, scan, *, org_id, agent_id, command, now)`. Fills the requested placeholder or inserts an unrequested scan; always writes scan `completed` itself (ingest owns the completed scan). `metadata.terminated_by == TERMINATED_BY_USER_CANCEL` alone decides `scan_cancelled` vs `scan_finished` activity and `cancelled` vs `done` for a live command; an already-`cancelled` command stays as it is, so a normal finish after an offline cancel still reads as finished. `persist_scan` reads the command status `FOR UPDATE` before it writes the scan row, matching the command → scan lock order of offline cancel and the sweep (no deadlock), and hands it to `_close_scan`, so an operator cancel that lands mid-ingest keeps the results instead of rolling them back. Stores `scan.coverage` in `ScanRecord.coverage_json` on both insert and fill. | `backend/src/api/services/persistence.py` |
@@ -92,8 +84,7 @@ images).
 | `_HOST_SORT_COLUMNS` | Sortable host columns: `last_seen_at`, `hostname`, `vendor`, `ip` (`cast` to `INET`), `vulnerability_count`. **Not** `machine_type`. Always with a `HostRecord.id` tie-breaker. | `backend/src/api/services/read.py` |
 | `list_hosts()` | Paginated `HostRecord` list → `HostListResponse`. Keyword-only `org_id`; `group` `active` (default) or `quiet` filters in SQL; `total` is the requested group; `quiet_total` is the whole-inventory quiet count. | `backend/src/api/services/read.py:67` |
 | `get_host_detail()` | Returns the durable profile projection and latest scan's assessment status/version/exposures; a legacy latest scan reports unavailable rather than reconstructed assessment. Sets each port's `observed_in_latest_scan` from the latest scan's open ports and `_port_check_complete` (all typed `ports` coverage units `completed` for that IP; with no coverage, `evidence_completeness == "complete"`). | `backend/src/api/services/read.py:132` |
-| `get_scan_detail()` | Returns stored per-scan profiles and exposures when the policy version exists, otherwise an explicit unavailable assessment with empty exposures. Also returns `coverage` from `coverage_json` and the latest validated live progress snapshot only while the scan is unfinished. | `backend/src/api/services/read.py` |
-| `apply_progress()` | Locks the matching command and scan, then stores a newer snapshot only for its authenticated agent and active command. Mismatched, stale, and terminal updates are no-ops. | `backend/src/api/services/scan_progress.py:18` |
+| `get_scan_detail()` | Returns stored per-scan profiles and exposures when the policy version exists, otherwise an explicit unavailable assessment with empty exposures. Also returns `coverage` from `coverage_json`. | `backend/src/api/services/read.py:249` |
 | `scan_evidence` | One owner for two evidence policies. `is_cve_correlation(cve_id, source)`: a CVE from `nmap_vulners`/`nvd` is a version correlation (enrichment writes `probable` for it; AI `evidence_basis` reads it). `parse_coverage` validates stored `coverage_json` into `CoverageUnitPayload[]`; `incomplete_check_count` counts units not `completed`; `evidence_completeness(metadata, coverage)` returns `partial` when `partial_result` is true or any unit is incomplete, `complete` when `partial_result` is false and coverage has no gap, else `unknown`. Used by inventory, port freshness, AI context, chat, and the Groq notice. | `backend/src/api/services/scan_evidence.py` |
 | `list_scans()` | Paginated `ScanRecord` list with per-scan `host_count`/`finding_count`/`highest_severity` aggregates (four-query strategy, no N+1) → `ScanListResponse`. Optional `status` filter; `sort_by`/`sort_order` with `scan_id` tie-breaker. Requires keyword-only `org_id`. | `backend/src/api/services/read.py:194` |
 | `list_findings()` | Paginated findings via `finding_read_query()`, optionally filtered by `host_id`, `severity`, `scan_id`. Ordered by `FindingRecord.id`. Requires `org_id`. | `backend/src/api/services/read.py:299` |
@@ -133,7 +124,7 @@ images).
 | `mark_connected()` / `mark_disconnected()` / `reconcile_all()` | The durable presence projection: set `agents.connected_at` + touch `last_seen_at` on connect, clear it on disconnect, and `UPDATE agents SET connected_at = NULL` at API startup to recover from a hard crash where the `finally` never ran. Each has an `async_*` wrapper that runs the sync body in a threadpool. | `backend/src/api/services/agent_presence.py:40` |
 | `agent_is_revoked()` / `touch_unless_revoked()` / `async_agent_is_revoked()` / `async_touch_unless_revoked()` | The revocation reads behind both DMI-97 gates. `agent_is_revoked` is the plain predicate used by the delivery gate and by the dispatcher's reject arm. `touch_unless_revoked` returns `"revoked"` for a revoked agent **without writing** and `"ok"` after bumping `last_seen_at` — a `Literal`, not a bool, so a write-named helper never reports its exception case as a bare `True` — **one `session.get(Agent, …)` serves both the check and the bump**, which is what keeps the per-frame cost at one `Agent` SELECT. Both **fail closed**: no `try/except`, so a failing lookup propagates rather than reading as "not revoked". An unknown `agent_id` reads as not-revoked (`False` / `"ok"`) — a missing row is a determinate answer, not a failed read — matching `mark_connected`/`mark_disconnected`'s silent-return precedent. Both `async_*` wrappers live here rather than at the call site: this module owns the session/threadpool lifecycle for presence, so `agent_ws` never opens a `Session` of its own. | `backend/src/api/services/agent_presence.py:22`, `:27`, `:62` |
 | `register()` / `unregister()` / `set_hello()` / `touch()` / `is_online()` / `get_socket()` / `last_seen_at()` / `get_hello()` / `close_revoked()` | In-process WebSocket connection registry — one live socket per `agent_id`, identity-aware unregister/hello/touch (reconnect race fix), displaced sockets closed with `CLOSE_REPLACED`/`replaced`. The two close codes are now named constants, `CLOSE_REPLACED = 4000` and `CLOSE_REVOKED = 4001` (DMI-97), and both are published in the WS operation's close-code table in `contracts/openapi/openapi.yaml` — the Pi keys its reconnect behaviour on them, so they are contract values. `close_revoked()` is best-effort: it returns early unless the socket is `CONNECTED`, swallows a raising `close()`, and deliberately does **not** unregister or touch presence — the route's `finally` owns both, and duplicating would double-write `connected_at`. Otherwise still a pure in-memory registry with no I/O. | `backend/src/api/services/agent_connections.py:12`, `:48` |
-| `run_agent_channel()` / `handle_agent_frame()` / `_parse_frame()` / `_apply_status_frame()` / `_apply_progress_frame()` / `send_error()` | WS receive loop. Takes a session **factory**, not a session: each frame opens its own `Session` inside a `run_in_threadpool` call, so no DB session or pool slot is held across the long-lived socket. **Every inbound frame re-checks revocation (DMI-97)**. Dispatch is parse-once into hello, status, progress, and reject cases. `status` frames go through `apply_status`; `progress` frames go through `apply_progress` and never transition command state. Malformed frames send `AgentErrorFrame` then check revocation; `unknown command_id` keeps plain `send_error`. | `backend/src/api/services/agent_ws.py` |
+| `run_agent_channel()` / `handle_agent_frame()` / `_parse_frame()` / `_apply_status_frame()` / `send_error()` | WS receive loop. Takes a session **factory**, not a session: each frame opens its own `Session` inside a `run_in_threadpool` call, so no DB session or pool slot is held across the long-lived socket. **Every inbound frame re-checks revocation (DMI-97)**. Dispatch is **parse-once** into `_Hello` / `_Status` / `_Reject`. Hello runs `_hello_gate` (touch + `pending_operator_cancels` in one session), then `_send_pending_cancels` sends catch-up `AgentCancelFrame`s for offline cancels still inside the mode budget, stopping if a newer socket took over (DMI-145). `status` frames go through `apply_status` (including `cancelled`). Malformed frames send `AgentErrorFrame` then check revocation; `unknown command_id` keeps plain `send_error`. | `backend/src/api/services/agent_ws.py` |
 
 ## The risk score
 

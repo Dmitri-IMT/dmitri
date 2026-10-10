@@ -27,7 +27,6 @@ from .scan import (
     ExposureConfidence,
     ExposureRole,
 )
-from .scan_progress import ScanProgressRead
 
 ScanStatus = Literal[
     "pending", "accepted", "processing", "completed", "failed", "cancelled"
@@ -272,7 +271,6 @@ class ScanDetailResponse(BaseModel):
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
     terminated_by: TerminatedBy | None = None
-    progress: ScanProgressRead | None = None
 
 
 class ScanSummary(BaseModel):

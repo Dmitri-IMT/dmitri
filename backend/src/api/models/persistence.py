@@ -46,9 +46,6 @@ class ScanRecord(SQLModel, table=True):
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    progress_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
-    progress_seq: int = Field(default=0)
-    progress_updated_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     coverage_json: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON)
     )

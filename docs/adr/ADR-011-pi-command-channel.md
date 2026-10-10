@@ -176,19 +176,6 @@ the HTTP half of C2 and belongs to the frontend-contract-asks epic.
 
 Allowed Pi `status` values on the wire: `running`, `uploading`, `done`, `failed`, `cancelled`.
 
-The Pi may also send a `progress` frame while its command is `running` or `uploading`. It carries
-the matching `command_id` and `scan_id`, a positive monotonically increasing `sequence`, and one
-compact snapshot with `stage`, `percent` (0–99), and nullable counts for machines, open ports,
-filtered ports, industrial services, and vulnerabilities. Unknown counts are `null`; a confirmed
-zero is `0`. The Pi coalesces ordinary updates to at most one every two seconds, sends stage and
-pre-upload boundaries promptly, and keeps only the newest unsent snapshot for reconnect replay.
-
-The backend validates that the authenticated Pi owns the active command and matching scan, then
-stores only a newer sequence on the existing scan row. Progress frames do not change command
-lifecycle state and never carry hosts, ports, findings, or raw scan evidence. `GET /scans/{id}`
-exposes the latest snapshot only while the scan is unfinished; accepted full or partial ingest is
-the authority for final results. The scan payload still travels over `POST /api/v1/scans`.
-
 - Backend sets `delivered` when the `command` frame is sent; Pi’s first `running` moves DB to `running`.
 - Large scan payloads are **not** sent on WS — only on `POST /api/v1/scans`.
 - After a remote cancel, the Pi reports `cancelled` after it stops the scan and uploads any partial

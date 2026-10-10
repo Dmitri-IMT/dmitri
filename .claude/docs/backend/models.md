@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend ORM models
-description: The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+description: The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Backend ORM models
@@ -26,7 +26,7 @@ order is irrelevant.
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
 | `utc_now()` | Timezone-aware `default_factory` shared by every model. | `backend/src/api/models/persistence.py:18` |
-| `ScanRecord` → `scans` | Per-scan header including nullable `assessment_policy_version`; null means the stored scan predates assessment. `coverage_json` holds per-endpoint coverage units. `progress_json`, `progress_seq`, and `progress_updated_at` hold the newest live snapshot separately from final-result metadata. | `backend/src/api/models/persistence.py:38` |
+| `ScanRecord` → `scans` | Per-scan header including nullable `assessment_policy_version`; null means the stored scan predates assessment. `coverage_json` holds the Pi's per-endpoint coverage units (`CoverageUnitPayload` dumps); empty for scans before `20260928_38`. | `backend/src/api/models/persistence.py:38` |
 | `ScanHostRecord` → `scan_hosts` | A **per-scan host observation**; unique `(scan_id, ip)`; original observations plus nullable assessment `machine_type` and `device_profile_json`; `host_id` resolves durable identity. | `backend/src/api/models/persistence.py:53` |
 | `HostRecord` → `hosts` | Durable cross-scan identity. Its latest accepted profile projection is `machine_type`, nullable `device_profile_json`, and nullable `device_profile_policy_version`; older scans do not overwrite it. | `backend/src/api/models/persistence.py:77` |
 | `PortRecord` → `ports` | Unique `(scan_host_id, port, protocol)`; `state`. Per-scan evidence — not the durable service list. | `backend/src/api/models/persistence.py:84` |

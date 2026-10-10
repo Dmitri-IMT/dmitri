@@ -60,7 +60,6 @@ from api.schemas.read import (
     SortOrder,
 )
 from api.schemas.scan import DeviceProfilePayload
-from api.schemas.scan_progress import ScanProgressRead
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
 from api.services.industrial import industrial_services_for_scan_host
@@ -283,18 +282,6 @@ def get_scan_detail(
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
     coverage = parse_coverage(scan.coverage_json)
-    progress = None
-    if (
-        scan.status in {"pending", "accepted", "processing"}
-        and scan.progress_json is not None
-        and scan.progress_updated_at is not None
-    ):
-        progress = ScanProgressRead.model_validate(
-            {
-                **scan.progress_json,
-                "updated_at": scan.progress_updated_at,
-            }
-        )
     return ScanDetailResponse(
         scan_id=scan.scan_id,
         timestamp=scan.timestamp,
@@ -326,7 +313,6 @@ def get_scan_detail(
         box_name=agent.display_name if agent is not None else None,
         duration=scan_duration_seconds(scan.status, scan.metadata_json),
         terminated_by=scan_terminated_by(scan.metadata_json),
-        progress=progress,
     )
 
 

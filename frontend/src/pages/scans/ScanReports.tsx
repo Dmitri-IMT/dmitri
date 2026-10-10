@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download } from 'lucide-react'
-import {
-  downloadScanReport,
-  getScanReport,
-  type ScanReportKind,
-} from '@/api/scans'
+import { downloadScanReport, type ScanReportKind } from '@/api/scans'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,7 +22,6 @@ type Preview = {
   kind: ScanReportKind
   blob: Blob
   url: string
-  json?: string
 }
 
 function ScanReports({ scanId }: { scanId: string }) {
@@ -44,19 +39,11 @@ function ScanReports({ scanId }: { scanId: string }) {
   async function openPreview(kind: ScanReportKind) {
     setPreparing(kind)
     try {
-      let blob: Blob
-      let json: string | undefined
-      if (kind === 'technical') {
-        const report = await getScanReport(scanId, kind, language)
-        json = JSON.stringify(report, null, 2)
-        blob = new Blob([json], { type: 'application/json' })
-      } else {
-        blob = await downloadScanReport(scanId, kind, language)
-      }
+      const blob = await downloadScanReport(scanId, kind, language)
       const url = URL.createObjectURL(blob)
       setPreview((current) => {
         if (current) URL.revokeObjectURL(current.url)
-        return { kind, blob, url, json }
+        return { kind, blob, url }
       })
     } catch {
       show(t('reports.error'))
@@ -76,8 +63,7 @@ function ScanReports({ scanId }: { scanId: string }) {
     if (!preview) return
     const link = document.createElement('a')
     link.href = preview.url
-    const extension = preview.kind === 'technical' ? 'json' : 'pdf'
-    link.download = `dmitri-scan-${scanId}-${preview.kind}.${extension}`
+    link.download = `dmitri-scan-${scanId}-${preview.kind}.pdf`
     link.click()
     closePreview()
   }
@@ -127,22 +113,13 @@ function ScanReports({ scanId }: { scanId: string }) {
                 : t('reports.previewExplained')}
             </DialogTitle>
           </DialogHeader>
-          {preview &&
-            (preview.kind === 'technical' ? (
-              <pre
-                data-testid="technical-report-json"
-                aria-label={t('reports.previewTechnical')}
-                className="min-h-0 flex-1 overflow-auto rounded border border-border bg-muted p-4 font-mono text-caption-md whitespace-pre"
-              >
-                {preview.json}
-              </pre>
-            ) : (
-              <iframe
-                title={t('reports.previewTitle')}
-                src={preview.url}
-                className="min-h-0 w-full flex-1 rounded border border-border bg-white"
-              />
-            ))}
+          {preview && (
+            <iframe
+              title={t('reports.previewTitle')}
+              src={preview.url}
+              className="min-h-0 w-full flex-1 rounded border border-border bg-white"
+            />
+          )}
           <DialogFooter className="flex-row justify-end">
             <Button type="button" variant="outline" onClick={closePreview}>
               {t('common.cancel')}

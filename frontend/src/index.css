@@ -138,10 +138,6 @@ body {
   height: 3.5rem;
 }
 
-@utility max-h-assistant-dialog {
-  max-height: min(90vh, 48rem);
-}
-
 /* Header row plus ten h-10 rows, so a short last page keeps the table height. */
 @utility min-h-usage-table {
   min-height: calc(11 * 2.5rem);

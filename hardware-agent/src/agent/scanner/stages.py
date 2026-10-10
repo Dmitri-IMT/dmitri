@@ -242,16 +242,12 @@ def run_port_stage(
                     f"Port stage aborted: {hosts_skipped}/{len(hosts)} units failed"
                 )
     ports_open = sum(len(host.open_ports) for host in hosts)
-    ports_filtered = sum(
-        1 for host in hosts for port in host.ports if port.state == "filtered"
-    )
     _emit(
         reporter,
         ScanEvent(
             kind="port_stage_done",
             message=f"{ports_open} open ports found",
             ports_open=ports_open,
-            ports_filtered=ports_filtered,
             units_skipped=hosts_skipped,
             units_total=len(hosts),
         ),
@@ -591,7 +587,6 @@ def run_ot_inspection_stage(
                 if settings.nspi_submode == "read_only_mapping"
                 else "Modbus inventory complete"
             ),
-            industrial_services=sum(len(host.industrial_services) for host in hosts),
             units_total=hosts_total,
             units_skipped=hosts_total - hosts_done,
         ),

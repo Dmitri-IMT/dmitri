@@ -2,29 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/renderWithProviders'
-import { downloadScanReport, getScanReport } from '@/api/scans'
+import { downloadScanReport } from '@/api/scans'
 import ScanReports from './ScanReports'
 
 vi.mock('@/api/scans', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/scans')>()),
   downloadScanReport: vi.fn(),
-  getScanReport: vi.fn(),
 }))
 
 describe('ScanReports', () => {
   beforeEach(() => {
     vi.mocked(downloadScanReport).mockReset()
     vi.mocked(downloadScanReport).mockResolvedValue(new Blob(['pdf']))
-    vi.mocked(getScanReport).mockReset()
-    vi.mocked(getScanReport).mockResolvedValue({
-      scan_id: 'scan-1',
-      kind: 'technical',
-      language: 'en',
-      generated_at: '2026-10-07T12:00:00Z',
-      filename: 'dmitri-scan-scan-1-technical.json',
-      content_type: 'application/json',
-      sections: { scan: { findings: [{ title: 'Raw scan finding' }] } },
-    })
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn(() => 'blob:report-preview'),
@@ -65,14 +54,8 @@ describe('ScanReports', () => {
     expect(screen.queryByTitle('PDF report preview')).not.toBeInTheDocument()
   })
 
-  it('previews and downloads the technical report as raw JSON', async () => {
+  it('supports the technical report confirmation flow', async () => {
     const user = userEvent.setup()
-    const clickedDownloads: HTMLAnchorElement[] = []
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(function (this: HTMLAnchorElement) {
-        clickedDownloads.push(this)
-      })
     renderWithProviders(<ScanReports scanId="scan-1" />)
 
     await user.click(screen.getByRole('button', { name: 'Scan reports' }))
@@ -81,21 +64,12 @@ describe('ScanReports', () => {
         name: 'Download technical report',
       }),
     )
-    const preview = await screen.findByTestId('technical-report-json')
-    expect(preview).toBeVisible()
-    expect(preview.textContent).toContain('"Raw scan finding"')
-    expect(getScanReport).toHaveBeenCalledWith('scan-1', 'technical', 'en')
-    expect(downloadScanReport).not.toHaveBeenCalled()
+    expect(await screen.findByText('Technical report preview')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Confirm download' }))
 
-    expect(clickedDownloads).toHaveLength(1)
-    expect(clickedDownloads[0].download).toBe(
-      'dmitri-scan-scan-1-technical.json',
-    )
     expect(
-      screen.queryByTestId('technical-report-json'),
+      screen.queryByText('Technical report preview'),
     ).not.toBeInTheDocument()
-    clickSpy.mockRestore()
   })
 
   it('raises a toast instead of inline text when the report fails', async () => {

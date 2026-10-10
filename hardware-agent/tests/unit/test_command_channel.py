@@ -11,8 +11,6 @@ from uuid import UUID
 import pytest
 from agent.transport.command_channel import (
     AgentCommand,
-    AgentProgress,
-    AgentProgressSnapshot,
     AgentStatus,
     CommandChannelClient,
 )
@@ -324,7 +322,9 @@ class TestInboundValidation:
     async def test_nspi_options_on_general_mode_is_rejected(self) -> None:
         dialer = Dialer(
             [
-                command_frame(nspi_options={"version": 1, "submode": "inventory"}),
+                command_frame(
+                    nspi_options={"version": 1, "submode": "inventory"}
+                ),
                 command_frame(),
             ]
         )
@@ -337,46 +337,6 @@ class TestInboundValidation:
 
 
 class TestSending:
-    @pytest.mark.asyncio
-    async def test_progress_frame_is_compact_and_serialized(self) -> None:
-        dialer = Dialer([])
-        client = build_client(dialer)
-        frame = AgentProgress(
-            command_id=COMMAND_ID,
-            scan_id=SCAN_ID,
-            sequence=4,
-            progress=AgentProgressSnapshot(
-                stage="ports",
-                percent=35,
-                machines=2,
-                open_ports=3,
-                filtered_ports=None,
-                industrial_services=0,
-                vulnerabilities=None,
-            ),
-        )
-
-        async def on_connected() -> None:
-            assert await client.send_progress(frame)
-
-        await drive(client, on_connected)
-
-        assert json.loads(dialer.sockets[0].sent[1]) == {
-            "type": "progress",
-            "command_id": str(COMMAND_ID),
-            "scan_id": str(SCAN_ID),
-            "sequence": 4,
-            "progress": {
-                "stage": "ports",
-                "percent": 35,
-                "machines": 2,
-                "open_ports": 3,
-                "filtered_ports": None,
-                "industrial_services": 0,
-                "vulnerabilities": None,
-            },
-        }
-
     @pytest.mark.asyncio
     async def test_cancelled_status_is_serialized(self) -> None:
         dialer = Dialer([])
@@ -568,7 +528,9 @@ class TestClassification:
             await asyncio.sleep(0)
             events.append("parked-end")
 
-        client = CommandChannelClient(make_config(), connect=Dialer(), sleep=sleep)
+        client = CommandChannelClient(
+            make_config(), connect=Dialer(), sleep=sleep
+        )
         await client.park("upload_refused")
 
         await drive(client, on_parked=on_parked)

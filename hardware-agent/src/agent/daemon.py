@@ -11,12 +11,9 @@ from typing import Literal
 from uuid import UUID
 
 from agent.headless import HeadlessScanResult, InvalidScanInput, run_headless_scan
-from agent.scanner.live_progress import LiveProgressReporter, LiveProgressSnapshot
 from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
 from agent.transport.command_channel import (
     AgentCommand,
-    AgentProgress,
-    AgentProgressSnapshot,
     AgentStatus,
     CommandChannelClient,
 )
@@ -116,9 +113,6 @@ class AgentDaemon:
         self._run_scan = run_scan
         self.ledger: dict[UUID, CommandRecord] = {}
         self._active: UUID | None = None
-        self._latest_progress: dict[UUID, AgentProgress] = {}
-        self._progress_sequence: dict[UUID, int] = {}
-        self._progress_revision: dict[UUID, int] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop = _ScanStop()
         self._upgrade_hold: ExitStack | None = None
@@ -193,9 +187,6 @@ class AgentDaemon:
         for command_id, record in list(self.ledger.items()):
             if record.pending:
                 await self._send(command_id, record)
-            progress = self._latest_progress.get(command_id)
-            if progress is not None and record.status in {"running", "uploading"}:
-                await self._send_progress(progress)
 
     async def _execute(self, command: AgentCommand) -> None:
         try:
@@ -206,23 +197,12 @@ class AgentDaemon:
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
-        loop = asyncio.get_running_loop()
-        reporter = LiveProgressReporter(
-            command.scan_mode,
-            lambda snapshot: loop.call_soon_threadsafe(
-                self._record_progress,
-                command.command_id,
-                command.scan_id,
-                snapshot,
-            ),
-        )
 
         def run_scan() -> HeadlessScanResult:
             try:
                 return self._run_scan(
                     command.scan_mode,
                     command.subnet,
-                    reporter=reporter,
                     nspi_submode=(
                         command.nspi_options.submode
                         if command.nspi_options is not None
@@ -244,14 +224,6 @@ class AgentDaemon:
         if status == "failed" or result.payload is None:
             await self._update(command.command_id, status, error_code)
             return
-        final_progress = self._record_progress(
-            command.command_id,
-            command.scan_id,
-            reporter.reconcile_payload(result.payload),
-            schedule_send=False,
-        )
-        if final_progress is not None:
-            await self._send_progress(final_progress)
         await self._update(command.command_id, "uploading")
         submission = await asyncio.to_thread(
             self._ingest.submit, result.payload, scan_id=command.scan_id
@@ -286,10 +258,6 @@ class AgentDaemon:
     ) -> None:
         record = CommandRecord(status=status, error_code=error_code)
         self.ledger[command_id] = record
-        if status in {"done", "failed", "cancelled"}:
-            self._latest_progress.pop(command_id, None)
-            self._progress_sequence.pop(command_id, None)
-            self._progress_revision.pop(command_id, None)
         await self._send(command_id, record)
 
     async def _send(self, command_id: UUID, record: CommandRecord) -> None:
@@ -307,54 +275,6 @@ class AgentDaemon:
             and record.status in {"done", "failed", "cancelled"}
         ):
             self._release_hold()
-
-    def _record_progress(
-        self,
-        command_id: UUID,
-        scan_id: UUID,
-        snapshot: LiveProgressSnapshot,
-        *,
-        schedule_send: bool = True,
-    ) -> AgentProgress | None:
-        record = self.ledger.get(command_id)
-        if (
-            record is None
-            or record.status not in {"running", "uploading"}
-            or snapshot.revision <= self._progress_revision.get(command_id, 0)
-        ):
-            return None
-
-        sequence = self._progress_sequence.get(command_id, 0) + 1
-        self._progress_sequence[command_id] = sequence
-        self._progress_revision[command_id] = snapshot.revision
-        frame = AgentProgress(
-            command_id=command_id,
-            scan_id=scan_id,
-            sequence=sequence,
-            progress=AgentProgressSnapshot(
-                stage=snapshot.stage,
-                percent=snapshot.percent,
-                machines=snapshot.machines,
-                open_ports=snapshot.open_ports,
-                filtered_ports=snapshot.filtered_ports,
-                industrial_services=snapshot.industrial_services,
-                vulnerabilities=snapshot.vulnerabilities,
-            ),
-        )
-        self._latest_progress[command_id] = frame
-        if schedule_send:
-            asyncio.create_task(self._send_progress(frame))
-        return frame
-
-    async def _send_progress(self, frame: AgentProgress) -> None:
-        record = self.ledger.get(frame.command_id)
-        if (
-            record is None
-            or record.status not in {"running", "uploading"}
-            or self._client.parked_reason is not None
-        ):
-            return
-        await self._client.send_progress(frame)
 
     def _release_hold(self) -> None:
         if self._upgrade_hold is not None:

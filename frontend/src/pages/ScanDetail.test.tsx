@@ -427,43 +427,15 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
-      'Vulnerabilities: 4',
       'Critical: 1 vulnerability',
       'High: 1 vulnerability',
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
-      'Machines seen',
       'Check coverage',
+      'Machines seen',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
-  })
-
-  it('opens one vulnerabilities card before revealing the severity cards', async () => {
-    const user = userEvent.setup()
-    scanDetail(completedScan())
-    renderPage(`/scans/${SCAN_ID}`)
-
-    const vulnerabilitiesToggle = await screen.findByRole('button', {
-      name: 'Toggle scan vulnerabilities',
-    })
-    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'false')
-
-    await user.click(vulnerabilitiesToggle)
-
-    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'true')
-    expect(
-      screen.getByRole('button', { name: 'Toggle critical vulnerabilities' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Toggle high vulnerabilities' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Toggle medium vulnerabilities' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Toggle low vulnerabilities' }),
-    ).toBeInTheDocument()
   })
 
   it('renders the summary strip, and drops the counts a failed scan cannot know', async () => {
@@ -1119,64 +1091,6 @@ describe('ScanDetail', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('scan-unfinished')).not.toBeInTheDocument()
-  })
-
-  it('shows unknown live counters and an indeterminate bar before the first report', async () => {
-    scanDetail(
-      completedScan({
-        status: 'processing',
-        progress: null,
-        hosts: [],
-        findings: [],
-        host_count: 0,
-        finding_count: 0,
-      }),
-    )
-    renderPage(`/scans/${SCAN_ID}`)
-
-    const notice = await screen.findByTestId('scan-unfinished')
-    expect(notice).toHaveTextContent('Machines—')
-    expect(notice).toHaveTextContent('Open ports—')
-    expect(notice).toHaveTextContent('Vulnerabilities—')
-    expect(screen.getByTestId('scan-progress')).not.toHaveTextContent('%')
-    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')
-  })
-
-  it('renders live stage, percentage, and confirmed zero counts', async () => {
-    scanDetail(
-      completedScan({
-        status: 'processing',
-        progress: {
-          stage: 'ports',
-          percent: 35,
-          machines: 3,
-          open_ports: 0,
-          filtered_ports: 2,
-          industrial_services: 0,
-          vulnerabilities: null,
-          updated_at: '2026-10-02T12:00:00Z',
-        },
-        hosts: [],
-        findings: [],
-        host_count: 0,
-        finding_count: 0,
-      }),
-    )
-    renderPage(`/scans/${SCAN_ID}`)
-
-    const notice = await screen.findByTestId('scan-unfinished')
-    expect(notice).toHaveTextContent('Machines3')
-    expect(notice).toHaveTextContent('Open ports0')
-    expect(notice).toHaveTextContent('Filtered ports2')
-    expect(notice).toHaveTextContent('Vulnerabilities—')
-    expect(screen.getByTestId('scan-progress')).toHaveTextContent('35%')
-    expect(screen.getByTestId('scan-progress')).toHaveTextContent(
-      'Checking ports',
-    )
-    expect(screen.getByRole('progressbar')).toHaveAttribute(
-      'aria-valuenow',
-      '35',
-    )
   })
 
   it('sends a machines-seen row to that machine instead of expanding it', async () => {
