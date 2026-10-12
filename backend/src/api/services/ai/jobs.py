@@ -517,16 +517,38 @@ def _validate_repaired_analysis(
     }.get(
         language, ("Review KEV vulnerability", "Apply the available vendor fix.")
     )
+    uncovered = [
+        finding.finding_ref
+        for finding in context.top_findings
+        if finding.is_kev and finding.finding_ref not in covered
+    ]
     actions = list(repaired.priority_actions)
-    actions.extend(
+    if len(actions) >= 15:
+        kev_refs = {
+            finding.finding_ref
+            for finding in context.top_findings
+            if finding.is_kev
+        }
+        counts: dict[str, int] = {}
+        for action in actions:
+            for reference in set(action.related_finding_refs) & kev_refs:
+                counts[reference] = counts.get(reference, 0) + 1
+        for index in range(len(actions) - 1, -1, -1):
+            sole = any(
+                counts[reference] == 1
+                for reference in set(actions[index].related_finding_refs)
+                & kev_refs
+            )
+            if not sole:
+                del actions[index]
+                break
+    actions.append(
         AIProviderRecommendedAction(
             priority="immediate",
             title=fallback_text[0],
             description=fallback_text[1],
-            related_finding_refs=[finding.finding_ref],
+            related_finding_refs=uncovered,
         )
-        for finding in context.top_findings
-        if finding.is_kev and finding.finding_ref not in covered
     )
     return _validate_grounded_provider_analysis(
         context, repaired.model_copy(update={"priority_actions": actions})

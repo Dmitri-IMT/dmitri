@@ -30,6 +30,26 @@ _LABELS = {
     "pt-BR": ("Crítica", "Alta", "Moderada", "Baixa", "Serviço / versão", "Registros"),
     "ru": ("Критическая", "Высокая", "Средняя", "Низкая", "Служба / версия", "Записи"),
 }
+_ACTION_PRIORITY = {
+    "en": {
+        "immediate": "Immediate",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+    },
+    "pt-BR": {
+        "immediate": "Imediata",
+        "high": "Alta",
+        "medium": "Moderada",
+        "low": "Baixa",
+    },
+    "ru": {
+        "immediate": "Срочно",
+        "high": "Высокий",
+        "medium": "Средний",
+        "low": "Низкий",
+    },
+}
 
 
 def _safe(value: Any) -> str:
@@ -353,11 +373,18 @@ def append_education(story, sections, styles, copy, language, width, font_name):
 
     heading("plan_title", new_page=True)
     field(text("plan_owner", language), text("plan_owner_body", language))
-    if sections.get("ai_explanation_available"):
+    actions = sections.get("what_to_do_first") or []
+    if actions:
         story.append(p(copy["first"], "ReportHeading"))
-        for action in sections.get("what_to_do_first", []):
+        for action in actions:
             if isinstance(action, dict):
-                field(action.get("title", ""), action.get("description", ""))
+                title = str(action.get("title") or "")
+                priority = _ACTION_PRIORITY.get(language, {}).get(
+                    str(action.get("priority") or "")
+                )
+                if priority:
+                    title = f"{priority}: {title}" if title else priority
+                field(title, action.get("description", ""))
             else:
                 body(action)
     for number in range(1, 7):
