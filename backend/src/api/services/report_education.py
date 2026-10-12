@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
-from api.schemas.ai import AILanguage
+from api.schemas.ai import AILanguage, ScanAIAnalysis
 from api.schemas.read import FindingRead, ScanDetailResponse
+from api.schemas.reports import ReportEducation
 from api.services.report_education_copy import guide, text
 from api.services.scan_evidence import is_cve_correlation
 
@@ -132,8 +133,11 @@ def build_report_education(
     *,
     advisories: dict[str, dict[str, Any]] | None = None,
     enrichment: dict[str, int] | None = None,
-) -> dict[str, Any]:
+    analysis: ScanAIAnalysis | None = None,
+) -> ReportEducation:
     advisories = advisories or {}
+    explanations = {item.finding_id: item for item in analysis.important_findings} \
+        if analysis else {}
     host_findings: dict[str, list[FindingRead]] = defaultdict(list)
     for finding in detail.findings:
         address = str(finding.host_ip) if finding.host_ip else ""
@@ -319,6 +323,7 @@ def build_report_education(
         item.port or 0, item.cve_id or "", item.title,
     )):
         advisory = advisories.get(finding.cve_id or "", {})
+        explanation = explanations.get(finding.finding_id)
         effects = _advisory_effects(advisory.get("description", ""), language)
         appendix.append({
             "finding_id": str(finding.finding_id),
@@ -327,6 +332,14 @@ def build_report_education(
             "port": finding.port, "protocol": finding.protocol,
             "title": finding.cve_id or finding.title,
             "severity": finding.severity, "basis": _basis(finding),
+            "description": finding.description,
+            "recommendation": explanation.recommendation if explanation
+            else finding.recommendation,
+            "evidence": finding.evidence,
+            "plain_language_explanation": explanation.plain_language_explanation
+            if explanation else None,
+            "why_it_matters": explanation.why_it_matters if explanation else None,
+            "uncertainty": explanation.uncertainty if explanation else None,
             "advisory_effects": effects,
             "advisory_description": advisory.get("description"),
             "advisory_fetched_at": advisory.get("fetched_at"),
@@ -338,7 +351,8 @@ def build_report_education(
     service_counts = Counter(port["family"] for device in devices
                              for port in device["services"])
     return {
-        "version": "2", "devices": devices, "issue_groups": issue_groups,
+        "version": "3", "devices": devices, "issue_groups": issue_groups,
+        "severity_counts": _severity_counts(detail.findings),
         "evidence_counts": {key: observations[key]
                             for key in ("observation", "correlation", "other")},
         "service_counts": dict(service_counts),

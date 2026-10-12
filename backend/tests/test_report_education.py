@@ -188,7 +188,7 @@ def test_cached_advisories_and_scan_scoped_enrichment_are_read_only(
         org_id=seeded["org"].id, kind="explained", ai_enabled=False,
         language="pt-BR",
     )
-    education = report.sections["education"]
+    education = report.sections
     assert education["enrichment"] == {"pending": 1, "failed": 1}
     record = next(row for row in education["appendix"]
                   if row["title"] == "CVE-2023-38408")
