@@ -10,14 +10,13 @@ from api.schemas.ai import (
     AIProviderFindingExplanation,
     AIProviderRecommendedAction,
     ProviderScanAIAnalysis,
+    ProviderScanAIChildAnalysis,
 )
 from api.schemas.read import SeverityBreakdown
+from api.services.ai.analyzer import validate_analysis_with_repair
 from api.services.ai.context import AIFindingContext, ScanAIContext
 from api.services.ai.groq import AIProviderError
-from api.services.ai.jobs import (
-    _validate_analysis_with_repair,
-    process_ready_ai_analyses,
-)
+from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.worker import run_ai_worker_once
 from pydantic import ValidationError
 from read_factories import (
@@ -136,16 +135,22 @@ def test_requested_ai_job_runs_once_after_enrichment_is_terminal(
             received.append(context)
             return _analysis()
 
+        def repair_analysis(self, context, violation_codes, *, language="en"):
+            raise AssertionError("no repair expected")
+
         def analyze_chunk(self, context, *, language="en"):
-            raise AssertionError("scan analysis should use one provider request")
+            raise AssertionError("empty context has no finding chunks")
 
         def repair_chunk(self, context, violation_codes, *, language="en"):
-            raise AssertionError("scan analysis should not repair finding chunks")
+            raise AssertionError("empty context has no finding chunks to repair")
 
         def synthesize_scan(
             self, context, child_results, failed_refs, *, language="en"
         ):
-            raise AssertionError("scan analysis should not synthesize child requests")
+            assert child_results == []
+            assert failed_refs == ()
+            received.append(context)
+            return _analysis()
 
     now = datetime.now(timezone.utc)
     assert _run(administrative_session, FakeProvider(), now=now) == 1
@@ -190,6 +195,53 @@ def test_grounded_analysis_completes(administrative_session):
         finding.finding_id
     )
     assert received[0].top_findings[0].finding_ref == "finding_1"
+
+
+def test_bounded_job_records_failed_child_coverage(administrative_session):
+    scan, finding = _scan_with_finding(administrative_session)
+    for index in range(5):
+        make_finding(
+            administrative_session, scan.scan_id,
+            finding.scan_host_id,
+            f"bounded-{index}",
+        )
+    _pending_analysis(administrative_session, scan)
+    calls = []
+
+    class BoundedProvider:
+        def analyze_scan(self, context, *, language="en"):
+            raise AssertionError("worker must use bounded analysis")
+
+        def repair_analysis(self, context, violation_codes, *, language="en"):
+            raise AssertionError("no repair expected")
+
+        def analyze_chunk(self, context, *, language="en"):
+            calls.append([item.finding_ref for item in context.top_findings])
+            if len(context.top_findings) == 5:
+                raise AIProviderError("provider_timeout", retryable=True)
+            return ProviderScanAIChildAnalysis(
+                priority_actions=[], important_findings=[], uncertainties=[]
+            )
+
+        def repair_chunk(self, context, violation_codes, *, language="en"):
+            raise AssertionError("no repair expected")
+
+        def synthesize_scan(
+            self, context, child_results, failed_refs, *, language="en"
+        ):
+            assert len(child_results) == 1
+            assert len(failed_refs) == 5
+            return _analysis()
+
+    assert _run(
+        administrative_session, BoundedProvider(), now=datetime.now(timezone.utc)
+    ) == 1
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    assert [len(chunk) for chunk in calls] == [5, 1]
+    assert record.analyzed_findings == 1
+    assert record.failed_findings == 5
+    assert record.total_findings == 6
 
 
 def test_unknown_provider_reference_is_repaired_before_materialization(
@@ -384,7 +436,7 @@ def test_style_violation_is_repaired_once(administrative_session):
     assert "executive_summary:safety_certification" in received_codes
 
 
-def test_style_repair_gets_deterministic_kev_action_in_pt_br(
+def test_style_repair_missing_kev_fails_without_local_actions(
     administrative_session,
 ):
     scan, finding = _scan_with_finding(administrative_session)
@@ -418,15 +470,14 @@ def test_style_repair_gets_deterministic_kev_action_in_pt_br(
         == 1
     )
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
-    assert record.status == "completed"
+    assert record.status == "failed"
+    assert record.last_error == "invalid_analysis"
+    assert record.analysis_json is None
     assert calls == [("analysis", "pt-BR"), ("repair", "pt-BR")]
-    assert len(record.analysis_json["priority_actions"]) == 1
-    assert record.analysis_json["priority_actions"][0]["title"] == (
-        "Revisar vulnerabilidade no KEV"
-    )
+    assert repaired.priority_actions == []
 
 
-def test_style_repair_covers_kev_when_action_list_is_full(
+def test_style_repair_missing_kev_preserves_full_action_list(
     administrative_session,
 ):
     scan, finding = _scan_with_finding(administrative_session)
@@ -465,18 +516,12 @@ def test_style_repair_covers_kev_when_action_list_is_full(
         == 1
     )
     record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
-    assert record.status == "completed"
-    actions = record.analysis_json["priority_actions"]
-    assert len(actions) == 15
-    covered = {
-        finding_id
-        for action in actions
-        for finding_id in action["related_finding_ids"]
-    }
-    assert str(finding.finding_id) in covered
-    assert any(
-        action["title"] == "Review KEV vulnerability" for action in actions
-    )
+    assert record.status == "failed"
+    assert record.last_error == "invalid_analysis"
+    assert record.analysis_json is None
+    assert [action.title for action in repaired.priority_actions] == [
+        f"Review item {index:02d}" for index in range(15)
+    ]
 
 
 def test_second_style_violation_fails_the_job(administrative_session):
@@ -547,7 +592,7 @@ def test_missing_kev_action_is_repaired_before_analysis_is_rejected():
             received_codes.extend(violation_codes)
             return _grounded_analysis()
 
-    validated = _validate_analysis_with_repair(
+    validated = validate_analysis_with_repair(
         RepairingProvider(), context, missing_action, language="en"
     )
 
