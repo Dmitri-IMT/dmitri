@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, constr
+from pydantic import BaseModel, ConfigDict, Field, constr
 
 from api.schemas.commands import NspiOptions
 from api.schemas.scan import ScanMode, SubnetCIDR
+from api.schemas.scan_progress import ScanProgressSnapshot
 
 AgentStatus = Literal["running", "uploading", "done", "failed", "cancelled"]
 
@@ -34,6 +35,16 @@ class AgentStatusFrame(BaseModel):
     command_id: UUID
     status: AgentStatus
     error_code: str | None = None
+
+
+class AgentProgressFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["progress"]
+    command_id: UUID
+    scan_id: UUID
+    sequence: Annotated[int, Field(ge=1)]
+    progress: ScanProgressSnapshot
 
 
 class AgentCommandFrame(BaseModel):

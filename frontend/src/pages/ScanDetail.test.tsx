@@ -427,15 +427,43 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
+      'Vulnerabilities: 4',
       'Critical: 1 vulnerability',
       'High: 1 vulnerability',
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
-      'Check coverage',
       'Machines seen',
+      'Check coverage',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+  })
+
+  it('opens one vulnerabilities card before revealing the severity cards', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const vulnerabilitiesToggle = await screen.findByRole('button', {
+      name: 'Toggle scan vulnerabilities',
+    })
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(vulnerabilitiesToggle)
+
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Toggle critical vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle high vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle medium vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle low vulnerabilities' }),
+    ).toBeInTheDocument()
   })
 
   it('renders the summary strip, and drops the counts a failed scan cannot know', async () => {
@@ -925,41 +953,13 @@ describe('ScanDetail', () => {
     ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
   })
 
-  it('shows partial coverage and keeps the no-findings copy honest', async () => {
-    const completedPartial = withPartialResult(
-      completedScan({ findings: [], finding_count: 0 }),
-      'completed',
+  it('shows the partial warning and keeps the no-findings copy honest', async () => {
+    scanDetail(
+      withPartialResult(
+        completedScan({ findings: [], finding_count: 0 }),
+        'completed',
+      ),
     )
-    completedPartial.metadata = {
-      ...completedPartial.metadata,
-      targeted_units_planned: 19,
-      targeted_units_completed: 5,
-      targeted_units_failed: 0,
-      targeted_units_timed_out: 1,
-      targeted_units_skipped: 13,
-    }
-    completedPartial.targeted_coverage = [
-      {
-        tool: 'ffuf',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [{ reason: 'wordlist_unavailable', count: 6 }],
-      },
-      {
-        tool: 'nikto',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [
-          { reason: 'tool_unavailable', count: 4 },
-          { reason: 'dependency_unavailable', count: 2 },
-        ],
-      },
-    ]
-    scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-ai-unavailable')).toHaveTextContent(
@@ -969,21 +969,12 @@ describe('ScanDetail', () => {
       'No confirmed vulnerabilities in accepted evidence.',
     )
     const summary = await screen.findByTestId('scan-summary-strip')
-    const warningButton = within(summary).getByRole('button', {
-      name: 'Warning: partial scan',
-    })
-    expect(warningButton).toBeInTheDocument()
-    await userEvent.setup().click(warningButton)
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    const notice = screen.getByTestId('scan-partial-notice')
-    expect(notice).toHaveTextContent(
-      '19 Planned, 5 Completed, 0 Failed, 1 Timed out, 13 Skipped',
-    )
-    expect(notice).toHaveTextContent('required wordlist is unavailable (6)')
-    expect(notice).toHaveTextContent('tool is not installed or available (4)')
-    expect(notice).toHaveTextContent('required dependency is unavailable (2)')
-    expect(notice).toHaveTextContent('ffuf')
-    expect(notice).toHaveTextContent('Skipped6')
+    expect(
+      within(summary).getByTestId('scan-partial-warning'),
+    ).toHaveTextContent('Warning: partial scan')
+    expect(
+      within(summary).queryByRole('button', { name: 'Warning: partial scan' }),
+    ).not.toBeInTheDocument()
 
     view.unmount()
     scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
@@ -993,7 +984,7 @@ describe('ScanDetail', () => {
       `findings-critical-row-${phpCgiFinding.finding_id}`,
     )
     expect(
-      await screen.findByTestId('scan-partial-warning-trigger'),
+      await screen.findByTestId('scan-partial-warning'),
     ).toBeInTheDocument()
   })
 
@@ -1091,6 +1082,64 @@ describe('ScanDetail', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('scan-unfinished')).not.toBeInTheDocument()
+  })
+
+  it('shows unknown live counters and an indeterminate bar before the first report', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: null,
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines—')
+    expect(notice).toHaveTextContent('Open ports—')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).not.toHaveTextContent('%')
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')
+  })
+
+  it('renders live stage, percentage, and confirmed zero counts', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: {
+          stage: 'ports',
+          percent: 35,
+          machines: 3,
+          open_ports: 0,
+          filtered_ports: 2,
+          industrial_services: 0,
+          vulnerabilities: null,
+          updated_at: '2026-10-02T12:00:00Z',
+        },
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines3')
+    expect(notice).toHaveTextContent('Open ports0')
+    expect(notice).toHaveTextContent('Filtered ports2')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent('35%')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent(
+      'Checking ports',
+    )
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '35',
+    )
   })
 
   it('sends a machines-seen row to that machine instead of expanding it', async () => {

@@ -7,10 +7,12 @@ from api.schemas.ai import ProviderScanAIAnalysis, ProviderScanAIChildAnalysis
 
 WRITING_SKILL_VERSION = "1"
 
-WRITING_SKILL_INSTRUCTIONS = """Write calm, plain English for a non-technical owner.
-Use short active sentences and only facts from the supplied context. Say vulnerability,
-not finding or issue; say machine, not device or host. Refer to machines and
-vulnerabilities only with their placeholders. Never claim a network, machine, or
+WRITING_SKILL_INSTRUCTIONS = """Write calmly in the requested language for a
+non-technical owner. Use short, active sentences and only facts from the supplied
+context. Use plain-language terms for vulnerabilities and machines. In English, say
+vulnerability, never finding, issue, or weakness, and say machine, never device, host,
+endpoint, or asset. Refer to machines
+and vulnerabilities only with their placeholders. Never claim a network, machine, or
 service is safe or secure. Do not use markdown, HTML, URLs, raw IP or MAC addresses,
 or the banned style words in the schema instructions. Return only the requested JSON.
 """

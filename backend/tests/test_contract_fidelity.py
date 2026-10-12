@@ -80,6 +80,16 @@ SCHEMA_NAMES = (
     "ScanAIAnalysisFailed",
     "ScanAIAnalysisCompleted",
     "ScanReportResponse",
+    "ExplainedReportSections",
+    "TechnicalReportSections",
+    "ReportDevice",
+    "ReportService",
+    "ReportIssueGroup",
+    "ReportObservation",
+    "ReportAdvisoryNote",
+    "ReportFinding",
+    "ReportAction",
+    "ReportSource",
     "AIChatResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")

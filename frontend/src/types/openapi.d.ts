@@ -136,7 +136,7 @@ export interface paths {
         };
         /**
          * Read a scan report
-         * @description Returns a deterministic explained or technical report for a completed scan.
+         * @description Returns the explained or technical report data for a completed scan.
          */
         get: operations["getScanReport"];
         put?: never;
@@ -210,7 +210,7 @@ export interface paths {
         };
         /**
          * Download a scan report
-         * @description Downloads the explained or technical report as a PDF.
+         * @description Downloads the explained report as PDF or the technical report as raw JSON.
          */
         get: operations["downloadScanReport"];
         put?: never;
@@ -375,6 +375,7 @@ export interface paths {
          *     | `command` | backend → Pi | `AgentCommandFrame` |
          *     | `cancel` | backend → Pi | `AgentCancelFrame` |
          *     | `status` | Pi → backend | `AgentStatusFrame` |
+         *     | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
          *
          *     Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
@@ -1154,6 +1155,8 @@ export interface components {
             /** @description Machines discovered by this scan. Items reuse the ingest `HostPayload` shape; they gain a `host_id` under contract ask C9. */
             hosts: components["schemas"]["ScanHostView"][];
             findings: components["schemas"]["FindingRecord"][];
+            /** @description Latest progress snapshot while the scan is unfinished; final scan data is authoritative after ingest. */
+            progress?: components["schemas"]["ScanProgressRead"] | null;
             assessment_status: components["schemas"]["AssessmentStatus"];
             assessment_policy_version: string | null;
             exposures: components["schemas"]["ExposureRead"][];
@@ -1371,7 +1374,7 @@ export interface components {
             nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         /**
-         * @description **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+         * @description **Pi → backend.** Command lifecycle reports. Scan results are never sent on the socket — they go to
          *     `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
          *     here.
          */
@@ -1383,6 +1386,42 @@ export interface components {
             /** @enum {string} */
             status: "running" | "uploading" | "done" | "failed" | "cancelled";
             error_code?: string | null;
+        };
+        /**
+         * @description **Pi → backend.** One compact, sequenced progress snapshot for an active command. The full
+         *     scan payload is sent separately to `POST /api/v1/scans`.
+         */
+        AgentProgressFrame: {
+            /** @constant */
+            type: "progress";
+            /** Format: uuid */
+            command_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            sequence: number;
+            progress: components["schemas"]["ScanProgressSnapshot"];
+        };
+        ScanProgressSnapshot: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+        };
+        ScanProgressRead: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description **Backend → Pi.** Requests that the Pi stop the active scan identified by `command_id`. */
         AgentCancelFrame: {
@@ -1575,20 +1614,320 @@ export interface components {
         ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
         /** @enum {string} */
         ReportKind: "explained" | "technical";
-        ScanReportResponse: {
-            /** Format: uuid */
-            scan_id: string;
-            kind: components["schemas"]["ReportKind"];
-            /** @enum {string} */
-            language: "en" | "pt-BR" | "ru";
-            /** Format: date-time */
-            generated_at: string;
-            filename: string;
-            /** @enum {string} */
-            content_type: "application/pdf";
-            sections: {
-                [key: string]: unknown;
+        /** ExplainedReportSections */
+        ExplainedReportSections: {
+            /** Version */
+            version: string;
+            /** Devices */
+            devices: components["schemas"]["ReportDevice"][];
+            /** Issue Groups */
+            issue_groups: components["schemas"]["ReportIssueGroup"][];
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
             };
+            /** Evidence Counts */
+            evidence_counts: {
+                [key: string]: number;
+            };
+            /** Service Counts */
+            service_counts: {
+                [key: string]: number;
+            };
+            /** Affected Hosts */
+            affected_hosts: number;
+            /** Hosts Without Findings */
+            hosts_without_findings: number;
+            /** Unassigned Findings */
+            unassigned_findings: number;
+            /** Evidence Completeness */
+            evidence_completeness: string;
+            /** Checks Completed */
+            checks_completed: number;
+            /** Checks Incomplete */
+            checks_incomplete: number;
+            /** Coverage Recorded */
+            coverage_recorded: boolean;
+            /** Enrichment */
+            enrichment: {
+                [key: string]: number;
+            };
+            /** Appendix */
+            appendix: components["schemas"]["ReportFinding"][];
+            /** Sources */
+            sources: components["schemas"]["ReportSource"][];
+            /**
+             * Scan Timestamp
+             * Format: date-time
+             */
+            scan_timestamp: string;
+            /** Scope */
+            scope: string;
+            /** Scan Mode */
+            scan_mode: string;
+            /** Overview */
+            overview: string;
+            /** Ai Explanation Available */
+            ai_explanation_available: boolean;
+            /** Actions */
+            actions: components["schemas"]["ReportAction"][];
+            /** Method */
+            method: string;
+            /** Limitations */
+            limitations: string[];
+        };
+        /** ReportAction */
+        ReportAction: {
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "immediate" | "high" | "medium" | "low";
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Related Finding Ids */
+            related_finding_ids: string[];
+        };
+        /** ReportAdvisoryNote */
+        ReportAdvisoryNote: {
+            /** Cve Id */
+            cve_id: string;
+            /** Explanation */
+            explanation: string;
+            /** Url */
+            url: string;
+        };
+        /** ReportDevice */
+        ReportDevice: {
+            /** Address */
+            address: string;
+            /** Hostname */
+            hostname: string;
+            /** Display Name */
+            display_name: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Model */
+            model: string | null;
+            /** Identity Confidence */
+            identity_confidence: string;
+            /** Identity Evidence */
+            identity_evidence: string[];
+            /** Identity Conflicts */
+            identity_conflicts: string[];
+            /** Machine Type */
+            machine_type: string;
+            /** Os */
+            os: string | null;
+            /** Finding Count */
+            finding_count: number;
+            /** Correlation Count */
+            correlation_count: number;
+            /** Observation Count */
+            observation_count: number;
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
+            };
+            /** Severity */
+            severity: string | null;
+            /** Open Ports */
+            open_ports: number;
+            /** Groups */
+            groups: string[];
+            /** Review Exposures */
+            review_exposures: number;
+            /** Checks Completed */
+            checks_completed: number;
+            /** Checks Incomplete */
+            checks_incomplete: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "review" | "no_alerts";
+            /** Services */
+            services: components["schemas"]["ReportService"][];
+            /** Note */
+            note: string;
+            /** Unreadable Fields */
+            unreadable_fields: string[];
+        };
+        /** ReportFinding */
+        ReportFinding: {
+            /** Finding Id */
+            finding_id: string;
+            /** Group */
+            group: string;
+            /** Address */
+            address: string | null;
+            /** Port */
+            port: number | null;
+            /** Protocol */
+            protocol: string | null;
+            /** Title */
+            title: string;
+            /** Severity */
+            severity: string;
+            /** Basis */
+            basis: string;
+            /** Advisory Effects */
+            advisory_effects: string[];
+            /** Advisory Description */
+            advisory_description: string | null;
+            /** Advisory Fetched At */
+            advisory_fetched_at: string | null;
+            /** Reference */
+            reference: string | null;
+            /** Description */
+            description: string;
+            /** Recommendation */
+            recommendation: string;
+            /** Evidence */
+            evidence: string;
+            /** Plain Language Explanation */
+            plain_language_explanation: string | null;
+            /** Why It Matters */
+            why_it_matters: string | null;
+            /** Uncertainty */
+            uncertainty: string | null;
+        };
+        /** ReportIssueGroup */
+        ReportIssueGroup: {
+            /** Id */
+            id: string;
+            /** Address */
+            address: string | null;
+            /** Hostname */
+            hostname: string | null;
+            /** Category */
+            category: string;
+            /** Family */
+            family: string;
+            /** Basis */
+            basis: string;
+            /** Title */
+            title: string;
+            /** Port */
+            port: number | null;
+            /** Protocol */
+            protocol: string | null;
+            /** Service */
+            service: string | null;
+            /** Version */
+            version: string | null;
+            /** Finding Count */
+            finding_count: number;
+            /** Severity */
+            severity: string | null;
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
+            };
+            /** Cves */
+            cves: string[];
+            /** Purpose */
+            purpose: string;
+            /** Meaning */
+            meaning: string;
+            /** Impact */
+            impact: string;
+            /** Conditions */
+            conditions: string;
+            /** Uncertainty */
+            uncertainty: string;
+            /** Steps */
+            steps: string[];
+            /** Verify */
+            verify: string;
+            /** Recorded Observations */
+            recorded_observations: components["schemas"]["ReportObservation"][];
+            /** Advisory Notes */
+            advisory_notes: components["schemas"]["ReportAdvisoryNote"][];
+        };
+        /** ReportObservation */
+        ReportObservation: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Evidence */
+            evidence: string;
+            /** Recommendation */
+            recommendation: string;
+        };
+        /** ReportService */
+        ReportService: {
+            /** Port */
+            port: number;
+            /** Protocol */
+            protocol: string;
+            /** Service */
+            service: string;
+            /** Version */
+            version: string | null;
+            /** Family */
+            family: string;
+            /** Purpose */
+            purpose: string;
+            /** Finding Count */
+            finding_count: number;
+        };
+        /** ReportSource */
+        ReportSource: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** TechnicalReportSections */
+        TechnicalReportSections: {
+            /**
+             * Scan Timestamp
+             * Format: date-time
+             */
+            scan_timestamp: string;
+            /** Scope */
+            scope: string;
+            /** Scan Mode */
+            scan_mode: string;
+            scan: components["schemas"]["ScanDetailResponse"];
+            risk_summary: components["schemas"]["ScanRiskSummaryResponse"];
+            ai_analysis: components["schemas"]["ScanAIAnalysisCompleted"] | null;
+        };
+        /** ScanReportResponse */
+        ScanReportResponse: {
+            /**
+             * Scan Id
+             * Format: uuid
+             */
+            scan_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "explained" | "technical";
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "application/json";
+            /** Sections */
+            sections: components["schemas"]["ExplainedReportSections"] | components["schemas"]["TechnicalReportSections"];
         };
         AIContextChatRequest: {
             question: string;
@@ -2712,7 +3051,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Downloadable PDF report. */
+            /** @description Downloadable PDF report or raw JSON report. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -2720,6 +3059,7 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": string;
+                    "application/json": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

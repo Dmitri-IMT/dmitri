@@ -222,8 +222,13 @@ def download_scan_report(
     report = read_scan_report(
         scan_id, kind, session, caller, settings, language=language
     )
+    content = (
+        report.model_dump_json(indent=2)
+        if kind == "technical"
+        else render_scan_report_pdf(report)
+    )
     return Response(
-        content=render_scan_report_pdf(report),
+        content=content,
         media_type=report.content_type,
         headers={
             "Content-Disposition": f'attachment; filename="{report.filename}"'
