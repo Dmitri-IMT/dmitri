@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/renderWithProviders'
+import { latestSuccessfulScan } from '@/test/mswHandlers'
 import { downloadScanReport, getScanReport } from '@/api/scans'
 import ScanReports from './ScanReports'
 
@@ -23,7 +24,43 @@ describe('ScanReports', () => {
       generated_at: '2026-10-07T12:00:00Z',
       filename: 'dmitri-scan-scan-1-technical.json',
       content_type: 'application/json',
-      sections: { scan: { findings: [{ title: 'Raw scan finding' }] } },
+      sections: {
+        scan_timestamp: '2026-10-07T12:00:00Z',
+        scope: '192.168.0.0/24',
+        scan_mode: 'quick',
+        scan: {
+          ...latestSuccessfulScan,
+          scan_id: 'scan-1',
+          assessment_status: 'unavailable',
+          assessment_policy_version: null,
+          hosts: [],
+          exposures: [],
+          findings: [{
+            finding_id: 'finding-1',
+            scan_id: 'scan-1',
+            title: 'Raw scan finding',
+            severity: 'high',
+            description: 'Observed service issue.',
+            recommendation: 'Review the service.',
+            evidence: 'Service banner.',
+            references: [],
+            detected_at: '2026-10-07T12:00:00Z',
+          }],
+          finding_count: 1,
+        },
+        risk_summary: {
+          scan_id: 'scan-1',
+          total_findings: 1,
+          scored_findings: 0,
+          confirmed_findings: 0,
+          kev_findings: 0,
+          average_risk_score: null,
+          max_risk_score: null,
+          severity: { critical: 0, high: 1, medium: 0, low: 0 },
+          top_findings: [],
+        },
+        ai_analysis: null,
+      },
     })
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
