@@ -1,38 +1,37 @@
 ---
 type: Module
-title: partial scan coverage details
-description: ScanPartialWarning shows an attention control beside scan duration and opens per-tool coverage details when a scan is partial.
+title: partial scan warning
+description: ScanPartialWarning shows a plain attention line beside scan duration when a scan is partial.
 resource: frontend/src/pages/scans/ScanPartialWarning.tsx
 tags: [frontend, scans, coverage, i18n, accessibility]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 
-# Partial scan coverage details
+# Partial scan warning
 
 ## Purpose
 
-`ScanPartialWarning` gives completed scans with incomplete targeted coverage a compact attention
-control beside duration. Opening it shows planned, completed, failed, timed-out, and skipped work,
-grouped by tool with available gap reasons. Complete scans render no control.
+`ScanPartialWarning` gives completed scans with incomplete coverage a plain attention line beside
+duration: an amber warning icon and the "partial scan" label. It is static text with no dialog or
+details. Complete scans render nothing.
 
 ## Key classes / functions
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ScanPartialWarning` | Reads `partial_result`, the `targeted_units_*` metadata counts, and the typed `targeted_coverage` array, then renders the attention trigger and accessible details dialog only for partial results. | `frontend/src/pages/scans/ScanPartialWarning.tsx:36` |
-| `GAP_REASON_MESSAGES` | Maps agent gap reason codes to message keys; unknown codes render with underscores replaced. | `frontend/src/pages/scans/ScanPartialWarning.tsx:17` |
+| `ScanPartialWarning` | Reads `metadata.partial_result` and renders the `scan-partial-warning` line only when it is `true`. | `frontend/src/pages/scans/ScanPartialWarning.tsx:7` |
 
 ## How it connects
 
 - `ScanSummaryStrip` places the component next to duration on Scan Detail
   ([screens](./screens.md)).
-- The component reads `ScanDetailResponse`; no extra API request is made. The backend decodes the
-  agent's coverage string (`parse_targeted_coverage`), so the SPA never parses it.
-- Text comes from the English, Brazilian Portuguese, and Russian message catalogs
-  ([i18n](./i18n.md)).
+- The component reads `ScanDetailResponse`; no extra API request is made.
+- The label comes from `scans.partialWarningTitle` in the English, Brazilian Portuguese, and Russian
+  message catalogs ([i18n](./i18n.md)).
 
 ## Notes / gotchas
 
-- Partial status alone decides whether the trigger is rendered; a completed scan with empty coverage
-  metadata does not show the dialog.
-- Gap reason identifiers are translated for display while the stored metadata remains unchanged.
+- Partial status alone decides whether the line renders.
+- `ScanDetailResponse.targeted_coverage` and the `targeted_units_*` metadata counts are still
+  returned by the API ([contracts](../contracts.md)), but no screen renders them since the details
+  dialog was removed.

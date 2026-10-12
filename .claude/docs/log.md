@@ -3,6 +3,17 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-12
+
+* **Update**: `ScanPartialWarning` is a plain warning line with no dialog; the dialog-only message
+  keys were removed from the three catalogs. `targeted_coverage` is still returned by the API but no
+  screen renders it. Updated `frontend/scan-partial-warning.md`, `frontend/screens.md`,
+  `frontend/index.md`.
+* **Update**: The AI writing instructions and the `retired_vocabulary` repair guidance name every
+  retired word and its replacement again, after English overviews failed style lint. Fixed stale
+  `groq.py` line references and the PDF font note, which now lists the macOS Arial path.
+  Updated `backend/ai.md`.
+
 ## 2026-10-06
 
 * **Creation**: `backend/reports.md` maps the educational report assembly, localized copy,
