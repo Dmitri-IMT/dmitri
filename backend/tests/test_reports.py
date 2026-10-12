@@ -10,8 +10,11 @@ from api.schemas.ai import (
     ScanAIAnalysis,
     ScanAIAnalysisCompleted,
 )
+from api.services.report_education_pdf import append_education
 from api.services.report_pdf import _COPY, _format_timestamp, _scan_mode_label
 from read_factories import make_finding, seed_read_graph
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import KeepTogether, Paragraph, Table
 
 
 def test_explained_report_is_available_without_ai_analysis(
@@ -268,3 +271,59 @@ def test_explained_report_download_renders_long_escaped_details(
     assert response.headers["content-type"].startswith("application/pdf")
     assert response.content.startswith(b"%PDF-")
     assert len(response.content) > 5_000
+
+
+def _flowable_text(flowable: object) -> list[str]:
+    if isinstance(flowable, Paragraph):
+        return [flowable.getPlainText()]
+    if isinstance(flowable, KeepTogether):
+        return [
+            line
+            for child in flowable._content
+            for line in _flowable_text(child)
+        ]
+    if isinstance(flowable, Table):
+        lines: list[str] = []
+        for row in flowable._cellvalues:
+            for cell in row:
+                if isinstance(cell, list):
+                    for child in cell:
+                        lines.extend(_flowable_text(child))
+                else:
+                    lines.extend(_flowable_text(cell))
+        return lines
+    return []
+
+
+def test_explained_report_download_includes_priorities_without_ai(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/explained",
+        params={"language": "en"},
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    styles = {
+        name: ParagraphStyle(name, fontName="Helvetica", fontSize=9)
+        for name in (
+            "ReportBody",
+            "ReportHeading",
+            "ReportChapter",
+            "ReportCard",
+            "ReportSmall",
+            "ReportDevice",
+        )
+    }
+    story: list[object] = []
+    append_education(story, sections, styles, _COPY["en"], "en", 460, "Helvetica")
+    text = "\n".join(line for item in story for line in _flowable_text(item))
+    assert "Recommended priorities" in text
+    assert "High: Vulnerable service" in text
+    assert "Low: Weak cipher" in text

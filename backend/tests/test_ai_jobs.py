@@ -426,6 +426,59 @@ def test_style_repair_gets_deterministic_kev_action_in_pt_br(
     )
 
 
+def test_style_repair_covers_kev_when_action_list_is_full(
+    administrative_session,
+):
+    scan, finding = _scan_with_finding(administrative_session)
+    finding.cve_id = "CVE-2026-0001"
+    administrative_session.add(finding)
+    administrative_session.add(KevRecord(cve_id=finding.cve_id))
+    administrative_session.commit()
+    _pending_analysis(administrative_session, scan)
+
+    rejected = _grounded_analysis()
+    rejected.executive_summary = "Your network is safe."
+    repaired = _grounded_analysis()
+    repaired.priority_actions = [
+        AIProviderRecommendedAction(
+            priority="low",
+            title=f"Review item {index:02d}",
+            description="Ask a qualified professional to check this item.",
+            related_finding_refs=[],
+        )
+        for index in range(15)
+    ]
+
+    class RepairingProvider:
+        def analyze_scan(self, context, language="en"):
+            return rejected
+
+        def repair_analysis(self, context, violation_codes, language="en"):
+            return repaired
+
+    assert (
+        _run(
+            administrative_session,
+            RepairingProvider(),
+            now=datetime.now(timezone.utc),
+        )
+        == 1
+    )
+    record = administrative_session.exec(select(AIScanAnalysisRecord)).one()
+    assert record.status == "completed"
+    actions = record.analysis_json["priority_actions"]
+    assert len(actions) == 15
+    covered = {
+        finding_id
+        for action in actions
+        for finding_id in action["related_finding_ids"]
+    }
+    assert str(finding.finding_id) in covered
+    assert any(
+        action["title"] == "Review KEV vulnerability" for action in actions
+    )
+
+
 def test_second_style_violation_fails_the_job(administrative_session):
     scan, _ = _scan_with_finding(administrative_session)
     _pending_analysis(administrative_session, scan)
