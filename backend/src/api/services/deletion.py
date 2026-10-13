@@ -194,9 +194,7 @@ def _delete_scans(session: Session, scan_ids: list[UUID], *, org_id: UUID) -> in
         .where(AIUsageRecord.scan_id.in_(scan_ids))
         .values(scan_id=None)
     )
-    session.execute(
-        update(Command).where(Command.scan_id.in_(scan_ids)).values(scan_id=None)
-    )
+    session.execute(delete(Command).where(Command.scan_id.in_(scan_ids)))
     session.execute(delete(ScanRecord).where(ScanRecord.scan_id.in_(scan_ids)))
     session.add_all(
         DeletedScanRecord(scan_id=scan_id, org_id=org_id) for scan_id in scan_ids

@@ -9,7 +9,7 @@ from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity
 from api.main import app
 from api.models.activity import ActivityRecord
-from api.models.command import Agent
+from api.models.command import Agent, Command
 from api.models.identity import Org, User
 from api.models.persistence import (
     AIChatMessageRecord,
@@ -198,6 +198,37 @@ def test_admin_deletes_finished_scan_with_its_ai_data(
     assert entry.subject_id == scan_id
     assert entry.payload["count"] == "1"
     assert entry.payload["machines_removed"] == "1"
+
+
+def test_scan_started_by_a_pi_command_is_deleted_with_its_command(
+    client: TestClient,
+    runtime_session: Session,
+    administrative_session: Session,
+    identity: AgentIdentity,
+    seeded_org: Org,
+    actor_headers: Headers,
+) -> None:
+    scan_id = _ingest(runtime_session, identity, [HOST_A])
+    command = Command(
+        org_id=seeded_org.id,
+        agent_id=identity.agent_id,
+        scan_id=scan_id,
+        scan_mode="standard",
+        subnet="10.0.0.0/24",
+        status="done",
+    )
+    command_id = command.id
+    administrative_session.add(command)
+    administrative_session.commit()
+
+    response = client.delete(
+        f"/api/v1/scans/{scan_id}", headers=actor_headers(seeded_org.id, "admin")
+    )
+
+    assert response.status_code == 204
+    runtime_session.expire_all()
+    assert runtime_session.get(ScanRecord, scan_id) is None
+    assert runtime_session.get(Command, command_id) is None
 
 
 def test_deleted_scan_upload_is_refused(

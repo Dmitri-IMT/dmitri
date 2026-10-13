@@ -59,6 +59,7 @@ RUNTIME_GRANTS_BY_TABLE = {
             "risk_snapshots",
             "enrichment_jobs",
             "hosts",
+            "commands",
         ),
         DELETABLE_RUNTIME_GRANTS,
     ),

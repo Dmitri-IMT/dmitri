@@ -24,6 +24,7 @@ DELETABLE_TABLES = (
     "risk_snapshots",
     "enrichment_jobs",
     "hosts",
+    "commands",
 )
 
 PREVIOUS_KINDS = (
