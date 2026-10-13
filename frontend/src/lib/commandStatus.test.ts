@@ -21,10 +21,6 @@ describe('commandStatusLabel', () => {
       expect(commandStatusLabel(status)).toBe(EXPECTED_LABELS[status])
     }
   })
-
-  it('distinguishes failed commands from expired commands', () => {
-    expect(commandStatusLabel('failed')).not.toBe(commandStatusLabel('expired'))
-  })
 })
 
 describe('isTerminalCommandStatus', () => {

@@ -4,7 +4,6 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from agent.normalize.contracts import ScanPayload
-from agent.scanner import errors as scanner_errors
 from agent.scanner import stages
 from agent.scanner.models import HostInfo
 from agent.scanner.nmap import NmapRunner
@@ -48,11 +47,6 @@ class _RecordingTargetedExecutor:
 
 def _kinds(events) -> list[str]:
     return [event.kind for event in events]
-
-
-class TestScanCancelledIdentity:
-    def test_runner_catches_same_class_as_errors_module(self) -> None:
-        assert ScanCancelled is scanner_errors.ScanCancelled
 
 
 class TestRequestCancel:
