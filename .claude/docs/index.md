@@ -50,16 +50,16 @@ FastAPI API plus CVE-enrichment worker. Full listing in [backend/index.md](./bac
 
 * [backend/overview](./backend/overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker and optional AI analysis loop.
 * [backend/api](./backend/api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
-* [backend/routers](./backend/routers.md) — The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
+* [backend/routers](./backend/routers.md) — The FastAPI read, identity admin, device revoke/restore, scan/machine deletion, ingest and command-channel HTTP/WS routers with their auth gates.
 * [backend/auth](./backend/auth.md) — The wired user auth/session/password system, activity stamping, invite creation/lookup/list/revoke, role gates, and request-id/CORS middleware.
 * [backend/device-auth](./backend/device-auth.md) — The per-device authentication gate — Ed25519 canonical-string signing, single-use nonce replay protection, and the transport-agnostic authenticate_agent core with its require_agent HTTP adapter.
 * [backend/management](./backend/management.md) — The two operator CLIs — backend-bootstrap-org (first org + its admin invite) and backend-provision-agent (register a device public key) — which print secrets to stdout and never to a log.
-* [backend/models](./backend/models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
-* [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
+* [backend/models](./backend/models.md) — The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+* [backend/schemas](./backend/schemas.md) — The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 * [backend/error-codes](./backend/error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
-* [backend/services](./backend/services.md) — Backend business logic for ingest, reads, enrichment, command delivery and cancel, presence, and idempotent device revoke/restore.
+* [backend/services](./backend/services.md) — Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, idempotent device revoke/restore, and admin scan/machine deletion.
 * [backend/ai](./backend/ai.md) — On-demand Groq overview of a completed scan. A member POSTs to request it; a separate worker loop claims one job after enrichment for that scan is idle; scan completion never enqueues AI.
-* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
+* [backend/migrations](./backend/migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261012_40`.
 
 ## Frontend (auth, Home, Settings, user administration, and scan/host reads)
 
@@ -78,7 +78,7 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 * [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.
-* [frontend/screens](./frontend/screens.md) — The public and guarded screens, 70rem app frame, 24rem auth shell, centred navigation, two-group Settings surface, password reveal fields, and shared presentation and interaction components.
+* [frontend/screens](./frontend/screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.
 
 ## Infrastructure
 

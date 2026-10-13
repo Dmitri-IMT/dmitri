@@ -4,7 +4,7 @@ title: Shared contracts (OpenAPI + example)
 description: The published OpenAPI + example-JSON seam binding agent, backend, and frontend, including the wired user/member, invite and agent administration surface.
 resource: contracts/openapi/openapi.yaml
 tags: [contracts, openapi, seam]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Shared contracts
@@ -73,6 +73,12 @@ the agent writes payloads shaped by it, and the backend's schemas mirror it.
   `DELETE /api/v1/users/{user_id}`. CORS publication now includes PATCH:
   `GET, POST, PATCH, DELETE, OPTIONS`.
 - `auth` login/session/password routes plus invite create/accept/lookup complete the identity surface.
+- Admin data deletion (DMI-186, [ADR-022](../../docs/adr/ADR-022-scan-and-machine-deletion.md)):
+  `DELETE /api/v1/scans` (`deleteAllScans` → `ScanDeletionResponse`), `DELETE /api/v1/scans/{scan_id}`
+  (`deleteScan`, `204`, `409 ScanRunningConflict` with code `scan_running`),
+  `DELETE /api/v1/hosts` (`deleteAllHosts` → `HostDeletionResponse`) and
+  `DELETE /api/v1/hosts/{host_id}` (`deleteHost`, `204`). `UserProfileResponse` gained a required
+  `org_name`, and `ActivityKind` gained `scans_deleted` / `machines_deleted`.
 
 Security schemes: `AgentSignatureAuth` (ingest + WS), `FrontendBearerAuth` (short-lived JWT),
 `RefreshCookieAuth` (httpOnly `dmitri_refresh` cookie). CORS restricted to the SPA origins.
@@ -132,7 +138,8 @@ which the Pydantic models now match exactly with `IPv4Address`.
 `backend/tests/test_contract_fidelity.py` fingerprints mounted Pydantic schemas against this file.
 Spec 030 added `OrgMember`, `OrgMemberListResponse`, `UpdateUserRoleRequest`, `PendingInvite`, and
 `PendingInviteListResponse` to that coverage, and separately pins operation ids and response-code
-sets for the four new admin operations. Query-parameter parity covers scans, findings and — since DMI-100 — hosts
+sets for the four new admin operations. DMI-186 added `ScanDeletionResponse` and
+`HostDeletionResponse` to the fingerprinted schemas and `ScanRunningConflict` to the error-code map. Query-parameter parity covers scans, findings and — since DMI-100 — hosts
 (`OPERATION_PATHS`, `test_contract_fidelity.py:59`).
 
 **The gate has one declared-but-unimplemented exemption.** `UNIMPLEMENTED_PARAMS =

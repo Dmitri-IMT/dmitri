@@ -3,6 +3,16 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-13
+
+* **Update**: DMI-186 admin scan and machine deletion. New `services/deletion.py`, `schemas/deletion.py`,
+  `DeletedScanRecord`, migration `20261012_40`, four `DELETE` routes, `org_name` on `GET /users/me`,
+  and the `scans_deleted` / `machines_deleted` activity kinds; ingest refuses a deleted `scan_id`.
+  Frontend gained `ScanDelete`, `HostDelete`, `DeleteDataPanel`, `useRefreshAfterDelete` and the
+  delete API calls. Updated `backend/routers.md`, `backend/services.md`, `backend/models.md`,
+  `backend/migrations.md`, `backend/schemas.md`, `frontend/api.md`, `frontend/screens.md`,
+  `frontend/host-detail.md`, `contracts.md`, and the `index.md` listings.
+
 ## 2026-10-12
 
 * **Update**: `ScanPartialWarning` is a plain warning line with no dialog; the dialog-only message
