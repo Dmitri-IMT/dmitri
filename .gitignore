@@ -228,3 +228,5 @@ docs/ui/nous-research/
 # Agents
 .agents/
 .codex/
+
+specs/
