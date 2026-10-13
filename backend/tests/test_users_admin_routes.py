@@ -246,6 +246,7 @@ def test_promote_returns_member_and_subsequent_own_profile_reports_admin(
         "user_id": str(viewer.id),
         "email": "viewer@corp.com",
         "role": "admin",
+        "org_name": seeded_org.name,
     }
 
 
