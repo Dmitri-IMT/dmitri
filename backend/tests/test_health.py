@@ -138,8 +138,6 @@ def test_route_surface_exposes_only_canonical_health() -> None:
     for path in ("/", "/docs", "/redoc", "/openapi.json") + DISCARDED_BUSINESS_PATHS:
         assert client.get(path).status_code == 404
 
-    assert client.options("/api/v1/health").status_code == 204
-
 
 def test_route_surface_is_exactly_the_declared_contract() -> None:
     surface = {

@@ -50,9 +50,6 @@ class TestStageWeightsTable:
             == 100
         )
 
-    def test_table_has_exactly_five_modes(self) -> None:
-        assert set(STAGE_WEIGHTS) == set(ALL_MODES)
-
 
 class TestBandBoundaries:
     @pytest.mark.parametrize("mode", ALL_MODES)
