@@ -27,6 +27,7 @@ ERROR_RESPONSE_ROUTES = {
     "AgentOfflineConflict": ("agents.py", "update_agent_target_subnet_route", 409),
     "TargetSubnetNotReported": ("agents.py", "update_agent_target_subnet_route", 422),
     "ScanSubnetNotReported": ("agents.py", "create_agent_command", 422),
+    "ScanRunningConflict": ("scans.py", "delete_scan_route", 409),
 }
 
 SCHEMA_NAMES = (
@@ -91,6 +92,8 @@ SCHEMA_NAMES = (
     "ReportAction",
     "ReportSource",
     "AIChatResponse",
+    "ScanDeletionResponse",
+    "HostDeletionResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
