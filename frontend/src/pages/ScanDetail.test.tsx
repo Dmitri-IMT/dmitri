@@ -435,6 +435,7 @@ describe('ScanDetail', () => {
       'Attack surface',
       'Machines seen',
       'Check coverage',
+      'Delete this scan',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
   })
