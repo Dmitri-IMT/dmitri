@@ -117,6 +117,25 @@ def test_exposure_roles_attention_and_confidence_are_conservative() -> None:
     assert {item.confidence for item in by_port.values()} == {"low"}
 
 
+def test_port_fallback_and_routeros_token_keep_their_roles() -> None:
+    host = HostInfo(
+        ip="192.168.1.20",
+        hostname="host",
+        ports=[
+            _port(22, "unknown"),
+            _port(80, "http", scripts=[ScriptResult("http-title", "RouterOS")]),
+        ],
+    )
+
+    by_port = {item.port: item for item in assess_hosts([host]).exposures}
+
+    assert by_port[22].role == "remote_access"
+    assert by_port[22].confidence == "low"
+    assert "conservative port fallback" in by_port[22].reason
+    assert by_port[80].role == "administration"
+    assert "structured inspection evidence" in by_port[80].reason
+
+
 def test_exposure_reason_names_cleartext_priority_cause() -> None:
     host = HostInfo(
         ip="192.168.1.20",
@@ -567,6 +586,27 @@ def test_equal_richness_duplicate_endpoints_are_fully_deterministic() -> None:
         for item in exposure.evidence
     )
     assert "DUPLICATE-ENDPOINT-SECRET" not in serialized
+
+
+def test_lone_camera_port_stays_below_the_type_floor() -> None:
+    port_only = HostInfo(
+        ip="192.168.1.20",
+        hostname="192.168.1.20",
+        ports=[_port(554, "unknown")],
+    )
+    port_and_service = HostInfo(
+        ip="192.168.1.21",
+        hostname="192.168.1.21",
+        ports=[_port(554, "rtsp")],
+    )
+
+    port_only_result = assess_hosts([port_only])
+    both = assess_hosts([port_and_service])
+
+    assert port_only_result.machine_types[port_only.ip] == "unknown"
+    assert port_only_result.device_profiles[port_only.ip].confidence == "unknown"
+    assert both.machine_types[port_and_service.ip] == "camera"
+    assert both.device_profiles[port_and_service.ip].confidence == "low"
 
 
 def test_profile_score_thresholds_and_conflict_are_visible() -> None:
