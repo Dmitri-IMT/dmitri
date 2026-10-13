@@ -208,11 +208,11 @@ def test_exposure_security_fence_and_runtime_grants(
                     connection, role, sequence, privilege, sequence=True
                 )
 
-        for privilege in ("SELECT", "INSERT", "UPDATE"):
+        for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
             assert _has_privilege(
                 connection, "dmitri_runtime", qualified, privilege
             )
-        for privilege in ("DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+        for privilege in ("TRUNCATE", "REFERENCES", "TRIGGER"):
             assert not _has_privilege(
                 connection, "dmitri_runtime", qualified, privilege
             )

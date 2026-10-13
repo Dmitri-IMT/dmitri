@@ -21,6 +21,8 @@ ActivityKind = Literal[
     "invite_revoked",
     "member_removed",
     "account_deleted",
+    "scans_deleted",
+    "machines_deleted",
 ]
 
 ACTIVITY_KINDS: tuple[str, ...] = get_args(ActivityKind)

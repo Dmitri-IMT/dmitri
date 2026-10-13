@@ -28,6 +28,11 @@ _SCAN_VERB = {
     "scan_cancelled": "was stopped",
 }
 
+_DELETED_NOUN = {
+    "scans_deleted": "scan",
+    "machines_deleted": "machine",
+}
+
 
 @dataclass(frozen=True)
 class ActivityAppend:
@@ -109,4 +114,19 @@ def activity_text(kind: str, role: str, payload: dict[str, str]) -> str:
         return f"{target} is no longer a member"
     if kind == "account_deleted":
         return f"{payload.get('email', '')} deleted their account"
+    if kind == "scans_deleted" and "subnet" in payload:
+        subnet = payload["subnet"]
+        if admin:
+            return f"{actor} deleted the {subnet} scan"
+        return f"The {subnet} scan was deleted"
+    if kind == "machines_deleted" and "machine" in payload:
+        machine = payload["machine"]
+        return f"{actor} deleted {machine}" if admin else f"{machine} was deleted"
+    if kind in _DELETED_NOUN:
+        count = payload.get("count", "0")
+        noun = _DELETED_NOUN[kind] if count == "1" else f"{_DELETED_NOUN[kind]}s"
+        if admin:
+            return f"{actor} deleted {count} {noun}"
+        verb = "was" if count == "1" else "were"
+        return f"{count} {noun} {verb} deleted"
     raise ValueError(f"unknown activity kind: {kind}")
