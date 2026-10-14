@@ -13,7 +13,7 @@ from api.dependencies.auth import (
     require_user_row,
 )
 from api.errors import ApiError
-from api.models.identity import User
+from api.models.identity import Org, User
 from api.schemas.users import (
     OrgMember,
     OrgMemberListResponse,
@@ -43,8 +43,13 @@ def _member(user: User) -> OrgMember:
 @router.get("/api/v1/users/me", response_model=UserProfileResponse)
 def read_current_user(
     user: User = Depends(require_user_row),
+    session: Session = Depends(get_session),
 ) -> UserProfileResponse:
-    return UserProfileResponse(user_id=user.id, email=user.email, role=user.role)
+    org = session.get(Org, user.org_id)
+    assert org is not None
+    return UserProfileResponse(
+        user_id=user.id, email=user.email, role=user.role, org_name=org.name
+    )
 
 
 @router.delete("/api/v1/users/me", status_code=204)

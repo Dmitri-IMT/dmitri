@@ -6,6 +6,7 @@ import ContextChat from '@/components/ContextChat'
 import ReadDetailGate from '@/components/ReadDetailGate'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
+import HostDelete from '@/pages/hosts/HostDelete'
 import HostFindings from '@/pages/hosts/HostFindings'
 import HostIdentity from '@/pages/hosts/HostIdentity'
 import HostProfile from '@/pages/hosts/HostProfile'
@@ -98,6 +99,7 @@ function HostDetail() {
               </CardContent>
             </Card>
           </div>
+          <HostDelete host={host} />
         </>
       )}
     </ReadDetailGate>

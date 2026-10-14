@@ -205,6 +205,39 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - scans
+      summary: Delete every finished scan in the caller's organisation
+      description: |
+        Admin only. Permanently deletes every finished scan and the data that belongs only to it.
+        Unfinished scans are skipped and counted in `skipped`. Machines that no remaining scan
+        observed are deleted too and counted in `machines_removed`. Writes one activity entry.
+      operationId: deleteAllScans
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Scans deleted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanDeletionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - scans
@@ -265,6 +298,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - scans
+      summary: Delete one finished scan
+      description: |
+        Admin only. Permanently deletes the scan and the data that belongs only to it. Machines
+        that no remaining scan observed are deleted too. A later upload with the same `scan_id`
+        is refused. Writes one activity entry.
+      operationId: deleteScan
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '204':
+          description: Scan deleted. The body is empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Unknown and foreign-organisation scans are reported identically.
+        '409':
+          $ref: '#/components/responses/ScanRunningConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -666,6 +735,39 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - hosts
+      summary: Delete every machine in the caller's organisation
+      description: |
+        Admin only. Permanently deletes every machine, its findings and its rows in old scans.
+        The scans stay. A machine found again by a later scan comes back as a new machine.
+        Writes one activity entry.
+      operationId: deleteAllHosts
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Machines deleted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostDeletionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - hosts
@@ -709,6 +811,40 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - hosts
+      summary: Delete one machine
+      description: |
+        Admin only. Permanently deletes the machine, its findings and its rows in old scans.
+        The scans stay. A machine found again by a later scan comes back as a new machine.
+        Writes one activity entry.
+      operationId: deleteHost
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HostId'
+      responses:
+        '204':
+          description: Machine deleted. The body is empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Unknown and foreign-organisation machines are reported identically.
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -2590,6 +2726,33 @@ components:
                 error:
                   code: self_target
                   message: Remove your account from Settings instead.
+                  details: {}
+    ScanRunningConflict:
+      description: |
+        The scan has not finished. Stop it first, then delete it. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - scan_running
+          examples:
+            scanRunning:
+              value:
+                error:
+                  code: scan_running
+                  message: Stop the scan before you delete it.
                   details: {}
     RoleChangeConflict:
       description: |
@@ -4770,6 +4933,28 @@ components:
         expires_in:
           type: integer
           description: Access token lifetime in seconds (~900 for 15 min).
+    ScanDeletionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - deleted
+        - skipped
+        - machines_removed
+      properties:
+        deleted:
+          type: integer
+        skipped:
+          type: integer
+        machines_removed:
+          type: integer
+    HostDeletionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - deleted
+      properties:
+        deleted:
+          type: integer
     UserProfileResponse:
       type: object
       additionalProperties: false
@@ -4777,6 +4962,7 @@ components:
         - user_id
         - email
         - role
+        - org_name
       properties:
         user_id:
           type: string
@@ -4789,6 +4975,8 @@ components:
           enum:
             - admin
             - viewer
+        org_name:
+          type: string
     OrgMember:
       type: object
       additionalProperties: false
@@ -6305,6 +6493,8 @@ components:
         - invite_revoked
         - member_removed
         - account_deleted
+        - scans_deleted
+        - machines_deleted
     HomeEvent:
       type: object
       additionalProperties: false

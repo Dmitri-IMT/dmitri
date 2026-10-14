@@ -239,6 +239,37 @@ export const catalog = {
   'settings.deleteAccountBody':
     "Your account is deleted and you lose access straight away. This can't be undone.",
   'settings.passwordChanged': 'Password changed.', // pragma: allowlist secret
+  'deletion.deleteScan': 'Delete scan',
+  'deletion.deleteScanHeading': 'Delete this scan',
+  'deletion.deleteScanQuestion': 'Delete this scan?',
+  'deletion.deleteScanBody':
+    "Its results, findings, AI analysis and chat are deleted. This can't be undone.",
+  'deletion.deleteScanError': "Couldn't delete this scan. Try again.",
+  'deletion.scanRunningError': 'Stop the scan before you delete it.',
+  'deletion.scanDeleted': 'Scan deleted.',
+  'deletion.deleteMachine': 'Delete machine',
+  'deletion.deleteMachineHeading': 'Delete this machine',
+  'deletion.deleteMachineQuestion': ({ name }) => 'Delete ' + name + '?',
+  'deletion.deleteMachineBody':
+    "The machine and its findings are deleted. Old scans stay but no longer list it. If a later scan finds it, it comes back as a new machine. This can't be undone.",
+  'deletion.deleteMachineError': "Couldn't delete this machine. Try again.",
+  'deletion.machineDeleted': ({ name }) => name + ' was deleted.',
+  'deletion.deleting': 'Deleting…',
+  'deletion.deleteData': 'Delete data',
+  'deletion.deleteAllScans': 'Delete all scans',
+  'deletion.deleteAllScansQuestion': 'Delete all scans?',
+  'deletion.deleteAllScansBody':
+    "Every finished scan and its data is deleted. Running scans are skipped. Machines seen only in these scans are deleted too. This can't be undone.",
+  'deletion.deleteAllScansError': "Couldn't delete the scans. Try again.",
+  'deletion.scansDeleted': ({ count }) => 'Scans deleted: ' + count + '.',
+  'deletion.scansSkipped': ({ count }) =>
+    'Running scans skipped: ' + count + '.',
+  'deletion.deleteAllMachines': 'Delete all machines',
+  'deletion.deleteAllMachinesQuestion': 'Delete all machines?',
+  'deletion.deleteAllMachinesBody':
+    "Every machine and its findings are deleted. Scans stay. The next scan builds the list again. This can't be undone.",
+  'deletion.deleteAllMachinesError': "Couldn't delete the machines. Try again.",
+  'deletion.machinesDeleted': ({ count }) => 'Machines deleted: ' + count + '.',
   'devices.subtitle': 'The Dmitri boxes reporting to this organisation.',
   'devices.caption': 'Dmitri boxes',
   'devices.error': "Couldn't load your devices.",

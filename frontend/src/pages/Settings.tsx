@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import PasswordDialog from '@/pages/settings/PasswordDialog'
 import AIUsagePanel from '@/pages/settings/AIUsagePanel'
+import DeleteDataPanel from '@/pages/settings/DeleteDataPanel'
 import useI18n from '@/i18n/useI18n'
 
 const LAST_ADMIN_ERROR =
@@ -107,6 +108,7 @@ function Settings() {
       </section>
       <AIUsagePanel />
       <hr className="border-border" />
+      <DeleteDataPanel />
       <section data-testid="settings-leave" className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <h2 className="text-title-sm">{t('settings.leaveOrganisation')}</h2>

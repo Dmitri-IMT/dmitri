@@ -45,4 +45,4 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [ai-usage](./ai-usage.md) — Settings panel for org-wide provider usage totals and recent operations.
 * [tables](./tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [host-detail](./host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
-* [screens](./screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage, and shared presentation and interaction components.
+* [screens](./screens.md) — The public and guarded screens, scan-detail progress display, 70rem app frame, centred navigation, Settings with AI usage and admin data deletion, and shared presentation and interaction components.

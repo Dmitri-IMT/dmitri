@@ -55,12 +55,14 @@ export const adminProfile: UserProfileResponse = {
   user_id: '11111111-1111-4111-8111-111111111111',
   email: 'admin@dmitri.dev',
   role: 'admin',
+  org_name: 'Acme Corp',
 }
 
 export const viewerProfile: UserProfileResponse = {
   user_id: '22222222-2222-4222-8222-222222222222',
   email: 'viewer@dmitri.dev',
   role: 'viewer',
+  org_name: 'Acme Corp',
 }
 
 export const defaultAgent: AgentDetail = {

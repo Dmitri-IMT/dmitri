@@ -102,6 +102,7 @@ describe('HostDetail', () => {
       'Ports observed on this machine',
       'Industrial services',
       'Scan history',
+      'Delete this machine',
     ])
     expect(screen.getByTestId('host-exposures-table')).toBeInTheDocument()
   })

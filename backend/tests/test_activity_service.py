@@ -179,6 +179,30 @@ MATRIX = [
         "bob@corp.com deleted their account",
         "bob@corp.com deleted their account",
     ),
+    (
+        "scans_deleted",
+        {"actor_email": "ada@corp.com", "subnet": "10.0.0.0/24", "count": "1"},
+        "ada@corp.com deleted the 10.0.0.0/24 scan",
+        "The 10.0.0.0/24 scan was deleted",
+    ),
+    (
+        "scans_deleted",
+        {"actor_email": "ada@corp.com", "count": "3", "skipped": "1"},
+        "ada@corp.com deleted 3 scans",
+        "3 scans were deleted",
+    ),
+    (
+        "machines_deleted",
+        {"actor_email": "ada@corp.com", "machine": "printer-01", "count": "1"},
+        "ada@corp.com deleted printer-01",
+        "printer-01 was deleted",
+    ),
+    (
+        "machines_deleted",
+        {"actor_email": "ada@corp.com", "count": "1"},
+        "ada@corp.com deleted 1 machine",
+        "1 machine was deleted",
+    ),
 ]
 
 

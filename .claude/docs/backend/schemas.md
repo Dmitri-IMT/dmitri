@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -76,7 +76,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `UserProfileResponse` | `user_id`, `email`, `role`; the caller-facing profile omits activity. | `backend/src/api/schemas/users.py:10` |
+| `UserProfileResponse` | `user_id`, `email`, `role`, `org_name`; the caller-facing profile omits activity. | `backend/src/api/schemas/users.py:10` |
 | `OrgMember` | Admin member-list row: `user_id`, `email`, `role`, nullable `last_seen_at`; deliberately no `last_login_at` or status. | `backend/src/api/schemas/users.py:18` |
 | `OrgMemberListResponse` | `{data: OrgMember[]}` with extras forbidden. | `backend/src/api/schemas/users.py:27` |
 | `UpdateUserRoleRequest` | Exactly one `role`, constrained to `admin` or `viewer`. | `backend/src/api/schemas/users.py:33` |
@@ -86,6 +86,13 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HomeNoticeKind` / `HomeNotice` | Only `failed_scan` remains — `stale_coverage` and `HomeNotice.days` were removed (DMI-179), in lockstep with the OpenAPI contract and generated frontend types. | `backend/src/api/schemas/home.py:35`, `:39` |
 
 Consumed by [`routers/users.py`](/backend/routers.md) for self profile and admin member operations.
+
+## Key classes / functions — `deletion.py` (admin deletion responses)
+
+| Name | What it does | Where |
+|------|--------------|-------|
+| `ScanDeletionResponse` | `deleted`, `skipped` (unfinished scans left alone), `machines_removed`; returned by `DELETE /scans`. | `backend/src/api/schemas/deletion.py:6` |
+| `HostDeletionResponse` | `deleted`; returned by `DELETE /hosts`. | `backend/src/api/schemas/deletion.py:14` |
 
 ## Key classes / functions — `auth.py` (auth request/response)
 

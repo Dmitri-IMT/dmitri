@@ -40,7 +40,13 @@ export interface paths {
          * @description Hardware agents submit completed scan results through this endpoint. Security v1 requires Ed25519-signed requests with the headers `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`. The server verifies the signature with the device's stored public key, rejects replay attempts, and returns 401 for invalid or expired signatures and 403 for revoked devices.
          */
         post: operations["ingestScan"];
-        delete?: never;
+        /**
+         * Delete every finished scan in the caller's organisation
+         * @description Admin only. Permanently deletes every finished scan and the data that belongs only to it.
+         *     Unfinished scans are skipped and counted in `skipped`. Machines that no remaining scan
+         *     observed are deleted too and counted in `machines_removed`. Writes one activity entry.
+         */
+        delete: operations["deleteAllScans"];
         /** CORS preflight for scans collection */
         options: operations["optionsScans"];
         head?: never;
@@ -63,7 +69,13 @@ export interface paths {
         get: operations["getScanById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete one finished scan
+         * @description Admin only. Permanently deletes the scan and the data that belongs only to it. Machines
+         *     that no remaining scan observed are deleted too. A later upload with the same `scan_id`
+         *     is refused. Writes one activity entry.
+         */
+        delete: operations["deleteScan"];
         /** CORS preflight for scan detail */
         options: operations["optionsScanById"];
         head?: never;
@@ -235,7 +247,13 @@ export interface paths {
         get: operations["listHosts"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete every machine in the caller's organisation
+         * @description Admin only. Permanently deletes every machine, its findings and its rows in old scans.
+         *     The scans stay. A machine found again by a later scan comes back as a new machine.
+         *     Writes one activity entry.
+         */
+        delete: operations["deleteAllHosts"];
         /** CORS preflight for hosts collection */
         options: operations["optionsHosts"];
         head?: never;
@@ -256,7 +274,13 @@ export interface paths {
         get: operations["getHostById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete one machine
+         * @description Admin only. Permanently deletes the machine, its findings and its rows in old scans.
+         *     The scans stay. A machine found again by a later scan comes back as a new machine.
+         *     Writes one activity entry.
+         */
+        delete: operations["deleteHost"];
         /** CORS preflight for host detail */
         options: operations["optionsHostById"];
         head?: never;
@@ -1453,6 +1477,14 @@ export interface components {
             /** @description Access token lifetime in seconds (~900 for 15 min). */
             expires_in: number;
         };
+        ScanDeletionResponse: {
+            deleted: number;
+            skipped: number;
+            machines_removed: number;
+        };
+        HostDeletionResponse: {
+            deleted: number;
+        };
         UserProfileResponse: {
             /** Format: uuid */
             user_id: string;
@@ -1460,6 +1492,7 @@ export interface components {
             email: string;
             /** @enum {string} */
             role: "admin" | "viewer";
+            org_name: string;
         };
         OrgMember: {
             /** Format: uuid */
@@ -2075,7 +2108,7 @@ export interface components {
         /** @enum {string} */
         HomeNoticeKind: "failed_scan";
         /** @enum {string} */
-        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "scan_cancelled" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
+        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "scan_cancelled" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted" | "scans_deleted" | "machines_deleted";
         HomeEvent: {
             kind: components["schemas"]["HomeEventKind"];
             text: string;
@@ -2487,6 +2520,20 @@ export interface components {
                 };
             };
         };
+        /** @description The scan has not finished. Stop it first, then delete it. The `code` is pinned. */
+        ScanRunningConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "scan_running";
+                    };
+                };
+            };
+        };
         /**
          * @description The role change conflicts with the organisation's current state: an admin targeted their
          *     own account, or demoting the target would leave the organisation without an admin. The
@@ -2720,6 +2767,33 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    deleteAllScans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scans deleted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanDeletionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     optionsScans: {
         parameters: {
             query?: never;
@@ -2760,6 +2834,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan deleted. The body is empty. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Unknown and foreign-organisation scans are reported identically. */
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ScanRunningConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -3115,6 +3220,33 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    deleteAllHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Machines deleted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostDeletionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     optionsHosts: {
         parameters: {
             query?: never;
@@ -3154,6 +3286,36 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteHost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of a discovered host. */
+                host_id: components["parameters"]["HostId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Machine deleted. The body is empty. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Unknown and foreign-organisation machines are reported identically. */
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
