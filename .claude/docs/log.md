@@ -3,6 +3,13 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-14
+
+* **Update**: PR #165 review fixes. Inventory rebuild now owns identity, seen times, counts,
+  ports, findings and machine type in one oldest-to-newest walk shared by scan deletion and MAC
+  repair. Scan deletion explicitly removes AI analyses, with a runtime DELETE grant in
+  `20261012_40`. Updated `backend/services.md` and `backend/migrations.md`.
+
 ## 2026-10-13
 
 * **Update**: DMI-186 admin scan and machine deletion. New `services/deletion.py`, `schemas/deletion.py`,
