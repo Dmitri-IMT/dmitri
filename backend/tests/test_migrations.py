@@ -60,6 +60,7 @@ RUNTIME_GRANTS_BY_TABLE = {
             "enrichment_jobs",
             "hosts",
             "commands",
+            "ai_scan_analyses",
         ),
         DELETABLE_RUNTIME_GRANTS,
     ),

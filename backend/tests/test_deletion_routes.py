@@ -315,6 +315,63 @@ def test_deleting_newest_scan_rebuilds_machine_from_remaining_scan(
     assert host.highest_severity == "high"
 
 
+@pytest.mark.parametrize("delete_newest", [True, False])
+def test_scan_deletion_rebuilds_identity_and_seen_times(
+    client: TestClient,
+    runtime_session: Session,
+    identity: AgentIdentity,
+    seeded_org: Org,
+    actor_headers: Headers,
+    delete_newest: bool,
+) -> None:
+    mac = "AA:00:00:00:00:01"
+    scans = [
+        _ingest(runtime_session, identity, [_host("10.0.0.1", mac, "first")]),
+        _ingest(
+            runtime_session,
+            identity,
+            [_host("10.0.0.2", mac, "middle").model_copy(update={"vendor": "unknown"})],
+            at=T0 + timedelta(days=1),
+        ),
+        _ingest(
+            runtime_session,
+            identity,
+            [_host("10.0.0.3", mac, "last")],
+            at=T0 + timedelta(days=2),
+        ),
+    ]
+    for scan_id, name in ((scans[0], "old OS"), (scans[2], "new OS")):
+        scan_host = runtime_session.exec(
+            select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_id)
+        ).one()
+        scan_host.operating_system_json = {"name": name}
+        runtime_session.add(scan_host)
+    runtime_session.commit()
+    host_id = _host_id(runtime_session, seeded_org.id, "10.0.0.3")
+
+    response = client.delete(
+        f"/api/v1/scans/{scans[-1] if delete_newest else scans[0]}",
+        headers=actor_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 204
+    runtime_session.expire_all()
+    host = runtime_session.get(HostRecord, host_id)
+    assert host is not None
+    assert host.identity_key == f"mac:{mac}"
+    assert host.mac == mac
+    assert host.first_seen_at == T0 + timedelta(days=0 if delete_newest else 1)
+    assert host.last_seen_at == T0 + timedelta(days=1 if delete_newest else 2)
+    assert host.ip == ("10.0.0.2" if delete_newest else "10.0.0.3")
+    assert host.hostname == ("middle" if delete_newest else "last")
+    assert host.vendor == "vendor"
+    assert host.operating_system_json == {
+        "name": "old OS" if delete_newest else "new OS"
+    }
+    assert host.open_ports_count == 1
+    assert host.highest_severity == "high"
+
+
 def test_deleting_machine_keeps_scans_but_drops_its_rows(
     client: TestClient,
     runtime_session: Session,

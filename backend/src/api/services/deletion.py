@@ -12,6 +12,7 @@ from api.models.command import Command
 from api.models.identity import User
 from api.models.persistence import (
     AIChatMessageRecord,
+    AIScanAnalysisRecord,
     AIUsageRecord,
     CPERecord,
     DeletedScanRecord,
@@ -32,7 +33,6 @@ from api.models.persistence import (
 )
 from api.services.activity import ActivityAppend, append_activity
 from api.services.command_lifecycle import UNFINISHED_SCAN
-from api.services.hosts import apply_observation
 from api.services.inventory import rebuild_host_inventory
 
 
@@ -190,6 +190,9 @@ def _delete_scans(session: Session, scan_ids: list[UUID], *, org_id: UUID) -> in
         delete(AIChatMessageRecord).where(AIChatMessageRecord.scan_id.in_(scan_ids))
     )
     session.execute(
+        delete(AIScanAnalysisRecord).where(AIScanAnalysisRecord.scan_id.in_(scan_ids))
+    )
+    session.execute(
         update(AIUsageRecord)
         .where(AIUsageRecord.scan_id.in_(scan_ids))
         .values(scan_id=None)
@@ -307,32 +310,6 @@ def _settle_hosts(session: Session, host_ids: set[UUID]) -> int:
     )
     orphans = host_ids - observed
     _delete_hosts(session, orphans)
-    session.expire_all()
     rebuild_host_inventory(session, list(observed))
-    _replay_observations(session, observed)
     session.flush()
     return len(orphans)
-
-
-def _replay_observations(session: Session, host_ids: set[UUID]) -> None:
-    rows = session.exec(
-        select(ScanHostRecord, ScanRecord)
-        .join(ScanRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
-        .where(ScanHostRecord.host_id.in_(host_ids))
-        .order_by(ScanRecord.timestamp, ScanRecord.created_at, ScanRecord.scan_id)
-    ).all()
-    reset: set[UUID] = set()
-    for scan_host, scan in rows:
-        host = session.get(HostRecord, scan_host.host_id)
-        assert host is not None
-        if host.id not in reset:
-            reset.add(host.id)
-            host.ip = scan_host.ip
-            host.mac = scan_host.mac
-            host.hostname = scan_host.hostname
-            host.vendor = scan_host.vendor
-            host.operating_system_json = scan_host.operating_system_json
-            host.first_seen_at = scan.timestamp
-            host.last_seen_at = scan.timestamp
-        apply_observation(session, host, scan_host, scan.timestamp)
-        session.add(host)

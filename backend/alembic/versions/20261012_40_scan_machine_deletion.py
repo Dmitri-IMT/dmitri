@@ -25,6 +25,7 @@ DELETABLE_TABLES = (
     "enrichment_jobs",
     "hosts",
     "commands",
+    "ai_scan_analyses",
 )
 
 PREVIOUS_KINDS = (
