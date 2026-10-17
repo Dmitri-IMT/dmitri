@@ -60,8 +60,8 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 - **Success Criteria**:
   - Sem snapshot confidence permanece; isolamento org e filtros exatos; >uma página resumo global correto; legado confirmed não demonstrado; Home mantem itens de atenção; scan summary e limites uniformes.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Review Rejections**: 1
 
 ## Task 6: Atualizar relatórios e verificar PDF
 - **Description**: Educação versão3, grupos separados por semântica, JSON técnico completo e copy localizada; renderizar e inspecionar PDF via skill PDF. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
@@ -71,8 +71,8 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 - **Success Criteria**:
   - Método/status/confidence/limites em grupos e apêndice equivalentes ao contrato; standalone na cobertura fora dos totais; compat evidence_counts; PDF renderizado e páginas afetadas inspecionadas sem clipping.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Review Rejections**: 3
 
 ## Task 7: Limitar explicação automatizada e fechar backend
 - **Description**: Contexto versão5 para overview e todos chats; prompts respeitam evidência e contexto agregado completo, conservando limites de amostra e anonimização. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.

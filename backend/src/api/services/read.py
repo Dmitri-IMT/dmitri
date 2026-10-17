@@ -34,6 +34,7 @@ from api.models.persistence import (
 from api.schemas.operating_system import OperatingSystemDetection
 from api.schemas.read import (
     ExposureRead,
+    FindingEvidenceSummary,
     FindingListResponse,
     FindingModbusUnitRef,
     FindingRead,
@@ -59,7 +60,10 @@ from api.schemas.read import (
     SeverityBreakdown,
     SortOrder,
 )
-from api.schemas.scan import DeviceProfilePayload
+from api.schemas.scan import (
+    DeviceProfilePayload,
+    FindingEvidenceObservationPayload,
+)
 from api.schemas.scan_progress import ScanProgressRead
 from api.services import commands
 from api.services.hosts import highest_severity, open_ports_count
@@ -67,8 +71,11 @@ from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
 from api.services.scan_evidence import (
     evidence_completeness,
+    is_cve_correlation,
     parse_coverage,
     parse_targeted_coverage,
+    reduce_finding_evidence,
+    summarize_finding_evidence,
 )
 
 logger = logging.getLogger(__name__)
@@ -279,6 +286,7 @@ def get_scan_detail(
             finding_read_query().where(FindingRecord.scan_id == scan_id)
         ).all()
     )
+    standalone_observations = _finding_observations(scan.finding_observations_json)
 
     command = commands.command_for_scan(session, scan_id)
     agent = session.get(Agent, scan.agent_id) if scan.agent_id else None
@@ -302,6 +310,12 @@ def get_scan_detail(
         scan_mode=scan.scan_mode,
         hosts=hosts,
         findings=findings,
+        finding_evidence_policy_version=scan.finding_evidence_policy_version,
+        finding_observations=standalone_observations,
+        finding_observations_truncated=scan.finding_observations_truncated,
+        evidence_summary=FindingEvidenceSummary.model_validate(
+            summarize_finding_evidence(findings, scope="scan")
+        ),
         assessment_status=(
             "available" if assessment_available else "unavailable"
         ),
@@ -427,6 +441,7 @@ def list_findings(
     total = session.exec(
         select(func.count()).select_from(base.subquery())
     ).one()
+    summary_rows = session.exec(base.order_by(FindingRecord.id.asc())).all()
     rows = session.exec(
         base.order_by(FindingRecord.id.asc())
         .offset((page - 1) * per_page)
@@ -437,6 +452,11 @@ def list_findings(
         data=to_finding_reads(rows),
         total=total,
         page=page,
+        evidence_summary=FindingEvidenceSummary.model_validate(
+            summarize_finding_evidence(
+                to_finding_reads(summary_rows), scope="filtered_findings"
+            )
+        ),
     )
 
 
@@ -833,6 +853,7 @@ def to_finding_reads(rows: Sequence[Row]) -> list[FindingRead]:
             row.ModbusUnitRecord,
             row.IndustrialServiceRecord,
             row.RiskSnapshotRecord,
+            row.ModbusUnitRecord.unit_id if row.ModbusUnitRecord else None,
         )
         for row in rows
     ]
@@ -859,7 +880,9 @@ def _to_finding_read(
     unit: ModbusUnitRecord | None,
     service: IndustrialServiceRecord | None,
     risk: RiskSnapshotRecord | None,
+    unit_id: int | None,
 ) -> FindingRead:
+    evidence = _finding_evidence_assessment(finding, unit_id)
     return FindingRead(
         finding_id=finding.finding_id,
         scan_id=finding.scan_id,
@@ -882,12 +905,62 @@ def _to_finding_read(
         detected_at=finding.created_at,
         risk_score=risk.risk_score if risk else None,
         exploitability=risk.exploitability if risk else None,
-        confidence=risk.confidence if risk else None,
+        confidence=finding.confidence,
         risk_rationale=risk.rationale if risk else None,
         host_hostname=hostname,
         first_seen_at=life.first_seen_at if life else None,
         last_seen_at=life.last_seen_at if life else None,
         fixed_at=life.fixed_at if life else None,
+        detection_method=evidence[0],
+        evidence_status=evidence[1],
+        evidence_observations=evidence[2],
+        evidence_truncated=evidence[3],
+    )
+
+
+def _finding_observations(values: list[dict] | None):
+    return [
+        FindingEvidenceObservationPayload.model_validate(value)
+        for value in values or []
+    ]
+
+
+def _finding_evidence_assessment(finding: FindingRecord, unit_id: int | None):
+    observations = finding.evidence_observations_json or []
+    if finding.finding_evidence_policy_version is None:
+        method = (
+            "version_correlation"
+            if is_cve_correlation(finding.cve_id, finding.source)
+            else "unknown"
+        )
+        return method, "unknown", [], finding.evidence_truncated
+
+    conditions = sorted(
+        {
+            value.get("condition_key")
+            for value in observations
+            if isinstance(value, dict)
+            and isinstance(value.get("condition_key"), str)
+        }
+    )
+    assessment = reduce_finding_evidence(
+        observations,
+        cve_id=finding.cve_id,
+        issue_key=finding.issue_key,
+        ip=finding.ip,
+        port=finding.port,
+        protocol=finding.protocol,
+        unit_id=unit_id,
+        policy_version=finding.finding_evidence_policy_version,
+        evidence_truncated=finding.evidence_truncated,
+        issue_key_ambiguous=finding.issue_key_ambiguous,
+        allowed_conditions=conditions,
+    )
+    return (
+        assessment.detection_method,
+        assessment.evidence_status,
+        list(assessment.observations),
+        assessment.evidence_truncated,
     )
 
 

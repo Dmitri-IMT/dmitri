@@ -6,16 +6,21 @@ from uuid import uuid4
 import pytest
 from api.models.persistence import EnrichmentJobRecord, NvdCacheRecord
 from api.schemas.read import ExposureRead
+from api.schemas.scan import FindingEvidenceObservationPayload
 from api.services.read import get_scan_detail
 from api.services.report_education import (
     build_report_education,
     device_identity,
+    finding_semantic_limit,
     service_family,
 )
 from api.services.report_education_copy import guide, text
-from api.services.report_education_pdf import EvidenceBars
+from api.services.report_education_pdf import EvidenceBars, append_education
+from api.services.report_pdf import _COPY
 from api.services.reports import build_scan_report
 from read_factories import make_scan, seed_read_graph
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Table
 
 
 @pytest.mark.parametrize("language", ["en", "pt-BR", "ru"])
@@ -81,7 +86,9 @@ def test_cve_associations_are_grouped_by_endpoint_and_never_confirmed_by_score(
     _, detail = _detail(administrative_session)
     first = detail.findings[0].model_copy(update={
         "source": "nmap_vulners", "cve_id": "CVE-2023-38408",
-        "service": "ssh", "port": 22, "confidence": "confirmed",
+        "service": "ssh", "port": 22, "confidence": "probable",
+        "detection_method": "version_correlation",
+        "evidence_status": "supported",
     })
     second = first.model_copy(update={
         "finding_id": uuid4(), "cve_id": "CVE-2011-2523",
@@ -98,7 +105,7 @@ def test_cve_associations_are_grouped_by_endpoint_and_never_confirmed_by_score(
     assert result["unassigned_findings"] == 1
     assert all(item["basis"] == "correlation" for item in result["appendix"])
     group = next(item for item in result["issue_groups"] if item["finding_count"] == 2)
-    assert group["uncertainty"] == text("correlation_limit", "pt-BR")
+    assert group["uncertainty"] == text("limit_version_correlation", "pt-BR")
     assert len(group["advisory_notes"]) == 2
     assert all(row["group"] in {g["id"] for g in result["issue_groups"]}
                for row in result["appendix"])
@@ -108,15 +115,48 @@ def test_direct_configuration_evidence_gets_specific_correction_steps(
     administrative_session
 ):
     _, detail = _detail(administrative_session)
+    smb_observation = FindingEvidenceObservationPayload(
+        ip=detail.findings[0].host_ip,
+        port=445,
+        protocol="tcp",
+        condition_key="smb:protocol:smbv1",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb-protocols",
+        rule_id="nse:smb-protocols",
+        rule_version="1",
+        evidence="SMBv1 supported",
+        facts={"dialect": "SMBv1"},
+    )
     first = detail.findings[0].model_copy(update={
         "source": "nmap_nse", "source_script": "smb-protocols",
-        "title": "SMBv1 protocol enabled", "port": None,
+        "title": "SMBv1 protocol enabled", "port": 445,
+        "protocol": "tcp", "service": "microsoft-ds",
         "evidence": "SMBv1 supported", "cve_id": None,
+        "detection_method": "configuration_observation",
+        "evidence_status": "supported", "confidence": "confirmed",
+        "evidence_observations": [smb_observation],
     })
+    ssh_observation = FindingEvidenceObservationPayload(
+        ip=first.host_ip,
+        port=22,
+        protocol="tcp",
+        condition_key="title:ssh password authentication exposed",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="ssh-auth-methods",
+        rule_id="nse:ssh-auth-methods",
+        rule_version="1",
+        evidence="password authentication advertised",
+        facts={"password_authentication": True},
+    )
     second = first.model_copy(update={
         "finding_id": uuid4(), "source_script": "ssh-auth-methods",
         "title": "Password authentication", "evidence": "publickey password",
-        "port": 22, "service": "ssh",
+        "port": 22, "service": "ssh", "confidence": "confirmed",
+        "evidence_observations": [ssh_observation],
     })
     detail.findings = [first, second]
     result = build_report_education(detail, "pt-BR")
@@ -128,6 +168,125 @@ def test_direct_configuration_evidence_gets_specific_correction_steps(
         assert group["steps"] == guide(group["family"], "pt-BR")["steps"]
         assert group["recorded_observations"]
         assert group["cves"] == []
+
+
+@pytest.mark.parametrize(
+    ("target", "method", "status", "confidence", "truncated"),
+    [
+        ("smb", "unknown", "unknown", None, False),
+        ("smb", "configuration_observation", "inconclusive", "tentative", False),
+        ("smb", "configuration_observation", "conflicting", "tentative", False),
+        ("smb", "textual_reference", "inconclusive", "tentative", False),
+        ("ssh", "unknown", "unknown", None, False),
+        ("ssh", "configuration_observation", "inconclusive", "tentative", False),
+        ("ssh", "configuration_observation", "conflicting", "tentative", False),
+        ("ssh", "textual_reference", "inconclusive", "tentative", False),
+    ],
+)
+def test_unverified_smb_and_ssh_records_do_not_get_affirmative_specific_claims(
+    administrative_session, target, method, status, confidence, truncated
+):
+    _, detail = _detail(administrative_session)
+    smb = target == "smb"
+    source_script = "smb-protocols" if smb else "ssh-auth-methods"
+    service = "microsoft-ds" if smb else "ssh"
+    title = "SMBv1 protocol enabled" if smb else "Password authentication"
+    evidence = "SMBv1 supported" if smb else "publickey password"
+    port = 445 if smb else 22
+    finding = detail.findings[0].model_copy(update={
+        "finding_id": uuid4(),
+        "source": "nmap_nse",
+        "source_script": source_script,
+        "title": title,
+        "evidence": evidence,
+        "cve_id": None,
+        "service": service,
+        "port": port,
+        "protocol": "tcp",
+        "detection_method": method,
+        "evidence_status": status,
+        "confidence": confidence,
+        "evidence_truncated": truncated,
+        "evidence_observations": [],
+    })
+    detail.findings = [finding]
+
+    result = build_report_education(detail, "pt-BR")
+
+    group = next(item for item in result["issue_groups"] if item["finding_count"])
+    appendix = result["appendix"][0]
+    generic_family = service_family(service)
+    specific_family = "smb_v1" if smb else "ssh_password"
+    assert group["family"] == generic_family
+    assert group["title"] == guide(generic_family, "pt-BR")["name"]
+    assert group["title"] != guide(specific_family, "pt-BR")["name"]
+    assert group["meaning"] == guide(generic_family, "pt-BR")["meaning"]
+    assert group["uncertainty"]
+    assert appendix["semantic_limit"] == finding_semantic_limit(
+        method, status, confidence, "pt-BR", evidence_truncated=truncated
+    )
+
+
+@pytest.mark.parametrize("target", ["smb", "ssh"])
+def test_supported_direct_evidence_retains_specialized_guidance(
+    administrative_session, target
+):
+    _, detail = _detail(administrative_session)
+    smb = target == "smb"
+    source_script = "smb-protocols" if smb else "ssh-auth-methods"
+    service = "microsoft-ds" if smb else "ssh"
+    title = "SMBv1 protocol enabled" if smb else "Password authentication"
+    evidence = "SMBv1 supported" if smb else "password authentication advertised"
+    port = 445 if smb else 22
+    condition = "smb:protocol:smbv1" if smb else (
+        "title:ssh password authentication exposed"
+    )
+    rule_id = "nse:smb-protocols" if smb else "nse:ssh-auth-methods"
+    facts = {"dialect": "SMBv1"} if smb else {
+        "password_authentication": True
+    }
+    observation = FindingEvidenceObservationPayload(
+        ip=detail.findings[0].host_ip,
+        port=port,
+        protocol="tcp",
+        condition_key=condition,
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script=source_script,
+        rule_id=rule_id,
+        rule_version="1",
+        evidence=evidence,
+        facts=facts,
+    )
+    finding = detail.findings[0].model_copy(update={
+        "finding_id": uuid4(),
+        "source": "nmap_nse",
+        "source_script": source_script,
+        "title": title,
+        "evidence": evidence,
+        "cve_id": None,
+        "service": service,
+        "port": port,
+        "protocol": "tcp",
+        "detection_method": "configuration_observation",
+        "evidence_status": "supported",
+        "confidence": "confirmed",
+        "evidence_truncated": False,
+        "evidence_observations": [observation],
+    })
+    detail.findings = [finding]
+
+    result = build_report_education(detail, "pt-BR")
+
+    group = next(item for item in result["issue_groups"] if item["finding_count"])
+    appendix = result["appendix"][0]
+    specific_family = "smb_v1" if smb else "ssh_password"
+    assert group["family"] == specific_family
+    assert group["title"] == guide(specific_family, "pt-BR")["name"]
+    assert group["meaning"] == guide(specific_family, "pt-BR")["meaning"]
+    assert group["steps"] == guide(specific_family, "pt-BR")["steps"]
+    assert appendix["semantic_limit"] is None
 
 
 def test_shell_service_observation_does_not_manufacture_a_finding(
@@ -230,6 +389,228 @@ def test_exposure_review_is_explained_without_inventing_a_vulnerability(
     assert group["finding_count"] == 0
     assert group["cves"] == []
     assert result["appendix"] == []
+
+
+def test_education_v3_keeps_semantically_distinct_records_and_limits_per_group(
+    administrative_session,
+):
+    _, detail = _detail(administrative_session)
+    base = detail.findings[0].model_copy(update={
+        "source": "nmap_vulners",
+        "cve_id": "CVE-2023-38408",
+        "service": "ssh",
+        "port": 22,
+        "detection_method": "version_correlation",
+        "evidence_status": "supported",
+        "confidence": "probable",
+        "evidence_truncated": False,
+        "evidence_observations": [],
+    })
+    stronger_but_different = base.model_copy(update={
+        "finding_id": uuid4(),
+        "detection_method": "specific_check",
+        "evidence_status": "inconclusive",
+        "confidence": "tentative",
+        "evidence_truncated": True,
+    })
+    detail.findings = [base, stronger_but_different]
+    detail.evidence_summary = None
+
+    result = build_report_education(detail, "en")
+
+    assert result["version"] == "3"
+    assert result["evidence_counts"] == {
+        "observation": 0,
+        "correlation": 2,
+        "other": 0,
+    }
+    assert result["evidence_summary"]["total_records"] == 2
+    assert result["evidence_summary"]["by_method"] == {
+        "version_correlation": 1,
+        "configuration_observation": 0,
+        "specific_check": 1,
+        "textual_reference": 0,
+        "unknown": 0,
+    }
+    assert len(result["issue_groups"]) == 2
+    assert len(result["appendix"]) == 2
+    for finding in (base, stronger_but_different):
+        row = next(
+            item for item in result["appendix"]
+            if item["finding_id"] == str(finding.finding_id)
+        )
+        group = next(
+            item for item in result["issue_groups"] if item["id"] == row["group"]
+        )
+        for item in (row, group):
+            assert item["detection_method"] == finding.detection_method
+            assert item["evidence_status"] == finding.evidence_status
+            assert item["confidence"] == finding.confidence
+            assert item["evidence_truncated"] is finding.evidence_truncated
+
+
+@pytest.mark.parametrize("language", ["en", "pt-BR", "ru"])
+def test_supported_specific_check_limit_is_localized_and_scoped(
+    administrative_session, language
+):
+    _, detail = _detail(administrative_session)
+    endpoint = str(detail.findings[0].host_ip)
+    observation = FindingEvidenceObservationPayload(
+        ip=endpoint,
+        port=443,
+        protocol="tcp",
+        condition_key="tls:protocol:tls1.0",
+        method="specific_check",
+        result="positive",
+        source="testssl.sh",
+        source_script="protocols",
+        rule_id="testssl:tls1.0",
+        rule_version="1",
+        evidence="TLS 1.0 accepted by the tested endpoint",
+        facts={"protocol": "TLS 1.0"},
+    )
+    finding = detail.findings[0].model_copy(update={
+        "finding_id": uuid4(),
+        "source": "testssl.sh",
+        "source_script": "protocols",
+        "title": "TLS 1.0 accepted",
+        "service": "https",
+        "port": 443,
+        "protocol": "tcp",
+        "detection_method": "specific_check",
+        "evidence_status": "supported",
+        "confidence": "confirmed",
+        "evidence_truncated": False,
+        "evidence_observations": [observation],
+    })
+    detail.findings = [finding]
+
+    result = build_report_education(detail, language)
+
+    appendix = result["appendix"][0]
+    group = result["issue_groups"][0]
+    limit = text("limit_specific_check", language)
+    assert appendix["semantic_limit"] == limit
+    assert group["uncertainty"] == limit
+    assert appendix["evidence_observations"][0]["ip"] == endpoint
+    assert appendix["evidence_observations"][0]["port"] == 443
+    assert appendix["evidence_observations"][0]["condition_key"] == (
+        "tls:protocol:tls1.0"
+    )
+
+
+def test_standalone_checks_are_limited_coverage_not_finding_totals(
+    administrative_session,
+):
+    _, detail = _detail(administrative_session)
+    detail.findings = [detail.findings[0].model_copy(update={
+        "source": "nmap_nse",
+        "cve_id": None,
+    })]
+    detail.evidence_summary = None
+    detail.finding_observations = [FindingEvidenceObservationPayload(
+        ip="192.168.1.10",
+        port=445,
+        protocol="tcp",
+        condition_key="SMBv1 availability",
+        method="configuration_observation",
+        result="negative",
+        source="nmap_nse",
+        source_script="smb-protocols",
+        rule_id="smb:smbv1",
+        rule_version="1",
+        evidence="SMBv1 not offered",
+    )]
+    detail.finding_observations_truncated = True
+
+    result = build_report_education(detail, "pt-BR")
+
+    assert result["version"] == "3"
+    assert result["evidence_summary"]["total_records"] == 1
+    assert result["evidence_counts"] == {
+        "observation": 1,
+        "correlation": 0,
+        "other": 0,
+    }
+    assert len(result["appendix"]) == 1
+    assert result["finding_observations_truncated"] is True
+    assert result["finding_observations"] == [
+        detail.finding_observations[0].model_dump(mode="json")
+    ]
+
+
+@pytest.mark.parametrize("language", ["en", "pt-BR", "ru"])
+def test_evidence_report_copy_is_localized_for_pdf_labels(language):
+    translated = [
+        text("method_version_correlation", language),
+        text("status_supported_version", language),
+        text("confidence_probable", language),
+        text("evidence_truncated", language),
+        text("standalone_observations_title", language),
+        text("observation_scope_note", language),
+    ]
+    assert all(translated)
+    assert len(set(translated)) == len(translated)
+
+
+def test_pdf_appendix_keeps_semantic_limit_separate_from_truncation(
+    administrative_session, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    finding = seeded["finding"]
+    finding.source = "nmap_nse"
+    finding.source_script = "smb-protocols"
+    finding.title = "SMBv1 protocol enabled"
+    finding.evidence = "SMBv1 supported"
+    finding.finding_evidence_policy_version = "1"
+    finding.evidence_observations_json = []
+    finding.evidence_truncated = True
+    administrative_session.add(finding)
+    administrative_session.commit()
+    monkeypatch.setattr(
+        "api.services.reports.get_scan_ai_analysis",
+        lambda *args, **kwargs: None,
+    )
+
+    report = build_scan_report(
+        administrative_session,
+        seeded["scan"].scan_id,
+        org_id=seeded["org"].id,
+        kind="explained",
+        ai_enabled=False,
+        language="pt-BR",
+    )
+    education = report.sections["education"]
+    record = next(
+        item for item in education["appendix"]
+        if item["finding_id"] == str(finding.finding_id)
+    )
+    styles = getSampleStyleSheet()
+    for name, base in (
+        ("ReportBody", "BodyText"),
+        ("ReportHeading", "Heading2"),
+        ("ReportChapter", "Heading2"),
+        ("ReportDevice", "Heading2"),
+        ("ReportCard", "BodyText"),
+        ("ReportSmall", "BodyText"),
+    ):
+        styles.add(ParagraphStyle(name, parent=styles[base]))
+    story = []
+    append_education(
+        story, report.sections, styles, _COPY["pt-BR"], "pt-BR", 500, "Helvetica"
+    )
+    appendix_table = next(
+        item for item in story
+        if isinstance(item, Table)
+        and len(item._cellvalues) > 1
+        and item._cellvalues[0][1].getPlainText() == "CVE / Gxx"
+    )
+    identity = appendix_table._cellvalues[1][1].getPlainText()
+
+    assert record["semantic_limit"]
+    assert record["semantic_limit"] in identity
+    assert text("evidence_truncated", "pt-BR") in identity
+    assert identity.count(text("limit", "pt-BR")) == 2
 
 
 def test_paginated_device_chart_keeps_every_row_and_the_same_count_scale():
