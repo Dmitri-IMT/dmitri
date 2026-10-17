@@ -30,6 +30,10 @@ def test_agent_columns_match_expected_set():
         "connected_at",
         "created_at",
         "target_subnet",
+        "observed_version",
+        "observed_package_version",
+        "version_observed_at",
+        "version_observed_session_id",
     }
 
 

@@ -4,16 +4,12 @@ import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
-import pytest
-from api.db.session import get_session
 from api.main import app
 from api.models.identity import Org
 from api.models.persistence import HostRecord
 from conftest import _dispose_runtime_engine
 from pydantic import BaseModel
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session
 from starlette.testclient import TestClient
 
 
@@ -35,30 +31,6 @@ def _assert_error_envelope(
     assert set(body["error"].keys()) == {"code", "message", "details"}
     assert body["error"]["code"] == code
     assert body["error"]["details"] == (details or {})
-
-
-@pytest.fixture()
-def session() -> Session:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
-@pytest.fixture()
-def client(session: Session) -> TestClient:
-    def _override_get_session():
-        yield session
-
-    app.dependency_overrides[get_session] = _override_get_session
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.pop(get_session, None)
 
 
 def _seed_host(session: Session) -> tuple[Org, HostRecord]:
@@ -84,29 +56,17 @@ def _seed_host(session: Session) -> tuple[Org, HostRecord]:
 
 
 def test_hosts_without_bearer_returns_unauthorized_envelope(
-    client: TestClient, session: Session
+    client: TestClient, administrative_session: Session
 ) -> None:
-    _seed_host(session)
+    _seed_host(administrative_session)
     response = client.get("/api/v1/hosts")
     _assert_error_envelope(response, 401, "unauthorized")
 
 
-@pytest.fixture()
-def postgres_client(administrative_session: Session) -> TestClient:
-    def _override_get_session():
-        yield administrative_session
-
-    app.dependency_overrides[get_session] = _override_get_session
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.pop(get_session, None)
-
-
 def test_viewer_post_invite_returns_forbidden_envelope(
-    postgres_client: TestClient, seeded_org: Org, bearer_headers
+    client: TestClient, seeded_org: Org, bearer_headers
 ) -> None:
-    response = postgres_client.post(
+    response = client.post(
         "/api/v1/invites",
         json={"email": "new@corp.com", "role": "viewer"},
         headers=bearer_headers(seeded_org.id, "viewer"),
@@ -115,9 +75,9 @@ def test_viewer_post_invite_returns_forbidden_envelope(
 
 
 def test_unknown_host_returns_not_found_envelope(
-    client: TestClient, session: Session, bearer_headers
+    client: TestClient, administrative_session: Session, bearer_headers
 ) -> None:
-    org, _ = _seed_host(session)
+    org, _ = _seed_host(administrative_session)
     response = client.get(
         f"/api/v1/hosts/{uuid4()}",
         headers=bearer_headers(org.id, "admin"),
