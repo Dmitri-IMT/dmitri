@@ -187,6 +187,8 @@ def _cve(value: Any) -> str | None:
 
 def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
     identifier = str(row.get("id", "")).strip()
+    if identifier.casefold() == "scanproblem":
+        return None
     finding = sanitize_evidence(row.get("finding", ""))
     severity = str(row.get("severity", "")).casefold().strip()
     identifier_lower = identifier.casefold()
@@ -252,6 +254,13 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
         cve_id=cve_id,
         cvss_score=_number(row.get("cvss", row.get("cvss_score"))),
         references=list(dict.fromkeys(references))[:8],
+        method="configuration_observation",
+        result="positive",
+        rule_id="targeted:testssl.sh-issue",
+        facts={
+            "primitive": sanitize_evidence(identifier, 160),
+            "observed_value": sanitize_evidence(finding, 160),
+        },
     )
 
 
@@ -282,6 +291,20 @@ def _result(unit: TargetedUnit, execution: ToolExecution) -> TargetedUnitResult:
         reason_code=execution.reason_code,
         diagnostic=execution.diagnostic,
     )
+
+
+def _scan_problem(records: list[Mapping[str, Any]]) -> str | None:
+    for row in records:
+        identifier = str(row.get("id", "")).casefold().strip()
+        severity = str(row.get("severity", "")).casefold().strip()
+        if identifier == "scanproblem" or severity == "fatal":
+            finding = sanitize_evidence(row.get("finding", ""))
+            return finding or "testssl reported a fatal scan problem."
+    return None
+
+
+def _exit_code_is_scan_error(exit_code: int | None) -> bool:
+    return exit_code is not None and exit_code != 0 and not 50 <= exit_code <= 200
 
 
 def run_testssl(
@@ -370,6 +393,19 @@ def run_testssl(
             issues=issues,
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.ISSUE_LIMIT,
+        )
+    scan_problem = _scan_problem(records)
+    scan_error = scan_problem is not None or _exit_code_is_scan_error(
+        execution.exit_code
+    )
+    if execution.outcome == TargetedOutcome.COMPLETED and scan_error:
+        return TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            issues=issues,
+            exit_code=execution.exit_code,
+            reason_code=TargetedGapReason.EXECUTION_ERROR,
+            diagnostic=execution.diagnostic or scan_problem,
         )
     return TargetedUnitResult(
         unit,

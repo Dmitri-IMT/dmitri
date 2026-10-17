@@ -42,7 +42,8 @@ function HostExposures({ host }: { host: HostDetailResponse }) {
         testId="host-exposures-table"
         openExposureId={openExposureId}
         onOpenExposureChange={setOpenExposureId}
-        caption="Reachable services on this machine"
+        caption="scans.exposureTableHostCaption"
+        showSummary={false}
         relatedFindingHref={(exposure, findingId) =>
           `/scans/${exposure.scan_id}?finding=${findingId}`
         }

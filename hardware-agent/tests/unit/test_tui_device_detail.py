@@ -12,6 +12,7 @@ from agent.normalize.contracts import (
     AssessmentEvidencePayload,
     DeviceProfilePayload,
     ExposurePayload,
+    FindingEvidenceObservationPayload,
     FindingPayload,
     HostPayload,
     ModbusDeviceIdentificationPayload,
@@ -111,6 +112,23 @@ def _payload(*, findings: bool = True) -> ScanPayload:
                 description="A control weakness was confirmed",
                 recommendation="Restrict the affected endpoint",
                 evidence="Confirmed by the inspection script",
+                issue_key="title:potentially risky http methods enabled",
+                evidence_observations=[
+                    FindingEvidenceObservationPayload(
+                        ip=host.ip,
+                        port=6668,
+                        protocol="tcp",
+                        condition_key="title:potentially risky http methods enabled",
+                        method="configuration_observation",
+                        result="positive",
+                        source="nmap_nse",
+                        source_script="http-methods",
+                        rule_id="nse:http-methods",
+                        rule_version="1",
+                        evidence="PUT",
+                        facts={"risky_method": "PUT"},
+                    )
+                ],
             )
         ]
         if findings
@@ -123,6 +141,21 @@ def _payload(*, findings: bool = True) -> ScanPayload:
         scan_mode="nspi",
         hosts=[host],
         findings=finding_list,
+        finding_evidence_policy_version="1",
+        finding_observations=[
+            FindingEvidenceObservationPayload(
+                ip=host.ip,
+                port=6668,
+                protocol="tcp",
+                condition_key="CVE-2020-1234",
+                method="unknown",
+                result="negative",
+                source="nmap_nse",
+                rule_id="nse:unknown-check",
+                rule_version="1",
+                evidence="The check returned not vulnerable.",
+            )
+        ],
         assessment_policy_version="2026-09-15.1",
         exposures=[
             ExposurePayload(
@@ -189,9 +222,7 @@ def test_detail_preserves_randomized_mac_uncertainty() -> None:
         product_family=None,
         model=None,
         confidence="low",
-        limitations=[
-            "Locally administered MAC address; OUI manufacturer unavailable."
-        ],
+        limitations=["Locally administered MAC address; OUI manufacturer unavailable."],
     )
 
     profile = DeviceDetailScreen(payload, host)._render_profile()
@@ -218,6 +249,23 @@ def test_exposure_and_finding_are_separate_with_reciprocal_relationship() -> Non
     assert "Related finding: CVE-2024-12345 (see Vulnerability findings)" in exposures
     assert "[HIGH] CVE-2024-12345" in findings
     assert "Endpoint: 6668/tcp · also listed in Attack surface" in findings
+    assert "Evidence interpretation is local to this agent (policy v1)" in findings
+    assert "Finding records are not all proven failures." in findings
+    assert "Local evidence: Observed configuration · supported · confirmed" in findings
+    assert (
+        "This configuration was observed; this does not show exploitation" in findings
+    )
+    assert "Standalone check observations" not in findings
+    assert "Evidence observation: positive · configuration_observation" in findings
+    assert "Condition: title:potentially risky http methods enabled" in findings
+    assert "Source: nmap_nse · http-methods · Rule: nse:http-methods v1" in findings
+    assert "Evidence excerpt: PUT" in findings
+    assert "Facts: risky_method=PUT" in findings
+    standalone = Text.from_markup(screen._render_standalone_observations()).plain
+    assert "1 observation · 1 negative · 0 inconclusive" in standalone
+    assert "Condition: CVE-2020-1234 · Result: negative · Method: unknown" in standalone
+    assert "Source: nmap_nse · Rule: nse:unknown-check v1" in standalone
+    assert "Evidence excerpt: The check returned not vulnerable." in standalone
     assert exposures.count("CVE-2024-12345") == 1
     assert findings.count("CVE-2024-12345") == 1
 
@@ -235,7 +283,7 @@ def test_current_empty_and_legacy_unavailable_are_distinct() -> None:
         in current_screen._render_exposures()
     )
     assert (
-        "No confirmed vulnerabilities found for this device."
+        "No vulnerability finding records for this device."
         in current_screen._render_findings()
     )
     assert (
@@ -247,6 +295,35 @@ def test_current_empty_and_legacy_unavailable_are_distinct() -> None:
         in legacy_screen._render_exposures()
     )
     assert "6668/tcp open · observed label: irc" in legacy_screen._render_inventory()
+
+
+def test_unknown_evidence_policy_is_not_interpreted_as_version_one() -> None:
+    payload = _payload()
+    payload.finding_evidence_policy_version = "2"
+
+    findings = DeviceDetailScreen(payload, payload.hosts[0])._render_findings()
+
+    assert "this agent does not interpret the recorded policy version" in findings
+    assert "Local evidence: Observed configuration" not in findings
+    assert "finding records are not proof of failure" in findings
+
+
+def test_finding_evidence_truncation_is_shown_as_sample_limit() -> None:
+    payload = _payload()
+    payload.findings[0].evidence_truncated = True
+    payload.finding_observations_truncated = True
+    screen = DeviceDetailScreen(payload, payload.hosts[0])
+
+    findings = Text.from_markup(screen._render_findings()).plain
+    standalone = Text.from_markup(screen._render_standalone_observations()).plain
+
+    assert "only a sample of this finding's evidence observations is available" in (
+        findings
+    )
+    assert "Only a sample of scan-level standalone observations is available." in (
+        standalone
+    )
+    assert "Sample shown: 1 observation" in standalone
 
 
 @pytest.mark.asyncio
@@ -283,7 +360,7 @@ async def test_detail_partial_banner_and_accepted_evidence_copy(
         assert expected in banner
         assert unexpected not in banner
         assert "This device shows accepted evidence only." in banner
-        assert "No confirmed vulnerabilities in accepted evidence." in findings
+        assert "No vulnerability finding records in accepted evidence." in findings
         assert "found for this device" not in findings
 
 
@@ -302,11 +379,16 @@ async def test_detail_mount_has_all_stable_ids_and_industrial_inventory() -> Non
             "#device-inventory",
             "#device-exposures",
             "#device-findings",
+            "#device-finding-observations",
             "#device-industrial",
         ):
             assert screen.query_one(widget_id) is not None
         industrial = str(screen.query_one("#device-industrial", Static).render())
         assert "Modbus TCP 502 - CONFIRMED" in industrial
+        observations = str(
+            screen.query_one("#device-finding-observations", Static).render()
+        )
+        assert "Condition: CVE-2020-1234" in observations
         assert "Mapping plan: generic_baseline" in industrial
         assert "Unit ID 7: responding" in industrial
         assert "vendor Schneider Electric" in industrial

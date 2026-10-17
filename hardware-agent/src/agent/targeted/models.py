@@ -58,6 +58,14 @@ TargetedObservationKind = Literal[
     "service_identity",
     "device_identity",
 ]
+EvidenceMethod = Literal[
+    "version_correlation",
+    "configuration_observation",
+    "specific_check",
+    "textual_reference",
+    "unknown",
+]
+EvidenceResult = Literal["positive", "negative", "inconclusive"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +97,12 @@ class TargetedIssue:
     cve_id: str | None = None
     cvss_score: float | None = None
     references: list[str] = field(default_factory=list)
+    # Evidence metadata is internal until Task 10 enables the scan wire fields.
+    method: EvidenceMethod = "unknown"
+    result: EvidenceResult = "inconclusive"
+    rule_id: str = "targeted:unsupported"
+    rule_version: str = "1"
+    facts: dict[str, str | int | bool] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

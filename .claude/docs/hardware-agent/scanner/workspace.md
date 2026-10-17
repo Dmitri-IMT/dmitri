@@ -4,7 +4,7 @@ title: scanner/workspace — results & logs layout
 description: The on-disk results/ + logs/ workspace layout — result serialization, per-run Nmap logging, and pruning.
 resource: hardware-agent/src/agent/scanner/workspace.py
 tags: [hardware-agent, scanner, workspace, persistence]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # scanner/workspace — results & logs layout
@@ -14,7 +14,7 @@ timestamp: 2026-07-21T00:00:00Z
 `workspace.py` manages everything the agent writes to disk under the workspace root: the `results/`
 directory of normalized scan JSON and the `logs/` directory of per-invocation Nmap traces. It
 serializes the `ScanPayload`, names and populates run folders, and prunes both trees to bounded
-sizes. This is the last step of the pipeline — the flow ends here (no upload today).
+sizes. The daemon persists each result before submitting the same payload to the ingest client.
 
 ## Key classes / functions
 
@@ -40,5 +40,7 @@ sizes. This is the last step of the pipeline — the flow ends here (no upload t
 
 - A completed scan on disk is the domain [scan](/glossary.md) result — the `ScanPayload` written
   here, later read back by the TUI's scan-view and past-scans screens.
+- Current results include finding-evidence policy metadata when emitted by the runner. Legacy files
+  without that version remain readable and are presented as unavailable.
 - `prune_logs` groups run folders by `parent_scan_id` from each `meta.json`, so all Nmap runs of one
   scan are kept or dropped together, and the newest failed scan's logs survive for debugging.

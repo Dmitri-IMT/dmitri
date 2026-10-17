@@ -108,6 +108,7 @@ def split_context(
             max_risk_score=context.max_risk_score,
             severity=context.severity,
             top_findings=selected,
+            evidence_summary=context.evidence_summary,
         )
         chunk._finding_ids_by_ref = {
             finding.finding_ref: context._finding_ids_by_ref[finding.finding_ref]

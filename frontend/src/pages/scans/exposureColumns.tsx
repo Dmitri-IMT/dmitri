@@ -1,40 +1,43 @@
 import AttentionWord from '@/components/AttentionWord'
 import type { DataTableColumn } from '@/components/DataTable'
+import type { MessageKey } from '@/i18n/messages'
 import type { components } from '@/types/openapi'
 
 type ExposureRead = components['schemas']['ExposureRead']
 type ExposureRole = components['schemas']['ExposureRole']
 type ExposureConfidence = components['schemas']['ExposureConfidence']
 
-const ROLE_LABEL: Record<ExposureRole, string> = {
-  administration: 'Administration',
-  data_store: 'Data store',
-  file_sharing: 'File sharing',
-  remote_access: 'Remote access',
-  proxy: 'Proxy',
-  api: 'API',
-  device_control: 'Device control',
-  discovery: 'Discovery',
-  media: 'Media',
-  general_service: 'General service',
-  unknown: 'Unknown',
+const ROLE_LABEL: Record<ExposureRole, MessageKey> = {
+  administration: 'scans.exposureRoleAdministration',
+  data_store: 'scans.exposureRoleDataStore',
+  file_sharing: 'scans.exposureRoleFileSharing',
+  remote_access: 'scans.exposureRoleRemoteAccess',
+  proxy: 'scans.exposureRoleProxy',
+  api: 'scans.exposureRoleApi',
+  device_control: 'scans.exposureRoleDeviceControl',
+  discovery: 'scans.exposureRoleDiscovery',
+  media: 'scans.exposureRoleMedia',
+  general_service: 'scans.exposureRoleGeneralService',
+  unknown: 'scans.exposureRoleUnknown',
 }
 
-const CONFIDENCE_LABEL: Record<ExposureConfidence, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
+const CONFIDENCE_LABEL: Record<ExposureConfidence, MessageKey> = {
+  low: 'scans.exposureConfidenceLow',
+  medium: 'scans.exposureConfidenceMedium',
+  high: 'scans.exposureConfidenceHigh',
 }
 
 export function exposureEndpoint(exposure: ExposureRead): string {
   return `${exposure.ip}:${exposure.port}/${exposure.protocol}`
 }
 
-export function exposureColumns(): DataTableColumn<ExposureRead>[] {
+export function exposureColumns(
+  t: (key: MessageKey, variables?: Record<string, string | number>) => string,
+): DataTableColumn<ExposureRead>[] {
   return [
     {
       key: 'endpoint',
-      label: 'Endpoint',
+      label: t('scans.exposureEndpoint'),
       width: 'w-1/4',
       render: (exposure) => (
         <span
@@ -47,7 +50,7 @@ export function exposureColumns(): DataTableColumn<ExposureRead>[] {
     },
     {
       key: 'service',
-      label: 'Observed service',
+      label: t('scans.exposureObservedService'),
       width: 'w-1/5',
       render: (exposure) => (
         <span className="block truncate" title={exposure.observed_service}>
@@ -57,21 +60,21 @@ export function exposureColumns(): DataTableColumn<ExposureRead>[] {
     },
     {
       key: 'role',
-      label: 'Role',
+      label: t('scans.exposureRole'),
       width: 'w-1/5',
-      render: (exposure) => ROLE_LABEL[exposure.role],
+      render: (exposure) => t(ROLE_LABEL[exposure.role]),
     },
     {
       key: 'attention',
-      label: 'Attention',
+      label: t('scans.exposureAttention'),
       width: 'w-1/5',
       render: (exposure) => <AttentionWord attention={exposure.attention} />,
     },
     {
       key: 'confidence',
-      label: 'Confidence',
+      label: t('common.confidence'),
       width: 'w-3/20',
-      render: (exposure) => CONFIDENCE_LABEL[exposure.confidence],
+      render: (exposure) => t(CONFIDENCE_LABEL[exposure.confidence]),
     },
   ]
 }

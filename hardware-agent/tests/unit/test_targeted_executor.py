@@ -53,6 +53,20 @@ def _assert_process_not_running(pid: int) -> None:
     raise AssertionError(f"process {pid} is still running")
 
 
+def _read_pid_when_ready(path: Path, timeout: float = 2) -> int:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            pid = int(path.read_text())
+        except (FileNotFoundError, ValueError):
+            time.sleep(0.01)
+            continue
+        if pid > 0:
+            return pid
+        time.sleep(0.01)
+    raise AssertionError(f"process id was not written to {path}")
+
+
 def test_file_report_is_read_and_private_temp_file_is_removed(tmp_path: Path) -> None:
     recorded_path = tmp_path / "report-path.txt"
     command = _file_command(
@@ -67,6 +81,27 @@ def test_file_report_is_read_and_private_temp_file_is_removed(tmp_path: Path) ->
     assert result.report == b'{"ok": true}'
     assert result.report_present is True
     assert not Path(recorded_path.read_text()).exists()
+
+
+def test_subprocess_config_is_writable_and_isolated_from_protected_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    inherited_config = tmp_path / "protected-config"
+    inherited_config.write_text("not a directory")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(inherited_config))
+    command = _file_command(
+        "import os,sys; from pathlib import Path; "
+        "config=Path(os.environ['XDG_CONFIG_HOME']); "
+        "(config/'ffuf'/'scraper').mkdir(parents=True); "
+        "Path(sys.argv[1]).write_text(str(config))"
+    )
+
+    result = TargetedExecutor().execute(command)
+
+    assert result.exit_code == 0
+    assert result.report_present
+    assert not Path(result.report.decode()).exists()
+    assert os.environ["XDG_CONFIG_HOME"] == str(inherited_config)
 
 
 def test_structured_stdout_is_report_not_diagnostic() -> None:
@@ -148,7 +183,7 @@ def test_cancel_before_spawn_is_isolated() -> None:
 
     assert result.outcome is TargetedOutcome.SKIPPED
     assert result.cancelled is True
-    assert result.reason_code is TargetedGapReason.STAGE_BUDGET
+    assert result.reason_code is TargetedGapReason.SCAN_CANCELLED
 
 
 def test_cancellation_rechecked_after_tempdir_setup_before_spawn(
@@ -198,6 +233,7 @@ def test_deadline_rechecked_after_tempdir_setup_before_spawn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original = tempfile.TemporaryDirectory
+    stage_deadline = perf_counter() + 0.01
 
     class ExpireDuringTempdir:
         def __init__(self, *args, **kwargs) -> None:
@@ -205,7 +241,7 @@ def test_deadline_rechecked_after_tempdir_setup_before_spawn(
 
         def __enter__(self) -> str:
             directory = self._manager.__enter__()
-            monkeypatch.setattr(executor_module, "perf_counter", lambda: 10_000.0)
+            monkeypatch.setattr(executor_module, "perf_counter", lambda: stage_deadline)
             return directory
 
         def __exit__(self, *args) -> None:
@@ -220,7 +256,7 @@ def test_deadline_rechecked_after_tempdir_setup_before_spawn(
             argv=(sys.executable, "-c", "raise SystemExit(99)"),
             report_mode="stdout",
         ),
-        stage_deadline=perf_counter() + 0.01,
+        stage_deadline=stage_deadline,
     )
 
     assert result.outcome is TargetedOutcome.SKIPPED
@@ -338,13 +374,13 @@ def test_cancelled_queued_execution_does_not_start_after_serialized_call(
         ),
     )
     first.start()
-    time.sleep(.03)
+    time.sleep(0.03)
     cancel_event.set()
     result = executor.execute(command, cancel_event=cancel_event)
     first.join(timeout=3)
 
     assert result.outcome is TargetedOutcome.SKIPPED
-    assert result.reason_code is TargetedGapReason.STAGE_BUDGET
+    assert result.reason_code is TargetedGapReason.SCAN_CANCELLED
     assert result.deadline_scope is None
     assert not started.exists()
 
@@ -438,9 +474,7 @@ def test_missing_report_is_preserved_for_adapter_and_temp_file_is_removed(
 def test_nonzero_exit_preserves_raw_report_for_adapter(
     script: str, report: bytes, present: bool
 ) -> None:
-    result = TargetedExecutor().execute(
-        _file_command(script)
-    )
+    result = TargetedExecutor().execute(_file_command(script))
 
     assert result.outcome is TargetedOutcome.COMPLETED
     assert result.reason_code is None
@@ -646,9 +680,7 @@ def test_report_setup_failure_terminates_spawned_process(
 
     def wait_for_child_pid(*args, **kwargs):
         process = original_popen(*args, **kwargs)
-        deadline = time.monotonic() + 2
-        while not child_pid.exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
+        _read_pid_when_ready(child_pid)
         return process
 
     monkeypatch.setattr(executor_module.subprocess, "Popen", wait_for_child_pid)
@@ -663,7 +695,7 @@ def test_report_setup_failure_terminates_spawned_process(
 
     assert result.outcome is TargetedOutcome.FAILED
     assert result.reason_code is TargetedGapReason.EXECUTION_ERROR
-    _assert_process_not_running(int(child_pid.read_text()))
+    _assert_process_not_running(_read_pid_when_ready(child_pid))
 
 
 def test_tempdir_creation_failure_is_execution_error_without_spawn(
@@ -721,7 +753,7 @@ def test_cancellation_kills_child_after_parent_exits(tmp_path: Path) -> None:
     thread.start()
     deadline = time.monotonic() + 3
     while not child_pid.exists() and time.monotonic() < deadline:
-        time.sleep(.01)
+        time.sleep(0.01)
     executor.terminate_active()
     thread.join(timeout=3)
 
@@ -732,7 +764,9 @@ def test_cancellation_kills_child_after_parent_exits(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX process groups")
-def test_timeout_kills_child_after_parent_exits(tmp_path: Path) -> None:
+def test_timeout_kills_child_after_parent_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     child_pid = tmp_path / "child-pid"
     script = (
         "import subprocess, sys; "
@@ -741,18 +775,29 @@ def test_timeout_kills_child_after_parent_exits(tmp_path: Path) -> None:
         f"open({str(child_pid)!r}, 'w').write(str(child.pid)); "
         "import time; time.sleep(30)"
     )
+    now = time.monotonic()
+    deadline = now + 0.1
+
+    def expire_after_child_starts() -> float:
+        try:
+            pid = int(child_pid.read_text())
+        except (FileNotFoundError, ValueError):
+            return now
+        return deadline + 0.001 if pid > 0 else now
+
+    monkeypatch.setattr(executor_module, "perf_counter", expire_after_child_starts)
     result = TargetedExecutor().execute(
         ToolCommand(
             tool=TargetedTool.SSH_AUDIT,
             argv=(sys.executable, "-c", script),
             report_mode="stdout",
-            timeout_s=.1,
+            timeout_s=0.1,
         )
     )
 
     assert result.outcome is TargetedOutcome.TIMED_OUT
     assert result.deadline_scope == "unit"
-    child = int(child_pid.read_text())
+    child = _read_pid_when_ready(child_pid)
     _assert_process_not_running(child)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import pytest
 from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Agent
 from api.models.identity import Org
@@ -17,6 +18,7 @@ from api.models.persistence import (
 )
 from api.schemas.scan import (
     CoverageUnitPayload,
+    FindingEvidenceObservationPayload,
     FindingPayload,
     HostPayload,
     PortPayload,
@@ -895,3 +897,255 @@ def test_cve_enrichment_leaves_machine_inventory_untouched(
         host_finding.last_seen_at,
         host_finding.fixed_at,
     ) == before
+
+
+def test_unknown_standalone_evidence_does_not_close_historical_finding(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    first_scan = _request(
+        T0,
+        [_host()],
+        [
+            _finding("Existing service issue"),
+            _finding("Unrelated service issue", port=23),
+        ],
+    )
+    ingest_scan(runtime_session, first_scan, identity=identity, now=T0)
+    machine = runtime_session.exec(
+        select(HostRecord).where(HostRecord.ip == IP)
+    ).one()
+    histories = runtime_session.exec(
+        select(HostFindingRecord).where(HostFindingRecord.host_id == machine.id)
+    ).all()
+    history = next(
+        row
+        for row in histories
+        if row.dedupe_key.endswith("|22|na|existing service issue")
+    )
+    unrelated = next(
+        row
+        for row in histories
+        if row.dedupe_key.endswith("|23|na|unrelated service issue")
+    )
+
+    unknown = FindingEvidenceObservationPayload(
+        ip=IP,
+        port=22,
+        protocol="tcp",
+        condition_key="service:unknown-check",
+        method="specific_check",
+        result="negative",
+        source="nmap_nse",
+        source_script="unreviewed-check",
+        rule_id="nse:unreviewed-check",
+        rule_version="1",
+        evidence="The response did not match a supported rule.",
+        facts={"state": "not_vulnerable"},
+    )
+    second_scan = ScanIngestRequest(
+        scan_id=uuid4(),
+        timestamp=T1,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[_host()],
+        findings=[],
+        metadata={"partial_result": False},
+        finding_evidence_policy_version="1",
+        finding_observations=[unknown],
+    )
+    ingest_scan(runtime_session, second_scan, identity=identity, now=T1)
+    runtime_session.refresh(history)
+    runtime_session.refresh(unrelated)
+    assert history.fixed_at is None
+    assert unrelated.fixed_at == T1
+
+
+@pytest.mark.parametrize(
+    "missing_dimension", ["ip", "protocol", "port", "unit_id", "all"]
+)
+def test_unsupported_observation_with_missing_dimension_preserves_only_possible_history(
+    missing_dimension: str,
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    issue_key = "smb:signing"
+    finding = _finding("SMB signing is optional", port=445).model_copy(
+        update={"issue_key": issue_key, "unit_id": 7}
+    )
+    unrelated_port = 445 if missing_dimension == "port" else 446
+    unrelated_finding = _finding(
+        "Unrelated SMB signing issue", port=unrelated_port
+    ).model_copy(update={"issue_key": issue_key, "unit_id": 7})
+    if missing_dimension == "port":
+        unrelated_finding.protocol = "udp"
+    ingest_scan(
+        runtime_session,
+        _request(
+            T0,
+            [_host(ports=[_port(445, "microsoft-ds")])],
+            [finding, unrelated_finding],
+        ),
+        identity=identity,
+        now=T0,
+    )
+    machine = runtime_session.exec(select(HostRecord).where(HostRecord.ip == IP)).one()
+    histories = runtime_session.exec(
+        select(HostFindingRecord).where(HostFindingRecord.host_id == machine.id)
+    ).all()
+    history = next(
+        row
+        for row in histories
+        if row.dedupe_key.endswith("|smb signing is optional")
+    )
+    unrelated = next(
+        row for row in histories if row.dedupe_key != history.dedupe_key
+    )
+    endpoint = {"ip": IP, "protocol": "tcp", "port": 445, "unit_id": 7}
+    if missing_dimension == "all":
+        endpoint = {key: None for key in endpoint}
+    else:
+        endpoint[missing_dimension] = None
+    unknown = FindingEvidenceObservationPayload(
+        ip=endpoint["ip"],
+        protocol=endpoint["protocol"],
+        port=endpoint["port"],
+        unit_id=endpoint["unit_id"],
+        condition_key=issue_key,
+        method="configuration_observation",
+        result="negative",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="The incomplete observation lacks endpoint scope.",
+        facts={},
+    )
+    second_scan = _request(T1, [_host()], [])
+    second_scan.finding_evidence_policy_version = "1"
+    second_scan.finding_observations = [unknown]
+    ingest_scan(runtime_session, second_scan, identity=identity, now=T1)
+    runtime_session.refresh(history)
+    runtime_session.refresh(unrelated)
+    assert history.fixed_at is None
+    assert unrelated.fixed_at == (None if missing_dimension == "all" else T1)
+
+
+def test_supported_ms17_negative_does_not_close_matching_historical_finding(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    cve_id = "CVE-2017-0143"
+    finding = FindingPayload(
+        ip=IP,
+        port=445,
+        protocol="tcp",
+        issue_key=None,
+        cve_id=cve_id,
+        severity="high",
+        title="MS17-010 exposure",
+        description="The SMB endpoint is vulnerable.",
+        recommendation="Patch the host.",
+        evidence="A vulnerable response was observed.",
+    )
+    ingest_scan(
+        runtime_session,
+        _request(T0, [_host(ports=[_port(445, "microsoft-ds")])], [finding]),
+        identity=identity,
+        now=T0,
+    )
+    machine = runtime_session.exec(
+        select(HostRecord).where(HostRecord.ip == IP)
+    ).one()
+    history = runtime_session.exec(
+        select(HostFindingRecord).where(HostFindingRecord.host_id == machine.id)
+    ).one()
+    negative = FindingEvidenceObservationPayload(
+        ip=IP,
+        port=445,
+        protocol="tcp",
+        condition_key=cve_id,
+        method="specific_check",
+        result="negative",
+        source="nmap_nse",
+        source_script="smb-vuln-ms17-010",
+        rule_id="nse:smb-vuln-ms17-010",
+        rule_version="1",
+        evidence="The MS17-010 check returned NOT VULNERABLE.",
+        facts={
+            "vulnerability_state": "NOT VULNERABLE",
+            "table": "smb-vuln-ms17-010",
+        },
+    )
+    second_scan = _request(T1, [_host(ports=[_port(445, "microsoft-ds")])], [])
+    second_scan.finding_evidence_policy_version = "1"
+    second_scan.finding_observations = [negative]
+    ingest_scan(runtime_session, second_scan, identity=identity, now=T1)
+    runtime_session.refresh(history)
+    assert history.fixed_at is None
+
+
+def test_smb_signing_negative_uses_persisted_issue_key_binding(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    identity = AgentIdentity(agent_id=provisioned_agent.id, org_id=seeded_org.id)
+    condition = "smb:signing"
+    positive = FindingEvidenceObservationPayload(
+        ip=IP,
+        port=445,
+        protocol="tcp",
+        condition_key=condition,
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="Signing is not required.",
+        facts={"signing_required": False},
+    )
+    finding = FindingPayload(
+        ip=IP,
+        port=445,
+        protocol="tcp",
+        issue_key=condition,
+        severity="high",
+        title="SMB signing is optional",
+        description="SMB does not require signing.",
+        recommendation="Require signing.",
+        evidence="Signing is not required.",
+        evidence_observations=[positive],
+    )
+    first = ScanIngestRequest(
+        scan_id=uuid4(),
+        timestamp=T0,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[_host(ports=[_port(445, "microsoft-ds")])],
+        findings=[finding],
+        metadata={"partial_result": False},
+        finding_evidence_policy_version="1",
+    )
+    ingest_scan(runtime_session, first, identity=identity, now=T0)
+    history = runtime_session.exec(select(HostFindingRecord)).one()
+    negative = positive.model_copy(
+        update={
+            "result": "negative",
+            "evidence": "Signing is required.",
+            "facts": {"signing_required": True},
+        }
+    )
+    second = _request(T1, [_host(ports=[_port(445, "microsoft-ds")])], [])
+    second.finding_evidence_policy_version = "1"
+    second.finding_observations = [negative]
+    ingest_scan(runtime_session, second, identity=identity, now=T1)
+    runtime_session.refresh(history)
+    assert history.fixed_at is None

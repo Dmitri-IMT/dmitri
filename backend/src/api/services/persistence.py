@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Any, Iterable, Sequence
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -14,6 +15,7 @@ from api.models.persistence import (
     EnrichmentJobRecord,
     ExposureRecord,
     FindingRecord,
+    ModbusUnitRecord,
     PortRecord,
     ScanHostRecord,
     ScanRecord,
@@ -22,6 +24,7 @@ from api.models.persistence import (
 from api.schemas.scan import (
     TERMINATED_BY_USER_CANCEL,
     ExposurePayload,
+    FindingEvidenceObservationPayload,
     FindingPayload,
     HostPayload,
     PortPayload,
@@ -35,6 +38,7 @@ from api.services.hosts import upsert_hosts_for_scan
 from api.services.industrial import persist_industrial_services
 from api.services.inventory import reconcile_scan_inventory
 from api.services.risk import refresh_risk_snapshot
+from api.services.scan_evidence import reduce_finding_evidence
 
 
 class ScanOwnershipError(Exception):
@@ -123,6 +127,13 @@ def persist_scan(
             scan_mode=scan.scan_mode,
             metadata_json=scan.metadata,
             coverage_json=[unit.model_dump(mode="json") for unit in scan.coverage],
+            finding_evidence_policy_version=scan.finding_evidence_policy_version,
+            finding_observations_json=(
+                _merge_observation_json([], scan.finding_observations)
+                if scan.finding_evidence_policy_version is not None
+                else None
+            ),
+            finding_observations_truncated=scan.finding_observations_truncated,
             assessment_policy_version=scan.assessment_policy_version,
             status="completed",
         )
@@ -141,6 +152,24 @@ def persist_scan(
         scan_record.coverage_json = [
             unit.model_dump(mode="json") for unit in scan.coverage
         ]
+        scan_record.finding_evidence_policy_version = (
+            scan.finding_evidence_policy_version
+            or scan_record.finding_evidence_policy_version
+        )
+        full_scan_observations = _all_observation_json(
+            scan_record.finding_observations_json or [], scan.finding_observations
+        )
+        merged_scan_observations = full_scan_observations[:512]
+        scan_record.finding_observations_json = (
+            merged_scan_observations
+            if scan_record.finding_evidence_policy_version is not None
+            else None
+        )
+        scan_record.finding_observations_truncated = (
+            scan_record.finding_observations_truncated
+            or scan.finding_observations_truncated
+            or len(full_scan_observations) > 512
+        )
         scan_record.status = "completed"
         scan_record.assessment_policy_version = scan.assessment_policy_version
         scan_record.agent_id = agent_id
@@ -211,10 +240,21 @@ def persist_scan(
             session,
             scan_id=scan.scan_id,
             finding=finding,
+            finding_evidence_policy_version=scan.finding_evidence_policy_version,
+            standalone_observations=[
+                FindingEvidenceObservationPayload.model_validate(value)
+                for value in scan_record.finding_observations_json or []
+            ],
+            standalone_observations_truncated=(
+                scan_record.finding_observations_truncated
+            ),
             scan_host_record=scan_host_record,
             port_record=port_record,
             modbus_unit_id=modbus_unit_id,
         )
+
+    if scan.finding_observations or scan.finding_observations_truncated:
+        _reassess_scan_findings(session, scan_record)
 
     upsert_hosts_for_scan(session, scan_record, scan)
 
@@ -287,6 +327,9 @@ def upsert_finding(
     *,
     scan_id: UUID,
     finding: FindingPayload,
+    finding_evidence_policy_version: str | None = None,
+    standalone_observations: Sequence[FindingEvidenceObservationPayload] = (),
+    standalone_observations_truncated: bool = False,
     scan_host_record: ScanHostRecord | None,
     port_record: PortRecord | None,
     confidence: str | None = None,
@@ -316,7 +359,64 @@ def upsert_finding(
         if value is not None
     ]
     merged_references = sorted(set((references or [])).union(finding.references))
-    chosen_confidence = confidence or initial_confidence_for_finding(finding)
+    existing_policy_version = (
+        existing.finding_evidence_policy_version if existing is not None else None
+    )
+    policy_version = (
+        finding_evidence_policy_version or existing_policy_version
+    )
+    prior_observations = (
+        existing.evidence_observations_json or [] if existing is not None else []
+    )
+    merged_observations = _merge_observation_json(
+        prior_observations,
+        [*finding.evidence_observations, *standalone_observations],
+    )
+    evidence_truncated = (
+        (existing.evidence_truncated if existing is not None else False)
+        or finding.evidence_truncated
+        or standalone_observations_truncated
+    )
+    issue_key = existing.issue_key if existing is not None else None
+    issue_key_ambiguous = (
+        existing.issue_key_ambiguous if existing is not None else False
+    )
+    if finding.issue_key is not None:
+        if issue_key is None and not issue_key_ambiguous:
+            issue_key = finding.issue_key
+        elif issue_key != finding.issue_key:
+            issue_key = None
+            issue_key_ambiguous = True
+    allowed_conditions = sorted(
+        {
+            item.get("condition_key")
+            for item in merged_observations
+            if isinstance(item.get("condition_key"), str)
+        }
+    )
+    if policy_version is not None:
+        assessment = reduce_finding_evidence(
+            merged_observations,
+            cve_id=finding.cve_id,
+            issue_key=issue_key,
+            ip=str(finding.ip) if finding.ip is not None else None,
+            port=finding.port,
+            protocol=finding.protocol,
+            unit_id=finding.unit_id,
+            policy_version=policy_version,
+            evidence_truncated=evidence_truncated,
+            issue_key_ambiguous=issue_key_ambiguous,
+            allowed_conditions=allowed_conditions,
+        )
+        merged_observations = [
+            item.model_dump(mode="json") for item in assessment.observations
+        ]
+        evidence_truncated = assessment.evidence_truncated
+        chosen_confidence = assessment.confidence
+    else:
+        chosen_confidence = confidence or initial_confidence_for_finding(finding)
+        if issue_key_ambiguous:
+            chosen_confidence = "tentative"
 
     if existing is None:
         record = FindingRecord(
@@ -334,6 +434,13 @@ def upsert_finding(
             cvss_score=finding.cvss_score,
             severity=finding.severity,
             confidence=chosen_confidence,
+            finding_evidence_policy_version=policy_version,
+            evidence_observations_json=(
+                merged_observations if policy_version is not None else None
+            ),
+            evidence_truncated=evidence_truncated,
+            issue_key=issue_key,
+            issue_key_ambiguous=issue_key_ambiguous,
             title=finding.title,
             description=finding.description,
             recommendation=finding.recommendation,
@@ -351,7 +458,18 @@ def upsert_finding(
 
     existing.cvss_score = _prefer_float(existing.cvss_score, finding.cvss_score)
     existing.severity = _max_severity(existing.severity, finding.severity)
-    existing.confidence = _max_confidence(existing.confidence, chosen_confidence)
+    existing.confidence = (
+        chosen_confidence
+        if policy_version is not None or issue_key_ambiguous
+        else _max_confidence(existing.confidence, chosen_confidence)
+    )
+    existing.finding_evidence_policy_version = policy_version
+    existing.evidence_observations_json = (
+        merged_observations if policy_version is not None else None
+    )
+    existing.evidence_truncated = evidence_truncated
+    existing.issue_key = issue_key
+    existing.issue_key_ambiguous = issue_key_ambiguous
     existing.references_json = sorted(
         set(existing.references_json).union(merged_references)
     )
@@ -390,6 +508,67 @@ def initial_confidence_for_finding(finding: FindingPayload) -> str:
     if finding.cve_id:
         return "probable"
     return "tentative"
+
+
+def _merge_observation_json(
+    existing: Sequence[dict[str, Any]] | None,
+    incoming: Sequence[FindingEvidenceObservationPayload | dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return _all_observation_json(existing, incoming)[:512]
+
+
+def _all_observation_json(
+    existing: Sequence[dict[str, Any]] | None,
+    incoming: Sequence[FindingEvidenceObservationPayload | dict[str, Any]],
+) -> list[dict[str, Any]]:
+    values: dict[str, dict[str, Any]] = {}
+    for item in [*(existing or []), *incoming]:
+        value = item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+        key = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        values[key] = value
+    return [values[key] for key in sorted(values)]
+
+
+def _reassess_scan_findings(session: Session, scan_record: ScanRecord) -> None:
+    for record in session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan_record.scan_id)
+    ).all():
+        if record.finding_evidence_policy_version is None:
+            continue
+        observations = _merge_observation_json(
+            record.evidence_observations_json or [],
+            [
+                FindingEvidenceObservationPayload.model_validate(value)
+                for value in scan_record.finding_observations_json or []
+            ],
+        )
+        modbus_unit = (
+            session.get(ModbusUnitRecord, record.modbus_unit_id)
+            if record.modbus_unit_id is not None
+            else None
+        )
+        assessment = reduce_finding_evidence(
+            observations,
+            cve_id=record.cve_id,
+            issue_key=record.issue_key,
+            ip=record.ip,
+            port=record.port,
+            protocol=record.protocol,
+            unit_id=modbus_unit.unit_id if modbus_unit is not None else None,
+            policy_version=record.finding_evidence_policy_version,
+            evidence_truncated=(
+                record.evidence_truncated
+                or scan_record.finding_observations_truncated
+            ),
+            issue_key_ambiguous=record.issue_key_ambiguous,
+        )
+        record.evidence_observations_json = [
+            item.model_dump(mode="json") for item in assessment.observations
+        ]
+        record.evidence_truncated = assessment.evidence_truncated
+        record.confidence = assessment.confidence
+        session.add(record)
+        refresh_risk_snapshot(session, record)
 
 
 def _persist_scan_host(

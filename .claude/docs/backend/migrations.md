@@ -1,7 +1,7 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261012_40`.
+description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261017_41`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
 timestamp: 2026-10-14T00:00:00Z
@@ -35,7 +35,9 @@ registration identity, and AI table security; `20260927_37` rebuilds `ck_activit
 adds `scans.coverage_json` and downgrades historical NVD/vulners CVE confidence to `probable`.
 `20261002_39` adds the separate live-progress snapshot, monotonic sequence, and server receipt timestamp to scans.
 `20261012_40` adds `deleted_scans` and the grants admin deletion needs.
-Head is `20261012_40`.
+`20261010_40` adds finding and scan evidence policy metadata.
+`20261017_41` merges evidence and deletion without changing their deployed revision IDs.
+Head is `20261017_41`.
 
 ## Key classes / functions
 
@@ -137,7 +139,7 @@ Head is `20261012_40`.
   `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
   `20260912_24` adds `ai_scan_analyses`. `20260912_25` adds enrichment retries, `20260912_26`
   adds AI retries, `20260920_33` adds attack-surface profiles, `20260927_37` adds the `scan_cancelled`
-  activity kind, `20260928_38` (scan evidence coverage), `20261002_39` (live scan progress), and `20261012_40` (scan/machine deletion) is the current head.
+  activity kind, `20260928_38` (scan evidence coverage), `20261002_39` (live scan progress), `20261010_40` (finding evidence), and `20261012_40` (scan/machine deletion); `20261017_41` merges the two feature branches into the current head.
   `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations

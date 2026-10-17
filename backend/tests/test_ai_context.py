@@ -1,15 +1,23 @@
 import pytest
-from api.models.persistence import EpssRecord, KevRecord, RiskSnapshotRecord
+from api.models.persistence import (
+    AIScanAnalysisRecord,
+    EpssRecord,
+    KevRecord,
+    RiskSnapshotRecord,
+)
 from api.schemas.ai import (
     AIProviderFindingExplanation,
     AIProviderRecommendedAction,
     ProviderScanAIAnalysis,
 )
+from api.services.ai.analyzer import split_context
 from api.services.ai.context import (
     ScanAINotReadyError,
+    build_finding_contexts,
     build_scan_ai_context,
     materialize_scan_ai_analysis,
 )
+from api.services.read import get_scan_detail
 from read_factories import seed_read_graph
 
 
@@ -65,7 +73,7 @@ def test_context_uses_ranked_bounded_enriched_findings(
     )
 
     assert context is not None
-    assert context.context_version == "4"
+    assert context.context_version == "5"
     assert context.host_count == 2
     assert context.total_findings == 2
     assert context.scored_findings == 2
@@ -103,13 +111,13 @@ def test_context_maps_partial_scan_termination(
     seeded = seed_read_graph(administrative_session)
     seeded["scan"].metadata_json = {
         "partial_result": True,
-        "terminated_by": terminated_by,
+        **({"terminated_by": terminated_by} if terminated_by is not None else {}),
     }
 
     context = build_scan_ai_context(administrative_session, seeded["scan"])
 
     assert context is not None
-    assert context.context_version == "4"
+    assert context.context_version == "5"
     assert context.evidence_completeness == "partial"
     assert context.stopped_by == stopped_by
 
@@ -123,6 +131,33 @@ def test_context_marks_complete_scan_as_complete(administrative_session):
     assert context is not None
     assert context.evidence_completeness == "complete"
     assert context.stopped_by is None
+
+
+def test_building_v5_context_leaves_saved_analysis_unchanged(
+    administrative_session,
+):
+    seeded = seed_read_graph(administrative_session)
+    saved_payload = {"executive_summary": "Saved legacy explanation."}
+    saved = AIScanAnalysisRecord(
+        scan_id=seeded["scan"].scan_id,
+        provider="groq",
+        model="legacy-model",
+        language="en",
+        status="completed",
+        analysis_json=saved_payload,
+        context_version="4",
+        prompt_version="6",
+    )
+    administrative_session.add(saved)
+    administrative_session.commit()
+
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+
+    assert context is not None
+    administrative_session.refresh(saved)
+    assert saved.analysis_json == saved_payload
+    assert saved.context_version == "4"
+    assert saved.prompt_version == "6"
 
 
 def test_context_sends_only_public_facts_and_placeholders(
@@ -152,6 +187,73 @@ def test_context_sends_only_public_facts_and_placeholders(
         assert value not in payload
     assert '"finding_ref":"finding_1"' in payload
     assert '"machine_ref":"machine_1"' in payload
+
+
+@pytest.mark.parametrize(
+    ("method", "status", "confidence", "truncated", "source", "basis"),
+    [
+        ("unknown", "unknown", None, False, "legacy", "unknown"),
+        (
+            "specific_check", "inconclusive", "tentative", False,
+            "nse", "target_observation",
+        ),
+        (
+            "configuration_observation", "conflicting", "tentative", False,
+            "nse", "target_observation",
+        ),
+        (
+            "version_correlation", "supported", "probable", False,
+            "nvd_enrichment", "cve_correlation",
+        ),
+        ("specific_check", "supported", "confirmed", True, "nse", "target_observation"),
+    ],
+)
+def test_finding_context_preserves_evidence_limits_without_raw_fields(
+    administrative_session, method, status, confidence, truncated, source, basis
+):
+    seeded = seed_read_graph(administrative_session)
+    detail = get_scan_detail(
+        administrative_session, seeded["scan"].scan_id, org_id=seeded["org"].id
+    )
+    assert detail is not None
+    evidence_observations = [{
+        "condition_key": "CVE-2024-10001",
+        "method": method,
+        "result": "inconclusive",
+        "source": source,
+        "source_script": "RAW_SCRIPT_SENTINEL",
+        "rule_id": "RAW_RULE_SENTINEL",
+        "rule_version": "1",
+        "evidence": "RAW_OBSERVATION_SENTINEL",
+        "facts": {"RAW_FACT_KEY_SENTINEL": "RAW_FACT_VALUE_SENTINEL"},
+    }] if basis != "unknown" else []
+    finding = detail.findings[0].model_copy(
+        update={
+            "title": "RAW_TITLE_SENTINEL",
+            "evidence": "RAW_EVIDENCE_SENTINEL",
+            "source": source,
+            "cve_id": "CVE-2024-10001" if method == "version_correlation" else None,
+            "detection_method": method,
+            "evidence_status": status,
+            "confidence": confidence,
+            "evidence_truncated": truncated,
+            "evidence_observations": evidence_observations,
+        }
+    )
+    bundle = build_finding_contexts([finding], machine_refs={})
+    context = bundle.contexts[0]
+
+    assert context.evidence_basis == basis
+    assert context.detection_method == method
+    assert context.evidence_status == status
+    assert context.evidence_truncated is truncated
+    serialized = context.model_dump_json()
+    for raw_value in (
+        "RAW_TITLE_SENTINEL", "RAW_EVIDENCE_SENTINEL", "RAW_SCRIPT_SENTINEL",
+        "RAW_RULE_SENTINEL", "RAW_OBSERVATION_SENTINEL",
+        "RAW_FACT_KEY_SENTINEL", "RAW_FACT_VALUE_SENTINEL",
+    ):
+        assert raw_value not in serialized
 
 
 def test_materialize_analysis_replaces_local_references(administrative_session):
@@ -221,6 +323,27 @@ def test_context_requires_completed_scan(administrative_session):
 
     with pytest.raises(ScanAINotReadyError):
         build_scan_ai_context(administrative_session, seeded["scan"])
+
+
+def test_split_context_keeps_full_evidence_summary(administrative_session):
+    seeded = seed_read_graph(administrative_session)
+    context = build_scan_ai_context(administrative_session, seeded["scan"])
+    assert context is not None
+    context.top_findings = [
+        context.top_findings[0],
+        context.top_findings[0].model_copy(update={"finding_ref": "finding_2"}),
+    ]
+    context._finding_ids_by_ref["finding_2"] = seeded["other_finding"].finding_id
+    context._display_values_by_ref["finding_2"] = "Second finding"
+
+    chunks = split_context(context, child_findings=1)
+
+    assert len(chunks) == 2
+    assert [chunk.top_findings[0].finding_ref for chunk in chunks] == [
+        "finding_1", "finding_2"
+    ]
+    assert all(chunk.evidence_summary == context.evidence_summary for chunk in chunks)
+    assert all(chunk.context_version == "5" for chunk in chunks)
 
 
 @pytest.mark.parametrize("max_findings", [0, 16])

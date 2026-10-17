@@ -9,7 +9,10 @@ from api.schemas.ai import AILanguage, ScanAIAnalysis
 from api.schemas.read import FindingRead, ScanDetailResponse
 from api.schemas.reports import ReportEducation
 from api.services.report_education_copy import guide, text
-from api.services.scan_evidence import is_cve_correlation
+from api.services.scan_evidence import (
+    is_cve_correlation,
+    summarize_finding_evidence,
+)
 
 SEVERITIES = ("critical", "high", "medium", "low")
 
@@ -75,24 +78,33 @@ def service_family(service: str | None) -> str:
     return "other_service"
 
 
-def _group_key(finding: FindingRead) -> tuple[str, str, int | None, str | None]:
+def _group_key(
+    finding: FindingRead,
+) -> tuple[str, str, int | None, str | None, str, str, str | None, bool]:
     address = str(finding.host_ip) if finding.host_ip else ""
     if finding.source_script == "smb-protocols" and "smbv1" in (
         finding.title + " " + finding.evidence
     ).casefold():
-        return address, "smb_v1", finding.port, finding.protocol
-    if finding.source_script == "ssh-auth-methods" and "password" in (
+        category = "smb_v1"
+    elif finding.source_script == "ssh-auth-methods" and "password" in (
         finding.title + " " + finding.evidence
     ).casefold():
-        return address, "ssh_password", finding.port, finding.protocol
-    if _basis(finding) == "correlation":
-        return address, "cve_" + service_family(finding.service), (
-            finding.port
-        ), finding.protocol
-    # Different observations must not become one assumed vulnerability.
-    return address, "observed_" + str(finding.finding_id), (
-        finding.port
-    ), finding.protocol
+        category = "ssh_password"
+    elif _basis(finding) == "correlation":
+        category = "cve_" + service_family(finding.service)
+    else:
+        # Different observations must not become one assumed vulnerability.
+        category = "observed_" + str(finding.finding_id)
+    return (
+        address,
+        category,
+        finding.port,
+        finding.protocol,
+        finding.detection_method,
+        finding.evidence_status,
+        finding.confidence,
+        finding.evidence_truncated,
+    )
 
 
 def _severity_counts(findings: list[FindingRead]) -> dict[str, int]:
@@ -103,6 +115,42 @@ def _severity_counts(findings: list[FindingRead]) -> dict[str, int]:
 def _maximum_severity(findings: list[FindingRead]) -> str | None:
     counts = _severity_counts(findings)
     return next((key for key in SEVERITIES if counts[key]), None)
+
+
+def finding_semantic_limit(
+    method: str, status: str, confidence: str | None, language: AILanguage,
+    *, evidence_truncated: bool = False, has_observations: bool = False,
+) -> str | None:
+    """Explain why a record cannot be read as a demonstrated target condition."""
+    if status == "supported" and method == "version_correlation":
+        return text("limit_version_correlation", language)
+    if (
+        status == "supported"
+        and method == "specific_check"
+        and confidence == "confirmed"
+        and has_observations
+    ):
+        return text("limit_specific_check", language)
+    if (
+        status == "supported"
+        and method == "configuration_observation"
+        and confidence == "confirmed"
+        and has_observations
+        and not evidence_truncated
+    ):
+        return None
+    if status == "textual_reference" or method == "textual_reference":
+        key = "limit_textual_reference"
+    elif status == "conflicting":
+        key = "limit_conflicting"
+    elif status == "inconclusive":
+        key = "limit_inconclusive"
+    elif status == "unknown" or method == "unknown":
+        key = "limit_unknown"
+    else:
+        key = "limit_unvalidated"
+    return text(key, language, method=text("method_" + method, language),
+                status=text("status_" + status, language))
 
 
 def _advisory_effects(description: str, language: AILanguage) -> list[str]:
@@ -144,15 +192,19 @@ def build_report_education(
         host_findings[address].append(finding)
     hosts = {str(host.ip): host for host in detail.hosts}
     observations = Counter(_basis(finding) for finding in detail.findings)
-    groups: dict[tuple[str, str, int | None, str | None], list[FindingRead]] = (
-        defaultdict(list)
-    )
+    groups: dict[
+        tuple[str, str, int | None, str | None, str, str, str | None, bool],
+        list[FindingRead],
+    ] = defaultdict(list)
     for finding in detail.findings:
         groups[_group_key(finding)].append(finding)
     issue_groups = []
     group_by_finding: dict[str, str] = {}
     for index, (key, findings) in enumerate(groups.items(), start=1):
-        address, category, port, protocol = key
+        (
+            address, category, port, protocol, detection_method,
+            evidence_status, confidence, evidence_truncated,
+        ) = key
         host = hosts.get(address)
         observed_port = next(
             (
@@ -167,6 +219,16 @@ def build_report_education(
             else category if category in {"smb_v1", "ssh_password"}
             else "other_service"
         )
+        semantic_supported = all(
+            finding.detection_method == "configuration_observation"
+            and finding.evidence_status == "supported"
+            and finding.confidence == "confirmed"
+            and bool(finding.evidence_observations)
+            and not finding.evidence_truncated
+            for finding in findings
+        )
+        if category in {"smb_v1", "ssh_password"} and not semantic_supported:
+            family = service_family(findings[0].service)
         profile = guide(family, language)
         group_id = f"G{index:02d}"
         basis = _basis(findings[0])
@@ -178,6 +240,15 @@ def build_report_education(
             "category": category,
             "family": family,
             "basis": basis,
+            "detection_method": detection_method,
+            "evidence_status": evidence_status,
+            "confidence": confidence,
+            "evidence_truncated": evidence_truncated,
+            "evidence_observations": [
+                observation.model_dump(mode="json")
+                for item in findings
+                for observation in item.evidence_observations
+            ],
             "title": profile["name"],
             "port": port,
             "protocol": protocol,
@@ -191,8 +262,15 @@ def build_report_education(
             "meaning": profile["meaning"],
             "impact": profile["impact"],
             "conditions": text("reachability", language),
-            "uncertainty": text("correlation_limit", language)
-            if basis == "correlation" else profile["uncertainty"],
+            "uncertainty": (
+                finding_semantic_limit(
+                    detection_method, evidence_status, confidence, language,
+                    evidence_truncated=evidence_truncated,
+                    has_observations=bool(findings[0].evidence_observations),
+                )
+                or (text("correlation_limit", language)
+                    if basis == "correlation" else profile["uncertainty"])
+            ),
             "steps": profile["steps"],
             "verify": profile["verify"],
             "recorded_observations": [
@@ -242,6 +320,11 @@ def build_report_education(
                 "category": "service_shell" if shell else "service_review",
                 "family": family,
                 "basis": "service", "title": profile["name"],
+                "detection_method": "unknown",
+                "evidence_status": "unknown",
+                "confidence": None,
+                "evidence_truncated": False,
+                "evidence_observations": [],
                 "port": port.port, "protocol": port.protocol,
                 "service": port.service, "version": port.version,
                 "finding_count": 0, "severity": None, "severity_counts": {},
@@ -332,6 +415,20 @@ def build_report_education(
             "port": finding.port, "protocol": finding.protocol,
             "title": finding.cve_id or finding.title,
             "severity": finding.severity, "basis": _basis(finding),
+            "detection_method": finding.detection_method,
+            "evidence_status": finding.evidence_status,
+            "confidence": finding.confidence,
+            "evidence_truncated": finding.evidence_truncated,
+            "semantic_limit": finding_semantic_limit(
+                finding.detection_method, finding.evidence_status,
+                finding.confidence, language,
+                evidence_truncated=finding.evidence_truncated,
+                has_observations=bool(finding.evidence_observations),
+            ),
+            "evidence_observations": [
+                observation.model_dump(mode="json")
+                for observation in finding.evidence_observations
+            ],
             "description": finding.description,
             "recommendation": explanation.recommendation if explanation
             else finding.recommendation,
@@ -355,6 +452,16 @@ def build_report_education(
         "severity_counts": _severity_counts(detail.findings),
         "evidence_counts": {key: observations[key]
                             for key in ("observation", "correlation", "other")},
+        "evidence_summary": (
+            detail.evidence_summary.model_dump(mode="json")
+            if detail.evidence_summary is not None
+            else summarize_finding_evidence(detail.findings, scope="scan")
+        ),
+        "finding_observations": [
+            observation.model_dump(mode="json")
+            for observation in detail.finding_observations
+        ],
+        "finding_observations_truncated": detail.finding_observations_truncated,
         "service_counts": dict(service_counts),
         "affected_hosts": sum(item["finding_count"] > 0 for item in devices),
         "hosts_without_findings": sum(item["finding_count"] == 0 for item in devices),

@@ -112,6 +112,13 @@ def _iter_algorithms(
 ) -> Iterable[tuple[str, str, list[str], list[str], Mapping[str, Any]]]:
     if depth > 32:
         return
+    if isinstance(value, list):
+        # Native ssh-audit 3.9.0 sections contain algorithm/notes records.
+        for row in value:
+            yield from _iter_algorithms(
+                row.get("notes", {}), section, row["algorithm"], depth + 1
+            )
+        return
     if not isinstance(value, Mapping):
         return
     fails, warns = _notes(value)
@@ -145,9 +152,19 @@ def _parse(payload: Any, unit: TargetedUnit) -> tuple[list[TargetedIssue], bool]
     issues: list[TargetedIssue] = []
     if not isinstance(payload, Mapping) or not payload:
         return [], False
-    for key in payload:
-        section = _SECTIONS.get(str(key).casefold())
-        if section is not None and not isinstance(payload[key], Mapping):
+    for key, value in payload.items():
+        if str(key).casefold() not in _SECTIONS:
+            continue
+        if isinstance(value, list):
+            if any(
+                not isinstance(row, Mapping)
+                or not isinstance(row.get("algorithm"), str)
+                or not row["algorithm"].strip()
+                or not isinstance(row.get("notes", {}), Mapping)
+                for row in value
+            ):
+                return [], False
+        elif not isinstance(value, Mapping):
             return [], False
     if not any(
         str(key).casefold() in _SECTIONS
@@ -175,6 +192,13 @@ def _parse(payload: Any, unit: TargetedUnit) -> tuple[list[TargetedIssue], bool]
                 sanitize_evidence(f"ssh-audit: {category}={name}; {text}"),
                 cve_id=cve_id,
                 cvss_score=score,
+                method="configuration_observation",
+                result="positive" if fails else "inconclusive",
+                rule_id="targeted:ssh-audit-algorithm",
+                facts={
+                    "primitive": sanitize_evidence(name, 160),
+                    "finding": sanitize_evidence(text, 160),
+                },
             )
             if issue.issue_key not in {existing.issue_key for existing in issues}:
                 issues.append(issue)

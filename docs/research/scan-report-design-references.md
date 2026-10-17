@@ -56,3 +56,33 @@ Primary sources consulted for concrete interpretation limits and remediation gui
   maliciously modified distribution; a version banner does not establish package provenance.
 - [CISA StopRansomware guide](https://www.cisa.gov/stopransomware/ransomware-guide): apply controlled
   network separation and protect backups; verify restoration and normal operation after changes.
+
+## Documentation gap — remediation priority
+
+The report guidance above already says that CVSS describes technical severity, not overall
+network risk, and that a CVE correlation does not prove applicability or exploitation. The
+finding-evidence specification also keeps exploit availability, CVSS, KEV and EPSS separate from
+evidence confidence. These statements do not yet give readers a complete, operational explanation
+of how to prioritize remediation or when a finding should be treated as requiring correction.
+
+Document this distinction in the user-facing report/help text and in the project article:
+
+- Explain that CVSS severity (and its score bands, with the CVSS version named) describes potential
+  technical impact; it does not by itself establish exploit availability, likelihood of attack,
+  applicability to the installed product, or remediation priority.
+- Explain that remediation priority may also depend on confirmed applicability and evidence
+  confidence, known exploitation (including KEV or a public exploit when verified), network
+  exposure, and the affected asset's operational importance. Name only factors the product actually
+  has data for; identify unavailable factors as unknown rather than inferred.
+- State when users should treat an item as requiring correction: distinguish an observed insecure
+  configuration or a specific check that supports the condition from a version-to-CVE correlation
+  that still needs validation against the vendor's package/version and environment. Give actionable
+  validation, mitigation/correction, and post-change verification steps where the evidence supports
+  them.
+- Do not claim that the product computes an exploit probability or an automatic remediation order
+  unless that behavior exists and is verified in code. Keep severity, evidence confidence, and
+  remediation priority visibly distinct.
+
+This is a documentation follow-up, not a claim that the current product already calculates a
+complete risk-based correction priority. Before publishing specific thresholds or deadlines, verify
+them against implemented behavior and cite the applicable CVSS version/source.

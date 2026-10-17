@@ -33,6 +33,7 @@ describe('ScanReports', () => {
           scan_id: 'scan-1',
           assessment_status: 'unavailable',
           assessment_policy_version: null,
+          finding_observations_truncated: false,
           hosts: [],
           exposures: [],
           findings: [
@@ -41,6 +42,9 @@ describe('ScanReports', () => {
               scan_id: 'scan-1',
               title: 'Raw scan finding',
               severity: 'high',
+              detection_method: 'unknown',
+              evidence_status: 'unknown',
+              evidence_truncated: false,
               description: 'Observed service issue.',
               recommendation: 'Review the service.',
               evidence: 'Service banner.',

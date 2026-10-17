@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "split": "development",
+  "notes": {
+    "sample_size": 4,
+    "limitations": [
+      "Small synthetic examples exercise representative parser states only.",
+      "Labels classify the reduced response, not the actual security state of any device.",
+      "All addresses and content are fictitious test data."
+    ]
+  },
+  "baseline": {
+    "id": "findings-extractor-471739f",
+    "source_revision": "471739f",
+    "artifact": "baseline-471739f.json",
+    "description": "Auditable predictions from the pre-change extract_findings implementation pinned at 471739f, run on the evaluation corpus."
+  },
+  "cases": [
+    {
+      "id": "dev-smb-signing-not-required",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb2-security-mode"
+      },
+      "condition": "SMB message signing is not required on TCP/445",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "configuration_observation",
+      "input": {
+        "ip": "192.0.2.40",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "Message signing enabled but not required",
+        "data": null
+      }
+    },
+    {
+      "id": "dev-smbv1-offered",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb-protocols"
+      },
+      "condition": "SMBv1 is offered on TCP/139",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "configuration_observation",
+      "input": {
+        "ip": "192.0.2.41",
+        "port": 139,
+        "protocol": "tcp",
+        "service": "netbios-ssn",
+        "output": "NT LM 0.12 (SMBv1) offered",
+        "data": null
+      }
+    },
+    {
+      "id": "dev-ssh-password-authentication",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "ssh-auth-methods"
+      },
+      "condition": "SSH advertises password authentication on TCP/2222",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "configuration_observation",
+      "input": {
+        "ip": "192.0.2.42",
+        "port": 2222,
+        "protocol": "tcp",
+        "service": "ssh",
+        "output": "Supported authentication methods: publickey,password",
+        "data": null
+      }
+    },
+    {
+      "id": "dev-unrecognized-tls-cipher-response",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "ssl-enum-ciphers"
+      },
+      "condition": "Cipher response cannot be interpreted on TCP/8443",
+      "reference_label": "not_evaluable",
+      "expected_current": "not_evaluable",
+      "expected_method": null,
+      "input": {
+        "ip": "192.0.2.43",
+        "port": 8443,
+        "protocol": "tcp",
+        "service": "https",
+        "output": "Cipher negotiation returned no supported cipher details",
+        "data": null
+      }
+    }
+  ]
+}

@@ -84,6 +84,48 @@ def test_get_scan_by_id_happy_path(
     assert all(row["device_profile"] is None for row in body["hosts"])
 
 
+def test_scan_evidence_summary_counts_findings_not_standalone_observations(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["finding"].confidence = "confirmed"
+    seeded["scan"].finding_observations_json = [
+        {
+            "ip": "192.168.1.10",
+            "port": 445,
+            "protocol": "tcp",
+            "condition_key": "smb:signing",
+            "method": "specific_check",
+            "result": "negative",
+            "source": "nmap_nse",
+            "source_script": "smb2-security-mode",
+            "rule_id": "nse:smb2-security-mode",
+            "rule_version": "1",
+            "evidence": "Signing is required.",
+            "facts": {"signing_required": True},
+        }
+    ]
+    administrative_session.add_all((seeded["finding"], seeded["scan"]))
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    summary = body["evidence_summary"]
+    assert summary["scope"] == "scan"
+    assert summary["total_records"] == 2
+    assert sum(summary["by_method"].values()) == 2
+    assert len(body["finding_observations"]) == 1
+    assert body["finding_observations"][0]["result"] == "negative"
+    assert summary["total_records"] != len(body["findings"]) + len(
+        body["finding_observations"]
+    )
+
+
 def test_current_scan_returns_profile_stable_exposures_and_related_findings(
     client: TestClient, administrative_session: Session, bearer_headers
 ) -> None:

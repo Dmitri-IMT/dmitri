@@ -8,7 +8,12 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from typing_extensions import TypedDict
 
 from api.schemas.ai import AILanguage, ScanAIAnalysisCompleted
-from api.schemas.read import ScanDetailResponse, ScanRiskSummaryResponse
+from api.schemas.read import (
+    FindingEvidenceSummary,
+    ScanDetailResponse,
+    ScanRiskSummaryResponse,
+)
+from api.schemas.scan import FindingEvidenceObservationPayload
 
 ReportKind = Literal["explained", "technical"]
 
@@ -63,7 +68,15 @@ class ReportAdvisoryNote(TypedDict):
     url: str
 
 
-class ReportIssueGroup(TypedDict):
+class ReportFindingEvidence(TypedDict):
+    detection_method: str
+    evidence_status: str
+    confidence: str | None
+    evidence_truncated: bool
+    evidence_observations: list[FindingEvidenceObservationPayload]
+
+
+class ReportIssueGroup(ReportFindingEvidence):
     id: str
     address: str | None
     hostname: str | None
@@ -90,7 +103,8 @@ class ReportIssueGroup(TypedDict):
     advisory_notes: list[ReportAdvisoryNote]
 
 
-class ReportFinding(TypedDict):
+class ReportFinding(ReportFindingEvidence):
+    semantic_limit: str | None
     finding_id: str
     group: str
     address: str | None
@@ -129,6 +143,9 @@ class ReportEducation(TypedDict):
     issue_groups: list[ReportIssueGroup]
     severity_counts: dict[str, int]
     evidence_counts: dict[str, int]
+    evidence_summary: FindingEvidenceSummary
+    finding_observations: list[FindingEvidenceObservationPayload]
+    finding_observations_truncated: bool
     service_counts: dict[str, int]
     affected_hosts: int
     hosts_without_findings: int

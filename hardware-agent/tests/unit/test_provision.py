@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from uuid import uuid4
 
@@ -16,6 +17,11 @@ from agent.transport.provision import (
 )
 
 
+def _assert_private_mode(path) -> None:
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
 def test_plain_http_is_refused() -> None:
     with pytest.raises(ProvisionError, match="https://"):
         parse_https_url("http://backend.example")
@@ -27,7 +33,7 @@ def test_the_key_is_created_once_and_kept_private(tmp_path) -> None:
     first = load_or_create_key(env_file)
 
     assert load_or_create_key(env_file) == first
-    assert stat.S_IMODE((tmp_path / "device.key").stat().st_mode) == 0o600
+    _assert_private_mode(tmp_path / "device.key")
     assert not env_file.exists()
     assert not is_provisioned(env_file)
 
@@ -140,7 +146,7 @@ def test_retry_after_backend_commit_keeps_identity(tmp_path, monkeypatch, failur
     assert keys[0] == keys[1]
     assert load_or_create_key(env_file) == key
     assert f"DEVICE_ID={agent_id}" in env_file.read_text()
-    assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    _assert_private_mode(env_file)
 
 
 def test_legacy_partial_env_keeps_its_key(tmp_path):

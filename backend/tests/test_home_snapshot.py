@@ -8,7 +8,12 @@ from api.core.home_constants import (
     HOME_ATTENTION_PER_PAGE,
 )
 from api.models.identity import Org
-from api.models.persistence import HostRecord, ScanHostRecord, ScanRecord
+from api.models.persistence import (
+    FindingRecord,
+    HostRecord,
+    ScanHostRecord,
+    ScanRecord,
+)
 from api.services.activity import ActivityAppend, append_activity
 from api.services.home import read_home_snapshot
 from read_factories import make_finding, make_host, make_org, make_scan, make_scan_host
@@ -322,3 +327,26 @@ def test_attention_rows_carry_the_machines_current_name(
 
     assert [row.host_hostname for row in attention.data] == ["renamed-machine"]
     assert [row.host_id for row in attention.data] == [host.id]
+
+
+def test_home_attention_keeps_review_items_and_persisted_confidence(
+    administrative_session: Session,
+) -> None:
+    org, scan = _seed_attention(
+        administrative_session, name="Evidence Home", severities=["critical"]
+    )
+    finding = administrative_session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan.scan_id)
+    ).one()
+    finding.confidence = "probable"
+    administrative_session.add(finding)
+    administrative_session.commit()
+
+    snapshot = _snapshot(administrative_session, org.id)
+
+    assert snapshot.attention.total == 1
+    assert snapshot.review_count == 1
+    assert len(snapshot.attention.data) == 1
+    assert snapshot.attention.data[0].confidence == "probable"
+    assert snapshot.attention.data[0].detection_method == "unknown"
+    assert snapshot.attention.data[0].evidence_status == "unknown"

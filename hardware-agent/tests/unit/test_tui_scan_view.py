@@ -13,6 +13,7 @@ from agent.normalize.contracts import (
     AssessmentEvidencePayload,
     DeviceProfilePayload,
     ExposurePayload,
+    FindingEvidenceObservationPayload,
     FindingPayload,
     HostPayload,
     PortPayload,
@@ -90,6 +91,17 @@ def _current_payload(*, findings: bool = True) -> ScanPayload:
                 description="A deprecated exchange is enabled",
                 recommendation="Disable the deprecated exchange",
                 evidence="diffie-hellman-group1-sha1",
+                evidence_observations=[
+                    FindingEvidenceObservationPayload(
+                        condition_key="CVE-2023-12345",
+                        method="textual_reference",
+                        result="inconclusive",
+                        source="nmap_nse",
+                        rule_id="nse:textual-cve-reference",
+                        rule_version="1",
+                        evidence="CVE-2023-12345 mentioned in output",
+                    )
+                ],
             )
         ]
         if findings
@@ -102,6 +114,33 @@ def _current_payload(*, findings: bool = True) -> ScanPayload:
         scan_mode="quick",
         hosts=[host],
         findings=finding_list,
+        finding_evidence_policy_version="1",
+        finding_observations=[
+            FindingEvidenceObservationPayload(
+                ip=host.ip,
+                port=80,
+                protocol="tcp",
+                condition_key="CVE-2020-1234",
+                method="unknown",
+                result="negative",
+                source="nmap_nse",
+                rule_id="nse:unknown-check",
+                rule_version="1",
+                evidence="The check returned not vulnerable.",
+            ),
+            FindingEvidenceObservationPayload(
+                ip=host.ip,
+                port=80,
+                protocol="tcp",
+                condition_key="CVE-2021-2345",
+                method="unknown",
+                result="inconclusive",
+                source="nmap_nse",
+                rule_id="nse:unknown-check",
+                rule_version="1",
+                evidence="The check could not determine the state.",
+            ),
+        ],
         assessment_policy_version="2026-09-15.1",
         exposures=[
             ExposurePayload(
@@ -148,10 +187,34 @@ def test_summary_keeps_inventory_exposures_and_findings_separate() -> None:
 
     assert "Inventory: 1 device · 2 open endpoints" in rendered
     assert "Attack surface: 2 exposures · 1 needs attention" in rendered
-    assert "Vulnerability findings: 1 finding" in rendered
+    assert "Vulnerability findings: 1 finding record" in rendered
+    assert "local policy v1" in rendered
+    assert "not backend enrichment" in rendered
+    assert "supported 0, conflicting 0, inconclusive 1" in rendered
+    assert "Standalone observations: 1 negative, 1 inconclusive" in rendered
+    assert "Counts do not mean proven failures." in rendered
     assert "2 findings" not in rendered
     assert "safe" not in rendered.casefold()
     assert "clean" not in rendered.casefold()
+
+
+def test_scan_renders_standalone_observation_details_separately_from_findings() -> None:
+    payload = _current_payload()
+    payload.finding_observations_truncated = True
+    payload.finding_observations[0].facts = {"matched_check": "router"}
+    screen = ScanViewScreen(payload=payload)
+
+    rendered = Text.from_markup(screen._render_payload(payload)).plain
+    assert "Vulnerability findings: 1 finding record" in rendered
+    assert "Standalone check observations (not vulnerability findings)" in rendered
+    assert "Condition: CVE-2020-1234" in rendered
+    assert "Result: negative · Method: unknown" in rendered
+    assert "Endpoint: 192.168.1.1 · 80/tcp" in rendered
+    assert "Source: nmap_nse · Rule: nse:unknown-check v1" in rendered
+    assert "Evidence excerpt: The check returned not vulnerable." in rendered
+    assert "Facts: matched_check=router" in rendered
+    assert "Only a sample of standalone observations is available." in rendered
+    assert "Standalone observation sample: 1 negative, 1 inconclusive" in rendered
 
 
 def test_summary_counts_duplicate_raw_ports_as_one_endpoint() -> None:
@@ -219,6 +282,21 @@ def test_current_empty_is_zero_while_legacy_is_unavailable() -> None:
     assert "Profile unavailable · exposures unavailable" in legacy_rendered
 
 
+@pytest.mark.parametrize("version", ["2", "[/bold]"])
+def test_unknown_evidence_policy_is_escaped_and_not_interpreted_as_version_one(
+    version: str,
+) -> None:
+    payload = _current_payload()
+    payload.finding_evidence_policy_version = version
+
+    rendered = Text.from_markup(
+        ScanViewScreen(payload=payload)._render_payload(payload)
+    ).plain
+
+    assert f"local policy {version} is not supported by this agent" in rendered
+    assert "Finding counts are records, not proven failures." in rendered
+
+
 @pytest.mark.parametrize(
     ("metadata", "expected", "unexpected"),
     [
@@ -268,6 +346,7 @@ async def test_mount_uses_stable_ids_focuses_devices_and_hides_legacy_note() -> 
             "#scan-result-header",
             "#scan-partial-banner",
             "#scan-category-summary",
+            "#scan-finding-observations",
             "#scan-enrichment-note",
             "#scan-devices-title",
             "#scan-device-list",
@@ -281,12 +360,17 @@ async def test_mount_uses_stable_ids_focuses_devices_and_hides_legacy_note() -> 
         assert screen.query_one("#scan-enrichment-note").display is False
         summary = str(screen.query_one("#scan-category-summary", Static).render())
         assert "2 exposures" in summary
-        assert "1 finding" in summary
+        assert "1 finding record" in summary
+        observations = str(
+            screen.query_one("#scan-finding-observations", Static).render()
+        )
+        assert "Condition: CVE-2020-1234" in observations
 
 
 @pytest.mark.asyncio
-async def test_keyboard_navigation_opens_selected_device_and_preserves_selection(
-) -> None:
+async def test_keyboard_navigation_opens_selected_device_and_preserves_selection() -> (
+    None
+):
     payload = _current_payload(findings=False)
     payload.hosts.append(
         HostPayload(

@@ -1,10 +1,10 @@
 ---
 type: Module
 title: tui — Textual application
-description: The Textual application — scan setup/progress plus local inventory, profile, exposure and finding result views.
+description: The Textual application — scan setup/progress plus local inventory, profile, exposure and evidence-aware finding result views.
 resource: hardware-agent/src/agent/tui/
 tags: [hardware-agent, tui, textual, ui]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # tui — Textual application
@@ -30,8 +30,8 @@ the CLAUDE.md integration rule requires to stay in sync.
 | `NetworkScreen` (S2) | Lists IPv4 interfaces/subnets via `psutil` (`ctrl+r` refresh) → `ScanCategoryScreen`. | `tui/screens/network.py:36` |
 | `ScanCategoryScreen` / `ScanModeScreen` (S3) | General vs NSPi → mode picker. NSPi submodes: Inventory, Read-only mapping; Active validation stays `disabled=True`. | `tui/screens/scan_category.py:13`, `tui/screens/scan_mode.py:32` |
 | `ScanProgressScreen` (S4) | Constructs `ScanRunner(..., nspi_submode=...)`. Terminal states: completed, incomplete, stopped, refused. Live `⏱` line uses `ScanEvent.deadline_seconds`. | `tui/screens/scan_progress.py:382` |
-| `ScanViewScreen` (S7) | Local summary with separate inventory, attack-surface, and vulnerability counts; lists devices and opens the selected device with Enter. Legacy scans label assessment unavailable. | `tui/screens/scan_view.py:88` |
-| `DeviceDetailScreen` | Local-only profile, evidence, conflicts, limitations, endpoints, exposures, findings, and industrial evidence for one device. | `tui/screens/device_detail.py:54` |
+| `ScanViewScreen` (S7) | Local summary with inventory, attack-surface and finding-record counts; labels local evidence status counts and displays standalone negative/inconclusive observations separately. Legacy or unsupported policy versions are identified. | `tui/screens/scan_view.py:162` |
+| `DeviceDetailScreen` | Local-only profile, endpoints, exposures, finding evidence method/status/category and limits, standalone observations, and industrial evidence for one device. | `tui/screens/device_detail.py:63` |
 | `PastScansScreen` (S6) | Lists `results/*.json` (`ScanEntry`), newest-first (`ctrl+r`) → `ScanViewScreen`. | `tui/screens/past_scans.py:29` |
 
 ## How it connects
@@ -61,3 +61,7 @@ in-memory or saved `ScanPayload`; they do not call the backend API.
   string. See [glossary](/glossary.md).
 - A partial result with no hosts dismisses silently; a fatal error keeps nothing and hides the
   "View scan" button.
+- Finding counts are records, not confirmed failures. With policy v1, the scan summary distinguishes
+  supported, conflicting and inconclusive evidence; device detail shows the witness and its scope.
+  Confidence is categorical, not a percentage. Standalone observations are outside the finding
+  count, and legacy/unknown policy results are marked unavailable or uninterpreted.

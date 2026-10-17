@@ -23,6 +23,7 @@ from agent.normalize.contracts import (
     CoverageUnitPayload,
     DeviceProfilePayload,
     ExposurePayload,
+    FindingEvidenceObservationPayload,
     FindingPayload,
     HostPayload,
     ModbusAddressRangePayload,
@@ -52,6 +53,7 @@ CONTRACT_MODELS = (
     ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
     ("PortPayload", PortPayload),
     ("FindingPayload", FindingPayload),
+    ("FindingEvidenceObservationPayload", FindingEvidenceObservationPayload),
     ("CoverageUnitPayload", CoverageUnitPayload),
     ("CoverageObservationPayload", CoverageObservationPayload),
     ("AvailableSubnet", AvailableSubnet),
@@ -760,3 +762,199 @@ def test_assessment_evidence_is_deduplicated_and_stably_ordered() -> None:
         ("port", "nmap", "22/tcp open"),
         ("service", "22/tcp", "SSH"),
     ]
+
+
+def test_finding_evidence_observation_is_strict_and_bounded() -> None:
+    observation = {
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "negative",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+        "facts": {"state": "not_vulnerable", "attempted": False},
+    }
+    assert (
+        FindingEvidenceObservationPayload.model_validate(observation).facts
+        == observation["facts"]
+    )
+
+    for invalid in (
+        {**observation, "facts": {"items": ["nested"]}},
+        {**observation, "facts": {"value": 1.5}},
+        {**observation, "facts": {"value": "x" * 161}},
+        {**observation, "unexpected": True},
+    ):
+        with pytest.raises(ValidationError):
+            FindingEvidenceObservationPayload.model_validate(invalid)
+
+
+def test_finding_issue_key_is_bounded_and_serialized_when_present() -> None:
+    data = {
+        "severity": "high",
+        "title": "Observed condition",
+        "description": "The condition was tested.",
+        "recommendation": "Review the result.",
+        "evidence": "Existing evidence text.",
+        "issue_key": "smb:signing",
+    }
+    finding = FindingPayload.model_validate(data)
+    assert finding.issue_key == "smb:signing"
+    assert finding.model_dump()["issue_key"] == "smb:signing"
+    legacy = {key: value for key, value in data.items() if key != "issue_key"}
+    assert FindingPayload.model_validate(legacy).model_dump()["issue_key"] is None
+    for value in (" ", "x" * 257):
+        with pytest.raises(ValidationError):
+            FindingPayload.model_validate({**data, "issue_key": value})
+
+
+def test_scan_payload_finding_evidence_requires_version_and_standalone_scope() -> None:
+    observation = {
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "negative",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+    }
+    base = {
+        "scan_id": uuid4(),
+        "timestamp": datetime.now(timezone.utc),
+        "subnet": "192.168.0.0/24",
+        "scan_mode": "quick",
+        "hosts": [HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")],
+    }
+    with pytest.raises(ValidationError):
+        ScanPayload(**base, finding_observations=[observation])
+    with pytest.raises(ValidationError):
+        ScanPayload(
+            **base,
+            finding_evidence_policy_version="1",
+            finding_observations=[{**observation, "ip": "192.168.0.21"}],
+        )
+    with pytest.raises(ValidationError):
+        ScanPayload(
+            **base,
+            finding_evidence_policy_version="1",
+            finding_observations=[{**observation, "result": "positive"}],
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("ip", "2001:db8::1"),
+        ("port", 0),
+        ("port", 65536),
+        ("protocol", "icmp"),
+        ("unit_id", -1),
+        ("unit_id", 256),
+        ("condition_key", ""),
+        ("condition_key", "x" * 257),
+        ("source", "x" * 65),
+        ("source_script", "x" * 65),
+        ("rule_id", "x" * 129),
+        ("rule_version", "x" * 65),
+        ("evidence", "x" * 513),
+    ],
+)
+def test_finding_evidence_observation_rejects_invalid_field_bounds(
+    field: str, value
+) -> None:
+    observation = {
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "negative",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+    }
+    observation[field] = value
+
+    with pytest.raises(ValidationError):
+        FindingEvidenceObservationPayload.model_validate(observation)
+
+
+def test_finding_evidence_accepts_future_version_and_rejects_incoherent_metadata(
+) -> None:
+    host = HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")
+    base = {
+        "scan_id": uuid4(),
+        "timestamp": datetime.now(timezone.utc),
+        "subnet": "192.168.0.0/24",
+        "scan_mode": "quick",
+        "hosts": [host],
+    }
+    observation = {
+        "ip": "192.168.0.20",
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "inconclusive",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+    }
+
+    with pytest.raises(ValidationError):
+        ScanPayload(**base, finding_observations_truncated=True)
+
+    payload = ScanPayload(
+        **base,
+        finding_evidence_policy_version="future-policy",
+        finding_observations=[observation],
+    )
+    assert payload.finding_evidence_policy_version == "future-policy"
+    assert len(payload.finding_observations) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"ip": "192.168.0.21"},
+        {"port": 443},
+        {"protocol": "udp"},
+        {"unit_id": 2},
+    ],
+)
+def test_finding_evidence_endpoint_fields_match_finding(mutation) -> None:
+    observation = {
+        "ip": "192.168.0.20",
+        "port": 22,
+        "protocol": "tcp",
+        "unit_id": 1,
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "positive",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+    }
+    observation.update(mutation)
+    finding = FindingPayload(
+        ip="192.168.0.20",
+        port=22,
+        protocol="tcp",
+        unit_id=1,
+        severity="high",
+        title="Observed condition",
+        description="The condition was tested.",
+        recommendation="Review the result.",
+        evidence="Existing evidence text.",
+        evidence_observations=[observation],
+    )
+
+    with pytest.raises(ValidationError):
+        ScanPayload(
+            scan_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            subnet="192.168.0.0/24",
+            scan_mode="quick",
+            hosts=[HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")],
+            findings=[finding],
+            finding_evidence_policy_version="1",
+        )

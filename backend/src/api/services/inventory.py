@@ -16,8 +16,13 @@ from api.models.persistence import (
     ScanRecord,
     ServiceRecord,
 )
+from api.schemas.scan import FindingEvidenceObservationPayload
 from api.services.hosts import apply_observation
-from api.services.scan_evidence import evidence_completeness, parse_coverage
+from api.services.scan_evidence import (
+    evidence_completeness,
+    finding_observation_is_supported,
+    parse_coverage,
+)
 
 _LATEST_SCAN_HOST_ORDER = (
     ScanRecord.timestamp.desc(),
@@ -232,12 +237,97 @@ def _reconcile_findings(
             )
         ).all()
     )
+    finding_records = session.exec(
+        select(FindingRecord).where(
+            FindingRecord.scan_id == scan_record.scan_id,
+            FindingRecord.scan_host_id == scan_host.id,
+        )
+    ).all()
+    negative_conditions: set[tuple[str, str, int, str]] = set()
+    unsupported_conditions: list[
+        tuple[str | None, str | None, int | None, int | None]
+    ] = []
+    truncated_finding_keys = {
+        finding.dedupe_key
+        for finding in finding_records
+        if finding.evidence_truncated
+    }
+    for value in scan_record.finding_observations_json or []:
+        observation = FindingEvidenceObservationPayload.model_validate(value)
+        observation_cve = (
+            observation.condition_key
+            if observation.method == "version_correlation"
+            or observation.rule_id.endswith("ms17-010")
+            else None
+        )
+        if (
+            observation.result == "negative"
+            and finding_observation_is_supported(
+                observation, cve_id=observation_cve
+            )
+        ):
+            if (
+                observation.ip is not None
+                and observation.protocol is not None
+                and observation.port is not None
+            ):
+                negative_conditions.add(
+                    (
+                        str(observation.ip),
+                        observation.protocol,
+                        observation.port,
+                        observation.condition_key,
+                    )
+                )
+    observations = list(scan_record.finding_observations_json or [])
+    observations.extend(
+        observation
+        for finding in finding_records
+        for observation in finding.evidence_observations_json or []
+    )
+    for value in observations:
+        observation = FindingEvidenceObservationPayload.model_validate(value)
+        observation_cve = (
+            observation.condition_key
+            if observation.method == "version_correlation"
+            or observation.rule_id.endswith("ms17-010")
+            else None
+        )
+        if not finding_observation_is_supported(
+            observation, cve_id=observation_cve
+        ):
+            unsupported_conditions.append(
+                (
+                    str(observation.ip) if observation.ip is not None else None,
+                    observation.protocol,
+                    observation.port,
+                    observation.unit_id,
+                )
+            )
     known = {
         row.dedupe_key: row
         for row in session.exec(
             select(HostFindingRecord).where(HostFindingRecord.host_id == host.id)
         ).all()
     }
+    persisted_findings = session.exec(
+        select(FindingRecord).where(
+            FindingRecord.dedupe_key.in_(list(known))
+        )
+    ).all()
+    bindings: dict[str, set[str]] = {}
+    for finding in persisted_findings:
+        keys = {
+            key
+            for key in (finding.issue_key, finding.cve_id)
+            if key is not None
+        }
+        keys.update(
+            item.get("condition_key")
+            for item in finding.evidence_observations_json or []
+            if isinstance(item, dict) and isinstance(item.get("condition_key"), str)
+        )
+        bindings[finding.dedupe_key] = keys
 
     for dedupe_key in seen:
         existing = known.get(dedupe_key)
@@ -263,9 +353,49 @@ def _reconcile_findings(
         )
         == "complete"
     )
-    if is_latest and evidence_complete:
+    if (
+        is_latest
+        and evidence_complete
+        and not scan_record.finding_observations_truncated
+    ):
         for row in known.values():
-            if row.dedupe_key not in seen and row.fixed_at is None:
+            blocked_by_negative = any(
+                row.dedupe_key.startswith(f"{ip}|{protocol}|{port}|")
+                and condition_key in bindings.get(row.dedupe_key, set())
+                for ip, protocol, port, condition_key in negative_conditions
+            )
+            blocked_by_semantic_gap = any(
+                _finding_scope_may_overlap(
+                    row.dedupe_key, ip, protocol, port, unit_id
+                )
+                for ip, protocol, port, unit_id in unsupported_conditions
+            )
+            if (
+                row.dedupe_key not in seen
+                and row.fixed_at is None
+                and row.dedupe_key not in truncated_finding_keys
+                and not blocked_by_negative
+                and not blocked_by_semantic_gap
+            ):
                 row.fixed_at = ts
                 session.add(row)
     return list(known.values())
+
+
+def _finding_scope_may_overlap(
+    dedupe_key: str,
+    ip: str | None,
+    protocol: str | None,
+    port: int | None,
+    unit_id: int | None,
+) -> bool:
+    parts = dedupe_key.split("|", 4)
+    if len(parts) < 5:
+        return True
+    row_ip, row_protocol, row_port, row_unit = parts[:4]
+    return (
+        (ip is None or row_ip == ip)
+        and (protocol is None or row_protocol == protocol)
+        and (port is None or row_port == str(port))
+        and (unit_id is None or row_unit == str(unit_id))
+    )

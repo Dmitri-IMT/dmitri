@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from agent import headless
-from agent.normalize.contracts import ScanPayload
+from agent.normalize.contracts import FindingPayload, ScanPayload
 from agent.scanner import stages
 from agent.scanner.errors import FatalScanError
 from agent.scanner.models import HostInfo
@@ -60,6 +60,8 @@ class TestSameShape:
         data = json.loads(files[0].read_text(encoding="utf-8"))
         loaded_payload = ScanPayload.model_validate(data)
         assert loaded_payload == headless_result.payload
+        assert data["finding_evidence_policy_version"] == "1"
+        assert data["finding_observations"] == []
 
         completed: list[ScanPayload] = []
         direct_runner = ScanRunner(
@@ -76,6 +78,7 @@ class TestSameShape:
         assert loaded_payload.scan_mode == direct_payload.scan_mode
         assert loaded_payload.hosts == direct_payload.hosts
         assert loaded_payload.findings == direct_payload.findings
+        assert loaded_payload.finding_evidence_policy_version == "1"
         assert set(loaded_payload.metadata) == set(direct_payload.metadata)
         assert loaded_payload.metadata["partial_result"] == (
             direct_payload.metadata["partial_result"]
@@ -100,6 +103,32 @@ class TestProgrammaticResult:
         assert result.result_path is not None
         assert result.result_path.exists()
         assert result.result_path == tmp_path / "results" / result.result_path.name
+
+    def test_local_artifact_serializes_issue_key_with_evidence_version(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        _patch_discovery(monkeypatch, [])
+        result = headless.run_headless_scan(
+            MODE, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
+        )
+        assert result.result_path is not None
+        finding = FindingPayload(
+            ip="192.168.1.10",
+            issue_key="smb:signing",
+            severity="high",
+            title="SMB signing disabled",
+            description="The SMB service does not require signing.",
+            recommendation="Require SMB signing.",
+            evidence="The service reported signing as disabled.",
+        )
+        payload = result.payload.model_copy(update={"findings": [finding]})
+        path = write_scan_result(payload, str(tmp_path))
+
+        local_data = json.loads(path.read_text(encoding="utf-8"))
+        wire_data = json.loads(payload.model_dump_json())
+        assert local_data["finding_evidence_policy_version"] == "1"
+        assert local_data["findings"][0]["issue_key"] == "smb:signing"
+        assert local_data == wire_data
 
 
 class TestFailureSemantics:
