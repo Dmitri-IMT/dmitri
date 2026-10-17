@@ -1,6 +1,6 @@
 # Tasks — Qualidade da evidência dos achados (`051-finding-evidence-quality`)
 
-11 tarefas sequenciais. **#1–#4 concluídas. Execução encerrada por limite do usuário antes da #5.** Specs aprovadas em 2026-10-10; base `471739f`.
+11 tarefas sequenciais. **#1?#7 conclu?das; #8?#11 pendentes.** Specs aprovadas em 2026-10-10; base `471739f`.
 
 Ordem compatível: parser offline → contrato/backend → consumidores → agente. Nenhum novo envio ingest antes da tarefa10. Sem scans reais, deploy, SSH, commit, push ou PR.
 
@@ -77,14 +77,14 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 ## Task 7: Limitar explicação automatizada e fechar backend
 - **Description**: Contexto versão5 para overview e todos chats; prompts respeitam evidência e contexto agregado completo, conservando limites de amostra e anonimização. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
 - **Dependencies**: Task 6
-- **Target Files**: `backend/src/api/services/ai/context.py`, `backend/src/api/services/ai/chat.py`, `backend/src/api/services/ai/groq.py`, `backend/tests/test_ai_context.py`, `backend/tests/test_ai_chat.py`, `backend/tests/test_ai_groq.py`
-- **Tests**: `backend/tests/test_ai_context.py`, `backend/tests/test_ai_chat.py`, `backend/tests/test_ai_groq.py`; aceites A10,A12,A14,A15.
+- **Target Files**: `backend/src/api/services/ai/context.py`, `backend/src/api/services/ai/chat.py`, `backend/src/api/services/ai/groq.py`, `backend/src/api/routers/ai.py`, `backend/src/api/services/ai/analyzer.py`, `backend/tests/test_ai_context.py`, `backend/tests/test_ai_chat.py`, `backend/tests/test_ai_groq.py`, `backend/tests/test_ai_chat_routes.py`, `backend/tests/test_ai_analyzer.py`, `backend/tests/test_ai_validation.py`, `backend/tests/test_ai_jobs.py`; aceites A10,A12,A14,A15.
 - **Success Criteria**:
   - Nenhum raw facts/evidence/endpoint/identidade enviado; unknown não target_observation default; conflito/inconclusivo/correlação nunca elevada; negativos não alvo seguro; análise salva intacta. Reviewer executa gate backend completo: database.ps1/sh --test em dmitri_test, ruff check src tests e pytest.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
-
+- **Status**: COMPLETE
+- **Review Rejections**: 2
+- **Final Review**: APPROVE; gate completo em `dmitri_test`: 1682 testes passaram; Ruff 0.15.21 e `git diff --check` passaram.
+- **Gate-Hygiene (Review 2):** Escopo expandido apenas para alinhar `backend/tests/test_alembic_single_head.py` ao head atual (`20261010_40`) e corrigir ordenacao Ruff I001 nos testes `test_contract_fidelity.py`, `test_enrichment_retries.py`, `test_ingest_scan.py`, `test_ingest_schema.py`, `test_inventory_reconcile.py`, `test_scan_evidence.py` e `test_scan_ingest_route.py`; sem mudanca de comportamento.
 ## Task 8: Apresentar método, limites e resumo web
 - **Description**: Gerar tipos OpenAPI e atualizar painéis/tabelas/scans/host e três catálogos conforme DESIGN. Consumir resumo API para host paginado. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
 - **Dependencies**: Task 7

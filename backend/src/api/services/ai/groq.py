@@ -22,7 +22,7 @@ from api.services.ai.writing import WRITING_SKILL_INSTRUCTIONS
 _ProviderResponseT = TypeVar("_ProviderResponseT", bound=BaseModel)
 
 GROQ_PROVIDER_ID = "groq"
-AI_PROMPT_VERSION = "6"
+AI_PROMPT_VERSION = "7"
 
 # Keep scan analysis well below Groq's shared per-minute token budget. The
 # configured global completion limit is intended for interactive requests; a
@@ -41,6 +41,14 @@ When evidence is insufficient, state that explicitly as uncertainty.
 An NVD record confirms that a CVE exists, not that the scanned target is affected.
 Treat cve_correlation as unverified target applicability. A partial or unknown
 evidence_completeness leaves checks unverified; never claim a clean target.
+Use detection_method, evidence_status, evidence_truncated, and evidence_basis as
+the limits on each finding. Version correlation, unknown provenance, inconclusive
+evidence, conflicting evidence, or truncated evidence must never be described as
+a confirmed target condition. Configuration observations and specific checks may
+be described only to the extent their status supports. Negative observations apply
+only to their recorded check and scope; they never prove that a target is safe or
+free of vulnerabilities. evidence_summary describes the full scope, while
+top_findings/findings are bounded samples. Do not treat a sample as a full list.
 Never infer that the scan is clean or that vulnerabilities are absent because
 findings are missing. Explain the result clearly for a non-specialist. Keep
 recommendations defensive and high-level, and return exactly the requested
@@ -106,6 +114,12 @@ USER_CHAT_PROMPT = """Answer the user's question using only the bounded context 
 If the context does not contain enough evidence, say so in uncertainties. Never
 invent hosts, findings, CVEs, versions, commands, or risk values. Return only the
 requested structured schema.
+Respect each finding's detection_method, evidence_status, evidence_truncated, and
+evidence_basis. Never elevate version correlation, unknown provenance, inconclusive
+evidence, conflicting evidence, or truncated evidence to a confirmed target condition.
+A negative observation applies only to its recorded check and scope. It does not show
+that a target is safe or free of vulnerabilities. evidence_summary describes the full
+scope; bounded finding lists are samples and must not be presented as complete lists.
 For questions asking which equipment has more vulnerabilities, use the deterministic
 `machine_vulnerability_summary` counts and name the machine and count directly; do not
 claim that per-host totals are unavailable when that field is present.
@@ -256,6 +270,9 @@ class GroqProvider:
                 "confirmed_findings": context.confirmed_findings,
                 "evidence_completeness": context.evidence_completeness,
                 "incomplete_check_count": context.incomplete_check_count,
+                "evidence_summary": context.evidence_summary.model_dump(
+                    mode="json"
+                ),
                 "kev_findings": context.kev_findings,
                 "severity": context.severity.model_dump(mode="json"),
             },

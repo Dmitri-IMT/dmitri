@@ -7,7 +7,12 @@ from api.schemas.ai import (
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
-from api.schemas.read import SeverityBreakdown
+from api.schemas.read import (
+    FindingEvidenceConfidenceCounts,
+    FindingEvidenceMethodCounts,
+    FindingEvidenceSummary,
+    SeverityBreakdown,
+)
 from api.services.ai.analyzer import run_bounded_analysis, split_context
 from api.services.ai.context import AIFindingContext, ScanAIContext
 from api.services.ai.groq import AIProviderError
@@ -43,6 +48,22 @@ def _context() -> ScanAIContext:
         max_risk_score=40,
         severity=SeverityBreakdown(medium=2),
         top_findings=findings,
+        evidence_summary=FindingEvidenceSummary(
+            scope="scan",
+            total_records=0,
+            by_method=FindingEvidenceMethodCounts(
+                version_correlation=0,
+                configuration_observation=0,
+                specific_check=0,
+                textual_reference=0,
+                unknown=0,
+            ),
+            by_confidence=FindingEvidenceConfidenceCounts(
+                tentative=0, probable=0, confirmed=0, unknown=0
+            ),
+            conflicting_records=0,
+            demonstrated_records=0,
+        ),
     )
     context._finding_ids_by_ref = {
         "finding_1": uuid4(),

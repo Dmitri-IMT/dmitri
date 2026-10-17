@@ -4,8 +4,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlmodel import Session, select
-
 from api.core.config import get_settings
 from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Agent
@@ -30,6 +28,7 @@ from api.services.enrichment import (
 )
 from api.services.nvd import NvdTemporaryError
 from api.services.persistence import ingest_scan
+from sqlmodel import Session, select
 
 
 def _one_nvd_job(

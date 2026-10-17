@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pydantic
 import pytest
-
 from api.schemas import (
     HostPayload,
     OperatingSystemDetection,

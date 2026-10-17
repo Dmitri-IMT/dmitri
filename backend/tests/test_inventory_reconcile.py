@@ -4,14 +4,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event
-from sqlmodel import Session, select
-from test_ingest_scan import (
-    _example_scan,
-    _fake_nvd_payload,
-    _scan_with_findable_payload,
-)
-
 from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Agent
 from api.models.identity import Org
@@ -40,6 +32,13 @@ from api.services.inventory import (
 )
 from api.services.nvd import NvdClient
 from api.services.persistence import finding_dedupe_key, ingest_scan, persist_scan
+from sqlalchemy import event
+from sqlmodel import Session, select
+from test_ingest_scan import (
+    _example_scan,
+    _fake_nvd_payload,
+    _scan_with_findable_payload,
+)
 
 T0 = datetime(2026, 6, 1, 11, 0, 0, tzinfo=timezone.utc)
 T1 = T0 + timedelta(hours=1)

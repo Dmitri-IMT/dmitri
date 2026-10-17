@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 import yaml
-
 from api.core import home_constants
 from api.main import app
 

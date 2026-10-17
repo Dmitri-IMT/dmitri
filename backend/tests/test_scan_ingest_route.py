@@ -6,9 +6,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-
 from api.db.session import get_session
 from api.main import app
 from api.models.activity import ActivityRecord
@@ -22,6 +19,8 @@ from api.models.persistence import (
     utc_now,
 )
 from api.services import commands, device_sig
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
 
 PATH = "/api/v1/scans"
 

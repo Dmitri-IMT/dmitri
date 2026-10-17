@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from api.schemas.scan import CoverageUnitPayload
 from api.services.scan_evidence import (
     evidence_completeness,

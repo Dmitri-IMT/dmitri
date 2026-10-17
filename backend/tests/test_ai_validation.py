@@ -9,7 +9,12 @@ from api.schemas.ai import (
     ProviderScanAIAnalysis,
     ScanAIAnalysis,
 )
-from api.schemas.read import SeverityBreakdown
+from api.schemas.read import (
+    FindingEvidenceConfidenceCounts,
+    FindingEvidenceMethodCounts,
+    FindingEvidenceSummary,
+    SeverityBreakdown,
+)
 from api.services.ai.context import AIFindingContext, ScanAIContext
 from api.services.ai.validation import (
     AIAnalysisValidationError,
@@ -30,6 +35,22 @@ def _context() -> ScanAIContext:
         average_risk_score=55,
         max_risk_score=90,
         severity=SeverityBreakdown(),
+        evidence_summary=FindingEvidenceSummary(
+            scope="scan",
+            total_records=0,
+            by_method=FindingEvidenceMethodCounts(
+                version_correlation=0,
+                configuration_observation=0,
+                specific_check=0,
+                textual_reference=0,
+                unknown=0,
+            ),
+            by_confidence=FindingEvidenceConfidenceCounts(
+                tentative=0, probable=0, confirmed=0, unknown=0
+            ),
+            conflicting_records=0,
+            demonstrated_records=0,
+        ),
         top_findings=[
             AIFindingContext(
                 finding_ref="finding_1",

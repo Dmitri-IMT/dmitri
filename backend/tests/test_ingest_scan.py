@@ -8,9 +8,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import JSON, text
-from sqlmodel import Session, select
-
 from api.dependencies.agent_auth import AgentIdentity
 from api.models.activity import ActivityRecord
 from api.models.command import Agent, Command
@@ -50,6 +47,8 @@ from api.services.persistence import (
     ingest_scan,
     persist_scan,
 )
+from sqlalchemy import JSON, text
+from sqlmodel import Session, select
 
 EXAMPLE_PATH = (
     Path(__file__).resolve().parents[2]

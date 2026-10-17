@@ -1,10 +1,19 @@
+from types import SimpleNamespace
+
 from api.core.config import get_settings
 from api.main import app
-from api.models.persistence import AIUsageRecord
+from api.models.identity import User
+from api.models.persistence import AIChatMessageRecord, AIUsageRecord
 from api.schemas.ai import ProviderAIChatResponse
+from api.schemas.read import (
+    FindingEvidenceConfidenceCounts,
+    FindingEvidenceMethodCounts,
+    FindingEvidenceSummary,
+)
 from api.services.ai.context import FindingChatContext, HostChatContext
 from api.services.ai.groq import AIProviderError
 from read_factories import seed_read_graph
+from sqlmodel import select
 
 
 class _FakeProvider:
@@ -204,6 +213,96 @@ def test_context_chat_host_returns_grounded_response(
 
     assert response.status_code == 200
     assert response.json()["answer"] == "Explicação fundamentada."
+
+
+def test_host_chat_route_passes_full_filtered_summary_to_provider(
+    client, administrative_session, actor_headers, monkeypatch
+):
+    seeded = seed_read_graph(administrative_session)
+    summary = FindingEvidenceSummary(
+        scope="filtered_findings",
+        total_records=143,
+        by_method=FindingEvidenceMethodCounts(
+            version_correlation=40, configuration_observation=20,
+            specific_check=30, textual_reference=3, unknown=50,
+        ),
+        by_confidence=FindingEvidenceConfidenceCounts(
+            tentative=40, probable=25, confirmed=28, unknown=50,
+        ),
+        conflicting_records=7,
+        demonstrated_records=12,
+    )
+    from api.services.read import list_findings
+
+    page = list_findings(
+        administrative_session, org_id=seeded["org"].id,
+        host_id=seeded["host"].id, per_page=1,
+    )
+    assert len(page.data) == 1
+    monkeypatch.setattr(
+        "api.routers.ai.list_findings",
+        lambda *args, **kwargs: SimpleNamespace(
+            data=page.data, evidence_summary=summary
+        ),
+    )
+    _enable_ai(monkeypatch)
+
+    class _SummaryProvider:
+        def answer_question(self, context, question, *, language="en"):
+            assert isinstance(context, HostChatContext)
+            assert len(context.findings) == 1
+            assert context.evidence_summary == summary
+            return ProviderAIChatResponse(
+                answer="Há registros para revisar.", uncertainties=[],
+                referenced_finding_refs=["finding_1"],
+            )
+
+    monkeypatch.setattr(
+        "api.routers.ai.build_ai_provider", lambda settings: _SummaryProvider()
+    )
+    headers = actor_headers(seeded["org"].id, "viewer")
+    user = administrative_session.exec(
+        select(User).where(User.org_id == seeded["org"].id)
+    ).one()
+    historical = AIChatMessageRecord(
+        scan_id=seeded["scan"].scan_id,
+        user_id=user.id,
+        scope_type="host",
+        scope_id=seeded["host"].id,
+        question="pergunta antiga",
+        answer="resposta histórica intacta",
+        uncertainties_json=["limite histórico"],
+        referenced_finding_ids_json=[str(seeded["finding"].finding_id)],
+    )
+    administrative_session.add(historical)
+    administrative_session.commit()
+    try:
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={
+                "question": "explique este contexto", "scope": "host",
+                "context_id": str(seeded["host"].id),
+            },
+            headers=headers,
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Há registros para revisar."
+
+    history = client.get(
+        "/api/v1/ai/chat/history",
+        params={"scope": "host", "context_id": str(seeded["host"].id)},
+        headers=headers,
+    )
+    assert history.status_code == 200
+    old_message = next(
+        item for item in history.json()["data"]
+        if item["question"] == "pergunta antiga"
+    )
+    assert old_message["answer"] == "resposta histórica intacta"
+    assert old_message["uncertainties"] == ["limite histórico"]
 
 
 def test_context_chat_finding_unknown_finding_returns_404(
