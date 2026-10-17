@@ -53,15 +53,22 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
       <div className="flex gap-8">
         <dl className="flex min-w-0 flex-1 flex-col gap-6">
           <div className="flex gap-4">
-            <Label>Risk score</Label>
+            <Label>{t('common.riskScore')}</Label>
             <dd className="min-w-0 max-w-prose text-body-md">
               {finding.risk_score == null
-                ? 'Not calculated'
-                : `${Math.round(finding.risk_score)} of 100`}
-              {finding.confidence && <p>Confidence: {finding.confidence}</p>}
+                ? t('common.riskScoreNotCalculated')
+                : t('common.riskScoreValue', {
+                    score: Math.round(finding.risk_score),
+                  })}
+              {finding.confidence && (
+                <p>
+                  {t('common.confidence')}: {finding.confidence}
+                </p>
+              )}
               {finding.exploitability != null && (
                 <p>
-                  Exploitability index: {finding.exploitability.toFixed(2)} / 1
+                  {t('common.exploitabilityIndex')}:{' '}
+                  {finding.exploitability.toFixed(2)} / 1
                 </p>
               )}
               {finding.risk_rationale && <p>{finding.risk_rationale}</p>}
@@ -69,7 +76,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           </div>
           {hasText(finding.description) && (
             <div className="flex gap-4">
-              <Label>What it is</Label>
+              <Label>{t('common.whatItIs')}</Label>
               <dd className="min-w-0 max-w-prose text-body-md">
                 {finding.description}
               </dd>
@@ -77,7 +84,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           )}
           {hasText(finding.recommendation) && (
             <div className="flex gap-4">
-              <Label>What to do</Label>
+              <Label>{t('common.whatToDo')}</Label>
               <dd className="min-w-0 max-w-prose text-body-md">
                 {finding.recommendation}
               </dd>
@@ -85,7 +92,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           )}
           {hasText(finding.evidence) && (
             <div className="flex gap-4">
-              <Label>Evidence</Label>
+              <Label>{t('common.evidence')}</Label>
               <dd className="min-w-0 flex-1">
                 <pre className="overflow-x-auto border border-border bg-card p-4 font-mono text-caption-md whitespace-pre">
                   {finding.evidence}
@@ -95,7 +102,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
           )}
           {finding.references.length > 0 && (
             <div className="flex gap-4">
-              <Label>References</Label>
+              <Label>{t('common.references')}</Label>
               <dd
                 data-testid={`findings-panel-refs-${id}`}
                 className="flex min-w-0 flex-1 flex-col gap-2"
@@ -140,7 +147,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
                 className="flex flex-col gap-2"
               >
                 <p className="text-caption-md uppercase tracking-widest text-muted-foreground">
-                  CVSS
+                  {t('common.cvss')}
                 </p>
                 <p className="text-body-md">{finding.cvss_score}</p>
               </div>
@@ -148,7 +155,7 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
             {seen != null && (
               <div className="flex flex-col gap-2">
                 <p className="text-caption-md uppercase tracking-widest text-muted-foreground">
-                  Seen on
+                  {t('common.seenOn')}
                 </p>
                 <p className="text-body-md">{seen}</p>
               </div>

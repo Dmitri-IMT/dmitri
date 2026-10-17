@@ -25,9 +25,7 @@ import ScanStoppedNotice from '@/pages/scans/ScanStoppedNotice'
 import ScanUnfinishedNotice from '@/pages/scans/ScanUnfinishedNotice'
 import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import { isTargetedFinding, scanDetailView } from '@/pages/scans/scanDetailView'
-import ServiceTargetedFindings, {
-  targetedFindingsTableTestId,
-} from '@/pages/scans/ServiceTargetedFindings'
+import ServiceTargetedFindings from '@/pages/scans/ServiceTargetedFindings'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
 
@@ -204,6 +202,26 @@ function ScanDetail() {
                     </div>
                   </ScanDetailSection>
                 )}
+                {view.sections.targeted && (
+                  <ScanDetailSection
+                    key="targeted"
+                    title={t('scans.targetedFindingsTitle', {
+                      count: scan.findings.filter(isTargetedFinding).length,
+                    })}
+                    openToken={
+                      opensTargetedDeepLink
+                        ? (openFindingId ?? undefined)
+                        : undefined
+                    }
+                    triggerAriaLabel={t('scans.targetedFindingsToggle')}
+                  >
+                    <ServiceTargetedFindings
+                      findings={scan.findings}
+                      openFindingId={openFindingId}
+                      onOpenFindingChange={setOpenFindingId}
+                    />
+                  </ScanDetailSection>
+                )}
                 {view.sections.attackSurface && (
                   <ScanDetailSection title={t('common.attackSurface')}>
                     {scan.assessment_status === 'unavailable' ? (
@@ -239,7 +257,7 @@ function ScanDetail() {
                             return
                           }
                           const table = isTargetedFinding(finding)
-                            ? targetedFindingsTableTestId(finding)
+                            ? `targeted-${finding.severity}`
                             : `findings-${finding.severity}`
                           document
                             .querySelector<HTMLButtonElement>(
@@ -249,24 +267,6 @@ function ScanDetail() {
                         }}
                       />
                     )}
-                  </ScanDetailSection>
-                )}
-                {view.sections.targeted && (
-                  <ScanDetailSection
-                    key="targeted"
-                    title="Service Targeted Tools"
-                    openToken={
-                      opensTargetedDeepLink
-                        ? (openFindingId ?? undefined)
-                        : undefined
-                    }
-                    triggerAriaLabel="Toggle service-targeted findings"
-                  >
-                    <ServiceTargetedFindings
-                      findings={scan.findings}
-                      openFindingId={openFindingId}
-                      onOpenFindingChange={setOpenFindingId}
-                    />
                   </ScanDetailSection>
                 )}
                 {view.sections.industrial && (

@@ -1,5 +1,6 @@
 import DataTable from '@/components/DataTable'
 import FindingPanel from '@/pages/scans/FindingPanel'
+import useI18n from '@/i18n/useI18n'
 import {
   hostFindingColumns,
   scanFindingColumns,
@@ -14,6 +15,7 @@ type FindingsTableProps = {
   isPending?: boolean
   testId: string
   caption: string
+  sourceToolLabel?: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
   variant: 'scan' | 'host'
@@ -24,12 +26,24 @@ function FindingsTable({
   isPending = false,
   testId,
   caption,
+  sourceToolLabel,
   openFindingId,
   onOpenFindingChange,
   variant,
 }: FindingsTableProps) {
+  const { t } = useI18n()
+  const labels = {
+    vulnerability: t('common.vulnerability'),
+    severity: t('common.severityLabel'),
+    machine: t('common.machine'),
+    port: t('common.port'),
+    cve: t('common.cve'),
+    firstSeen: t('common.firstSeen'),
+  }
   const columns =
-    variant === 'scan' ? scanFindingColumns() : hostFindingColumns()
+    variant === 'scan'
+      ? scanFindingColumns(sourceToolLabel, labels)
+      : hostFindingColumns(labels)
 
   const table = {
     columns,
@@ -47,7 +61,7 @@ function FindingsTable({
       rowAction={{
         kind: 'expand',
         panel: (finding) => <FindingPanel finding={finding} />,
-        label: (finding) => `Show details for ${finding.title}`,
+        label: (finding) => t('common.showFindingDetails', { title: finding.title }),
         openRowId: openFindingId,
         onOpenRowChange: onOpenFindingChange,
       }}

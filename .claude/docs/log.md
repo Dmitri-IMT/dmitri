@@ -5,6 +5,13 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
 
 ## 2026-10-16
 
+* **Update**: Attack-surface tables now explain row expansion, show localized service/review counts
+  in scan detail, and translate endpoint, service role, confidence, evidence, and related-finding
+  labels in English, Brazilian Portuguese, and Russian. Host detail keeps its existing count.
+* **Update**: Service-targeted findings now use severity groups like standard findings and
+  show the reporting tool below each title. Section copy, severity controls, finding table
+  labels, row actions and finding details are translated in English, Brazilian Portuguese
+  and Russian.
 * **Update**: Extensive targeted assessments now budget for the selected capped plan,
   preserving individual timeouts and explicit overall deadlines. Other modes retain their
   budgets. The frontend and Foundations duration text now allows for runs over an hour.
