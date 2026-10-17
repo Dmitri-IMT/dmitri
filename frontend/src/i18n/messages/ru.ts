@@ -380,6 +380,43 @@ export const catalog: Catalog = {
   'settings.deleteAccountBody':
     'Ваша учетная запись будет удалена, и доступ будет потерян. Это нельзя отменить.',
   'settings.passwordChanged': 'Пароль изменен.',
+  'deletion.deleteScan': 'Удалить сканирование',
+  'deletion.deleteScanHeading': 'Удалить это сканирование',
+  'deletion.deleteScanQuestion': 'Удалить это сканирование?',
+  'deletion.deleteScanBody':
+    'Результаты, уязвимости, анализ ИИ и чат будут удалены. Это действие нельзя отменить.',
+  'deletion.deleteScanError':
+    'Не удалось удалить сканирование. Попробуйте ещё раз.',
+  'deletion.scanRunningError':
+    'Остановите сканирование, прежде чем удалять его.',
+  'deletion.scanDeleted': 'Сканирование удалено.',
+  'deletion.deleteMachine': 'Удалить машину',
+  'deletion.deleteMachineHeading': 'Удалить эту машину',
+  'deletion.deleteMachineQuestion': ({ name }) => 'Удалить ' + name + '?',
+  'deletion.deleteMachineBody':
+    'Машина и её уязвимости будут удалены. Старые сканирования останутся, но больше не будут её показывать. Если новое сканирование найдёт её, она появится как новая машина. Это действие нельзя отменить.',
+  'deletion.deleteMachineError':
+    'Не удалось удалить машину. Попробуйте ещё раз.',
+  'deletion.machineDeleted': ({ name }) => name + ' удалена.',
+  'deletion.deleting': 'Удаление…',
+  'deletion.deleteData': 'Удаление данных',
+  'deletion.deleteAllScans': 'Удалить все сканирования',
+  'deletion.deleteAllScansQuestion': 'Удалить все сканирования?',
+  'deletion.deleteAllScansBody':
+    'Все завершённые сканирования и их данные будут удалены. Запущенные сканирования пропускаются. Машины, найденные только в этих сканированиях, тоже будут удалены. Это действие нельзя отменить.',
+  'deletion.deleteAllScansError':
+    'Не удалось удалить сканирования. Попробуйте ещё раз.',
+  'deletion.scansDeleted': ({ count }) =>
+    'Удалено сканирований: ' + count + '.',
+  'deletion.scansSkipped': ({ count }) =>
+    'Пропущено запущенных сканирований: ' + count + '.',
+  'deletion.deleteAllMachines': 'Удалить все машины',
+  'deletion.deleteAllMachinesQuestion': 'Удалить все машины?',
+  'deletion.deleteAllMachinesBody':
+    'Все машины и их уязвимости будут удалены. Сканирования останутся. Следующее сканирование заново создаст список. Это действие нельзя отменить.',
+  'deletion.deleteAllMachinesError':
+    'Не удалось удалить машины. Попробуйте ещё раз.',
+  'deletion.machinesDeleted': ({ count }) => 'Удалено машин: ' + count + '.',
   'devices.subtitle':
     'Устройства Dmitri, отправляющие данные в эту организацию.',
   'devices.caption': 'Устройства Dmitri',

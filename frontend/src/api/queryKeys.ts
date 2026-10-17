@@ -7,6 +7,7 @@ export type { FindingListParams, HostListParams, ScanListParams }
 
 export const queryKeys = {
   home: {
+    all: ['home'] as const,
     snapshot: (pages: HomePages) =>
       [
         'home',

@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Backend routers — reads, identity admin, ingest and commands
-description: The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
+description: The FastAPI read, identity admin, device revoke/restore, scan/machine deletion, ingest and command-channel HTTP/WS routers with their auth gates.
 resource: backend/src/api/routers
 tags: [backend, fastapi, routers, read, ingest, auth, tenancy, websocket, command-channel, identity-admin, agents]
-timestamp: 2026-09-28T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Backend routers — reads, identity admin, ingest and commands
@@ -27,9 +27,11 @@ service, so the tenant boundary is enforced in SQL rather than in the handler. R
 |------|--------------|-----|
 | `read_hosts()` | `GET /api/v1/hosts` (optional `page`, `per_page`, `sort_by`, `sort_order`, `group` default `active`) → `list_hosts(...)` → `HostListResponse`. | `backend/src/api/routers/hosts.py:28` |
 | `read_host()` | `GET /api/v1/hosts/{host_id}` → `get_host_detail(...)` → `HostDetailResponse`, or `404` if `None` — including for a row belonging to another org. | `backend/src/api/routers/hosts.py:46` |
+| `delete_all_hosts_route()` / `delete_host_route()` | Admin-only `DELETE /api/v1/hosts` (`deleteAllHosts`, → `HostDeletionResponse {deleted}`) and `DELETE /api/v1/hosts/{host_id}` (`deleteHost`, `204`; unknown or foreign id → `404`), gated by `require_admin_row`. See [services](/backend/services.md) deletion rows and [ADR-022](../../../docs/adr/ADR-022-scan-and-machine-deletion.md). | `backend/src/api/routers/hosts.py:68`, `:80` |
 | `ingest_scan_route()` | `POST /api/v1/scans` (`operation_id="ingestScan"`, `202`) behind `Depends(require_agent)` → `ingest_scan(...)` → `ScanIngestAcceptedResponse`. `ScanOwnershipError` → `403 Forbidden`; `ScanClosedError` → `400 "Scan is no longer accepting results"`. | `backend/src/api/routers/scans.py:32` |
 | `read_scans()` | `GET /api/v1/scans` (optional `page`, `per_page`, `status`, `sort_by`, `sort_order`) → `list_scans(...)` → `ScanListResponse`. Empty org or filter mismatch → 200 with an empty page, never 404. | `backend/src/api/routers/scans.py:55` |
 | `read_scan()` | `GET /api/v1/scans/{scan_id}` → `get_scan_detail(...)` → `ScanDetailResponse`, or `404` if `None`. | `backend/src/api/routers/scans.py:76` |
+| `delete_all_scans_route()` / `delete_scan_route()` | Admin-only `DELETE /api/v1/scans` (`deleteAllScans`, → `ScanDeletionResponse {deleted, skipped, machines_removed}`) and `DELETE /api/v1/scans/{scan_id}` (`deleteScan`, `204`), gated by `require_admin_row`. An unfinished scan → `ScanRunningError` → `409 scan_running`; unknown or foreign id → `404`. | `backend/src/api/routers/scans.py:110`, `:125` |
 | `read_scan_ai_analysis()` | `GET /api/v1/scans/{scan_id}/analysis` (`getScanAIAnalysis`) behind `require_user`; `?language=` (`en`/`pt-BR`/`ru`, default `en`) selects the row. See [ai](/backend/ai.md). | `backend/src/api/routers/scans.py:160` |
 | `request_scan_ai_analysis_route()` | `POST /api/v1/scans/{scan_id}/analysis` (`requestScanAIAnalysis`, 202), same `?language=`. `409` if already requested for that language. | `backend/src/api/routers/scans.py:185` |
 | `read_scan_report()` / `download_scan_report()` | `GET /api/v1/scans/{scan_id}/reports/{kind}` and `/download` (PDF), both with `?language=`. | `backend/src/api/routers/scans.py:305`, `:338` |
@@ -37,7 +39,7 @@ service, so the tenant boundary is enforced in SQL rather than in the handler. R
 | `list_context_chat()` / `ask_context_chat()` | `GET`/`POST /api/v1/ai/chat/history` and `/api/v1/ai/chat` with `scope` `scan`/`host`/`finding`. The **only** AI question route: the per-resource `/scans/{id}/chat` and `/{hosts,findings}/{id}/explain` routes were deleted in PR #151. POST writes the usage rows and the transcript in one commit; on a provider failure the usage rows are committed alone, because the tokens were spent. | `backend/src/api/routers/ai.py:112`, `:132` |
 | `read_findings()` | `GET /api/v1/findings` (optional `page`, `per_page`, `severity`, `scan_id`, `host_id`) → `list_findings(...)` → `FindingListResponse`. Foreign ids → empty page, not 404. | `backend/src/api/routers/findings.py:18` |
 | `read_home()` | `GET /api/v1/home` behind `require_user`. Three `Query(1, ge=1)` page integers, no `per_page`. Returns `HomeSnapshot`. Viewers are allowed. | `backend/src/api/routers/home.py:15` |
-| `read_current_user()` | `GET /api/v1/users/me` → caller profile, with role loaded from the DB row by `require_user_row`. | `backend/src/api/routers/users.py:29` |
+| `read_current_user()` | `GET /api/v1/users/me` → caller profile (`user_id`, `email`, `role`, `org_name`), with role loaded from the DB row by `require_user_row` and `org_name` from the caller's `Org` row (the SPA's typed confirmation for "delete all" compares against it). | `backend/src/api/routers/users.py:44` |
 | `delete_current_user_route()` | `DELETE /api/v1/users/me` (`204`) for either role; maps `LastAdminError` to `409 last_admin`. | `backend/src/api/routers/users.py:36` |
 | `list_org_users_route()` | Admin-only `GET /api/v1/users`; returns the caller org's members as `{data: OrgMember[]}`, ordered by activity. Exposes `last_seen_at`, never `last_login_at`. | `backend/src/api/routers/users.py:51` |
 | `update_user_role_route()` | Admin-only `PATCH /api/v1/users/{user_id}`, gated by `require_admin_row` so the actor's row is on hand for the activity log. Refuses self-targeting with `409 self_target`, maps last-admin refusal to `409 last_admin`, and returns the updated `OrgMember`; foreign/unknown id → 404. | `backend/src/api/routers/users.py:75` |

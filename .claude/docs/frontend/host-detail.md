@@ -4,7 +4,7 @@ title: frontend detail read state
 description: readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states with back links, and each independent second read owns its own section states.
 resource: frontend/src/lib/detailState.ts
 tags: [frontend, hosts, scans, devices, tanstack-query]
-timestamp: 2026-09-30T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # frontend detail read state
@@ -42,6 +42,7 @@ whose identity, profile, exposures, ports and history already arrived. Identity 
   [screens](./screens.md)).
 - Findings on both scan and host screens open `pages/scans/FindingPanel.tsx` inside the shared
   `FindingsTable`.
+- The ready view ends with the admin-only `HostDelete` section (see [screens](./screens.md)).
 
 ## Notes / gotchas
 

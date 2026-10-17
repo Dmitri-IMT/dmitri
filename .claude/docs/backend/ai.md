@@ -4,7 +4,7 @@ title: Backend AI — scan analysis, contextual chat, usage telemetry
 description: Groq-backed scan overviews per language with bounded structured repair and KEV coverage, scoped Q&A on scans/hosts/findings, and org-scoped provider usage rows without storing prompts or answers in ai_usage.
 resource: backend/src/api/services/ai/jobs.py
 tags: [backend, ai, groq, worker, scans, chat, telemetry]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 
 # Backend AI — scan analysis, contextual chat, usage telemetry
@@ -23,12 +23,12 @@ timestamp: 2026-10-06T00:00:00Z
    (`worker_main`) runs `run_ai_worker_loop` in a daemon thread when `ai_is_available` (`AI_ENABLED`
    plus a non-empty `AI_API_KEY`). That loop is separate from enrichment; it claims at most one
    analysis row per tick and only when no `enrichment_jobs` for that scan are `pending` or `running`.
-   The claimed job currently sends the full bounded scan context in one `analyze_scan` request.
-   Structural or grounding violations and writing-style violations each allow one structured
-   repair call. Repair prompts include validation codes and guidance, never rejected prose. If a
-   repaired result still lacks an action for a KEV vulnerability, the worker adds a localized,
-   deterministic action from the existing finding reference, then repeats grounding and style
-   validation without another provider call. A failed job retry refreshes its prompt and writing
+   The claimed job calls `run_bounded_analysis`: Groq analyzes finding chunks, then synthesizes
+   validated child results with explicit failed-finding references. The analyzer validates
+   grounding, KEV coverage and writing style, with one provider repair per child or final result.
+   Repair prompts include validation codes and guidance, never rejected prose. A repair that
+   still omits KEV coverage fails; the worker never inserts actions or evicts recommendations.
+   Coverage counts come from the analyzer. A failed job retry refreshes its prompt and writing
    skill versions.
 
 2. **Contextual chat** — read-only Q&A grounded in org-scoped scan/host/finding evidence. Two
@@ -69,17 +69,17 @@ Each language is a separate job and a separate provider run.
 
 | Name | What it does | Ref |
 |------|--------------|-----|
-| `ai_is_available()` / `build_ai_provider()` | Gate and construct `GroqProvider`. Accept `AI_API_KEY` as a `SecretStr` or a plain string. | `backend/src/api/services/ai/groq.py:466`, `:479` |
-| `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Active scan-job path uses `analyze_scan`; the adapter also exposes chunk and synthesis methods. `repair_*` sends validation codes and concise corrections without rejected prose. Chat: `answer_question`. Every method takes keyword `language`; `_language_name()` maps it to English / Brazilian Portuguese / Russian in the system prompt. `AI_PROMPT_VERSION` is `"6"` (bumped for the evidence-completeness and CVE-correlation rules). `_coverage_notice` reads `evidence_completeness`: `partial` prepends the stop-reason notice from `stopped_by` (DMI-145), `unknown` prepends a notice that the scan does not report whether every check finished, `complete` adds nothing. The system prompt also says an NVD record proves a CVE exists, not that the target is affected; treats `cve_correlation` as unverified; and forbids claiming a clean target when `evidence_completeness` is `partial`/`unknown`. The synthesis aggregate carries `evidence_completeness` and `incomplete_check_count`; there is no `partial_result` key. Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py` |
+| `ai_is_available()` / `build_ai_provider()` | Gate and construct `GroqProvider`. Accept `AI_API_KEY` as a `SecretStr` or a plain string. | `backend/src/api/services/ai/groq.py:536`, `:549` |
+| `GroqProvider` | OpenAI-compatible HTTP to `AI_API_BASE_URL`. Active scan-job path uses `analyze_chunk` and `synthesize_scan` through the bounded analyzer; adapters without bounded support use `analyze_scan`. `repair_*` sends validation codes and concise corrections without rejected prose. Chat: `answer_question`. Every method takes keyword `language`; `_language_name()` maps it to English / Brazilian Portuguese / Russian in the system prompt. `AI_PROMPT_VERSION` is `"6"` (bumped for the evidence-completeness and CVE-correlation rules). `_coverage_notice` reads `evidence_completeness`: `partial` prepends the stop-reason notice from `stopped_by` (DMI-145), `unknown` prepends a notice that the scan does not report whether every check finished, `complete` adds nothing. The system prompt also says an NVD record proves a CVE exists, not that the target is affected; treats `cve_correlation` as unverified; and forbids claiming a clean target when `evidence_completeness` is `partial`/`unknown`. The synthesis aggregate carries `evidence_completeness` and `incomplete_check_count`; there is no `partial_result` key. Each HTTP round-trip records a `GroqUsageEvent` drained after the route returns. | `backend/src/api/services/ai/groq.py` |
 | `ScanAIContext` | Scan-analysis context version `"4"`: includes `evidence_completeness` and `stopped_by` (`operator` \| `timeout` \| `error` \| null), mapped from `scan_terminated_by` (the same typed reader the scan list and detail use). A `cancelled` scan with no results gets no analysis. Also carries `evidence_completeness` and `incomplete_check_count` from `scan_evidence` (metadata plus typed coverage); `split_context` copies both into each chunk. `ScanChatContext` carries the same two fields; chat takes `evidence_completeness` straight from `ScanDetailResponse`. | `backend/src/api/services/ai/context.py:64` |
 | `AIFindingContext.evidence_basis` | `cve_correlation` when `scan_evidence.is_cve_correlation` holds, else `target_observation`. Tells the model whether the finding was seen on the target or only correlated by version. | `backend/src/api/services/ai/context.py:42` |
 | `drain_provider_usage()` / `persist_usage_events()` | Move provider events into `AIUsageRecord` rows (org/scan/user when known). | `backend/src/api/services/ai/telemetry.py:12`, `:17` |
 | `answer_interactive_question()` | Calls `GroqProvider.answer_question`, then `materialize_chat_response` (finding refs to UUIDs and placeholder text to display values). | `backend/src/api/services/ai/chat.py` |
 | `build_scan_chat_bundle()` / `build_host_chat_bundle()` / `build_finding_chat_bundle()` | Placeholder-only JSON for chat (`finding_N`, `machine_N`, `service_N`); no subnet, UUIDs, or raw evidence to Groq. | `backend/src/api/services/ai/chat.py` |
 | `save_chat_message()` / `list_chat_messages()` | Persist Q&A under `scope_type` + `scope_id`; trim to `MAX_CHAT_HISTORY` (10). `list_chat_messages` takes `scan_id=None`; it filters on `scan_id` only for non-host scopes. | `backend/src/api/services/ai/chat.py:275`, `:316` |
-| `lint_provider_analysis()` | Versioned writing skill in the requested language. A style failure gets one repair; the result must pass lint after deterministic KEV-action completion. | `backend/src/api/services/ai/writing.py:10` |
-| `_validate_analysis_with_repair()` / `_validate_repaired_analysis()` | Validate references, duplicate explanations, and KEV action coverage; allow one structured provider repair and add a localized deterministic KEV action if that repair still omits coverage. | `backend/src/api/services/ai/jobs.py:475`, `:485` |
-| `run_bounded_analysis()` | Retained bounded map-reduce helper; the current `process_ready_ai_analyses()` job path calls `analyze_scan` directly. | `backend/src/api/services/ai/analyzer.py:28`, `backend/src/api/services/ai/jobs.py:305` |
+| `lint_provider_analysis()` | Versioned writing skill in the requested language. The analyzer allows one provider repair; the result must pass both grounding and style checks. | `backend/src/api/services/ai/writing.py:10` |
+| `validate_analysis_with_repair()` | Validates references, duplicate explanations, KEV action coverage and writing; repairs once, then accepts or fails without local action insertion. | `backend/src/api/services/ai/analyzer.py` |
+| `run_bounded_analysis()` | Canonical worker analysis path. Runs and validates child chunks, records failed references, synthesizes and validates the final result, and returns coverage counts. | `backend/src/api/services/ai/analyzer.py`, `backend/src/api/services/ai/jobs.py` |
 | `request_scan_ai_analysis()` / `get_scan_ai_analysis()` | On-demand analysis request and read, both keyed by `(scan_id, language)`. `request_scan_ai_analysis(commit=False)` leaves the commit to the caller. | `backend/src/api/services/ai/jobs.py:121`, `:89` |
 | `enqueue_auto_scan_analysis()` | Insert the pending `en` row when `AI_AUTO_ANALYSIS` + `AI_ENABLED` + key; no-op if enrichment still active or row already exists. Called from `persist_scan` (`commit=False`) and after enrichment. | `backend/src/api/services/ai/jobs.py:191`, `backend/src/api/services/persistence.py:188` |
 | `_enqueue_auto_analysis_safely()` | Called from enrichment job completion paths; logs and swallows enqueue failures. | `backend/src/api/services/enrichment.py:115` |
@@ -87,7 +87,7 @@ Each language is a separate job and a separate provider run.
 | `run_ai_worker_loop()` / `run_ai_worker_once()` | Dedicated poll loop in `services/worker.py`. | `backend/src/api/services/worker.py:46`, `:57` |
 | `get_ai_usage()` / `list_context_chat()` / `ask_context_chat()` | Org usage dashboard and unified chat API. | `backend/src/api/routers/ai.py:50`, `:112`, `:137` |
 | `read_scan_ai_chat()` / `ask_scan_ai()` | Scan-scoped chat (scope `scan`). | `backend/src/api/routers/scans.py:63`, `:218` |
-| `build_scan_report()` / `render_scan_report_pdf()` | [Explained reports](/backend/reports.md) combine scan/risk facts, optional AI and deterministic educational guidance: all devices, five vector visuals, endpoint-specific impacts and correction checks, glossary and complete finding register. Technical PDF remains separate. | `backend/src/api/services/reports.py:24`, `backend/src/api/services/report_pdf.py` |
+| `build_scan_report()` / `render_scan_report_pdf()` | [Explained reports](/backend/reports.md) combine scan/risk facts, optional AI and deterministic educational guidance: all devices, five vector visuals, endpoint-specific impacts and correction checks, glossary and complete finding register. Technical reports download as JSON; only explained reports use PDF. | `backend/src/api/services/reports.py:24`, `backend/src/api/services/report_pdf.py` |
 | `AIScanAnalysisRecord` | Table `ai_scan_analyses`; `language` column, unique `(scan_id, language)`, coverage + writing-skill versions. | `backend/src/api/models/persistence.py:360` |
 | `AIChatMessageRecord` | Table `ai_chat_messages`; `scope_type` + `scope_id` index the thread. | `backend/src/api/models/persistence.py:407` |
 | `AIUsageRecord` | Table `ai_usage`; token/latency metadata only. | `backend/src/api/models/persistence.py:47` |
@@ -114,12 +114,12 @@ Each language is a separate job and a separate provider run.
   no enrichment jobs remain active for that scan.
 - **Ingest can write `ai_scan_analyses`.** With `AI_AUTO_ANALYSIS` on, `persist_scan` enqueues the
   `en` row in the same transaction. Other languages are only ever created by a member POST.
-- **`supports_bounded_scan_analysis()`** selects chunked analysis inside `run_bounded_analysis()`; the current job processor calls `analyze_scan()` directly.
+- **`supports_bounded_scan_analysis()`** selects chunked analysis inside the worker's `run_bounded_analysis()` call. Failed children remain visible in coverage counts.
+- **Retired vocabulary must be named in the prompt.** `WRITING_SKILL_INSTRUCTIONS` and the `retired_vocabulary` repair guidance in `_writing_guidance()` list every word in `_RETIRED_WORDS` with its replacement (vulnerability, machine). The lint matches those English words in any language; when the prompt stopped naming them, English overviews failed `style_violation` even after repair.
 - **Writing and grounding repairs** log only the validation phase and category. The worker never logs provider response text; rejected prose is not sent back to Groq.
 - **PDF rendering needs a Unicode TTF on the host.** `_register_unicode_fonts()`
-  (`_register_unicode_fonts` in `report_pdf.py`) looks only at fixed paths — Windows Arial, Linux DejaVu Sans, Linux Liberation
-  Sans — and raises `RuntimeError` when none exists. macOS keeps Arial at another path, so a local PDF
-  download fails there.
+  (`_register_unicode_fonts` in `report_pdf.py`) looks only at fixed paths — macOS Supplemental Arial,
+  Windows Arial, Linux DejaVu Sans, Linux Liberation Sans — and raises `RuntimeError` when none exists.
 - **Chat errors** — `ai_unavailable` (503), `ai_rate_limited` (429, localized body from `chat_api_error_message`), `ai_context_too_large`
   (413), `ai_provider_error` (502). Scan chat adds `scan_not_ready` (409) when the scan is not
   `completed`.

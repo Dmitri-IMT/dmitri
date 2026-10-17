@@ -4,6 +4,7 @@ import type { components, operations } from '../types/openapi'
 type ScanSummary = components['schemas']['ScanSummary']
 type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
+type ScanDeletionResponse = components['schemas']['ScanDeletionResponse']
 export type ScanAIAnalysisResponse =
   components['schemas']['ScanAIAnalysisResponse']
 export type AILanguage = 'en' | 'pt-BR' | 'ru'
@@ -58,6 +59,15 @@ export async function listScans(
 
 export async function getScan(scanId: string): Promise<ScanDetailResponse> {
   const response = await apiClient.get<ScanDetailResponse>(`/scans/${scanId}`)
+  return response.data
+}
+
+export async function deleteScan(scanId: string): Promise<void> {
+  await apiClient.delete(`/scans/${scanId}`)
+}
+
+export async function deleteAllScans(): Promise<ScanDeletionResponse> {
+  const response = await apiClient.delete<ScanDeletionResponse>('/scans')
   return response.data
 }
 

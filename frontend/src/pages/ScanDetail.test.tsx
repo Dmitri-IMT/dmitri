@@ -556,6 +556,7 @@ describe('ScanDetail', () => {
       'Attack surface',
       'Machines seen',
       'Check coverage',
+      'Delete this scan',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
   })
@@ -1103,41 +1104,13 @@ describe('ScanDetail', () => {
     ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
   })
 
-  it('shows partial coverage and keeps the no-findings copy honest', async () => {
-    const completedPartial = withPartialResult(
-      completedScan({ findings: [], finding_count: 0 }),
-      'completed',
+  it('shows the partial warning and keeps the no-findings copy honest', async () => {
+    scanDetail(
+      withPartialResult(
+        completedScan({ findings: [], finding_count: 0 }),
+        'completed',
+      ),
     )
-    completedPartial.metadata = {
-      ...completedPartial.metadata,
-      targeted_units_planned: 19,
-      targeted_units_completed: 5,
-      targeted_units_failed: 0,
-      targeted_units_timed_out: 1,
-      targeted_units_skipped: 13,
-    }
-    completedPartial.targeted_coverage = [
-      {
-        tool: 'ffuf',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [{ reason: 'wordlist_unavailable', count: 6 }],
-      },
-      {
-        tool: 'nikto',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [
-          { reason: 'tool_unavailable', count: 4 },
-          { reason: 'dependency_unavailable', count: 2 },
-        ],
-      },
-    ]
-    scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-ai-unavailable')).toHaveTextContent(
@@ -1147,21 +1120,12 @@ describe('ScanDetail', () => {
       'No confirmed vulnerabilities in accepted evidence.',
     )
     const summary = await screen.findByTestId('scan-summary-strip')
-    const warningButton = within(summary).getByRole('button', {
-      name: 'Warning: partial scan',
-    })
-    expect(warningButton).toBeInTheDocument()
-    await userEvent.setup().click(warningButton)
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    const notice = screen.getByTestId('scan-partial-notice')
-    expect(notice).toHaveTextContent(
-      '19 Planned, 5 Completed, 0 Failed, 1 Timed out, 13 Skipped',
-    )
-    expect(notice).toHaveTextContent('required wordlist is unavailable (6)')
-    expect(notice).toHaveTextContent('tool is not installed or available (4)')
-    expect(notice).toHaveTextContent('required dependency is unavailable (2)')
-    expect(notice).toHaveTextContent('ffuf')
-    expect(notice).toHaveTextContent('Skipped6')
+    expect(
+      within(summary).getByTestId('scan-partial-warning'),
+    ).toHaveTextContent('Warning: partial scan')
+    expect(
+      within(summary).queryByRole('button', { name: 'Warning: partial scan' }),
+    ).not.toBeInTheDocument()
 
     view.unmount()
     scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
@@ -1171,7 +1135,7 @@ describe('ScanDetail', () => {
       `findings-critical-row-${phpCgiFinding.finding_id}`,
     )
     expect(
-      await screen.findByTestId('scan-partial-warning-trigger'),
+      await screen.findByTestId('scan-partial-warning'),
     ).toBeInTheDocument()
   })
 

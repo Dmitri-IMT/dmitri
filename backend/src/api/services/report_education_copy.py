@@ -367,6 +367,67 @@ _GUIDES: dict[str, dict[str, tuple[str, str, str]]] = {
 }
 
 
+REPORT_COPY: dict[AILanguage, dict[str, str]] = {
+    "en": {
+        "generated": "Generated", "intro": "A clear summary of the devices and security observations returned by this scan.",
+        "overview": "Executive summary", "first": "Recommended priorities",
+        "limitations": "What this scan cannot confirm", "hosts": "Devices seen",
+        "findings": "Finding records", "cves": "Distinct CVE IDs", "ports": "Open ports",
+        "scan_timestamp": "Scan date and time", "scope": "Scan scope", "mode": "Scan type",
+        "severity_chart": "Findings by technical severity", "hosts_chart": "Devices with the most findings",
+        "details": "Important findings", "method": "How the scan works", "address": "Address",
+        "severity": "Severity", "description": "What was observed", "why": "Why it may matter",
+        "recommendation": "Recommended action", "evidence": "Evidence recorded by the scan",
+        "uncertainty": "Note", "no_findings": "No finding records were returned by this scan.",
+        "contents": "Contents", "page": "Page",
+    },
+    "pt-BR": {
+        "generated": "Gerado em", "intro": "Um resumo claro dos equipamentos e dos pontos de segurança observados nesta varredura.",
+        "overview": "Resumo executivo", "first": "Prioridades recomendadas",
+        "limitations": "O que esta varredura não confirma", "hosts": "Equipamentos encontrados",
+        "findings": "Registros de achados", "cves": "Identificadores CVE distintos", "ports": "Portas abertas",
+        "scan_timestamp": "Data e hora da varredura", "scope": "Escopo da varredura", "mode": "Tipo de varredura",
+        "severity_chart": "Achados por gravidade técnica", "hosts_chart": "Equipamentos com mais achados",
+        "details": "Achados importantes", "method": "Como a varredura funciona", "address": "Endereço",
+        "severity": "Gravidade", "description": "O que foi observado", "why": "Por que isso pode importar",
+        "recommendation": "Ação recomendada", "evidence": "Evidência registrada pela varredura",
+        "uncertainty": "Observação", "no_findings": "Esta varredura não retornou registros de achados.",
+        "contents": "Sumário", "page": "Página",
+    },
+    "ru": {
+        "generated": "Создан", "intro": "Понятная сводка устройств и замечаний безопасности, обнаруженных при сканировании.",
+        "overview": "Краткий итог", "first": "Рекомендуемые приоритеты",
+        "limitations": "Что это сканирование не подтверждает", "hosts": "Обнаружено устройств",
+        "findings": "Записи о находках", "cves": "Различные идентификаторы CVE", "ports": "Открытые порты",
+        "scan_timestamp": "Дата и время сканирования", "scope": "Область сканирования", "mode": "Тип сканирования",
+        "severity_chart": "Находки по технической серьёзности", "hosts_chart": "Устройства с наибольшим числом находок",
+        "details": "Важные находки", "method": "Как работает сканирование", "address": "Адрес",
+        "severity": "Серьёзность", "description": "Что обнаружено", "why": "Почему это может быть важно",
+        "recommendation": "Рекомендуемое действие", "evidence": "Данные сканирования",
+        "uncertainty": "Примечание", "no_findings": "Сканирование не вернуло записей о находках.",
+        "contents": "Содержание", "page": "Страница",
+    },
+}
+
+SCAN_MODES: dict[AILanguage, dict[str, str]] = {
+    "en": {
+        "quick": "Quick (basic port checks)", "standard": "Standard (common services)",
+        "extensive": "Extensive (more ports and encryption checks)", "max": "Max (all ports)",
+        "nspi": "NSPi (industrial and Windows remote access services)",
+    },
+    "pt-BR": {
+        "quick": "Rápida (verificação básica de portas)", "standard": "Padrão (serviços comuns)",
+        "extensive": "Extensiva (mais portas e verificações de criptografia)", "max": "Máxima (todas as portas)",
+        "nspi": "NSPi (serviços industriais e acesso remoto do Windows)",
+    },
+    "ru": {
+        "quick": "Быстрое (базовая проверка портов)", "standard": "Стандартное (распространённые службы)",
+        "extensive": "Расширенное (больше портов и проверка шифрования)", "max": "Максимальное (все порты)",
+        "nspi": "NSPi (промышленные службы и удалённый доступ Windows)",
+    },
+}
+
+
 def text(key: str, language: AILanguage, **values: Any) -> str:
     return _TEXT[key][_LANGUAGE[language]].format(**values)
 

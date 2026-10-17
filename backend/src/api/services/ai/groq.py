@@ -478,7 +478,8 @@ def _writing_guidance(violation_codes: tuple[str, ...]) -> str:
             "protected, or clean"
         ),
         "retired_vocabulary": (
-            "replace terms such as finding, issue, device, or host with plain language"
+            "replace finding, issue, and weakness with vulnerability, and replace "
+            "device, host, endpoint, and asset with machine"
         ),
         "banned_pattern": "remove promotional or banned phrases",
         "punctuation": (

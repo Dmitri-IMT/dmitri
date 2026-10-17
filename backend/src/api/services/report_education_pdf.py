@@ -18,6 +18,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from api.schemas.ai import AILanguage
+from api.schemas.reports import ExplainedReportSections
 from api.services.report_education_copy import guide, text
 
 _INK = colors.HexColor("#1F2937")
@@ -29,6 +31,26 @@ _LABELS = {
     "en": ("Critical", "High", "Medium", "Low", "Service / version", "Records"),
     "pt-BR": ("Crítica", "Alta", "Moderada", "Baixa", "Serviço / versão", "Registros"),
     "ru": ("Критическая", "Высокая", "Средняя", "Низкая", "Служба / версия", "Записи"),
+}
+_ACTION_PRIORITY = {
+    "en": {
+        "immediate": "Immediate",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+    },
+    "pt-BR": {
+        "immediate": "Imediata",
+        "high": "Alta",
+        "medium": "Moderada",
+        "low": "Baixa",
+    },
+    "ru": {
+        "immediate": "Срочно",
+        "high": "Высокий",
+        "medium": "Средний",
+        "low": "Низкий",
+    },
 }
 
 
@@ -147,8 +169,10 @@ def _evidence_status_label(method, status, language):
     return text(key, language)
 
 
-def append_education(story, sections, styles, copy, language, width, font_name):
-    education = sections["education"]
+def append_education(
+    story: list[Any], education: ExplainedReportSections, styles: Any,
+    copy: dict[str, str], language: AILanguage, width: float, font_name: str,
+) -> None:
     devices = education["devices"]
     labels = _LABELS[language]
     chart_width = width - 12
@@ -189,7 +213,7 @@ def append_education(story, sections, styles, copy, language, width, font_name):
     heading("dashboard", new_page=True)
     lesson("counts_note", affected=education["affected_hosts"], hosts=len(devices),
            without=education["hosts_without_findings"])
-    counts = sections["severity_counts"]
+    counts = education["severity_counts"]
     story.append(p(copy["severity_chart"], "ReportHeading"))
     story.append(EvidenceBars(
         [(labels[index], [counts[key] if column == index else 0
@@ -460,23 +484,20 @@ def append_education(story, sections, styles, copy, language, width, font_name):
 
     heading("plan_title", new_page=True)
     field(text("plan_owner", language), text("plan_owner_body", language))
-    if sections.get("ai_explanation_available"):
+    if education["actions"]:
         story.append(p(copy["first"], "ReportHeading"))
-        for action in sections.get("what_to_do_first", []):
-            if isinstance(action, dict):
-                field(action.get("title", ""), action.get("description", ""))
-            else:
-                body(action)
+        for action in education["actions"]:
+            priority = _ACTION_PRIORITY[language][action["priority"]]
+            field(f"{priority}: {action['title']}", action["description"])
     for number in range(1, 7):
         story.append(KeepTogether([
             p(f"{number}. " + text(f"plan_{number}_title", language), "ReportHeading"),
             p(text(f"plan_{number}_body", language)),
         ]))
-    # Retain individually generated explanations and recommendations when AI is
-    # available; this supplement also preserves the original top finding text.
-    important = [finding for finding in sections.get("important_findings", [])
-                 if finding.get("plain_language_explanation")
-                 or finding.get("why_it_matters")]
+    # AI explanations enrich the finding register, not a parallel document.
+    important = [finding for finding in education["appendix"]
+                 if finding["plain_language_explanation"]
+                 or finding["why_it_matters"]]
     if important:
         story.append(PageBreak())
         story.append(p(copy["details"], "ReportHeading"))
@@ -562,7 +583,7 @@ def append_education(story, sections, styles, copy, language, width, font_name):
         ))
         story.append(Spacer(1, 3 * mm))
     story.append(p(copy["method"], "ReportHeading"))
-    body(sections["method"])
+    body(education["method"])
     story.append(p(copy["limitations"], "ReportHeading"))
-    for limitation in sections["limitations"]:
+    for limitation in education["limitations"]:
         body(limitation)

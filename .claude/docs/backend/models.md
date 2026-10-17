@@ -4,7 +4,7 @@ title: Backend ORM models
 description: The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
 resource: backend/src/api/models/persistence.py
 tags: [backend, models, sqlmodel, orm, schema]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Backend ORM models
@@ -46,6 +46,7 @@ order is irrelevant.
 | `AIScanAnalysisRecord` → `ai_scan_analyses` | `language` column (default `en`); unique `(scan_id, language)` as `uq_ai_scan_analyses_scan_language`; status check; completed requires `analysis_json`; coverage and writing-skill version columns. See [ai](/backend/ai.md). | `backend/src/api/models/persistence.py:360` |
 | `AIUsageRecord` → `ai_usage` | Provider operation metadata (tokens, latency, status); no prompt/response text. | `backend/src/api/models/persistence.py:47` |
 | `AIChatMessageRecord` → `ai_chat_messages` | Per-user Q&A; `scope_type` + `scope_id` thread key; capped in service layer. | `backend/src/api/models/persistence.py:404` |
+| `DeletedScanRecord` → `deleted_scans` | PK `scan_id`, `org_id` FK, `deleted_at`. IDs only, no scan content: ingest refuses an upload for a listed `scan_id`, so an admin-deleted scan cannot be recreated by a late or retried Pi upload (ADR-022). | `backend/src/api/models/persistence.py:488` |
 
 `ArtifactRecord` → `artifacts` was **deleted in DMI-63** (migration `20260804_14` drops the table).
 The agent never wrote artifacts, so the table was dead weight; the reverse migration recreates it.
@@ -77,7 +78,7 @@ The agent never wrote artifacts, so the table was dead weight; the reverse migra
 
 | Model → table | Notable columns / constraints | Ref |
 |---------------|------------------------------|-----|
-| `ActivityRecord` → `activity` | Int autoincrement PK (paging tiebreaker). `org_id` FK. `kind` CHECK of ten literals (includes `scan_cancelled` since DMI-145). `occurred_at` is the API clock. Nullable `actor_user_id` with **no FK** so rows survive user delete. JSONB `payload`. | `backend/src/api/models/activity.py:31` |
+| `ActivityRecord` → `activity` | Int autoincrement PK (paging tiebreaker). `org_id` FK. `kind` CHECK of twelve literals (includes `scan_cancelled` since DMI-145, and `scans_deleted` / `machines_deleted` since DMI-186). `occurred_at` is the API clock. Nullable `actor_user_id` with **no FK** so rows survive user delete. JSONB `payload`. | `backend/src/api/models/activity.py:31` |
 
 ## How it connects
 

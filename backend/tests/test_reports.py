@@ -10,8 +10,12 @@ from api.schemas.ai import (
     ScanAIAnalysis,
     ScanAIAnalysisCompleted,
 )
-from api.services.report_pdf import _COPY, _format_timestamp, _scan_mode_label
+from api.services.report_education_copy import REPORT_COPY
+from api.services.report_education_pdf import append_education
+from api.services.report_pdf import _format_timestamp, _scan_mode_label
 from read_factories import make_finding, seed_read_graph
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import KeepTogether, Paragraph, Table
 
 
 def test_explained_report_is_available_without_ai_analysis(
@@ -35,36 +39,24 @@ def test_explained_report_is_available_without_ai_analysis(
     body = response.json()
     assert body["kind"] == "explained"
     assert body["scan_id"] == str(seeded["scan"].scan_id)
-    assert body["sections"]["attention_level"] in {
-        "none",
-        "low",
-        "medium",
-        "high",
-        "critical",
-    }
-    assert body["sections"]["what_to_do_first"]
     sections = body["sections"]
-    assert sections["metrics"] == {
-        "hosts_scanned": 2,
-        "finding_records": 2,
-        "unique_cve_ids": 0,
-        "open_ports": 1,
-    }
+    assert sections["actions"]
+    assert {"education", "metrics", "top_hosts", "important_findings",
+            "what_to_do_first"}.isdisjoint(sections)
+    assert len(sections["devices"]) == 2
+    assert len(sections["appendix"]) == 2
+    assert sum(device["open_ports"] for device in sections["devices"]) == 1
     assert sections["severity_counts"] == {
         "critical": 0,
         "high": 1,
         "medium": 0,
         "low": 1,
     }
-    assert sections["top_hosts"][0] == {
-        "hostname": "host-a",
-        "address": "192.168.1.10",
-        "findings": 1,
-    }
-    assert sections["important_findings"][0]["recommendation"] == "Patch it."
+    assert sections["devices"][0]["hostname"] == "host-a"
+    assert sections["appendix"][0]["recommendation"] == "Patch it."
     assert {
         action["title"]: action["priority"]
-        for action in sections["what_to_do_first"]
+        for action in sections["actions"]
     } == {"Vulnerable service": "high", "Weak cipher": "low"}
     assert sections["method"]
     assert sections["limitations"]
@@ -79,7 +71,7 @@ def test_explained_report_is_available_without_ai_analysis(
     assert _scan_mode_label("quick", "en") == "Quick (basic port checks)"
     assert _scan_mode_label("quick", "pt-BR") == "Rápida (verificação básica de portas)"
     assert _scan_mode_label("quick", "ru") == "Быстрое (базовая проверка портов)"
-    assert [_COPY[language]["ports"] for language in ("en", "pt-BR", "ru")] == [
+    assert [REPORT_COPY[language]["ports"] for language in ("en", "pt-BR", "ru")] == [
         "Open ports",
         "Portas abertas",
         "Открытые порты",
@@ -137,7 +129,7 @@ def test_explained_report_uses_ai_recommendation_for_finding(
     )
 
     assert response.status_code == 200
-    findings = response.json()["sections"]["important_findings"]
+    findings = response.json()["sections"]["appendix"]
     finding = next(
         item
         for item in findings
@@ -146,7 +138,7 @@ def test_explained_report_uses_ai_recommendation_for_finding(
     assert finding["recommendation"] == "Replace it with a modern, supported setting."
 
 
-def test_explained_report_includes_a_finding_at_the_attention_level(
+def test_explained_report_register_includes_all_findings_regardless_of_rank(
     client,
     administrative_session,
     bearer_headers,
@@ -193,11 +185,11 @@ def test_explained_report_includes_a_finding_at_the_attention_level(
 
     assert response.status_code == 200
     sections = response.json()["sections"]
-    assert sections["attention_level"] == "critical"
-    assert len(sections["important_findings"]) == 5
+    assert sections["severity_counts"]["critical"] == 1
+    assert len(sections["appendix"]) == 8
     assert any(
         finding["title"] == "Critical attention finding"
-        for finding in sections["important_findings"]
+        for finding in sections["appendix"]
     )
 
 
@@ -344,3 +336,59 @@ def test_explained_report_download_renders_long_escaped_details(
     assert response.headers["content-type"].startswith("application/pdf")
     assert response.content.startswith(b"%PDF-")
     assert len(response.content) > 5_000
+
+
+def _flowable_text(flowable: object) -> list[str]:
+    if isinstance(flowable, Paragraph):
+        return [flowable.getPlainText()]
+    if isinstance(flowable, KeepTogether):
+        return [
+            line
+            for child in flowable._content
+            for line in _flowable_text(child)
+        ]
+    if isinstance(flowable, Table):
+        lines: list[str] = []
+        for row in flowable._cellvalues:
+            for cell in row:
+                if isinstance(cell, list):
+                    for child in cell:
+                        lines.extend(_flowable_text(child))
+                else:
+                    lines.extend(_flowable_text(cell))
+        return lines
+    return []
+
+
+def test_explained_report_download_includes_priorities_without_ai(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}/reports/explained",
+        params={"language": "en"},
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    styles = {
+        name: ParagraphStyle(name, fontName="Helvetica", fontSize=9)
+        for name in (
+            "ReportBody",
+            "ReportHeading",
+            "ReportChapter",
+            "ReportCard",
+            "ReportSmall",
+            "ReportDevice",
+        )
+    }
+    story: list[object] = []
+    append_education(story, sections, styles, REPORT_COPY["en"], "en", 460, "Helvetica")
+    text = "\n".join(line for item in story for line in _flowable_text(item))
+    assert "Recommended priorities" in text
+    assert "High: Vulnerable service" in text
+    assert "Low: Weak cipher" in text

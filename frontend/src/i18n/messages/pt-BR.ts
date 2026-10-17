@@ -394,6 +394,43 @@ export const catalog: Catalog = {
   'settings.deleteAccountBody':
     'Sua conta será excluída e você perderá o acesso imediatamente. Isso não pode ser desfeito.',
   'settings.passwordChanged': 'Senha alterada.', // pragma: allowlist secret
+  'deletion.deleteScan': 'Excluir varredura',
+  'deletion.deleteScanHeading': 'Excluir esta varredura',
+  'deletion.deleteScanQuestion': 'Excluir esta varredura?',
+  'deletion.deleteScanBody':
+    'Os resultados, vulnerabilidades, análise de IA e conversa são excluídos. Isso não pode ser desfeito.',
+  'deletion.deleteScanError':
+    'Não foi possível excluir esta varredura. Tente novamente.',
+  'deletion.scanRunningError': 'Pare a varredura antes de excluí-la.',
+  'deletion.scanDeleted': 'Varredura excluída.',
+  'deletion.deleteMachine': 'Excluir máquina',
+  'deletion.deleteMachineHeading': 'Excluir esta máquina',
+  'deletion.deleteMachineQuestion': ({ name }) => 'Excluir ' + name + '?',
+  'deletion.deleteMachineBody':
+    'A máquina e suas vulnerabilidades são excluídas. As varreduras antigas continuam, mas não a listam mais. Se uma varredura futura a encontrar, ela volta como uma nova máquina. Isso não pode ser desfeito.',
+  'deletion.deleteMachineError':
+    'Não foi possível excluir esta máquina. Tente novamente.',
+  'deletion.machineDeleted': ({ name }) => name + ' foi excluída.',
+  'deletion.deleting': 'Excluindo…',
+  'deletion.deleteData': 'Excluir dados',
+  'deletion.deleteAllScans': 'Excluir todas as varreduras',
+  'deletion.deleteAllScansQuestion': 'Excluir todas as varreduras?',
+  'deletion.deleteAllScansBody':
+    'Todas as varreduras concluídas e seus dados são excluídos. Varreduras em andamento são ignoradas. Máquinas vistas só nessas varreduras também são excluídas. Isso não pode ser desfeito.',
+  'deletion.deleteAllScansError':
+    'Não foi possível excluir as varreduras. Tente novamente.',
+  'deletion.scansDeleted': ({ count }) =>
+    'Varreduras excluídas: ' + count + '.',
+  'deletion.scansSkipped': ({ count }) =>
+    'Varreduras em andamento ignoradas: ' + count + '.',
+  'deletion.deleteAllMachines': 'Excluir todas as máquinas',
+  'deletion.deleteAllMachinesQuestion': 'Excluir todas as máquinas?',
+  'deletion.deleteAllMachinesBody':
+    'Todas as máquinas e suas vulnerabilidades são excluídas. As varreduras continuam. A próxima varredura monta a lista de novo. Isso não pode ser desfeito.',
+  'deletion.deleteAllMachinesError':
+    'Não foi possível excluir as máquinas. Tente novamente.',
+  'deletion.machinesDeleted': ({ count }) =>
+    'Máquinas excluídas: ' + count + '.',
   'devices.subtitle': 'As caixas Dmitri que reportam para esta organização.',
   'devices.caption': 'Caixas Dmitri',
   'devices.error': 'Não foi possível carregar seus dispositivos.',

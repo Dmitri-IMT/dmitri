@@ -501,3 +501,11 @@ class AIChatMessageRecord(SQLModel, table=True):
         default_factory=list, sa_column=Column(JSON)
     )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class DeletedScanRecord(SQLModel, table=True):
+    __tablename__ = "deleted_scans"
+
+    scan_id: UUID = Field(primary_key=True)
+    org_id: UUID = Field(index=True, foreign_key="orgs.id")
+    deleted_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

@@ -41,6 +41,7 @@
 | [`adr/ADR-019-v2-active-scanning-and-agent-hardening.md`](adr/ADR-019-v2-active-scanning-and-agent-hardening.md) | Agent hardening, keyed digest, industrial persistence |
 | [`adr/ADR-020-ai-scan-analysis.md`](adr/ADR-020-ai-scan-analysis.md) | Groq scan overview, Explain this scan, data boundary |
 | [`adr/ADR-021-pi-agent-updates.md`](adr/ADR-021-pi-agent-updates.md) | How a provisioned Pi upgrades `hardware-agent` |
+| [`adr/ADR-022-scan-and-machine-deletion.md`](adr/ADR-022-scan-and-machine-deletion.md) | Delete scans or machines (admin, hard delete, deleted-scan guard) |
 
 ### Product roadmap (`roadmap/`)
 

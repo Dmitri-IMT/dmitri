@@ -14,6 +14,7 @@ from agent.assessment.policy import (
     EXPOSURE_ATTENTIONS,
     EXPOSURE_CONFIDENCES,
     EXPOSURE_ROLES,
+    LOCAL_ASSESSMENT_POLICY_VERSION,
     MACHINE_TYPES,
 )
 from agent.normalize.contracts import (
@@ -587,6 +588,10 @@ def _assessment_exposure() -> ExposurePayload:
         reason="The endpoint is classified as media from an observed service.",
         evidence=[],
     )
+
+
+def test_local_assessment_policy_version_is_frozen() -> None:
+    assert LOCAL_ASSESSMENT_POLICY_VERSION == "2026-09-15.2"
 
 
 def test_assessment_contract_vocabulary_is_exact() -> None:

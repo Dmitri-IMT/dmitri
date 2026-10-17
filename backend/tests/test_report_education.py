@@ -14,9 +14,8 @@ from api.services.report_education import (
     finding_semantic_limit,
     service_family,
 )
-from api.services.report_education_copy import guide, text
+from api.services.report_education_copy import REPORT_COPY, guide, text
 from api.services.report_education_pdf import EvidenceBars, append_education
-from api.services.report_pdf import _COPY
 from api.services.reports import build_scan_report
 from read_factories import make_scan, seed_read_graph
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -347,7 +346,7 @@ def test_cached_advisories_and_scan_scoped_enrichment_are_read_only(
         org_id=seeded["org"].id, kind="explained", ai_enabled=False,
         language="pt-BR",
     )
-    education = report.sections["education"]
+    education = report.sections
     assert education["enrichment"] == {"pending": 1, "failed": 1}
     record = next(row for row in education["appendix"]
                   if row["title"] == "CVE-2023-38408")
@@ -580,7 +579,7 @@ def test_pdf_appendix_keeps_semantic_limit_separate_from_truncation(
         ai_enabled=False,
         language="pt-BR",
     )
-    education = report.sections["education"]
+    education = report.sections
     record = next(
         item for item in education["appendix"]
         if item["finding_id"] == str(finding.finding_id)
@@ -597,7 +596,7 @@ def test_pdf_appendix_keeps_semantic_limit_separate_from_truncation(
         styles.add(ParagraphStyle(name, parent=styles[base]))
     story = []
     append_education(
-        story, report.sections, styles, _COPY["pt-BR"], "pt-BR", 500, "Helvetica"
+        story, report.sections, styles, REPORT_COPY["pt-BR"], "pt-BR", 500, "Helvetica"
     )
     appendix_table = next(
         item for item in story

@@ -11,6 +11,7 @@ from api.dependencies.agent_auth import AgentIdentity
 from api.models.command import Command
 from api.models.persistence import (
     CPERecord,
+    DeletedScanRecord,
     EnrichmentJobRecord,
     ExposureRecord,
     FindingRecord,
@@ -58,6 +59,8 @@ def ingest_scan(
     existing = session.get(ScanRecord, scan.scan_id)
 
     if existing is None:
+        if session.get(DeletedScanRecord, scan.scan_id) is not None:
+            raise ScanClosedError
         return persist_scan(
             session,
             scan,

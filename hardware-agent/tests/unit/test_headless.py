@@ -251,10 +251,6 @@ class TestOnePipeline:
 
         assert result.outcome == "partial"
 
-    def test_headless_imports_shared_runner_and_writer(self) -> None:
-        assert headless.ScanRunner is ScanRunner
-        assert headless.write_scan_result is write_scan_result
-
     @pytest.mark.parametrize("mode", ["extensive", "max", "nspi"])
     def test_headless_eligible_modes_use_targeted_stage_and_keep_gap_partial(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path, mode: str

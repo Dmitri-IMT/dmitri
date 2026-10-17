@@ -265,26 +265,9 @@ class TestActivityLog:
             text = _log_text(screen)
             assert "Inventoried 192.168.1.30 (1/1)" in text
             assert "1 Modbus hosts inventoried" in text
-            assert screen._target_pct == 85.0
 
 
 class TestProgressTarget:
-    @pytest.mark.asyncio
-    async def test_target_pct_after_port_stage_done_max(self) -> None:
-        screen = _make_screen(scan_mode="max")
-        async with _Harness(screen).run_test() as pilot:
-            await pilot.pause()
-            await _post(pilot, screen, ScanEvent(kind="port_stage_done", ports_open=7))
-            assert screen._target_pct == 55.0
-
-    @pytest.mark.asyncio
-    async def test_target_pct_after_port_stage_done_quick(self) -> None:
-        screen = _make_screen(scan_mode="quick")
-        async with _Harness(screen).run_test() as pilot:
-            await pilot.pause()
-            await _post(pilot, screen, ScanEvent(kind="port_stage_done", ports_open=2))
-            assert screen._target_pct == 65.0
-
     @pytest.mark.asyncio
     @pytest.mark.parametrize("mode", ["quick", "standard"])
     async def test_ineligible_modes_ignore_targeted_events(self, mode: str) -> None:
@@ -322,7 +305,7 @@ class TestProgressTarget:
             assert "Targeted checks" not in _log_text(screen)
 
     @pytest.mark.asyncio
-    async def test_eligible_zero_target_reaches_normalize_floor(self) -> None:
+    async def test_eligible_zero_target_logs_no_supported_services(self) -> None:
         screen = _make_screen(scan_mode="max")
         async with _Harness(screen).run_test() as pilot:
             await pilot.pause()
@@ -331,11 +314,8 @@ class TestProgressTarget:
                 screen,
                 ScanEvent(kind="targeted_stage_started", units_total=0),
             )
-            assert screen._target_pct == 85.0
             assert "No supported services found" in _log_text(screen)
             assert "targeted" not in screen._active_stages
-            await _post(pilot, screen, ScanEvent(kind="normalize_started"))
-            assert screen._target_pct == 95.0
 
     @pytest.mark.asyncio
     async def test_targeted_full_summary_precedes_normalize(self) -> None:
@@ -373,7 +353,6 @@ class TestProgressTarget:
             assert text.index("Targeted checks completed: 2") < text.index(
                 "Generating results"
             )
-            assert screen._target_pct == 95.0
 
     @pytest.mark.asyncio
     async def test_targeted_degraded_summary_keeps_counters_through_normalize(

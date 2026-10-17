@@ -16,6 +16,7 @@ import FindingsTable from '@/pages/scans/FindingsTable'
 import { EvidenceSummary, ObservationList } from '@/pages/scans/FindingPanel'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
 import ScanCoverage from '@/pages/scans/ScanCoverage'
+import ScanDelete from '@/pages/scans/ScanDelete'
 import ScanDetailHeader, {
   ScanSummaryStrip,
 } from '@/pages/scans/ScanDetailHeader'
@@ -308,6 +309,7 @@ function ScanDetail() {
                 )}
               </div>
             )}
+            <ScanDelete scan={scan} />
           </>
         )
       }}

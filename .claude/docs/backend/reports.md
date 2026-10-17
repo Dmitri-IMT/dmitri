@@ -34,8 +34,13 @@ English, Brazilian Portuguese and Russian.
 The report routes in [routers](/backend/routers.md) authorize the reader, call `build_scan_report`,
 and pass the resulting `ScanReportResponse` to `render_scan_report_pdf`. The assembly reads
 [scan/risk projections](/backend/services.md) and [optional AI analysis](/backend/ai.md).
-`sections.education` is additional structured content in the existing free-form report sections;
-the route and response schema are unchanged. The frontend downloads the PDF through the same URL.
+Explained `sections` is a single typed `ExplainedReportSections` payload: education, scan metadata,
+summary, actions and limitations. AI explanations enrich the full finding register. There is no
+parallel executive-summary document or nested `education` blob. The cover derives counts and
+host charts from that same inventory and register; `append_education` is the only body renderer.
+Technical `sections` is `TechnicalReportSections`, with scan/risk/optional AI models, and downloads
+as JSON. The response validates the payload and content type against `kind`. Download URLs are
+unchanged; the OpenAPI contract and generated frontend types describe both payloads.
 
 ## Notes / gotchas
 

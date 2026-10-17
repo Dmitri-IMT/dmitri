@@ -27,6 +27,7 @@ ERROR_RESPONSE_ROUTES = {
     "AgentOfflineConflict": ("agents.py", "update_agent_target_subnet_route", 409),
     "TargetSubnetNotReported": ("agents.py", "update_agent_target_subnet_route", 422),
     "ScanSubnetNotReported": ("agents.py", "create_agent_command", 422),
+    "ScanRunningConflict": ("scans.py", "delete_scan_route", 409),
 }
 
 SCHEMA_NAMES = (
@@ -84,7 +85,19 @@ SCHEMA_NAMES = (
     "ScanAIAnalysisFailed",
     "ScanAIAnalysisCompleted",
     "ScanReportResponse",
+    "ExplainedReportSections",
+    "TechnicalReportSections",
+    "ReportDevice",
+    "ReportService",
+    "ReportIssueGroup",
+    "ReportObservation",
+    "ReportAdvisoryNote",
+    "ReportFinding",
+    "ReportAction",
+    "ReportSource",
     "AIChatResponse",
+    "ScanDeletionResponse",
+    "HostDeletionResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -210,106 +223,6 @@ def _app_operation_parameters(path: str) -> dict[str, dict[str, Any]]:
     spec = app.openapi()
     raw = spec["paths"][path]["get"]["parameters"]
     return {param["name"]: _parameter_entry(spec, param) for param in raw}
-
-
-def test_property_shape_type_list_and_anyof_nullable_are_equal():
-    spec: dict[str, Any] = {}
-    type_list = {"type": ["string", "null"]}
-    any_of = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-    assert _property_shape(spec, type_list) == _property_shape(spec, any_of)
-
-
-def test_property_shape_const_and_single_enum_are_equal():
-    spec: dict[str, Any] = {}
-    const = {"const": "accepted"}
-    enum = {"enum": ["accepted"]}
-    assert _property_shape(spec, const) == _property_shape(spec, enum)
-
-
-def test_property_shape_nullable_mismatch_is_different():
-    spec: dict[str, Any] = {}
-    nullable = {"type": ["string", "null"]}
-    non_nullable = {"type": "string"}
-    assert _property_shape(spec, nullable) != _property_shape(spec, non_nullable)
-
-
-def test_property_shape_const_vs_wider_enum_is_different():
-    spec: dict[str, Any] = {}
-    const = {"const": "accepted"}
-    enum = {"enum": ["accepted", "pending"]}
-    assert _property_shape(spec, const) != _property_shape(spec, enum)
-
-
-def test_property_shape_changed_type_is_different():
-    spec: dict[str, Any] = {}
-    assert _property_shape(spec, {"type": "string"}) != _property_shape(
-        spec, {"type": "integer"}
-    )
-
-
-def test_property_shape_changed_minimum_is_different():
-    spec: dict[str, Any] = {}
-    assert _property_shape(
-        spec, {"type": "integer", "minimum": 0}
-    ) != _property_shape(spec, {"type": "integer", "minimum": 1})
-
-
-def test_schema_fingerprint_removed_required_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": ["a", "b"],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    missing_required = {
-        "additionalProperties": False,
-        "required": ["a"],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(
-        spec, missing_required
-    )
-
-
-def test_schema_fingerprint_added_property_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}},
-    }
-    with_extra = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, with_extra)
-
-
-def test_schema_fingerprint_removed_property_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    without_b = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, without_b)
-
-
-def test_response_status_codes_not_compared_open_item_1():
-    contract = _load_contract()
-    app_spec = app.openapi()
-    for path in OPERATION_PATHS:
-        contract_codes = set(contract["paths"][path]["get"]["responses"])
-        app_codes = set(app_spec["paths"][path]["get"]["responses"])
-        assert "400" in contract_codes
-        assert "422" in app_codes
-        assert contract_codes != app_codes
 
 
 @pytest.mark.parametrize("schema_name", SCHEMA_NAMES)

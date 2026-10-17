@@ -10,7 +10,14 @@ from sqlmodel import Session, select
 from api.models.persistence import EnrichmentJobRecord, NvdCacheRecord
 from api.schemas.ai import AILanguage, ScanAIAnalysisCompleted
 from api.schemas.read import ScanDetailResponse, ScanRiskSummaryResponse
-from api.schemas.reports import ReportKind, ScanReportResponse
+from api.schemas.reports import (
+    ExplainedReportSections,
+    ReportAction,
+    ReportFinding,
+    ReportKind,
+    ScanReportResponse,
+    TechnicalReportSections,
+)
 from api.services.ai.jobs import get_scan_ai_analysis
 from api.services.nvd import parse_nvd_matches
 from api.services.read import get_scan_detail, get_scan_risk_summary
@@ -40,33 +47,46 @@ def build_scan_report(
     if risk is None:
         raise ReportNotReadyError("risk summary is not available")
     analysis = get_scan_ai_analysis(
-        session,
-        scan_id,
-        org_id=org_id,
-        ai_enabled=ai_enabled,
-        language=language,
+        session, scan_id, org_id=org_id, ai_enabled=ai_enabled, language=language,
     )
-    generated_at = now or datetime.now(timezone.utc)
-    sections = (
-        _explained_sections(detail, risk, analysis, language)
-        if kind == "explained"
-        else _technical_sections(detail, risk, analysis)
-    )
+    completed = analysis if isinstance(analysis, ScanAIAnalysisCompleted) else None
+    sections: ExplainedReportSections | TechnicalReportSections
     if kind == "explained":
         advisories, enrichment = _educational_evidence(session, detail)
-        sections["education"] = build_report_education(
-            detail, language, advisories=advisories, enrichment=enrichment
+        education = build_report_education(
+            detail, language, advisories=advisories, enrichment=enrichment,
+            analysis=completed.analysis if completed else None,
+        )
+        sections = ExplainedReportSections(
+            **education,
+            scan_timestamp=detail.timestamp,
+            scope=detail.subnet,
+            scan_mode=detail.scan_mode,
+            ai_explanation_available=completed is not None,
+            overview=(
+                completed.analysis.plain_language_summary if completed else
+                _fallback_overview(language, len(education["devices"]),
+                                   len(education["appendix"]))
+            ),
+            actions=_report_actions(risk, completed, education["appendix"], language),
+            method=_method_text(language),
+            limitations=(
+                list(completed.analysis.uncertainties) if completed else
+                [_fallback_limitation(language)]
+            ) + _method_limitations(language, detail.assessment_status),
+        )
+    else:
+        sections = TechnicalReportSections(
+            scan_timestamp=detail.timestamp, scope=detail.subnet,
+            scan_mode=detail.scan_mode, scan=detail, risk_summary=risk,
+            ai_analysis=completed,
         )
     extension = "pdf" if kind == "explained" else "json"
     return ScanReportResponse(
-        scan_id=scan_id,
-        kind=kind,
-        language=language,
-        generated_at=generated_at,
+        scan_id=scan_id, kind=kind, language=language,
+        generated_at=now or datetime.now(timezone.utc),
         filename=f"dmitri-scan-{scan_id}-{kind}.{extension}",
-        content_type=(
-            "application/pdf" if kind == "explained" else "application/json"
-        ),
+        content_type="application/pdf" if kind == "explained" else "application/json",
         sections=sections,
     )
 
@@ -101,166 +121,29 @@ def _educational_evidence(
     }
 
 
-def _explained_sections(
-    detail: ScanDetailResponse,
+def _report_actions(
     risk: ScanRiskSummaryResponse,
-    analysis: object,
+    completed: ScanAIAnalysisCompleted | None,
+    appendix: list[ReportFinding],
     language: AILanguage,
-) -> dict[str, Any]:
-    completed = (
-        analysis
-        if isinstance(analysis, ScanAIAnalysisCompleted)
-        else None
-    )
-    host_names = {str(host.ip): host.hostname for host in detail.hosts}
-    findings_by_host: dict[str, dict[str, Any]] = {}
-    for finding in detail.findings:
-        address = str(finding.host_ip) if finding.host_ip is not None else None
-        if address is None:
-            continue
-        host = findings_by_host.setdefault(
-            address,
-            {
-                "hostname": finding.host_hostname or host_names.get(address) or address,
-                "address": address,
-                "findings": 0,
-            },
-        )
-        host["findings"] += 1
-
-    ai_explanations = (
-        {
-            item.finding_id: item
-            for item in completed.analysis.important_findings
-        }
-        if completed is not None
-        else {}
-    )
-    important_findings = []
-    ranked_findings = list(risk.top_findings)
-    attention_severity = {
-        "critical": "critical",
-        "high": "high",
-        "medium": "medium",
-        "low": "low",
-    }.get(_attention_level(risk))
-    attention_finding = next(
-        (
-            finding
-            for finding in detail.findings
-            if finding.severity == attention_severity
-        ),
-        None,
-    )
-    selected_findings = ranked_findings[:5]
-    if (
-        attention_finding is not None
-        and all(
-            finding.finding_id != attention_finding.finding_id
-            for finding in selected_findings
-        )
-    ):
-        selected_findings = ranked_findings[:4] + [attention_finding]
-
-    for finding in selected_findings:
-        explanation = ai_explanations.get(finding.finding_id)
-        address = str(finding.host_ip) if finding.host_ip is not None else None
-        important_findings.append(
-            {
-                "title": finding.title,
-                "hostname": finding.host_hostname
-                or (host_names.get(address) if address else None),
-                "address": address,
-                "severity": finding.severity,
-                "service": finding.service,
-                "port": finding.port,
-                "cvss_score": finding.cvss_score,
-                "cve_id": finding.cve_id,
-                "description": finding.description,
-                "plain_language_explanation": (
-                    explanation.plain_language_explanation
-                    if explanation is not None
-                    else None
-                ),
-                "why_it_matters": (
-                    explanation.why_it_matters if explanation is not None else None
-                ),
-                "recommendation": (
-                    explanation.recommendation
-                    if explanation is not None
-                    else finding.recommendation
-                ),
-                "evidence": finding.evidence,
-                "uncertainty": (
-                    explanation.uncertainty if explanation is not None else None
-                ),
-            }
-        )
-
-    limitations = (
-        list(completed.analysis.uncertainties)
-        if completed is not None
-        else [_fallback_limitation(language)]
-    )
-    limitations.extend(_method_limitations(language, detail.assessment_status))
-
-    return {
-        "ai_explanation_available": completed is not None,
-        "overview": (
-            completed.analysis.plain_language_summary
-            if completed is not None
-            else _fallback_overview(language, detail.host_count, detail.finding_count)
-        ),
-        "attention_level": _attention_level(risk),
-        "metrics": {
-            "hosts_scanned": detail.host_count,
-            "finding_records": risk.total_findings,
-            "unique_cve_ids": len(
-                {finding.cve_id.upper()
-                 for finding in detail.findings if finding.cve_id}
-            ),
-            "open_ports": sum(
-                port.state == "open"
-                for host in detail.hosts
-                for port in host.ports
-            ),
-        },
-        "severity_counts": {
-            "critical": risk.severity.critical,
-            "high": risk.severity.high,
-            "medium": risk.severity.medium,
-            "low": risk.severity.low,
-        },
-        "top_hosts": sorted(
-            findings_by_host.values(),
-            key=lambda host: (
-                -host["findings"], host["hostname"].casefold(), host["address"]
-            ),
-        )[:5],
-        "important_findings": important_findings,
-        "scan_timestamp": detail.timestamp,
-        "scope": detail.subnet,
-        "scan_mode": detail.scan_mode,
-        "assessment_status": detail.assessment_status,
-        "method": _method_text(language),
-        "what_to_do_first": (
-            [
-                action.model_dump(mode="json")
-                for action in completed.analysis.priority_actions
-            ]
-            if completed is not None and completed.analysis.priority_actions
-            else [
-                {
-                    "priority": _priority_for_severity(finding["severity"]),
-                    "title": finding["title"],
-                    "description": finding["recommendation"],
-                }
-                for finding in important_findings[:3]
-            ]
-            or [_fallback_action(language)]
-        ),
-        "limitations": limitations,
-    }
+) -> list[ReportAction]:
+    if completed and completed.analysis.priority_actions:
+        return [action.model_dump(mode="json")
+                for action in completed.analysis.priority_actions]
+    records = {item["finding_id"]: item for item in appendix}
+    actions = []
+    for finding in risk.top_findings[:3]:
+        record = records[str(finding.finding_id)]
+        actions.append(ReportAction(
+            priority={"critical": "immediate", "high": "high",
+                      "medium": "medium", "low": "low"}[record["severity"]],
+            title=finding.title, description=record["recommendation"],
+            related_finding_ids=[record["finding_id"]],
+        ))
+    return actions or [ReportAction(
+        priority="medium", title=_fallback_action(language),
+        description=_fallback_action(language), related_finding_ids=[],
+    )]
 
 
 def _method_text(language: AILanguage) -> str:
@@ -281,15 +164,6 @@ def _method_text(language: AILanguage) -> str:
             "безопасности, но не проверяет все возможные уязвимости."
         ),
     }[language]
-
-
-def _priority_for_severity(severity: str) -> str:
-    return {
-        "critical": "immediate",
-        "high": "high",
-        "medium": "medium",
-        "low": "low",
-    }.get(severity, "medium")
 
 
 def _method_limitations(language: AILanguage, assessment_status: str) -> list[str]:
@@ -317,51 +191,15 @@ def _method_limitations(language: AILanguage, assessment_status: str) -> list[st
         ],
     }[language]
     if assessment_status == "unavailable":
-        common.append(
-            {
-                "en": "Device exposure assessment was unavailable for this scan.",
-                "pt-BR": (
-                    "A avaliação de exposição dos equipamentos não estava "
-                    "disponível nesta varredura."
-                ),
-                "ru": (
-                    "Оценка открытых служб устройств для этого "
-                    "сканирования недоступна."
-                ),
-            }[language]
-        )
+        common.append({
+            "en": "Device exposure assessment was unavailable for this scan.",
+            "pt-BR": (
+                "A avaliação de exposição dos equipamentos não estava "
+                "disponível nesta varredura."
+            ),
+            "ru": "Оценка открытых служб устройств для этого сканирования недоступна.",
+        }[language])
     return common
-
-
-def _technical_sections(
-    detail: ScanDetailResponse,
-    risk: ScanRiskSummaryResponse,
-    analysis: object,
-) -> dict[str, Any]:
-    return {
-        "scan_timestamp": detail.timestamp,
-        "scope": detail.subnet,
-        "scan_mode": detail.scan_mode,
-        "scan": detail.model_dump(mode="json"),
-        "risk_summary": risk.model_dump(mode="json"),
-        "ai_analysis": (
-            analysis.model_dump(mode="json")
-            if isinstance(analysis, ScanAIAnalysisCompleted)
-            else None
-        ),
-    }
-
-
-def _attention_level(risk: ScanRiskSummaryResponse) -> str:
-    if risk.severity.critical:
-        return "critical"
-    if risk.severity.high:
-        return "high"
-    if risk.severity.medium:
-        return "medium"
-    if risk.severity.low:
-        return "low"
-    return "none"
 
 
 def _fallback_overview(language: AILanguage, hosts: int, findings: int) -> str:

@@ -43,6 +43,33 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   per-tool coverage gaps and pinned Raspberry Pi tool provisioning.
 * **Update**: `hardware-agent/index.md` links the targeted stage; `docs/DEV-SETUP.md`
   explains package-only prerequisites and the Pi provisioner's tool verification.
+## 2026-10-14
+
+* **Update**: PR #165 review fixes. Inventory rebuild now owns identity, seen times, counts,
+  ports, findings and machine type in one oldest-to-newest walk shared by scan deletion and MAC
+  repair. Scan deletion explicitly removes AI analyses, with a runtime DELETE grant in
+  `20261012_40`. Updated `backend/services.md` and `backend/migrations.md`.
+
+## 2026-10-13
+
+* **Update**: DMI-186 admin scan and machine deletion. New `services/deletion.py`, `schemas/deletion.py`,
+  `DeletedScanRecord`, migration `20261012_40`, four `DELETE` routes, `org_name` on `GET /users/me`,
+  and the `scans_deleted` / `machines_deleted` activity kinds; ingest refuses a deleted `scan_id`.
+  Frontend gained `ScanDelete`, `HostDelete`, `DeleteDataPanel`, `useRefreshAfterDelete` and the
+  delete API calls. Updated `backend/routers.md`, `backend/services.md`, `backend/models.md`,
+  `backend/migrations.md`, `backend/schemas.md`, `frontend/api.md`, `frontend/screens.md`,
+  `frontend/host-detail.md`, `contracts.md`, and the `index.md` listings.
+
+## 2026-10-12
+
+* **Update**: `ScanPartialWarning` is a plain warning line with no dialog; the dialog-only message
+  keys were removed from the three catalogs. `targeted_coverage` is still returned by the API but no
+  screen renders it. Updated `frontend/scan-partial-warning.md`, `frontend/screens.md`,
+  `frontend/index.md`.
+* **Update**: The AI writing instructions and the `retired_vocabulary` repair guidance name every
+  retired word and its replacement again, after English overviews failed style lint. Fixed stale
+  `groq.py` line references and the PDF font note, which now lists the macOS Arial path.
+  Updated `backend/ai.md`.
 
 ## 2026-10-06
 

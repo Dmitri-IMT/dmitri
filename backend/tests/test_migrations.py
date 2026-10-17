@@ -39,9 +39,32 @@ SEQUENCES_DROPPED_AFTER_BASELINE = {"artifacts_id_seq"}
 # the default grant set. `activity` is append-only: it is never updated or deleted
 # by the runtime (see 20260905_19_home_activity_feed.py). `host_ports` and
 # `host_findings` add DELETE for the host cascade and the downgrade (see
-# 20260907_20_machine_inventory_depth.py).
+# 20260907_20_machine_inventory_depth.py). The scan and machine tables add DELETE
+# for admin deletion, and `deleted_scans` is insert-only (see
+# 20261012_40_scan_machine_deletion.py).
 DEFAULT_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE"})
+DELETABLE_RUNTIME_GRANTS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE"})
 RUNTIME_GRANTS_BY_TABLE = {
+    **dict.fromkeys(
+        (
+            "scans",
+            "scan_hosts",
+            "ports",
+            "services",
+            "cpes",
+            "exposures",
+            "industrial_services",
+            "modbus_units",
+            "findings",
+            "risk_snapshots",
+            "enrichment_jobs",
+            "hosts",
+            "commands",
+            "ai_scan_analyses",
+        ),
+        DELETABLE_RUNTIME_GRANTS,
+    ),
+    "deleted_scans": frozenset({"SELECT", "INSERT"}),
     "activity": frozenset({"SELECT", "INSERT"}),
     "ai_chat_messages": frozenset({"SELECT", "INSERT", "DELETE"}),
     "ai_usage": frozenset({"SELECT", "INSERT"}),

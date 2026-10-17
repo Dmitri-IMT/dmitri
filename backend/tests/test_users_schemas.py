@@ -15,7 +15,7 @@ from api.schemas.users import (
 def test_user_profile_response_validates_good_payload():
     user_id = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
     response = UserProfileResponse.model_validate(
-        {"user_id": user_id, "email": "a@b.com", "role": "admin"}
+        {"user_id": user_id, "email": "a@b.com", "role": "admin", "org_name": "Acme"}
     )
 
     assert response.user_id == user_id

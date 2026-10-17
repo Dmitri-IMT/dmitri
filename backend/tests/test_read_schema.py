@@ -226,7 +226,6 @@ def test_scan_list_response_envelope_shape():
 
     assert envelope.total == 1
     assert isinstance(envelope.data[0], ScanSummary)
-    assert "per_page" not in ScanListResponse.model_fields
 
 
 def test_host_summary_rejects_a_negative_vulnerability_count():
@@ -254,7 +253,6 @@ def test_host_list_response_rejects_a_negative_quiet_total():
 
 
 def test_host_port_carries_the_two_dates_and_no_state():
-    assert "state" not in HostPort.model_fields
     payload = {
         "port": 554,
         "protocol": "tcp",

@@ -17,6 +17,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas.scan import FindingEvidenceObservationPayload
+from api.services.hosts import apply_observation
 from api.services.scan_evidence import (
     evidence_completeness,
     finding_observation_is_supported,
@@ -88,8 +89,13 @@ def rebuild_host_inventory(session: Session, host_ids: list[UUID]) -> None:
         .join(ScanHostRecord, ScanHostRecord.scan_id == ScanRecord.scan_id)
         .where(ScanHostRecord.host_id.in_(host_ids))
         .group_by(ScanRecord.scan_id, ScanRecord.timestamp, ScanRecord.created_at)
-        .order_by(*_LATEST_SCAN_HOST_ORDER[::-1])
+        .order_by(
+            ScanRecord.timestamp.asc(),
+            ScanRecord.created_at.asc(),
+            ScanRecord.scan_id.asc(),
+        )
     ).all()
+    reset: set[UUID] = set()
     for scan_id in scan_ids:
         scan = session.get(ScanRecord, scan_id)
         if scan is None:
@@ -103,6 +109,16 @@ def rebuild_host_inventory(session: Session, host_ids: list[UUID]) -> None:
         for scan_host in scan_hosts:
             host = _host_for(session, scan_host)
             if host is not None:
+                if host.id not in reset:
+                    reset.add(host.id)
+                    host.ip = scan_host.ip
+                    host.mac = scan_host.mac
+                    host.hostname = scan_host.hostname
+                    host.vendor = scan_host.vendor
+                    host.operating_system_json = scan_host.operating_system_json
+                    host.first_seen_at = scan.timestamp
+                    host.last_seen_at = scan.timestamp
+                apply_observation(session, host, scan_host, scan.timestamp)
                 _reconcile_machine(session, scan, scan_host, host)
 
 

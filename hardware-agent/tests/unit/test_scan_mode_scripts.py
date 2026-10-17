@@ -32,7 +32,22 @@ class TestDeepStageScripts:
             "ftp-anon",
             "banner",
         )
-        assert len(NSPI_NSE_SCRIPTS) == 14
+        assert NSPI_NSE_SCRIPTS == (
+            "modbus-discover",
+            "enip-info",
+            "smb-protocols",
+            "smb2-security-mode",
+            "smb-security-mode",
+            "smb-vuln-ms17-010",
+            "smb-enum-shares",
+            "rdp-enum-encryption",
+            "ssh-auth-methods",
+            "ssh2-enum-algos",
+            "ssl-cert",
+            "ssl-enum-ciphers",
+            "http-title",
+            "vulners",
+        )
 
         assert deep_stage_scripts("quick") == QUICK_NSE_SCRIPTS
         assert deep_stage_scripts("standard") == STANDARD_NSE_SCRIPTS

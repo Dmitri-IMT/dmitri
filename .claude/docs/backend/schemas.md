@@ -4,7 +4,7 @@ title: Backend wire schemas
 description: The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 resource: backend/src/api/schemas/scan.py
 tags: [backend, schemas, pydantic, contract]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Backend wire schemas
@@ -59,7 +59,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `FindingRead` | A finding row plus resolved `host_id`/`host_ip`, nullable `host_hostname`, `detected_at`, optional `modbus_unit`, and nullable life fields `first_seen_at`/`last_seen_at`/`fixed_at`. | `backend/src/api/schemas/read.py:56` |
 | `ScanAIAnalysisResponse` | GET/POST `/scans/{id}/analysis`. `Annotated` union with `discriminator="status"` over `ScanAIAnalysisUnavailable`, `ScanAIAnalysisNotRequested`, `ScanAIAnalysisQueued`, `ScanAIAnalysisFailed`, `ScanAIAnalysisCompleted`. Only `Completed` has `analysis` (`ScanAIAnalysis`, same file). Every job variant carries `language`. | `backend/src/api/schemas/ai.py` |
 | `AIChatResponse` / `AIChatHistoryResponse` | Interactive Q&A body and history list; finding refs as UUIDs on the wire. The request `AIChatRequest` takes `question` plus optional `language` (default `en`). | `backend/src/api/schemas/ai.py` |
-| `ScanReportResponse` | Report JSON; carries `kind` and `language`. | `backend/src/api/schemas/reports.py` |
+| `ScanReportResponse` | Report envelope with `kind` and `language`; validates typed explained or technical sections and the matching content type. Explained sections contain the education document directly; technical sections contain scan, risk and optional AI models. | `backend/src/api/schemas/reports.py` |
 | `AIUsageResponse` | `GET /ai/usage` summary + `data` entries. | `backend/src/api/schemas/ai.py` |
 | `HostSummary` | List-view row for `GET /hosts`: identity + `first_seen_at`/`last_seen_at` + `vendor` + `machine_type` + `open_ports_count` + `vulnerability_count` + `highest_severity`. `machine_type` NULL in the row maps to `"unknown"` on the wire. Also carries the optional full device profile; legacy rows may supply only the type. | `backend/src/api/schemas/read.py:83` |
 | `HostScanHistoryEntry` | One scan's contribution to a host's history: `scan_id`, `timestamp`, `scan_mode`, `open_ports_count`, `highest_severity`. | `backend/src/api/schemas/read.py:99` |
@@ -76,7 +76,7 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 
 | Name | What it validates | Ref |
 |------|-------------------|-----|
-| `UserProfileResponse` | `user_id`, `email`, `role`; the caller-facing profile omits activity. | `backend/src/api/schemas/users.py:10` |
+| `UserProfileResponse` | `user_id`, `email`, `role`, `org_name`; the caller-facing profile omits activity. | `backend/src/api/schemas/users.py:10` |
 | `OrgMember` | Admin member-list row: `user_id`, `email`, `role`, nullable `last_seen_at`; deliberately no `last_login_at` or status. | `backend/src/api/schemas/users.py:18` |
 | `OrgMemberListResponse` | `{data: OrgMember[]}` with extras forbidden. | `backend/src/api/schemas/users.py:27` |
 | `UpdateUserRoleRequest` | Exactly one `role`, constrained to `admin` or `viewer`. | `backend/src/api/schemas/users.py:33` |
@@ -86,6 +86,13 @@ made FastAPI mangle a component to `api__schemas__scan__Port`.
 | `HomeNoticeKind` / `HomeNotice` | Only `failed_scan` remains — `stale_coverage` and `HomeNotice.days` were removed (DMI-179), in lockstep with the OpenAPI contract and generated frontend types. | `backend/src/api/schemas/home.py:35`, `:39` |
 
 Consumed by [`routers/users.py`](/backend/routers.md) for self profile and admin member operations.
+
+## Key classes / functions — `deletion.py` (admin deletion responses)
+
+| Name | What it does | Where |
+|------|--------------|-------|
+| `ScanDeletionResponse` | `deleted`, `skipped` (unfinished scans left alone), `machines_removed`; returned by `DELETE /scans`. | `backend/src/api/schemas/deletion.py:6` |
+| `HostDeletionResponse` | `deleted`; returned by `DELETE /hosts`. | `backend/src/api/schemas/deletion.py:14` |
 
 ## Key classes / functions — `auth.py` (auth request/response)
 

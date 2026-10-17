@@ -125,6 +125,9 @@ class _BoundedProvider:
     def analyze_scan(self, context, *, language="en"):
         raise AssertionError("the bounded pipeline must not call analyze_scan")
 
+    def repair_analysis(self, context, violation_codes, *, language="en"):
+        raise AssertionError("no final repair was expected")
+
     def analyze_chunk(self, context, *, language="en"):
         raise NotImplementedError
 
@@ -210,3 +213,53 @@ def test_bounded_child_and_repair_keep_partial_coverage():
     assert coverage.analyzed_findings == 2
     assert received["child"] == [("partial", "error"), ("partial", "error")]
     assert received["repair"] == [("partial", "error"), ("partial", "error")]
+
+
+def test_invalid_child_reference_is_repaired_inside_analyzer():
+    received = []
+
+    class Provider(_BoundedProvider):
+        def analyze_chunk(self, context, *, language="en"):
+            return _child("finding_99")
+
+        def repair_chunk(self, context, violation_codes, *, language="en"):
+            received.append(violation_codes)
+            return _child(context.top_findings[0].finding_ref)
+
+        def synthesize_scan(
+            self, context, child_results, failed_refs, *, language="en"
+        ):
+            assert len(child_results) == 2
+            assert failed_refs == ()
+            return _synthesis()
+
+    _, coverage = run_bounded_analysis(Provider(), _context(), child_findings=1)
+    assert received == [("analysis contains an unknown reference",)] * 2
+    assert coverage.analyzed_findings == 2
+    assert coverage.failed_findings == 0
+
+
+def test_synthesis_style_repair_stays_inside_analyzer():
+    calls = []
+
+    class Provider(_BoundedProvider):
+        def analyze_chunk(self, context, *, language="en"):
+            return _child(context.top_findings[0].finding_ref)
+
+        def synthesize_scan(
+            self, context, child_results, failed_refs, *, language="en"
+        ):
+            analysis = _synthesis()
+            analysis.executive_summary = "Your network is safe."
+            return analysis
+
+        def repair_analysis(self, context, violation_codes, *, language="en"):
+            calls.append((violation_codes, language))
+            return _synthesis()
+
+    analysis, coverage = run_bounded_analysis(
+        Provider(), _context(), child_findings=1, language="pt-BR"
+    )
+    assert analysis == _synthesis()
+    assert calls == [(("executive_summary:safety_certification",), "pt-BR")]
+    assert coverage.analyzed_findings == 2
