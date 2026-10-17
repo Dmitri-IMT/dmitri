@@ -115,5 +115,5 @@ def test_finding_evidence_migration_upgrades_and_downgrades_known_aliases(
     _migrate(postgres_engine, "head")
     with postgres_engine.connect() as connection:
         assert MigrationContext.configure(connection).get_current_heads() == (
-            "20261010_40",
+            "20261017_41",
         )

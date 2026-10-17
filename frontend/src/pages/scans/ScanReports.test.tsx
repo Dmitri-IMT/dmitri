@@ -33,6 +33,7 @@ describe('ScanReports', () => {
           scan_id: 'scan-1',
           assessment_status: 'unavailable',
           assessment_policy_version: null,
+          finding_observations_truncated: false,
           hosts: [],
           exposures: [],
           findings: [
