@@ -4,7 +4,7 @@ title: scanner/runner — ScanRunner
 description: ScanRunner — the worker thread, cancellation, deadline guards, and the _run() pipeline body that drives the whole scan.
 resource: hardware-agent/src/agent/scanner/runner.py
 tags: [hardware-agent, scanner, pipeline, threading]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # scanner/runner — ScanRunner
@@ -25,7 +25,7 @@ and translates every failure mode into a completed payload, partial payload, or 
 | `start()` / `run_blocking()` | Run `_run()` on a daemon thread or inline, respectively. | `runner.py:69`, `runner.py:73` |
 | `request_cancel()` | Cancels active Nmap and Modbus work. | `runner.py:76` |
 | `_check_cancel()` / `_check_deadline()` | Raise the existing cancellation/budget signals. | `runner.py:88`, `runner.py:92` |
-| `_build_payload()` | Normalizes accepted host evidence, runs the pure local assessment once, and assembles profiles, exposures, findings, coverage (`extract_coverage`), and metadata into one `ScanPayload`. | `runner.py:120` |
+| `_build_payload()` | Normalizes accepted host evidence, runs local assessment, and assembles profiles, exposures, evidence-aware findings, scan-level observations, coverage and policy version `1` into one `ScanPayload`. The same builder handles completed and partial results. | `runner.py:121` |
 | `_finalize_partial()` | Calls `_record_not_run`, then builds a partial payload tagged with cause/stage, or emits `failed` if construction is impossible. | `runner.py:172` |
 | `_record_not_run()` | On a stop, appends a `skipped`/`not_run` `StageCoverage` (reason `scan_cancelled`/`scan_timeout`/`scan_error`) for each stage the host never reached: `ports` when missing, `deep_inspection` for hosts with open ports, `ot_inspection` in NSPi mode for hosts with a Modbus candidate when the OT stage had not started, and — in targeted modes, only if the targeted stage had not started — one `targeted_assessment` line per host with open ports (no port or tool; nothing is re-selected). | `runner.py:496` |
 | `_run()` | Drives discovery → ports → deep inspection → NSPi OT inspection → normalization; a completed scan with skipped port/deep units carries `partial_result=true` and `terminated_by="completed"`. | `runner.py:225` |
@@ -63,6 +63,9 @@ and translates every failure mode into a completed payload, partial payload, or 
   subnet selection happens in the front door, not here.
 - Assessment is a normalization substep, not a new scan stage: it adds no event, timeout, probe, or
   I/O, and it also runs when an accepted partial result is finalized.
+- Finding evidence extraction is also local normalization. Every runner payload, including a
+  partial payload, carries `finding_evidence_policy_version="1"`; finding `issue_key` values bind
+  observations to their condition. See [normalize](/hardware-agent/normalize.md).
 
 # Citations
 

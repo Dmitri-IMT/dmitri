@@ -1,6 +1,6 @@
 # Tasks — Qualidade da evidência dos achados (`051-finding-evidence-quality`)
 
-11 tarefas sequenciais. **#1–#10 concluídas; #11 pendente.** Specs aprovadas em 2026-10-10; base `471739f`.
+11 tarefas sequenciais. **#1–#11 concluídas.** Specs aprovadas em 2026-10-10; base `471739f`.
 
 Ordem compatível: parser offline → contrato/backend → consumidores → agente. Nenhum novo envio ingest antes da tarefa10. Sem scans reais, deploy, SSH, commit, push ou PR.
 
@@ -127,13 +127,15 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 ## Task 11: Apresentar TUI e avaliar corpus offline
 - **Description**: Atualizar telas locais/legado e avaliar corpus desenvolvimento/evaluation versionado independente, baseline versus corrigido; fechar gate hardware-agent. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
 - **Dependencies**: Task 10
-- **Target Files**: `hardware-agent/src/agent/tui/screens/scan_view.py`, `hardware-agent/src/agent/tui/screens/device_detail.py`, `hardware-agent/tests/fixtures/finding_evidence_quality/development.json`, `hardware-agent/tests/fixtures/finding_evidence_quality/evaluation.json`, `hardware-agent/tests/unit/test_tui_scan_view.py`, `hardware-agent/tests/unit/test_tui_device_detail.py`, `hardware-agent/tests/test_finding_evidence_quality.py`
+- **Target Files**: `hardware-agent/src/agent/tui/screens/scan_view.py`, `hardware-agent/src/agent/tui/screens/device_detail.py`, `hardware-agent/tests/fixtures/finding_evidence_quality/development.json`, `hardware-agent/tests/fixtures/finding_evidence_quality/evaluation.json`, `hardware-agent/tests/fixtures/finding_evidence_quality/baseline-471739f.json`, `hardware-agent/tests/unit/test_tui_scan_view.py`, `hardware-agent/tests/unit/test_tui_device_detail.py`, `hardware-agent/tests/test_finding_evidence_quality.py`; gate hygiene: `hardware-agent/src/agent/transport/provision.py`, `hardware-agent/tests/unit/test_provision.py`, `hardware-agent/tests/unit/test_targeted_selection.py`, `hardware-agent/src/agent/normalize/contracts.py`, `hardware-agent/src/agent/normalize/findings.py`, `hardware-agent/src/agent/targeted/web.py`.
 - **Tests**: `hardware-agent/tests/unit/test_tui_scan_view.py`, `hardware-agent/tests/unit/test_tui_device_detail.py`, `hardware-agent/tests/test_finding_evidence_quality.py`; aceites A01,A02,A03,A04,A05,A06,A07,A08,A09,A10,A11,A12,A13,A15,A16.
 - **Success Criteria**:
   - TUI explicita local/método/limite e contagens registros; corpus origem/versão/condição/rótulo, positivos reais preservados; TP/FP/FN/precisão/cobertura denominadores e inconclusivos separados sem confiança percentual produto. Reviewer executa pytest completo hardware-agent e black/ruff escopados gates da camada.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Implementation Handoff**: Primeira revisão REJECT (rejeição 1): splits compartilhavam casos semânticos com IDs/IPs diferentes; baseline de presença de CVE era aproximação e divergia dos resultados reais do parser em 471739f; versão de política podia injetar markup Rich; gate completo tinha falhas Windows de provisionamento/permissões e expectativa serializada obsoleta de TargetedIssue. Correções aplicadas: splits com conteúdo canônico disjunto; artefato auditável de saídas reais do parser em 471739f com hash da implementação e digests por caso; escape Rich; sincronização de diretório POSIX e testes de modo POSIX-only; expectativa atualizada. Métricas evaluation: baseline TP=2/FP=1/FN=3; atual TP=5/FP=0/FN=0, cinco previsões inconclusivas e uma não avaliável; só uma referência negativa, então taxa FP suprimida. Focais (corpus, duas telas TUI, provisionamento e seleção targeted): 133 passaram; Ruff, Black 24.3.0 escopado e `git diff --check` passaram. Escopo gate hygiene documentado acima. Suite completa e re-review ainda pendentes.
+- **Status**: COMPLETE
+- **Review Rejections**: 1
+- **Final Review**: APPROVE; 1415 testes passaram, 48 foram ignorados; Ruff completo, Black 24.3.0 em 81 arquivos e `git diff --check` passaram. Baseline comparado com `471739f`, TUI e corpus offline aprovados.
 
 ## Acceptance mapping
 
@@ -176,4 +178,4 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 | 8 | Apresentar método, limites e resumo web | COMPLETE |
 | 9 | Anotar adaptadores e reduzir evidência local | COMPLETE |
 | 10 | Integrar emissão e preservar todos caminhos | COMPLETE |
-| 11 | Apresentar TUI e avaliar corpus offline | PENDING |
+| 11 | Apresentar TUI e avaliar corpus offline | COMPLETE |

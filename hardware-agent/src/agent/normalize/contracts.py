@@ -262,9 +262,9 @@ class FindingEvidenceObservationPayload(BaseModel):
     ]
     result: Literal["positive", "negative", "inconclusive"]
     source: constr(min_length=1, max_length=64, strip_whitespace=True)
-    source_script: constr(
-        min_length=1, max_length=64, strip_whitespace=True
-    ) | None = None
+    source_script: constr(min_length=1, max_length=64, strip_whitespace=True) | None = (
+        None
+    )
     rule_id: constr(min_length=1, max_length=128, strip_whitespace=True)
     rule_version: constr(min_length=1, max_length=64, strip_whitespace=True)
     evidence: constr(min_length=1, max_length=512, strip_whitespace=True)
@@ -279,7 +279,6 @@ class FindingEvidenceObservationPayload(BaseModel):
         return value
 
 
-
 class FindingPayload(BaseModel):
     ip: IPv4Address | None = None
     port: Annotated[int | None, Field(default=None, ge=1, le=65535)]
@@ -289,9 +288,7 @@ class FindingPayload(BaseModel):
     source: str | None = None
     source_script: str | None = None
     # Optional reconciliation identity used to bind evidence to its condition.
-    issue_key: constr(
-        min_length=1, max_length=256, strip_whitespace=True
-    ) | None = None
+    issue_key: constr(min_length=1, max_length=256, strip_whitespace=True) | None = None
     cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
     cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Literal["low", "medium", "high", "critical"]
@@ -355,9 +352,9 @@ class ScanPayload(BaseModel):
     metadata: dict[str, str | int | float | bool] | None = None
     assessment_policy_version: constr(min_length=1, strip_whitespace=True) | None = None
     exposures: list[ExposurePayload] = Field(default_factory=list)
-    finding_evidence_policy_version: constr(
-        min_length=1, max_length=64, strip_whitespace=True
-    ) | None = None
+    finding_evidence_policy_version: (
+        constr(min_length=1, max_length=64, strip_whitespace=True) | None
+    ) = None
     finding_observations: list[FindingEvidenceObservationPayload] = Field(
         default_factory=list, max_length=512
     )
@@ -369,8 +366,7 @@ class ScanPayload(BaseModel):
             self.finding_observations
             or self.finding_observations_truncated
             or any(
-                f.evidence_observations or f.evidence_truncated
-                for f in self.findings
+                f.evidence_observations or f.evidence_truncated for f in self.findings
             )
         )
         if self.finding_evidence_policy_version is None and has_evidence_metadata:
@@ -412,9 +408,7 @@ class ScanPayload(BaseModel):
                     observation.unit_id is not None
                     and observation.unit_id != finding.unit_id
                 ):
-                    raise ValueError(
-                        "finding observation unit must match its finding"
-                    )
+                    raise ValueError("finding observation unit must match its finding")
         for observation in self.finding_observations:
             if observation.result == "positive":
                 raise ValueError("standalone finding observations cannot be positive")

@@ -3,6 +3,16 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-17
+
+* **Creation**: Added the hardware-agent provisioning code map for HTTPS agent registration,
+  local key handling and atomic configuration writes.
+* **Update**: Documented finding-evidence policy v1, bounded finding and standalone observations,
+  local evidence categories, serializer/reconciliation identity, and partial-result propagation.
+  The local TUI now distinguishes finding records from evidence status and keeps standalone checks
+  separate; targeted tool witnesses and the synthetic offline corpus limitations are recorded.
+  Corrected workspace documentation to reflect persistence before daemon upload.
+
 ## 2026-10-16
 
 * **Update**: Attack-surface tables now explain row expansion, show localized service/review counts

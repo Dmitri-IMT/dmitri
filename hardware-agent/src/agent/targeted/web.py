@@ -1363,9 +1363,7 @@ def run_nikto(
         (
             TargetedOutcome.TIMED_OUT
             if internal_timeout
-            else TargetedOutcome.FAILED
-            if error_limit
-            else execution.outcome
+            else TargetedOutcome.FAILED if error_limit else execution.outcome
         ),
         issues=issues,
         exit_code=execution.exit_code,

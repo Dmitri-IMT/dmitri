@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Service-targeted checks and tool provisioning
-description: Bounded service checks, native SSH audit report parsing, and Raspberry Pi tool prerequisites.
+description: Bounded service checks, evidence-aware tool reports, native SSH audit parsing, and Raspberry Pi prerequisites.
 resource: hardware-agent/src/agent/targeted/
 tags: [hardware-agent, targeted, coverage, provisioning]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # Service-targeted checks
@@ -20,7 +20,7 @@ gaps; they are not interpreted as a clean result.
 | Symbol | What it does | Source |
 |--------|--------------|--------|
 | `TargetedExecutor` | Owns bounded subprocesses, reports and cleanup. | `hardware-agent/src/agent/targeted/executor.py` |
-| `run_ffuf` / `run_nikto` | Preserve startup diagnostics and partial findings; native tool time limits are detected in stdout and stderr. | `hardware-agent/src/agent/targeted/web.py` |
+| `run_ffuf` / `run_nikto` | Preserve startup diagnostics and partial findings; native tool time limits are detected in stdout and stderr. Validated ffuf candidates carry a specific-check witness; unsupported Nikto issue text is inconclusive. | `hardware-agent/src/agent/targeted/web.py` |
 | `run_ssh_audit` | Executes the JSON audit with `--skip-rate-test`; parses native 3.9.0 algorithm/notes lists and legacy mapping sections, rejects malformed rows and mismatched targets, and ignores post-quantum-only advice. | `hardware-agent/src/agent/targeted/ssh.py` |
 | `provision-targeted-tools.sh` | Installs pinned ffuf, Nikto, testssl and enum4linux-ng, the DIRB common wordlist and runtime dependencies; verifies those and the agent venv's ssh-audit. `--verify-only` performs local checks without installation or network access. | `hardware-agent/scripts/provision-targeted-tools.sh` |
 | `provision-pi.sh` | Installs the agent package and provisions targeted tools while holding the scan/update lock, before declaring the appliance ready. | `hardware-agent/scripts/provision-pi.sh` |
@@ -65,3 +65,6 @@ same pipeline. The root `install.sh --agent-only` also invokes tool provisioning
 - Cancellation uses `scan_cancelled`, including the currently running tool. It is distinct
   from the stage budget. Completed units log the tool, endpoint, outcome, reason, exit code
   and a bounded, sanitized diagnostic to the service journal.
+- Targeted findings retain structured witnesses through normalization. Evidence assessment uses the
+  closed local rules in [normalize](/hardware-agent/normalize.md); unsupported tool output remains
+  inconclusive instead of being promoted to confirmed evidence.

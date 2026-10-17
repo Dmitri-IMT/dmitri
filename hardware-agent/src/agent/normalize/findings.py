@@ -283,9 +283,11 @@ def _supported_local_observation(
             type(observed) is str
             and observed in {"GET", "HEAD", "POST", "OPTIONS", "PATCH"}
             if item.rule_id == "nse:http-methods"
-            else type(observed) is bool and observed is not value
-            if type(value) is bool
-            else type(observed) is str and observed in {"SMBv2", "SMBv3"}
+            else (
+                type(observed) is bool and observed is not value
+                if type(value) is bool
+                else type(observed) is str and observed in {"SMBv2", "SMBv3"}
+            )
         )
         if (
             item.rule_id == "nse:ssl-cert-expired"
@@ -381,9 +383,7 @@ def _supported_local_observation(
         == (
             value
             if item.result == "positive"
-            else False
-            if type(value) is bool
-            else "none"
+            else False if type(value) is bool else "none"
         )
         and set(item.facts) == {fact}
     )
@@ -396,9 +396,11 @@ def _supported_local_observation(
         == (
             "targeted_service_assessment"
             if item.rule_id.startswith("targeted:")
-            else "modbus-read-only-assessment"
-            if item.rule_id.startswith("modbus:")
-            else "nmap_nse"
+            else (
+                "modbus-read-only-assessment"
+                if item.rule_id.startswith("modbus:")
+                else "nmap_nse"
+            )
         )
         and item.condition_key == condition
         and fact_matches
@@ -437,9 +439,7 @@ def extract_findings_and_observations(
         for script in host.host_scripts:
             for finding in _extract_script_findings(host, None, script):
                 candidates.append(finding)
-            standalone.extend(
-                _extract_standalone_nse_observations(host, None, script)
-            )
+            standalone.extend(_extract_standalone_nse_observations(host, None, script))
 
         for port in host.ports:
             for script in port.scripts:
@@ -543,9 +543,7 @@ def _extract_standalone_nse_observations(
             # Missing/null state, errors, and unrecognized states identify an
             # attempted check at most; they never become negative evidence.
             result = "inconclusive"
-            has_state_field = any(
-                str(key).casefold() == "state" for key in candidate
-            )
+            has_state_field = any(str(key).casefold() == "state" for key in candidate)
             if state:
                 state_fact = state.upper()[:160]
             elif not has_state_field:
@@ -911,16 +909,18 @@ def _targeted_observation(
     condition_key = (
         issue.cve_id
         if issue.method == "version_correlation" and issue.cve_id
-        else "CVE-2017-0143"
-        if issue.method == "specific_check" and issue.rule_id.endswith("ms17-010")
-        else issue.issue_key
+        else (
+            "CVE-2017-0143"
+            if issue.method == "specific_check" and issue.rule_id.endswith("ms17-010")
+            else issue.issue_key
+        )
     )
     return FindingEvidenceObservationPayload(
         ip=host.ip,
         port=port.port if port is not None else result.unit.port,
-        protocol=result.unit.protocol
-        if result.unit.protocol in {"tcp", "udp"}
-        else None,
+        protocol=(
+            result.unit.protocol if result.unit.protocol in {"tcp", "udp"} else None
+        ),
         condition_key=condition_key[:256],
         method=issue.method,
         result=issue.result,

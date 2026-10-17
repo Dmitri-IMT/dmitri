@@ -1,0 +1,144 @@
+{
+  "corpus_split": "evaluation",
+  "id": "findings-extractor-471739f",
+  "implementation": "hardware-agent/src/agent/normalize/findings.py:extract_findings",
+  "prediction_rule": "positive iff the pinned implementation returned at least one FindingPayload for the exact evaluation case; otherwise negative",
+  "records": [
+    {
+      "case_id": "eval-ms17-positive-control",
+      "case_sha256": "7edfb01ff4bafcbb05dfb05881de17129d01d285e6482117f30e6398bcf00737",
+      "finding_count": 0,
+      "findings": [],
+      "prediction": "negative"
+    },
+    {
+      "case_id": "eval-structured-negative-cve-reference",
+      "case_sha256": "edca1ba5b3ac6397c17b0f27aab8b9b909fddea33788090f476c805ae108695e",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": "CVE-2020-1234",
+          "issue_key": null,
+          "source_script": "generic-vuln-check",
+          "title": "CVE-2020-1234 reported by generic-vuln-check"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-text-cve-reference",
+      "case_sha256": "bd4f4f6e277b21d78aded5b9ae712b724971e79c8b91b304ed4c53c1672d245c",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": "CVE-2024-12345",
+          "issue_key": null,
+          "source_script": "unmapped-script",
+          "title": "CVE-2024-12345 reported by unmapped-script"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-unknown-structured-state",
+      "case_sha256": "00eb670875cd3c8c821af2ec0a42d83b285a197ab32fc6eda9528dc7d839c370",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": "CVE-2021-2345",
+          "issue_key": null,
+          "source_script": "generic-vuln-check",
+          "title": "CVE-2021-2345 reported by generic-vuln-check"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-ftp-positive-control",
+      "case_sha256": "362817c03031e0a2fc0612713d6ca40365d89f5ca0967549038fa5d579a98d2c",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": null,
+          "issue_key": null,
+          "source_script": "ftp-anon",
+          "title": "Anonymous FTP login allowed"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-http-observed-configuration",
+      "case_sha256": "6f124258790098abddff97a1e583f281d78764f27ba1df3f8fa55e376b3d8c9f",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": null,
+          "issue_key": null,
+          "source_script": "http-methods",
+          "title": "Potentially risky HTTP methods enabled"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-version-correlation-only",
+      "case_sha256": "c634d0b85fb7763e2f0f0a06c34bfe1e951da95568a56e812cd0c55a53a25150",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": "CVE-2024-1000",
+          "issue_key": null,
+          "source_script": "vulners",
+          "title": "Known CVE detected via vulners: CVE-2024-1000"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-likely-vulnerable-is-inconclusive",
+      "case_sha256": "2a08b87d8b5b977fbbbb5e9e1e1c3eaa4ee5788386e3a39c8d45c875a2d5f0b5",
+      "finding_count": 1,
+      "findings": [
+        {
+          "cve_id": "CVE-2022-3456",
+          "issue_key": null,
+          "source_script": "generic-vuln-check",
+          "title": "CVE-2022-3456 reported by generic-vuln-check"
+        }
+      ],
+      "prediction": "positive"
+    },
+    {
+      "case_id": "eval-mixed-independent-checks",
+      "case_sha256": "bcbe8250b3e7e182f51e21901e35a3490e1eeda7a04a6928a8f3a2b52452896c",
+      "finding_count": 0,
+      "findings": [],
+      "prediction": "negative"
+    },
+    {
+      "case_id": "eval-conflicting-same-condition",
+      "case_sha256": "fe52f652bb75970c627ac98c013abbdc880117e115941de06ee9dce90025c049",
+      "finding_count": 0,
+      "findings": [],
+      "prediction": "negative"
+    },
+    {
+      "case_id": "eval-repeated-positive-witness",
+      "case_sha256": "facd56654b0d8d851b823e643f53f1f6785334ff972ab503f2ffa55e2b116302",
+      "finding_count": 0,
+      "findings": [],
+      "prediction": "negative"
+    },
+    {
+      "case_id": "eval-no-response-not-evaluable",
+      "case_sha256": "d9a0537f01400b9a76a63b0b55943236396463a9c1abb827c44ac1d3b76fa8e3",
+      "finding_count": 0,
+      "findings": [],
+      "prediction": "negative"
+    }
+  ],
+  "schema_version": 1,
+  "source_revision": "471739f",
+  "source_sha256": "ed2bef9dee45776834605910c59a14bf3381bc85cd681ea452e76674407816f4"
+}

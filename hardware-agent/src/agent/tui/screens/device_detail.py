@@ -13,6 +13,7 @@ from agent.normalize.contracts import (
     ModbusUnitPayload,
     ScanPayload,
 )
+from agent.normalize.findings import assess_local_evidence
 from agent.tui.markup import (
     LIMIT_HOST_TEXT,
     LIMIT_IDENTIFICATION,
@@ -50,6 +51,14 @@ SEVERITY_COLORS = {
     "low": "dim",
 }
 
+EVIDENCE_METHOD_LABELS = {
+    "version_correlation": "Version association",
+    "configuration_observation": "Observed configuration",
+    "specific_check": "Specific check",
+    "textual_reference": "Text reference only",
+    "unknown": "Unknown",
+}
+
 
 class DeviceDetailScreen(DmitriScreen):
     """Show stored inventory, assessment, and findings for one host."""
@@ -69,6 +78,10 @@ class DeviceDetailScreen(DmitriScreen):
             yield Static(self._render_inventory(), id="device-inventory")
             yield Static(self._render_exposures(), id="device-exposures")
             yield Static(self._render_findings(), id="device-findings")
+            yield Static(
+                self._render_standalone_observations(),
+                id="device-finding-observations",
+            )
             yield Static(self._render_industrial(), id="device-industrial")
 
     def on_mount(self) -> None:
@@ -95,6 +108,11 @@ class DeviceDetailScreen(DmitriScreen):
                 banner.set_classes("stopped")
         industrial = self.query_one("#device-industrial", Static)
         industrial.display = bool(self._host.industrial_services)
+        observations = self.query_one("#device-finding-observations", Static)
+        observations.display = (
+            any(item.ip == self._host.ip for item in self._payload.finding_observations)
+            or self._payload.finding_observations_truncated
+        )
 
     def _render_header(self) -> str:
         hostname = safe(self._host.hostname, LIMIT_HOST_TEXT)
@@ -234,11 +252,28 @@ class DeviceDetailScreen(DmitriScreen):
         if not findings:
             partial = (self._payload.metadata or {}).get("partial_result") is True
             lines.append(
-                "No confirmed vulnerabilities in accepted evidence."
+                "No vulnerability finding records in accepted evidence."
                 if partial
-                else "No confirmed vulnerabilities found for this device."
+                else "No vulnerability finding records for this device."
             )
             return "\n".join(lines)
+        version = self._payload.finding_evidence_policy_version
+        if version == "1":
+            lines.append(
+                "Evidence interpretation is local to this agent (policy v1); "
+                "it is not backend enrichment. Finding records are not all "
+                "proven failures."
+            )
+        elif version is None:
+            lines.append(
+                "Evidence interpretation is unavailable for this legacy scan. "
+                "Finding records are not proof of failure."
+            )
+        else:
+            lines.append(
+                f"Local evidence policy {safe(version)} is not supported by this "
+                "agent; finding records are not proof of failure."
+            )
         exposure_keys = {
             (exposure.protocol, exposure.port)
             for exposure in self._payload.exposures
@@ -257,6 +292,96 @@ class DeviceDetailScreen(DmitriScreen):
                 f"[{color}][{severity}][/{color}] {identifier} — "
                 f"{safe(finding.title, LIMIT_HOST_TEXT)}{cvss}"
             )
+            if version == "1":
+                assessment = assess_local_evidence(finding)
+                method = EVIDENCE_METHOD_LABELS.get(assessment.method, "Unknown")
+                lines.append(
+                    f"  Local evidence: {method} · {assessment.status} · "
+                    f"{assessment.confidence} (category, not a percentage)"
+                )
+                if assessment.method == "version_correlation":
+                    limit = (
+                        "The version association does not validate this "
+                        "vulnerability's presence on the device."
+                    )
+                elif assessment.method == "configuration_observation":
+                    limit = (
+                        "This configuration was observed; this does not show "
+                        "exploitation of a known vulnerability."
+                    )
+                elif assessment.status == "conflicting":
+                    limit = (
+                        "Evidence conflicts; no single positive or negative "
+                        "conclusion is established."
+                    )
+                elif (
+                    assessment.method == "specific_check"
+                    and assessment.status == "supported"
+                    and finding.port is not None
+                    and finding.protocol is not None
+                ):
+                    limit = (
+                        "The check supports only its recorded condition on "
+                        f"{finding.port}/{finding.protocol}; it does not describe "
+                        "the whole device."
+                    )
+                elif assessment.method == "textual_reference":
+                    limit = (
+                        "A vulnerability reference appeared in text, but no "
+                        "verifiable positive result was recorded."
+                    )
+                else:
+                    limit = (
+                        "The check is inconclusive; this neither confirms nor "
+                        "rules out the condition."
+                    )
+                lines.append(f"  Limit: {limit}")
+                if finding.evidence_truncated:
+                    lines.append(
+                        "  Evidence note: only a sample of this finding's evidence "
+                        "observations is available."
+                    )
+                for observation in finding.evidence_observations:
+                    endpoint = (
+                        f"{observation.port}/{observation.protocol}"
+                        if observation.port is not None
+                        else "not recorded"
+                    )
+                    if observation.unit_id is not None:
+                        endpoint += f" · unit {observation.unit_id}"
+                    source = observation.source
+                    if observation.source_script:
+                        source += f" · {observation.source_script}"
+                    lines.extend(
+                        (
+                            "  Evidence observation: "
+                            f"{observation.result} · {observation.method}",
+                            "    Condition: "
+                            f"{safe(observation.condition_key, LIMIT_HOST_TEXT)}",
+                            f"    Endpoint: {endpoint}",
+                            f"    Source: {safe(source, LIMIT_HOST_TEXT)} · Rule: "
+                            f"{safe(observation.rule_id, LIMIT_HOST_TEXT)} "
+                            f"v{safe(observation.rule_version)}",
+                            f"    Evidence excerpt: "
+                            f"{safe(observation.evidence, 160)}",
+                        )
+                    )
+                    if observation.facts:
+                        facts = "; ".join(
+                            f"{safe(key, LIMIT_HOST_TEXT)}={safe(value)}"
+                            for key, value in sorted(observation.facts.items())
+                        )
+                        lines.append(f"    Facts: {facts}")
+            elif version is None:
+                lines.append(
+                    "  Local evidence: unavailable (legacy record); the recorded "
+                    "finding cannot be verified from this payload."
+                )
+            else:
+                lines.append(
+                    "  Local evidence: unknown; this agent does not interpret the "
+                    "recorded policy version."
+                )
             if finding.port is not None and finding.protocol is not None:
                 relationship = (
                     " · also listed in Attack surface"
@@ -266,6 +391,62 @@ class DeviceDetailScreen(DmitriScreen):
                 lines.append(
                     f"  Endpoint: {finding.port}/{finding.protocol}{relationship}"
                 )
+        return "\n".join(lines)
+
+    def _render_standalone_observations(self) -> str:
+        lines = [
+            "[bold]Standalone check observations (not vulnerability findings)[/bold]"
+        ]
+        observations = [
+            item
+            for item in self._payload.finding_observations
+            if item.ip == self._host.ip
+        ]
+        negative = sum(item.result == "negative" for item in observations)
+        inconclusive = sum(item.result == "inconclusive" for item in observations)
+        noun = "observation" if len(observations) == 1 else "observations"
+        count_label = (
+            f"Sample shown: {len(observations)} {noun}"
+            if self._payload.finding_observations_truncated
+            else f"{len(observations)} {noun}"
+        )
+        lines.append(
+            f"{count_label} · {negative} negative · "
+            f"{inconclusive} inconclusive. A negative result applies only to its "
+            "recorded check."
+        )
+        for item in observations:
+            endpoint = (
+                f"{item.port}/{item.protocol}"
+                if item.port is not None
+                else "not recorded"
+            )
+            if item.unit_id is not None:
+                endpoint += f" · unit {item.unit_id}"
+            source = item.source
+            if item.source_script:
+                source += f" · {item.source_script}"
+            lines.extend(
+                (
+                    f"Condition: {safe(item.condition_key, LIMIT_HOST_TEXT)} · "
+                    f"Result: {item.result} · Method: {item.method}",
+                    f"Endpoint: {endpoint}",
+                    f"Source: {safe(source, LIMIT_HOST_TEXT)} · Rule: "
+                    f"{safe(item.rule_id, LIMIT_HOST_TEXT)} "
+                    f"v{safe(item.rule_version)}",
+                    f"Evidence excerpt: {safe(item.evidence, 160)}",
+                )
+            )
+            if item.facts:
+                facts = "; ".join(
+                    f"{safe(key, LIMIT_HOST_TEXT)}={safe(value)}"
+                    for key, value in sorted(item.facts.items())
+                )
+                lines.append(f"Facts: {facts}")
+        if self._payload.finding_observations_truncated:
+            lines.append(
+                "Only a sample of scan-level standalone observations is available."
+            )
         return "\n".join(lines)
 
     def _related_findings(self, port: int, protocol: str) -> list[FindingPayload]:
