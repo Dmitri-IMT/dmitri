@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from xml.sax.saxutils import escape
 
+from pydantic import TypeAdapter
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -173,6 +174,9 @@ def append_education(
     story: list[Any], education: ExplainedReportSections, styles: Any,
     copy: dict[str, str], language: AILanguage, width: float, font_name: str,
 ) -> None:
+    education = TypeAdapter(ExplainedReportSections).dump_python(
+        education, mode="json"
+    )
     devices = education["devices"]
     labels = _LABELS[language]
     chart_width = width - 12
