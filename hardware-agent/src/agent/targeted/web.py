@@ -795,7 +795,7 @@ def run_ffuf(
             return TargetedUnitResult(
                 unit,
                 TargetedOutcome.SKIPPED,
-                reason_code=TargetedGapReason.STAGE_BUDGET,
+                reason_code=TargetedGapReason.SCAN_CANCELLED,
             )
         if perf_counter() < end:
             return None
@@ -874,7 +874,14 @@ def run_ffuf(
                 unit,
                 TargetedOutcome.FAILED,
                 exit_code=execution.exit_code,
-                reason_code=TargetedGapReason.MALFORMED_REPORT,
+                reason_code=(
+                    TargetedGapReason.EXECUTION_ERROR
+                    if execution.exit_code not in (None, 0)
+                    else TargetedGapReason.MALFORMED_REPORT
+                ),
+                diagnostic=sanitize_evidence(
+                    execution.diagnostic or "ffuf did not create its JSON report.", 512
+                ),
             )
         payload = parse_json_payload(execution.report)
         if not isinstance(payload, dict) or not isinstance(
@@ -887,6 +894,11 @@ def run_ffuf(
                 TargetedOutcome.FAILED,
                 exit_code=execution.exit_code,
                 reason_code=TargetedGapReason.MALFORMED_REPORT,
+                diagnostic=sanitize_evidence(
+                    execution.diagnostic
+                    or "ffuf JSON report has an unsupported schema.",
+                    512,
+                ),
             )
         candidates = parse_ffuf_json(execution.report, unit)
         candidates = [c for c in candidates if classify_ffuf_candidate(c)]
@@ -897,12 +909,41 @@ def run_ffuf(
                 c.path.casefold(),
             )
         )
+        execution_output = (
+            (execution.diagnostic or "")
+            + " "
+            + execution.stdout.decode(errors="replace")
+            + " "
+            + execution.stderr.decode(errors="replace")
+        ).casefold()
+        internal_timeout = (
+            execution.outcome == TargetedOutcome.COMPLETED
+            and "maximum running time for entire process reached, exiting"
+            in execution_output
+        )
+        if internal_timeout:
+            status = incomplete_result()
+            if status is not None:
+                return status
         result = TargetedUnitResult(
             unit,
-            execution.outcome,
+            TargetedOutcome.TIMED_OUT if internal_timeout else execution.outcome,
             exit_code=execution.exit_code,
-            reason_code=execution.reason_code,
-            diagnostic=execution.diagnostic,
+            reason_code=(
+                TargetedGapReason.UNIT_TIMEOUT
+                if internal_timeout
+                else execution.reason_code
+            ),
+            diagnostic=(
+                execution.diagnostic
+                or (
+                    sanitize_evidence(
+                        "Maximum running time for entire process reached, exiting.", 512
+                    )
+                    if internal_timeout
+                    else None
+                )
+            ),
         )
         if candidates:
             synthetic = hashlib.sha256(
@@ -943,7 +984,10 @@ def run_ffuf(
                     result.issues.append(validated)
                 elif isinstance(validated, TargetedObservation):
                     result.observations.append(validated)
-            if len(candidates) > TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT:
+            if (
+                len(candidates) > TARGETED_WEB_MAX_VALIDATIONS_PER_UNIT
+                and not internal_timeout
+            ):
                 result.outcome, result.reason_code = (
                     TargetedOutcome.FAILED,
                     TargetedGapReason.VALIDATION_LIMIT,
@@ -1250,20 +1294,46 @@ def run_nikto(
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.ISSUE_LIMIT,
         )
-    internal_timeout = bool(
-        execution.diagnostic
-        and "host maximum execution time" in execution.diagnostic.casefold()
-        and "reached" in execution.diagnostic.casefold()
+    timeout_output = (
+        (execution.diagnostic or "")
+        + " "
+        + execution.stdout.decode(errors="replace")
+        + " "
+        + execution.stderr.decode(errors="replace")
+    ).casefold()
+    internal_timeout = (
+        execution.outcome == TargetedOutcome.COMPLETED
+        and "host maximum execution time" in timeout_output
+        and "reached" in timeout_output
+    )
+    error_limit = (
+        re.search(
+            r"\+\s*error:\s*\*{3}\s*error limit \(\d+\) reached for host, giving up\.",
+            timeout_output,
+        )
+        if execution.outcome == TargetedOutcome.COMPLETED
+        else None
     )
     return TargetedUnitResult(
         unit,
-        TargetedOutcome.TIMED_OUT if internal_timeout else execution.outcome,
+        (
+            TargetedOutcome.TIMED_OUT
+            if internal_timeout
+            else TargetedOutcome.FAILED if error_limit else execution.outcome
+        ),
         issues=issues,
         exit_code=execution.exit_code,
         reason_code=(
             TargetedGapReason.UNIT_TIMEOUT
             if internal_timeout
-            else execution.reason_code
+            else (
+                TargetedGapReason.EXECUTION_ERROR
+                if error_limit
+                else execution.reason_code
+            )
         ),
-        diagnostic=execution.diagnostic,
+        diagnostic=(
+            execution.diagnostic
+            or (sanitize_evidence(error_limit.group(0), 512) if error_limit else None)
+        ),
     )

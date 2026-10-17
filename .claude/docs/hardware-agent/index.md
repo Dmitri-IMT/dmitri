@@ -11,6 +11,8 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 
 ## Scan engine (scanner)
 
+* [Service-targeted checks](./targeted.md) — Bounded service checks, native SSH audit report parsing, and Raspberry Pi tool prerequisites.
+
 * [scanner package](./scanner/index.md) — The split scan engine: runner, stages, Nmap execution, models, errors, progress snapshots, and workspace layout.
 
 ## Discovery & normalization

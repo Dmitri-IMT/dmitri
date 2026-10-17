@@ -203,6 +203,27 @@ def test_one_unit_failure_isolated_and_later_units_run(
     assert summary.completed == 2
 
 
+def test_failed_unit_logs_reason_and_redacts_diagnostic(monkeypatch, caplog):
+    units = _units()[:1]
+    _install_plan(monkeypatch, units)
+    monkeypatch.setattr(
+        stage,
+        "_adapter_for",
+        lambda tool: lambda unit, executor, **kwargs: TargetedUnitResult(
+            unit,
+            TargetedOutcome.FAILED,
+            reason_code=TargetedGapReason.EXECUTION_ERROR,
+            diagnostic="permission denied password=private-value\nsecond line",
+        ),
+    )
+    with caplog.at_level("INFO", logger="agent.targeted.stage"):
+        stage.run_targeted_stage([_host()], scan_mode="extensive", executor=_Executor())
+
+    assert "reason=execution_error" in caplog.text
+    assert "permission denied" in caplog.text
+    assert "private-value" not in caplog.text
+
+
 def test_stage_budget_skips_remaining_units_and_reaches_stage_done(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -244,6 +265,81 @@ def test_stage_budget_skips_remaining_units_and_reaches_stage_done(
         0,
         len(units),
     )
+
+
+def test_stage_budget_covers_selected_unit_allowances(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    units = [_units()[0]] * 6
+    _install_plan(monkeypatch, units)
+    elapsed = 0.0
+    dispatch: list[TargetedUnit] = []
+
+    def clock() -> float:
+        return elapsed
+
+    def adapter(unit, _executor, **kwargs):
+        nonlocal elapsed
+        dispatch.append(unit)
+        elapsed += 400.0
+        return TargetedUnitResult(unit, TargetedOutcome.COMPLETED)
+
+    monkeypatch.setattr(stage, "perf_counter", clock)
+    monkeypatch.setattr(stage, "_adapter_for", lambda _tool: adapter)
+    host = _host()
+
+    summary = stage.run_targeted_stage(
+        [host], scan_mode="extensive", executor=_Executor()
+    )
+
+    assert len(dispatch) == len(units)
+    assert summary.completed == len(units)
+    assert summary.skipped == 0
+
+
+def test_overall_deadline_remains_hard_stage_budget_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    units = [_units()[0]] * 4
+    _install_plan(monkeypatch, units)
+    elapsed = 0.0
+    dispatch: list[TargetedUnit] = []
+
+    def clock() -> float:
+        return elapsed
+
+    def adapter(unit, _executor, **kwargs):
+        nonlocal elapsed
+        dispatch.append(unit)
+        elapsed += 200.0
+        return TargetedUnitResult(unit, TargetedOutcome.COMPLETED)
+
+    monkeypatch.setattr(stage, "perf_counter", clock)
+    monkeypatch.setattr(stage, "_adapter_for", lambda _tool: adapter)
+    host = _host()
+
+    summary = stage.run_targeted_stage(
+        [host],
+        scan_mode="extensive",
+        executor=_Executor(),
+        overall_deadline=500.0,
+    )
+
+    assert len(dispatch) == 3
+    assert summary.completed == 3
+    assert summary.skipped == 1
+    assert host.targeted_results[-1].reason_code == TargetedGapReason.SCAN_TIMEOUT
+
+
+@pytest.mark.parametrize("mode", ["max", "nspi"])
+def test_other_modes_keep_their_fixed_stage_budget(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    monkeypatch.setattr(stage, "perf_counter", lambda: 100.0)
+
+    deadline = stage._stage_deadline(mode, _units() * 40, None)
+
+    assert deadline == 100.0 + stage.TARGETED_STAGE_TIMEOUT_S[mode]
 
 
 def test_cancellation_stops_new_units_and_omits_stage_done(

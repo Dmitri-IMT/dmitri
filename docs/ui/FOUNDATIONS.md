@@ -293,7 +293,7 @@ Radio cards and a selectable list with a description column are rejected.
 | --- | --- |
 | **Quick** | Checks the 1000 most-used connection points on each device for known vulnerabilities. About 2–5 minutes. |
 | **Standard** | Same 1000 connection points, and also inspects the common services — file sharing, remote login, web — for weak settings. About 5–10 minutes. |
-| **Extensive** | Checks the 10,000 most-used connection points, adds certificate and encryption checks, and reports lower-severity problems as well. About 20–35 minutes. |
+| **Extensive** | Checks the 10,000 most-used connection points, adds certificate and encryption checks, and reports lower-severity problems as well. Duration depends on the services found and can exceed an hour. |
 | **Max** | Checks every connection point on every device and reports everything it finds, however small. 45 minutes or more. |
 | **NSPi** | For networks with industrial equipment: checks the control-system connection points (Modbus, OPC UA, EtherNet/IP) plus Windows remote-access ones. About 20–30 minutes. |
 

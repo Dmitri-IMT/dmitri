@@ -6,7 +6,7 @@ import json
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 from urllib.error import URLError
 
 import agent.targeted.web as web
@@ -66,13 +66,16 @@ def test_sensitive_response_is_redacted_and_wildcard_baseline_is_rejected() -> N
     assert issue.severity == "high"
     assert "secret-value" not in issue.evidence
     assert WEB_RESULT_POLICY_VERSION in issue.evidence
-    assert validate_web_candidate(
-        candidate,
-        WebBaseline(
-            200, "text/plain", response.length, response.words, response.lines, "x"
-        ),
-        response=response,
-    ) is not None
+    assert (
+        validate_web_candidate(
+            candidate,
+            WebBaseline(
+                200, "text/plain", response.length, response.words, response.lines, "x"
+            ),
+            response=response,
+        )
+        is not None
+    )
     digest = hashlib.sha256(re.sub(rb"\s+", b" ", response.body)).hexdigest()
     assert (
         validate_web_candidate(
@@ -97,7 +100,10 @@ def test_admin_and_api_surfaces_are_observations() -> None:
     admin_result = validate_web_candidate(
         admin,
         response=WebResponse(
-            200, "text/html", b"<h1>Admin login</h1><form action='/admin/login'><input type=password></form>", admin.url
+            200,
+            "text/html",
+            b"<h1>Admin login</h1><form action='/admin/login'><input type=password></form>",
+            admin.url,
         ),
     )
     api_result = validate_web_candidate(
@@ -129,21 +135,76 @@ def test_nikto_uses_only_supplied_pinned_database_rows() -> None:
     ("path", "body", "rule_id", "severity"),
     [
         ("/.git/HEAD", b"ref: refs/heads/main\n", "WEB-VCS-GIT-001", "high"),
-        ("/.git/config", b"[core]\nrepositoryformatversion = 0\n", "WEB-VCS-GIT-001", "high"),
-        ("/.svn/entries", b"<?xml version='1.0'?><wc-entries/>", "WEB-VCS-SVN-001", "high"),
+        (
+            "/.git/config",
+            b"[core]\nrepositoryformatversion = 0\n",
+            "WEB-VCS-GIT-001",
+            "high",
+        ),
+        (
+            "/.svn/entries",
+            b"<?xml version='1.0'?><wc-entries/>",
+            "WEB-VCS-SVN-001",
+            "high",
+        ),
         ("/.svn/wc.db", b"SQLite format 3\x00", "WEB-VCS-SVN-001", "high"),
-        ("/.env", b"DB_USER=operator\nDB_PASSWORD=secret\n", "WEB-SECRET-ENV-001", "high"),
-        ("/keys/id_rsa", b"-----BEGIN OPENSSH PRIVATE KEY-----\n", "WEB-SECRET-KEY-001", "critical"),
-        ("/config.json", b'{"database":"prod","password":"redacted"}', "WEB-CONFIG-001", "high"),
+        (
+            "/.env",
+            b"DB_USER=operator\nDB_PASSWORD=secret\n",
+            "WEB-SECRET-ENV-001",
+            "high",
+        ),
+        (
+            "/keys/id_rsa",
+            b"-----BEGIN OPENSSH PRIVATE KEY-----\n",
+            "WEB-SECRET-KEY-001",
+            "critical",
+        ),
+        (
+            "/config.json",
+            b'{"database":"prod","password":"redacted"}',
+            "WEB-CONFIG-001",
+            "high",
+        ),
         ("/backup.zip", b"PK\x03\x04 archive", "WEB-BACKUP-001", "high"),
         ("/database.sql", b"CREATE TABLE users (id int);", "WEB-DUMP-001", "high"),
-        ("/error.log", b"2026-09-19 10:00:00 GET / HTTP/1.1\n2026-09-19 10:01:00 exception", "WEB-LOG-001", "medium"),
-        ("/phpinfo.php", b"PHP Version 8.3 phpinfo configuration", "WEB-DIAG-PHP-001", "medium"),
+        (
+            "/error.log",
+            b"2026-09-19 10:00:00 GET / HTTP/1.1\n2026-09-19 10:01:00 exception",
+            "WEB-LOG-001",
+            "medium",
+        ),
+        (
+            "/phpinfo.php",
+            b"PHP Version 8.3 phpinfo configuration",
+            "WEB-DIAG-PHP-001",
+            "medium",
+        ),
         ("/server-status", b"Server Status\nrequests", "WEB-DIAG-SERVER-001", "medium"),
-        ("/actuator/env", b'{"environment":{"propertySources":[]}}', "WEB-DIAG-ACTUATOR-001", "high"),
-        ("/prometheus", b"# HELP requests_total Requests\n# TYPE requests_total counter\nrequests_total 1", "WEB-METRICS-001", "medium"),
-        ("/assets/", b"<title>Index of /assets/</title><a href='a.txt'>a</a>", "WEB-DIRLIST-001", "medium"),
-        ("/admin", b"<h1>Admin login</h1><form action='/admin/login'><input type=password></form>", "WEB-ADMIN-001", None),
+        (
+            "/actuator/env",
+            b'{"environment":{"propertySources":[]}}',
+            "WEB-DIAG-ACTUATOR-001",
+            "high",
+        ),
+        (
+            "/prometheus",
+            b"# HELP requests_total Requests\n# TYPE requests_total counter\nrequests_total 1",
+            "WEB-METRICS-001",
+            "medium",
+        ),
+        (
+            "/assets/",
+            b"<title>Index of /assets/</title><a href='a.txt'>a</a>",
+            "WEB-DIRLIST-001",
+            "medium",
+        ),
+        (
+            "/admin",
+            b"<h1>Admin login</h1><form action='/admin/login'><input type=password></form>",
+            "WEB-ADMIN-001",
+            None,
+        ),
         ("/openapi.json", b'{"openapi":"3.0.0","paths":{}}', "WEB-API-DOCS-001", None),
     ],
 )
@@ -174,10 +235,15 @@ def test_policy_matrix_requires_path_and_affirmative_signature(
 
 def test_admin_arbitrary_form_is_not_an_observation() -> None:
     candidate = WebCandidate("http://192.0.2.10:80/admin", "/admin", 200)
-    assert validate_web_candidate(
-        candidate,
-        response=WebResponse(200, "text/html", b"<form><input type=password></form>", candidate.url),
-    ) is None
+    assert (
+        validate_web_candidate(
+            candidate,
+            response=WebResponse(
+                200, "text/html", b"<form><input type=password></form>", candidate.url
+            ),
+        )
+        is None
+    )
 
 
 def test_policy_seeds_are_frozen_and_normalized() -> None:
@@ -225,7 +291,9 @@ def test_directory_candidate_keeps_trailing_slash() -> None:
     assert classify_ffuf_candidate(candidates[0]).rule_id == "WEB-DIRLIST-001"
 
 
-@pytest.mark.parametrize("path", ["/application.properties.bak", "/config.json.old", "/web.config.save"])
+@pytest.mark.parametrize(
+    "path", ["/application.properties.bak", "/config.json.old", "/web.config.save"]
+)
 def test_configuration_backup_variants_keep_configuration_rule(path: str) -> None:
     candidate = WebCandidate(f"http://192.0.2.10:80{path}", path, 200)
     assert classify_ffuf_candidate(candidate).rule_id == "WEB-CONFIG-001"
@@ -240,17 +308,23 @@ class _FakeExecutor:
     def execute(self, command, **_deadline):
         self.commands.append(command)
         if len(command.argv) > 4 and command.argv[0] == "ffuf":
-            self.effective_entries = Path(command.argv[4]).read_text(encoding="utf-8").splitlines()
+            self.effective_entries = (
+                Path(command.argv[4]).read_text(encoding="utf-8").splitlines()
+            )
         return self.execution
 
 
 def _wordlist(tmp_path) -> str:
     path = tmp_path / "common.txt"
-    path.write_text("\n".join(f"base-{index}" for index in range(4_000)), encoding="utf-8")
+    path.write_text(
+        "\n".join(f"base-{index}" for index in range(4_000)), encoding="utf-8"
+    )
     return str(path)
 
 
-def test_ffuf_argv_is_bounded_and_effective_wordlist_contains_policy_seeds(tmp_path) -> None:
+def test_ffuf_argv_is_bounded_and_effective_wordlist_contains_policy_seeds(
+    tmp_path,
+) -> None:
     executor = _FakeExecutor(
         ToolExecution(
             TargetedOutcome.COMPLETED,
@@ -293,7 +367,9 @@ def test_ffuf_argv_is_bounded_and_effective_wordlist_contains_policy_seeds(tmp_p
     assert effective_entries == sorted(effective_entries)
     assert set(WEB_RESULT_SEEDS).issubset(effective_entries)
     assert "-k" not in command.argv
-    assert not {"-recursion", "-e", "-H", "-X", "-request", "-proxy"}.intersection(command.argv)
+    assert not {"-recursion", "-e", "-H", "-X", "-request", "-proxy"}.intersection(
+        command.argv
+    )
 
 
 def test_ffuf_https_accepts_self_signed_target_certificate(tmp_path) -> None:
@@ -429,6 +505,87 @@ def test_ffuf_preserves_timeout_when_report_is_partial(tmp_path) -> None:
     assert result.issues == []
 
 
+def test_ffuf_internal_max_runtime_marks_valid_report_timed_out(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            report=b'{"results": []}',
+            report_present=True,
+            diagnostic="Maximum running time for entire process reached, exiting.",
+        )
+    )
+
+    result = run_ffuf(_unit(), executor, _wordlist(tmp_path))
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+
+
+def test_ffuf_internal_max_runtime_preserves_validated_findings(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            report=b'{"results": [{"url": "http://192.0.2.10:80/.env", "status": 200}]}',
+            report_present=True,
+            stdout=b"Maximum running time for entire process reached, exiting.",
+        )
+    )
+
+    def fetcher(url: str) -> WebResponse:
+        if ".dmitri-not-found-" in url:
+            return WebResponse(404, "text/html", b"not found", url)
+        return WebResponse(
+            200, "text/plain", b"DB_USER=operator\nDB_PASSWORD=secret\n", url
+        )
+
+    result = run_ffuf(_unit(), executor, _wordlist(tmp_path), fetcher=fetcher)
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+    assert len(result.issues) == 1
+
+
+def test_ffuf_internal_max_runtime_keeps_stage_budget_precedence(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            report=b'{"results": []}',
+            report_present=True,
+            stderr=b"Maximum running time for entire process reached, exiting.",
+        )
+    )
+
+    result = run_ffuf(
+        _unit(),
+        executor,
+        _wordlist(tmp_path),
+        stage_deadline=web.perf_counter() - 1,
+    )
+
+    assert result.outcome == TargetedOutcome.SKIPPED
+    assert result.reason_code == TargetedGapReason.STAGE_BUDGET
+
+
+def test_ffuf_internal_max_runtime_keeps_cancel_precedence(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            report=b'{"results": []}',
+            report_present=True,
+            diagnostic="Maximum running time for entire process reached, exiting.",
+        )
+    )
+    cancel_event = Event()
+    cancel_event.set()
+
+    result = run_ffuf(_unit(), executor, _wordlist(tmp_path), cancel_event=cancel_event)
+
+    assert result.outcome == TargetedOutcome.SKIPPED
+    assert result.reason_code == TargetedGapReason.SCAN_CANCELLED
+
+
 @pytest.mark.parametrize("report", [b'{"results": {}}', b'{"results": "bad"}'])
 def test_ffuf_non_list_results_are_malformed(tmp_path, report: bytes) -> None:
     executor = _FakeExecutor(
@@ -461,13 +618,25 @@ def test_ffuf_truncated_baseline_is_unavailable(tmp_path) -> None:
 def test_web_validation_rejects_baseline_and_external_redirect() -> None:
     candidate = WebCandidate("http://192.0.2.10:80/.env", "/.env", 200)
     response = WebResponse(200, "text/plain", b"A=1\nB=2\n", candidate.url)
-    baseline = WebBaseline(200, "text/plain", response.length, response.words, response.lines, hashlib.sha256(re.sub(rb"\s+", b" ", response.body)).hexdigest())
+    baseline = WebBaseline(
+        200,
+        "text/plain",
+        response.length,
+        response.words,
+        response.lines,
+        hashlib.sha256(re.sub(rb"\s+", b" ", response.body)).hexdigest(),
+    )
 
     assert validate_web_candidate(candidate, baseline, response=response) is None
-    assert validate_web_candidate(
-        candidate,
-        response=WebResponse(200, "text/plain", b"A=1\nB=2\n", "http://evil.example/.env"),
-    ) is None
+    assert (
+        validate_web_candidate(
+            candidate,
+            response=WebResponse(
+                200, "text/plain", b"A=1\nB=2\n", "http://evil.example/.env"
+            ),
+        )
+        is None
+    )
 
 
 class _RedirectResponse:
@@ -538,7 +707,9 @@ def test_fetch_rejects_external_redirect() -> None:
 
 
 @pytest.mark.parametrize("status", [404, 401, 403])
-def test_fetch_returns_bounded_http_error_responses_from_local_server(status: int) -> None:
+def test_fetch_returns_bounded_http_error_responses_from_local_server(
+    status: int,
+) -> None:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             body = f"local status {status}".encode()
@@ -627,9 +798,27 @@ def test_nikto_parser_accepts_native_host_array_report() -> None:
 def test_nikto_target_matching_ignores_foreign_host_or_port() -> None:
     report = {
         "vulnerabilities": [
-            {"id": "123", "host": "192.0.2.10", "port": 80, "uri": "/ok", "message": "ok"},
-            {"id": "123", "host": "192.0.2.11", "port": 80, "uri": "/host", "message": "host"},
-            {"id": "123", "host": "192.0.2.10", "port": 81, "uri": "/port", "message": "port"},
+            {
+                "id": "123",
+                "host": "192.0.2.10",
+                "port": 80,
+                "uri": "/ok",
+                "message": "ok",
+            },
+            {
+                "id": "123",
+                "host": "192.0.2.11",
+                "port": 80,
+                "uri": "/host",
+                "message": "host",
+            },
+            {
+                "id": "123",
+                "host": "192.0.2.10",
+                "port": 81,
+                "uri": "/port",
+                "message": "port",
+            },
         ]
     }
 
@@ -641,7 +830,11 @@ def test_nikto_target_matching_ignores_foreign_host_or_port() -> None:
 def test_nikto_valid_nonzero_exit_is_completed_and_redacts_secrets() -> None:
     report = {
         "vulnerabilities": [
-            {"id": "123", "uri": "/config", "message": "password=secret-value token=abc"}
+            {
+                "id": "123",
+                "uri": "/config",
+                "message": "password=secret-value token=abc",
+            }
         ]
     }
     executor = _FakeExecutor(
@@ -660,7 +853,9 @@ def test_nikto_valid_nonzero_exit_is_completed_and_redacts_secrets() -> None:
     assert len(result.issues) == 1
     assert "secret-value" not in result.issues[0].evidence
     assert "abc" not in result.issues[0].evidence
-    assert result.issues[0].evidence.startswith(f"{WEB_RESULT_POLICY_VERSION}:nikto:000123")
+    assert result.issues[0].evidence.startswith(
+        f"{WEB_RESULT_POLICY_VERSION}:nikto:000123"
+    )
     assert executor.commands[0].argv == [
         "nikto",
         "-h",
@@ -871,3 +1066,74 @@ def test_nikto_retains_method_and_only_safe_references() -> None:
     assert "method=GET" in issue.evidence
     assert issue.cve_id == "CVE-2026-1234"
     assert issue.references == ["https://vendor.example/[REDACTED]"]
+
+
+def test_ffuf_startup_failure_preserves_sanitized_diagnostic(tmp_path) -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=1,
+            diagnostic="Cannot read configuration directory: permission denied",
+        )
+    )
+
+    result = run_ffuf(_unit(), executor, _wordlist(tmp_path))
+
+    assert result.outcome == TargetedOutcome.FAILED
+    assert result.reason_code == TargetedGapReason.EXECUTION_ERROR
+    assert "permission denied" in result.diagnostic
+
+
+def test_nikto_stdout_time_limit_preserves_partial_findings() -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            report=b'{"vulnerabilities": [{"id":"000123","uri":"/config","msg":"configuration exposed"}]}',
+            report_present=True,
+            stdout=b"+ Host maximum execution time of 200 seconds reached",
+        )
+    )
+
+    result = run_nikto(_unit(), executor, policy={"000123": "5"})
+
+    assert result.outcome == TargetedOutcome.TIMED_OUT
+    assert result.reason_code == TargetedGapReason.UNIT_TIMEOUT
+    assert len(result.issues) == 1
+
+
+def test_nikto_error_limit_preserves_partial_findings() -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            report=b'{"vulnerabilities": [{"id":"000123","uri":"/config","msg":"configuration exposed"}]}',
+            report_present=True,
+            stdout=(
+                b"+ ERROR: *** Error limit (20) reached for host, giving up. "
+                b"Last error: error reading HTTP response. ***"
+            ),
+        )
+    )
+
+    result = run_nikto(_unit(), executor, policy={"000123": "5"})
+
+    assert result.outcome == TargetedOutcome.FAILED
+    assert result.reason_code == TargetedGapReason.EXECUTION_ERROR
+    assert len(result.issues) == 1
+
+
+def test_nikto_benign_error_advisory_does_not_fail_execution() -> None:
+    executor = _FakeExecutor(
+        ToolExecution(
+            TargetedOutcome.COMPLETED,
+            exit_code=0,
+            report=b'{"vulnerabilities": []}',
+            report_present=True,
+            stderr=b"+ ERROR: TLS fingerprinting advisory is unavailable.",
+        )
+    )
+
+    result = run_nikto(_unit(), executor, policy={"000123": "5"})
+
+    assert result.outcome == TargetedOutcome.COMPLETED

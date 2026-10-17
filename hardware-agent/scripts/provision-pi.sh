@@ -56,6 +56,11 @@ sh "$agent_src/packaging/build-deb.sh" "$deb_dir/hardware-agent.deb" >/dev/null 
 dpkg -i "$deb_dir/hardware-agent.deb" 9>&- || die "package install failed"
 rm -rf "$deb_dir"
 
+# Package installation alone does not install the external targeted tools.
+# Verify them before reporting this appliance as ready, while holding the lock.
+bash "$agent_src/scripts/provision-targeted-tools.sh" \
+    || die "targeted tool provisioning failed"
+
 if [ "$provisioned" = true ]; then
     echo "This Pi is already provisioned. The package restarted the agent."
 else
