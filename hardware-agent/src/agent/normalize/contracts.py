@@ -288,10 +288,10 @@ class FindingPayload(BaseModel):
     service: str | None = None
     source: str | None = None
     source_script: str | None = None
-    # Internal reconciliation identity. It is excluded from the wire payload.
+    # Optional reconciliation identity used to bind evidence to its condition.
     issue_key: constr(
         min_length=1, max_length=256, strip_whitespace=True
-    ) | None = Field(default=None, exclude=True)
+    ) | None = None
     cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
     cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Literal["low", "medium", "high", "critical"]

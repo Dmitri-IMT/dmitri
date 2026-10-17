@@ -8,8 +8,6 @@ from uuid import uuid4
 
 import pytest
 import yaml
-from pydantic import ValidationError
-
 from agent.assessment.policy import (
     ASSESSMENT_CONFIDENCES,
     EVIDENCE_KINDS,
@@ -43,6 +41,7 @@ from agent.transport.command_channel import (
     AgentStatus,
     AvailableSubnet,
 )
+from pydantic import ValidationError
 
 CONTRACT_MODELS = (
     ("ScanIngestRequest", ScanPayload),
@@ -786,7 +785,7 @@ def test_finding_evidence_observation_is_strict_and_bounded() -> None:
             FindingEvidenceObservationPayload.model_validate(invalid)
 
 
-def test_finding_issue_key_is_bounded_and_remains_internal() -> None:
+def test_finding_issue_key_is_bounded_and_serialized_when_present() -> None:
     data = {
         "severity": "high",
         "title": "Observed condition",
@@ -797,7 +796,9 @@ def test_finding_issue_key_is_bounded_and_remains_internal() -> None:
     }
     finding = FindingPayload.model_validate(data)
     assert finding.issue_key == "smb:signing"
-    assert "issue_key" not in finding.model_dump()
+    assert finding.model_dump()["issue_key"] == "smb:signing"
+    legacy = {key: value for key, value in data.items() if key != "issue_key"}
+    assert FindingPayload.model_validate(legacy).model_dump()["issue_key"] is None
     for value in (" ", "x" * 257):
         with pytest.raises(ValidationError):
             FindingPayload.model_validate({**data, "issue_key": value})

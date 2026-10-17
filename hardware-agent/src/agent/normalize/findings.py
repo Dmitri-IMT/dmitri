@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from agent.normalize.contracts import (
     FindingEvidenceObservationPayload,
@@ -412,17 +412,42 @@ def extract_findings(
 ) -> list[FindingPayload]:
     """Convert general and targeted evidence into the shared findings payload."""
 
+    findings, _, _ = extract_findings_and_observations(hosts)
+    if include_evidence_metadata:
+        return findings
+    # Task 9 retains evidence at the internal extractor boundary. Task 10 opts in
+    # only after it sets the scan-level policy version.
+    return [
+        item.model_copy(
+            update={"evidence_observations": [], "evidence_truncated": False}
+        )
+        for item in findings
+    ]
+
+
+def extract_findings_and_observations(
+    hosts: list[HostInfo],
+) -> tuple[list[FindingPayload], list[FindingEvidenceObservationPayload], bool]:
+    """Extract findings and bounded standalone negative/inconclusive evidence."""
+
     candidates: list[FindingPayload] = []
+    standalone: list[FindingEvidenceObservationPayload] = []
 
     for host in hosts:
         for script in host.host_scripts:
             for finding in _extract_script_findings(host, None, script):
                 candidates.append(finding)
+            standalone.extend(
+                _extract_standalone_nse_observations(host, None, script)
+            )
 
         for port in host.ports:
             for script in port.scripts:
                 for finding in _extract_script_findings(host, port, script):
                     candidates.append(finding)
+                standalone.extend(
+                    _extract_standalone_nse_observations(host, port, script)
+                )
 
         for finding in _extract_modbus_read_findings(host):
             candidates.append(finding)
@@ -440,18 +465,144 @@ def extract_findings(
             for issue in result.issues:
                 candidates.append(_targeted_finding(host, port, result, issue))
 
-    findings = _reduce_findings(candidates)
+    # A supported standalone negative for the same condition is a conflict
+    # witness, so bind it to that finding before reducing duplicates. Unsupported
+    # negatives and failures remain standalone and cannot downgrade a finding.
+    remaining_standalone: list[FindingEvidenceObservationPayload] = []
+    for observation in standalone:
+        matching = [
+            candidate
+            for candidate in candidates
+            if _supported_local_observation(observation, candidate)
+        ]
+        if matching and observation.result == "negative":
+            for candidate in matching:
+                candidate.evidence_observations.append(observation)
+        else:
+            remaining_standalone.append(observation)
 
-    if include_evidence_metadata:
-        return findings
-    # Task 9 retains evidence at the internal extractor boundary. Task 10 opts in
-    # only after it sets the scan-level policy version and handles standalone rows.
-    return [
-        item.model_copy(
-            update={"evidence_observations": [], "evidence_truncated": False}
+    findings = _reduce_findings(candidates)
+    unique: dict[str, FindingEvidenceObservationPayload] = {}
+    for item in remaining_standalone:
+        identity_key = _standalone_observation_key(item)
+        unique[identity_key] = item
+    ordered = [unique[key] for key in sorted(unique, key=str)]
+    truncated = len(ordered) > 512
+    return findings, ordered[:512], truncated
+
+
+def _observation_scope_key(
+    item: FindingEvidenceObservationPayload,
+) -> tuple[object, ...]:
+    return (
+        str(item.ip) if item.ip is not None else None,
+        item.protocol,
+        item.port,
+        item.unit_id,
+        item.condition_key,
+    )
+
+
+def _standalone_observation_key(
+    item: FindingEvidenceObservationPayload,
+) -> str:
+    """Retain distinct evidence/facts while deduplicating exact observations."""
+    payload = item.model_dump(mode="json")
+    payload["facts"] = dict(sorted(item.facts.items()))
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _extract_standalone_nse_observations(
+    host: HostInfo,
+    port: PortInfo | None,
+    script: ScriptResult,
+) -> list[FindingEvidenceObservationPayload]:
+    """Keep explicit non-positive NSE states separate from positive findings."""
+
+    observations: list[FindingEvidenceObservationPayload] = []
+    for candidate in _walk_mappings(script.data):
+        if not any(str(key).casefold() in {"state", "ids"} for key in candidate):
+            continue
+        state_value = _lookup(candidate, "state")
+        state = (
+            " ".join(state_value.split()).casefold()
+            if isinstance(state_value, str)
+            else ""
         )
-        for item in findings
-    ]
+        if state == "not vulnerable":
+            result: Literal["negative", "inconclusive"] = "negative"
+            state_fact = "NOT VULNERABLE"
+        elif state in {
+            "vulnerable",
+            "vulnerable (dos)",
+            "vulnerable (exploitable)",
+        }:
+            # Positive states are carried by their finding observation.
+            continue
+        else:
+            # Missing/null state, errors, and unrecognized states identify an
+            # attempted check at most; they never become negative evidence.
+            result = "inconclusive"
+            has_state_field = any(
+                str(key).casefold() == "state" for key in candidate
+            )
+            if state:
+                state_fact = state.upper()[:160]
+            elif not has_state_field:
+                state_fact = "MISSING"
+            elif state_value is None:
+                state_fact = "NULL"
+            else:
+                state_fact = (
+                    f"UNSUPPORTED TYPE: {type(state_value).__name__.upper()}"
+                )[:160]
+
+        condition_keys = _structured_cves(_lookup(candidate, "ids"))
+        if not condition_keys:
+            continue
+        evidence = json.dumps(
+            {"output": script.output.strip(), "table": candidate},
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        for condition_key in condition_keys:
+            supported_ms17_negative = (
+                result == "negative"
+                and script.script_id == "smb-vuln-ms17-010"
+                and condition_key == "CVE-2017-0143"
+                and port is not None
+                and port.port == 445
+                and port.protocol == "tcp"
+            )
+            observations.append(
+                FindingEvidenceObservationPayload(
+                    ip=host.ip,
+                    port=port.port if port is not None else None,
+                    protocol=port.protocol if port is not None else None,
+                    condition_key=condition_key,
+                    method="specific_check" if supported_ms17_negative else "unknown",
+                    result=result,
+                    source="nmap_nse",
+                    source_script=script.script_id,
+                    rule_id=(
+                        "nse:smb-vuln-ms17-010"
+                        if supported_ms17_negative
+                        else "nse:unsupported"
+                    ),
+                    rule_version="1",
+                    evidence=evidence[:512],
+                    facts=(
+                        {
+                            "vulnerability_state": state_fact,
+                            "table": "smb-vuln-ms17-010",
+                        }
+                        if supported_ms17_negative
+                        else {"vulnerability_state": state_fact}
+                    ),
+                )
+            )
+    return observations
 
 
 def _extract_modbus_read_findings(host: HostInfo) -> list[FindingPayload]:
@@ -530,7 +681,13 @@ def _function_code(address_space: str) -> int:
 def _reduce_findings(candidates: list[FindingPayload]) -> list[FindingPayload]:
     groups: dict[tuple[object, ...], list[FindingPayload]] = {}
     for finding in candidates:
-        groups.setdefault(finding_dedupe_key(finding), []).append(finding)
+        identity = finding_dedupe_key(finding)
+        # The backend's persistent identity still collides on CVE + endpoint,
+        # where its approved merge records issue_key ambiguity. Keep distinct
+        # declared conditions as separate wire findings so each observation is
+        # attached to a compatible issue_key and remains valid under the schema.
+        key = (*identity, finding.issue_key) if finding.cve_id else identity
+        groups.setdefault(key, []).append(finding)
     return [
         _merge_finding_group(groups[key])
         for key in sorted(groups, key=lambda value: tuple(str(item) for item in value))

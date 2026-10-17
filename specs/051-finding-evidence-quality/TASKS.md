@@ -1,6 +1,6 @@
 # Tasks — Qualidade da evidência dos achados (`051-finding-evidence-quality`)
 
-11 tarefas sequenciais. **#1–#8 concluídas; #9–#11 pendentes.** Specs aprovadas em 2026-10-10; base `471739f`.
+11 tarefas sequenciais. **#1–#10 concluídas; #11 pendente.** Specs aprovadas em 2026-10-10; base `471739f`.
 
 Ordem compatível: parser offline → contrato/backend → consumidores → agente. Nenhum novo envio ingest antes da tarefa10. Sem scans reais, deploy, SSH, commit, push ou PR.
 
@@ -112,13 +112,17 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 ## Task 10: Integrar emissão e preservar todos caminhos
 - **Description**: Somente após backend e consumidores aprovados, runner coleta uma vez observações/achados e produz versão1; transporte, arquivo local, assinatura e parcial preservam contrato. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
 - **Dependencies**: Task 9
-- **Target Files**: `hardware-agent/src/agent/scanner/runner.py`, `hardware-agent/src/agent/cli.py`, `hardware-agent/src/agent/headless.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/src/agent/tui/screens/scan_progress.py`, `hardware-agent/src/agent/scanner/workspace.py`, `hardware-agent/src/agent/transport/ingest.py`, `hardware-agent/src/agent/transport/signing.py`, `hardware-agent/src/agent/normalize/coverage.py`, `hardware-agent/tests/unit/test_scan_runner_partial.py`, `hardware-agent/tests/unit/test_headless.py`, `hardware-agent/tests/unit/test_cli_agent.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_ingest_client.py`
-- **Tests**: `hardware-agent/tests/unit/test_scan_runner_partial.py`, `hardware-agent/tests/unit/test_headless.py`, `hardware-agent/tests/unit/test_cli_agent.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_ingest_client.py`; aceites A07,A10,A11,A12,A15.
+- **Target Files**: `hardware-agent/src/agent/scanner/runner.py`, `hardware-agent/src/agent/cli.py`, `hardware-agent/src/agent/headless.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/src/agent/tui/screens/scan_progress.py`, `hardware-agent/src/agent/scanner/workspace.py`, `hardware-agent/src/agent/transport/ingest.py`, `hardware-agent/src/agent/transport/signing.py`, `hardware-agent/src/agent/normalize/contracts.py`, `hardware-agent/src/agent/normalize/findings.py`, `hardware-agent/src/agent/normalize/coverage.py`, `hardware-agent/tests/test_contract_models.py`, `hardware-agent/tests/test_findings.py`, `hardware-agent/tests/unit/test_scan_runner_partial.py`, `hardware-agent/tests/unit/test_headless.py`, `hardware-agent/tests/unit/test_cli_agent.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_ingest_client.py`
+- **Tests**: `hardware-agent/tests/test_contract_models.py`, `hardware-agent/tests/test_findings.py`, `hardware-agent/tests/unit/test_scan_runner_partial.py`, `hardware-agent/tests/unit/test_headless.py`, `hardware-agent/tests/unit/test_cli_agent.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_ingest_client.py`; aceites A07,A10,A11,A12,A15.
 - **Success Criteria**:
-  - CLI/headless/daemon/TUI mesmos campos, partial/cancel persistem; audit constructors/calls; bytes completos assinados; upload falho conserva arquivo sem fallback422; coverage independente; exit0/10/20 e inválido2 mantidos.
+  - Emitir `finding_evidence_policy_version=1` também sem findings; ao habilitar v1, serializar `issue_key` opcional no FindingPayload para que o backend valide o vínculo. Arquivo local e bytes assinados contêm os mesmos campos; modelos legados sem evidência continuam válidos.
+  - CLI/headless/daemon/TUI mesmos campos, partial/cancel persistem; audit constructors/calls; bytes completos assinados; upload falho conserva arquivo sem fallback422; standalone negativos/inconclusivos permanecem distintos da coverage; exit0/10/20 e inválido2 mantidos.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Review Rejections**: 2
+- **Review 1**: Preserved supported positive/negative conflicts, unknown and incomplete structured states, MS17-010 rule facts, deterministic evidence deduplication, and separate issue_key conditions for colliding CVEs; independent validation pending.
+- **Review 2**: Capped unsupported structured NSE state facts at the contract's 160-character limit so payload construction and partial finalization remain valid; null and unsupported state types retain distinct inconclusive facts.
+- **Final Review**: APPROVE; 261 testes passaram, 3 foram ignorados; Ruff e `git diff --check` passaram. Cobriu emissão v1/issue_key, observações standalone e conflitos, persistência/assinatura e finalização parcial.
 
 ## Task 11: Apresentar TUI e avaliar corpus offline
 - **Description**: Atualizar telas locais/legado e avaliar corpus desenvolvimento/evaluation versionado independente, baseline versus corrigido; fechar gate hardware-agent. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
@@ -166,10 +170,10 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 | 2 | Publicar contrato aditivo estrito | COMPLETE |
 | 3 | Implementar política e redução backend | COMPLETE |
 | 4 | Persistir evidências e proteger reconciliação | COMPLETE |
-| 5 | Expor leitura e totais por escopo | PENDING |
-| 6 | Atualizar relatórios e verificar PDF | PENDING |
-| 7 | Limitar explicação automatizada e fechar backend | PENDING |
-| 8 | Apresentar método, limites e resumo web | PENDING |
+| 5 | Expor leitura e totais por escopo | COMPLETE |
+| 6 | Atualizar relatórios e verificar PDF | COMPLETE |
+| 7 | Limitar explicação automatizada e fechar backend | COMPLETE |
+| 8 | Apresentar método, limites e resumo web | COMPLETE |
 | 9 | Anotar adaptadores e reduzir evidência local | COMPLETE |
-| 10 | Integrar emissão e preservar todos caminhos | PENDING |
+| 10 | Integrar emissão e preservar todos caminhos | COMPLETE |
 | 11 | Apresentar TUI e avaliar corpus offline | PENDING |

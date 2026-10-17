@@ -4,13 +4,20 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
-from agent.normalize.contracts import FindingEvidenceObservationPayload, FindingPayload
+from agent.normalize.contracts import (
+    FindingEvidenceObservationPayload,
+    FindingPayload,
+    ScanPayload,
+)
 from agent.normalize.findings import (
     _merge_finding_group,
     _merge_observations,
+    _reduce_findings,
     assess_local_evidence,
     extract_findings,
+    extract_findings_and_observations,
 )
 from agent.ot.modbus.models import ModbusAddressRange, ModbusService, ModbusUnit
 from agent.scanner.models import HostInfo, PortInfo, ScriptResult, ServiceInfo
@@ -357,6 +364,265 @@ def test_structured_negative_without_description_blocks_text_fallback() -> None:
     )
 
     assert findings == []
+
+
+def test_structured_negative_emits_identified_standalone_observation() -> None:
+    host = _generic_nse_host(
+        {"state": " NOT   VULNERABLE ", "IDS": {"CVE": "CVE-2020-1234"}},
+        "The check returned NOT VULNERABLE.",
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert truncated is False
+    assert len(observations) == 1
+    observation = observations[0]
+    assert str(observation.ip) == "192.168.0.81"
+    assert (observation.port, observation.protocol) == (445, "tcp")
+    assert observation.condition_key == "CVE-2020-1234"
+    assert (observation.method, observation.result) == ("unknown", "negative")
+    assert observation.source_script == "unmapped-nse"
+    assert observation.facts == {"vulnerability_state": "NOT VULNERABLE"}
+
+
+def test_unknown_state_emits_inconclusive_observations() -> None:
+    host = _generic_nse_host(
+        {
+            "state": "UNKNOWN (unable to test)",
+            "ids": [{"CVE": "CVE-2020-1234"}, {"CVE": "CVE-2021-2345"}],
+        }
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert truncated is False
+    assert [item.condition_key for item in observations] == [
+        "CVE-2020-1234",
+        "CVE-2021-2345",
+    ]
+    assert all(item.result == "inconclusive" for item in observations)
+
+
+def test_mixed_states_keep_negative_separate_from_positive_finding() -> None:
+    host = _generic_nse_host(
+        [
+            {
+                "state": "NOT VULNERABLE",
+                "ids": {"CVE": "CVE-2020-1234"},
+            },
+            {
+                "state": "VULNERABLE",
+                "title": "Positive finding",
+                "ids": {"CVE": "CVE-2021-2345"},
+            },
+        ]
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert [item.cve_id for item in findings] == ["CVE-2021-2345"]
+    assert [item.condition_key for item in observations] == ["CVE-2020-1234"]
+    assert observations[0].result == "negative"
+    assert truncated is False
+
+
+def test_standalone_observations_are_bounded_and_report_truncation() -> None:
+    records = [
+        {"state": "NOT VULNERABLE", "ids": {"CVE": f"CVE-2020-{index + 1000}"}}
+        for index in range(513)
+    ]
+
+    findings, observations, truncated = extract_findings_and_observations(
+        [_generic_nse_host(records)]
+    )
+
+    assert findings == []
+    assert len(observations) == 512
+    assert truncated is True
+
+
+def test_standalone_negative_does_not_duplicate_a_positive_finding_condition() -> None:
+    host = _generic_nse_host(
+        [
+            {
+                "state": "NOT VULNERABLE",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+            {
+                "state": "VULNERABLE",
+                "title": "MS17-010",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+        ]
+    )
+    host.ports[0].scripts[0].script_id = "smb-vuln-ms17-010"
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert [item.cve_id for item in findings] == ["CVE-2017-0143"]
+    assert observations == []
+    assert truncated is False
+
+
+def test_supported_ms17_negative_is_retained_as_conflict_with_positive() -> None:
+    host = _generic_nse_host(
+        [
+            {"state": "NOT VULNERABLE", "ids": {"CVE": "CVE-2017-0143"}},
+            {
+                "state": "VULNERABLE",
+                "title": "MS17-010",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+        ]
+    )
+    host.ports[0].scripts[0].script_id = "smb-vuln-ms17-010"
+
+    findings, standalone, _ = extract_findings_and_observations([host])
+
+    assert standalone == []
+    assert len(findings) == 1
+    assert {item.result for item in findings[0].evidence_observations} == {
+        "negative",
+        "positive",
+    }
+    assert assess_local_evidence(findings[0]).status == "conflicting"
+
+
+def test_unknown_or_missing_state_is_inconclusive_when_cve_is_known() -> None:
+    host = _generic_nse_host(
+        [
+            {"state": None, "ids": {"CVE": "CVE-2020-1234"}},
+            {"state": "ERROR: connection failed", "ids": {"CVE": "CVE-2021-2345"}},
+            {"state": True, "ids": {"CVE": "CVE-2023-4567"}},
+            {"ids": {"CVE": "CVE-2022-3456"}},
+        ]
+    )
+
+    findings, observations, _ = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert {item.condition_key for item in observations} == {
+        "CVE-2020-1234",
+        "CVE-2021-2345",
+        "CVE-2022-3456",
+        "CVE-2023-4567",
+    }
+    assert all(item.result == "inconclusive" for item in observations)
+    assert all(item.method == "unknown" for item in observations)
+    facts_by_condition = {item.condition_key: item.facts for item in observations}
+    assert facts_by_condition["CVE-2020-1234"] == {
+        "vulnerability_state": "NULL"
+    }
+    assert facts_by_condition["CVE-2023-4567"] == {
+        "vulnerability_state": "UNSUPPORTED TYPE: BOOL"
+    }
+
+
+def test_oversized_unknown_state_is_bounded_without_losing_observation() -> None:
+    oversized_state = "ERROR " + ("x" * 200)
+    _, observations, truncated = extract_findings_and_observations(
+        [
+            _generic_nse_host(
+                {
+                    "state": oversized_state,
+                    "ids": {"CVE": "CVE-2024-1234"},
+                }
+            )
+        ]
+    )
+
+    assert truncated is False
+    assert len(observations) == 1
+    observation = observations[0]
+    assert observation.result == "inconclusive"
+    assert observation.facts == {"vulnerability_state": oversized_state.upper()[:160]}
+
+
+def test_standalone_observation_dedup_preserves_distinct_facts_and_evidence() -> None:
+    first = {
+        "state": "UNKNOWN",
+        "ids": {"CVE": "CVE-2020-1234"},
+        "detail": "first response",
+    }
+    second = {
+        "state": "UNKNOWN",
+        "ids": {"CVE": "CVE-2020-1234"},
+        "detail": "second response",
+    }
+    _, observations, _ = extract_findings_and_observations(
+        [_generic_nse_host([first, second])]
+    )
+    _, reversed_observations, _ = extract_findings_and_observations(
+        [_generic_nse_host([second, first])]
+    )
+
+    assert len(observations) == 2
+    assert observations[0].evidence != observations[1].evidence
+    assert [item.model_dump_json() for item in observations] == [
+        item.model_dump_json() for item in reversed_observations
+    ]
+
+
+def test_colliding_cve_conditions_remain_separate_valid_wire_findings() -> None:
+    base = FindingPayload(
+        ip="192.0.2.101",
+        port=443,
+        protocol="tcp",
+        cve_id="CVE-2024-12345",
+        issue_key="tls.certificate:expired",
+        severity="medium",
+        title="TLS condition",
+        description="A TLS condition was observed.",
+        recommendation="Review the certificate.",
+        evidence="certificate details",
+        evidence_observations=[
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.101",
+                port=443,
+                protocol="tcp",
+                condition_key="tls.certificate:expired",
+                method="unknown",
+                result="inconclusive",
+                source="nmap_nse",
+                source_script="ssl-cert",
+                rule_id="nse:unsupported",
+                rule_version="1",
+                evidence="unsupported structured condition",
+            )
+        ],
+    )
+    second = base.model_copy(
+        update={
+            "issue_key": "tls.certificate:self-signed",
+            "evidence_observations": [
+                base.evidence_observations[0].model_copy(
+                    update={"condition_key": "tls.certificate:self-signed"}
+                )
+            ],
+        }
+    )
+
+    findings = _reduce_findings([base, second])
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.0.2.0/24",
+        scan_mode="standard",
+        findings=findings,
+        finding_evidence_policy_version="1",
+    )
+
+    assert len(payload.findings) == 2
+    assert {item.issue_key for item in payload.findings} == {
+        "tls.certificate:expired",
+        "tls.certificate:self-signed",
+    }
+    assert all(
+        finding.evidence_observations[0].condition_key == finding.issue_key
+        for finding in payload.findings
+    )
 
 
 def test_structured_ids_maps_and_lists_are_accepted_only_for_positive_state() -> None:

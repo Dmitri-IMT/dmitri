@@ -13,7 +13,13 @@ from agent.scanner.errors import (
     ScanCancelled,
     UnitScanError,
 )
-from agent.scanner.models import HostInfo, PortInfo, ServiceInfo, StageCoverage
+from agent.scanner.models import (
+    HostInfo,
+    PortInfo,
+    ScriptResult,
+    ServiceInfo,
+    StageCoverage,
+)
 from agent.scanner.nmap import NmapRunner
 from agent.scanner.runner import ScanRunner, _record_not_run
 from agent.targeted.models import (
@@ -107,6 +113,8 @@ def test_nse_failure_with_service_recovery_marks_payload_partial(
     runner.run_blocking()
 
     assert errors == []
+    assert completed[0].finding_evidence_policy_version == "1"
+    assert completed[0].finding_observations == []
     assert completed[0].metadata["partial_result"] is True
     assert completed[0].metadata["terminated_by"] == "completed"
     assert completed[0].hosts[0].ports[0].service == "modbus"
@@ -125,6 +133,39 @@ def test_nse_failure_with_service_recovery_marks_payload_partial(
         "issue_keys": [],
         "observations": [],
     }
+
+
+def test_runner_emits_standalone_nse_observations_separately_from_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = _one_host()[0]
+    host.ports = [
+        PortInfo(
+            port=445,
+            scripts=[
+                ScriptResult(
+                    "unmapped-nse",
+                    "Explicit negative response.",
+                    {"state": "NOT VULNERABLE", "ids": {"CVE": "CVE-2020-1234"}},
+                )
+            ],
+        )
+    ]
+    runner, completed, errors, _ = _build_runner(
+        monkeypatch,
+        hosts=[host],
+        port_stage=lambda *args, **kwargs: 0,
+        deep_stage=lambda *args, **kwargs: 0,
+    )
+
+    runner.run_blocking()
+
+    assert errors == []
+    assert completed[0].finding_evidence_policy_version == "1"
+    assert len(completed[0].finding_observations) == 1
+    assert completed[0].finding_observations[0].condition_key == "CVE-2020-1234"
+    assert completed[0].finding_observations[0].result == "negative"
+    assert all(not unit.observations for unit in completed[0].coverage)
 
 
 def test_ot_deadline_marks_completed_scan_payload_partial(
@@ -320,16 +361,76 @@ class TestPostDiscoveryFatal:
     def test_partial_payload_keeps_discovered_devices(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        host = _one_host()[0]
+        host.ports = [
+            PortInfo(
+                port=445,
+                scripts=[
+                    ScriptResult(
+                        "unmapped-nse",
+                        "Explicit negative response.",
+                        {
+                            "state": "NOT VULNERABLE",
+                            "ids": {"CVE": "CVE-2020-1234"},
+                        },
+                    )
+                ],
+            )
+        ]
+
         def boom(*args, **kwargs):
             raise FatalScanError("ports blew up")
 
         runner, completed, _, _ = _build_runner(
-            monkeypatch, hosts=_one_host(), port_stage=boom
+            monkeypatch, hosts=[host], port_stage=boom
         )
         runner._run()
 
         payload = completed[0]
+        assert payload.finding_evidence_policy_version == "1"
+        assert [item.condition_key for item in payload.finding_observations] == [
+            "CVE-2020-1234"
+        ]
         assert [str(device.ip) for device in payload.hosts] == ["192.168.1.10"]
+
+    def test_partial_payload_bounds_oversized_unknown_nse_state(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        host = _one_host()[0]
+        oversized_state = "ERROR " + ("x" * 200)
+        host.ports = [
+            PortInfo(
+                port=445,
+                scripts=[
+                    ScriptResult(
+                        "unmapped-nse",
+                        "The script returned an unsupported state.",
+                        {
+                            "state": oversized_state,
+                            "ids": {"CVE": "CVE-2024-1234"},
+                        },
+                    )
+                ],
+            )
+        ]
+
+        def boom(*args, **kwargs):
+            raise FatalScanError("ports blew up")
+
+        runner, completed, errors, _ = _build_runner(
+            monkeypatch, hosts=[host], port_stage=boom
+        )
+        runner._run()
+
+        assert errors == []
+        payload = completed[0]
+        assert payload.metadata["partial_result"] is True
+        assert len(payload.finding_observations) == 1
+        observation = payload.finding_observations[0]
+        assert observation.result == "inconclusive"
+        assert observation.facts == {
+            "vulnerability_state": oversized_state.upper()[:160]
+        }
 
 
 class TestPostDiscoveryUnexpected:
@@ -347,6 +448,8 @@ class TestPostDiscoveryUnexpected:
         assert len(completed) == 1
         assert len(errors) == 0
         payload = completed[0]
+        assert payload.finding_evidence_policy_version == "1"
+        assert payload.finding_observations == []
         assert payload.metadata["partial_result"] is True
         assert payload.metadata["terminated_by"] == "error"
         assert [str(device.ip) for device in payload.hosts] == ["192.168.1.10"]
