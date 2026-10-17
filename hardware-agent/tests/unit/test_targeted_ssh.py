@@ -71,6 +71,10 @@ def test_ssh_maps_fail_and_ignores_post_quantum_advice() -> None:
         "ssh.algorithm:kex:diffie-hellman-group1-sha1"
     ]
     assert "post-quantum" not in issues[0].evidence
+    assert issues[0].method == "configuration_observation"
+    assert issues[0].result == "positive"
+    assert issues[0].rule_id == "targeted:ssh-audit-algorithm"
+    assert issues[0].facts["primitive"] == "diffie-hellman-group1-sha1"
 
 
 def test_ssh_maps_warn_and_cve_score_to_severity() -> None:

@@ -64,6 +64,11 @@ def test_sensitive_response_is_redacted_and_wildcard_baseline_is_rejected() -> N
 
     assert issue is not None
     assert issue.severity == "high"
+    assert issue.method == "specific_check"
+    assert issue.result == "positive"
+    assert issue.rule_id == "targeted:ffuf:WEB-SECRET-ENV-001"
+    assert issue.facts["status"] == 200
+    assert "secret-value" not in str(issue.facts)
     assert "secret-value" not in issue.evidence
     assert WEB_RESULT_POLICY_VERSION in issue.evidence
     assert (
@@ -755,6 +760,8 @@ def test_nikto_parser_requires_pinned_id_and_maps_highest_category() -> None:
         ("nikto:000124:/b", "critical"),
     ]
     assert "default file" in issues[0].evidence
+    assert issues[0].method == "unknown"
+    assert issues[0].result == "inconclusive"
     assert "not pinned" not in " ".join(issue.evidence for issue in issues)
 
 

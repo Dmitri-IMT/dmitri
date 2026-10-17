@@ -44,6 +44,11 @@ def test_testssl_maps_affirmative_protocol_and_ignores_ok() -> None:
     }
     issues = parse_testssl_json(report, unit())
     assert [issue.issue_key for issue in issues] == ["tls.protocol:tls1.0"]
+    issue = issues[0]
+    assert issue.method == "configuration_observation"
+    assert issue.result == "positive"
+    assert issue.rule_id == "targeted:testssl.sh-issue"
+    assert issue.facts == {"primitive": "protocols", "observed_value": "TLS 1.0"}
 
 
 def test_testssl_parses_native_nested_host_report_and_inherits_target() -> None:

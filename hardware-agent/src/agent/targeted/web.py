@@ -108,11 +108,10 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Disable directory indexing on the web server.",
         matches_path=lambda path, base: path.endswith("/"),
         proof="directory-index-structure",
-        matches_body=lambda base, text, body: re.search(
-            r"(?i)<title>\s*index of|parent directory", text
-        )
-        is not None
-        and len(re.findall(r"href\s*=", text.casefold())) >= 1,
+        matches_body=lambda base, text, body: (
+            re.search(r"(?i)<title>\s*index of|parent directory", text) is not None
+            and len(re.findall(r"href\s*=", text.casefold())) >= 1
+        ),
     ),
     "WEB-VCS-GIT-001": WebRule(
         "WEB-VCS-GIT-001",
@@ -120,8 +119,9 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed Git repository metadata",
         "Remove repository metadata from the web root.",
-        matches_path=lambda path, base: path in {"/.git/head", "/.git/config"}
-        or path.startswith("/.git/"),
+        matches_path=lambda path, base: (
+            path in {"/.git/head", "/.git/config"} or path.startswith("/.git/")
+        ),
         proof="git-ref-or-config",
         matches_body=lambda base, text, body: (
             (
@@ -138,8 +138,9 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed Subversion repository metadata",
         "Remove Subversion metadata from the web root.",
-        matches_path=lambda path, base: path in {"/.svn/entries", "/.svn/wc.db"}
-        or path.startswith("/.svn/"),
+        matches_path=lambda path, base: (
+            path in {"/.svn/entries", "/.svn/wc.db"} or path.startswith("/.svn/")
+        ),
         proof="svn-entries-or-sqlite",
         matches_body=lambda base, text, body: (
             (
@@ -162,10 +163,9 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Remove environment configuration from public web paths.",
         matches_path=lambda path, base: base == ".env" or base.startswith(".env."),
         proof="environment-assignments",
-        matches_body=lambda base, text, body: len(
-            re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)
-        )
-        >= 2,
+        matches_body=lambda base, text, body: (
+            len(re.findall(r"(?m)^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s#]+", text)) >= 2
+        ),
         seeds=(".env", ".env.bak", ".env.old"),
     ),
     "WEB-SECRET-KEY-001": WebRule(
@@ -174,14 +174,17 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "critical",
         "Exposed private key material",
         "Remove the private key and rotate any affected credentials.",
-        matches_path=lambda path, base: base == "id_rsa"
-        or base.endswith((".key", ".pem")),
+        matches_path=lambda path, base: (
+            base == "id_rsa" or base.endswith((".key", ".pem"))
+        ),
         proof="private-key-header",
-        matches_body=lambda base, text, body: re.search(
-            r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----",
-            text,
-        )
-        is not None,
+        matches_body=lambda base, text, body: (
+            re.search(
+                r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----",
+                text,
+            )
+            is not None
+        ),
         seeds=("id_rsa", "private.key", "server.key"),
     ),
     "WEB-CONFIG-001": WebRule(
@@ -192,12 +195,14 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Remove configuration files from the public web root.",
         matches_path=lambda path, base: _config_stem(base) in _CONFIG_STEMS,
         proof="reviewed-config-setting",
-        matches_body=lambda base, text, body: re.search(
-            r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)",
-            text,
-        )
-        is not None
-        and ("{" in text or "=" in text or ":" in text or "[" in text),
+        matches_body=lambda base, text, body: (
+            re.search(
+                r"(?i)(database|secret|password|listen|server_name|connection|string|api[_-]?key)",
+                text,
+            )
+            is not None
+            and ("{" in text or "=" in text or ":" in text or "[" in text)
+        ),
         seeds=(
             "application.properties",
             "application.yml",
@@ -214,11 +219,11 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Remove backups and source artifacts from the web root.",
         matches_path=lambda path, base: base.endswith(_BACKUP_SUFFIXES),
         proof="archive-or-source-signature",
-        matches_body=lambda base, text, body: body.startswith(
-            (b"PK\x03\x04", b"\x1f\x8b", b"ustar")
-        )
-        or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
-        is not None,
+        matches_body=lambda base, text, body: (
+            body.startswith((b"PK\x03\x04", b"\x1f\x8b", b"ustar"))
+            or re.search(r"(?i)(?:<\?php|#!/|function\s+\w+\s*\(|source\s+code)", text)
+            is not None
+        ),
         seeds=("backup.tar.gz", "backup.zip"),
     ),
     "WEB-DUMP-001": WebRule(
@@ -227,14 +232,18 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "high",
         "Exposed database artifact",
         "Remove database dumps from the web root and rotate exposed secrets.",
-        matches_path=lambda path, base: base.endswith((".sql", ".db", ".sqlite"))
-        or base in {"database", "dump"},
+        matches_path=lambda path, base: (
+            base.endswith((".sql", ".db", ".sqlite")) or base in {"database", "dump"}
+        ),
         proof="database-dump-signature",
-        matches_body=lambda base, text, body: body.startswith(b"SQLite format 3")
-        or re.search(
-            r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))", text
-        )
-        is not None,
+        matches_body=lambda base, text, body: (
+            body.startswith(b"SQLite format 3")
+            or re.search(
+                r"(?i)(?:CREATE\s+TABLE|INSERT\s+INTO|--\s*(?:mysql|postgres|sql))",
+                text,
+            )
+            is not None
+        ),
         seeds=("database.sql", "database.sqlite"),
     ),
     "WEB-LOG-001": WebRule(
@@ -243,15 +252,15 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Exposed application or server log",
         "Remove logs from public paths and review disclosed information.",
-        matches_path=lambda path, base: base.endswith(".log")
-        or base in {"debug.log", "error.log"},
+        matches_path=lambda path, base: (
+            base.endswith(".log") or base in {"debug.log", "error.log"}
+        ),
         proof="log-structure",
-        matches_body=lambda base, text, body: len(
-            re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)
-        )
-        >= 2
-        or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
-        is not None,
+        matches_body=lambda base, text, body: (
+            len(re.findall(r"(?:\d{4}-\d\d-\d\d|\b\d\d?:\d\d:\d\d\b)", text)) >= 2
+            or re.search(r"(?i)(GET|POST)\s+\S+\s+HTTP/\d|traceback|exception", text)
+            is not None
+        ),
         seeds=("debug.log", "error.log"),
     ),
     "WEB-DIAG-PHP-001": WebRule(
@@ -262,8 +271,10 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Remove or restrict PHP diagnostic pages.",
         matches_path=lambda path, base: base == "phpinfo.php" or "phpinfo" in base,
         proof="phpinfo-structure",
-        matches_body=lambda base, text, body: "php version" in text.casefold()
-        and ("phpinfo" in text.casefold() or "configuration" in text.casefold()),
+        matches_body=lambda base, text, body: (
+            "php version" in text.casefold()
+            and ("phpinfo" in text.casefold() or "configuration" in text.casefold())
+        ),
         seeds=("phpinfo.php",),
     ),
     "WEB-DIAG-SERVER-001": WebRule(
@@ -272,12 +283,15 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "medium",
         "Exposed web-server diagnostic endpoint",
         "Disable or restrict web-server diagnostic endpoints.",
-        matches_path=lambda path, base: path
-        in {"/server-status", "/server-info", "/nginx_status"},
+        matches_path=lambda path, base: (
+            path in {"/server-status", "/server-info", "/nginx_status"}
+        ),
         proof="server-diagnostic-structure",
-        matches_body=lambda base, text, body: "server status" in text.casefold()
-        or "server-info" in text.casefold()
-        or "stub_status" in text.casefold(),
+        matches_body=lambda base, text, body: (
+            "server status" in text.casefold()
+            or "server-info" in text.casefold()
+            or "stub_status" in text.casefold()
+        ),
         seeds=("nginx_status", "server-info", "server-status"),
     ),
     "WEB-DIAG-ACTUATOR-001": WebRule(
@@ -289,15 +303,17 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         matches_path=lambda path, base: path.startswith("/actuator/"),
         proof="actuator-sensitive-data",
         matches_body=lambda base, text, body: (
-            base == "heapdump"
-            and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))
-        )
-        or (
-            base != "heapdump"
-            and (
-                "environment" in text.casefold()
-                or "propertysources" in text.casefold()
-                or "activeprofiles" in text.casefold()
+            (
+                base == "heapdump"
+                and (body.startswith(b"PK") or body.startswith(b"\x1f\x8b"))
+            )
+            or (
+                base != "heapdump"
+                and (
+                    "environment" in text.casefold()
+                    or "propertysources" in text.casefold()
+                    or "activeprofiles" in text.casefold()
+                )
             )
         ),
         seeds=("actuator/configprops", "actuator/env", "actuator/heapdump"),
@@ -311,10 +327,12 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         matches_path=lambda path, base: path in {"/metrics", "/prometheus"},
         proof="prometheus-exposition",
         matches_body=lambda base, text, body: (
-            "# help " in text.casefold() and "# type " in text.casefold()
-        )
-        or re.search(r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", text.casefold())
-        is not None,
+            ("# help " in text.casefold() and "# type " in text.casefold())
+            or re.search(
+                r"(?m)^[a-z_:][a-z0-9_:]*(?:\{[^}]*\})?\s+-?\d", text.casefold()
+            )
+            is not None
+        ),
         seeds=("metrics", "prometheus"),
     ),
     "WEB-ADMIN-001": WebRule(
@@ -324,34 +342,38 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "Administrative interface reachable",
         "Restrict administrative interfaces to authorized operators.",
         "administration",
-        matches_path=lambda path, base: path
-        in {
-            "/admin",
-            "/administrator",
-            "/manager/html",
-            "/host-manager/html",
-            "/phpmyadmin",
-            "/adminer.php",
-            "/wp-admin",
-        },
+        matches_path=lambda path, base: (
+            path
+            in {
+                "/admin",
+                "/administrator",
+                "/manager/html",
+                "/host-manager/html",
+                "/phpmyadmin",
+                "/adminer.php",
+                "/wp-admin",
+            }
+        ),
         proof="administrative-login-surface",
-        matches_body=lambda base, text, body: re.search(
-            r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b",
-            text,
-        )
-        is not None
-        or re.search(
-            r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']",
-            text,
-        )
-        is not None
-        or (
-            re.search(r"(?i)<form\b", text)
-            and re.search(
-                r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))",
+        matches_body=lambda base, text, body: (
+            re.search(
+                r"(?i)\b(?:admin(?:istration)?|management\s+console|control\s+panel|dashboard)\b",
                 text,
             )
-            and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
+            is not None
+            or re.search(
+                r"(?is)<form\b[^>]*(?:action|id|class)=[\"'][^\"']*(?:admin|manage|login)[^\"']*[\"']",
+                text,
+            )
+            is not None
+            or (
+                re.search(r"(?i)<form\b", text)
+                and re.search(
+                    r"(?i)(?:type=[\"']?password|name=[\"']?(?:password|username|user))",
+                    text,
+                )
+                and re.search(r"(?i)\b(?:login|sign\s*in|authenticate)\b", text)
+            )
         ),
         seeds=(
             "admin",
@@ -370,15 +392,25 @@ WEB_RESULT_RULES: dict[str, WebRule] = {
         "API documentation reachable",
         "Restrict API documentation and review its disclosed surface.",
         "api_surface",
-        matches_path=lambda path, base: path
-        in {"/swagger", "/swagger-ui", "/api-docs", "/openapi.json", "/openapi.yaml"},
+        matches_path=lambda path, base: (
+            path
+            in {
+                "/swagger",
+                "/swagger-ui",
+                "/api-docs",
+                "/openapi.json",
+                "/openapi.yaml",
+            }
+        ),
         proof="api-documentation-structure",
         matches_body=lambda base, text, body: (
-            re.search(r'(?i)["\']openapi["\']\s*:', text) is not None
-            and "paths" in text.casefold()
-        )
-        or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
-        is not None,
+            (
+                re.search(r'(?i)["\']openapi["\']\s*:', text) is not None
+                and "paths" in text.casefold()
+            )
+            or re.search(r"(?i)(swagger ui|swagger-ui|openapi documentation)", text)
+            is not None
+        ),
         seeds=("api-docs", "openapi.json", "openapi.yaml", "swagger", "swagger-ui"),
     ),
 }
@@ -702,6 +734,14 @@ def validate_web_candidate(
         rule.remediation,
         evidence,
         references=[f"policy:{WEB_RESULT_POLICY_VERSION}:{rule.rule_id}"],
+        method="specific_check",
+        result="positive",
+        rule_id=f"targeted:ffuf:{rule.rule_id}"[:128],
+        facts={
+            "path": path[:160],
+            "status": result.status,
+            "signature": sanitize_evidence(signature, 160),
+        },
     )
 
 
@@ -1172,6 +1212,10 @@ def _parse_nikto_issues(
                 evidence,
                 cve_id=cve_id,
                 references=references,
+                method="unknown",
+                result="inconclusive",
+                rule_id="targeted:nikto-unsupported",
+                facts={},
             )
         )
     return issues, supported_count > (limit or supported_count)
@@ -1319,7 +1363,9 @@ def run_nikto(
         (
             TargetedOutcome.TIMED_OUT
             if internal_timeout
-            else TargetedOutcome.FAILED if error_limit else execution.outcome
+            else TargetedOutcome.FAILED
+            if error_limit
+            else execution.outcome
         ),
         issues=issues,
         exit_code=execution.exit_code,

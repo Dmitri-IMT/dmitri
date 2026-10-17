@@ -254,6 +254,13 @@ def _issue(row: Mapping[str, Any]) -> TargetedIssue | None:
         cve_id=cve_id,
         cvss_score=_number(row.get("cvss", row.get("cvss_score"))),
         references=list(dict.fromkeys(references))[:8],
+        method="configuration_observation",
+        result="positive",
+        rule_id="targeted:testssl.sh-issue",
+        facts={
+            "primitive": sanitize_evidence(identifier, 160),
+            "observed_value": sanitize_evidence(finding, 160),
+        },
     )
 
 

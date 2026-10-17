@@ -25,32 +25,68 @@ class FakeExecutor:
 
 
 def unit() -> TargetedUnit:
-    return TargetedUnit("192.0.2.10", 445, "tcp", "microsoft-ds", TargetedTool.ENUM4LINUX)
+    return TargetedUnit(
+        "192.0.2.10", 445, "tcp", "microsoft-ds", TargetedTool.ENUM4LINUX
+    )
 
 
 def test_enum4linux_maps_null_session_and_bounded_share() -> None:
-    report = {"target": "192.0.2.10", "sessions": {"null_session": True}, "shares": [{"name": "public", "access": {"mapping": "ok", "listing": "ok"}}]}
+    report = {
+        "target": "192.0.2.10",
+        "sessions": {"null_session": True},
+        "shares": [{"name": "public", "access": {"mapping": "ok", "listing": "ok"}}],
+    }
     issues = parse_enum4linux_json(report, unit())
-    assert {issue.issue_key for issue in issues} == {"smb:anonymous-session", "smb:anonymous-share:public"}
+    assert {issue.issue_key for issue in issues} == {
+        "smb:anonymous-session",
+        "smb:anonymous-share:public",
+    }
+    null_session = next(
+        issue for issue in issues if issue.issue_key == "smb:anonymous-session"
+    )
+    assert null_session.method == "specific_check"
+    assert null_session.result == "positive"
+    assert null_session.rule_id == "targeted:enum4linux-ng-session"
+    assert null_session.facts == {"session_type": "null", "accepted": True}
 
 
 def test_enum4linux_argv_has_no_credentials() -> None:
-    execution = ToolExecution(TargetedOutcome.COMPLETED, exit_code=1, report=json.dumps({"target": "192.0.2.10"}).encode(), report_present=True)
+    execution = ToolExecution(
+        TargetedOutcome.COMPLETED,
+        exit_code=1,
+        report=json.dumps({"target": "192.0.2.10"}).encode(),
+        report_present=True,
+    )
     executor = FakeExecutor(execution)
     result = run_enum4linux(unit(), executor)
     assert result.outcome == TargetedOutcome.COMPLETED
-    assert executor.commands[0].argv == ["enum4linux-ng", "-As", "-t", "5", "-oJ", "REPORT", "192.0.2.10"]
+    assert executor.commands[0].argv == [
+        "enum4linux-ng",
+        "-As",
+        "-t",
+        "5",
+        "-oJ",
+        "REPORT",
+        "192.0.2.10",
+    ]
     assert executor.commands[0].report_mode == "file"
     assert executor.commands[0].report_argument_index == 5
     assert executor.commands[0].report_path_mode == "base"
-    assert not {"-u", "-p", "-K", "-H", "-R", "-s"}.intersection(executor.commands[0].argv)
+    assert not {"-u", "-p", "-K", "-H", "-R", "-s"}.intersection(
+        executor.commands[0].argv
+    )
 
 
 def test_enum4linux_inventory_is_an_observation_not_a_finding() -> None:
     execution = ToolExecution(
         TargetedOutcome.COMPLETED,
         report=json.dumps(
-            {"target": "192.0.2.10", "os_info": {"name": "Windows"}, "shares": [{"name": "public"}], "users": {"users": ["alice"]}}
+            {
+                "target": "192.0.2.10",
+                "os_info": {"name": "Windows"},
+                "shares": [{"name": "public"}],
+                "users": {"users": ["alice"]},
+            }
         ).encode(),
         report_present=True,
     )
@@ -96,7 +132,12 @@ def test_enum4linux_ignores_policy_keys_outside_top_level_policy_container() -> 
                 "password_complexity": False,
             }
         },
-        "shares": [{"name": "public", "metadata": {"access": {"mapping": "ok", "listing": "ok"}}}],
+        "shares": [
+            {
+                "name": "public",
+                "metadata": {"access": {"mapping": "ok", "listing": "ok"}},
+            }
+        ],
     }
     assert parse_enum4linux_json(report, unit()) == []
 
@@ -116,7 +157,12 @@ def test_enum4linux_policy_numeric_values_are_strict_json_integers() -> None:
 
 def test_enum4linux_malformed_and_wrong_target_reports_fail() -> None:
     malformed = run_enum4linux(
-        unit(), FakeExecutor(ToolExecution(TargetedOutcome.COMPLETED, report=b"not-json", report_present=True))
+        unit(),
+        FakeExecutor(
+            ToolExecution(
+                TargetedOutcome.COMPLETED, report=b"not-json", report_present=True
+            )
+        ),
     )
     assert malformed.outcome == TargetedOutcome.FAILED
     assert malformed.reason_code == TargetedGapReason.MALFORMED_REPORT
@@ -139,7 +185,9 @@ def test_enum4linux_nonzero_exit_with_valid_report_completes() -> None:
     execution = ToolExecution(
         TargetedOutcome.COMPLETED,
         exit_code=1,
-        report=json.dumps({"target": "192.0.2.10", "sessions": {"null_session": True}}).encode(),
+        report=json.dumps(
+            {"target": "192.0.2.10", "sessions": {"null_session": True}}
+        ).encode(),
         report_present=True,
     )
     result = run_enum4linux(unit(), FakeExecutor(execution))
@@ -159,7 +207,9 @@ def test_enum4linux_root_target_substring_fails_as_wrong_target() -> None:
         FakeExecutor(
             ToolExecution(
                 TargetedOutcome.COMPLETED,
-                report=json.dumps({"target": "192.0.2.1", "sessions": {"null_session": True}}).encode(),
+                report=json.dumps(
+                    {"target": "192.0.2.1", "sessions": {"null_session": True}}
+                ).encode(),
                 report_present=True,
             )
         ),
@@ -174,7 +224,13 @@ def test_enum4linux_root_direct_port_conflict_fails_as_wrong_target() -> None:
         FakeExecutor(
             ToolExecution(
                 TargetedOutcome.COMPLETED,
-                report=json.dumps({"target": "192.0.2.10", "port": 139, "sessions": {"null_session": True}}).encode(),
+                report=json.dumps(
+                    {
+                        "target": "192.0.2.10",
+                        "port": 139,
+                        "sessions": {"null_session": True},
+                    }
+                ).encode(),
                 report_present=True,
             )
         ),
@@ -193,7 +249,9 @@ def test_enum4linux_direct_share_row_port_conflict_fails_as_wrong_target() -> No
                     {
                         "target": "192.0.2.10",
                         "sessions": {"null_session": True},
-                        "shares": [{"name": "public", "host": "192.0.2.10", "port": 139}],
+                        "shares": [
+                            {"name": "public", "host": "192.0.2.10", "port": 139}
+                        ],
                     }
                 ).encode(),
                 report_present=True,
@@ -211,7 +269,10 @@ def test_enum4linux_direct_session_row_port_conflict_fails_without_findings() ->
             ToolExecution(
                 TargetedOutcome.COMPLETED,
                 report=json.dumps(
-                    {"target": "192.0.2.10", "sessions": {"null_session": True, "port": 139}}
+                    {
+                        "target": "192.0.2.10",
+                        "sessions": {"null_session": True, "port": 139},
+                    }
                 ).encode(),
                 report_present=True,
             )
@@ -232,7 +293,13 @@ def test_enum4linux_direct_share_row_port_conflict_fails_without_findings() -> N
                     {
                         "target": "192.0.2.10",
                         "sessions": {"null_session": True},
-                        "shares": [{"name": "public", "port": 139, "access": {"mapping": "ok", "listing": "ok"}}],
+                        "shares": [
+                            {
+                                "name": "public",
+                                "port": 139,
+                                "access": {"mapping": "ok", "listing": "ok"},
+                            }
+                        ],
                     }
                 ).encode(),
                 report_present=True,
@@ -278,7 +345,9 @@ def test_enum4linux_recognized_malformed_schema_fails() -> None:
         FakeExecutor(
             ToolExecution(
                 TargetedOutcome.COMPLETED,
-                report=json.dumps({"target": "192.0.2.10", "shares": "not-a-list"}).encode(),
+                report=json.dumps(
+                    {"target": "192.0.2.10", "shares": "not-a-list"}
+                ).encode(),
                 report_present=True,
             )
         ),
@@ -316,7 +385,9 @@ def test_enum4linux_ignores_unknown_nested_evidence_paths() -> None:
     report = {
         "target": "192.0.2.10",
         "sessions": {"metadata": {"guest session": True}},
-        "shares": [{"name": "docs", "metadata": {"access": {"mapping": "ok", "listing": "ok"}}}],
+        "shares": [
+            {"name": "docs", "metadata": {"access": {"mapping": "ok", "listing": "ok"}}}
+        ],
         "users": [{"metadata": {"accounts": ["alice"]}}],
         "os_info": {"password_policy": {"minimum_password_length": 1}},
         "errors": [{"sessions": {"null_session": True}}],
@@ -331,7 +402,9 @@ def test_enum4linux_metadata_mapping_under_account_alias_is_not_counted() -> Non
         "users": {"users": {"metadata": {"alice": {}}}},
         "groups": {"groups": {"metadata": {"staff": {}}}},
     }
-    assert {issue.issue_key for issue in parse_enum4linux_json(report, unit())} == {"smb:anonymous-session"}
+    assert {issue.issue_key for issue in parse_enum4linux_json(report, unit())} == {
+        "smb:anonymous-session"
+    }
 
 
 def test_enum4linux_account_aliases_are_scoped_to_users_and_groups() -> None:
@@ -342,10 +415,14 @@ def test_enum4linux_account_aliases_are_scoped_to_users_and_groups() -> None:
         "accounts": ["bob"],
         "group_accounts": ["staff"],
     }
-    assert {issue.issue_key for issue in parse_enum4linux_json(report, unit())} == {"smb:anonymous-session"}
+    assert {issue.issue_key for issue in parse_enum4linux_json(report, unit())} == {
+        "smb:anonymous-session"
+    }
 
 
-@pytest.mark.parametrize("alias", ["null-session", "NULL_SESSION", "guest-session", "GUEST_SESSION"])
+@pytest.mark.parametrize(
+    "alias", ["null-session", "NULL_SESSION", "guest-session", "GUEST_SESSION"]
+)
 def test_enum4linux_session_aliases_are_exact(alias: str) -> None:
     report = {"target": "192.0.2.10", "sessions": {alias: True}}
     assert parse_enum4linux_json(report, unit()) == []
@@ -361,7 +438,9 @@ def test_enum4linux_rejects_any_mismatching_target_identity_or_port() -> None:
             FakeExecutor(
                 ToolExecution(
                     TargetedOutcome.COMPLETED,
-                    report=json.dumps({"target": target, "sessions": {"null_session": True}}).encode(),
+                    report=json.dumps(
+                        {"target": target, "sessions": {"null_session": True}}
+                    ).encode(),
                     report_present=True,
                 )
             ),
@@ -373,17 +452,32 @@ def test_enum4linux_rejects_any_mismatching_target_identity_or_port() -> None:
 @pytest.mark.parametrize(
     ("container", "row"),
     [
-        ("shares", {"name": "docs", "target": {"host": "192.0.2.11", "port": 445}, "access": {"mapping": "ok", "listing": "ok"}}),
+        (
+            "shares",
+            {
+                "name": "docs",
+                "target": {"host": "192.0.2.11", "port": 445},
+                "access": {"mapping": "ok", "listing": "ok"},
+            },
+        ),
         ("users", {"name": "alice", "target": {"host": "192.0.2.11", "port": 445}}),
         ("groups", {"name": "staff", "target": {"host": "192.0.2.11", "port": 445}}),
     ],
 )
-def test_enum4linux_recognized_rows_with_target_conflicts_are_rejected(container: str, row: dict) -> None:
+def test_enum4linux_recognized_rows_with_target_conflicts_are_rejected(
+    container: str, row: dict
+) -> None:
     contents = [row] if container == "shares" else {container: [row]}
     report = {"target": "192.0.2.10", container: contents}
     result = run_enum4linux(
         unit(),
-        FakeExecutor(ToolExecution(TargetedOutcome.COMPLETED, report=json.dumps(report).encode(), report_present=True)),
+        FakeExecutor(
+            ToolExecution(
+                TargetedOutcome.COMPLETED,
+                report=json.dumps(report).encode(),
+                report_present=True,
+            )
+        ),
     )
     assert result.outcome == TargetedOutcome.FAILED
     assert result.reason_code == TargetedGapReason.WRONG_TARGET
@@ -391,8 +485,12 @@ def test_enum4linux_recognized_rows_with_target_conflicts_are_rejected(container
 
 
 @pytest.mark.parametrize("field", ["minimum_password_length", "lockout_threshold"])
-@pytest.mark.parametrize("value", [True, False, 0.0, 7.0, "0", "7", None, "none", " None "])
-def test_enum4linux_numeric_policy_values_reject_non_integer_values(field: str, value: object) -> None:
+@pytest.mark.parametrize(
+    "value", [True, False, 0.0, 7.0, "0", "7", None, "none", " None "]
+)
+def test_enum4linux_numeric_policy_values_reject_non_integer_values(
+    field: str, value: object
+) -> None:
     report = {"target": "192.0.2.10", "password_policy": {field: value}}
     assert parse_enum4linux_json(report, unit()) == []
 
@@ -406,6 +504,10 @@ def test_enum4linux_numeric_policy_values_reject_non_integer_values(field: str, 
         ("lockout_threshold", "None", "smb:lockout-threshold"),
     ],
 )
-def test_enum4linux_numeric_policy_values_accept_int_and_exact_none(field: str, value: object, issue_key: str) -> None:
+def test_enum4linux_numeric_policy_values_accept_int_and_exact_none(
+    field: str, value: object, issue_key: str
+) -> None:
     report = {"target": "192.0.2.10", "password_policy": {field: value}}
-    assert [issue.issue_key for issue in parse_enum4linux_json(report, unit())] == [issue_key]
+    assert [issue.issue_key for issue in parse_enum4linux_json(report, unit())] == [
+        issue_key
+    ]

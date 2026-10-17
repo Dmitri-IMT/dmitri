@@ -192,6 +192,13 @@ def _parse(payload: Any, unit: TargetedUnit) -> tuple[list[TargetedIssue], bool]
                 sanitize_evidence(f"ssh-audit: {category}={name}; {text}"),
                 cve_id=cve_id,
                 cvss_score=score,
+                method="configuration_observation",
+                result="positive" if fails else "inconclusive",
+                rule_id="targeted:ssh-audit-algorithm",
+                facts={
+                    "primitive": sanitize_evidence(name, 160),
+                    "finding": sanitize_evidence(text, 160),
+                },
             )
             if issue.issue_key not in {existing.issue_key for existing in issues}:
                 issues.append(issue)

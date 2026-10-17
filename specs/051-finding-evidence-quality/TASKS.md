@@ -106,8 +106,8 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 - **Success Criteria**:
   - Regras fechadas com fatos reais/endpoint/unidade; unsupported fica tentative; Modbus read não write/CVE; MS17 limitado; CVE referenciada em configuração não confirma CVE; duplicatas/contradições e truncamento em permutações equivalentes backend.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Review Rejections**: 3
 
 ## Task 10: Integrar emissão e preservar todos caminhos
 - **Description**: Somente após backend e consumidores aprovados, runner coleta uma vez observações/achados e produz versão1; transporte, arquivo local, assinatura e parcial preservam contrato. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
@@ -170,6 +170,6 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 | 6 | Atualizar relatórios e verificar PDF | PENDING |
 | 7 | Limitar explicação automatizada e fechar backend | PENDING |
 | 8 | Apresentar método, limites e resumo web | PENDING |
-| 9 | Anotar adaptadores e reduzir evidência local | PENDING |
+| 9 | Anotar adaptadores e reduzir evidência local | COMPLETE |
 | 10 | Integrar emissão e preservar todos caminhos | PENDING |
 | 11 | Apresentar TUI e avaliar corpus offline | PENDING |
