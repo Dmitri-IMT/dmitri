@@ -75,9 +75,12 @@ export const catalog: Catalog = {
   'scans.targetedFindingsDescription':
     'Achados de verificações específicas, agrupados por gravidade. A ferramenta que reportou cada item aparece abaixo do título.',
   'scans.targetedFindingsCaption': ({ severity }) =>
-    'Achados de ferramentas direcionadas com gravidade ' + severity + ' neste scan',
+    'Achados de ferramentas direcionadas com gravidade ' +
+    severity +
+    ' neste scan',
   'scans.targetedSeverityGroupToggle': ({ severity }) =>
-    'Alternar achados direcionados de gravidade ' + String(severity).toLowerCase(),
+    'Alternar achados direcionados de gravidade ' +
+    String(severity).toLowerCase(),
   'scans.targetedToolLabel': 'Ferramenta',
   'scans.noTargetedFindings':
     'Nenhum achado foi registrado pelas ferramentas direcionadas. Isso não confirma que todas as verificações planejadas foram executadas.',
@@ -209,6 +212,62 @@ export const catalog: Catalog = {
   'common.riskScoreNotCalculated': 'Não calculada',
   'common.riskScoreValue': ({ score }) => score + ' de 100',
   'common.confidence': 'Confiança',
+  'evidence.confidenceLabel': 'Confiança da evidência',
+  'evidence.methodLabel': 'Método de detecção',
+  'evidence.statusLabel': 'Estado da evidência',
+  'evidence.method.version_correlation': 'Associação de versão',
+  'evidence.method.configuration_observation': 'Configuração observada',
+  'evidence.method.specific_check': 'Verificação específica',
+  'evidence.method.textual_reference': 'Apenas referência textual',
+  'evidence.method.unknown': 'Desconhecido',
+  'evidence.status.supported': 'Sustentada para o método registrado',
+  'evidence.status.supportedVersionCorrelation':
+    'Sustentada para a associação de versão',
+  'evidence.status.inconclusive': 'Inconclusivo',
+  'evidence.status.conflicting': 'Evidências conflitantes',
+  'evidence.status.unknown': 'Desconhecido',
+  'evidence.confidence.tentative': 'Preliminar',
+  'evidence.confidence.probable': 'Provável',
+  'evidence.confidence.confirmed': 'Confirmada',
+  'evidence.confidence.unknown': 'Não informada',
+  'evidence.confidence.notReported': 'Não informada',
+  'evidence.explanation.correlation':
+    'Uma versão está associada a uma vulnerabilidade conhecida. A presença dela neste equipamento ainda precisa ser validada.',
+  'evidence.explanation.configuration':
+    'Esta configuração foi observada. Isso não demonstra a exploração de uma vulnerabilidade conhecida.',
+  'evidence.explanation.specificCheck':
+    'A verificação encontrou a condição indicada no endpoint registrado. Isso não descreve o equipamento inteiro.',
+  'evidence.explanation.textReference':
+    'Uma referência a vulnerabilidade apareceu no texto, mas nenhum resultado positivo verificável foi registrado.',
+  'evidence.explanation.inconclusive':
+    'A verificação não chegou a um resultado conclusivo. Isso não confirma nem descarta a vulnerabilidade.',
+  'evidence.explanation.conflicting':
+    'As verificações registradas divergem. Revise cada origem e resultado; isso não confirma nem descarta a vulnerabilidade.',
+  'evidence.explanation.legacy':
+    'Este registro é anterior ao detalhamento da evidência. Os dados disponíveis não mostram como o alerta foi produzido nem validam a vulnerabilidade.',
+  'evidence.explanation.unknown':
+    'As evidências disponíveis não identificam como o alerta foi produzido nem validam a vulnerabilidade.',
+  'evidence.summaryTitle': 'Resumo da evidência',
+  'evidence.records': 'Registros de vulnerabilidade',
+  'evidence.demonstrated': 'Condições demonstradas',
+  'evidence.conflictingRecords': 'Registros conflitantes',
+  'evidence.scope': 'Escopo',
+  'evidence.scope.scan': 'Scan',
+  'evidence.scope.filtered_findings': 'Vulnerabilidades filtradas',
+  'evidence.countNote':
+    'As contagens são registros de vulnerabilidade, não falhas comprovadas.',
+  'evidence.observationsTitle': 'Verificações sem registro de vulnerabilidade',
+  'evidence.recordedTitle': 'Evidência registrada',
+  'evidence.condition': 'Condição verificada',
+  'evidence.endpoint': 'Endpoint',
+  'evidence.modbusUnit': 'ID da unidade Modbus',
+  'evidence.provenance': 'Origem e regra',
+  'evidence.result.positive': 'Resultado positivo',
+  'evidence.result.negative':
+    'Esta verificação não encontrou a condição indicada',
+  'evidence.result.inconclusive': 'Resultado inconclusivo',
+  'evidence.truncated':
+    'Alguns registros de evidência foram omitidos porque o limite de exibição foi atingido.',
   'common.exploitabilityIndex': 'Índice de explorabilidade',
   'common.whatItIs': 'O que é',
   'common.whatToDo': 'O que fazer',

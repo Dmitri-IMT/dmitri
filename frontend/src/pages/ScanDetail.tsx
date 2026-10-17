@@ -13,6 +13,7 @@ import { isUnfinished } from '@/lib/scanStatus'
 import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
+import { EvidenceSummary, ObservationList } from '@/pages/scans/FindingPanel'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
 import ScanCoverage from '@/pages/scans/ScanCoverage'
 import ScanDetailHeader, {
@@ -287,10 +288,22 @@ function ScanDetail() {
                 )}
                 {view.sections.coverage && (
                   <ScanDetailSection title={t('scans.checkCoverage')}>
-                    <ScanCoverage
-                      coverage={scan.coverage ?? []}
-                      omittedUnlisted={omittedUnlisted}
-                    />
+                    <div className="flex flex-col gap-6">
+                      <EvidenceSummary
+                        summary={scan.evidence_summary}
+                        scope="scan"
+                      />
+                      <ObservationList
+                        observations={scan.finding_observations ?? []}
+                        truncated={scan.finding_observations_truncated}
+                        testId="scan-finding-observations"
+                        title={t('evidence.observationsTitle')}
+                      />
+                      <ScanCoverage
+                        coverage={scan.coverage ?? []}
+                        omittedUnlisted={omittedUnlisted}
+                      />
+                    </div>
                   </ScanDetailSection>
                 )}
               </div>

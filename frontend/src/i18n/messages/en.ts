@@ -199,6 +199,61 @@ export const catalog = {
   'common.riskScoreNotCalculated': 'Not calculated',
   'common.riskScoreValue': ({ score }) => score + ' of 100',
   'common.confidence': 'Confidence',
+  'evidence.confidenceLabel': 'Evidence confidence',
+  'evidence.methodLabel': 'Detection method',
+  'evidence.statusLabel': 'Evidence status',
+  'evidence.method.version_correlation': 'Version association',
+  'evidence.method.configuration_observation': 'Observed configuration',
+  'evidence.method.specific_check': 'Specific check',
+  'evidence.method.textual_reference': 'Text reference only',
+  'evidence.method.unknown': 'Unknown',
+  'evidence.status.supported': 'Supported for the recorded method',
+  'evidence.status.supportedVersionCorrelation':
+    'Supported for the version association',
+  'evidence.status.inconclusive': 'Inconclusive',
+  'evidence.status.conflicting': 'Conflicting evidence',
+  'evidence.status.unknown': 'Unknown',
+  'evidence.confidence.tentative': 'Tentative',
+  'evidence.confidence.probable': 'Probable',
+  'evidence.confidence.confirmed': 'Confirmed',
+  'evidence.confidence.unknown': 'Not reported',
+  'evidence.confidence.notReported': 'Not reported',
+  'evidence.explanation.correlation':
+    'A version is associated with a known vulnerability. Its presence on this machine still needs validation.',
+  'evidence.explanation.configuration':
+    'This configuration was observed. This does not show that a known vulnerability was exploited.',
+  'evidence.explanation.specificCheck':
+    'The check found the stated condition on the recorded endpoint. It does not describe the whole machine.',
+  'evidence.explanation.textReference':
+    'A vulnerability reference appeared in the text, but no verifiable positive result was recorded.',
+  'evidence.explanation.inconclusive':
+    'The check did not produce a conclusive result. This neither confirms nor rules out the vulnerability.',
+  'evidence.explanation.conflicting':
+    'The recorded checks disagree. Review each source and result; this does not confirm or rule out the vulnerability.',
+  'evidence.explanation.legacy':
+    'This record predates evidence details. The available data do not show how the alert was produced or validate the vulnerability.',
+  'evidence.explanation.unknown':
+    'The available evidence does not identify how the alert was produced or validate the vulnerability.',
+  'evidence.summaryTitle': 'Evidence summary',
+  'evidence.records': 'Vulnerability records',
+  'evidence.demonstrated': 'Demonstrated conditions',
+  'evidence.conflictingRecords': 'Conflicting records',
+  'evidence.scope': 'Scope',
+  'evidence.scope.scan': 'Scan',
+  'evidence.scope.filtered_findings': 'Filtered vulnerabilities',
+  'evidence.countNote':
+    'Counts are vulnerability records, not proven failures.',
+  'evidence.observationsTitle': 'Checks without a vulnerability record',
+  'evidence.recordedTitle': 'Recorded evidence',
+  'evidence.condition': 'Condition checked',
+  'evidence.endpoint': 'Endpoint',
+  'evidence.modbusUnit': 'Modbus unit ID',
+  'evidence.provenance': 'Source and rule',
+  'evidence.result.positive': 'Positive result',
+  'evidence.result.negative': 'This check did not find the stated condition',
+  'evidence.result.inconclusive': 'Inconclusive result',
+  'evidence.truncated':
+    'Some evidence records were omitted because the display limit was reached.',
   'common.exploitabilityIndex': 'Exploitability index',
   'common.whatItIs': 'What it is',
   'common.whatToDo': 'What to do',

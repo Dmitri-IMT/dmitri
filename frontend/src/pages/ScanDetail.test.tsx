@@ -146,6 +146,8 @@ function completedScan(
     scan_id: SCAN_ID,
     hosts: [nas, piLab],
     findings: shuffledFindings,
+    finding_observations: [],
+    finding_observations_truncated: false,
     finding_count: shuffledFindings.length,
     host_count: 2,
     assessment_status: 'available',
@@ -277,7 +279,9 @@ describe('ScanDetail', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('Ferramenta: ffuf')).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Vulnerabilidade' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Vulnerabilidade' }),
+    ).toBeInTheDocument()
     expect(
       screen.getAllByRole('columnheader', { name: 'Equipamento' }).length,
     ).toBeGreaterThan(0)
@@ -391,6 +395,72 @@ describe('ScanDetail', () => {
       '4 additional omitted checks are not listed individually.',
     )
     expect(coverage).toHaveTextContent('status=403; protected surface')
+  })
+
+  it('shows scan-scoped evidence totals and standalone checks separately from findings', async () => {
+    scanDetail(
+      completedScan({
+        findings: [],
+        finding_count: 0,
+        evidence_summary: {
+          scope: 'scan',
+          total_records: 0,
+          by_method: {
+            version_correlation: 0,
+            configuration_observation: 0,
+            specific_check: 0,
+            textual_reference: 0,
+            unknown: 0,
+          },
+          by_confidence: {
+            tentative: 0,
+            probable: 0,
+            confirmed: 0,
+            unknown: 0,
+          },
+          conflicting_records: 0,
+          demonstrated_records: 0,
+        },
+        finding_observations: [
+          {
+            condition_key: 'smb:smbv1:offered',
+            method: 'specific_check',
+            result: 'negative',
+            source: 'smb-protocols',
+            source_script: 'smb-protocols',
+            rule_id: 'smb-v1',
+            rule_version: '1',
+            evidence: 'SMBv1: not offered',
+            ip: '192.168.1.10',
+            port: 445,
+            protocol: 'tcp',
+            unit_id: 0,
+          },
+        ],
+        finding_observations_truncated: true,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const summary = await screen.findByTestId('evidence-summary-scan')
+    const observations = screen.getByTestId('scan-finding-observations')
+    expect(summary).toHaveTextContent('Vulnerability records0')
+    expect(summary).toHaveTextContent('ScopeScan')
+    expect(observations).toHaveTextContent('smb:smbv1:offered')
+    expect(observations).toHaveTextContent(
+      'This check did not find the stated condition',
+    )
+    expect(observations).toHaveTextContent('445/tcp')
+    expect(observations).toHaveTextContent(/Modbus unit ID\s*0/)
+    expect(
+      screen.getByTestId('scan-finding-observations-truncated'),
+    ).toBeVisible()
+    expect(screen.getByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities were found in this scan.',
+    )
+    expect(
+      screen.queryByTestId(`finding-panel-${UNKNOWN_FINDING_ID}`),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the unlisted omission count when no individual units were stored', async () => {
@@ -896,7 +966,9 @@ describe('ScanDetail', () => {
         'Expand a row to see evidence and vulnerabilities related to that service.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Endpoint' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Endpoint' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Observed service' }),
     ).toBeInTheDocument()
@@ -1136,6 +1208,46 @@ describe('ScanDetail', () => {
     expect(
       within(evidence).getByTestId('scan-exposures-table'),
     ).toBeInTheDocument()
+  })
+
+  it('shows standalone-only or truncated evidence from a failed scan', async () => {
+    scanDetail(
+      completedScan({
+        status: 'failed',
+        error_code: 'device_offline',
+        hosts: [],
+        findings: [],
+        exposures: [],
+        coverage: [],
+        finding_observations: [
+          {
+            condition_key: 'modbus:device-identification',
+            method: 'specific_check',
+            result: 'inconclusive',
+            source: 'modbus-discover',
+            source_script: null,
+            rule_id: 'DEVICE_IDENTIFICATION',
+            rule_version: '1',
+            evidence: 'No response before disconnect',
+            ip: '192.168.1.10',
+            port: 502,
+            protocol: 'tcp',
+            unit_id: 0,
+          },
+        ],
+        finding_observations_truncated: true,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const evidence = await screen.findByTestId('scan-failed-evidence')
+    expect(evidence).toHaveTextContent('modbus:device-identification')
+    expect(evidence).toHaveTextContent(/Modbus unit ID\s*0/)
+    expect(evidence).toHaveTextContent('No response before disconnect')
+    expect(
+      screen.getByTestId('scan-finding-observations-truncated'),
+    ).toBeVisible()
+    expect(evidence).toHaveTextContent('Check coverage')
   })
 
   it('keeps loading and request errors free of false zero claims', async () => {

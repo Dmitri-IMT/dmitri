@@ -61,7 +61,8 @@ function FindingsTable({
       rowAction={{
         kind: 'expand',
         panel: (finding) => <FindingPanel finding={finding} />,
-        label: (finding) => t('common.showFindingDetails', { title: finding.title }),
+        label: (finding) =>
+          t('common.showFindingDetails', { title: finding.title }),
         openRowId: openFindingId,
         onOpenRowChange: onOpenFindingChange,
       }}

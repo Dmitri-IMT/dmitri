@@ -15,6 +15,8 @@ function scan(overrides: Partial<ScanDetailResponse> = {}): ScanDetailResponse {
     coverage: [],
     assessment_status: 'available',
     assessment_policy_version: '2026-09-15.1',
+    finding_observations: [],
+    finding_observations_truncated: false,
     error_code: null,
     ...overrides,
   }
@@ -70,6 +72,38 @@ describe('scanDetailView', () => {
       industrial: false,
       machines: false,
     })
+  })
+
+  it('treats standalone observations and truncation as failed-scan evidence', () => {
+    const standalone = scanDetailView(
+      scan({
+        status: 'failed',
+        finding_observations: [
+          {
+            condition_key: 'modbus:device-identification',
+            method: 'specific_check',
+            result: 'inconclusive',
+            source: 'modbus-discover',
+            source_script: null,
+            rule_id: 'DEVICE_IDENTIFICATION',
+            rule_version: '1',
+            evidence: 'No response before disconnect',
+          },
+        ],
+      }),
+    )
+    expect(standalone.body).toBe('evidence')
+    expect(standalone.sections.coverage).toBe(true)
+
+    const truncated = scanDetailView(
+      scan({
+        status: 'failed',
+        finding_observations: [],
+        finding_observations_truncated: true,
+      }),
+    )
+    expect(truncated.body).toBe('evidence')
+    expect(truncated.sections.coverage).toBe(true)
   })
 
   it('reads evidence completeness and an operator stop', () => {

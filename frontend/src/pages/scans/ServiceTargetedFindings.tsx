@@ -56,7 +56,9 @@ function ServiceTargetedFindings({
                 })}
               </span>
             }
-            openToken={opensForDeepLink ? (openFindingId ?? undefined) : undefined}
+            openToken={
+              opensForDeepLink ? (openFindingId ?? undefined) : undefined
+            }
             triggerAriaLabel={t('scans.targetedSeverityGroupToggle', {
               severity: t('common.severity', { severity: group.severity }),
             })}

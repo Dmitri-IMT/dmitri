@@ -1,6 +1,6 @@
 # Tasks — Qualidade da evidência dos achados (`051-finding-evidence-quality`)
 
-11 tarefas sequenciais. **#1?#7 conclu?das; #8?#11 pendentes.** Specs aprovadas em 2026-10-10; base `471739f`.
+11 tarefas sequenciais. **#1–#8 concluídas; #9–#11 pendentes.** Specs aprovadas em 2026-10-10; base `471739f`.
 
 Ordem compatível: parser offline → contrato/backend → consumidores → agente. Nenhum novo envio ingest antes da tarefa10. Sem scans reais, deploy, SSH, commit, push ou PR.
 
@@ -88,13 +88,15 @@ Coder/tester: GPT-6 Luna medium. Reviewer GPT-6.1 Sol high para parser/contrato/
 ## Task 8: Apresentar método, limites e resumo web
 - **Description**: Gerar tipos OpenAPI e atualizar painéis/tabelas/scans/host e três catálogos conforme DESIGN. Consumir resumo API para host paginado. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.
 - **Dependencies**: Task 7
-- **Target Files**: `frontend/src/types/openapi.d.ts`, `frontend/src/pages/scans/FindingPanel.tsx`, `frontend/src/pages/scans/FindingsTable.tsx`, `frontend/src/pages/scans/findingColumns.tsx`, `frontend/src/pages/scans/ServiceTargetedFindings.tsx`, `frontend/src/pages/ScanDetail.tsx`, `frontend/src/pages/hosts/HostFindings.tsx`, `frontend/src/pages/HostDetail.tsx`, `frontend/src/api/findings.ts`, `frontend/src/i18n/messages/en.ts`, `frontend/src/i18n/messages/pt-BR.ts`, `frontend/src/i18n/messages/ru.ts`, `frontend/src/i18n/messages/catalog.types.ts`, `frontend/src/pages/scans/FindingPanel.test.tsx`, `frontend/src/pages/scans/findingColumns.test.tsx`, `frontend/src/pages/ScanDetail.test.tsx`, `frontend/src/pages/HostDetail.test.tsx`
-- **Tests**: `frontend/src/pages/scans/FindingPanel.test.tsx`, `frontend/src/pages/scans/findingColumns.test.tsx`, `frontend/src/pages/ScanDetail.test.tsx`, `frontend/src/pages/HostDetail.test.tsx`; aceites A05,A06,A07,A10,A12,A13,A15.
+- **Target Files**: `frontend/src/types/openapi.d.ts`, `frontend/src/pages/scans/FindingPanel.tsx`, `frontend/src/pages/scans/FindingsTable.tsx`, `frontend/src/pages/scans/findingColumns.tsx`, `frontend/src/pages/scans/ServiceTargetedFindings.tsx`, `frontend/src/pages/scans/scanDetailView.ts`, `frontend/src/pages/ScanDetail.tsx`, `frontend/src/pages/hosts/HostFindings.tsx`, `frontend/src/pages/HostDetail.tsx`, `frontend/src/api/findings.ts`, `frontend/src/i18n/messages/en.ts`, `frontend/src/i18n/messages/pt-BR.ts`, `frontend/src/i18n/messages/ru.ts`, `frontend/src/i18n/messages/catalog.types.ts`, `frontend/src/pages/scans/FindingPanel.test.tsx`, `frontend/src/pages/scans/findingColumns.test.tsx`, `frontend/src/pages/ScanDetail.test.tsx`, `frontend/src/pages/HostDetail.test.tsx`, `frontend/src/pages/scans/scanDetailView.test.ts`, `frontend/src/test/mswHandlers.ts`, `frontend/.prettierrc`
+- **Tests**: `frontend/src/pages/scans/FindingPanel.test.tsx`, `frontend/src/pages/scans/findingColumns.test.tsx`, `frontend/src/pages/ScanDetail.test.tsx`, `frontend/src/pages/HostDetail.test.tsx`, `frontend/src/pages/scans/scanDetailView.test.ts`; aceites A05,A06,A07,A10,A12,A13,A15. Updated shared API fixtures in `frontend/src/test/mswHandlers.ts` for generated OpenAPI-required defaults.
 - **Success Criteria**:
   - Severity/method/confidence/status independentes; labels e seletores DESIGN, expansion keyboard, legacy/conflict/truncation e standalone; contagem filtrada API. npm.cmd gen:types, lint, format:check, typecheck, test, build pelo reviewer frontend.
   - Todos os critérios implementados e testes focais aprovados por reviewer independente; nenhuma alteração fora do escopo.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE
+- **Final Review**: APPROVE; gen:types, lint, format:check, typecheck, build, diff-check passed; 741 tests in 81 files passed with maxWorkers=2; final review verified missing/null/0 unit_id, failed scans with observations/truncation, and AI chat after evidence.
+- **Review Rejections**: 2
+- **Gate-Hygiene (Review 1):** Prettier differences affected 241 Windows CRLF files and two in-scope files. Added `endOfLine: auto` to accept either checkout EOL and formatted only the two out-of-format Task 8 files; no test script or worker-count changes.
 
 ## Task 9: Anotar adaptadores e reduzir evidência local
 - **Description**: Adicionar metadados por TargetedIssue e todos extratores existentes NSE/OT/targeted; implementar policy/merge local equivalente backend sem novos scans ou confirmação por nome ferramenta. Governada por ARCHITECTURE.md, INTEGRATION.md e DESIGN.md quando visual.

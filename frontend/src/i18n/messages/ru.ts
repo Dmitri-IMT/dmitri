@@ -68,9 +68,12 @@ export const catalog: Catalog = {
   'scans.targetedFindingsDescription':
     'Результаты проверок конкретных служб, сгруппированные по критичности. Инструмент, обнаруживший каждый пункт, указан под его названием.',
   'scans.targetedFindingsCaption': ({ severity }) =>
-    'Результаты проверок служб с критичностью ' + severity + ' в этом сканировании',
+    'Результаты проверок служб с критичностью ' +
+    severity +
+    ' в этом сканировании',
   'scans.targetedSeverityGroupToggle': ({ severity }) =>
-    'Показать или скрыть целевые результаты с критичностью ' + String(severity).toLowerCase(),
+    'Показать или скрыть целевые результаты с критичностью ' +
+    String(severity).toLowerCase(),
   'scans.targetedToolLabel': 'Инструмент',
   'scans.noTargetedFindings':
     'Целевые инструменты не зарегистрировали проблем. Это не подтверждает, что все запланированные проверки были выполнены.',
@@ -197,6 +200,61 @@ export const catalog: Catalog = {
   'common.riskScoreNotCalculated': 'Не рассчитана',
   'common.riskScoreValue': ({ score }) => score + ' из 100',
   'common.confidence': 'Уверенность',
+  'evidence.confidenceLabel': 'Уверенность в доказательствах',
+  'evidence.methodLabel': 'Метод обнаружения',
+  'evidence.statusLabel': 'Статус доказательств',
+  'evidence.method.version_correlation': 'Связь с версией',
+  'evidence.method.configuration_observation': 'Наблюдаемая конфигурация',
+  'evidence.method.specific_check': 'Специальная проверка',
+  'evidence.method.textual_reference': 'Только текстовое упоминание',
+  'evidence.method.unknown': 'Неизвестно',
+  'evidence.status.supported': 'Подтверждается для указанного метода',
+  'evidence.status.supportedVersionCorrelation':
+    'Подтверждается для связи с версией',
+  'evidence.status.inconclusive': 'Неубедительно',
+  'evidence.status.conflicting': 'Противоречивые данные',
+  'evidence.status.unknown': 'Неизвестно',
+  'evidence.confidence.tentative': 'Предварительная',
+  'evidence.confidence.probable': 'Вероятная',
+  'evidence.confidence.confirmed': 'Подтверждённая',
+  'evidence.confidence.unknown': 'Не указана',
+  'evidence.confidence.notReported': 'Не указана',
+  'evidence.explanation.correlation':
+    'Версия связана с известной уязвимостью. Её наличие на этом устройстве ещё нужно проверить.',
+  'evidence.explanation.configuration':
+    'Эта конфигурация была обнаружена. Это не доказывает эксплуатацию известной уязвимости.',
+  'evidence.explanation.specificCheck':
+    'Проверка выявила указанное состояние на записанном узле. Это не описывает устройство целиком.',
+  'evidence.explanation.textReference':
+    'В тексте встретилось упоминание уязвимости, но проверяемый положительный результат не записан.',
+  'evidence.explanation.inconclusive':
+    'Проверка не дала однозначного результата. Это не подтверждает и не исключает уязвимость.',
+  'evidence.explanation.conflicting':
+    'Записанные проверки противоречат друг другу. Проверьте каждый источник и результат; это не подтверждает и не исключает уязвимость.',
+  'evidence.explanation.legacy':
+    'Эта запись создана до появления подробных данных о доказательствах. Имеющиеся данные не показывают, как возникло предупреждение, и не подтверждают уязвимость.',
+  'evidence.explanation.unknown':
+    'Имеющиеся данные не показывают, как возникло предупреждение, и не подтверждают уязвимость.',
+  'evidence.summaryTitle': 'Сводка доказательств',
+  'evidence.records': 'Записи об уязвимостях',
+  'evidence.demonstrated': 'Подтверждённые условия',
+  'evidence.conflictingRecords': 'Противоречивые записи',
+  'evidence.scope': 'Область',
+  'evidence.scope.scan': 'Сканирование',
+  'evidence.scope.filtered_findings': 'Отфильтрованные уязвимости',
+  'evidence.countNote':
+    'Числа обозначают записи об уязвимостях, а не доказанные сбои.',
+  'evidence.observationsTitle': 'Проверки без записи об уязвимости',
+  'evidence.recordedTitle': 'Записанные доказательства',
+  'evidence.condition': 'Проверенное условие',
+  'evidence.endpoint': 'Узел',
+  'evidence.modbusUnit': 'ID устройства Modbus',
+  'evidence.provenance': 'Источник и правило',
+  'evidence.result.positive': 'Положительный результат',
+  'evidence.result.negative': 'Эта проверка не выявила указанное состояние',
+  'evidence.result.inconclusive': 'Неоднозначный результат',
+  'evidence.truncated':
+    'Некоторые записи доказательств не показаны из-за ограничения объёма.',
   'common.exploitabilityIndex': 'Индекс эксплуатируемости',
   'common.whatItIs': 'Что это',
   'common.whatToDo': 'Что делать',

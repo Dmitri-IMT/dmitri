@@ -32,11 +32,15 @@ export interface ScanDetailView {
 export function scanDetailView(scan: ScanDetailResponse): ScanDetailView {
   const metadata = scan.metadata ?? {}
   const coverage = scan.coverage ?? []
+  const hasObservationEvidence =
+    (scan.finding_observations?.length ?? 0) > 0 ||
+    scan.finding_observations_truncated
   const failed = scan.status === 'failed'
   const hasRecordedEvidence =
     scan.findings.length > 0 ||
     scan.exposures.length > 0 ||
     scan.hosts.length > 0 ||
+    hasObservationEvidence ||
     coverage.length > 0
   const body: ScanDetailBody =
     scan.status === 'cancelled'
@@ -62,7 +66,8 @@ export function scanDetailView(scan: ScanDetailResponse): ScanDetailView {
       targeted:
         metadata.targeted_units_planned != null ||
         scan.findings.some(isTargetedFinding),
-      coverage: showsEmptyStates || coverage.length > 0,
+      coverage:
+        showsEmptyStates || coverage.length > 0 || hasObservationEvidence,
       industrial: scan.hosts.some(
         (host) => host.industrial_services.length > 0,
       ),

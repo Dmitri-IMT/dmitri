@@ -1033,6 +1033,8 @@ export interface components {
             service?: string | null;
             source?: string | null;
             source_script?: string | null;
+            /** @default null */
+            issue_key: string | null;
             cve_id?: string | null;
             cvss_score?: number | null;
             severity: components["schemas"]["Severity"];
@@ -1043,6 +1045,13 @@ export interface components {
             /** @default [] */
             references: string[];
             unit_id?: number | null;
+            /** Evidence Observations */
+            evidence_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Evidence Truncated
+             * @default false
+             */
+            evidence_truncated: boolean;
         };
         /** CoverageObservationPayload */
         CoverageObservationPayload: {
@@ -1118,6 +1127,15 @@ export interface components {
             assessment_policy_version?: string | null;
             /** @default [] */
             exposures: components["schemas"]["ExposurePayload"][];
+            /** Finding Evidence Policy Version */
+            finding_evidence_policy_version?: string | null;
+            /** Finding Observations */
+            finding_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Finding Observations Truncated
+             * @default false
+             */
+            finding_observations_truncated: boolean;
         };
         ScanIngestAcceptedResponse: {
             /** @example scan received successfully */
@@ -1177,6 +1195,16 @@ export interface components {
             box_name?: string | null;
             duration?: number | null;
             terminated_by?: components["schemas"]["TerminatedBy"] | null;
+            /** Finding Evidence Policy Version */
+            finding_evidence_policy_version?: string | null;
+            /** Finding Observations */
+            finding_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Finding Observations Truncated
+             * @default false
+             */
+            finding_observations_truncated: boolean;
+            evidence_summary?: components["schemas"]["FindingEvidenceSummary"] | null;
         };
         TargetedToolCoverage: {
             tool: string;
@@ -1563,11 +1591,31 @@ export interface components {
             first_seen_at?: string | null;
             last_seen_at?: string | null;
             fixed_at?: string | null;
+            /**
+             * Detection Method
+             * @default unknown
+             * @enum {string}
+             */
+            detection_method: "version_correlation" | "configuration_observation" | "specific_check" | "textual_reference" | "unknown";
+            /**
+             * Evidence Status
+             * @default unknown
+             * @enum {string}
+             */
+            evidence_status: "supported" | "inconclusive" | "conflicting" | "unknown";
+            /** Evidence Observations */
+            evidence_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Evidence Truncated
+             * @default false
+             */
+            evidence_truncated: boolean;
         };
         FindingListResponse: {
             data: components["schemas"]["FindingRecord"][];
             total: number;
             page: number;
+            evidence_summary?: components["schemas"]["FindingEvidenceSummary"] | null;
         };
         SeverityBreakdown: {
             critical: number;
@@ -1830,6 +1878,83 @@ export interface components {
             code: string;
             message: string;
             details: components["schemas"]["ErrorDetail"];
+        };
+        /** FindingEvidenceObservationPayload */
+        FindingEvidenceObservationPayload: {
+            /** Ip */
+            ip?: string | null;
+            /** Port */
+            port?: number | null;
+            /** Protocol */
+            protocol?: ("tcp" | "udp") | null;
+            /** Unit Id */
+            unit_id?: number | null;
+            /** Condition Key */
+            condition_key: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "version_correlation" | "configuration_observation" | "specific_check" | "textual_reference" | "unknown";
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "positive" | "negative" | "inconclusive";
+            /** Source */
+            source: string;
+            /** Source Script */
+            source_script?: string | null;
+            /** Rule Id */
+            rule_id: string;
+            /** Rule Version */
+            rule_version: string;
+            /** Evidence */
+            evidence: string;
+            /** Facts */
+            facts?: {
+                [key: string]: string | number | boolean;
+            };
+        };
+        /** FindingEvidenceMethodCounts */
+        FindingEvidenceMethodCounts: {
+            /** Version Correlation */
+            version_correlation: number;
+            /** Configuration Observation */
+            configuration_observation: number;
+            /** Specific Check */
+            specific_check: number;
+            /** Textual Reference */
+            textual_reference: number;
+            /** Unknown */
+            unknown: number;
+        };
+        /** FindingEvidenceConfidenceCounts */
+        FindingEvidenceConfidenceCounts: {
+            /** Tentative */
+            tentative: number;
+            /** Probable */
+            probable: number;
+            /** Confirmed */
+            confirmed: number;
+            /** Unknown */
+            unknown: number;
+        };
+        /** FindingEvidenceSummary */
+        FindingEvidenceSummary: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "scan" | "filtered_findings";
+            /** Total Records */
+            total_records: number;
+            by_method: components["schemas"]["FindingEvidenceMethodCounts"];
+            by_confidence: components["schemas"]["FindingEvidenceConfidenceCounts"];
+            /** Conflicting Records */
+            conflicting_records: number;
+            /** Demonstrated Records */
+            demonstrated_records: number;
         };
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
