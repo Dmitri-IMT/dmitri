@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Task 1 concluída. Unblocked now: #2, #3, #4, #6, #7** (dependências de código; próxima execução aguarda comando do usuário).
+14 tasks. **Tasks 1–4 concluídas. Unblocked now: #5, #6, #7** (dependências de código; próxima execução aguarda comando do usuário).
 
 ## Escopo e estado
 
@@ -115,8 +115,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Timer/default helper apenas verificam metadados; nunca instalam ou reiniciam agente. Mutex cobre consulta e preflight; não apagar locks APT/dpkg.
   - Sem endpoint de instalação incompleto anunciado; a base oferece somente suas capacidades implementadas até Task 11.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 1
 
 ## Task 4: Preparar publicação imutável e verificável em repositório de teste
 - **Description**: Implementar o publicador de artefatos em `ARCHITECTURE.md` (Release identity and trust). Separar código testável de publicação, assinatura e proteção de CI dependentes de H1/H2/H6.
@@ -129,7 +129,7 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Não remover artefatos referenciados por frota/operação/recuperação; refresh de metadados não altera bytes do pacote.
   - Build não exige chave de produção; assinatura é uma etapa separada. Nenhuma publicação externa, chave ou workflow de CI é criado por esta tarefa.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
+- **Status**: COMPLETED
 - **Review Rejections**: 0
 
 ## Task 5: Construir pacotes offline do agente e do companion
@@ -357,9 +357,9 @@ habilitar clientes capazes; nenhuma release intermediária incompleta é promovi
 | # | Task | Dependências | Reviewer | Status |
 |---|---|---|---|---|
 | 1 | Persistência e migração | — | Sol high | COMPLETED |
-| 2 | Catálogo verificado | 1 | Sol high | PENDING |
-| 3 | Supervisor durável/manual | — | Sol high | PENDING |
-| 4 | Publicador de teste | — | Sol high | PENDING |
+| 2 | Catálogo verificado | 1 | Sol high | COMPLETED |
+| 3 | Supervisor durável/manual | — | Sol high | COMPLETED |
+| 4 | Publicador de teste | — | Sol high | COMPLETED |
 | 5 | Pacotes offline e baseline | 3 | Sol high | PENDING |
 | 6 | Leases em todos os scans | — | Sol high | PENDING |
 | 7 | Sessões, versões e ACK | 1 | Sol high | PENDING |
