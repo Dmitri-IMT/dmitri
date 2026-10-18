@@ -10,6 +10,7 @@ from agent.config import TARGETED_MODES, TARGETED_STAGE_TIMEOUT_S
 from agent.scanner.errors import BudgetExceeded, ScanCancelled
 from agent.scanner.models import HostInfo
 from agent.scanner.progress import ScanEvent, ScanReporter
+from agent.scanner.scan_lock import ScanLease
 from agent.targeted.cleartext import run_ftp_check, run_telnet_check
 from agent.targeted.executor import TargetedExecutor
 from agent.targeted.models import (
@@ -135,6 +136,7 @@ def run_targeted_stage(
     overall_deadline: float | None = None,
     wordlist: str | None = None,
     scan_id: str = "",
+    scan_lease: ScanLease | None = None,
 ) -> TargetedStageSummary:
     """Select and execute targeted units serially.
 
@@ -168,6 +170,9 @@ def run_targeted_stage(
                 )
             )
     active_executor = executor or TargetedExecutor()
+    set_lease = getattr(active_executor, "set_scan_lease", None)
+    if callable(set_lease):
+        set_lease(scan_lease)
     stage_deadline = _stage_deadline(scan_mode, overall_deadline)
     interrupted = False
     for index, unit in enumerate(units):

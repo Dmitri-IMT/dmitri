@@ -20,6 +20,7 @@ from agent.paths import load_config
 from agent.scanner.errors import UnsupportedScanDepth
 from agent.scanner.progress import ProgressMapper, ScanEvent
 from agent.scanner.runner import ScanRunner
+from agent.scanner.scan_lock import ScanLease
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.scan_view import MODE_LABELS
 from agent.tui.widgets import SPINNER_FRAMES
@@ -92,11 +93,13 @@ class ScanProgressScreen(DmitriScreen):
         subnet: str,
         scan_mode: Literal["quick", "standard", "extensive", "nspi", "max"],
         nspi_submode: NspiSubmode | None = None,
+        scan_lease: ScanLease | None = None,
     ) -> None:
         super().__init__()
         self.subnet = subnet
         self.scan_mode = scan_mode
         self.nspi_submode: NspiSubmode = nspi_submode or "inventory"
+        self.scan_lease = scan_lease
         self._runner: ScanRunner | None = None
         self._mapper = ProgressMapper(scan_mode)
         self._target_pct = 0.0
@@ -170,6 +173,7 @@ class ScanProgressScreen(DmitriScreen):
                 on_error=self._on_worker_error,
                 workspace_root=workspace_root,
                 nspi_submode=self.nspi_submode,
+                scan_lease=self.scan_lease,
             )
         except UnsupportedScanDepth as exc:
             self._handle_refused(exc.refused_depth)

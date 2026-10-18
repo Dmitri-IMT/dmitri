@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–4 concluídas. Unblocked now: #5, #6, #7** (dependências de código; próxima execução aguarda comando do usuário).
+14 tasks. **Tasks 1–6 concluídas. Próxima: #7; depois #8.** Execução das Tasks 7 e 8 autorizada pelo usuário após a correção da incompatibilidade de ingestão.
 
 ## Escopo e estado
 
@@ -145,8 +145,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Postinst do agente não inicia serviço nem instalação automática; bootstrap exige ociosidade, preserva dados e prepara baseline recuperável. Não anunciar capacidade antes de todo o runtime das Tasks 3/8/11/12 existir.
   - Evidência de empacotamento é isolada; não executar provisionamento real e não alterar CI nesta tarefa (H3/H4/H6).
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 3
 
 ## Task 6: Proteger todos os caminhos de scan e a vida dos subprocessos
 - **Description**: Implementar lease compartilhado, gate e validação de versão em `ARCHITECTURE.md` (Admission, exclusion and process lifetime). Cobrir CLI, headless, daemon, runner isolado e TUI, incluindo persistência de resultados e filhos.
@@ -160,8 +160,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Scan adquire lease e verifica gate/identidade da instalação; processo TUI obsoleto deve reiniciar antes de novo scan. Source checkout conserva seu comportamento fora do suporte de atualização appliance.
   - Conferir todos os construtores/chamadores por busca; nenhum scan real é executado pelos testes.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 1
 
 ## Task 7: Persistir versões e negociar sessões compatíveis no backend
 - **Description**: Implementar registry guard, hello negociado, schemas de frames e confirmação terminal de scan conforme `INTEGRATION.md` (WS contract). Clientes legados mantêm o contrato existente.
@@ -360,8 +360,8 @@ habilitar clientes capazes; nenhuma release intermediária incompleta é promovi
 | 2 | Catálogo verificado | 1 | Sol high | COMPLETED |
 | 3 | Supervisor durável/manual | — | Sol high | COMPLETED |
 | 4 | Publicador de teste | — | Sol high | COMPLETED |
-| 5 | Pacotes offline e baseline | 3 | Sol high | PENDING |
-| 6 | Leases em todos os scans | — | Sol high | PENDING |
+| 5 | Pacotes offline e baseline | 3 | Sol high | COMPLETED |
+| 6 | Leases em todos os scans | — | Sol high | COMPLETED |
 | 7 | Sessões, versões e ACK | 1 | Sol high | PENDING |
 | 8 | Finalização durável e saúde | 5, 6, 7 | Sol high | PENDING |
 | 9 | Consulta e admissão HTTP | 1, 2, 7 | Sol high | PENDING |

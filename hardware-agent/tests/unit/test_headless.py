@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -100,6 +101,37 @@ class TestProgrammaticResult:
         assert result.result_path is not None
         assert result.result_path.exists()
         assert result.result_path == tmp_path / "results" / result.result_path.name
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+    def test_lease_remains_held_through_result_persistence(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        import fcntl
+
+        from agent.scanner.scan_lock import scan_lock_path
+
+        _patch_discovery(monkeypatch, [])
+        observed: list[bool] = []
+
+        def persist(payload, workspace):
+            with scan_lock_path().open("r") as lock_handle:
+                try:
+                    fcntl.flock(
+                        lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB
+                    )
+                except BlockingIOError:
+                    observed.append(True)
+                else:
+                    observed.append(False)
+            return tmp_path / "saved.json"
+
+        monkeypatch.setattr(headless, "write_scan_result", persist)
+        result = headless.run_headless_scan(
+            MODE, SUBNET, workspace_root=tmp_path, runner=_FakeRunner()
+        )
+
+        assert result.outcome == "completed"
+        assert observed == [True]
 
 
 class TestFailureSemantics:

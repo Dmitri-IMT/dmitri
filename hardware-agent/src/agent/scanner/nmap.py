@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import shutil
 import subprocess
@@ -21,6 +22,7 @@ from agent.scanner.errors import (
     TransientScanError,
     UnitScanError,
 )
+from agent.scanner.scan_lock import ScanLease
 from agent.version import installed_version
 
 if TYPE_CHECKING:
@@ -90,11 +92,23 @@ def _stream_pipe_to_file(pipe, file_path: Path) -> None:
 class NmapRunner:
     """Thin wrapper around the Nmap CLI that always requests XML output."""
 
-    def __init__(self, nmap_path: str | None = None) -> None:
+    def __init__(
+        self, nmap_path: str | None = None, scan_lease: ScanLease | None = None
+    ) -> None:
         self.nmap_path = _resolve_nmap_path(nmap_path)
+        self._scan_lease = scan_lease
         self._proc_lock = threading.Lock()
         self._active_procs: set[subprocess.Popen] = set()
         self._cancelled = False
+
+    def set_scan_lease(self, lease: ScanLease | None) -> None:
+        self._scan_lease = lease
+
+    def _lease_popen_options(self) -> dict[str, object]:
+        lease = getattr(self, "_scan_lease", None)
+        if os.name == "posix" and lease is not None:
+            return {"pass_fds": lease.pass_fds}
+        return {}
 
     def terminate_active(self) -> None:
         self._cancelled = True
@@ -117,6 +131,7 @@ class NmapRunner:
                 text=True,
                 check=False,
                 timeout=timeout,
+                **self._lease_popen_options(),
             )
         except subprocess.TimeoutExpired as exc:
             raise BudgetExceeded(f"Nmap exceeded its {timeout}s timeout.") from exc
@@ -160,6 +175,7 @@ class NmapRunner:
                 stderr=subprocess.PIPE,
                 text=True,
                 errors="replace",
+                **self._lease_popen_options(),
             )
         except FileNotFoundError as exc:
             raise FatalScanError(f"Nmap executable not found: {exc}") from exc
@@ -220,8 +236,9 @@ class LoggedNmapRunner(NmapRunner):
         workspace_root: Path,
         parent_scan_id: str | None = None,
         agent_version: str | None = None,
+        scan_lease: ScanLease | None = None,
     ) -> None:
-        super().__init__(nmap_path)
+        super().__init__(nmap_path, scan_lease=scan_lease)
         self.workspace_root = workspace_root
         self.logs_dir = workspace_root / "logs"
         self.parent_scan_id = parent_scan_id
@@ -327,8 +344,10 @@ def build_runner(
     workspace_root: Path | None,
     scan_id: UUID | str,
     runner: NmapRunner | None = None,
+    scan_lease: ScanLease | None = None,
 ) -> NmapRunner:
     if runner is not None:
+        runner.set_scan_lease(scan_lease)
         return runner
     if workspace_root is not None:
         return LoggedNmapRunner(
@@ -336,5 +355,6 @@ def build_runner(
             workspace_root,
             parent_scan_id=str(scan_id),
             agent_version=installed_version(),
+            scan_lease=scan_lease,
         )
-    return NmapRunner(settings.nmap_path)
+    return NmapRunner(settings.nmap_path, scan_lease=scan_lease)

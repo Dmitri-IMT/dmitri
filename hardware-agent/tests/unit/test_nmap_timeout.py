@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
+from agent.scanner import nmap as nmap_module
 from agent.scanner.errors import (
     BudgetExceeded,
     FatalScanError,
@@ -46,6 +47,15 @@ def _make_logged_runner(workspace: Path, stage: str = "discovery") -> LoggedNmap
     runner._active_procs = set()
     runner._cancelled = False
     return runner
+
+
+def test_legacy_runner_without_lease_attribute_has_no_pass_fds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _make_runner()
+    monkeypatch.setattr(nmap_module.os, "name", "posix")
+
+    assert runner._lease_popen_options() == {}
 
 
 class TestRunXmlTimeout:

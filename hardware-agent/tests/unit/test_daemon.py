@@ -60,6 +60,7 @@ class FakeScan:
         self.cancelled = threading.Event()
         self._results = list(results) or [scan_result()]
         self._gate = gate
+        self.leases: list[Any] = []
 
     def __call__(
         self,
@@ -68,7 +69,9 @@ class FakeScan:
         *,
         nspi_submode: str | None = None,
         bind_cancel: Any = None,
+        scan_lease: Any = None,
     ) -> HeadlessScanResult:
+        self.leases.append(scan_lease)
         self.calls.append((mode, subnet, nspi_submode))
         self.threads.append(threading.get_ident())
         if bind_cancel is not None:
@@ -220,6 +223,41 @@ async def dispatch(daemon: AgentDaemon, subject: AgentCommand) -> None:
 
 
 class TestFrameOrder:
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(sys.platform == "win32", reason="flock is POSIX")
+    async def test_daemon_lease_is_borrowed_by_scan_and_held_through_upload_ack(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import fcntl
+
+        from agent.scanner.scan_lock import scan_lock_path
+
+        observed_during_upload: list[bool] = []
+        original_submit = FakeIngest.submit
+
+        def checked_submit(ingest, payload, *, scan_id):
+            with scan_lock_path().open("r") as handle:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    observed_during_upload.append(True)
+                else:
+                    observed_during_upload.append(False)
+            return original_submit(ingest, payload, scan_id=scan_id)
+
+        monkeypatch.setattr(FakeIngest, "submit", checked_submit)
+        daemon, _, scan, _ = build()
+        subject = command()
+
+        await dispatch(daemon, subject)
+
+        assert len(scan.leases) == 1
+        assert scan.leases[0] is not None
+        assert observed_during_upload == [True]
+        assert daemon._upgrade_hold is None
+        with scan_lock_path().open("r") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("result", "expected", "uploads"),

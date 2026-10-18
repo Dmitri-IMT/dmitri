@@ -32,6 +32,7 @@ from agent.config import (
     TARGETED_STDIO_LIMIT_BYTES,
     TARGETED_UNIT_TIMEOUT_S,
 )
+from agent.scanner.scan_lock import ScanLease
 from agent.targeted.models import TargetedGapReason, TargetedOutcome, TargetedTool
 
 ReportMode = Literal["file", "stdout"]
@@ -115,6 +116,10 @@ class TargetedExecutor:
         self._active_process: subprocess.Popen[bytes] | None = None
         self._active_sockets: set[socket.socket] = set()
         self._cancelled = False
+        self._scan_lease: ScanLease | None = None
+
+    def set_scan_lease(self, lease: ScanLease | None) -> None:
+        self._scan_lease = lease
 
     def terminate_active(self) -> None:
         """Stop the active process group and close active native-probe sockets."""
@@ -249,6 +254,12 @@ class TargetedExecutor:
         pre_spawn = self._pre_spawn_status(cancel_event, deadline, deadline_scope)
         if pre_spawn is not None:
             return pre_spawn
+        pass_fds = (
+            self._scan_lease.pass_fds
+            if os.name == "posix" and self._scan_lease is not None
+            else ()
+        )
+        popen_options = {"pass_fds": pass_fds} if pass_fds else {}
         try:
             process = subprocess.Popen(
                 argv,
@@ -260,6 +271,7 @@ class TargetedExecutor:
                 preexec_fn=(
                     self._set_report_size_limit if report_mode == "file" else None
                 ),
+                **popen_options,
             )
         except FileNotFoundError:
             return ToolExecution(

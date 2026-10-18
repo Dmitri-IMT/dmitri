@@ -37,7 +37,7 @@ from agent.scanner.errors import (
 from agent.scanner.models import CoverageStage, HostInfo, StageCoverage
 from agent.scanner.nmap import NmapRunner, build_runner
 from agent.scanner.progress import ScanEvent, ScanReporter
-from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
+from agent.scanner.scan_lock import ScanLease, UpgradeInProgressError, scan_lock
 from agent.scanner.stages import OtInspectionResult
 from agent.targeted.executor import TargetedExecutor
 from agent.targeted.models import TargetedStageSummary
@@ -59,6 +59,7 @@ class ScanRunner:
         runner: NmapRunner | None = None,
         nspi_submode: NspiSubmode = "inventory",
         ot_policy: OtAutomationPolicy | None = None,
+        scan_lease: ScanLease | None = None,
     ) -> None:
         validate_nspi_depth(scan_mode, nspi_submode)
         self.subnet = subnet
@@ -70,12 +71,19 @@ class ScanRunner:
         self._runner = runner
         self.nspi_submode = nspi_submode
         self._ot_policy = ot_policy
+        self._scan_lease = scan_lease
+        self._active_lease: ScanLease | None = None
         self._cancel_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._runner_lock = threading.Lock()
         self._active_runner: NmapRunner | None = None
         self._modbus_controller = ModbusClientController()
         self._targeted_executor = TargetedExecutor()
+
+    @property
+    def scan_lease(self) -> ScanLease | None:
+        """Lease borrowed from the caller, if this runner is nested in a flow."""
+        return self._scan_lease
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run_locked, daemon=True)
@@ -86,8 +94,15 @@ class ScanRunner:
 
     def _run_locked(self) -> None:
         try:
-            with scan_lock():
-                self._run()
+            with scan_lock(self._scan_lease) as lease:
+                self._active_lease = lease
+                set_lease = getattr(self._targeted_executor, "set_scan_lease", None)
+                if callable(set_lease):
+                    set_lease(lease)
+                try:
+                    self._run()
+                finally:
+                    self._active_lease = None
         except (OSError, UpgradeInProgressError) as exc:
             self._emit(ScanEvent(kind="failed", message=str(exc)))
             if self._on_error:
@@ -256,6 +271,7 @@ class ScanRunner:
                 self._workspace_root,
                 scan_id,
                 runner=self._runner,
+                scan_lease=self._active_lease,
             )
             with self._runner_lock:
                 self._active_runner = runner
@@ -351,6 +367,7 @@ class ScanRunner:
                     executor=self._targeted_executor,
                     overall_deadline=deadline,
                     scan_id=str(scan_id),
+                    scan_lease=self._active_lease,
                 )
                 self._check_cancel()
                 self._check_deadline(deadline)

@@ -5,13 +5,16 @@ import logging
 import sys
 import threading
 from collections.abc import Callable
-from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
 from agent.headless import HeadlessScanResult, InvalidScanInput, run_headless_scan
-from agent.scanner.scan_lock import UpgradeInProgressError, scan_lock
+from agent.scanner.scan_lock import (
+    ScanLease,
+    UpgradeInProgressError,
+    acquire_scan_lease,
+)
 from agent.transport.command_channel import (
     AgentCommand,
     AgentStatus,
@@ -115,7 +118,7 @@ class AgentDaemon:
         self._active: UUID | None = None
         self._task: asyncio.Task[None] | None = None
         self._stop = _ScanStop()
-        self._upgrade_hold: ExitStack | None = None
+        self._upgrade_hold: ScanLease | None = None
 
     async def run(self) -> None:
         try:
@@ -152,15 +155,12 @@ class AgentDaemon:
         if self._active is not None:
             await self._update(command.command_id, "failed", "device_busy")
             return
-        lock = ExitStack()
         try:
-            lock.enter_context(scan_lock())
+            lock = acquire_scan_lease()
         except UpgradeInProgressError:
-            lock.close()
             await self._update(command.command_id, "failed", "device_busy")
             return
         except OSError:
-            lock.close()
             LOGGER.exception("Cannot acquire appliance update lock")
             await self._update(command.command_id, "failed", "scan_failed")
             return
@@ -197,6 +197,7 @@ class AgentDaemon:
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
+        lease = self._upgrade_hold
 
         def run_scan() -> HeadlessScanResult:
             try:
@@ -209,6 +210,7 @@ class AgentDaemon:
                         else None
                     ),
                     bind_cancel=stop.bind,
+                    scan_lease=lease,
                 )
             finally:
                 stop.finish()

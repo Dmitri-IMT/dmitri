@@ -19,10 +19,12 @@ from agent.normalize.contracts import (
     ScanPayload,
 )
 from agent.paths import DmitriConfig, save_config
+from agent.scanner.scan_lock import ScanLease
 from agent.tui.app import DmitriApp
 from agent.tui.screens.device_detail import DeviceDetailScreen
 from agent.tui.screens.home import HomeScreen
 from agent.tui.screens.past_scans import PastScansScreen
+from agent.tui.screens.scan_progress import ScanProgressScreen
 from agent.tui.screens.scan_view import ScanViewScreen
 from agent.tui.screens.settings import SettingsScreen
 from agent.tui.screens.setup import SetupScreen
@@ -326,6 +328,50 @@ async def test_home_summary_counts_duplicate_raw_ports_once(tmp_path):
 
             summary = str(home.query_one("#summary-band", Static).render())
             assert "Ports open: 1" in summary
+
+
+@pytest.mark.asyncio
+async def test_home_transfers_lease_through_progress_and_result_persistence(
+    tmp_path, monkeypatch
+):
+    config = DmitriConfig(results_dir=str(tmp_path))
+    payload = _make_payload()
+    lease = ScanLease(None, None)
+    runner_args = []
+    persist_while_active = []
+
+    def record_runner_start(runner):
+        runner_args.append(runner.scan_lease)
+
+    def persist_result(*args):
+        persist_while_active.append(lease.active)
+        return tmp_path / "saved.json"
+
+    monkeypatch.setattr("agent.tui.screens.home.acquire_scan_lease", lambda: lease)
+    monkeypatch.setattr("agent.tui.screens.home.load_config", lambda: config)
+    monkeypatch.setattr("agent.tui.screens.home.write_scan_result", persist_result)
+    monkeypatch.setattr(
+        "agent.tui.screens.scan_progress.ScanRunner.start", record_runner_start
+    )
+    with patch("agent.tui.app.load_config", return_value=config):
+        async with DmitriApp().run_test() as pilot:
+            await pilot.pause()
+            home = pilot.app.screen
+            assert isinstance(home, HomeScreen)
+            home._on_network_result((payload.subnet, "quick", None))
+            await pilot.pause()
+            progress = pilot.app.screen
+            assert isinstance(progress, ScanProgressScreen)
+            assert progress.scan_lease is lease
+            assert runner_args == [lease]
+            assert lease.active
+
+            progress.dismiss((payload, False))
+            await pilot.pause()
+
+            assert pilot.app.screen is home
+            assert persist_while_active == [True]
+            assert not lease.active
 
 
 @pytest.mark.asyncio
