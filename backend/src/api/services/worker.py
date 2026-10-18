@@ -12,8 +12,10 @@ from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
 from api.services.nvd import NvdClient
+from api.services.release_catalog import refresh_release_catalog
 
 logger = logging.getLogger(__name__)
+_last_catalog_refresh = 0.0
 
 
 def _poll_forever(tick: Callable[[], int], interval: float) -> None:
@@ -75,9 +77,18 @@ def run_worker_once(
     nvd_client: NvdClient | None = None,
 ) -> int:
     settings = get_settings()
+    global _last_catalog_refresh
     resolved_batch_size = batch_size or settings.enrichment_batch_size
 
     for session in get_session():
+        if settings.agent_update_repository_url and time.monotonic() - _last_catalog_refresh >= settings.agent_update_refresh_interval_seconds:
+            try:
+                refresh_release_catalog(session, settings)
+            except Exception:
+                logger.exception("agent release catalogue refresh failed; preserving prior catalogue")
+                session.rollback()
+            finally:
+                _last_catalog_refresh = time.monotonic()
         try:
             sweep_stale_commands(session, now=datetime.now(UTC))
         except Exception:

@@ -99,8 +99,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Catálogo ausente/inválido/expirado é indisponível, versão instalada desconhecida é desconhecida; não apresentar ambos como atualizado.
   - Persistir geração monotônica, digest e validade; rejeitar replay/catálogo conflitante. Leitura HTTP futura não dispara refresh ou instalação.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 2
 
 ## Task 3: Criar supervisor durável e política manual de atualização
 - **Description**: Implementar a base do companion conforme `ARCHITECTURE.md` (Permanent updater e process lifetime): socket local restrito, journal, gate de mutação, supervisão e timer somente de consulta. Não habilitar instalação antes da Task 11.
