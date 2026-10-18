@@ -22,11 +22,43 @@ def version_is_greater(candidate: str, current: str) -> bool:
     return parse_version(candidate) > parse_version(current)
 
 
+def debian_package_version(upstream: str) -> str:
+    return f"{'.'.join(str(part) for part in parse_version(upstream))}-1"
+
+
 def _version_line(text: str) -> str:
     for line in text.splitlines():
         if line.startswith('version = "'):
             return line.split('"', 2)[1]
     raise SystemExit("hardware-agent/pyproject.toml has no version")
+
+
+def affected_packages(changed: set[str]) -> tuple[bool, bool]:
+    """Return agent/updater identity effects for paths changed in the checkout."""
+    agent_sources = {
+        "hardware-agent/packaging/build-deb.sh",
+        "hardware-agent/pyproject.toml",
+        "hardware-agent/uv.lock",
+        "hardware-agent/README.md",
+        "hardware-agent/dmitri-agent.service",
+        "hardware-agent/packaging/updater-version",
+        "hardware-agent/src/agent/transport/signing.py",
+    }
+    agent_changed = bool(changed & agent_sources) or any(
+        path.startswith("hardware-agent/src/") for path in changed
+    )
+    updater_sources = {
+        "hardware-agent/packaging/build-deb.sh",
+        "hardware-agent/packaging/updater-version",
+        "hardware-agent/packaging/updater.py",
+        "hardware-agent/packaging/apt-upgrade-agent",
+        "hardware-agent/packaging/scan-lock-path",
+        "hardware-agent/packaging/dmitri-agent-update.service",
+        "hardware-agent/packaging/dmitri-agent-update.timer",
+        "hardware-agent/packaging/dmitri-agent-update-check.service",
+        "hardware-agent/src/agent/transport/signing.py",
+    }
+    return agent_changed, bool(changed & updater_sources)
 
 
 def _git(*args: str) -> str:
@@ -49,19 +81,42 @@ def main() -> int:
         text=True,
         check=True,
     )
-    if not diff.stdout.strip():
+    changed = set(diff.stdout.splitlines())
+    if not changed:
         print("hardware-agent/ unchanged")
         return 0
-    current = _version_line(_git("show", f"{base}:hardware-agent/pyproject.toml"))
-    candidate = _version_line(PYPROJECT.read_text())
-    if not version_is_greater(candidate, current):
-        message = (
-            f"hardware-agent changed but {candidate} "
-            f"is not greater than {current} on {base}"
+
+    agent_changed, updater_changed = affected_packages(changed)
+
+    checks: list[tuple[str, str, str]] = []
+    if agent_changed:
+        current = _version_line(_git("show", f"{base}:hardware-agent/pyproject.toml"))
+        candidate = _version_line(PYPROJECT.read_text())
+        checks.append(("hardware-agent", current, candidate))
+    if updater_changed:
+        version_file = ROOT / "hardware-agent" / "packaging" / "updater-version"
+        candidate = version_file.read_text().strip()
+        parse_version(candidate)
+        try:
+            current = _git(
+                "show", f"{base}:hardware-agent/packaging/updater-version"
+            ).strip()
+        except subprocess.CalledProcessError:
+            current = "0.0.0"
+        checks.append(("hardware-agent-updater", current, candidate))
+
+    for package, current, candidate in checks:
+        if not version_is_greater(candidate, current):
+            print(
+                f"{package} changed but {candidate} is not greater than "
+                f"{current} on {base}",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"{package} version {current} -> {candidate} "
+            f"(Debian {debian_package_version(candidate)})"
         )
-        print(message, file=sys.stderr)
-        return 1
-    print(f"hardware-agent version {current} -> {candidate}")
     return 0
 
 
