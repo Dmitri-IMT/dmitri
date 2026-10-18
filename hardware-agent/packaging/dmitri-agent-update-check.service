@@ -1,0 +1,15 @@
+[Unit]
+Description=Refresh package metadata without installing upgrades
+After=dmitri-agent-update.service network-online.target
+Requires=dmitri-agent-update.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/dmitri/apt-upgrade-agent --check
+TimeoutStartSec=11min
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/run/dmitri-agent-updater /var/lib/apt/lists /var/lib/apt/lists/partial
+StandardOutput=journal
+StandardError=journal

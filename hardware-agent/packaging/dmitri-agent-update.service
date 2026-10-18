@@ -1,8 +1,25 @@
 [Unit]
-Description=Upgrade the Dmitri hardware-agent package
-After=network-online.target
+Description=Dmitri durable update supervisor
+After=local-fs.target
+Before=dmitri-agent.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
-ExecStart=/usr/lib/dmitri/apt-upgrade-agent
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/python3 /usr/lib/dmitri/updater.py
+Restart=on-failure
+RestartSec=2s
+KillMode=control-group
+TimeoutStartSec=30s
+RuntimeDirectory=dmitri-agent-updater
+RuntimeDirectoryMode=0700
+StateDirectory=dmitri/updates
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/dmitri /run/dmitri-agent-updater /var/lib/apt/lists /var/lib/apt/lists/partial
+StandardOutput=journal
+StandardError=journal
