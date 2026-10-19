@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+import pytest
 from agent.targeted.executor import ToolExecution
 from agent.targeted.models import (
     TargetedGapReason,
@@ -27,11 +29,52 @@ def unit() -> TargetedUnit:
     return TargetedUnit("192.0.2.10", 22, "tcp", "ssh", TargetedTool.SSH_AUDIT)
 
 
+def test_ssh_accepts_native_3_9_0_report() -> None:
+    # Captured from ssh-audit 3.9.0 against the Pi's loopback SSH server.
+    report = (
+        Path(__file__).parents[1] / "fixtures" / "ssh_audit_3_9_0.json"
+    ).read_bytes()
+    result = run_ssh_audit(
+        unit(),
+        FakeExecutor(
+            ToolExecution(
+                TargetedOutcome.COMPLETED,
+                exit_code=2,
+                report=report,
+                report_present=True,
+            )
+        ),
+    )
+    assert result.outcome == TargetedOutcome.COMPLETED
+    assert result.exit_code == 2
+    issues = {issue.issue_key: issue for issue in result.issues}
+    assert "ssh.algorithm:kex:ecdh-sha2-nistp256" in issues
+    assert "ssh.algorithm:host-key:ecdsa-sha2-nistp256" in issues
+    assert "ssh.algorithm:mac:hmac-sha1" in issues
+    assert "ssh.algorithm:kex:curve25519-sha256" not in issues
+    assert "ssh.algorithm:cipher:aes128-ctr" not in issues
+    assert all("post-quantum" not in issue.evidence for issue in result.issues)
+
+
 def test_ssh_maps_fail_and_ignores_post_quantum_advice() -> None:
-    report = {"target": "192.0.2.10:22", "kex": {"diffie-hellman-group1-sha1": {"fail": ["weak algorithm"], "warn": ["does not provide protection against post-quantum attacks"]}}}
+    report = {
+        "target": "192.0.2.10:22",
+        "kex": {
+            "diffie-hellman-group1-sha1": {
+                "fail": ["weak algorithm"],
+                "warn": ["does not provide protection against post-quantum attacks"],
+            }
+        },
+    }
     issues = parse_ssh_audit_json(report, unit())
-    assert [issue.issue_key for issue in issues] == ["ssh.algorithm:kex:diffie-hellman-group1-sha1"]
+    assert [issue.issue_key for issue in issues] == [
+        "ssh.algorithm:kex:diffie-hellman-group1-sha1"
+    ]
     assert "post-quantum" not in issues[0].evidence
+    assert issues[0].method == "configuration_observation"
+    assert issues[0].result == "positive"
+    assert issues[0].rule_id == "targeted:ssh-audit-algorithm"
+    assert issues[0].facts["primitive"] == "diffie-hellman-group1-sha1"
 
 
 def test_ssh_maps_warn_and_cve_score_to_severity() -> None:
@@ -110,13 +153,24 @@ def test_ssh_does_not_accept_host_substrings() -> None:
     assert parse_ssh_audit_json(report, unit()) == []
 
 
-def test_ssh_recognized_malformed_schema_fails() -> None:
+@pytest.mark.parametrize(
+    "section",
+    [
+        None,
+        "invalid",
+        [None],
+        [{"algorithm": 123}],
+        [{"algorithm": ""}],
+        [{"algorithm": "aes128-ctr", "notes": []}],
+    ],
+)
+def test_ssh_recognized_malformed_schema_fails(section) -> None:
     result = run_ssh_audit(
         unit(),
         FakeExecutor(
             ToolExecution(
                 TargetedOutcome.COMPLETED,
-                report=json.dumps({"target": "192.0.2.10:22", "kex": []}).encode(),
+                report=json.dumps({"target": "192.0.2.10:22", "kex": section}).encode(),
                 report_present=True,
             )
         ),
@@ -125,18 +179,68 @@ def test_ssh_recognized_malformed_schema_fails() -> None:
     assert result.reason_code == TargetedGapReason.MALFORMED_REPORT
 
 
+def test_ssh_native_empty_sections_complete_without_findings() -> None:
+    report = {"target": "192.0.2.10:22", "kex": [], "enc": []}
+    result = run_ssh_audit(
+        unit(),
+        FakeExecutor(
+            ToolExecution(
+                TargetedOutcome.COMPLETED,
+                report=json.dumps(report).encode(),
+                report_present=True,
+            )
+        ),
+    )
+    assert result.outcome == TargetedOutcome.COMPLETED
+    assert not result.issues
+
+
 def test_ssh_uses_audit_only_argv() -> None:
-    execution = ToolExecution(TargetedOutcome.COMPLETED, report=json.dumps({"target": "192.0.2.10:22"}).encode(), report_present=True)
+    execution = ToolExecution(
+        TargetedOutcome.COMPLETED,
+        report=json.dumps({"target": "192.0.2.10:22"}).encode(),
+        report_present=True,
+    )
     executor = FakeExecutor(execution)
     result = run_ssh_audit(unit(), executor)
     assert result.outcome == TargetedOutcome.COMPLETED
-    assert executor.commands[0].argv == ("ssh-audit", "-j", "-t", "5", "--skip-rate-test", "-p", "22", "192.0.2.10") or list(executor.commands[0].argv) == ["ssh-audit", "-j", "-t", "5", "--skip-rate-test", "-p", "22", "192.0.2.10"]
-    assert not {"--client", "--policy", "--gex", "--dheat", "--rate-test", "-u"}.intersection(executor.commands[0].argv)
+    assert executor.commands[0].argv == (
+        "ssh-audit",
+        "-j",
+        "-t",
+        "5",
+        "--skip-rate-test",
+        "-p",
+        "22",
+        "192.0.2.10",
+    ) or list(executor.commands[0].argv) == [
+        "ssh-audit",
+        "-j",
+        "-t",
+        "5",
+        "--skip-rate-test",
+        "-p",
+        "22",
+        "192.0.2.10",
+    ]
+    assert not {
+        "--client",
+        "--policy",
+        "--gex",
+        "--dheat",
+        "--rate-test",
+        "-u",
+    }.intersection(executor.commands[0].argv)
 
 
 def test_ssh_malformed_and_wrong_target_reports_fail() -> None:
     malformed = run_ssh_audit(
-        unit(), FakeExecutor(ToolExecution(TargetedOutcome.COMPLETED, report=b"not-json", report_present=True))
+        unit(),
+        FakeExecutor(
+            ToolExecution(
+                TargetedOutcome.COMPLETED, report=b"not-json", report_present=True
+            )
+        ),
     )
     assert malformed.outcome == TargetedOutcome.FAILED
     assert malformed.reason_code == TargetedGapReason.MALFORMED_REPORT
@@ -159,7 +263,9 @@ def test_ssh_valid_nonzero_exit_completes() -> None:
     execution = ToolExecution(
         TargetedOutcome.COMPLETED,
         exit_code=2,
-        report=json.dumps({"target": "192.0.2.10:22", "protocol": {"ssh1": {"fail": ["obsolete"]}}}).encode(),
+        report=json.dumps(
+            {"target": "192.0.2.10:22", "protocol": {"ssh1": {"fail": ["obsolete"]}}}
+        ).encode(),
         report_present=True,
     )
     result = run_ssh_audit(unit(), FakeExecutor(execution))

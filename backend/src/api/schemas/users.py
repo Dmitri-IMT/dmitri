@@ -13,6 +13,7 @@ class UserProfileResponse(BaseModel):
     user_id: UUID
     email: str
     role: Literal["admin", "viewer"]
+    org_name: str
 
 
 class OrgMember(BaseModel):

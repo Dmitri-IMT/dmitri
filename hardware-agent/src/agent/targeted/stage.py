@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from time import perf_counter
 from typing import Callable
 
-from agent.config import TARGETED_MODES, TARGETED_STAGE_TIMEOUT_S
+from agent.config import (
+    TARGETED_MODES,
+    TARGETED_STAGE_TIMEOUT_S,
+    TARGETED_UNIT_TIMEOUT_S,
+)
 from agent.scanner.errors import BudgetExceeded, ScanCancelled
 from agent.scanner.models import HostInfo
 from agent.scanner.progress import ScanEvent, ScanReporter
@@ -21,6 +26,7 @@ from agent.targeted.models import (
     TargetedUnit,
     TargetedUnitResult,
 )
+from agent.targeted.report import sanitize_evidence
 from agent.targeted.selection import (
     select_omitted_targeted_units,
     select_targeted_units,
@@ -29,6 +35,9 @@ from agent.targeted.smb import run_enum4linux
 from agent.targeted.ssh import run_ssh_audit
 from agent.targeted.tls import run_testssl
 from agent.targeted.web import run_ffuf, run_nikto
+
+LOGGER = logging.getLogger(__name__)
+_TARGETED_CLEANUP_MARGIN_S = 5.0
 
 
 def _adapter_for(tool: TargetedTool) -> Callable[..., TargetedUnitResult]:
@@ -95,13 +104,30 @@ def _record(
         summary.skipped += 1
     summary.finding_candidates += len(result.issues)
     summary.observation_candidates += len(result.observations)
+    LOGGER.info(
+        "Targeted check %s %s:%s: outcome=%s reason=%s exit_code=%s diagnostic=%s",
+        result.unit.tool.value,
+        result.unit.ip,
+        result.unit.port,
+        result.outcome.value,
+        result.reason_code.value if result.reason_code else "none",
+        result.exit_code,
+        sanitize_evidence(result.diagnostic or "", 512),
+    )
 
 
 def _stage_deadline(
     scan_mode: str,
+    units: list[TargetedUnit],
     overall_deadline: float | None,
 ) -> float:
-    deadline = perf_counter() + TARGETED_STAGE_TIMEOUT_S[scan_mode]
+    budget = TARGETED_STAGE_TIMEOUT_S[scan_mode]
+    if scan_mode == "extensive":
+        planned_allowance = sum(
+            TARGETED_UNIT_TIMEOUT_S[unit.tool.value] for unit in units
+        ) + _TARGETED_CLEANUP_MARGIN_S * len(units)
+        budget = max(budget, planned_allowance)
+    deadline = perf_counter() + budget
     return min(deadline, overall_deadline) if overall_deadline is not None else deadline
 
 
@@ -173,7 +199,7 @@ def run_targeted_stage(
     set_lease = getattr(active_executor, "set_scan_lease", None)
     if callable(set_lease):
         set_lease(scan_lease)
-    stage_deadline = _stage_deadline(scan_mode, overall_deadline)
+    stage_deadline = _stage_deadline(scan_mode, units, overall_deadline)
     interrupted = False
     for index, unit in enumerate(units):
         if cancel_event is not None and cancel_event.is_set():

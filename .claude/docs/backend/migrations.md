@@ -1,10 +1,10 @@
 ---
 type: Migration
 title: Backend database migrations
-description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
+description: The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261017_41`.
 resource: backend/alembic/env.py
 tags: [backend, alembic, migrations, rls, supabase, database]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Backend database migrations
@@ -32,8 +32,12 @@ downgrade deletes all but one row per scan, keeping `en` first); `20260920_33` a
 snapshots and endpoint exposures; `20260922_34`–`20260924_36` add AI runtime grants, agent
 registration identity, and AI table security; `20260927_37` rebuilds `ck_activity_kind` and the
 `uq_activity_org_kind_subject` partial index to include `scan_cancelled` (DMI-145); `20260928_38`
-adds `scans.coverage_json` and downgrades historical NVD/vulners CVE confidence to `probable`. Head
-is `20260928_38`.
+adds `scans.coverage_json` and downgrades historical NVD/vulners CVE confidence to `probable`.
+`20261002_39` adds the separate live-progress snapshot, monotonic sequence, and server receipt timestamp to scans.
+`20261012_40` adds `deleted_scans` and the grants admin deletion needs.
+`20261010_40` adds finding and scan evidence policy metadata.
+`20261017_41` merges evidence and deletion without changing their deployed revision IDs.
+Head is `20261017_41`.
 
 ## Key classes / functions
 
@@ -75,6 +79,8 @@ is `20260928_38`.
 | `upgrade()` (rev `20260920_33`, `attack_surface_profiles`) | Adds nullable assessment fields to scans/scan_hosts/hosts and creates `exposures` with endpoint FKs, uniqueness, checks, indexes, RLS, and runtime grants. No historical backfill. | `backend/alembic/versions/20260920_33_attack_surface_profiles.py` |
 | `upgrade()` (rev `20260927_37`, `scan_cancelled_activity`) | Rebuilds `ck_activity_kind` and the `uq_activity_org_kind_subject` partial index to include `scan_cancelled` (joins `UNIQUE_KINDS` like `scan_finished` / `scan_failed`). Parent `20260924_36`. | `backend/alembic/versions/20260927_37_scan_cancelled_activity.py` |
 | `upgrade()` (rev `20260928_38`, `scan_evidence_coverage`) | Adds `scans.coverage_json` (JSON, server default `[]`). Rewrites `nmap_vulners`/`nvd` CVE findings from `confirmed` to `probable`, replaces the old "NVD validated this CVE." evidence note, and recomputes the matching confirmed `risk_snapshots`. `downgrade()` only drops the column; the data rewrite is not reversed. Parent `20260927_37`. Current head. | `backend/alembic/versions/20260928_38_scan_evidence_coverage.py` |
+| `upgrade()` (rev `20261012_40`, `scan_machine_deletion`) | Creates `deleted_scans` (RLS on, anon/authenticated revoked, runtime `SELECT, INSERT`); grants the runtime role `DELETE` on `scans`, `scan_hosts`, `ports`, `services`, `cpes`, `exposures`, `industrial_services`, `modbus_units`, `findings`, `risk_snapshots`, `enrichment_jobs`, `hosts`, `commands` and `ai_scan_analyses`, plus column-level `UPDATE (scan_id)` on `ai_usage`; adds `scans_deleted` / `machines_deleted` to `ck_activity_kind`. Downgrade deletes those activity rows, restores the check, revokes and drops the table. | `backend/alembic/versions/20261012_40_scan_machine_deletion.py` |
+| `upgrade()` (rev `20261002_39`, `scan_live_progress`) | Adds nullable `scans.progress_json`, zero-based `progress_seq`, and nullable server receipt time. Progress is stored separately from final-result metadata; downgrade drops the three columns. | `backend/alembic/versions/20261002_39_scan_live_progress.py` |
 
 ## How it connects
 
@@ -133,7 +139,7 @@ is `20260928_38`.
   `findings.modbus_unit_id`, and `orgs.ot_digest_key`. `20260912_23` merges those two heads.
   `20260912_24` adds `ai_scan_analyses`. `20260912_25` adds enrichment retries, `20260912_26`
   adds AI retries, `20260920_33` adds attack-surface profiles, `20260927_37` adds the `scan_cancelled`
-  activity kind, and `20260928_38` (scan evidence coverage) is the current head.
+  activity kind, `20260928_38` (scan evidence coverage), `20261002_39` (live scan progress), `20261010_40` (finding evidence), and `20261012_40` (scan/machine deletion); `20261017_41` merges the two feature branches into the current head.
   `test_alembic_single_head.py` fails the suite if a second head appears.
 
 # Citations

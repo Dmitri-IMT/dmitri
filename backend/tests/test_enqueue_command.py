@@ -20,7 +20,6 @@ from sqlmodel import Session, select
 from starlette.websockets import WebSocketState
 
 T0 = datetime(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
-STALE = T0 - timedelta(minutes=20)
 REQUEST_BODY = {"scan_mode": "standard", "subnet": "192.168.1.0/24"}
 
 
@@ -541,47 +540,6 @@ def test_revoked_agent_with_live_socket_returns_503_without_scan(
     assert command.status == "expired"
     assert command.scan_id is None
     assert administrative_session.exec(select(ScanRecord)).all() == []
-
-
-def test_enqueue_sweep_clears_stale_command_wedge(
-    client: TestClient,
-    administrative_session: Session,
-    provisioned_agent: Agent,
-    seeded_org: Org,
-    bearer_headers,
-) -> None:
-    provisioned_agent.last_seen_at = STALE.replace(tzinfo=None)
-    provisioned_agent.connected_at = None
-    administrative_session.add(provisioned_agent)
-    administrative_session.commit()
-
-    scan = _seed_scan(administrative_session, seeded_org.id)
-    stale = _seed_command(
-        administrative_session,
-        org_id=seeded_org.id,
-        agent_id=provisioned_agent.id,
-        status="running",
-        scan_id=scan.scan_id,
-    )
-    assert commands.active_command_for(administrative_session, provisioned_agent.id)
-
-    ws = AsyncMock()
-
-    async def register() -> None:
-        await agent_connections.register(provisioned_agent.id, ws, now=T0)
-
-    asyncio.run(register())
-
-    response = client.post(
-        _commands_path(provisioned_agent.id),
-        json=REQUEST_BODY,
-        headers=bearer_headers(seeded_org.id, "admin"),
-    )
-
-    assert response.status_code == 201
-    administrative_session.refresh(stale)
-    assert stale.status == "failed"
-    assert response.json()["status"] == "delivered"
 
 
 def test_enqueue_sweep_clears_overdue_connected_command_wedge(

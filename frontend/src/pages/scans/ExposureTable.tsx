@@ -1,6 +1,8 @@
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router'
 import DataTable from '@/components/DataTable'
+import useI18n from '@/i18n/useI18n'
+import type { MessageKey } from '@/i18n/messages'
 import {
   exposureColumns,
   exposureEndpoint,
@@ -18,7 +20,8 @@ type ExposureTableProps = {
   onOpenExposureChange: (id: string | null) => void
   onOpenFinding?: (id: string) => void
   relatedFindingHref?: (exposure: ExposureRead, findingId: string) => string
-  caption?: string
+  caption?: MessageKey
+  showSummary?: boolean
 }
 
 function ExposurePanel({
@@ -32,6 +35,7 @@ function ExposurePanel({
   onOpenFinding?: (id: string) => void
   relatedFindingHref?: (exposure: ExposureRead, findingId: string) => string
 }) {
+  const { t } = useI18n()
   const relatedFindings = exposure.related_finding_ids
     .map((id) => findings.find((finding) => finding.finding_id === id))
     .filter((finding): finding is FindingRecord => finding !== undefined)
@@ -40,13 +44,13 @@ function ExposurePanel({
     <div className="flex flex-col gap-6 p-4">
       <div className="flex gap-4">
         <p className="w-1/4 shrink-0 text-caption-md uppercase tracking-widest text-muted-foreground">
-          Why it matters
+          {t('scans.exposureWhyItMatters')}
         </p>
         <p className="min-w-0 max-w-prose text-body-md">{exposure.reason}</p>
       </div>
       <div className="flex gap-4">
         <p className="w-1/4 shrink-0 text-caption-md uppercase tracking-widest text-muted-foreground">
-          Evidence
+          {t('common.evidence')}
         </p>
         <ul className="flex min-w-0 flex-1 flex-col gap-2 text-body-md">
           {exposure.evidence.map((item, index) => (
@@ -59,7 +63,7 @@ function ExposurePanel({
       {exposure.related_finding_ids.length > 0 && (
         <div className="flex gap-4">
           <p className="w-1/4 shrink-0 text-caption-md uppercase tracking-widest text-muted-foreground">
-            Related vulnerabilities
+            {t('scans.exposureRelatedVulnerabilities')}
           </p>
           <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
             {exposure.related_finding_ids.map((findingId) => {
@@ -82,7 +86,7 @@ function ExposurePanel({
                         to={relatedFindingHref(exposure, findingId)}
                         data-testid={`exposure-related-finding-${findingId}`}
                       >
-                        Open vulnerability
+                        {t('scans.exposureOpenVulnerability')}
                       </Link>
                     </Button>
                   ) : onOpenFinding ? (
@@ -93,7 +97,7 @@ function ExposurePanel({
                       className="h-auto p-0 text-body-md"
                       onClick={() => onOpenFinding(findingId)}
                     >
-                      Open vulnerability
+                      {t('scans.exposureOpenVulnerability')}
                     </Button>
                   ) : null}
                 </div>
@@ -114,31 +118,51 @@ function ExposureTable({
   onOpenExposureChange,
   onOpenFinding,
   relatedFindingHref,
-  caption = 'Reachable services in this scan',
+  caption = 'scans.exposureTableCaption',
+  showSummary = true,
 }: ExposureTableProps) {
+  const { t } = useI18n()
+  const needsReview = exposures.filter(
+    (exposure) => exposure.attention !== 'informational',
+  ).length
+
   return (
-    <DataTable
-      columns={exposureColumns()}
-      rows={exposures}
-      rowId={(exposure) => exposure.exposure_id}
-      testId={testId}
-      caption={caption}
-      rowAction={{
-        kind: 'expand',
-        panel: (exposure) => (
-          <ExposurePanel
-            exposure={exposure}
-            findings={findings}
-            onOpenFinding={onOpenFinding}
-            relatedFindingHref={relatedFindingHref}
-          />
-        ),
-        label: (exposure) =>
-          `Show details for ${exposure.observed_service} on ${exposureEndpoint(exposure)}`,
-        openRowId: openExposureId,
-        onOpenRowChange: onOpenExposureChange,
-      }}
-    />
+    <div className="flex flex-col gap-4">
+      {showSummary && (
+        <p className="text-body-sm font-medium">
+          {t('common.reachableServices', { count: exposures.length })} ·{' '}
+          {t('common.needsReview', { count: needsReview })}
+        </p>
+      )}
+      <p className="text-body-sm text-muted-foreground">
+        {t('scans.exposureTableGuidance')}
+      </p>
+      <DataTable
+        columns={exposureColumns(t)}
+        rows={exposures}
+        rowId={(exposure) => exposure.exposure_id}
+        testId={testId}
+        caption={t(caption)}
+        rowAction={{
+          kind: 'expand',
+          panel: (exposure) => (
+            <ExposurePanel
+              exposure={exposure}
+              findings={findings}
+              onOpenFinding={onOpenFinding}
+              relatedFindingHref={relatedFindingHref}
+            />
+          ),
+          label: (exposure) =>
+            t('scans.exposureRowDetails', {
+              service: exposure.observed_service,
+              endpoint: exposureEndpoint(exposure),
+            }),
+          openRowId: openExposureId,
+          onOpenRowChange: onOpenExposureChange,
+        }}
+      />
+    </div>
   )
 }
 

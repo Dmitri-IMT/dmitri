@@ -169,6 +169,7 @@ def test_fills_requested_scan_and_links_agent(
     provisioned_agent: Agent,
     agent_keypair,
     seeded_org: Org,
+    bearer_headers,
 ) -> None:
     private_key, _ = agent_keypair
     now = utc_now()
@@ -193,6 +194,75 @@ def test_fills_requested_scan_and_links_agent(
     assert scan_record.agent_id == provisioned_agent.id
     assert scan_record.status == "completed"
     assert administrative_session.exec(select(ScanRecord)).all() == [scan_record]
+
+
+def test_ingest_persists_explicit_finding_issue_key(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    private_key, _ = agent_keypair
+    now = utc_now()
+    scan_id = uuid4()
+    _seed_placeholder(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        scan_id=scan_id,
+        now=now,
+    )
+    finding = _finding()
+    finding.update(
+        {
+            "issue_key": "ssh:weak-cipher",
+            "evidence_observations": [
+                {
+                    "ip": "10.0.0.5",
+                    "port": 22,
+                    "protocol": "tcp",
+                    "condition_key": "ssh:weak-cipher",
+                    "method": "unknown",
+                    "result": "inconclusive",
+                    "source": "nmap_nse",
+                    "source_script": "ssh2-enum-algos",
+                    "rule_id": "nse:unreviewed-ssh-cipher",
+                    "rule_version": "1",
+                    "evidence": (
+                        "The script reported an unsupported SSH cipher condition."
+                    ),
+                    "facts": {},
+                }
+            ],
+        }
+    )
+    payload = _payload(scan_id, hosts=[_host()], findings=[finding])
+    payload["finding_evidence_policy_version"] = "1"
+
+    response = _post(
+        client, private_key=private_key, device_id=provisioned_agent.id, payload=payload
+    )
+
+    assert response.status_code == 202
+    finding_record = administrative_session.exec(select(FindingRecord)).one()
+    assert finding_record.issue_key == "ssh:weak-cipher"
+    assert finding_record.issue_key_ambiguous is False
+    assert finding_record.confidence == "tentative"
+    assert finding_record.evidence_observations_json[0]["condition_key"] == (
+        "ssh:weak-cipher"
+    )
+    read_response = client.get(
+        f"/api/v1/scans/{scan_id}",
+        headers=bearer_headers(seeded_org.id, "viewer"),
+    )
+    assert read_response.status_code == 200
+    read_finding = read_response.json()["findings"][0]
+    assert read_finding["issue_key"] == "ssh:weak-cipher"
+    assert read_finding["evidence_observations"][0]["condition_key"] == (
+        "ssh:weak-cipher"
+    )
 
 
 def test_request_and_scan_both_complete(

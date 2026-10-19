@@ -26,12 +26,51 @@ from .scan import (
     ExposureAttention,
     ExposureConfidence,
     ExposureRole,
+    FindingEvidenceObservationPayload,
 )
+from .scan_progress import ScanProgressRead
 
 ScanStatus = Literal[
     "pending", "accepted", "processing", "completed", "failed", "cancelled"
 ]
 AssessmentStatus = Literal["available", "unavailable"]
+DetectionMethod = Literal[
+    "version_correlation",
+    "configuration_observation",
+    "specific_check",
+    "textual_reference",
+    "unknown",
+]
+
+
+class FindingEvidenceMethodCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_correlation: Annotated[int, Field(ge=0)]
+    configuration_observation: Annotated[int, Field(ge=0)]
+    specific_check: Annotated[int, Field(ge=0)]
+    textual_reference: Annotated[int, Field(ge=0)]
+    unknown: Annotated[int, Field(ge=0)]
+
+
+class FindingEvidenceConfidenceCounts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tentative: Annotated[int, Field(ge=0)]
+    probable: Annotated[int, Field(ge=0)]
+    confirmed: Annotated[int, Field(ge=0)]
+    unknown: Annotated[int, Field(ge=0)]
+
+
+class FindingEvidenceSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["scan", "filtered_findings"]
+    total_records: Annotated[int, Field(ge=0)]
+    by_method: FindingEvidenceMethodCounts
+    by_confidence: FindingEvidenceConfidenceCounts
+    conflicting_records: Annotated[int, Field(ge=0)]
+    demonstrated_records: Annotated[int, Field(ge=0)]
 ScanSortBy = Literal["timestamp", "status", "scan_mode"]
 HostSortBy = Literal[
     "last_seen_at", "hostname", "vendor", "ip", "vulnerability_count"
@@ -145,6 +184,7 @@ class FindingRead(BaseModel):
     service: str | None = None
     source: str | None = None
     source_script: str | None = None
+    issue_key: str | None = None
     cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
     cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Severity
@@ -163,6 +203,14 @@ class FindingRead(BaseModel):
     first_seen_at: datetime | None = None
     last_seen_at: datetime | None = None
     fixed_at: datetime | None = None
+    detection_method: DetectionMethod = "unknown"
+    evidence_status: Literal[
+        "supported", "inconclusive", "conflicting", "unknown"
+    ] = "unknown"
+    evidence_observations: list[FindingEvidenceObservationPayload] = Field(
+        default_factory=list, max_length=16
+    )
+    evidence_truncated: bool = False
 
 
 class ExposureRead(BaseModel):
@@ -255,6 +303,12 @@ class ScanDetailResponse(BaseModel):
     scan_mode: ScanMode
     hosts: list[ScanHostView]
     findings: list[FindingRead]
+    finding_evidence_policy_version: constr(min_length=1, max_length=64) | None = None
+    finding_observations: list[FindingEvidenceObservationPayload] = Field(
+        default_factory=list, max_length=512
+    )
+    finding_observations_truncated: bool = False
+    evidence_summary: FindingEvidenceSummary | None = None
     assessment_status: AssessmentStatus
     assessment_policy_version: constr(min_length=1) | None
     exposures: list[ExposureRead]
@@ -271,6 +325,7 @@ class ScanDetailResponse(BaseModel):
     box_name: str | None = None
     duration: Annotated[int | None, Field(default=None, ge=0)] = None
     terminated_by: TerminatedBy | None = None
+    progress: ScanProgressRead | None = None
 
 
 class ScanSummary(BaseModel):
@@ -314,6 +369,7 @@ class FindingListResponse(BaseModel):
     data: list[FindingRead]
     total: Annotated[int, Field(ge=0)]
     page: Annotated[int, Field(ge=1)]
+    evidence_summary: FindingEvidenceSummary | None = None
 
 
 class SeverityBreakdown(BaseModel):

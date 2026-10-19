@@ -84,6 +84,48 @@ def test_get_scan_by_id_happy_path(
     assert all(row["device_profile"] is None for row in body["hosts"])
 
 
+def test_scan_evidence_summary_counts_findings_not_standalone_observations(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["finding"].confidence = "confirmed"
+    seeded["scan"].finding_observations_json = [
+        {
+            "ip": "192.168.1.10",
+            "port": 445,
+            "protocol": "tcp",
+            "condition_key": "smb:signing",
+            "method": "specific_check",
+            "result": "negative",
+            "source": "nmap_nse",
+            "source_script": "smb2-security-mode",
+            "rule_id": "nse:smb2-security-mode",
+            "rule_version": "1",
+            "evidence": "Signing is required.",
+            "facts": {"signing_required": True},
+        }
+    ]
+    administrative_session.add_all((seeded["finding"], seeded["scan"]))
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    summary = body["evidence_summary"]
+    assert summary["scope"] == "scan"
+    assert summary["total_records"] == 2
+    assert sum(summary["by_method"].values()) == 2
+    assert len(body["finding_observations"]) == 1
+    assert body["finding_observations"][0]["result"] == "negative"
+    assert summary["total_records"] != len(body["findings"]) + len(
+        body["finding_observations"]
+    )
+
+
 def test_current_scan_returns_profile_stable_exposures_and_related_findings(
     client: TestClient, administrative_session: Session, bearer_headers
 ) -> None:
@@ -286,6 +328,48 @@ def test_scan_read_degrades_malformed_persisted_operating_system_snapshot(
     )
     assert row.operating_system is None
     assert "operating_system" in row.unreadable_fields
+
+
+def test_scan_read_exposes_progress_only_while_unfinished(
+    administrative_session: Session,
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    scan = seeded["scan"]
+    scan.status = "processing"
+    scan.progress_json = {
+        "stage": "ports",
+        "percent": 35,
+        "machines": 3,
+        "open_ports": 0,
+        "filtered_ports": 2,
+        "industrial_services": None,
+        "vulnerabilities": None,
+    }
+    scan.progress_updated_at = datetime.now(timezone.utc)
+    administrative_session.add(scan)
+    administrative_session.commit()
+
+    detail = get_scan_detail(
+        administrative_session,
+        scan.scan_id,
+        org_id=seeded["org"].id,
+    )
+    assert detail is not None
+    assert detail.progress is not None
+    assert detail.progress.percent == 35
+    assert detail.progress.machines == 3
+    assert detail.progress.open_ports == 0
+
+    scan.status = "completed"
+    administrative_session.add(scan)
+    administrative_session.commit()
+    completed = get_scan_detail(
+        administrative_session,
+        scan.scan_id,
+        org_id=seeded["org"].id,
+    )
+    assert completed is not None
+    assert completed.progress is None
 
 
 def test_get_scan_by_id_failed_body_has_error_code_and_command_id(

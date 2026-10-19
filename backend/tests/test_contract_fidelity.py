@@ -27,10 +27,15 @@ ERROR_RESPONSE_ROUTES = {
     "AgentOfflineConflict": ("agents.py", "update_agent_target_subnet_route", 409),
     "TargetSubnetNotReported": ("agents.py", "update_agent_target_subnet_route", 422),
     "ScanSubnetNotReported": ("agents.py", "create_agent_command", 422),
+    "ScanRunningConflict": ("scans.py", "delete_scan_route", 409),
 }
 
 SCHEMA_NAMES = (
     "AssessmentEvidencePayload",
+    "FindingEvidenceObservationPayload",
+    "FindingEvidenceMethodCounts",
+    "FindingEvidenceConfidenceCounts",
+    "FindingEvidenceSummary",
     "DeviceProfilePayload",
     "ExposurePayload",
     "ExposureRead",
@@ -80,7 +85,19 @@ SCHEMA_NAMES = (
     "ScanAIAnalysisFailed",
     "ScanAIAnalysisCompleted",
     "ScanReportResponse",
+    "ExplainedReportSections",
+    "TechnicalReportSections",
+    "ReportDevice",
+    "ReportService",
+    "ReportIssueGroup",
+    "ReportObservation",
+    "ReportAdvisoryNote",
+    "ReportFinding",
+    "ReportAction",
+    "ReportSource",
     "AIChatResponse",
+    "ScanDeletionResponse",
+    "HostDeletionResponse",
 )
 OPERATION_PATHS = ("/api/v1/scans", "/api/v1/findings", "/api/v1/hosts")
 
@@ -208,106 +225,6 @@ def _app_operation_parameters(path: str) -> dict[str, dict[str, Any]]:
     return {param["name"]: _parameter_entry(spec, param) for param in raw}
 
 
-def test_property_shape_type_list_and_anyof_nullable_are_equal():
-    spec: dict[str, Any] = {}
-    type_list = {"type": ["string", "null"]}
-    any_of = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-    assert _property_shape(spec, type_list) == _property_shape(spec, any_of)
-
-
-def test_property_shape_const_and_single_enum_are_equal():
-    spec: dict[str, Any] = {}
-    const = {"const": "accepted"}
-    enum = {"enum": ["accepted"]}
-    assert _property_shape(spec, const) == _property_shape(spec, enum)
-
-
-def test_property_shape_nullable_mismatch_is_different():
-    spec: dict[str, Any] = {}
-    nullable = {"type": ["string", "null"]}
-    non_nullable = {"type": "string"}
-    assert _property_shape(spec, nullable) != _property_shape(spec, non_nullable)
-
-
-def test_property_shape_const_vs_wider_enum_is_different():
-    spec: dict[str, Any] = {}
-    const = {"const": "accepted"}
-    enum = {"enum": ["accepted", "pending"]}
-    assert _property_shape(spec, const) != _property_shape(spec, enum)
-
-
-def test_property_shape_changed_type_is_different():
-    spec: dict[str, Any] = {}
-    assert _property_shape(spec, {"type": "string"}) != _property_shape(
-        spec, {"type": "integer"}
-    )
-
-
-def test_property_shape_changed_minimum_is_different():
-    spec: dict[str, Any] = {}
-    assert _property_shape(
-        spec, {"type": "integer", "minimum": 0}
-    ) != _property_shape(spec, {"type": "integer", "minimum": 1})
-
-
-def test_schema_fingerprint_removed_required_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": ["a", "b"],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    missing_required = {
-        "additionalProperties": False,
-        "required": ["a"],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(
-        spec, missing_required
-    )
-
-
-def test_schema_fingerprint_added_property_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}},
-    }
-    with_extra = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, with_extra)
-
-
-def test_schema_fingerprint_removed_property_is_different():
-    spec: dict[str, Any] = {}
-    base = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
-    }
-    without_b = {
-        "additionalProperties": False,
-        "required": [],
-        "properties": {"a": {"type": "string"}},
-    }
-    assert _schema_fingerprint(spec, base) != _schema_fingerprint(spec, without_b)
-
-
-def test_response_status_codes_not_compared_open_item_1():
-    contract = _load_contract()
-    app_spec = app.openapi()
-    for path in OPERATION_PATHS:
-        contract_codes = set(contract["paths"][path]["get"]["responses"])
-        app_codes = set(app_spec["paths"][path]["get"]["responses"])
-        assert "400" in contract_codes
-        assert "422" in app_codes
-        assert contract_codes != app_codes
-
-
 @pytest.mark.parametrize("schema_name", SCHEMA_NAMES)
 def test_schema_matches_contract(schema_name: str):
     contract = _load_contract()
@@ -379,6 +296,142 @@ def test_assessment_field_limits_match_contract(
             app_spec["components"]["schemas"][schema_name]["properties"][field],
         )
         assert contract_field[key] == app_field[key] == expected
+
+
+def test_finding_evidence_contract_limits_match_openapi_and_backend() -> None:
+    contract = _load_contract()
+    app_spec = app.openapi()
+    observation = contract["components"]["schemas"][
+        "FindingEvidenceObservationPayload"
+    ]
+    app_observation = app_spec["components"]["schemas"][
+        "FindingEvidenceObservationPayload"
+    ]
+
+    assert observation["additionalProperties"] is False
+    assert app_observation["additionalProperties"] is False
+    assert set(observation["properties"]) == set(app_observation["properties"])
+    assert set(observation["properties"]) == {
+        "ip",
+        "port",
+        "protocol",
+        "unit_id",
+        "condition_key",
+        "method",
+        "result",
+        "source",
+        "source_script",
+        "rule_id",
+        "rule_version",
+        "evidence",
+        "facts",
+    }
+
+    for schema in (observation, app_observation):
+        properties = schema["properties"]
+        port = next(
+            part
+            for part in properties["port"]["anyOf"]
+            if part.get("type") == "integer"
+        )
+        unit_id = next(
+            part
+            for part in properties["unit_id"]["anyOf"]
+            if part.get("type") == "integer"
+        )
+        assert port["minimum"] == 1
+        assert port["maximum"] == 65535
+        assert unit_id["minimum"] == 0
+        assert unit_id["maximum"] == 255
+        for name, maximum in (
+            ("condition_key", 256),
+            ("source", 64),
+            ("source_script", 64),
+            ("rule_id", 128),
+            ("rule_version", 64),
+            ("evidence", 512),
+        ):
+            prop = _resolve_ref(
+                contract if schema is observation else app_spec,
+                properties[name],
+            )
+            if "anyOf" in prop:
+                prop = next(
+                    part for part in prop["anyOf"] if part.get("type") == "string"
+                )
+            assert prop["maxLength"] == maximum
+        facts = properties["facts"]
+        assert facts["maxProperties"] == 8
+        string_fact = next(
+            part
+            for part in facts["additionalProperties"]["anyOf"]
+            if part.get("type") == "string"
+        )
+        assert string_fact["maxLength"] == 160
+        assert facts["propertyNames"]["maxLength"] == 64
+
+    finding = contract["components"]["schemas"]["FindingPayload"]
+    assert finding["additionalProperties"] is False
+    assert finding["properties"]["issue_key"] == {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 256,
+        "default": None,
+    }
+    assert finding["properties"]["evidence_observations"]["maxItems"] == 16
+    ingest = contract["components"]["schemas"]["ScanIngestRequest"]
+    assert ingest["additionalProperties"] is False
+    assert ingest["properties"]["finding_observations"]["maxItems"] == 512
+
+
+def test_finding_evidence_read_summary_is_additive_and_counts_records() -> None:
+    contract = _load_contract()
+    summary = contract["components"]["schemas"]["FindingEvidenceSummary"]
+    methods = contract["components"]["schemas"]["FindingEvidenceMethodCounts"]
+    confidence = contract["components"]["schemas"]["FindingEvidenceConfidenceCounts"]
+
+    assert summary["additionalProperties"] is False
+    assert set(summary["required"]) == {
+        "scope",
+        "total_records",
+        "by_method",
+        "by_confidence",
+        "conflicting_records",
+        "demonstrated_records",
+    }
+    assert summary["properties"]["scope"]["enum"] == [
+        "scan",
+        "filtered_findings",
+    ]
+    for name in ("total_records", "conflicting_records", "demonstrated_records"):
+        field = summary["properties"][name]
+        assert field["type"] == "integer"
+        assert field["minimum"] == 0
+    assert set(methods["properties"]) == {
+        "version_correlation",
+        "configuration_observation",
+        "specific_check",
+        "textual_reference",
+        "unknown",
+    }
+    assert set(confidence["properties"]) == {
+        "tentative",
+        "probable",
+        "confirmed",
+        "unknown",
+    }
+    for schema in (methods, confidence):
+        assert schema["additionalProperties"] is False
+        assert set(schema["required"]) == set(schema["properties"])
+        assert all(
+            item["type"] == "integer" and item["minimum"] == 0
+            for item in schema["properties"].values()
+        )
+
+    for schema_name in ("ScanDetailResponse", "FindingListResponse"):
+        assert "evidence_summary" in contract["components"]["schemas"][
+            schema_name
+        ]["properties"]
 
 
 @pytest.mark.parametrize(

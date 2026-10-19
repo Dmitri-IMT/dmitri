@@ -23,7 +23,7 @@ from agent.config import (
 from agent.discovery.network_discovery import discover_hosts
 from agent.normalize.contracts import ScanPayload
 from agent.normalize.coverage import extract_coverage
-from agent.normalize.findings import extract_findings
+from agent.normalize.findings import extract_findings_and_observations
 from agent.ot.modbus.client import ModbusClientController
 from agent.ot.modbus.inventory import has_modbus_candidate
 from agent.ot.policy import OtAutomationPolicy, load_ot_policy
@@ -148,7 +148,9 @@ class ScanRunner:
         ot_inspection: OtInspectionResult | None = None,
         targeted_summary: TargetedStageSummary | None = None,
     ) -> ScanPayload:
-        findings = extract_findings(hosts)
+        findings, finding_observations, observations_truncated = (
+            extract_findings_and_observations(hosts)
+        )
         assessment = assess_hosts(hosts)
         elapsed_seconds = round(perf_counter() - started_counter, 2)
         hosts_payload = [
@@ -167,6 +169,9 @@ class ScanRunner:
             hosts=hosts_payload,
             findings=findings,
             coverage=extract_coverage(hosts),
+            finding_evidence_policy_version="1",
+            finding_observations=finding_observations,
+            finding_observations_truncated=observations_truncated,
             assessment_policy_version=LOCAL_ASSESSMENT_POLICY_VERSION,
             exposures=assessment.exposures,
             metadata=stages.build_metadata(

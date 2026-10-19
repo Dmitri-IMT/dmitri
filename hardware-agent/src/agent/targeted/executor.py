@@ -268,6 +268,10 @@ class TargetedExecutor:
                 stderr=subprocess.PIPE,
                 shell=False,
                 start_new_session=True,
+                env={
+                    **os.environ,
+                    "XDG_CONFIG_HOME": str(report_path.parent / "config"),
+                },
                 preexec_fn=(
                     self._set_report_size_limit if report_mode == "file" else None
                 ),
@@ -344,7 +348,7 @@ class TargetedExecutor:
                     self._terminate_process_group(process)
                     outcome, reason = (
                         TargetedOutcome.SKIPPED,
-                        TargetedGapReason.STAGE_BUDGET,
+                        TargetedGapReason.SCAN_CANCELLED,
                     )
                     break
                 if perf_counter() >= deadline:
@@ -545,7 +549,7 @@ class TargetedExecutor:
     def _cancelled_execution() -> ToolExecution:
         return ToolExecution(
             outcome=TargetedOutcome.SKIPPED,
-            reason_code=TargetedGapReason.STAGE_BUDGET,
+            reason_code=TargetedGapReason.SCAN_CANCELLED,
             diagnostic="Targeted execution cancelled.",
             cancelled=True,
         )

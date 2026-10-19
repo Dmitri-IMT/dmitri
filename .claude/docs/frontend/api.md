@@ -4,7 +4,7 @@ title: frontend API layer
 description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # frontend API layer
@@ -33,7 +33,7 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `lookupInvite()` / `acceptInvite()` | `POST /invites/lookup` (non-consuming; returns `org_name`, `role` and an `email` the UI never renders) and `POST /invites/accept` (`201 → LoginResponse`). `acceptInvite` writes `access_token` to the store exactly as `login` does, and posts on `authClient` so the httpOnly refresh cookie is received. | `frontend/src/api/auth.ts:48` |
 | `changePassword()` | `POST /auth/change-password` for the voluntary change on Settings. Lives in its **own** module and imports `apiClient` from `./client` — the one authenticated write in the app. | `frontend/src/api/passwords.ts:6` |
 | `getAccessToken()` / `setAccessToken()` / `clearAccessToken()` | The in-memory token store over a single module-scoped `let accessToken` — never `localStorage`/`sessionStorage`/cookies/React state. | `frontend/src/api/tokenStore.ts:3` |
-| `getCurrentUser()` | `GET /users/me`. The **sole** source of identity and role — nothing decodes a JWT anywhere in the app. | `frontend/src/api/users.ts:6` |
+| `getCurrentUser()` | `GET /users/me` (`user_id`, `email`, `role`, `org_name`). The **sole** source of identity and role — nothing decodes a JWT anywhere in the app. `org_name` is what the Settings "delete all" confirmation compares against. | `frontend/src/api/users.ts:6` |
 | `deleteCurrentUser()` | `DELETE /users/me`, `204`. The self-service exit from the organization, called only by the session layer's `deleteAccount()`. No body either way, so no type alias. Deleting the account destroys its sessions server-side; the residual refresh cookie is deliberately left alone because it then authenticates nothing. | `frontend/src/api/users.ts:11` |
 | `listOrgMembers()` | `GET /users` → `OrgMemberListResponse`. The admin-only org roster behind the Users screen; server-ordered, never re-sorted client-side. | `frontend/src/api/users.ts:21` |
 | `updateUserRole(userId, role)` | `PATCH /users/{id}` with an `UpdateUserRoleRequest` body. The backend keeps the `self_target` and `last_admin` guards; neither is reachable from the Users screen, so the UI carries no copy for them. | `frontend/src/api/users.ts:28` |
@@ -44,6 +44,8 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getScan(scanId)` | `GET /scans/{id}` → `ScanDetailResponse` (findings and hosts embedded). Scan detail opens a finding without a second request. | `frontend/src/api/scans.ts:58` |
 | `getScanAnalysis` / `requestScanAnalysis` | GET and POST `/scans/{id}/analysis` with `?language=` (`AILanguage`, default `en`). `downloadScanReport` takes the same argument. See [scan-ai](./scan-ai.md). | `frontend/src/api/scans.ts:67`, `:78` |
 | `getAIUsage` / `askContextAI` / `getContextAIHistory` | Usage dashboard and unified contextual chat. See [ai-usage](./ai-usage.md) and [context-ai](./context-ai.md). | `frontend/src/api/ai.ts:10`, `:18`, `:31` |
+| `deleteScan(scanId)` / `deleteAllScans()` | `DELETE /scans/{id}` (`204`) and `DELETE /scans` → `ScanDeletionResponse` (`deleted`, `skipped`, `machines_removed`). Admin only. | `frontend/src/api/scans.ts` |
+| `deleteHost(hostId)` / `deleteAllHosts()` | `DELETE /hosts/{id}` (`204`) and `DELETE /hosts` → `HostDeletionResponse` (`deleted`). Admin only. | `frontend/src/api/hosts.ts` |
 | `listHosts(params)` / `getHost(hostId)` | `GET /hosts` with required page/sort/`group` params (`HostGroup`; `HOST_LIST_DEFAULT_SORT_BY` is `last_seen_at`; `HOST_SORT_DEFAULT_ORDER` starts `vulnerability_count` and `last_seen_at` at `desc`, text columns at `asc`); `GET /hosts/{id}` → `HostDetailResponse`. | `frontend/src/api/hosts.ts` |
 | `listFindings(params)` | The **one** wrapper on `GET /findings`. `FindingListParams` is a two-member union — `{ scan_id, severity, per_page }` for the home deck, `{ host_id, per_page }` for host detail — so a caller cannot mix filters, and the object handed to the wrapper is the same one handed to the query key. One severity per call (never a list or comma-joined string); returns the **whole envelope** so `total` survives alongside `data`. | `frontend/src/api/findings.ts:26` |
 | `FindingListParams` | The exact params sent to `GET /findings`, and the shape `queryKeys.findings.list` takes. `scan_id` stays optional because Home builds its key before the scan id lands; `skipToken` at that one call site is what keeps the unfiltered read unsent. | `frontend/src/api/findings.ts:14` |
@@ -53,7 +55,8 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail` (includes `has_results`). Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `cancelCommand(commandId)` | `POST /commands/{id}/cancel` → `CommandDetail` (`202`/`200`). Used by [devices-screen](./devices-screen.md)'s `useScanCommand.cancel`. | `frontend/src/api/commands.ts:13` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
-| `queryKeys` | Prefix-shaped TanStack keys: `home`, `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done` or `cancelled`, and again when a cancelled command gains results. | `frontend/src/api/queryKeys.ts:8` |
+| `useRefreshAfterDelete()` | Returns one async function that invalidates `home.all`, `scans.all`, `hosts.all`, `findings.all` and `commands.all` — everything a scan or machine delete can change. Called by `ScanDelete`, `HostDelete` and `DeleteDataPanel` after a successful delete (after navigating away, for the detail screens). | `frontend/src/hooks/useRefreshAfterDelete.ts` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home` (`home.all` is the prefix), `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done` or `cancelled`, and again when a cancelled command gains results. | `frontend/src/api/queryKeys.ts:8` |
 
 ## How it connects
 

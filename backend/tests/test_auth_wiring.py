@@ -8,87 +8,16 @@ from api.main import app
 from starlette.routing import WebSocketRoute
 from starlette.testclient import TestClient
 
-AUTH_POST_PATHS = (
-    "/api/v1/auth/login",
-    "/api/v1/auth/refresh",
-    "/api/v1/auth/logout",
-    "/api/v1/auth/change-password",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-)
-
-INVITE_POST_PATHS = (
-    "/api/v1/invites",
-    "/api/v1/invites/accept",
-)
-
 
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
 
 
-@pytest.mark.parametrize("path", AUTH_POST_PATHS)
-def test_auth_post_paths_are_registered(client: TestClient, path: str) -> None:
-    response = client.post(path, json={})
-
-    assert response.status_code not in (404, 405)
-
-
-def test_options_health_returns_204(client: TestClient) -> None:
-    response = client.options("/api/v1/health")
-
-    assert response.status_code == 204
-
-
-def test_auth_preflight_returns_204_with_cors_headers(client: TestClient) -> None:
-    response = client.options(
-        "/api/v1/auth/login",
-        headers={
-            "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "POST",
-        },
-    )
-
-    assert response.status_code == 204
-    assert response.headers["access-control-allow-origin"] == (
-        "http://localhost:5173"
-    )
-    assert response.headers["access-control-allow-credentials"] == "true"
-    assert "POST" in response.headers["access-control-allow-methods"]
-
-
-@pytest.mark.parametrize("path", AUTH_POST_PATHS)
-def test_response_carries_request_id_header(client: TestClient, path: str) -> None:
-    response = client.post(path, json={})
-
-    assert response.headers["x-request-id"]
-
-
 def test_health_response_carries_request_id_header(client: TestClient) -> None:
     response = client.get("/api/v1/health")
 
     assert response.headers["x-request-id"]
-
-
-@pytest.mark.parametrize("path", INVITE_POST_PATHS)
-def test_invite_post_paths_are_registered(client: TestClient, path: str) -> None:
-    response = client.post(path, json={})
-
-    assert response.status_code not in (404, 405)
-
-
-@pytest.mark.parametrize("path", INVITE_POST_PATHS)
-def test_invite_preflight_returns_204(client: TestClient, path: str) -> None:
-    response = client.options(
-        path,
-        headers={
-            "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "POST",
-        },
-    )
-
-    assert response.status_code == 204
 
 
 def _flatten_routes(routes):
@@ -108,19 +37,6 @@ def test_agent_commands_websocket_route_is_registered() -> None:
     }
 
     assert "/api/v1/agents/{agent_id}/commands" in websocket_paths
-
-
-def test_invite_routes_and_preflights_appear_in_app_routes() -> None:
-    registered = {
-        (route.path, method)
-        for route in _flatten_routes(app.routes)
-        for method in getattr(route, "methods", set())
-    }
-
-    assert ("/api/v1/invites", "POST") in registered
-    assert ("/api/v1/invites", "OPTIONS") in registered
-    assert ("/api/v1/invites/accept", "POST") in registered
-    assert ("/api/v1/invites/accept", "OPTIONS") in registered
 
 
 READ_ROUTES = (

@@ -4,6 +4,7 @@ import type { components, operations } from '../types/openapi'
 type ScanSummary = components['schemas']['ScanSummary']
 type ScanListResponse = components['schemas']['ScanListResponse']
 type ScanDetailResponse = components['schemas']['ScanDetailResponse']
+type ScanDeletionResponse = components['schemas']['ScanDeletionResponse']
 export type ScanAIAnalysisResponse =
   components['schemas']['ScanAIAnalysisResponse']
 export type AILanguage = 'en' | 'pt-BR' | 'ru'
@@ -61,6 +62,15 @@ export async function getScan(scanId: string): Promise<ScanDetailResponse> {
   return response.data
 }
 
+export async function deleteScan(scanId: string): Promise<void> {
+  await apiClient.delete(`/scans/${scanId}`)
+}
+
+export async function deleteAllScans(): Promise<ScanDeletionResponse> {
+  const response = await apiClient.delete<ScanDeletionResponse>('/scans')
+  return response.data
+}
+
 export async function getScanAnalysis(
   scanId: string,
   language: AILanguage = 'en',
@@ -85,6 +95,19 @@ export async function requestScanAnalysis(
 }
 
 export type ScanReportKind = 'explained' | 'technical'
+export type ScanReportResponse = components['schemas']['ScanReportResponse']
+
+export async function getScanReport(
+  scanId: string,
+  kind: ScanReportKind,
+  language: AILanguage = 'en',
+): Promise<ScanReportResponse> {
+  const response = await apiClient.get<ScanReportResponse>(
+    `/scans/${scanId}/reports/${kind}`,
+    { params: { language } },
+  )
+  return response.data
+}
 
 export async function downloadScanReport(
   scanId: string,

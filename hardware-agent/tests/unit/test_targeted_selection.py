@@ -58,9 +58,7 @@ def _host(ip: str, *ports: PortInfo) -> HostInfo:
 
 
 def _tools(host: HostInfo, mode: str = "extensive") -> list[TargetedTool]:
-    return [
-        unit.tool for unit in select_targeted_units([host], scan_mode=mode)
-    ]
+    return [unit.tool for unit in select_targeted_units([host], scan_mode=mode)]
 
 
 def test_mode_gate_has_no_quick_or_standard_plan() -> None:
@@ -160,9 +158,7 @@ def test_every_normalized_http_name_selects_both_web_tools(service: str) -> None
     "service", ["tls", "https", "imaps", "pop3s", "smtps", "ftps", "ldaps", "ssl/imap"]
 )
 def test_every_tls_service_fingerprint_selects_testssl(service: str) -> None:
-    assert TargetedTool.TESTSSL in _tools(
-        _host("192.168.1.1", _port(32123, service))
-    )
+    assert TargetedTool.TESTSSL in _tools(_host("192.168.1.1", _port(32123, service)))
 
 
 @pytest.mark.parametrize("service", ["netbios-ssn", "microsoft-ds", "smb", "samba"])
@@ -303,9 +299,7 @@ def test_smb_uses_lowest_service_identified_nonstandard_port() -> None:
     )
 
     assert [
-        (unit.port, unit.tool)
-        for unit in units
-        if unit.tool is TargetedTool.ENUM4LINUX
+        (unit.port, unit.tool) for unit in units if unit.tool is TargetedTool.ENUM4LINUX
     ] == [(1445, TargetedTool.ENUM4LINUX)]
 
 
@@ -342,10 +336,7 @@ def test_plan_is_numeric_ip_port_tool_ordered_and_deduplicated() -> None:
 
 
 def test_plan_is_capped_at_96_units() -> None:
-    hosts = [
-        _host(f"10.0.0.{index}", _port(80, "http"))
-        for index in range(1, 60)
-    ]
+    hosts = [_host(f"10.0.0.{index}", _port(80, "http")) for index in range(1, 60)]
 
     summary = TargetedStageSummary()
     units = select_targeted_units(
@@ -447,8 +438,7 @@ def test_reversed_duplicate_hosts_keep_identical_canonical_units() -> None:
 
 def test_duplicate_evidence_does_not_change_cap_counts() -> None:
     unique_hosts = [
-        _host(f"10.0.0.{index}", _port(80, "http"))
-        for index in range(1, 60)
+        _host(f"10.0.0.{index}", _port(80, "http")) for index in range(1, 60)
     ]
     duplicated_hosts = [
         host
@@ -701,6 +691,11 @@ def test_target_models_have_stable_values_and_serialization() -> None:
                 "severity": "high",
                 "recommendation": "Disable it",
                 "evidence": "protocol offered",
+                "method": "unknown",
+                "result": "inconclusive",
+                "rule_id": "targeted:unsupported",
+                "rule_version": "1",
+                "facts": {},
                 "cve_id": None,
                 "cvss_score": None,
                 "references": [],

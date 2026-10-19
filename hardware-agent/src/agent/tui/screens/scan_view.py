@@ -11,6 +11,8 @@ from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from agent.normalize.contracts import HostPayload, ScanPayload
+from agent.normalize.findings import assess_local_evidence
+from agent.tui.markup import LIMIT_HOST_TEXT, safe
 from agent.tui.screens.base import DmitriScreen
 
 MODE_LABELS = {
@@ -68,6 +70,77 @@ def count_unique_open_endpoints(payload: ScanPayload) -> int:
     )
 
 
+def _finding_evidence_summary(payload: ScanPayload) -> str:
+    version = payload.finding_evidence_policy_version
+    if version is None:
+        return (
+            "Evidence interpretation: unavailable for this legacy scan. Finding "
+            "counts are records, not proven failures."
+        )
+    if version != "1":
+        return (
+            "Evidence interpretation: local policy "
+            f"{safe(version, 32)} is not supported by "
+            "this agent. Finding counts are records, not proven failures."
+        )
+
+    assessments = [assess_local_evidence(finding) for finding in payload.findings]
+    statuses = {
+        status: sum(item.status == status for item in assessments)
+        for status in ("supported", "conflicting", "inconclusive")
+    }
+    observations = payload.finding_observations
+    negative = sum(item.result == "negative" for item in observations)
+    inconclusive = sum(item.result == "inconclusive" for item in observations)
+    observation_label = "Standalone observations"
+    if payload.finding_observations_truncated:
+        observation_label = "Standalone observation sample"
+    return (
+        "Evidence interpretation: local policy v1; this is not backend enrichment. "
+        f"Finding records by evidence status: supported {statuses['supported']}, "
+        f"conflicting {statuses['conflicting']}, "
+        f"inconclusive {statuses['inconclusive']}. "
+        f"{observation_label}: {negative} negative, {inconclusive} inconclusive; "
+        "these are not finding records. Counts do not mean proven failures."
+    )
+
+
+def _render_observations(payload: ScanPayload) -> str:
+    lines = ["[bold]Standalone check observations (not vulnerability findings)[/bold]"]
+    if not payload.finding_observations:
+        lines.append("No standalone check observations recorded.")
+    for item in payload.finding_observations:
+        endpoint = (
+            f"{item.port}/{item.protocol}" if item.port is not None else "not recorded"
+        )
+        if item.unit_id is not None:
+            endpoint += f" · unit {item.unit_id}"
+        if item.ip is not None:
+            endpoint = f"{item.ip} · {endpoint}"
+        source = item.source
+        if item.source_script:
+            source += f" · {item.source_script}"
+        lines.extend(
+            (
+                f"Condition: {safe(item.condition_key, LIMIT_HOST_TEXT)} · "
+                f"Result: {item.result} · Method: {item.method}",
+                f"Endpoint: {endpoint}",
+                f"Source: {safe(source, LIMIT_HOST_TEXT)} · Rule: "
+                f"{safe(item.rule_id, LIMIT_HOST_TEXT)} v{safe(item.rule_version)}",
+                f"Evidence excerpt: {safe(item.evidence, 160)}",
+            )
+        )
+        if item.facts:
+            facts = "; ".join(
+                f"{safe(key, LIMIT_HOST_TEXT)}={safe(value)}"
+                for key, value in sorted(item.facts.items())
+            )
+            lines.append(f"Facts: {facts}")
+    if payload.finding_observations_truncated:
+        lines.append("Only a sample of standalone observations is available.")
+    return "\n".join(lines)
+
+
 def _partial_banner(payload: ScanPayload) -> tuple[str, str] | None:
     metadata = payload.metadata or {}
     if metadata.get("partial_result") is not True:
@@ -111,6 +184,7 @@ class ScanViewScreen(DmitriScreen):
                 yield Static("", id="scan-result-header")
                 yield Static("", id="scan-partial-banner")
                 yield Static("", id="scan-category-summary")
+                yield Static("", id="scan-finding-observations")
                 yield Static("", id="scan-enrichment-note")
                 yield Static("", id="scan-devices-title")
                 yield OptionList(id="scan-device-list")
@@ -125,6 +199,7 @@ class ScanViewScreen(DmitriScreen):
             for widget_id in (
                 "#scan-partial-banner",
                 "#scan-category-summary",
+                "#scan-finding-observations",
                 "#scan-enrichment-note",
                 "#scan-devices-title",
                 "#scan-device-list",
@@ -139,6 +214,12 @@ class ScanViewScreen(DmitriScreen):
         self.query_one("#scan-category-summary", Static).update(
             self._render_category_summary(payload)
         )
+        observation_panel = self.query_one("#scan-finding-observations", Static)
+        observation_panel.display = bool(
+            payload.finding_observations or payload.finding_observations_truncated
+        )
+        if observation_panel.display:
+            observation_panel.update(_render_observations(payload))
         banner = self.query_one("#scan-partial-banner", Static)
         partial = _partial_banner(payload)
         banner.display = partial is not None
@@ -228,8 +309,9 @@ class ScanViewScreen(DmitriScreen):
             )
         lines.append(
             f"[bold]Vulnerability findings:[/bold] "
-            f"{_count('finding', len(payload.findings))}"
+            f"{_count('finding record', len(payload.findings))}"
         )
+        lines.append(_finding_evidence_summary(payload))
         return "\n".join(lines)
 
     def _device_prompt(self, payload: ScanPayload, host: HostPayload) -> str:
@@ -256,6 +338,8 @@ class ScanViewScreen(DmitriScreen):
         if partial is not None:
             lines.append(partial[1])
         lines.append(self._render_category_summary(payload))
+        if payload.finding_observations or payload.finding_observations_truncated:
+            lines.append(_render_observations(payload))
         if payload.assessment_policy_version is None:
             lines.append(
                 "Unavailable — this scan predates attack-surface analysis and device "

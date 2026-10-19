@@ -174,7 +174,7 @@ describe('Settings', () => {
       ),
     )
     expect(screen.getByTestId('settings-leave-trigger')).toBeEnabled()
-    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3)
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(4)
   })
 
   it.each([

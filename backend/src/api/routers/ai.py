@@ -253,10 +253,12 @@ def _build_context(
         host = get_host_detail(session, context_id, org_id=org_id)
         if host is None or not host.scan_history:
             return None
-        findings = list_findings(
+        finding_result = list_findings(
             session, org_id=org_id, host_id=context_id, per_page=100
-        ).data
-        return build_host_chat_bundle(host, findings), host.scan_history[0].scan_id
+        )
+        return build_host_chat_bundle(
+            host, finding_result.data, finding_result.evidence_summary
+        ), host.scan_history[0].scan_id
     finding = get_finding_detail(session, context_id, org_id=org_id)
     if finding is None:
         return None

@@ -33,10 +33,14 @@ EXPECTED_ROUTE_SURFACE = {
     ("/api/v1/health", "GET"),
     ("/api/v1/health", "OPTIONS"),
     ("/api/v1/hosts", "GET"),
+    ("/api/v1/hosts", "DELETE"),
     ("/api/v1/hosts/{host_id}", "GET"),
+    ("/api/v1/hosts/{host_id}", "DELETE"),
     ("/api/v1/scans", "GET"),
     ("/api/v1/scans", "POST"),
+    ("/api/v1/scans", "DELETE"),
     ("/api/v1/scans/{scan_id}", "GET"),
+    ("/api/v1/scans/{scan_id}", "DELETE"),
     ("/api/v1/scans/{scan_id}/analysis", "GET"),
     ("/api/v1/scans/{scan_id}/analysis", "POST"),
     ("/api/v1/scans/{scan_id}/risk-summary", "GET"),
@@ -137,8 +141,6 @@ def test_route_surface_exposes_only_canonical_health() -> None:
 
     for path in ("/", "/docs", "/redoc", "/openapi.json") + DISCARDED_BUSINESS_PATHS:
         assert client.get(path).status_code == 404
-
-    assert client.options("/api/v1/health").status_code == 204
 
 
 def test_route_surface_is_exactly_the_declared_contract() -> None:

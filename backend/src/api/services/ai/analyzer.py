@@ -13,9 +13,14 @@ from api.services.ai.providers import (
     ScanAnalysisProvider,
     supports_bounded_scan_analysis,
 )
-from api.services.ai.validation import validate_provider_child_analysis
+from api.services.ai.validation import (
+    AIAnalysisValidationError,
+    validate_provider_analysis,
+    validate_provider_child_analysis,
+)
 from api.services.ai.writing import (
     WritingStyleViolation,
+    lint_provider_analysis,
     lint_provider_child_analysis,
 )
 
@@ -41,7 +46,9 @@ def run_bounded_analysis(
         raise ValueError("child_findings must be positive")
     if not supports_bounded_scan_analysis(provider):
         analysis = provider.analyze_scan(context, language=language)
-        return analysis, AnalysisCoverage(
+        return validate_analysis_with_repair(
+            provider, context, analysis, language=language
+        ), AnalysisCoverage(
             analyzed_findings=len(context.top_findings),
             failed_findings=0,
             total_findings=len(context.top_findings),
@@ -55,7 +62,12 @@ def run_bounded_analysis(
         refs = [finding.finding_ref for finding in chunk.top_findings]
         try:
             child = _run_child(provider, chunk, language=language)
-        except (AIProviderError, WritingStyleViolation, ValueError):
+        except AIProviderError as exc:
+            if exc.code == "provider_rate_limited":
+                raise
+            failed_refs.extend(refs)
+            continue
+        except (WritingStyleViolation, ValueError):
             failed_refs.extend(refs)
             continue
         children.append(child.model_dump(mode="json"))
@@ -64,7 +76,9 @@ def run_bounded_analysis(
     synthesis = provider.synthesize_scan(
         context, children, tuple(failed_refs), language=language
     )
-    return synthesis, AnalysisCoverage(
+    return validate_analysis_with_repair(
+        provider, context, synthesis, language=language
+    ), AnalysisCoverage(
         analyzed_findings=analyzed,
         failed_findings=len(failed_refs),
         total_findings=len(context.top_findings),
@@ -94,6 +108,7 @@ def split_context(
             max_risk_score=context.max_risk_score,
             severity=context.severity,
             top_findings=selected,
+            evidence_summary=context.evidence_summary,
         )
         chunk._finding_ids_by_ref = {
             finding.finding_ref: context._finding_ids_by_ref[finding.finding_ref]
@@ -118,11 +133,56 @@ def _run_child(
         child = ProviderScanAIChildAnalysis.model_validate(child)
     try:
         child = validate_provider_child_analysis(context, child)
+        _validate_references(context, child)
         lint_provider_child_analysis(child)
-    except WritingStyleViolation as exc:
-        child = provider.repair_chunk(context, exc.codes, language=language)
+    except (WritingStyleViolation, AIAnalysisValidationError) as exc:
+        codes = exc.codes if isinstance(exc, WritingStyleViolation) else (str(exc),)
+        child = provider.repair_chunk(context, codes, language=language)
         if not isinstance(child, ProviderScanAIChildAnalysis):
             child = ProviderScanAIChildAnalysis.model_validate(child)
         child = validate_provider_child_analysis(context, child)
         lint_provider_child_analysis(child)
+    _validate_references(context, child)
     return child
+
+
+def validate_analysis_with_repair(
+    provider: ScanAnalysisProvider,
+    context: ScanAIContext,
+    analysis: ProviderScanAIAnalysis,
+    *,
+    language: str,
+) -> ProviderScanAIAnalysis:
+    """Repair an invalid provider result once, then accept it or fail."""
+    try:
+        return _validate_analysis(context, analysis)
+    except (AIAnalysisValidationError, WritingStyleViolation) as exc:
+        codes = exc.codes if isinstance(exc, WritingStyleViolation) else (str(exc),)
+        repaired = provider.repair_analysis(context, codes, language=language)
+        return _validate_analysis(context, repaired)
+
+
+def _validate_analysis(
+    context: ScanAIContext, analysis: ProviderScanAIAnalysis,
+) -> ProviderScanAIAnalysis:
+    normalized = validate_provider_analysis(context, analysis)
+    _validate_references(context, normalized)
+    lint_provider_analysis(normalized)
+    return normalized
+
+
+def _validate_references(
+    context: ScanAIContext,
+    analysis: ProviderScanAIAnalysis | ProviderScanAIChildAnalysis,
+) -> None:
+    allowed = {finding.finding_ref for finding in context.top_findings}
+    explained = [item.finding_ref for item in analysis.important_findings]
+    referenced = set(explained).union(
+        *(action.related_finding_refs for action in analysis.priority_actions)
+    )
+    if not referenced <= allowed:
+        raise AIAnalysisValidationError("analysis contains an unknown reference")
+    if len(explained) != len(set(explained)):
+        raise AIAnalysisValidationError(
+            "analysis contains duplicate finding references"
+        )

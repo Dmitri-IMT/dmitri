@@ -40,7 +40,13 @@ export interface paths {
          * @description Hardware agents submit completed scan results through this endpoint. Security v1 requires Ed25519-signed requests with the headers `X-Device-Id`, `X-Timestamp`, `X-Nonce`, `X-Body-SHA256`, and `X-Signature`. The server verifies the signature with the device's stored public key, rejects replay attempts, and returns 401 for invalid or expired signatures and 403 for revoked devices.
          */
         post: operations["ingestScan"];
-        delete?: never;
+        /**
+         * Delete every finished scan in the caller's organisation
+         * @description Admin only. Permanently deletes every finished scan and the data that belongs only to it.
+         *     Unfinished scans are skipped and counted in `skipped`. Machines that no remaining scan
+         *     observed are deleted too and counted in `machines_removed`. Writes one activity entry.
+         */
+        delete: operations["deleteAllScans"];
         /** CORS preflight for scans collection */
         options: operations["optionsScans"];
         head?: never;
@@ -63,7 +69,13 @@ export interface paths {
         get: operations["getScanById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete one finished scan
+         * @description Admin only. Permanently deletes the scan and the data that belongs only to it. Machines
+         *     that no remaining scan observed are deleted too. A later upload with the same `scan_id`
+         *     is refused. Writes one activity entry.
+         */
+        delete: operations["deleteScan"];
         /** CORS preflight for scan detail */
         options: operations["optionsScanById"];
         head?: never;
@@ -136,7 +148,7 @@ export interface paths {
         };
         /**
          * Read a scan report
-         * @description Returns a deterministic explained or technical report for a completed scan.
+         * @description Returns the explained or technical report data for a completed scan.
          */
         get: operations["getScanReport"];
         put?: never;
@@ -210,7 +222,7 @@ export interface paths {
         };
         /**
          * Download a scan report
-         * @description Downloads the explained or technical report as a PDF.
+         * @description Downloads the explained report as PDF or the technical report as raw JSON.
          */
         get: operations["downloadScanReport"];
         put?: never;
@@ -235,7 +247,13 @@ export interface paths {
         get: operations["listHosts"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete every machine in the caller's organisation
+         * @description Admin only. Permanently deletes every machine, its findings and its rows in old scans.
+         *     The scans stay. A machine found again by a later scan comes back as a new machine.
+         *     Writes one activity entry.
+         */
+        delete: operations["deleteAllHosts"];
         /** CORS preflight for hosts collection */
         options: operations["optionsHosts"];
         head?: never;
@@ -256,7 +274,13 @@ export interface paths {
         get: operations["getHostById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete one machine
+         * @description Admin only. Permanently deletes the machine, its findings and its rows in old scans.
+         *     The scans stay. A machine found again by a later scan comes back as a new machine.
+         *     Writes one activity entry.
+         */
+        delete: operations["deleteHost"];
         /** CORS preflight for host detail */
         options: operations["optionsHostById"];
         head?: never;
@@ -375,6 +399,7 @@ export interface paths {
          *     | `command` | backend → Pi | `AgentCommandFrame` |
          *     | `cancel` | backend → Pi | `AgentCancelFrame` |
          *     | `status` | Pi → backend | `AgentStatusFrame` |
+         *     | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
          *
          *     Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
@@ -1032,6 +1057,8 @@ export interface components {
             service?: string | null;
             source?: string | null;
             source_script?: string | null;
+            /** @default null */
+            issue_key: string | null;
             cve_id?: string | null;
             cvss_score?: number | null;
             severity: components["schemas"]["Severity"];
@@ -1042,6 +1069,13 @@ export interface components {
             /** @default [] */
             references: string[];
             unit_id?: number | null;
+            /** Evidence Observations */
+            evidence_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Evidence Truncated
+             * @default false
+             */
+            evidence_truncated: boolean;
         };
         /** CoverageObservationPayload */
         CoverageObservationPayload: {
@@ -1117,6 +1151,15 @@ export interface components {
             assessment_policy_version?: string | null;
             /** @default [] */
             exposures: components["schemas"]["ExposurePayload"][];
+            /** Finding Evidence Policy Version */
+            finding_evidence_policy_version?: string | null;
+            /** Finding Observations */
+            finding_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Finding Observations Truncated
+             * @default false
+             */
+            finding_observations_truncated: boolean;
         };
         ScanIngestAcceptedResponse: {
             /** @example scan received successfully */
@@ -1154,6 +1197,8 @@ export interface components {
             /** @description Machines discovered by this scan. Items reuse the ingest `HostPayload` shape; they gain a `host_id` under contract ask C9. */
             hosts: components["schemas"]["ScanHostView"][];
             findings: components["schemas"]["FindingRecord"][];
+            /** @description Latest progress snapshot while the scan is unfinished; final scan data is authoritative after ingest. */
+            progress?: components["schemas"]["ScanProgressRead"] | null;
             assessment_status: components["schemas"]["AssessmentStatus"];
             assessment_policy_version: string | null;
             exposures: components["schemas"]["ExposureRead"][];
@@ -1174,6 +1219,16 @@ export interface components {
             box_name?: string | null;
             duration?: number | null;
             terminated_by?: components["schemas"]["TerminatedBy"] | null;
+            /** Finding Evidence Policy Version */
+            finding_evidence_policy_version?: string | null;
+            /** Finding Observations */
+            finding_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Finding Observations Truncated
+             * @default false
+             */
+            finding_observations_truncated: boolean;
+            evidence_summary?: components["schemas"]["FindingEvidenceSummary"] | null;
         };
         TargetedToolCoverage: {
             tool: string;
@@ -1371,7 +1426,7 @@ export interface components {
             nspi_options?: components["schemas"]["NspiOptions"] | null;
         };
         /**
-         * @description **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+         * @description **Pi → backend.** Command lifecycle reports. Scan results are never sent on the socket — they go to
          *     `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
          *     here.
          */
@@ -1383,6 +1438,42 @@ export interface components {
             /** @enum {string} */
             status: "running" | "uploading" | "done" | "failed" | "cancelled";
             error_code?: string | null;
+        };
+        /**
+         * @description **Pi → backend.** One compact, sequenced progress snapshot for an active command. The full
+         *     scan payload is sent separately to `POST /api/v1/scans`.
+         */
+        AgentProgressFrame: {
+            /** @constant */
+            type: "progress";
+            /** Format: uuid */
+            command_id: string;
+            /** Format: uuid */
+            scan_id: string;
+            sequence: number;
+            progress: components["schemas"]["ScanProgressSnapshot"];
+        };
+        ScanProgressSnapshot: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+        };
+        ScanProgressRead: {
+            /** @enum {string} */
+            stage: "discovery" | "ports" | "deep_inspection" | "ot_inspection" | "targeted_assessment" | "normalization" | "uploading";
+            percent: number;
+            machines: number | null;
+            open_ports: number | null;
+            filtered_ports: number | null;
+            industrial_services: number | null;
+            vulnerabilities: number | null;
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description **Backend → Pi.** Requests that the Pi stop the active scan identified by `command_id`. */
         AgentCancelFrame: {
@@ -1414,6 +1505,14 @@ export interface components {
             /** @description Access token lifetime in seconds (~900 for 15 min). */
             expires_in: number;
         };
+        ScanDeletionResponse: {
+            deleted: number;
+            skipped: number;
+            machines_removed: number;
+        };
+        HostDeletionResponse: {
+            deleted: number;
+        };
         UserProfileResponse: {
             /** Format: uuid */
             user_id: string;
@@ -1421,6 +1520,7 @@ export interface components {
             email: string;
             /** @enum {string} */
             role: "admin" | "viewer";
+            org_name: string;
         };
         OrgMember: {
             /** Format: uuid */
@@ -1508,6 +1608,7 @@ export interface components {
             service?: string | null;
             source?: string | null;
             source_script?: string | null;
+            issue_key?: string | null;
             cve_id?: string | null;
             cvss_score?: number | null;
             severity: components["schemas"]["Severity"];
@@ -1524,11 +1625,31 @@ export interface components {
             first_seen_at?: string | null;
             last_seen_at?: string | null;
             fixed_at?: string | null;
+            /**
+             * Detection Method
+             * @default unknown
+             * @enum {string}
+             */
+            detection_method: "version_correlation" | "configuration_observation" | "specific_check" | "textual_reference" | "unknown";
+            /**
+             * Evidence Status
+             * @default unknown
+             * @enum {string}
+             */
+            evidence_status: "supported" | "inconclusive" | "conflicting" | "unknown";
+            /** Evidence Observations */
+            evidence_observations?: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /**
+             * Evidence Truncated
+             * @default false
+             */
+            evidence_truncated: boolean;
         };
         FindingListResponse: {
             data: components["schemas"]["FindingRecord"][];
             total: number;
             page: number;
+            evidence_summary?: components["schemas"]["FindingEvidenceSummary"] | null;
         };
         SeverityBreakdown: {
             critical: number;
@@ -1575,20 +1696,347 @@ export interface components {
         ScanAIAnalysisResponse: components["schemas"]["ScanAIAnalysisUnavailable"] | components["schemas"]["ScanAIAnalysisNotRequested"] | components["schemas"]["ScanAIAnalysisQueued"] | components["schemas"]["ScanAIAnalysisFailed"] | components["schemas"]["ScanAIAnalysisCompleted"];
         /** @enum {string} */
         ReportKind: "explained" | "technical";
-        ScanReportResponse: {
-            /** Format: uuid */
-            scan_id: string;
-            kind: components["schemas"]["ReportKind"];
-            /** @enum {string} */
-            language: "en" | "pt-BR" | "ru";
-            /** Format: date-time */
-            generated_at: string;
-            filename: string;
-            /** @enum {string} */
-            content_type: "application/pdf";
-            sections: {
-                [key: string]: unknown;
+        /** ExplainedReportSections */
+        ExplainedReportSections: {
+            /** Version */
+            version: string;
+            /** Devices */
+            devices: components["schemas"]["ReportDevice"][];
+            /** Issue Groups */
+            issue_groups: components["schemas"]["ReportIssueGroup"][];
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
             };
+            /** Evidence Counts */
+            evidence_counts: {
+                [key: string]: number;
+            };
+            evidence_summary: components["schemas"]["FindingEvidenceSummary"];
+            /** Finding Observations */
+            finding_observations: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /** Finding Observations Truncated */
+            finding_observations_truncated: boolean;
+            /** Service Counts */
+            service_counts: {
+                [key: string]: number;
+            };
+            /** Affected Hosts */
+            affected_hosts: number;
+            /** Hosts Without Findings */
+            hosts_without_findings: number;
+            /** Unassigned Findings */
+            unassigned_findings: number;
+            /** Evidence Completeness */
+            evidence_completeness: string;
+            /** Checks Completed */
+            checks_completed: number;
+            /** Checks Incomplete */
+            checks_incomplete: number;
+            /** Coverage Recorded */
+            coverage_recorded: boolean;
+            /** Enrichment */
+            enrichment: {
+                [key: string]: number;
+            };
+            /** Appendix */
+            appendix: components["schemas"]["ReportFinding"][];
+            /** Sources */
+            sources: components["schemas"]["ReportSource"][];
+            /**
+             * Scan Timestamp
+             * Format: date-time
+             */
+            scan_timestamp: string;
+            /** Scope */
+            scope: string;
+            /** Scan Mode */
+            scan_mode: string;
+            /** Overview */
+            overview: string;
+            /** Ai Explanation Available */
+            ai_explanation_available: boolean;
+            /** Actions */
+            actions: components["schemas"]["ReportAction"][];
+            /** Method */
+            method: string;
+            /** Limitations */
+            limitations: string[];
+        };
+        /** ReportAction */
+        ReportAction: {
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "immediate" | "high" | "medium" | "low";
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Related Finding Ids */
+            related_finding_ids: string[];
+        };
+        /** ReportAdvisoryNote */
+        ReportAdvisoryNote: {
+            /** Cve Id */
+            cve_id: string;
+            /** Explanation */
+            explanation: string;
+            /** Url */
+            url: string;
+        };
+        /** ReportDevice */
+        ReportDevice: {
+            /** Address */
+            address: string;
+            /** Hostname */
+            hostname: string;
+            /** Display Name */
+            display_name: string;
+            /** Manufacturer */
+            manufacturer: string | null;
+            /** Model */
+            model: string | null;
+            /** Identity Confidence */
+            identity_confidence: string;
+            /** Identity Evidence */
+            identity_evidence: string[];
+            /** Identity Conflicts */
+            identity_conflicts: string[];
+            /** Machine Type */
+            machine_type: string;
+            /** Os */
+            os: string | null;
+            /** Finding Count */
+            finding_count: number;
+            /** Correlation Count */
+            correlation_count: number;
+            /** Observation Count */
+            observation_count: number;
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
+            };
+            /** Severity */
+            severity: string | null;
+            /** Open Ports */
+            open_ports: number;
+            /** Groups */
+            groups: string[];
+            /** Review Exposures */
+            review_exposures: number;
+            /** Checks Completed */
+            checks_completed: number;
+            /** Checks Incomplete */
+            checks_incomplete: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "review" | "no_alerts";
+            /** Services */
+            services: components["schemas"]["ReportService"][];
+            /** Note */
+            note: string;
+            /** Unreadable Fields */
+            unreadable_fields: string[];
+        };
+        /** ReportFinding */
+        ReportFinding: {
+            /** Detection Method */
+            detection_method: string;
+            /** Evidence Status */
+            evidence_status: string;
+            /** Confidence */
+            confidence: string | null;
+            /** Evidence Truncated */
+            evidence_truncated: boolean;
+            /** Evidence Observations */
+            evidence_observations: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /** Semantic Limit */
+            semantic_limit: string | null;
+            /** Finding Id */
+            finding_id: string;
+            /** Group */
+            group: string;
+            /** Address */
+            address: string | null;
+            /** Port */
+            port: number | null;
+            /** Protocol */
+            protocol: string | null;
+            /** Title */
+            title: string;
+            /** Severity */
+            severity: string;
+            /** Basis */
+            basis: string;
+            /** Advisory Effects */
+            advisory_effects: string[];
+            /** Advisory Description */
+            advisory_description: string | null;
+            /** Advisory Fetched At */
+            advisory_fetched_at: string | null;
+            /** Reference */
+            reference: string | null;
+            /** Description */
+            description: string;
+            /** Recommendation */
+            recommendation: string;
+            /** Evidence */
+            evidence: string;
+            /** Plain Language Explanation */
+            plain_language_explanation: string | null;
+            /** Why It Matters */
+            why_it_matters: string | null;
+            /** Uncertainty */
+            uncertainty: string | null;
+        };
+        /** ReportIssueGroup */
+        ReportIssueGroup: {
+            /** Detection Method */
+            detection_method: string;
+            /** Evidence Status */
+            evidence_status: string;
+            /** Confidence */
+            confidence: string | null;
+            /** Evidence Truncated */
+            evidence_truncated: boolean;
+            /** Evidence Observations */
+            evidence_observations: components["schemas"]["FindingEvidenceObservationPayload"][];
+            /** Id */
+            id: string;
+            /** Address */
+            address: string | null;
+            /** Hostname */
+            hostname: string | null;
+            /** Category */
+            category: string;
+            /** Family */
+            family: string;
+            /** Basis */
+            basis: string;
+            /** Title */
+            title: string;
+            /** Port */
+            port: number | null;
+            /** Protocol */
+            protocol: string | null;
+            /** Service */
+            service: string | null;
+            /** Version */
+            version: string | null;
+            /** Finding Count */
+            finding_count: number;
+            /** Severity */
+            severity: string | null;
+            /** Severity Counts */
+            severity_counts: {
+                [key: string]: number;
+            };
+            /** Cves */
+            cves: string[];
+            /** Purpose */
+            purpose: string;
+            /** Meaning */
+            meaning: string;
+            /** Impact */
+            impact: string;
+            /** Conditions */
+            conditions: string;
+            /** Uncertainty */
+            uncertainty: string;
+            /** Steps */
+            steps: string[];
+            /** Verify */
+            verify: string;
+            /** Recorded Observations */
+            recorded_observations: components["schemas"]["ReportObservation"][];
+            /** Advisory Notes */
+            advisory_notes: components["schemas"]["ReportAdvisoryNote"][];
+        };
+        /** ReportObservation */
+        ReportObservation: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Evidence */
+            evidence: string;
+            /** Recommendation */
+            recommendation: string;
+        };
+        /** ReportService */
+        ReportService: {
+            /** Port */
+            port: number;
+            /** Protocol */
+            protocol: string;
+            /** Service */
+            service: string;
+            /** Version */
+            version: string | null;
+            /** Family */
+            family: string;
+            /** Purpose */
+            purpose: string;
+            /** Finding Count */
+            finding_count: number;
+        };
+        /** ReportSource */
+        ReportSource: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** TechnicalReportSections */
+        TechnicalReportSections: {
+            /**
+             * Scan Timestamp
+             * Format: date-time
+             */
+            scan_timestamp: string;
+            /** Scope */
+            scope: string;
+            /** Scan Mode */
+            scan_mode: string;
+            scan: components["schemas"]["ScanDetailResponse"];
+            risk_summary: components["schemas"]["ScanRiskSummaryResponse"];
+            ai_analysis: components["schemas"]["ScanAIAnalysisCompleted"] | null;
+        };
+        /** ScanReportResponse */
+        ScanReportResponse: {
+            /**
+             * Scan Id
+             * Format: uuid
+             */
+            scan_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "explained" | "technical";
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "pt-BR" | "ru";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "application/pdf" | "application/json";
+            /** Sections */
+            sections: components["schemas"]["ExplainedReportSections"] | components["schemas"]["TechnicalReportSections"];
         };
         AIContextChatRequest: {
             question: string;
@@ -1736,7 +2184,7 @@ export interface components {
         /** @enum {string} */
         HomeNoticeKind: "failed_scan";
         /** @enum {string} */
-        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "scan_cancelled" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted";
+        ActivityKind: "scan_started" | "scan_finished" | "scan_failed" | "scan_cancelled" | "machine_first_seen" | "role_changed" | "member_invited" | "invite_revoked" | "member_removed" | "account_deleted" | "scans_deleted" | "machines_deleted";
         HomeEvent: {
             kind: components["schemas"]["HomeEventKind"];
             text: string;
@@ -1791,6 +2239,83 @@ export interface components {
             code: string;
             message: string;
             details: components["schemas"]["ErrorDetail"];
+        };
+        /** FindingEvidenceObservationPayload */
+        FindingEvidenceObservationPayload: {
+            /** Ip */
+            ip?: string | null;
+            /** Port */
+            port?: number | null;
+            /** Protocol */
+            protocol?: ("tcp" | "udp") | null;
+            /** Unit Id */
+            unit_id?: number | null;
+            /** Condition Key */
+            condition_key: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "version_correlation" | "configuration_observation" | "specific_check" | "textual_reference" | "unknown";
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "positive" | "negative" | "inconclusive";
+            /** Source */
+            source: string;
+            /** Source Script */
+            source_script?: string | null;
+            /** Rule Id */
+            rule_id: string;
+            /** Rule Version */
+            rule_version: string;
+            /** Evidence */
+            evidence: string;
+            /** Facts */
+            facts?: {
+                [key: string]: string | number | boolean;
+            };
+        };
+        /** FindingEvidenceMethodCounts */
+        FindingEvidenceMethodCounts: {
+            /** Version Correlation */
+            version_correlation: number;
+            /** Configuration Observation */
+            configuration_observation: number;
+            /** Specific Check */
+            specific_check: number;
+            /** Textual Reference */
+            textual_reference: number;
+            /** Unknown */
+            unknown: number;
+        };
+        /** FindingEvidenceConfidenceCounts */
+        FindingEvidenceConfidenceCounts: {
+            /** Tentative */
+            tentative: number;
+            /** Probable */
+            probable: number;
+            /** Confirmed */
+            confirmed: number;
+            /** Unknown */
+            unknown: number;
+        };
+        /** FindingEvidenceSummary */
+        FindingEvidenceSummary: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "scan" | "filtered_findings";
+            /** Total Records */
+            total_records: number;
+            by_method: components["schemas"]["FindingEvidenceMethodCounts"];
+            by_confidence: components["schemas"]["FindingEvidenceConfidenceCounts"];
+            /** Conflicting Records */
+            conflicting_records: number;
+            /** Demonstrated Records */
+            demonstrated_records: number;
         };
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
@@ -2148,6 +2673,20 @@ export interface components {
                 };
             };
         };
+        /** @description The scan has not finished. Stop it first, then delete it. The `code` is pinned. */
+        ScanRunningConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"] & {
+                    error: {
+                        /** @enum {unknown} */
+                        code: "scan_running";
+                    };
+                };
+            };
+        };
         /**
          * @description The role change conflicts with the organisation's current state: an admin targeted their
          *     own account, or demoting the target would leave the organisation without an admin. The
@@ -2381,6 +2920,33 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    deleteAllScans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scans deleted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanDeletionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     optionsScans: {
         parameters: {
             query?: never;
@@ -2421,6 +2987,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of the scan. */
+                scan_id: components["parameters"]["ScanId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan deleted. The body is empty. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Unknown and foreign-organisation scans are reported identically. */
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ScanRunningConflict"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -2712,7 +3309,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Downloadable PDF report. */
+            /** @description Downloadable PDF report or raw JSON report. */
             200: {
                 headers: {
                     "Content-Disposition"?: string;
@@ -2720,6 +3317,7 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": string;
+                    "application/json": string;
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2775,6 +3373,33 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    deleteAllHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Machines deleted. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostDeletionResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     optionsHosts: {
         parameters: {
             query?: never;
@@ -2814,6 +3439,36 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deleteHost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backend identifier of a discovered host. */
+                host_id: components["parameters"]["HostId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Machine deleted. The body is empty. */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["X-Request-Id"];
+                    "Access-Control-Allow-Origin": components["headers"]["Access-Control-Allow-Origin"];
+                    "Access-Control-Allow-Credentials": components["headers"]["Access-Control-Allow-Credentials"];
+                    Vary: components["headers"]["Vary-Origin"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Unknown and foreign-organisation machines are reported identically. */
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };

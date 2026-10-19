@@ -209,7 +209,10 @@ def test_live_fence_privileges(postgres_engine: Engine) -> None:
                 assert _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )
-            for privilege in ("DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+            assert _has_privilege(
+                connection, "dmitri_runtime", f"public.{table}", "DELETE"
+            ) == (table == "commands")
+            for privilege in ("TRUNCATE", "REFERENCES", "TRIGGER"):
                 assert not _has_privilege(
                     connection, "dmitri_runtime", f"public.{table}", privilege
                 )

@@ -192,6 +192,10 @@ def _parse(
                 "medium",
                 "Disable null sessions and restrict unauthenticated SMB/RPC access.",
                 "enum4linux-ng: null session confirmed",
+                method="specific_check",
+                result="positive",
+                rule_id="targeted:enum4linux-ng-session",
+                facts={"session_type": "null", "accepted": True},
             )
         )
     if has_guest:
@@ -203,6 +207,10 @@ def _parse(
                 "medium",
                 "Disable guest access and require authenticated SMB sessions.",
                 "enum4linux-ng: guest session confirmed",
+                method="specific_check",
+                result="positive",
+                rule_id="targeted:enum4linux-ng-session",
+                facts={"session_type": "guest", "accepted": True},
             )
         )
     for row in share_rows:
@@ -227,6 +235,10 @@ def _parse(
                     sanitize_evidence(
                         f"enum4linux-ng: share={name}; mapping=ok; listing=ok"
                     ),
+                    method="unknown",
+                    result="inconclusive",
+                    rule_id="targeted:enum4linux-ng-unsupported",
+                    facts={"share": name, "mapping": True, "listing": True},
                 )
             )
     account_count = _account_count_alias(users, ("users", "user_accounts", "accounts"))
@@ -240,6 +252,13 @@ def _parse(
                 "medium",
                 "Restrict account and group enumeration to authenticated administrators.",
                 f"enum4linux-ng: users={min(account_count, 256)}; groups={min(group_count, 256)}",
+                method="unknown",
+                result="inconclusive",
+                rule_id="targeted:enum4linux-ng-unsupported",
+                facts={
+                    "users": min(account_count, 256),
+                    "groups": min(group_count, 256),
+                },
             )
         )
     if isinstance(policy, Mapping):
@@ -260,6 +279,10 @@ def _parse(
                         "high",
                         "Disable cleartext password storage and rotate affected credentials.",
                         "enum4linux-ng: cleartext password storage enabled",
+                        method="unknown",
+                        result="inconclusive",
+                        rule_id="targeted:enum4linux-ng-unsupported",
+                        facts={normalized: value},
                     )
                 )
             elif normalized in {
@@ -285,6 +308,10 @@ def _parse(
                             "medium",
                             "Set the minimum password length to at least eight characters.",
                             f"enum4linux-ng: minimum password length={minimum_length}",
+                            method="unknown",
+                            result="inconclusive",
+                            rule_id="targeted:enum4linux-ng-unsupported",
+                            facts={normalized: minimum_length},
                         )
                     )
             elif (
@@ -305,6 +332,10 @@ def _parse(
                         "medium",
                         "Enable password complexity requirements.",
                         "enum4linux-ng: password complexity disabled",
+                        method="unknown",
+                        result="inconclusive",
+                        rule_id="targeted:enum4linux-ng-unsupported",
+                        facts={normalized: value},
                     )
                 )
             elif normalized in {"lockout_threshold", "account_lockout_threshold"}:
@@ -321,6 +352,10 @@ def _parse(
                             "low",
                             "Configure a nonzero account lockout threshold with appropriate recovery controls.",
                             "enum4linux-ng: lockout threshold=0",
+                            method="unknown",
+                            result="inconclusive",
+                            rule_id="targeted:enum4linux-ng-unsupported",
+                            facts={normalized: 0},
                         )
                     )
     if not issues and any(

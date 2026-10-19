@@ -3,7 +3,97 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-17
+
+* **Creation**: Added the hardware-agent provisioning code map for HTTPS agent registration,
+  local key handling and atomic configuration writes.
+* **Update**: Documented finding-evidence policy v1, bounded finding and standalone observations,
+  local evidence categories, serializer/reconciliation identity, and partial-result propagation.
+  The local TUI now distinguishes finding records from evidence status and keeps standalone checks
+  separate; targeted tool witnesses and the synthetic offline corpus limitations are recorded.
+  Corrected workspace documentation to reflect persistence before daemon upload.
+
+## 2026-10-16
+
+* **Update**: Attack-surface tables now explain row expansion, show localized service/review counts
+  in scan detail, and translate endpoint, service role, confidence, evidence, and related-finding
+  labels in English, Brazilian Portuguese, and Russian. Host detail keeps its existing count.
+* **Update**: Service-targeted findings now use severity groups like standard findings and
+  show the reporting tool below each title. Section copy, severity controls, finding table
+  labels, row actions and finding details are translated in English, Brazilian Portuguese
+  and Russian.
+* **Update**: Extensive targeted assessments now budget for the selected capped plan,
+  preserving individual timeouts and explicit overall deadlines. Other modes retain their
+  budgets. The frontend and Foundations duration text now allows for runs over an hour.
+* **Update**: ffuf's native maximum-runtime stop is now an incomplete unit, including when
+  a valid partial report and exit zero are returned. Existing validation of partial
+  candidates and precedence of cancellation and deadlines are preserved.
+* **Update**: Nikto host error-limit aborts and testssl runtime errors no longer count as
+  completed checks. Partial affirmative evidence survives; testssl runtime error records
+  never become vulnerabilities. Removed the printer exclusion at the operator's request.
+  Targeted documentation distinguishes ineligible services from skipped checks and records
+  the existing serial stage budgets.
+* **Update**: Targeted tools now receive isolated writable configuration under systemd;
+  ffuf startup diagnostics and Nikto stdout time limits are preserved. Cancellation no
+  longer reports a stage-budget expiry. Per-unit sanitized diagnostics reach the journal.
+
+## 2026-10-15
+
+* **Creation**: `hardware-agent/targeted.md` documents native ssh-audit 3.9.0 parsing,
+  per-tool coverage gaps and pinned Raspberry Pi tool provisioning.
+* **Update**: `hardware-agent/index.md` links the targeted stage; `docs/DEV-SETUP.md`
+  explains package-only prerequisites and the Pi provisioner's tool verification.
+## 2026-10-14
+
+* **Update**: PR #165 review fixes. Inventory rebuild now owns identity, seen times, counts,
+  ports, findings and machine type in one oldest-to-newest walk shared by scan deletion and MAC
+  repair. Scan deletion explicitly removes AI analyses, with a runtime DELETE grant in
+  `20261012_40`. Updated `backend/services.md` and `backend/migrations.md`.
+
+## 2026-10-13
+
+* **Update**: DMI-186 admin scan and machine deletion. New `services/deletion.py`, `schemas/deletion.py`,
+  `DeletedScanRecord`, migration `20261012_40`, four `DELETE` routes, `org_name` on `GET /users/me`,
+  and the `scans_deleted` / `machines_deleted` activity kinds; ingest refuses a deleted `scan_id`.
+  Frontend gained `ScanDelete`, `HostDelete`, `DeleteDataPanel`, `useRefreshAfterDelete` and the
+  delete API calls. Updated `backend/routers.md`, `backend/services.md`, `backend/models.md`,
+  `backend/migrations.md`, `backend/schemas.md`, `frontend/api.md`, `frontend/screens.md`,
+  `frontend/host-detail.md`, `contracts.md`, and the `index.md` listings.
+
+## 2026-10-12
+
+* **Update**: `ScanPartialWarning` is a plain warning line with no dialog; the dialog-only message
+  keys were removed from the three catalogs. `targeted_coverage` is still returned by the API but no
+  screen renders it. Updated `frontend/scan-partial-warning.md`, `frontend/screens.md`,
+  `frontend/index.md`.
+* **Update**: The AI writing instructions and the `retired_vocabulary` repair guidance name every
+  retired word and its replacement again, after English overviews failed style lint. Fixed stale
+  `groq.py` line references and the PDF font note, which now lists the macOS Arial path.
+  Updated `backend/ai.md`.
+
+## 2026-10-06
+
+* **Creation**: `backend/reports.md` maps the educational report assembly, localized copy,
+  PDF chapters and navigation, count charts, conditional incident diagram and full finding register.
+* **Update**: Explained reports now include every device, distinguish observations from CVE
+  associations, describe conditional service impacts and correction checks, and read local advisory
+  cache data without new requests. Zero-alert devices retain coverage caveats. Updated backend
+  index, services and AI links; documented primary security references in
+  `docs/research/scan-report-design-references.md`. Existing report routes and setup commands remain valid.
+* **Update**: Added a clickable table of contents with page numbers for report chapters, all devices
+  and every explained group. Stable PDF bookmarks let its multi-pass build resolve final page numbers.
+  Technical PDF downloads keep their existing single-pass content.
+
 ## 2026-10-02
+
+* **Update**: Live scan progress now travels as compact, sequenced WebSocket snapshots from the
+  Pi, is persisted separately from result metadata, and appears on unfinished scan details with
+  nullable counts and stage-based progress. The final normalized payload corrects interim counts
+  before upload. Touched: `backend/schemas.md`, `backend/services.md`, `backend/models.md`,
+  `backend/migrations.md`, `hardware-agent/command-channel.md`, `hardware-agent/daemon.md`,
+  `hardware-agent/scanner/progress.md`, `hardware-agent/scanner/stages.md`,
+  `hardware-agent/scanner/live-progress.md`,
+  `frontend/screens.md`.
 
 * **Update**: PR #161 Cursor review. Ingest host identity is now a key rule
   (`scan_identity_key`, `_split_macs`, `retarget_split_mac_hosts`) with one upsert loop and no
@@ -135,6 +225,23 @@ The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code ch
   to `"5"`. Touched: `hardware-agent/daemon.md`, `backend/services.md`, `backend/ai.md`,
   `backend/schemas.md`, `frontend/api.md`, `frontend/devices-screen.md`, `frontend/screens.md`,
   `frontend/scan-status.md`.
+
+## 2026-09-29
+
+* **Update**: Explained scan PDFs now combine a plain-language summary, scan metrics, vector bar
+  charts for severity and affected equipment, prioritized finding details, methodology and scan
+  limitations in English, Portuguese and Russian. Technical report downloads remain available.
+  Touched: `backend/services.md`.
+
+* **Update**: Scan report downloads failed with HTTP 500 because the API image lacked the Unicode
+  font required by PDF rendering. Railway Railpack and the local simulator now install DejaVu Sans;
+  documented the runtime requirement. Touched: `backend/services.md`.
+
+* **Update**: Scan analysis prompt and repair behavior. The worker uses the requested language,
+  repairs structured validation and style failures with codes rather than rejected prose, and
+  completes missing KEV actions deterministically before rechecking grounding and style. Failed
+  retries use the current prompt and writing-skill versions. Documented the active single-request
+  analysis path and retained bounded-analysis helper. Touched: `backend/ai.md`.
 
 ## 2026-09-28
 

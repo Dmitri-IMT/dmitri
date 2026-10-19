@@ -46,8 +46,18 @@ class ScanRecord(SQLModel, table=True):
     scan_mode: str
     status: str = Field(default="completed")
     metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    progress_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    progress_seq: int = Field(default=0)
+    progress_updated_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     coverage_json: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON)
+    )
+    finding_evidence_policy_version: str | None = None
+    finding_observations_json: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
+    finding_observations_truncated: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
     )
     assessment_policy_version: str | None = None
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
@@ -307,6 +317,17 @@ class FindingRecord(SQLModel, table=True):
     cvss_score: float | None = None
     severity: str
     confidence: str = Field(default="tentative", index=True)
+    finding_evidence_policy_version: str | None = None
+    evidence_observations_json: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSON(none_as_null=True))
+    )
+    evidence_truncated: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
+    )
+    issue_key: str | None = Field(default=None, max_length=256)
+    issue_key_ambiguous: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
+    )
     title: str
     description: str
     recommendation: str
@@ -480,3 +501,11 @@ class AIChatMessageRecord(SQLModel, table=True):
         default_factory=list, sa_column=Column(JSON)
     )
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
+
+
+class DeletedScanRecord(SQLModel, table=True):
+    __tablename__ = "deleted_scans"
+
+    scan_id: UUID = Field(primary_key=True)
+    org_id: UUID = Field(index=True, foreign_key="orgs.id")
+    deleted_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)

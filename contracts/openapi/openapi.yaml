@@ -205,6 +205,39 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - scans
+      summary: Delete every finished scan in the caller's organisation
+      description: |
+        Admin only. Permanently deletes every finished scan and the data that belongs only to it.
+        Unfinished scans are skipped and counted in `skipped`. Machines that no remaining scan
+        observed are deleted too and counted in `machines_removed`. Writes one activity entry.
+      operationId: deleteAllScans
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Scans deleted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanDeletionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - scans
@@ -265,6 +298,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - scans
+      summary: Delete one finished scan
+      description: |
+        Admin only. Permanently deletes the scan and the data that belongs only to it. Machines
+        that no remaining scan observed are deleted too. A later upload with the same `scan_id`
+        is refused. Writes one activity entry.
+      operationId: deleteScan
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ScanId'
+      responses:
+        '204':
+          description: Scan deleted. The body is empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Unknown and foreign-organisation scans are reported identically.
+        '409':
+          $ref: '#/components/responses/ScanRunningConflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -421,7 +490,7 @@ paths:
       tags:
         - scans
       summary: Read a scan report
-      description: Returns a deterministic explained or technical report for a completed scan.
+      description: Returns the explained or technical report data for a completed scan.
       operationId: getScanReport
       security:
         - FrontendBearerAuth: []
@@ -567,7 +636,7 @@ paths:
       tags:
         - scans
       summary: Download a scan report
-      description: Downloads the explained or technical report as a PDF.
+      description: Downloads the explained report as PDF or the technical report as raw JSON.
       operationId: downloadScanReport
       security:
         - FrontendBearerAuth: []
@@ -587,13 +656,17 @@ paths:
             default: en
       responses:
         '200':
-          description: Downloadable PDF report.
+          description: Downloadable PDF report or raw JSON report.
           headers:
             Content-Disposition:
               schema:
                 type: string
           content:
             application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/json:
               schema:
                 type: string
                 format: binary
@@ -662,6 +735,39 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - hosts
+      summary: Delete every machine in the caller's organisation
+      description: |
+        Admin only. Permanently deletes every machine, its findings and its rows in old scans.
+        The scans stay. A machine found again by a later scan comes back as a new machine.
+        Writes one activity entry.
+      operationId: deleteAllHosts
+      security:
+        - FrontendBearerAuth: []
+      responses:
+        '200':
+          description: Machines deleted.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostDeletionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     options:
       tags:
         - hosts
@@ -705,6 +811,40 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - hosts
+      summary: Delete one machine
+      description: |
+        Admin only. Permanently deletes the machine, its findings and its rows in old scans.
+        The scans stay. A machine found again by a later scan comes back as a new machine.
+        Writes one activity entry.
+      operationId: deleteHost
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HostId'
+      responses:
+        '204':
+          description: Machine deleted. The body is empty.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+            Access-Control-Allow-Origin:
+              $ref: '#/components/headers/Access-Control-Allow-Origin'
+            Access-Control-Allow-Credentials:
+              $ref: '#/components/headers/Access-Control-Allow-Credentials'
+            Vary:
+              $ref: '#/components/headers/Vary-Origin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+          description: Unknown and foreign-organisation machines are reported identically.
         '500':
           $ref: '#/components/responses/InternalServerError'
     options:
@@ -941,6 +1081,7 @@ paths:
         | `command` | backend → Pi | `AgentCommandFrame` |
         | `cancel` | backend → Pi | `AgentCancelFrame` |
         | `status` | Pi → backend | `AgentStatusFrame` |
+        | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
         | `error` | backend → Pi | `AgentErrorFrame` |
 
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
@@ -2586,6 +2727,33 @@ components:
                   code: self_target
                   message: Remove your account from Settings instead.
                   details: {}
+    ScanRunningConflict:
+      description: |
+        The scan has not finished. Stop it first, then delete it. The `code` is pinned.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: object
+                    required:
+                      - code
+                    properties:
+                      code:
+                        enum:
+                          - scan_running
+          examples:
+            scanRunning:
+              value:
+                error:
+                  code: scan_running
+                  message: Stop the scan before you delete it.
+                  details: {}
     RoleChangeConflict:
       description: |
         The role change conflicts with the organisation's current state: an admin targeted their
@@ -3568,6 +3736,13 @@ components:
           type:
             - string
             - 'null'
+        issue_key:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 256
+          default: null
         cve_id:
           type:
             - string
@@ -3605,6 +3780,16 @@ components:
             - 'null'
           minimum: 0
           maximum: 255
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 16
+          title: Evidence Observations
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+          default: false
     CoverageObservationPayload:
       properties:
         observation_key:
@@ -3795,6 +3980,23 @@ components:
           items:
             $ref: '#/components/schemas/ExposurePayload'
           default: []
+        finding_evidence_policy_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Finding Evidence Policy Version
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 512
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
+          default: false
     ScanIngestAcceptedResponse:
       type: object
       additionalProperties: false
@@ -3911,6 +4113,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FindingRecord'
+        progress:
+          anyOf:
+            - $ref: '#/components/schemas/ScanProgressRead'
+            - type: 'null'
+          description: Latest progress snapshot while the scan is unfinished; final scan data is authoritative after ingest.
         assessment_status:
           $ref: '#/components/schemas/AssessmentStatus'
         assessment_policy_version:
@@ -3979,6 +4186,27 @@ components:
           anyOf:
             - $ref: '#/components/schemas/TerminatedBy'
             - type: 'null'
+        finding_evidence_policy_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Finding Evidence Policy Version
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 512
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
+          default: false
+        evidence_summary:
+          anyOf:
+          - $ref: '#/components/schemas/FindingEvidenceSummary'
+          - type: 'null'
     TargetedToolCoverage:
       type: object
       additionalProperties: false
@@ -4539,7 +4767,7 @@ components:
       type: object
       additionalProperties: false
       description: |
-        **Pi → backend.** Progress reports. Scan results are never sent on the socket — they go to
+        **Pi → backend.** Command lifecycle reports. Scan results are never sent on the socket — they go to
         `POST /api/v1/scans`. `queued`, `delivered` and `expired` are backend-owned and never appear
         here.
       required:
@@ -4565,6 +4793,139 @@ components:
           type:
             - string
             - 'null'
+    AgentProgressFrame:
+      type: object
+      additionalProperties: false
+      description: |
+        **Pi → backend.** One compact, sequenced progress snapshot for an active command. The full
+        scan payload is sent separately to `POST /api/v1/scans`.
+      required:
+        - type
+        - command_id
+        - scan_id
+        - sequence
+        - progress
+      properties:
+        type:
+          type: string
+          const: progress
+        command_id:
+          type: string
+          format: uuid
+        scan_id:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+          minimum: 1
+        progress:
+          $ref: '#/components/schemas/ScanProgressSnapshot'
+    ScanProgressSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - percent
+        - machines
+        - open_ports
+        - filtered_ports
+        - industrial_services
+        - vulnerabilities
+      properties:
+        stage:
+          type: string
+          enum:
+            - discovery
+            - ports
+            - deep_inspection
+            - ot_inspection
+            - targeted_assessment
+            - normalization
+            - uploading
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 99
+        machines:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        open_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        filtered_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        industrial_services:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        vulnerabilities:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+    ScanProgressRead:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - percent
+        - machines
+        - open_ports
+        - filtered_ports
+        - industrial_services
+        - vulnerabilities
+        - updated_at
+      properties:
+        stage:
+          type: string
+          enum:
+            - discovery
+            - ports
+            - deep_inspection
+            - ot_inspection
+            - targeted_assessment
+            - normalization
+            - uploading
+        percent:
+          type: integer
+          minimum: 0
+          maximum: 99
+        machines:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        open_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        filtered_ports:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        industrial_services:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        vulnerabilities:
+          anyOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        updated_at:
+          type: string
+          format: date-time
     AgentCancelFrame:
       type: object
       additionalProperties: false
@@ -4627,6 +4988,28 @@ components:
         expires_in:
           type: integer
           description: Access token lifetime in seconds (~900 for 15 min).
+    ScanDeletionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - deleted
+        - skipped
+        - machines_removed
+      properties:
+        deleted:
+          type: integer
+        skipped:
+          type: integer
+        machines_removed:
+          type: integer
+    HostDeletionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - deleted
+      properties:
+        deleted:
+          type: integer
     UserProfileResponse:
       type: object
       additionalProperties: false
@@ -4634,6 +5017,7 @@ components:
         - user_id
         - email
         - role
+        - org_name
       properties:
         user_id:
           type: string
@@ -4646,6 +5030,8 @@ components:
           enum:
             - admin
             - viewer
+        org_name:
+          type: string
     OrgMember:
       type: object
       additionalProperties: false
@@ -4905,6 +5291,10 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        issue_key:
+          anyOf:
+            - type: string
+            - type: 'null'
         cve_id:
           anyOf:
             - type: string
@@ -4962,6 +5352,35 @@ components:
             - type: string
               format: date-time
             - type: 'null'
+        detection_method:
+          type: string
+          enum:
+          - version_correlation
+          - configuration_observation
+          - specific_check
+          - textual_reference
+          - unknown
+          title: Detection Method
+          default: unknown
+        evidence_status:
+          type: string
+          enum:
+          - supported
+          - inconclusive
+          - conflicting
+          - unknown
+          title: Evidence Status
+          default: unknown
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 16
+          title: Evidence Observations
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+          default: false
     FindingListResponse:
       type: object
       additionalProperties: false
@@ -4980,6 +5399,10 @@ components:
         page:
           type: integer
           minimum: 1
+        evidence_summary:
+          anyOf:
+          - $ref: '#/components/schemas/FindingEvidenceSummary'
+          - type: 'null'
     SeverityBreakdown:
       type: object
       additionalProperties: false
@@ -5163,37 +5586,742 @@ components:
     ReportKind:
       type: string
       enum: [explained, technical]
-    ScanReportResponse:
-      type: object
+    ExplainedReportSections:
+      properties:
+        version:
+          type: string
+          title: Version
+        devices:
+          items:
+            $ref: '#/components/schemas/ReportDevice'
+          type: array
+          title: Devices
+        issue_groups:
+          items:
+            $ref: '#/components/schemas/ReportIssueGroup'
+          type: array
+          title: Issue Groups
+        severity_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Severity Counts
+        evidence_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Evidence Counts
+        evidence_summary:
+          $ref: '#/components/schemas/FindingEvidenceSummary'
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
+        service_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Service Counts
+        affected_hosts:
+          type: integer
+          title: Affected Hosts
+        hosts_without_findings:
+          type: integer
+          title: Hosts Without Findings
+        unassigned_findings:
+          type: integer
+          title: Unassigned Findings
+        evidence_completeness:
+          type: string
+          title: Evidence Completeness
+        checks_completed:
+          type: integer
+          title: Checks Completed
+        checks_incomplete:
+          type: integer
+          title: Checks Incomplete
+        coverage_recorded:
+          type: boolean
+          title: Coverage Recorded
+        enrichment:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Enrichment
+        appendix:
+          items:
+            $ref: '#/components/schemas/ReportFinding'
+          type: array
+          title: Appendix
+        sources:
+          items:
+            $ref: '#/components/schemas/ReportSource'
+          type: array
+          title: Sources
+        scan_timestamp:
+          type: string
+          format: date-time
+          title: Scan Timestamp
+        scope:
+          type: string
+          title: Scope
+        scan_mode:
+          type: string
+          title: Scan Mode
+        overview:
+          type: string
+          title: Overview
+        ai_explanation_available:
+          type: boolean
+          title: Ai Explanation Available
+        actions:
+          items:
+            $ref: '#/components/schemas/ReportAction'
+          type: array
+          title: Actions
+        method:
+          type: string
+          title: Method
+        limitations:
+          items:
+            type: string
+          type: array
+          title: Limitations
       additionalProperties: false
+      type: object
       required:
-        - scan_id
-        - kind
-        - language
-        - generated_at
-        - filename
-        - content_type
-        - sections
+      - version
+      - devices
+      - issue_groups
+      - severity_counts
+      - evidence_counts
+      - evidence_summary
+      - finding_observations
+      - finding_observations_truncated
+      - service_counts
+      - affected_hosts
+      - hosts_without_findings
+      - unassigned_findings
+      - evidence_completeness
+      - checks_completed
+      - checks_incomplete
+      - coverage_recorded
+      - enrichment
+      - appendix
+      - sources
+      - scan_timestamp
+      - scope
+      - scan_mode
+      - overview
+      - ai_explanation_available
+      - actions
+      - method
+      - limitations
+      title: ExplainedReportSections
+    ReportAction:
+      properties:
+        priority:
+          type: string
+          enum:
+          - immediate
+          - high
+          - medium
+          - low
+          title: Priority
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        related_finding_ids:
+          items:
+            type: string
+          type: array
+          title: Related Finding Ids
+      additionalProperties: false
+      type: object
+      required:
+      - priority
+      - title
+      - description
+      - related_finding_ids
+      title: ReportAction
+    ReportAdvisoryNote:
+      properties:
+        cve_id:
+          type: string
+          title: Cve Id
+        explanation:
+          type: string
+          title: Explanation
+        url:
+          type: string
+          title: Url
+      additionalProperties: false
+      type: object
+      required:
+      - cve_id
+      - explanation
+      - url
+      title: ReportAdvisoryNote
+    ReportDevice:
+      properties:
+        address:
+          type: string
+          title: Address
+        hostname:
+          type: string
+          title: Hostname
+        display_name:
+          type: string
+          title: Display Name
+        manufacturer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manufacturer
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        identity_confidence:
+          type: string
+          title: Identity Confidence
+        identity_evidence:
+          items:
+            type: string
+          type: array
+          title: Identity Evidence
+        identity_conflicts:
+          items:
+            type: string
+          type: array
+          title: Identity Conflicts
+        machine_type:
+          type: string
+          title: Machine Type
+        os:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Os
+        finding_count:
+          type: integer
+          title: Finding Count
+        correlation_count:
+          type: integer
+          title: Correlation Count
+        observation_count:
+          type: integer
+          title: Observation Count
+        severity_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Severity Counts
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        open_ports:
+          type: integer
+          title: Open Ports
+        groups:
+          items:
+            type: string
+          type: array
+          title: Groups
+        review_exposures:
+          type: integer
+          title: Review Exposures
+        checks_completed:
+          type: integer
+          title: Checks Completed
+        checks_incomplete:
+          type: integer
+          title: Checks Incomplete
+        status:
+          type: string
+          enum:
+          - review
+          - no_alerts
+          title: Status
+        services:
+          items:
+            $ref: '#/components/schemas/ReportService'
+          type: array
+          title: Services
+        note:
+          type: string
+          title: Note
+        unreadable_fields:
+          items:
+            type: string
+          type: array
+          title: Unreadable Fields
+      additionalProperties: false
+      type: object
+      required:
+      - address
+      - hostname
+      - display_name
+      - manufacturer
+      - model
+      - identity_confidence
+      - identity_evidence
+      - identity_conflicts
+      - machine_type
+      - os
+      - finding_count
+      - correlation_count
+      - observation_count
+      - severity_counts
+      - severity
+      - open_ports
+      - groups
+      - review_exposures
+      - checks_completed
+      - checks_incomplete
+      - status
+      - services
+      - note
+      - unreadable_fields
+      title: ReportDevice
+    ReportFinding:
+      properties:
+        detection_method:
+          type: string
+          title: Detection Method
+        evidence_status:
+          type: string
+          title: Evidence Status
+        confidence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Evidence Observations
+        semantic_limit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Semantic Limit
+        finding_id:
+          type: string
+          title: Finding Id
+        group:
+          type: string
+          title: Group
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+        port:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Port
+        protocol:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Protocol
+        title:
+          type: string
+          title: Title
+        severity:
+          type: string
+          title: Severity
+        basis:
+          type: string
+          title: Basis
+        advisory_effects:
+          items:
+            type: string
+          type: array
+          title: Advisory Effects
+        advisory_description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Advisory Description
+        advisory_fetched_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Advisory Fetched At
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        description:
+          type: string
+          title: Description
+        recommendation:
+          type: string
+          title: Recommendation
+        evidence:
+          type: string
+          title: Evidence
+        plain_language_explanation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Plain Language Explanation
+        why_it_matters:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Why It Matters
+        uncertainty:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Uncertainty
+      additionalProperties: false
+      type: object
+      required:
+      - detection_method
+      - evidence_status
+      - confidence
+      - evidence_truncated
+      - evidence_observations
+      - semantic_limit
+      - finding_id
+      - group
+      - address
+      - port
+      - protocol
+      - title
+      - severity
+      - basis
+      - advisory_effects
+      - advisory_description
+      - advisory_fetched_at
+      - reference
+      - description
+      - recommendation
+      - evidence
+      - plain_language_explanation
+      - why_it_matters
+      - uncertainty
+      title: ReportFinding
+    ReportIssueGroup:
+      properties:
+        detection_method:
+          type: string
+          title: Detection Method
+        evidence_status:
+          type: string
+          title: Evidence Status
+        confidence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Evidence Observations
+        id:
+          type: string
+          title: Id
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+        hostname:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hostname
+        category:
+          type: string
+          title: Category
+        family:
+          type: string
+          title: Family
+        basis:
+          type: string
+          title: Basis
+        title:
+          type: string
+          title: Title
+        port:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Port
+        protocol:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Protocol
+        service:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Service
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+        finding_count:
+          type: integer
+          title: Finding Count
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        severity_counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Severity Counts
+        cves:
+          items:
+            type: string
+          type: array
+          title: Cves
+        purpose:
+          type: string
+          title: Purpose
+        meaning:
+          type: string
+          title: Meaning
+        impact:
+          type: string
+          title: Impact
+        conditions:
+          type: string
+          title: Conditions
+        uncertainty:
+          type: string
+          title: Uncertainty
+        steps:
+          items:
+            type: string
+          type: array
+          title: Steps
+        verify:
+          type: string
+          title: Verify
+        recorded_observations:
+          items:
+            $ref: '#/components/schemas/ReportObservation'
+          type: array
+          title: Recorded Observations
+        advisory_notes:
+          items:
+            $ref: '#/components/schemas/ReportAdvisoryNote'
+          type: array
+          title: Advisory Notes
+      additionalProperties: false
+      type: object
+      required:
+      - detection_method
+      - evidence_status
+      - confidence
+      - evidence_truncated
+      - evidence_observations
+      - id
+      - address
+      - hostname
+      - category
+      - family
+      - basis
+      - title
+      - port
+      - protocol
+      - service
+      - version
+      - finding_count
+      - severity
+      - severity_counts
+      - cves
+      - purpose
+      - meaning
+      - impact
+      - conditions
+      - uncertainty
+      - steps
+      - verify
+      - recorded_observations
+      - advisory_notes
+      title: ReportIssueGroup
+    ReportObservation:
+      properties:
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        evidence:
+          type: string
+          title: Evidence
+        recommendation:
+          type: string
+          title: Recommendation
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - description
+      - evidence
+      - recommendation
+      title: ReportObservation
+    ReportService:
+      properties:
+        port:
+          type: integer
+          title: Port
+        protocol:
+          type: string
+          title: Protocol
+        service:
+          type: string
+          title: Service
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+        family:
+          type: string
+          title: Family
+        purpose:
+          type: string
+          title: Purpose
+        finding_count:
+          type: integer
+          title: Finding Count
+      additionalProperties: false
+      type: object
+      required:
+      - port
+      - protocol
+      - service
+      - version
+      - family
+      - purpose
+      - finding_count
+      title: ReportService
+    ReportSource:
+      properties:
+        title:
+          type: string
+          title: Title
+        url:
+          type: string
+          title: Url
+      additionalProperties: false
+      type: object
+      required:
+      - title
+      - url
+      title: ReportSource
+    TechnicalReportSections:
+      properties:
+        scan_timestamp:
+          type: string
+          format: date-time
+          title: Scan Timestamp
+        scope:
+          type: string
+          title: Scope
+        scan_mode:
+          type: string
+          title: Scan Mode
+        scan:
+          $ref: '#/components/schemas/ScanDetailResponse'
+        risk_summary:
+          $ref: '#/components/schemas/ScanRiskSummaryResponse'
+        ai_analysis:
+          anyOf:
+          - $ref: '#/components/schemas/ScanAIAnalysisCompleted'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - scan_timestamp
+      - scope
+      - scan_mode
+      - scan
+      - risk_summary
+      - ai_analysis
+      title: TechnicalReportSections
+    ScanReportResponse:
       properties:
         scan_id:
           type: string
           format: uuid
+          title: Scan Id
         kind:
-          $ref: '#/components/schemas/ReportKind'
+          type: string
+          enum:
+          - explained
+          - technical
+          title: Kind
         language:
           type: string
-          enum: [en, pt-BR, ru]
+          enum:
+          - en
+          - pt-BR
+          - ru
+          title: Language
         generated_at:
           type: string
           format: date-time
+          title: Generated At
         filename:
           type: string
+          title: Filename
         content_type:
           type: string
-          enum: [application/pdf]
+          enum:
+          - application/pdf
+          - application/json
+          title: Content Type
         sections:
-          type: object
-          additionalProperties: true
+          anyOf:
+          - $ref: '#/components/schemas/ExplainedReportSections'
+          - $ref: '#/components/schemas/TechnicalReportSections'
+          title: Sections
+      additionalProperties: false
+      type: object
+      required:
+      - scan_id
+      - kind
+      - language
+      - generated_at
+      - filename
+      - content_type
+      - sections
+      title: ScanReportResponse
     AIContextChatRequest:
       type: object
       additionalProperties: false
@@ -5524,6 +6652,8 @@ components:
         - invite_revoked
         - member_removed
         - account_deleted
+        - scans_deleted
+        - machines_deleted
     HomeEvent:
       type: object
       additionalProperties: false
@@ -5685,6 +6815,199 @@ components:
           type: string
         details:
           $ref: '#/components/schemas/ErrorDetail'
+    FindingEvidenceObservationPayload:
+      properties:
+        ip:
+          anyOf:
+          - type: string
+            format: ipv4
+          - type: 'null'
+          title: Ip
+        port:
+          anyOf:
+          - type: integer
+            maximum: 65535.0
+            minimum: 1.0
+          - type: 'null'
+          title: Port
+        protocol:
+          anyOf:
+          - type: string
+            enum:
+            - tcp
+            - udp
+          - type: 'null'
+          title: Protocol
+        unit_id:
+          anyOf:
+          - type: integer
+            maximum: 255.0
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Id
+        condition_key:
+          type: string
+          maxLength: 256
+          minLength: 1
+          title: Condition Key
+        method:
+          type: string
+          enum:
+          - version_correlation
+          - configuration_observation
+          - specific_check
+          - textual_reference
+          - unknown
+          title: Method
+        result:
+          type: string
+          enum:
+          - positive
+          - negative
+          - inconclusive
+          title: Result
+        source:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Source
+        source_script:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Source Script
+        rule_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Rule Id
+        rule_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Rule Version
+        evidence:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Evidence
+        facts:
+          additionalProperties:
+            anyOf:
+            - type: string
+              maxLength: 160
+            - type: integer
+            - type: boolean
+          propertyNames:
+            maxLength: 64
+            minLength: 1
+          type: object
+          maxProperties: 8
+          title: Facts
+      additionalProperties: false
+      type: object
+      required:
+      - condition_key
+      - method
+      - result
+      - source
+      - rule_id
+      - rule_version
+      - evidence
+      title: FindingEvidenceObservationPayload
+    FindingEvidenceMethodCounts:
+      properties:
+        version_correlation:
+          type: integer
+          minimum: 0.0
+          title: Version Correlation
+        configuration_observation:
+          type: integer
+          minimum: 0.0
+          title: Configuration Observation
+        specific_check:
+          type: integer
+          minimum: 0.0
+          title: Specific Check
+        textual_reference:
+          type: integer
+          minimum: 0.0
+          title: Textual Reference
+        unknown:
+          type: integer
+          minimum: 0.0
+          title: Unknown
+      additionalProperties: false
+      type: object
+      required:
+      - version_correlation
+      - configuration_observation
+      - specific_check
+      - textual_reference
+      - unknown
+      title: FindingEvidenceMethodCounts
+    FindingEvidenceConfidenceCounts:
+      properties:
+        tentative:
+          type: integer
+          minimum: 0.0
+          title: Tentative
+        probable:
+          type: integer
+          minimum: 0.0
+          title: Probable
+        confirmed:
+          type: integer
+          minimum: 0.0
+          title: Confirmed
+        unknown:
+          type: integer
+          minimum: 0.0
+          title: Unknown
+      additionalProperties: false
+      type: object
+      required:
+      - tentative
+      - probable
+      - confirmed
+      - unknown
+      title: FindingEvidenceConfidenceCounts
+    FindingEvidenceSummary:
+      properties:
+        scope:
+          type: string
+          enum:
+          - scan
+          - filtered_findings
+          title: Scope
+        total_records:
+          type: integer
+          minimum: 0.0
+          title: Total Records
+        by_method:
+          $ref: '#/components/schemas/FindingEvidenceMethodCounts'
+        by_confidence:
+          $ref: '#/components/schemas/FindingEvidenceConfidenceCounts'
+        conflicting_records:
+          type: integer
+          minimum: 0.0
+          title: Conflicting Records
+        demonstrated_records:
+          type: integer
+          minimum: 0.0
+          title: Demonstrated Records
+      additionalProperties: false
+      type: object
+      required:
+      - scope
+      - total_records
+      - by_method
+      - by_confidence
+      - conflicting_records
+      - demonstrated_records
+      title: FindingEvidenceSummary
     ErrorResponse:
       type: object
       additionalProperties: false

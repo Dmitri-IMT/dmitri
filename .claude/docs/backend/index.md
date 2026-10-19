@@ -11,19 +11,20 @@ not a missing client or backend route.
 
 * [Backend — API + enrichment worker](./overview.md) — The FastAPI backend — read, auth, user/invite administration, command-channel and ingest routes wired — plus the CVE-enrichment worker and optional AI analysis loop.
 * [Backend entry points & config](./api.md) — The FastAPI app (health, read, auth, user/invite admin, command-channel HTTP/WS, global errors), the worker entry, settings, and DB sessions.
-* [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, identity admin, device revoke/restore, ingest and command-channel HTTP/WS routers with their auth gates.
+* [Backend routers — reads, identity admin, ingest and commands](./routers.md) — The FastAPI read, identity admin, device revoke/restore, scan/machine deletion, ingest and command-channel HTTP/WS routers with their auth gates.
 * [Backend management commands](./management.md) — The two operator CLIs — backend-bootstrap-org (first org + admin invite) and backend-provision-agent (device public key + org OT digest key).
 
 ## Data model
 
-* [Backend ORM models](./models.md) — The SQLModel tables for scan persistence, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
-* [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command/agent schemas plus profile, organization-member, auth and invite request/response models.
+* [Backend ORM models](./models.md) — The SQLModel tables for scan persistence and live progress, host identity, enrichment/risk, user identity and activity, auth sessions, and the command channel.
+* [Backend wire schemas](./schemas.md) — The Pydantic ingest/read/command/agent schemas, including live progress snapshots, plus profile, organization-member, auth and invite models.
 * [Scan failure-code vocabulary](./error-codes.md) — The closed ScanErrorCode set and the two pure helpers every read path uses to normalise a stored command code onto the wire.
 
 ## Services
 
-* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — The backend business logic for ingest/persistence, member administration, account removal, org-scoped reads, agent reads and target-subnet choice, enrichment/risk, command lifecycle/delivery/cancel, presence, idempotent device revoke/restore, and agent revocation enforcement on live connections.
-* [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
+* [Backend explained and technical scan reports](./reports.md) — Localized educational PDFs with clickable contents and page numbers, complete device inventories, evidence-aware explanations, charts, remediation checks and the full finding register.
+* [Backend services — persistence, host identity, read, enrichment, risk](./services.md) — Backend business logic for ingest, guarded live progress, reads, enrichment, command delivery and cancel, presence, idempotent device revoke/restore, and admin scan/machine deletion.
+* [Backend AI — scan analysis, contextual chat, usage telemetry](./ai.md) — Groq scan overviews (on-demand or auto after enrichment), bounded structured repair and KEV coverage, scoped Q&A, and org usage metadata without storing prompts in `ai_usage`.
 
 ## Auth
 
@@ -33,4 +34,4 @@ not a missing client or backend route.
 
 ## Migrations
 
-* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, and scan evidence coverage. Head is `20260928_38`.
+* [Backend database migrations](./migrations.md) — The Alembic env and revisions through AI, attack-surface profiles, agent identity, scan_cancelled activity, scan evidence coverage, live progress, and scan/machine deletion. Head is `20261012_40`.

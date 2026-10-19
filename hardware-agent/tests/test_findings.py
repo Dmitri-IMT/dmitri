@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
 
-from agent.normalize.findings import extract_findings
+from agent.normalize.contracts import (
+    FindingEvidenceObservationPayload,
+    FindingPayload,
+    ScanPayload,
+)
+from agent.normalize.findings import (
+    _merge_finding_group,
+    _merge_observations,
+    _reduce_findings,
+    assess_local_evidence,
+    extract_findings,
+    extract_findings_and_observations,
+)
 from agent.ot.modbus.models import ModbusAddressRange, ModbusService, ModbusUnit
 from agent.scanner.models import HostInfo, PortInfo, ScriptResult, ServiceInfo
 from agent.targeted.models import (
@@ -16,6 +31,11 @@ from agent.targeted.models import (
     TargetedUnitResult,
 )
 from agent.utils.nmap_xml import parse_host_scripts, parse_ports
+
+_BACKEND_SRC = Path(__file__).resolve().parents[2] / "backend" / "src"
+if str(_BACKEND_SRC) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_SRC))
+from api.services.scan_evidence import reduce_finding_evidence  # noqa: E402
 
 
 def test_vulners_script_is_normalized_into_cve_findings() -> None:
@@ -241,6 +261,10 @@ def test_http_methods_detects_risky_verbs() -> None:
     assert finding.title == "Potentially risky HTTP methods enabled"
     assert finding.severity == "medium"
     assert finding.source_script == "http-methods"
+    assert finding.issue_key == "title:potentially risky http methods enabled"
+    evidence_finding = extract_findings([host], include_evidence_metadata=True)[0]
+    assert assess_local_evidence(evidence_finding).confidence == "confirmed"
+    _assert_backend_assessment_matches(evidence_finding)
 
 
 def test_ssh_auth_methods_detects_password_authentication() -> None:
@@ -271,6 +295,10 @@ def test_ssh_auth_methods_detects_password_authentication() -> None:
     assert finding.title == "SSH password authentication exposed"
     assert finding.severity == "low"
     assert finding.source_script == "ssh-auth-methods"
+    assert finding.issue_key == "title:ssh password authentication exposed"
+    evidence_finding = extract_findings([host], include_evidence_metadata=True)[0]
+    assert assess_local_evidence(evidence_finding).confidence == "confirmed"
+    _assert_backend_assessment_matches(evidence_finding)
 
 
 def test_unmapped_script_with_cve_uses_generic_fallback() -> None:
@@ -300,7 +328,429 @@ def test_unmapped_script_with_cve_uses_generic_fallback() -> None:
     finding = findings[0]
     assert finding.cve_id == "CVE-2021-1234"
     assert finding.source_script == "some-unmapped-script"
-    assert finding.severity == "high"
+    assert finding.severity == "low"
+    assert "no structured positive result" in finding.description
+    assert finding.title == "CVE-2021-1234 reported by some-unmapped-script"
+    assert finding.references == []
+    assert finding.evidence_observations == []
+    internal_finding = extract_findings([host], include_evidence_metadata=True)[0]
+    assert internal_finding.evidence_observations[0].method == "textual_reference"
+    assert internal_finding.evidence_observations[0].result == "inconclusive"
+    assessment = assess_local_evidence(internal_finding)
+    assert (assessment.method, assessment.status, assessment.confidence) == (
+        "textual_reference",
+        "inconclusive",
+        "tentative",
+    )
+
+
+def _generic_nse_host(data: object, output: str = "") -> HostInfo:
+    return HostInfo(
+        ip="192.168.0.81",
+        hostname="host",
+        ports=[
+            PortInfo(
+                port=445,
+                service=ServiceInfo(name="microsoft-ds"),
+                scripts=[ScriptResult("unmapped-nse", output, data)],
+            )
+        ],
+    )
+
+
+def test_structured_negative_without_description_blocks_text_fallback() -> None:
+    findings = extract_findings(
+        [_generic_nse_host({"state": " NOT   VULNERABLE "}, "CVE-2020-1234")]
+    )
+
+    assert findings == []
+
+
+def test_structured_negative_emits_identified_standalone_observation() -> None:
+    host = _generic_nse_host(
+        {"state": " NOT   VULNERABLE ", "IDS": {"CVE": "CVE-2020-1234"}},
+        "The check returned NOT VULNERABLE.",
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert truncated is False
+    assert len(observations) == 1
+    observation = observations[0]
+    assert str(observation.ip) == "192.168.0.81"
+    assert (observation.port, observation.protocol) == (445, "tcp")
+    assert observation.condition_key == "CVE-2020-1234"
+    assert (observation.method, observation.result) == ("unknown", "negative")
+    assert observation.source_script == "unmapped-nse"
+    assert observation.facts == {"vulnerability_state": "NOT VULNERABLE"}
+
+
+def test_unknown_state_emits_inconclusive_observations() -> None:
+    host = _generic_nse_host(
+        {
+            "state": "UNKNOWN (unable to test)",
+            "ids": [{"CVE": "CVE-2020-1234"}, {"CVE": "CVE-2021-2345"}],
+        }
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert truncated is False
+    assert [item.condition_key for item in observations] == [
+        "CVE-2020-1234",
+        "CVE-2021-2345",
+    ]
+    assert all(item.result == "inconclusive" for item in observations)
+
+
+def test_mixed_states_keep_negative_separate_from_positive_finding() -> None:
+    host = _generic_nse_host(
+        [
+            {
+                "state": "NOT VULNERABLE",
+                "ids": {"CVE": "CVE-2020-1234"},
+            },
+            {
+                "state": "VULNERABLE",
+                "title": "Positive finding",
+                "ids": {"CVE": "CVE-2021-2345"},
+            },
+        ]
+    )
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert [item.cve_id for item in findings] == ["CVE-2021-2345"]
+    assert [item.condition_key for item in observations] == ["CVE-2020-1234"]
+    assert observations[0].result == "negative"
+    assert truncated is False
+
+
+def test_standalone_observations_are_bounded_and_report_truncation() -> None:
+    records = [
+        {"state": "NOT VULNERABLE", "ids": {"CVE": f"CVE-2020-{index + 1000}"}}
+        for index in range(513)
+    ]
+
+    findings, observations, truncated = extract_findings_and_observations(
+        [_generic_nse_host(records)]
+    )
+
+    assert findings == []
+    assert len(observations) == 512
+    assert truncated is True
+
+
+def test_standalone_negative_does_not_duplicate_a_positive_finding_condition() -> None:
+    host = _generic_nse_host(
+        [
+            {
+                "state": "NOT VULNERABLE",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+            {
+                "state": "VULNERABLE",
+                "title": "MS17-010",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+        ]
+    )
+    host.ports[0].scripts[0].script_id = "smb-vuln-ms17-010"
+
+    findings, observations, truncated = extract_findings_and_observations([host])
+
+    assert [item.cve_id for item in findings] == ["CVE-2017-0143"]
+    assert observations == []
+    assert truncated is False
+
+
+def test_supported_ms17_negative_is_retained_as_conflict_with_positive() -> None:
+    host = _generic_nse_host(
+        [
+            {"state": "NOT VULNERABLE", "ids": {"CVE": "CVE-2017-0143"}},
+            {
+                "state": "VULNERABLE",
+                "title": "MS17-010",
+                "ids": {"CVE": "CVE-2017-0143"},
+            },
+        ]
+    )
+    host.ports[0].scripts[0].script_id = "smb-vuln-ms17-010"
+
+    findings, standalone, _ = extract_findings_and_observations([host])
+
+    assert standalone == []
+    assert len(findings) == 1
+    assert {item.result for item in findings[0].evidence_observations} == {
+        "negative",
+        "positive",
+    }
+    assert assess_local_evidence(findings[0]).status == "conflicting"
+
+
+def test_unknown_or_missing_state_is_inconclusive_when_cve_is_known() -> None:
+    host = _generic_nse_host(
+        [
+            {"state": None, "ids": {"CVE": "CVE-2020-1234"}},
+            {"state": "ERROR: connection failed", "ids": {"CVE": "CVE-2021-2345"}},
+            {"state": True, "ids": {"CVE": "CVE-2023-4567"}},
+            {"ids": {"CVE": "CVE-2022-3456"}},
+        ]
+    )
+
+    findings, observations, _ = extract_findings_and_observations([host])
+
+    assert findings == []
+    assert {item.condition_key for item in observations} == {
+        "CVE-2020-1234",
+        "CVE-2021-2345",
+        "CVE-2022-3456",
+        "CVE-2023-4567",
+    }
+    assert all(item.result == "inconclusive" for item in observations)
+    assert all(item.method == "unknown" for item in observations)
+    facts_by_condition = {item.condition_key: item.facts for item in observations}
+    assert facts_by_condition["CVE-2020-1234"] == {
+        "vulnerability_state": "NULL"
+    }
+    assert facts_by_condition["CVE-2023-4567"] == {
+        "vulnerability_state": "UNSUPPORTED TYPE: BOOL"
+    }
+
+
+def test_oversized_unknown_state_is_bounded_without_losing_observation() -> None:
+    oversized_state = "ERROR " + ("x" * 200)
+    _, observations, truncated = extract_findings_and_observations(
+        [
+            _generic_nse_host(
+                {
+                    "state": oversized_state,
+                    "ids": {"CVE": "CVE-2024-1234"},
+                }
+            )
+        ]
+    )
+
+    assert truncated is False
+    assert len(observations) == 1
+    observation = observations[0]
+    assert observation.result == "inconclusive"
+    assert observation.facts == {"vulnerability_state": oversized_state.upper()[:160]}
+
+
+def test_standalone_observation_dedup_preserves_distinct_facts_and_evidence() -> None:
+    first = {
+        "state": "UNKNOWN",
+        "ids": {"CVE": "CVE-2020-1234"},
+        "detail": "first response",
+    }
+    second = {
+        "state": "UNKNOWN",
+        "ids": {"CVE": "CVE-2020-1234"},
+        "detail": "second response",
+    }
+    _, observations, _ = extract_findings_and_observations(
+        [_generic_nse_host([first, second])]
+    )
+    _, reversed_observations, _ = extract_findings_and_observations(
+        [_generic_nse_host([second, first])]
+    )
+
+    assert len(observations) == 2
+    assert observations[0].evidence != observations[1].evidence
+    assert [item.model_dump_json() for item in observations] == [
+        item.model_dump_json() for item in reversed_observations
+    ]
+
+
+def test_colliding_cve_conditions_remain_separate_valid_wire_findings() -> None:
+    base = FindingPayload(
+        ip="192.0.2.101",
+        port=443,
+        protocol="tcp",
+        cve_id="CVE-2024-12345",
+        issue_key="tls.certificate:expired",
+        severity="medium",
+        title="TLS condition",
+        description="A TLS condition was observed.",
+        recommendation="Review the certificate.",
+        evidence="certificate details",
+        evidence_observations=[
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.101",
+                port=443,
+                protocol="tcp",
+                condition_key="tls.certificate:expired",
+                method="unknown",
+                result="inconclusive",
+                source="nmap_nse",
+                source_script="ssl-cert",
+                rule_id="nse:unsupported",
+                rule_version="1",
+                evidence="unsupported structured condition",
+            )
+        ],
+    )
+    second = base.model_copy(
+        update={
+            "issue_key": "tls.certificate:self-signed",
+            "evidence_observations": [
+                base.evidence_observations[0].model_copy(
+                    update={"condition_key": "tls.certificate:self-signed"}
+                )
+            ],
+        }
+    )
+
+    findings = _reduce_findings([base, second])
+    payload = ScanPayload(
+        scan_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        subnet="192.0.2.0/24",
+        scan_mode="standard",
+        findings=findings,
+        finding_evidence_policy_version="1",
+    )
+
+    assert len(payload.findings) == 2
+    assert {item.issue_key for item in payload.findings} == {
+        "tls.certificate:expired",
+        "tls.certificate:self-signed",
+    }
+    assert all(
+        finding.evidence_observations[0].condition_key == finding.issue_key
+        for finding in payload.findings
+    )
+
+
+def test_structured_ids_maps_and_lists_are_accepted_only_for_positive_state() -> None:
+    data = [
+        {
+            "state": "VULNERABLE",
+            "title": "First issue",
+            "IDS": {"CVE": "CVE-2020-1234"},
+        },
+        {
+            "state": "vulnerable (DoS)",
+            "ids": [{"CVE": "CVE-2021-2345"}],
+            "title": "Second issue",
+        },
+        {"state": "LIKELY VULNERABLE", "title": "Candidate", "ids": ["CVE-2022-3456"]},
+        {
+            "state": "NOT VULNERABLE",
+            "IDS": {"CVE": "CVE-2023-4567"},
+        },
+    ]
+
+    findings = extract_findings([_generic_nse_host(data, "CVE-2023-4567")])
+
+    assert [(finding.title, finding.cve_id) for finding in findings] == [
+        ("First issue", "CVE-2020-1234"),
+        ("Second issue", "CVE-2021-2345"),
+    ]
+
+
+def test_malformed_structured_result_blocks_text_fallback() -> None:
+    findings = extract_findings(
+        [_generic_nse_host({"state": ["VULNERABLE"]}, "CVE-2020-1234")]
+    )
+
+    assert findings == []
+
+
+def test_malformed_nested_record_does_not_change_mixed_sibling_results() -> None:
+    data = [
+        {
+            "state": "NOT VULNERABLE",
+            "ids": {"CVE": "CVE-2020-1234"},
+            "details": {"state": ["VULNERABLE"]},
+        },
+        {
+            "state": "VULNERABLE",
+            "title": "Independent positive record",
+            "ids": {"CVE": "CVE-2021-2345"},
+        },
+    ]
+
+    findings = extract_findings([_generic_nse_host(data, "Advisory CVE-2022-3456")])
+
+    assert [(finding.title, finding.cve_id) for finding in findings] == [
+        ("Independent positive record", "CVE-2021-2345")
+    ]
+
+
+def test_null_structured_fields_block_text_fallback() -> None:
+    for data in (
+        {"state": None},
+        {"IDS": None},
+        {"state": None, "ids": None},
+    ):
+        assert (
+            extract_findings([_generic_nse_host(data, "Advisory CVE-2020-1234")]) == []
+        )
+
+
+def test_unknown_structured_result_blocks_text_fallback() -> None:
+    data = {
+        "state": "UNKNOWN (unable to test)",
+        "IDS": {"CVE": "CVE-2020-1234"},
+    }
+
+    assert extract_findings([_generic_nse_host(data, "CVE-2022-3456")]) == []
+
+
+def test_cve_in_reference_or_child_record_does_not_inherit_positive_state() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Positive parent record",
+        "references": ["https://example.test/CVE-2020-1234"],
+        "details": {"ids": {"CVE": "CVE-2021-2345"}},
+    }
+
+    findings = extract_findings([_generic_nse_host(data)])
+
+    assert len(findings) == 1
+    assert findings[0].title == "Positive parent record"
+    assert findings[0].cve_id is None
+    assert findings[0].references == ["https://example.test/CVE-2020-1234"]
+
+
+def test_native_ms17_positive_state_does_not_require_check_results() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Remote Code Execution vulnerability in Microsoft SMBv1 servers",
+        "IDS": ["CVE:CVE-2017-0143"],
+    }
+
+    host = _generic_nse_host(data)
+    host.ports[0].scripts[0].script_id = "smb-vuln-ms17-010"
+    findings = extract_findings([host], include_evidence_metadata=True)
+
+    assert len(findings) == 1
+    assert findings[0].cve_id == "CVE-2017-0143"
+    observation = findings[0].evidence_observations[0]
+    assert observation.method == "specific_check"
+    assert observation.result == "positive"
+    assert observation.rule_id == "nse:smb-vuln-ms17-010"
+    assert observation.facts == {
+        "vulnerability_state": "VULNERABLE",
+        "table": "smb-vuln-ms17-010",
+    }
+
+
+def test_native_nmap_ids_list_prefix_is_parsed_strictly() -> None:
+    data = {
+        "state": "VULNERABLE",
+        "title": "Native vulnerability record",
+        "IDS": ["CVE:CVE-2020-1234", "BID:1234"],
+    }
+
+    findings = extract_findings([_generic_nse_host(data)])
+
+    assert len(findings) == 1
+    assert findings[0].cve_id == "CVE-2020-1234"
 
 
 def _ssl_cert_host(
@@ -445,7 +895,7 @@ def test_ssl_enum_ciphers_weak_config_yields_medium_findings() -> None:
         ports=parse_ports(host_element),
     )
 
-    findings = extract_findings([host])
+    findings = extract_findings([host], include_evidence_metadata=True)
 
     assert len(findings) == 3
     assert all(f.severity == "medium" for f in findings)
@@ -453,6 +903,18 @@ def test_ssl_enum_ciphers_weak_config_yields_medium_findings() -> None:
     assert "Deprecated TLS/SSL protocol offered: TLSv1.0" in titles
     assert "Weak TLS cipher configuration" in titles
     assert "Weak TLS cipher strength (grade C)" in titles
+    grade = next(
+        finding
+        for finding in findings
+        if finding.title == "Weak TLS cipher strength (grade C)"
+    )
+    observation = grade.evidence_observations[0]
+    assert (
+        observation.condition_key
+        == "title:weak tls cipher strength (grade c):cipher report"
+    )
+    assessment = assess_local_evidence(grade)
+    assert (assessment.status, assessment.confidence) == ("supported", "confirmed")
 
 
 def test_ssl_enum_ciphers_clean_grade_yields_no_finding() -> None:
@@ -536,6 +998,19 @@ def test_modbus_read_findings_emit_one_finding_per_readable_unit() -> None:
                 confidence="confirmed",
                 units=[
                     ModbusUnit(
+                        unit_id=0,
+                        status="responding",
+                        address_ranges=[
+                            ModbusAddressRange(
+                                address_space="input_register",
+                                start_address=0,
+                                count=1,
+                                status="readable",
+                                observed_at=observed_at,
+                            )
+                        ],
+                    ),
+                    ModbusUnit(
                         unit_id=1,
                         status="responding",
                         address_ranges=[
@@ -566,15 +1041,73 @@ def test_modbus_read_findings_emit_one_finding_per_readable_unit() -> None:
         ],
     )
 
-    findings = extract_findings([host])
+    findings = extract_findings([host], include_evidence_metadata=True)
     modbus_findings = [
         finding
         for finding in findings
         if finding.source == "modbus-read-only-assessment"
     ]
 
-    assert len(modbus_findings) == 2
-    assert sorted(finding.unit_id for finding in modbus_findings) == [1, 2]
+    assert len(modbus_findings) == 3
+    assert sorted(finding.unit_id for finding in modbus_findings) == [0, 1, 2]
+    for finding in modbus_findings:
+        observation = finding.evidence_observations[0]
+        assert observation.unit_id == finding.unit_id
+        assert observation.source_script == "modbus-read-only-assessment"
+        assert observation.facts == {"read_result": True}
+        assert assess_local_evidence(finding).confidence == "confirmed"
+
+
+def test_modbus_read_rule_does_not_confirm_a_forged_write_condition() -> None:
+    observed_at = datetime(2026, 9, 12, tzinfo=timezone.utc)
+    host = HostInfo(
+        ip="192.168.10.30",
+        hostname="plc",
+        ports=[PortInfo(port=502, service=ServiceInfo(name="modbus"))],
+        industrial_services=[
+            ModbusService(
+                port=502,
+                confidence="confirmed",
+                units=[
+                    ModbusUnit(
+                        unit_id=0,
+                        status="responding",
+                        address_ranges=[
+                            ModbusAddressRange(
+                                address_space="input_register",
+                                start_address=0,
+                                count=1,
+                                status="readable",
+                                observed_at=observed_at,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+    finding = next(
+        item
+        for item in extract_findings([host], include_evidence_metadata=True)
+        if item.source == "modbus-read-only-assessment"
+    )
+    arbitrary_condition = "title:modbus write permitted"
+    forged = finding.model_copy(
+        update={
+            "title": "Modbus write permitted",
+            "issue_key": arbitrary_condition,
+            "evidence_observations": [
+                finding.evidence_observations[0].model_copy(
+                    update={"condition_key": arbitrary_condition}
+                )
+            ],
+        }
+    )
+
+    assessment = assess_local_evidence(forged)
+
+    assert assessment.status == "inconclusive"
+    assert assessment.confidence == "tentative"
 
 
 def _targeted_result(
@@ -700,6 +1233,10 @@ def test_targeted_finding_precedes_nse_duplicate_and_merges_corroboration() -> N
         recommendation="Disable anonymous access.",
         evidence="220 FTP banner; anonymous login accepted",
         references=["https://example.test/ftp"],
+        method="specific_check",
+        result="positive",
+        rule_id="targeted:ftp-check-anonymous",
+        facts={"anonymous_login_accepted": True},
     )
     host = HostInfo(
         ip="192.168.10.42",
@@ -707,16 +1244,16 @@ def test_targeted_finding_precedes_nse_duplicate_and_merges_corroboration() -> N
         ports=parse_ports(host_element),
         targeted_results=[
             TargetedUnitResult(
-                TargetedUnit(
-                    "192.168.10.42", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
-                ),
+                TargetedUnit("192.168.10.42", 21, "tcp", "ftp", TargetedTool.FTP_CHECK),
                 TargetedOutcome.COMPLETED,
                 issues=[issue],
             )
         ],
     )
 
-    findings = extract_findings([host])
+    legacy_findings = extract_findings([host])
+    assert legacy_findings[0].evidence_observations == []
+    findings = extract_findings([host], include_evidence_metadata=True)
 
     assert len(findings) == 1
     finding = findings[0]
@@ -724,10 +1261,185 @@ def test_targeted_finding_precedes_nse_duplicate_and_merges_corroboration() -> N
     assert finding.description == issue.description
     assert finding.recommendation == issue.recommendation
     assert finding.references == ["https://example.test/ftp"]
-    assert "corroborated by nmap_nse" in finding.evidence
+    assert "corroborated by" not in finding.evidence
+    assert len(finding.evidence_observations) == 2
+    targeted = next(
+        item
+        for item in finding.evidence_observations
+        if item.source_script == "ftp-check"
+    )
+    assert targeted.method == "specific_check"
+    assert targeted.result == "positive"
+    assert targeted.condition_key == "ftp:anonymous-login"
+    assert targeted.facts == {"anonymous_login_accepted": True}
+    assessment = assess_local_evidence(finding)
+    assert (assessment.method, assessment.status, assessment.confidence) == (
+        "specific_check",
+        "supported",
+        "confirmed",
+    )
+    cve_reference_only = finding.model_copy(
+        update={"cve_id": "CVE-2024-12345", "issue_key": None}
+    )
+    assert assess_local_evidence(cve_reference_only).confidence == "tentative"
+    negative = targeted.model_copy(
+        update={
+            "result": "negative",
+            "facts": {"anonymous_login_accepted": False},
+            "evidence": "anonymous login was rejected",
+        }
+    )
+    for witnesses in ([targeted, negative], [negative, targeted]):
+        assessment = assess_local_evidence(
+            finding.model_copy(update={"evidence_observations": witnesses})
+        )
+        assert (assessment.status, assessment.confidence) == (
+            "conflicting",
+            "tentative",
+        )
+
+    # Candidate facts must be typed and bound to the finding endpoint.
+    zero_is_not_false = targeted.model_copy(
+        update={"facts": {"anonymous_login_accepted": 0}}
+    )
+    wrong_endpoint = targeted.model_copy(update={"port": 22})
+    for invalid in (zero_is_not_false, wrong_endpoint):
+        result = assess_local_evidence(
+            finding.model_copy(update={"evidence_observations": [invalid]})
+        )
+        assert (result.status, result.confidence) == ("inconclusive", "tentative")
+
+    negative_only = assess_local_evidence(
+        finding.model_copy(update={"evidence_observations": [negative]})
+    )
+    assert (negative_only.method, negative_only.status, negative_only.confidence) == (
+        "specific_check",
+        "inconclusive",
+        "tentative",
+    )
 
 
-def test_highest_severity_wins_but_targeted_remediation_is_retained() -> None:
+def test_local_cve_text_stays_tentative() -> None:
+    host = HostInfo(
+        ip="192.0.2.94",
+        hostname="server",
+        ports=[
+            PortInfo(
+                port=445,
+                service=ServiceInfo(name="microsoft-ds"),
+                scripts=[
+                    ScriptResult(
+                        script_id="unknown-check",
+                        output="See CVE-2024-12345 for details",
+                    )
+                ],
+            )
+        ],
+    )
+    finding = extract_findings([host], include_evidence_metadata=True)[0]
+    assert finding.evidence_observations[0].method == "textual_reference"
+    assert (
+        assess_local_evidence(finding).method,
+        assess_local_evidence(finding).confidence,
+    ) == ("textual_reference", "tentative")
+
+
+def test_local_observation_limit_keeps_supported_positive_witness() -> None:
+    finding = FindingPayload(
+        ip="192.0.2.95",
+        port=21,
+        protocol="tcp",
+        issue_key="ftp:anonymous-login",
+        severity="high",
+        title="Anonymous FTP login allowed",
+        description="Anonymous login was accepted.",
+        recommendation="Disable anonymous login.",
+        evidence="FTP code 230",
+    )
+    positive = FindingEvidenceObservationPayload(
+        ip="192.0.2.95",
+        port=21,
+        protocol="tcp",
+        condition_key="ftp:anonymous-login",
+        method="specific_check",
+        result="positive",
+        source="nmap_nse",
+        source_script="ftp-anon",
+        rule_id="nse:ftp-anon",
+        rule_version="1",
+        evidence="Anonymous FTP login allowed",
+        facts={"anonymous_login": True},
+    )
+    unsupported = [
+        positive.model_copy(
+            update={
+                "method": "unknown",
+                "result": "inconclusive",
+                "rule_id": f"aaa-unsupported-{index}",
+                "facts": {},
+            }
+        )
+        for index in range(16)
+    ]
+    forward, truncated = _merge_observations(unsupported, [positive], finding)
+    reverse, _ = _merge_observations([positive], unsupported, finding)
+    assert truncated is True
+    assert positive in forward
+    assert [item.model_dump_json() for item in forward] == [
+        item.model_dump_json() for item in reverse
+    ]
+
+
+def test_ms17_specific_negative_conflicts_with_same_cve_correlation() -> None:
+    finding = FindingPayload(
+        ip="192.0.2.96",
+        port=445,
+        protocol="tcp",
+        cve_id="CVE-2017-0143",
+        severity="high",
+        title="CVE-2017-0143 detected",
+        description="A catalog correlated this CVE.",
+        recommendation="Review the server.",
+        evidence="correlated product version",
+        evidence_observations=[
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.96",
+                port=445,
+                protocol="tcp",
+                condition_key="CVE-2017-0143",
+                method="version_correlation",
+                result="positive",
+                source="nmap_vulners",
+                source_script="vulners",
+                rule_id="catalog:nmap-vulners",
+                rule_version="1",
+                evidence="CPE matched catalog entry",
+                facts={"cpe": "cpe:/o:microsoft:windows", "cve_id": "CVE-2017-0143"},
+            ),
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.96",
+                port=445,
+                protocol="tcp",
+                condition_key="CVE-2017-0143",
+                method="specific_check",
+                result="negative",
+                source="nmap_nse",
+                source_script="smb-vuln-ms17-010",
+                rule_id="nse:smb-vuln-ms17-010",
+                rule_version="1",
+                evidence="NOT VULNERABLE",
+                facts={
+                    "vulnerability_state": "NOT VULNERABLE",
+                    "table": "smb-vuln-ms17-010",
+                },
+            ),
+        ],
+    )
+    result = assess_local_evidence(finding)
+    assert (result.status, result.confidence) == ("conflicting", "tentative")
+
+
+def test_supported_evidence_wins_before_severity_or_source() -> None:
     host = HostInfo(
         ip="192.168.10.43",
         hostname="ftp-host",
@@ -745,9 +1457,7 @@ def test_highest_severity_wins_but_targeted_remediation_is_retained() -> None:
         ],
         targeted_results=[
             TargetedUnitResult(
-                TargetedUnit(
-                    "192.168.10.43", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
-                ),
+                TargetedUnit("192.168.10.43", 21, "tcp", "ftp", TargetedTool.FTP_CHECK),
                 TargetedOutcome.COMPLETED,
                 issues=[
                     TargetedIssue(
@@ -767,8 +1477,336 @@ def test_highest_severity_wins_but_targeted_remediation_is_retained() -> None:
 
     assert len(findings) == 1
     assert findings[0].severity == "high"
-    assert findings[0].description == "Targeted probe confirmed anonymous login."
-    assert findings[0].recommendation == "Disable anonymous access immediately."
+    assert findings[0].description.startswith("The FTP service")
+    assert findings[0].recommendation.startswith("Disable anonymous FTP")
+
+
+def test_ftp_evidence_must_match_finding_condition_and_endpoint() -> None:
+    finding = extract_findings(
+        [_ftp_anon_host("Anonymous FTP login allowed (FTP code 230)")],
+        include_evidence_metadata=True,
+    )[0]
+    assert (
+        assess_local_evidence(
+            finding.model_copy(update={"issue_key": "ftp:unrelated"})
+        ).confidence
+        == "tentative"
+    )
+    wrong_endpoint = finding.evidence_observations[0].model_copy(
+        update={"ip": "198.51.100.8"}
+    )
+    mismatched = finding.model_copy(update={"evidence_observations": [wrong_endpoint]})
+    assert assess_local_evidence(mismatched).confidence == "tentative"
+
+
+def test_configuration_observation_cannot_confirm_referenced_cve() -> None:
+    observation = FindingEvidenceObservationPayload(
+        ip="192.0.2.30",
+        port=443,
+        protocol="tcp",
+        condition_key="CVE-2024-12345",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="ssl-cert",
+        rule_id="nse:ssl-cert-expired",
+        rule_version="1",
+        evidence="certificate expired",
+        facts={"certificate_expired": True},
+    )
+    finding = FindingPayload(
+        ip="192.0.2.30",
+        port=443,
+        protocol="tcp",
+        issue_key="tls.certificate:expired",
+        cve_id="CVE-2024-12345",
+        severity="medium",
+        title="Expired certificate",
+        description="Expired certificate observed.",
+        recommendation="Replace the certificate.",
+        evidence="certificate expired",
+        evidence_observations=[observation],
+    )
+    assert assess_local_evidence(finding).status == "inconclusive"
+
+
+def test_smb_signing_fact_uses_exact_boolean_type() -> None:
+    finding = FindingPayload(
+        ip="192.0.2.31",
+        port=445,
+        protocol="tcp",
+        issue_key="smb:signing",
+        severity="medium",
+        title="SMB signing is not required",
+        description="SMB signing value recorded.",
+        recommendation="Require SMB signing.",
+        evidence="signing_required=0",
+        evidence_observations=[
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.31",
+                port=445,
+                protocol="tcp",
+                condition_key="smb:signing",
+                method="configuration_observation",
+                result="positive",
+                source="nmap_nse",
+                source_script="smb2-security-mode",
+                rule_id="nse:smb2-security-mode",
+                rule_version="1",
+                evidence="signing_required=0",
+                facts={"signing_required": 0},
+            )
+        ],
+    )
+    assert assess_local_evidence(finding).confidence == "tentative"
+
+
+def _assert_backend_assessment_matches(finding: FindingPayload) -> None:
+    backend = reduce_finding_evidence(
+        [item.model_dump(mode="json") for item in finding.evidence_observations],
+        cve_id=finding.cve_id,
+        issue_key=finding.issue_key,
+        ip=finding.ip,
+        port=finding.port,
+        protocol=finding.protocol,
+        unit_id=finding.unit_id,
+        evidence_truncated=finding.evidence_truncated,
+    )
+    local = assess_local_evidence(finding)
+    assert (local.method, local.status, local.confidence) == (
+        backend.detection_method,
+        backend.evidence_status,
+        backend.confidence,
+    )
+
+
+def _tls_cipher_findings(output: str, data: dict[str, object]) -> list[FindingPayload]:
+    host = HostInfo(
+        ip="192.0.2.44",
+        hostname="tls",
+        ports=[
+            PortInfo(
+                port=443,
+                service=ServiceInfo(name="https"),
+                scripts=[
+                    ScriptResult(script_id="ssl-enum-ciphers", output=output, data=data)
+                ],
+            )
+        ],
+    )
+    return extract_findings([host], include_evidence_metadata=True)
+
+
+def test_tls_warning_and_grade_metadata_match_backend_oracle() -> None:
+    warning = _tls_cipher_findings(
+        "cipher RC4 report", {"TLSv1.2": {"warnings": ["RC4 cipher is weak"]}}
+    )[0]
+    grade_with_primitive = _tls_cipher_findings(
+        "cipher RC4 report",
+        {"TLSv1.2": {"ciphers": []}, "least strength": "C"},
+    )[0]
+    grade_without_primitive = _tls_cipher_findings(
+        "cipher report",
+        {"TLSv1.2": {"ciphers": []}, "least strength": "C"},
+    )[0]
+    assert warning.evidence_observations[0].facts == {"weak_cipher": "RC4"}
+    assert (
+        grade_with_primitive.evidence_observations[0].condition_key == "tls.cipher:rc4"
+    )
+    assert grade_without_primitive.evidence_observations[0].condition_key == (
+        "title:weak tls cipher strength (grade c):cipher report"
+    )
+    for finding in (warning, grade_with_primitive, grade_without_primitive):
+        _assert_backend_assessment_matches(finding)
+
+    negative = FindingPayload(
+        ip="192.0.2.44",
+        port=443,
+        protocol="tcp",
+        issue_key="title:weak tls cipher strength (grade a):clean cipher report",
+        severity="low",
+        title="TLS grade A",
+        description="TLS grade is A.",
+        recommendation="No change required.",
+        evidence="clean cipher report",
+        evidence_observations=[
+            FindingEvidenceObservationPayload(
+                ip="192.0.2.44",
+                port=443,
+                protocol="tcp",
+                condition_key=(
+                    "title:weak tls cipher strength (grade a):clean cipher report"
+                ),
+                method="configuration_observation",
+                result="negative",
+                source="nmap_nse",
+                source_script="ssl-enum-ciphers",
+                rule_id="nse:ssl-enum-ciphers-grade",
+                rule_version="1",
+                evidence="clean cipher report",
+                facts={"weakest_grade": "A"},
+            )
+        ],
+    )
+    _assert_backend_assessment_matches(negative)
+
+
+def test_complete_union_reduces_independently_of_candidate_order() -> None:
+    unit = TargetedUnit("192.0.2.45", 21, "tcp", "ftp", TargetedTool.FTP_CHECK)
+
+    def issue(
+        title: str, method: str, result: str, rule: str, facts: dict[str, object]
+    ):
+        return TargetedIssue(
+            "ftp:anonymous-login",
+            title,
+            title,
+            "medium",
+            title,
+            title,
+            method=method,
+            result=result,
+            rule_id=rule,
+            facts=facts,
+        )
+
+    candidates = [
+        issue(
+            "Direct positive",
+            "specific_check",
+            "positive",
+            "targeted:ftp-check-anonymous",
+            {"anonymous_login_accepted": True},
+        ),
+        issue(
+            "Direct negative",
+            "specific_check",
+            "negative",
+            "targeted:ftp-check-anonymous",
+            {"anonymous_login_accepted": False},
+        ),
+    ] + [
+        issue(
+            f"Unknown {index:02}",
+            "unknown",
+            "inconclusive",
+            f"unsupported:{index:02}",
+            {},
+        )
+        for index in range(17)
+    ]
+
+    def extract(issues: list[TargetedIssue]) -> FindingPayload:
+        host = HostInfo(
+            ip=unit.ip,
+            hostname="ftp",
+            ports=[PortInfo(port=21, service=ServiceInfo(name="ftp"))],
+            targeted_results=[
+                TargetedUnitResult(unit, TargetedOutcome.COMPLETED, issues=[item])
+                for item in issues
+            ],
+        )
+        return extract_findings([host], include_evidence_metadata=True)[0]
+
+    forward = extract(candidates)
+    reverse = extract(list(reversed(candidates)))
+    assert (
+        forward.title,
+        forward.description,
+        forward.recommendation,
+        forward.evidence,
+        forward.source,
+    ) == (
+        reverse.title,
+        reverse.description,
+        reverse.recommendation,
+        reverse.evidence,
+        reverse.source,
+    )
+    assert [item.model_dump_json() for item in forward.evidence_observations] == [
+        item.model_dump_json() for item in reverse.evidence_observations
+    ]
+    assert forward.evidence_truncated is True
+    assert len(forward.evidence_observations) == 16
+    assert {
+        item.result
+        for item in forward.evidence_observations
+        if item.rule_id == "targeted:ftp-check-anonymous"
+    } == {"positive", "negative"}
+    assert (
+        assess_local_evidence(forward).status,
+        assess_local_evidence(forward).confidence,
+    ) == ("conflicting", "tentative")
+
+
+def test_valid_nse_content_wins_over_targeted_unknown_in_any_host_order() -> None:
+    nse = _ftp_anon_host("Anonymous FTP login allowed (FTP code 230)")
+    unit = TargetedUnit("192.168.1.13", 21, "tcp", "ftp", TargetedTool.FTP_CHECK)
+    targeted = HostInfo(
+        ip=unit.ip,
+        hostname="ftp",
+        ports=[PortInfo(port=21, service=ServiceInfo(name="ftp"))],
+        targeted_results=[
+            TargetedUnitResult(
+                unit,
+                TargetedOutcome.COMPLETED,
+                issues=[
+                    TargetedIssue(
+                        "ftp:anonymous-login",
+                        "Unclassified FTP result",
+                        "Unclassified detail",
+                        "critical",
+                        "Unclassified remediation",
+                        "Unclassified evidence",
+                    )
+                ],
+            )
+        ],
+    )
+    first = extract_findings([nse, targeted], include_evidence_metadata=True)[0]
+    second = extract_findings([targeted, nse], include_evidence_metadata=True)[0]
+    for field in (
+        "source",
+        "source_script",
+        "title",
+        "description",
+        "recommendation",
+        "evidence",
+    ):
+        assert getattr(first, field) == getattr(second, field)
+    assert first.source == "nmap_nse"
+    assert assess_local_evidence(first).confidence == "confirmed"
+
+
+def test_full_finding_payload_tie_break_is_order_independent() -> None:
+    base = FindingPayload(
+        ip="192.0.2.46",
+        port=443,
+        protocol="tcp",
+        service="https",
+        issue_key="tls:shared-identity",
+        severity="medium",
+        title="Shared finding identity",
+        description="Candidate description.",
+        recommendation="Candidate recommendation.",
+        evidence="Candidate evidence.",
+    )
+    lower_score = base.model_copy(update={"cvss_score": 4.0, "service": "z-service"})
+    higher_score = base.model_copy(update={"cvss_score": 8.0, "service": "a-service"})
+    forward = _merge_finding_group([lower_score, higher_score])
+    reverse = _merge_finding_group([higher_score, lower_score])
+    assert forward.model_dump(mode="json") == reverse.model_dump(mode="json")
+    # Canonical serialized payload is the lexical tie-break after evidence and severity.
+    assert (forward.cvss_score, forward.service) == (4.0, "z-service")
+
+    service_a = base.model_copy(update={"cvss_score": 4.0, "service": "a-service"})
+    service_z = base.model_copy(update={"cvss_score": 4.0, "service": "z-service"})
+    service_forward = _merge_finding_group([service_z, service_a])
+    service_reverse = _merge_finding_group([service_a, service_z])
+    assert service_forward.model_dump(mode="json") == service_reverse.model_dump(
+        mode="json"
+    )
+    assert service_forward.service == "a-service"
 
 
 def test_targeted_issue_key_is_used_for_cross_source_identity() -> None:
@@ -789,9 +1827,7 @@ def test_targeted_issue_key_is_used_for_cross_source_identity() -> None:
         ],
         targeted_results=[
             TargetedUnitResult(
-                TargetedUnit(
-                    "192.168.10.44", 21, "tcp", "ftp", TargetedTool.FTP_CHECK
-                ),
+                TargetedUnit("192.168.10.44", 21, "tcp", "ftp", TargetedTool.FTP_CHECK),
                 TargetedOutcome.COMPLETED,
                 issues=[
                     TargetedIssue(
@@ -808,3 +1844,52 @@ def test_targeted_issue_key_is_used_for_cross_source_identity() -> None:
     )
 
     assert len(extract_findings([host])) == 1
+
+
+def test_local_evidence_merge_is_deterministic_and_marks_truncation() -> None:
+    unit = TargetedUnit("192.0.2.90", 443, "tcp", "https", TargetedTool.FFUF)
+
+    def host_with_order(order: list[int]) -> HostInfo:
+        return HostInfo(
+            ip=unit.ip,
+            hostname="web",
+            ports=[PortInfo(port=443, service=ServiceInfo(name="https"))],
+            targeted_results=[
+                TargetedUnitResult(
+                    unit,
+                    TargetedOutcome.COMPLETED,
+                    issues=[
+                        TargetedIssue(
+                            "web:test",
+                            "Policy test candidate",
+                            "A policy candidate needs review.",
+                            "low",
+                            "Review the response.",
+                            f"candidate response {index}",
+                        )
+                    ],
+                )
+                for index in order
+            ],
+        )
+
+    forward = extract_findings(
+        [host_with_order(list(range(17)))], include_evidence_metadata=True
+    )[0]
+    reverse = extract_findings(
+        [host_with_order(list(reversed(range(17))))],
+        include_evidence_metadata=True,
+    )[0]
+
+    assert len(forward.evidence_observations) == 16
+    assert forward.evidence_truncated is True
+    assert [item.model_dump_json() for item in forward.evidence_observations] == [
+        item.model_dump_json() for item in reverse.evidence_observations
+    ]
+    assert (forward.title, forward.description, forward.evidence) == (
+        reverse.title,
+        reverse.description,
+        reverse.evidence,
+    )
+    assessment = assess_local_evidence(forward)
+    assert (assessment.status, assessment.confidence) == ("inconclusive", "tentative")

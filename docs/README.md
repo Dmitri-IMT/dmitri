@@ -41,6 +41,7 @@
 | [`adr/ADR-019-v2-active-scanning-and-agent-hardening.md`](adr/ADR-019-v2-active-scanning-and-agent-hardening.md) | Agent hardening, keyed digest, industrial persistence |
 | [`adr/ADR-020-ai-scan-analysis.md`](adr/ADR-020-ai-scan-analysis.md) | Groq scan overview, Explain this scan, data boundary |
 | [`adr/ADR-021-pi-agent-updates.md`](adr/ADR-021-pi-agent-updates.md) | How a provisioned Pi upgrades `hardware-agent` |
+| [`adr/ADR-022-scan-and-machine-deletion.md`](adr/ADR-022-scan-and-machine-deletion.md) | Delete scans or machines (admin, hard delete, deleted-scan guard) |
 
 ### Product roadmap (`roadmap/`)
 
@@ -61,6 +62,8 @@
 | [`implementation/NSE-VULNERABILITY-PIPELINE.md`](implementation/NSE-VULNERABILITY-PIPELINE.md) | Add/modify NSE scripts or the vulnerability pipeline |
 | [`implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md`](implementation/INTELLIGENCE-IA-ASSESSMENT-ROADMAP.md) | Work on the AI/assessment roadmap |
 | [`implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md`](implementation/SCAN-EVIDENCE-CORRECTIONS-2026-09-24.md) | Understand scan coverage, partial-scan reconciliation, CVE confidence and evidence display corrections |
+
+| [`research/scan-report-design-references.md`](research/scan-report-design-references.md) | Review market patterns and evidence caveats used by the downloadable scan reports |
 
 ### UI & setup (`ui/`, root)
 

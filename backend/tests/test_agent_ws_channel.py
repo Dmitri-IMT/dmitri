@@ -58,6 +58,26 @@ def _status_payload(
     return json.dumps(payload)
 
 
+def _progress_payload(*, command_id: UUID, scan_id: UUID, sequence: int) -> str:
+    return json.dumps(
+        {
+            "type": "progress",
+            "command_id": str(command_id),
+            "scan_id": str(scan_id),
+            "sequence": sequence,
+            "progress": {
+                "stage": "discovery",
+                "percent": 10,
+                "machines": 2,
+                "open_ports": None,
+                "filtered_ports": None,
+                "industrial_services": None,
+                "vulnerabilities": None,
+            },
+        }
+    )
+
+
 def _sync(ws: WebSocketTestSession) -> None:
     """Block until the server has drained every frame sent before this call.
 
@@ -69,10 +89,11 @@ def _sync(ws: WebSocketTestSession) -> None:
     assert ws.receive_json() == {"type": "error", "message": "invalid JSON"}
 
 
-def _seed_scan(session: Session, org_id) -> ScanRecord:
+def _seed_scan(session: Session, org_id, *, agent_id=None) -> ScanRecord:
     scan = ScanRecord(
         scan_id=uuid4(),
         org_id=org_id,
+        agent_id=agent_id,
         timestamp=T0,
         subnet="192.168.1.0/24",
         scan_mode="standard",
@@ -82,6 +103,46 @@ def _seed_scan(session: Session, org_id) -> ScanRecord:
     session.commit()
     session.refresh(scan)
     return scan
+
+
+def test_progress_frame_persists_snapshot_without_changing_command_status(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _ = agent_keypair
+    scan = _seed_scan(
+        administrative_session, seeded_org.id, agent_id=provisioned_agent.id
+    )
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(
+            _progress_payload(
+                command_id=command.id, scan_id=scan.scan_id, sequence=1
+            )
+        )
+        _sync(ws)
+
+    administrative_session.expire_all()
+    administrative_session.refresh(scan)
+    administrative_session.refresh(command)
+    assert scan.progress_json is not None
+    assert scan.progress_json["machines"] == 2
+    assert scan.progress_seq == 1
+    assert scan.progress_updated_at is not None
+    assert command.status == "running"
 
 
 def _seed_command(

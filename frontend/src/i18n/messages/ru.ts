@@ -34,6 +34,49 @@ export const catalog: Catalog = {
   'scans.partialResults': 'Некоторые проверки не были завершены.',
   'scans.targetedChecks': 'Целевые проверки',
   'scans.targetedToolCoverage': 'Покрытие по инструментам',
+  'scans.targetedFindingsTitle': ({ count }) =>
+    'Результаты целевых проверок служб: ' + count,
+  'scans.targetedFindingsToggle':
+    'Показать или скрыть результаты целевых проверок служб',
+  'scans.exposureTableGuidance':
+    'Разверните строку, чтобы увидеть доказательства и связанные уязвимости сервиса.',
+  'scans.exposureTableCaption': 'Доступные сервисы в этом сканировании',
+  'scans.exposureTableHostCaption': 'Доступные сервисы на этом устройстве',
+  'scans.exposureEndpoint': 'Адрес и порт',
+  'scans.exposureObservedService': 'Обнаруженный сервис',
+  'scans.exposureRole': 'Назначение сервиса',
+  'scans.exposureAttention': 'Внимание',
+  'scans.exposureWhyItMatters': 'Почему это важно',
+  'scans.exposureRelatedVulnerabilities': 'Связанные уязвимости',
+  'scans.exposureOpenVulnerability': 'Открыть уязвимость',
+  'scans.exposureRowDetails': ({ service, endpoint }) =>
+    'Показать сведения о ' + service + ' на ' + endpoint,
+  'scans.exposureRoleAdministration': 'Администрирование',
+  'scans.exposureRoleDataStore': 'Хранилище данных',
+  'scans.exposureRoleFileSharing': 'Общий доступ к файлам',
+  'scans.exposureRoleRemoteAccess': 'Удалённый доступ',
+  'scans.exposureRoleProxy': 'Прокси',
+  'scans.exposureRoleApi': 'API',
+  'scans.exposureRoleDeviceControl': 'Управление устройствами',
+  'scans.exposureRoleDiscovery': 'Обнаружение',
+  'scans.exposureRoleMedia': 'Медиа',
+  'scans.exposureRoleGeneralService': 'Общий сервис',
+  'scans.exposureRoleUnknown': 'Неизвестно',
+  'scans.exposureConfidenceLow': 'Низкая',
+  'scans.exposureConfidenceMedium': 'Средняя',
+  'scans.exposureConfidenceHigh': 'Высокая',
+  'scans.targetedFindingsDescription':
+    'Результаты проверок конкретных служб, сгруппированные по критичности. Инструмент, обнаруживший каждый пункт, указан под его названием.',
+  'scans.targetedFindingsCaption': ({ severity }) =>
+    'Результаты проверок служб с критичностью ' +
+    severity +
+    ' в этом сканировании',
+  'scans.targetedSeverityGroupToggle': ({ severity }) =>
+    'Показать или скрыть целевые результаты с критичностью ' +
+    String(severity).toLowerCase(),
+  'scans.targetedToolLabel': 'Инструмент',
+  'scans.noTargetedFindings':
+    'Целевые инструменты не зарегистрировали проблем. Это не подтверждает, что все запланированные проверки были выполнены.',
   'scans.coveragePlanned': 'Запланировано',
   'scans.coverageCompletedLabel': 'Завершено',
   'scans.coverageFailed': 'Не удалось',
@@ -130,6 +173,9 @@ export const catalog: Catalog = {
   'common.servicesRunning': 'Порты, наблюдавшиеся на этом устройстве',
   'common.scanHistory': 'История сканирований',
   'common.machine': 'Устройство',
+  'common.vulnerability': 'Уязвимость',
+  'common.port': 'Порт',
+  'common.cve': 'CVE',
   'common.vendor': 'Производитель',
   'common.services': 'Сервисы',
   'common.mac': 'MAC',
@@ -148,6 +194,76 @@ export const catalog: Catalog = {
   'common.nextPage': 'Следующая страница',
   'common.pageNumber': ({ page }) => 'Страница ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityLabel': 'Критичность',
+  'common.showFindingDetails': ({ title }) => 'Показать подробности: ' + title,
+  'common.riskScore': 'Оценка риска',
+  'common.riskScoreNotCalculated': 'Не рассчитана',
+  'common.riskScoreValue': ({ score }) => score + ' из 100',
+  'common.confidence': 'Уверенность',
+  'evidence.confidenceLabel': 'Уверенность в доказательствах',
+  'evidence.methodLabel': 'Метод обнаружения',
+  'evidence.statusLabel': 'Статус доказательств',
+  'evidence.method.version_correlation': 'Связь с версией',
+  'evidence.method.configuration_observation': 'Наблюдаемая конфигурация',
+  'evidence.method.specific_check': 'Специальная проверка',
+  'evidence.method.textual_reference': 'Только текстовое упоминание',
+  'evidence.method.unknown': 'Неизвестно',
+  'evidence.status.supported': 'Подтверждается для указанного метода',
+  'evidence.status.supportedVersionCorrelation':
+    'Подтверждается для связи с версией',
+  'evidence.status.inconclusive': 'Неубедительно',
+  'evidence.status.conflicting': 'Противоречивые данные',
+  'evidence.status.unknown': 'Неизвестно',
+  'evidence.confidence.tentative': 'Предварительная',
+  'evidence.confidence.probable': 'Вероятная',
+  'evidence.confidence.confirmed': 'Подтверждённая',
+  'evidence.confidence.unknown': 'Не указана',
+  'evidence.confidence.notReported': 'Не указана',
+  'evidence.explanation.correlation':
+    'Версия связана с известной уязвимостью. Её наличие на этом устройстве ещё нужно проверить.',
+  'evidence.explanation.configuration':
+    'Эта конфигурация была обнаружена. Это не доказывает эксплуатацию известной уязвимости.',
+  'evidence.explanation.specificCheck':
+    'Проверка выявила указанное состояние на записанном узле. Это не описывает устройство целиком.',
+  'evidence.explanation.textReference':
+    'В тексте встретилось упоминание уязвимости, но проверяемый положительный результат не записан.',
+  'evidence.explanation.inconclusive':
+    'Проверка не дала однозначного результата. Это не подтверждает и не исключает уязвимость.',
+  'evidence.explanation.conflicting':
+    'Записанные проверки противоречат друг другу. Проверьте каждый источник и результат; это не подтверждает и не исключает уязвимость.',
+  'evidence.explanation.legacy':
+    'Эта запись создана до появления подробных данных о доказательствах. Имеющиеся данные не показывают, как возникло предупреждение, и не подтверждают уязвимость.',
+  'evidence.explanation.unknown':
+    'Имеющиеся данные не показывают, как возникло предупреждение, и не подтверждают уязвимость.',
+  'evidence.summaryTitle': 'Сводка доказательств',
+  'evidence.records': 'Записи об уязвимостях',
+  'evidence.demonstrated': 'Подтверждённые условия',
+  'evidence.conflictingRecords': 'Противоречивые записи',
+  'evidence.scope': 'Область',
+  'evidence.scope.scan': 'Сканирование',
+  'evidence.scope.filtered_findings': 'Отфильтрованные уязвимости',
+  'evidence.countNote':
+    'Числа обозначают записи об уязвимостях, а не доказанные сбои.',
+  'evidence.observationsTitle': 'Проверки без записи об уязвимости',
+  'evidence.recordedTitle': 'Записанные доказательства',
+  'evidence.condition': 'Проверенное условие',
+  'evidence.endpoint': 'Узел',
+  'evidence.modbusUnit': 'ID устройства Modbus',
+  'evidence.provenance': 'Источник и правило',
+  'evidence.result.positive': 'Положительный результат',
+  'evidence.result.negative': 'Эта проверка не выявила указанное состояние',
+  'evidence.result.inconclusive': 'Неоднозначный результат',
+  'evidence.truncated':
+    'Некоторые записи доказательств не показаны из-за ограничения объёма.',
+  'common.exploitabilityIndex': 'Индекс эксплуатируемости',
+  'common.whatItIs': 'Что это',
+  'common.whatToDo': 'Что делать',
+  'common.references': 'Источники',
+  'common.seenOn': 'Обнаружено на',
+  'common.cvss': 'CVSS',
+  'common.vulnerabilitiesInScanTitle': ({ count }) => 'Уязвимости: ' + count,
+  'common.vulnerabilitiesInScanToggle':
+    'Показать или скрыть уязвимости сканирования',
   'common.severityGroupTitle': ({ severity, count }) => {
     const n = Number(count)
     const word =
@@ -264,6 +380,43 @@ export const catalog: Catalog = {
   'settings.deleteAccountBody':
     'Ваша учетная запись будет удалена, и доступ будет потерян. Это нельзя отменить.',
   'settings.passwordChanged': 'Пароль изменен.',
+  'deletion.deleteScan': 'Удалить сканирование',
+  'deletion.deleteScanHeading': 'Удалить это сканирование',
+  'deletion.deleteScanQuestion': 'Удалить это сканирование?',
+  'deletion.deleteScanBody':
+    'Результаты, уязвимости, анализ ИИ и чат будут удалены. Это действие нельзя отменить.',
+  'deletion.deleteScanError':
+    'Не удалось удалить сканирование. Попробуйте ещё раз.',
+  'deletion.scanRunningError':
+    'Остановите сканирование, прежде чем удалять его.',
+  'deletion.scanDeleted': 'Сканирование удалено.',
+  'deletion.deleteMachine': 'Удалить машину',
+  'deletion.deleteMachineHeading': 'Удалить эту машину',
+  'deletion.deleteMachineQuestion': ({ name }) => 'Удалить ' + name + '?',
+  'deletion.deleteMachineBody':
+    'Машина и её уязвимости будут удалены. Старые сканирования останутся, но больше не будут её показывать. Если новое сканирование найдёт её, она появится как новая машина. Это действие нельзя отменить.',
+  'deletion.deleteMachineError':
+    'Не удалось удалить машину. Попробуйте ещё раз.',
+  'deletion.machineDeleted': ({ name }) => name + ' удалена.',
+  'deletion.deleting': 'Удаление…',
+  'deletion.deleteData': 'Удаление данных',
+  'deletion.deleteAllScans': 'Удалить все сканирования',
+  'deletion.deleteAllScansQuestion': 'Удалить все сканирования?',
+  'deletion.deleteAllScansBody':
+    'Все завершённые сканирования и их данные будут удалены. Запущенные сканирования пропускаются. Машины, найденные только в этих сканированиях, тоже будут удалены. Это действие нельзя отменить.',
+  'deletion.deleteAllScansError':
+    'Не удалось удалить сканирования. Попробуйте ещё раз.',
+  'deletion.scansDeleted': ({ count }) =>
+    'Удалено сканирований: ' + count + '.',
+  'deletion.scansSkipped': ({ count }) =>
+    'Пропущено запущенных сканирований: ' + count + '.',
+  'deletion.deleteAllMachines': 'Удалить все машины',
+  'deletion.deleteAllMachinesQuestion': 'Удалить все машины?',
+  'deletion.deleteAllMachinesBody':
+    'Все машины и их уязвимости будут удалены. Сканирования останутся. Следующее сканирование заново создаст список. Это действие нельзя отменить.',
+  'deletion.deleteAllMachinesError':
+    'Не удалось удалить машины. Попробуйте ещё раз.',
+  'deletion.machinesDeleted': ({ count }) => 'Удалено машин: ' + count + '.',
   'devices.subtitle':
     'Устройства Dmitri, отправляющие данные в эту организацию.',
   'devices.caption': 'Устройства Dmitri',
@@ -315,6 +468,13 @@ export const catalog: Catalog = {
   'scans.coverageOutcomeSkipped': 'пропущена',
   'scans.openPorts': 'Открытые порты',
   'scans.filteredPorts': 'Фильтрованные порты',
+  'scans.stage.discovery': 'Поиск устройств',
+  'scans.stage.ports': 'Проверка портов',
+  'scans.stage.deep_inspection': 'Проверка устройств',
+  'scans.stage.ot_inspection': 'Проверка промышленных служб',
+  'scans.stage.targeted_assessment': 'Целевые проверки',
+  'scans.stage.normalization': 'Подготовка результатов',
+  'scans.stage.uploading': 'Отправка результатов',
   'scans.currentPort': 'Наблюдался в последнем сканировании',
   'scans.historicalPort': 'Предыдущее наблюдение',
   'scans.unknownPort': 'Не проверен в последнем сканировании',

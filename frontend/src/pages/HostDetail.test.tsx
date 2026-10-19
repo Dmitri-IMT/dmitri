@@ -102,6 +102,7 @@ describe('HostDetail', () => {
       'Ports observed on this machine',
       'Industrial services',
       'Scan history',
+      'Delete this machine',
     ])
     expect(screen.getByTestId('host-exposures-table')).toBeInTheDocument()
   })
@@ -329,6 +330,49 @@ describe('HostDetail', () => {
     expect(screen.getByTestId('location-probe')).toHaveTextContent(
       `/network/${HOST.host_id}`,
     )
+  })
+
+  it('shows API-filtered evidence totals before the host findings page', async () => {
+    hostDetail(HOST, findingFixtures)
+    server.use(
+      http.get(`${baseURL}/findings`, () =>
+        HttpResponse.json({
+          data: [criticalFinding],
+          total: 153,
+          page: 1,
+          evidence_summary: {
+            scope: 'filtered_findings',
+            total_records: 153,
+            by_method: {
+              version_correlation: 90,
+              configuration_observation: 20,
+              specific_check: 30,
+              textual_reference: 5,
+              unknown: 8,
+            },
+            by_confidence: {
+              tentative: 28,
+              probable: 50,
+              confirmed: 60,
+              unknown: 15,
+            },
+            conflicting_records: 4,
+            demonstrated_records: 12,
+          },
+        }),
+      ),
+    )
+    renderPage(`/network/${HOST.host_id}`)
+
+    const summary = await screen.findByTestId('evidence-summary-filtered')
+    const table = await screen.findByTestId('host-findings-table')
+    expect(summary).toHaveTextContent('Vulnerability records153')
+    expect(summary).toHaveTextContent('Filtered vulnerabilities')
+    expect(summary).toHaveTextContent('Version association90')
+    expect(summary).toHaveTextContent('Confirmed60')
+    expect(
+      summary.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
   })
 
   it('renders an inert ports table when the host has open ports', async () => {

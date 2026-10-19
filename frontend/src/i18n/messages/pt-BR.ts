@@ -41,6 +41,49 @@ export const catalog: Catalog = {
   'scans.partialResults': 'Algumas verificações não foram concluídas.',
   'scans.targetedChecks': 'Verificações direcionadas',
   'scans.targetedToolCoverage': 'Cobertura por ferramenta',
+  'scans.targetedFindingsTitle': ({ count }) =>
+    'Achados das ferramentas por serviço: ' + count,
+  'scans.targetedFindingsToggle':
+    'Alternar achados das ferramentas por serviço',
+  'scans.exposureTableGuidance':
+    'Expanda uma linha para ver as evidências e vulnerabilidades relacionadas ao serviço.',
+  'scans.exposureTableCaption': 'Serviços alcançáveis neste scan',
+  'scans.exposureTableHostCaption': 'Serviços alcançáveis neste equipamento',
+  'scans.exposureEndpoint': 'Endereço e porta',
+  'scans.exposureObservedService': 'Serviço identificado',
+  'scans.exposureRole': 'Função do serviço',
+  'scans.exposureAttention': 'Atenção',
+  'scans.exposureWhyItMatters': 'Por que isso importa',
+  'scans.exposureRelatedVulnerabilities': 'Vulnerabilidades relacionadas',
+  'scans.exposureOpenVulnerability': 'Abrir vulnerabilidade',
+  'scans.exposureRowDetails': ({ service, endpoint }) =>
+    'Mostrar detalhes de ' + service + ' em ' + endpoint,
+  'scans.exposureRoleAdministration': 'Administração',
+  'scans.exposureRoleDataStore': 'Armazenamento de dados',
+  'scans.exposureRoleFileSharing': 'Compartilhamento de arquivos',
+  'scans.exposureRoleRemoteAccess': 'Acesso remoto',
+  'scans.exposureRoleProxy': 'Proxy',
+  'scans.exposureRoleApi': 'API',
+  'scans.exposureRoleDeviceControl': 'Controle de dispositivos',
+  'scans.exposureRoleDiscovery': 'Descoberta',
+  'scans.exposureRoleMedia': 'Mídia',
+  'scans.exposureRoleGeneralService': 'Serviço geral',
+  'scans.exposureRoleUnknown': 'Desconhecida',
+  'scans.exposureConfidenceLow': 'Baixa',
+  'scans.exposureConfidenceMedium': 'Média',
+  'scans.exposureConfidenceHigh': 'Alta',
+  'scans.targetedFindingsDescription':
+    'Achados de verificações específicas, agrupados por gravidade. A ferramenta que reportou cada item aparece abaixo do título.',
+  'scans.targetedFindingsCaption': ({ severity }) =>
+    'Achados de ferramentas direcionadas com gravidade ' +
+    severity +
+    ' neste scan',
+  'scans.targetedSeverityGroupToggle': ({ severity }) =>
+    'Alternar achados direcionados de gravidade ' +
+    String(severity).toLowerCase(),
+  'scans.targetedToolLabel': 'Ferramenta',
+  'scans.noTargetedFindings':
+    'Nenhum achado foi registrado pelas ferramentas direcionadas. Isso não confirma que todas as verificações planejadas foram executadas.',
   'scans.coveragePlanned': 'Planejadas',
   'scans.coverageCompletedLabel': 'Concluídas',
   'scans.coverageFailed': 'Falharam',
@@ -142,6 +185,9 @@ export const catalog: Catalog = {
   'common.servicesRunning': 'Portas observadas neste equipamento',
   'common.scanHistory': 'Hist\u00f3rico de varreduras',
   'common.machine': 'Equipamento',
+  'common.vulnerability': 'Vulnerabilidade',
+  'common.port': 'Porta',
+  'common.cve': 'CVE',
   'common.vendor': 'Fabricante',
   'common.services': 'Servi\u00e7os',
   'common.mac': 'MAC',
@@ -160,6 +206,77 @@ export const catalog: Catalog = {
   'common.nextPage': 'Próxima página',
   'common.pageNumber': ({ page }) => 'Página ' + page,
   'common.severity': ({ severity }) => SEVERITY[severity],
+  'common.severityLabel': 'Gravidade',
+  'common.showFindingDetails': ({ title }) => 'Mostrar detalhes de ' + title,
+  'common.riskScore': 'Pontuação de risco',
+  'common.riskScoreNotCalculated': 'Não calculada',
+  'common.riskScoreValue': ({ score }) => score + ' de 100',
+  'common.confidence': 'Confiança',
+  'evidence.confidenceLabel': 'Confiança da evidência',
+  'evidence.methodLabel': 'Método de detecção',
+  'evidence.statusLabel': 'Estado da evidência',
+  'evidence.method.version_correlation': 'Associação de versão',
+  'evidence.method.configuration_observation': 'Configuração observada',
+  'evidence.method.specific_check': 'Verificação específica',
+  'evidence.method.textual_reference': 'Apenas referência textual',
+  'evidence.method.unknown': 'Desconhecido',
+  'evidence.status.supported': 'Sustentada para o método registrado',
+  'evidence.status.supportedVersionCorrelation':
+    'Sustentada para a associação de versão',
+  'evidence.status.inconclusive': 'Inconclusivo',
+  'evidence.status.conflicting': 'Evidências conflitantes',
+  'evidence.status.unknown': 'Desconhecido',
+  'evidence.confidence.tentative': 'Preliminar',
+  'evidence.confidence.probable': 'Provável',
+  'evidence.confidence.confirmed': 'Confirmada',
+  'evidence.confidence.unknown': 'Não informada',
+  'evidence.confidence.notReported': 'Não informada',
+  'evidence.explanation.correlation':
+    'Uma versão está associada a uma vulnerabilidade conhecida. A presença dela neste equipamento ainda precisa ser validada.',
+  'evidence.explanation.configuration':
+    'Esta configuração foi observada. Isso não demonstra a exploração de uma vulnerabilidade conhecida.',
+  'evidence.explanation.specificCheck':
+    'A verificação encontrou a condição indicada no endpoint registrado. Isso não descreve o equipamento inteiro.',
+  'evidence.explanation.textReference':
+    'Uma referência a vulnerabilidade apareceu no texto, mas nenhum resultado positivo verificável foi registrado.',
+  'evidence.explanation.inconclusive':
+    'A verificação não chegou a um resultado conclusivo. Isso não confirma nem descarta a vulnerabilidade.',
+  'evidence.explanation.conflicting':
+    'As verificações registradas divergem. Revise cada origem e resultado; isso não confirma nem descarta a vulnerabilidade.',
+  'evidence.explanation.legacy':
+    'Este registro é anterior ao detalhamento da evidência. Os dados disponíveis não mostram como o alerta foi produzido nem validam a vulnerabilidade.',
+  'evidence.explanation.unknown':
+    'As evidências disponíveis não identificam como o alerta foi produzido nem validam a vulnerabilidade.',
+  'evidence.summaryTitle': 'Resumo da evidência',
+  'evidence.records': 'Registros de vulnerabilidade',
+  'evidence.demonstrated': 'Condições demonstradas',
+  'evidence.conflictingRecords': 'Registros conflitantes',
+  'evidence.scope': 'Escopo',
+  'evidence.scope.scan': 'Scan',
+  'evidence.scope.filtered_findings': 'Vulnerabilidades filtradas',
+  'evidence.countNote':
+    'As contagens são registros de vulnerabilidade, não falhas comprovadas.',
+  'evidence.observationsTitle': 'Verificações sem registro de vulnerabilidade',
+  'evidence.recordedTitle': 'Evidência registrada',
+  'evidence.condition': 'Condição verificada',
+  'evidence.endpoint': 'Endpoint',
+  'evidence.modbusUnit': 'ID da unidade Modbus',
+  'evidence.provenance': 'Origem e regra',
+  'evidence.result.positive': 'Resultado positivo',
+  'evidence.result.negative':
+    'Esta verificação não encontrou a condição indicada',
+  'evidence.result.inconclusive': 'Resultado inconclusivo',
+  'evidence.truncated':
+    'Alguns registros de evidência foram omitidos porque o limite de exibição foi atingido.',
+  'common.exploitabilityIndex': 'Índice de explorabilidade',
+  'common.whatItIs': 'O que é',
+  'common.whatToDo': 'O que fazer',
+  'common.references': 'Referências',
+  'common.seenOn': 'Observado em',
+  'common.cvss': 'CVSS',
+  'common.vulnerabilitiesInScanTitle': ({ count }) =>
+    'Vulnerabilidades: ' + count,
+  'common.vulnerabilitiesInScanToggle': 'Alternar vulnerabilidades do scan',
   'common.severityGroupTitle': ({ severity, count }) =>
     SEVERITY[severity] +
     ': ' +
@@ -277,6 +394,43 @@ export const catalog: Catalog = {
   'settings.deleteAccountBody':
     'Sua conta será excluída e você perderá o acesso imediatamente. Isso não pode ser desfeito.',
   'settings.passwordChanged': 'Senha alterada.', // pragma: allowlist secret
+  'deletion.deleteScan': 'Excluir varredura',
+  'deletion.deleteScanHeading': 'Excluir esta varredura',
+  'deletion.deleteScanQuestion': 'Excluir esta varredura?',
+  'deletion.deleteScanBody':
+    'Os resultados, vulnerabilidades, análise de IA e conversa são excluídos. Isso não pode ser desfeito.',
+  'deletion.deleteScanError':
+    'Não foi possível excluir esta varredura. Tente novamente.',
+  'deletion.scanRunningError': 'Pare a varredura antes de excluí-la.',
+  'deletion.scanDeleted': 'Varredura excluída.',
+  'deletion.deleteMachine': 'Excluir máquina',
+  'deletion.deleteMachineHeading': 'Excluir esta máquina',
+  'deletion.deleteMachineQuestion': ({ name }) => 'Excluir ' + name + '?',
+  'deletion.deleteMachineBody':
+    'A máquina e suas vulnerabilidades são excluídas. As varreduras antigas continuam, mas não a listam mais. Se uma varredura futura a encontrar, ela volta como uma nova máquina. Isso não pode ser desfeito.',
+  'deletion.deleteMachineError':
+    'Não foi possível excluir esta máquina. Tente novamente.',
+  'deletion.machineDeleted': ({ name }) => name + ' foi excluída.',
+  'deletion.deleting': 'Excluindo…',
+  'deletion.deleteData': 'Excluir dados',
+  'deletion.deleteAllScans': 'Excluir todas as varreduras',
+  'deletion.deleteAllScansQuestion': 'Excluir todas as varreduras?',
+  'deletion.deleteAllScansBody':
+    'Todas as varreduras concluídas e seus dados são excluídos. Varreduras em andamento são ignoradas. Máquinas vistas só nessas varreduras também são excluídas. Isso não pode ser desfeito.',
+  'deletion.deleteAllScansError':
+    'Não foi possível excluir as varreduras. Tente novamente.',
+  'deletion.scansDeleted': ({ count }) =>
+    'Varreduras excluídas: ' + count + '.',
+  'deletion.scansSkipped': ({ count }) =>
+    'Varreduras em andamento ignoradas: ' + count + '.',
+  'deletion.deleteAllMachines': 'Excluir todas as máquinas',
+  'deletion.deleteAllMachinesQuestion': 'Excluir todas as máquinas?',
+  'deletion.deleteAllMachinesBody':
+    'Todas as máquinas e suas vulnerabilidades são excluídas. As varreduras continuam. A próxima varredura monta a lista de novo. Isso não pode ser desfeito.',
+  'deletion.deleteAllMachinesError':
+    'Não foi possível excluir as máquinas. Tente novamente.',
+  'deletion.machinesDeleted': ({ count }) =>
+    'Máquinas excluídas: ' + count + '.',
   'devices.subtitle': 'As caixas Dmitri que reportam para esta organização.',
   'devices.caption': 'Caixas Dmitri',
   'devices.error': 'Não foi possível carregar seus dispositivos.',
@@ -328,6 +482,13 @@ export const catalog: Catalog = {
   'scans.coverageOutcomeSkipped': 'não executada',
   'scans.openPorts': 'Portas abertas',
   'scans.filteredPorts': 'Portas filtradas',
+  'scans.stage.discovery': 'Procurando dispositivos',
+  'scans.stage.ports': 'Verificando portas',
+  'scans.stage.deep_inspection': 'Inspecionando dispositivos',
+  'scans.stage.ot_inspection': 'Inspecionando serviços industriais',
+  'scans.stage.targeted_assessment': 'Executando verificações direcionadas',
+  'scans.stage.normalization': 'Preparando resultados',
+  'scans.stage.uploading': 'Enviando resultados',
   'scans.currentPort': 'Observada na última varredura',
   'scans.historicalPort': 'Observação anterior',
   'scans.unknownPort': 'Não verificada na última varredura',

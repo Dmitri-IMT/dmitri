@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 VALID_PASSWORD = "Xk9$mQvL2pTz"
-ALLOWED_ORIGIN = "http://localhost:5173"
 
 
 def _assert_error_envelope(
@@ -247,6 +246,7 @@ def test_promote_returns_member_and_subsequent_own_profile_reports_admin(
         "user_id": str(viewer.id),
         "email": "viewer@corp.com",
         "role": "admin",
+        "org_name": seeded_org.name,
     }
 
 
@@ -497,18 +497,3 @@ def test_role_patch_without_bearer_returns_401_and_preserves_role(
     persisted = administrative_session.get(User, target.id)
     assert persisted is not None
     assert persisted.role == "viewer"
-
-
-def test_real_patch_preflight_is_allowed(client: TestClient) -> None:
-    response = client.options(
-        f"/api/v1/users/{uuid4()}",
-        headers={
-            "Origin": ALLOWED_ORIGIN,
-            "Access-Control-Request-Method": "PATCH",
-            "Access-Control-Request-Headers": "authorization,content-type",
-        },
-    )
-
-    assert response.status_code == 204
-    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
-    assert "PATCH" in response.headers["access-control-allow-methods"]

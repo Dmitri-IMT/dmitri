@@ -230,10 +230,12 @@ As interfaces seguem REST + JSON. O contrato publicado e autoritativo é `contra
 - **Autenticação**: JWT Bearer Token (access token short-lived) + refresh token em httpOnly cookie
 - **Métodos principais**:
   - `GET /api/v1/scans` → Lista de scans realizados
-  - `GET /api/v1/scans/{scan_id}` → Detalhes de um scan específico
+  - `GET /api/v1/scans/{scan_id}` → Detalhes do scan; enquanto estiver em andamento, inclui o estágio, o percentual e as contagens confirmadas mais recentes enviados pelo Pi
   - `GET /api/v1/hosts` → Inventário de máquinas descobertas na rede
   - `GET /api/v1/hosts/{host_id}` → Detalhes de uma máquina
   - `GET /api/v1/findings` → Vulnerabilidades encontradas (filtráveis por severidade, scan ou host)
+  - `DELETE /api/v1/scans/{scan_id}`, `DELETE /api/v1/scans` → Excluir um scan finalizado ou todos os scans finalizados (admin; `409 scan_running` se o scan não terminou; ver ADR-022)
+  - `DELETE /api/v1/hosts/{host_id}`, `DELETE /api/v1/hosts` → Excluir uma máquina ou todas as máquinas (admin; os scans permanecem; ver ADR-022)
   - `POST /api/v1/auth/login` → Login (email/senha)
   - `POST /api/v1/auth/refresh` / `POST /api/v1/auth/logout` → Ciclo de vida da sessão
   - `POST /api/v1/invites`, `POST /api/v1/invites/accept`, `POST /api/v1/invites/lookup` → Criar, aceitar e consultar convites

@@ -8,7 +8,11 @@ from uuid import UUID
 
 import pytest
 from api.models.command import Agent
-from api.schemas.agent_frames import AgentCancelFrame, AgentErrorFrame
+from api.schemas.agent_frames import (
+    AgentCancelFrame,
+    AgentErrorFrame,
+    AgentProgressFrame,
+)
 from api.services import agent_connections, agent_ws
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
@@ -252,6 +256,32 @@ def test_parse_frame_accepts_hello_and_status_without_io():
     assert hello.frame.agent_version
     assert isinstance(status, agent_ws._Status)
     assert status.frame.command_id == COMMAND_ID
+
+
+def test_parse_frame_accepts_progress_without_io():
+    parsed = agent_ws._parse_frame(
+        json.dumps(
+            {
+                "type": "progress",
+                "command_id": str(COMMAND_ID),
+                "scan_id": str(COMMAND_ID),
+                "sequence": 1,
+                "progress": {
+                    "stage": "discovery",
+                    "percent": 0,
+                    "machines": None,
+                    "open_ports": None,
+                    "filtered_ports": None,
+                    "industrial_services": None,
+                    "vulnerabilities": None,
+                },
+            }
+        )
+    )
+
+    assert isinstance(parsed, agent_ws._Progress)
+    assert isinstance(parsed.frame, AgentProgressFrame)
+    assert parsed.frame.progress.machines is None
 
 
 def test_accepted_hello_sends_cancel_catch_up(monkeypatch):

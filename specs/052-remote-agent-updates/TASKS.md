@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–6 concluídas. Próxima: #7; depois #8.** Execução das Tasks 7 e 8 autorizada pelo usuário após a correção da incompatibilidade de ingestão.
+14 tasks. **Tasks 1–6 concluídas. Próxima: #7.** Execução da Task 7 autorizada após a correção da incompatibilidade de ingestão; Task 8 aguarda novo comando do usuário.
 
 ## Escopo e estado
 
@@ -163,6 +163,16 @@ publicação de release, scan real e commit/push dependem de autorização para 
 - **Status**: COMPLETED
 - **Review Rejections**: 1
 
+## Pré-requisito corretivo: compatibilidade com a feature 051
+
+- **Causa**: agente instalado emite o contrato 051, mas a branch do backend não contém a implementação correspondente; uploads retornam 422.
+- **Escopo autorizado**: integrar `feature/scan-adjusts-improve` em `5168821`, preservando as Tasks 1–6 desta feature, o contrato estrito de ingestão e toda a evidência coletada.
+- **Migrações**: preservar a revisão remota aplicada `20261017_41`; renomear o merge vazio recebido para `20261018_42`, reunindo os pais `20261010_40`, `20261012_40` e `20261017_41`.
+- **Gates**: migração aditiva com dados existentes preservados; ingestão/leituras com evidências e payload legado; testes por camada e revisão independente. Banco local respaldado antes da alteração; nenhum scan real.
+- **Resultado**: payload real salvo do Pi aceito com 115 achados e evidências; campos extras continuam rejeitados. Migração ensaiada preservou os dados de scans/findings/risk snapshots; 200 testes Linux focais passaram. Backend: 1.717 aprovados na suíte completa; os 3 testes de PDF que falharam por ausência de fonte Unicode passaram ao instalar `fonts-dejavu-core` no container de teste. Ruff passou. Frontend: 747 testes em 84 arquivos, lint, formatação, build e typecheck passaram; após a atualização do contrato, tipos foram regenerados e typecheck passou novamente. Revisão independente `[APPROVE]`. Nenhum scan real.
+- **Status**: COMPLETED
+- **Review Rejections**: 0
+
 ## Task 7: Persistir versões e negociar sessões compatíveis no backend
 - **Description**: Implementar registry guard, hello negociado, schemas de frames e confirmação terminal de scan conforme `INTEGRATION.md` (WS contract). Clientes legados mantêm o contrato existente.
 - **Absorbed**: Projeção de versão, endpoint assinado de probe e atualização dos contratos de frames pertencem aos testes de conexão e read routes; não há tarefa isolada de wrappers.
@@ -172,9 +182,9 @@ publicação de release, scan real e commit/push dependem de autorização para 
 - **Success Criteria**:
   - U01/U07/U08/U10: guard por dispositivo serializa sessão/hello; ordem guard → Agent row; trabalho de DB permanece fora do event loop.
   - Hello aceito persiste versão/data somente da sessão atual; desconexão remove capacidade atual sem apagar versão histórica.
-  - Enviar `update_session` e `scan_status_ack` somente à capacidade negociada; ACK de scan somente após commit de status terminal pertencente ao dispositivo, incluindo repetição idêntica.
+  - Negociar `scan_finalization_v1` independentemente da instalação; `update_session` correlaciona o socket sem autorizar update. ACK de scan inclui `session_id` e só segue commit terminal pertencente ao dispositivo, incluindo repetição idêntica.
   - Frames de socket substituído não alteram estado nem produzem ACK; schemas rejeitam campos extras. Não entregar frame de update nesta tarefa.
-  - Expor GET assinado `update-protocol` para o próprio dispositivo, apenas com versões suportadas; leitura sem efeito colateral. Isso permite o probe da Task 8 antes da API de admissão da Task 9.
+  - Expor GET assinado `update-protocol` para o próprio dispositivo, com versões e `scan_finalization_v1` suportados; leitura sem efeito colateral. Isso permite o probe da Task 8 antes da API de admissão da Task 9.
   - Contrato de scans/ingest e clientes antigos permanecem cobertos; tipos gerados refletem apenas mudanças implementadas.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
 - **Status**: PENDING
@@ -187,10 +197,10 @@ publicação de release, scan real e commit/push dependem de autorização para 
 - **Target Files**: `hardware-agent/src/agent/daemon.py`, `hardware-agent/src/agent/transport/command_channel.py`, `hardware-agent/src/agent/transport/ingest.py`, `hardware-agent/src/agent/headless.py`, `hardware-agent/src/agent/cli.py`, `hardware-agent/packaging/updater.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_command_channel.py`, `hardware-agent/tests/unit/test_headless.py`, `hardware-agent/tests/unit/test_cli_agent.py`, `hardware-agent/tests/unit/test_updater.py` (N).
 - **Tests**: Reinício em cada fase do scan remoto, perda de ACK, ingest fechado, falha de escrita, backend antigo recusando campos extras e readiness de PID/invocation/nonce antigo.
 - **Success Criteria**:
-  - U05/U07/U08/U12: gravar comando antes de executar e referência ao resultado antes de upload; checkpoint só é liberado pelo ACK terminal correspondente da sessão atual.
+  - U05/U07/U08/U12: em sessão `scan_finalization_v1`, gravar comando antes de executar e referência ao resultado antes de upload; checkpoint só é liberado pelo ACK terminal correspondente da sessão atual.
   - Reinício reenvia artefato/status salvos; scan interrompido sem resultado é reportado como falha, sem novo Nmap. Ingest definitivamente fechado conserva o artefato e reconcilia status.
   - Supervisor recusa claim com checkpoint pendente mesmo sem flock ativo. Lease e estado durável não deixam janela entre escrita, upload e confirmação.
-  - Probe usa contrato implementado quando disponível; 404/sem suporte envia hello legado. Capacidade de instalação só será anunciada na Task 12.
+  - Probe negocia `scan_finalization_v1`; 404/sem suporte mantém hello e ciclo de scan legados sem criar checkpoint v1. Um checkpoint v1 existente nunca é rebaixado; aguarda ACK compatível e bloqueia novos scans remotos/claims. Erros de rede/5xx/probe inválido usam retry. Capacidade de instalação só será anunciada na Task 12.
   - Saúde fixa verifica imports/versão/configuração/acesso a resultados sem scan ou segredos; handshake local associa MainPID/invocation/versões ao desafio atual, sem depender do backend e sem adquirir lease de scan.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
 - **Status**: PENDING

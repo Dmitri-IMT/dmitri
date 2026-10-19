@@ -81,11 +81,17 @@ def run_worker_once(
     resolved_batch_size = batch_size or settings.enrichment_batch_size
 
     for session in get_session():
-        if settings.agent_update_repository_url and time.monotonic() - _last_catalog_refresh >= settings.agent_update_refresh_interval_seconds:
+        if (
+            settings.agent_update_repository_url
+            and time.monotonic() - _last_catalog_refresh
+            >= settings.agent_update_refresh_interval_seconds
+        ):
             try:
                 refresh_release_catalog(session, settings)
             except Exception:
-                logger.exception("agent release catalogue refresh failed; preserving prior catalogue")
+                logger.exception(
+                    "agent release catalogue refresh failed; preserving prior catalogue"
+                )
                 session.rollback()
             finally:
                 _last_catalog_refresh = time.monotonic()

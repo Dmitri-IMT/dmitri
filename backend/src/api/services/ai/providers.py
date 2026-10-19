@@ -15,6 +15,14 @@ class ScanAnalysisProvider(Protocol):
         self, context: ScanAIContext, *, language: str = "en"
     ) -> ProviderScanAIAnalysis: ...
 
+    def repair_analysis(
+        self,
+        context: ScanAIContext,
+        violation_codes: tuple[str, ...],
+        *,
+        language: str = "en",
+    ) -> ProviderScanAIAnalysis: ...
+
 
 @runtime_checkable
 class BoundedScanAnalysisProvider(ScanAnalysisProvider, Protocol):

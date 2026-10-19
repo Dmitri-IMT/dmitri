@@ -3,6 +3,7 @@ import type { components, operations } from '../types/openapi'
 
 type HostListResponse = components['schemas']['HostListResponse']
 type HostDetailResponse = components['schemas']['HostDetailResponse']
+type HostDeletionResponse = components['schemas']['HostDeletionResponse']
 type ListHostsQuery = NonNullable<
   operations['listHosts']['parameters']['query']
 >
@@ -38,5 +39,14 @@ export async function listHosts(
 
 export async function getHost(hostId: string): Promise<HostDetailResponse> {
   const response = await apiClient.get<HostDetailResponse>(`/hosts/${hostId}`)
+  return response.data
+}
+
+export async function deleteHost(hostId: string): Promise<void> {
+  await apiClient.delete(`/hosts/${hostId}`)
+}
+
+export async function deleteAllHosts(): Promise<HostDeletionResponse> {
+  const response = await apiClient.delete<HostDeletionResponse>('/hosts')
   return response.data
 }

@@ -8,10 +8,12 @@ from sqlmodel import Session
 from api.core.config import Settings, get_settings
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent
-from api.dependencies.auth import CallerIdentity, require_user
+from api.dependencies.auth import CallerIdentity, require_admin_row, require_user
 from api.errors import ApiError
+from api.models.identity import User
 from api.models.persistence import utc_now
 from api.schemas.ai import AILanguage, ScanAIAnalysisResponse
+from api.schemas.deletion import ScanDeletionResponse
 from api.schemas.read import (
     ScanDetailResponse,
     ScanListResponse,
@@ -28,6 +30,7 @@ from api.services.ai.jobs import (
     get_scan_ai_analysis,
     request_scan_ai_analysis,
 )
+from api.services.deletion import ScanRunningError, delete_all_scans, delete_scan
 from api.services.persistence import ScanClosedError, ScanOwnershipError, ingest_scan
 from api.services.read import get_scan_detail, get_scan_risk_summary, list_scans
 from api.services.report_pdf import render_scan_report_pdf
@@ -97,6 +100,43 @@ def read_scan(
     if scan is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     return scan
+
+
+@router.delete(
+    "/api/v1/scans",
+    response_model=ScanDeletionResponse,
+    operation_id="deleteAllScans",
+)
+def delete_all_scans_route(
+    actor: User = Depends(require_admin_row),
+    session: Session = Depends(get_session),
+) -> ScanDeletionResponse:
+    result = delete_all_scans(session, org_id=actor.org_id, actor=actor)
+    return ScanDeletionResponse(
+        deleted=result.deleted,
+        skipped=result.skipped,
+        machines_removed=result.machines_removed,
+    )
+
+
+@router.delete(
+    "/api/v1/scans/{scan_id}", status_code=204, operation_id="deleteScan"
+)
+def delete_scan_route(
+    scan_id: UUID,
+    actor: User = Depends(require_admin_row),
+    session: Session = Depends(get_session),
+) -> None:
+    try:
+        deleted = delete_scan(
+            session, scan_id=scan_id, org_id=actor.org_id, actor=actor
+        )
+    except ScanRunningError as exc:
+        raise ApiError(
+            409, "Stop the scan before you delete it.", code="scan_running"
+        ) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Scan not found")
 
 
 @router.get(
@@ -222,8 +262,13 @@ def download_scan_report(
     report = read_scan_report(
         scan_id, kind, session, caller, settings, language=language
     )
+    content = (
+        report.model_dump_json(indent=2)
+        if kind == "technical"
+        else render_scan_report_pdf(report)
+    )
     return Response(
-        content=render_scan_report_pdf(report),
+        content=content,
         media_type=report.content_type,
         headers={
             "Content-Disposition": f'attachment; filename="{report.filename}"'

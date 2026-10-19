@@ -4,6 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router'
 import ScanDetail from '@/pages/ScanDetail'
+import {
+  LANGUAGE_STORAGE_KEY,
+  LanguageProvider,
+  type Language,
+} from '@/i18n/LanguageProvider'
 import { SCAN_FAILURE_REASONS } from '@/lib/scanFailureReasons'
 import { server } from '@/test/setup'
 import { renderWithProviders } from '@/test/renderWithProviders'
@@ -141,6 +146,8 @@ function completedScan(
     scan_id: SCAN_ID,
     hosts: [nas, piLab],
     findings: shuffledFindings,
+    finding_observations: [],
+    finding_observations_truncated: false,
     finding_count: shuffledFindings.length,
     host_count: 2,
     assessment_status: 'available',
@@ -151,14 +158,17 @@ function completedScan(
   }
 }
 
-function renderPage(route: string, state?: unknown) {
+function renderPage(route: string, state?: unknown, language: Language = 'en') {
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, language)
   return renderWithProviders(
-    <>
-      <Routes>
-        <Route path="/scans/:scanId" element={<ScanDetail />} />
-      </Routes>
-      <LocationProbe />
-    </>,
+    <LanguageProvider>
+      <>
+        <Routes>
+          <Route path="/scans/:scanId" element={<ScanDetail />} />
+        </Routes>
+        <LocationProbe />
+      </>
+    </LanguageProvider>,
     { route, state },
   )
 }
@@ -171,7 +181,7 @@ function expectNoScanTables() {
 }
 
 describe('ScanDetail', () => {
-  it('groups service-targeted findings by tool family without mixing NSE findings', async () => {
+  it('groups service-targeted findings by severity and shows their source tool', async () => {
     const web = finding({
       finding_id: '44444444-aaaa-4aaa-8aaa-444444444444',
       severity: 'high',
@@ -193,10 +203,17 @@ describe('ScanDetail', () => {
       source: 'targeted_service_assessment',
       source_script: 'enum4linux-ng',
     })
+    const tlsCritical = finding({
+      finding_id: '77777777-aaaa-4aaa-8aaa-777777777777',
+      severity: 'critical',
+      title: 'TLS certificate trust issue',
+      source: 'targeted_service_assessment',
+      source_script: 'testssl.sh',
+    })
     scanDetail(
       completedScan({
         scan_mode: 'extensive',
-        findings: [phpCgiFinding, web, ssl, smb],
+        findings: [phpCgiFinding, web, ssl, smb, tlsCritical],
       }),
     )
     renderPage(`/scans/${SCAN_ID}`)
@@ -206,18 +223,26 @@ describe('ScanDetail', () => {
     )
 
     expect(
-      screen.getByRole('heading', { name: 'Service Targeted Tools' }),
+      screen.getByRole('heading', { name: 'Targeted service findings: 4' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByTestId(`targeted-web-row-${web.finding_id}`),
-    ).toBeInTheDocument()
-    expect(screen.getByText('ffuf')).toBeInTheDocument()
-    expect(
-      screen.getByTestId(`targeted-ssl-row-${ssl.finding_id}`),
+      screen.getByTestId(`targeted-high-row-${web.finding_id}`),
     ).toBeInTheDocument()
     expect(
-      screen.getByTestId(`targeted-smb-row-${smb.finding_id}`),
+      screen.getByTestId(`targeted-medium-row-${ssl.finding_id}`),
     ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-medium-row-${smb.finding_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-critical-row-${tlsCritical.finding_id}`),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByTestId(`targeted-high-row-${web.finding_id}`),
+    ).toHaveTextContent('Tool: ffuf')
+    expect(
+      screen.getByTestId(`targeted-medium-row-${ssl.finding_id}`),
+    ).toHaveTextContent('Tool: testssl.sh')
     expect(
       screen.getByTestId(`findings-critical-row-${phpCgiFinding.finding_id}`),
     ).toBeInTheDocument()
@@ -230,6 +255,36 @@ describe('ScanDetail', () => {
     expect(
       screen.queryByTestId(`findings-medium-row-${smb.finding_id}`),
     ).toBeNull()
+  })
+
+  it('localizes the service-targeted findings section in Brazilian Portuguese', async () => {
+    const web = finding({
+      finding_id: '44444444-aaaa-4aaa-8aaa-444444444444',
+      severity: 'medium',
+      title: 'Exposed environment configuration',
+      source: 'targeted_service_assessment',
+      source_script: 'ffuf',
+    })
+    scanDetail(completedScan({ scan_mode: 'extensive', findings: [web] }))
+    renderPage(`/scans/${SCAN_ID}`, undefined, 'pt-BR')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Achados das ferramentas por serviço: 1',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Alternar achados direcionados de gravidade média',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Ferramenta: ffuf')).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Vulnerabilidade' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('columnheader', { name: 'Equipamento' }).length,
+    ).toBeGreaterThan(0)
   })
 
   it('opens the targeted section for a ?finding= deep link', async () => {
@@ -256,7 +311,7 @@ describe('ScanDetail', () => {
     ).not.toBeInTheDocument()
 
     const trigger = screen.getByRole('button', {
-      name: 'Toggle service-targeted findings',
+      name: 'Toggle targeted service findings',
     })
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     await user.click(trigger)
@@ -300,7 +355,7 @@ describe('ScanDetail', () => {
     )
 
     expect(screen.getByTestId('scan-no-targeted-findings')).toHaveTextContent(
-      'This does not mean every tool ran.',
+      'This does not confirm that every planned tool check ran.',
     )
   })
 
@@ -342,6 +397,72 @@ describe('ScanDetail', () => {
     expect(coverage).toHaveTextContent('status=403; protected surface')
   })
 
+  it('shows scan-scoped evidence totals and standalone checks separately from findings', async () => {
+    scanDetail(
+      completedScan({
+        findings: [],
+        finding_count: 0,
+        evidence_summary: {
+          scope: 'scan',
+          total_records: 0,
+          by_method: {
+            version_correlation: 0,
+            configuration_observation: 0,
+            specific_check: 0,
+            textual_reference: 0,
+            unknown: 0,
+          },
+          by_confidence: {
+            tentative: 0,
+            probable: 0,
+            confirmed: 0,
+            unknown: 0,
+          },
+          conflicting_records: 0,
+          demonstrated_records: 0,
+        },
+        finding_observations: [
+          {
+            condition_key: 'smb:smbv1:offered',
+            method: 'specific_check',
+            result: 'negative',
+            source: 'smb-protocols',
+            source_script: 'smb-protocols',
+            rule_id: 'smb-v1',
+            rule_version: '1',
+            evidence: 'SMBv1: not offered',
+            ip: '192.168.1.10',
+            port: 445,
+            protocol: 'tcp',
+            unit_id: 0,
+          },
+        ],
+        finding_observations_truncated: true,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const summary = await screen.findByTestId('evidence-summary-scan')
+    const observations = screen.getByTestId('scan-finding-observations')
+    expect(summary).toHaveTextContent('Vulnerability records0')
+    expect(summary).toHaveTextContent('ScopeScan')
+    expect(observations).toHaveTextContent('smb:smbv1:offered')
+    expect(observations).toHaveTextContent(
+      'This check did not find the stated condition',
+    )
+    expect(observations).toHaveTextContent('445/tcp')
+    expect(observations).toHaveTextContent(/Modbus unit ID\s*0/)
+    expect(
+      screen.getByTestId('scan-finding-observations-truncated'),
+    ).toBeVisible()
+    expect(screen.getByTestId('scan-no-findings')).toHaveTextContent(
+      'No confirmed vulnerabilities were found in this scan.',
+    )
+    expect(
+      screen.queryByTestId(`finding-panel-${UNKNOWN_FINDING_ID}`),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows the unlisted omission count when no individual units were stored', async () => {
     scanDetail(
       completedScan({
@@ -374,7 +495,7 @@ describe('ScanDetail', () => {
     )
 
     expect(
-      screen.getByRole('heading', { name: 'Service Targeted Tools' }),
+      screen.getByRole('heading', { name: 'Targeted service findings: 0' }),
     ).toBeInTheDocument()
     expect(screen.getByTestId('scan-no-targeted-findings')).toBeInTheDocument()
     expect(screen.queryByTestId('findings-high')).not.toBeInTheDocument()
@@ -427,15 +548,44 @@ describe('ScanDetail', () => {
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual([
+      'Vulnerabilities: 4',
       'Critical: 1 vulnerability',
       'High: 1 vulnerability',
       'Medium: 1 vulnerability',
       'Low: 1 vulnerability',
       'Attack surface',
-      'Check coverage',
       'Machines seen',
+      'Check coverage',
+      'Delete this scan',
     ])
     expect(screen.queryByTestId('findings-table')).not.toBeInTheDocument()
+  })
+
+  it('opens one vulnerabilities card before revealing the severity cards', async () => {
+    const user = userEvent.setup()
+    scanDetail(completedScan())
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const vulnerabilitiesToggle = await screen.findByRole('button', {
+      name: 'Toggle scan vulnerabilities',
+    })
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(vulnerabilitiesToggle)
+
+    expect(vulnerabilitiesToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Toggle critical vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle high vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle medium vulnerabilities' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Toggle low vulnerabilities' }),
+    ).toBeInTheDocument()
   })
 
   it('renders the summary strip, and drops the counts a failed scan cannot know', async () => {
@@ -812,6 +962,17 @@ describe('ScanDetail', () => {
 
     const summary = await screen.findByTestId('scan-assessment-summary')
     expect(summary).toHaveTextContent('2 reachable services · 1 needs review')
+    expect(
+      screen.getByText(
+        'Expand a row to see evidence and vulnerabilities related to that service.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Endpoint' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Observed service' }),
+    ).toBeInTheDocument()
     expect(summary).toHaveTextContent('Vulnerabilities1')
     expect(screen.getByText('Needs review')).toBeInTheDocument()
     expect(screen.getByText('For awareness')).toBeInTheDocument()
@@ -850,6 +1011,24 @@ describe('ScanDetail', () => {
       'data-testid',
       `findings-critical-caret-${phpCgiFinding.finding_id}`,
     )
+  })
+
+  it('localizes the attack surface table in Brazilian Portuguese', async () => {
+    scanDetail(withAssessment(completedScan(), [relatedExposure]))
+    renderPage(`/scans/${SCAN_ID}`, undefined, 'pt-BR')
+
+    expect(
+      await screen.findByText(
+        'Expanda uma linha para ver as evidências e vulnerabilidades relacionadas ao serviço.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Endereço e porta' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Serviço identificado' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Administração')).toBeInTheDocument()
   })
 
   it('closes an exposure with Escape and returns focus to its trigger', async () => {
@@ -925,41 +1104,13 @@ describe('ScanDetail', () => {
     ).toHaveTextContent('Open ports: 1, Filtered ports: 1')
   })
 
-  it('shows partial coverage and keeps the no-findings copy honest', async () => {
-    const completedPartial = withPartialResult(
-      completedScan({ findings: [], finding_count: 0 }),
-      'completed',
+  it('shows the partial warning and keeps the no-findings copy honest', async () => {
+    scanDetail(
+      withPartialResult(
+        completedScan({ findings: [], finding_count: 0 }),
+        'completed',
+      ),
     )
-    completedPartial.metadata = {
-      ...completedPartial.metadata,
-      targeted_units_planned: 19,
-      targeted_units_completed: 5,
-      targeted_units_failed: 0,
-      targeted_units_timed_out: 1,
-      targeted_units_skipped: 13,
-    }
-    completedPartial.targeted_coverage = [
-      {
-        tool: 'ffuf',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [{ reason: 'wordlist_unavailable', count: 6 }],
-      },
-      {
-        tool: 'nikto',
-        completed: 0,
-        failed: 0,
-        timed_out: 0,
-        skipped: 6,
-        gaps: [
-          { reason: 'tool_unavailable', count: 4 },
-          { reason: 'dependency_unavailable', count: 2 },
-        ],
-      },
-    ]
-    scanDetail(completedPartial)
     const view = renderPage(`/scans/${SCAN_ID}`)
 
     expect(await screen.findByTestId('scan-ai-unavailable')).toHaveTextContent(
@@ -969,21 +1120,12 @@ describe('ScanDetail', () => {
       'No confirmed vulnerabilities in accepted evidence.',
     )
     const summary = await screen.findByTestId('scan-summary-strip')
-    const warningButton = within(summary).getByRole('button', {
-      name: 'Warning: partial scan',
-    })
-    expect(warningButton).toBeInTheDocument()
-    await userEvent.setup().click(warningButton)
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    const notice = screen.getByTestId('scan-partial-notice')
-    expect(notice).toHaveTextContent(
-      '19 Planned, 5 Completed, 0 Failed, 1 Timed out, 13 Skipped',
-    )
-    expect(notice).toHaveTextContent('required wordlist is unavailable (6)')
-    expect(notice).toHaveTextContent('tool is not installed or available (4)')
-    expect(notice).toHaveTextContent('required dependency is unavailable (2)')
-    expect(notice).toHaveTextContent('ffuf')
-    expect(notice).toHaveTextContent('Skipped6')
+    expect(
+      within(summary).getByTestId('scan-partial-warning'),
+    ).toHaveTextContent('Warning: partial scan')
+    expect(
+      within(summary).queryByRole('button', { name: 'Warning: partial scan' }),
+    ).not.toBeInTheDocument()
 
     view.unmount()
     scanDetail(withPartialResult(completedScan(), 'timeout', 'deep_inspection'))
@@ -993,7 +1135,7 @@ describe('ScanDetail', () => {
       `findings-critical-row-${phpCgiFinding.finding_id}`,
     )
     expect(
-      await screen.findByTestId('scan-partial-warning-trigger'),
+      await screen.findByTestId('scan-partial-warning'),
     ).toBeInTheDocument()
   })
 
@@ -1030,6 +1172,46 @@ describe('ScanDetail', () => {
     expect(
       within(evidence).getByTestId('scan-exposures-table'),
     ).toBeInTheDocument()
+  })
+
+  it('shows standalone-only or truncated evidence from a failed scan', async () => {
+    scanDetail(
+      completedScan({
+        status: 'failed',
+        error_code: 'device_offline',
+        hosts: [],
+        findings: [],
+        exposures: [],
+        coverage: [],
+        finding_observations: [
+          {
+            condition_key: 'modbus:device-identification',
+            method: 'specific_check',
+            result: 'inconclusive',
+            source: 'modbus-discover',
+            source_script: null,
+            rule_id: 'DEVICE_IDENTIFICATION',
+            rule_version: '1',
+            evidence: 'No response before disconnect',
+            ip: '192.168.1.10',
+            port: 502,
+            protocol: 'tcp',
+            unit_id: 0,
+          },
+        ],
+        finding_observations_truncated: true,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const evidence = await screen.findByTestId('scan-failed-evidence')
+    expect(evidence).toHaveTextContent('modbus:device-identification')
+    expect(evidence).toHaveTextContent(/Modbus unit ID\s*0/)
+    expect(evidence).toHaveTextContent('No response before disconnect')
+    expect(
+      screen.getByTestId('scan-finding-observations-truncated'),
+    ).toBeVisible()
+    expect(evidence).toHaveTextContent('Check coverage')
   })
 
   it('keeps loading and request errors free of false zero claims', async () => {
@@ -1091,6 +1273,64 @@ describe('ScanDetail', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('scan-unfinished')).not.toBeInTheDocument()
+  })
+
+  it('shows unknown live counters and an indeterminate bar before the first report', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: null,
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines—')
+    expect(notice).toHaveTextContent('Open ports—')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).not.toHaveTextContent('%')
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')
+  })
+
+  it('renders live stage, percentage, and confirmed zero counts', async () => {
+    scanDetail(
+      completedScan({
+        status: 'processing',
+        progress: {
+          stage: 'ports',
+          percent: 35,
+          machines: 3,
+          open_ports: 0,
+          filtered_ports: 2,
+          industrial_services: 0,
+          vulnerabilities: null,
+          updated_at: '2026-10-02T12:00:00Z',
+        },
+        hosts: [],
+        findings: [],
+        host_count: 0,
+        finding_count: 0,
+      }),
+    )
+    renderPage(`/scans/${SCAN_ID}`)
+
+    const notice = await screen.findByTestId('scan-unfinished')
+    expect(notice).toHaveTextContent('Machines3')
+    expect(notice).toHaveTextContent('Open ports0')
+    expect(notice).toHaveTextContent('Filtered ports2')
+    expect(notice).toHaveTextContent('Vulnerabilities—')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent('35%')
+    expect(screen.getByTestId('scan-progress')).toHaveTextContent(
+      'Checking ports',
+    )
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '35',
+    )
   })
 
   it('sends a machines-seen row to that machine instead of expanding it', async () => {

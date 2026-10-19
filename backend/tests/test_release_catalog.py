@@ -9,16 +9,16 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from sqlmodel import Session, select
 from api.core.config import Settings
 from api.models.agent_update import AgentRelease, AgentReleaseCatalogState
 from api.services.release_catalog import (
     CatalogError,
-    debian_version_compare,
     _get,
+    debian_version_compare,
     project_availability,
     refresh_release_catalog,
 )
+from sqlmodel import Session, select
 
 
 class _Result:
@@ -43,7 +43,11 @@ class _Session:
 
     def exec(self, _statement):
         model = _statement.column_descriptions[0]["entity"]
-        return _Result([self.state] if model is AgentReleaseCatalogState and self.state else self.rows)
+        return _Result(
+            [self.state]
+            if model is AgentReleaseCatalogState and self.state
+            else self.rows
+        )
 
     def add(self, row):
         if isinstance(row, AgentReleaseCatalogState):
@@ -105,7 +109,8 @@ def repository(tmp_path, signing_material):
     package_hash = hashlib.sha256(package_bytes).hexdigest()
     package_index = (
         "Package: hardware-agent\nVersion: 1.0.10-1\nArchitecture: arm64\n"
-        f"Size: {len(package_bytes)}\nSHA256: {package_hash}\nFilename: pool/hardware-agent.deb\n\n"
+        f"Size: {len(package_bytes)}\nSHA256: {package_hash}\n"
+        "Filename: pool/hardware-agent.deb\n\n"
     ).encode()
     catalog = {
         "generation": 1,
@@ -130,16 +135,25 @@ def repository(tmp_path, signing_material):
     files["main/binary-arm64/Packages"] = package_index
     files["main/release-catalog.json"] = catalog_bytes
 
-    def sign(*, valid_until=None, origin="Dmitri", suite="stable", change=b"", detached=False):
+    def sign(
+        *, valid_until=None, origin="Dmitri", suite="stable", change=b"", detached=False
+    ):
         until = valid_until or datetime.now(UTC) + timedelta(days=1)
         entries = []
         for name, content in files.items():
             if change and name.endswith("Packages"):
                 content = content + change
-            entries.append(f" {hashlib.sha256(content).hexdigest()} {len(content)} {name}")
+            entries.append(
+                f" {hashlib.sha256(content).hexdigest()} {len(content)} {name}"
+            )
+        release_date = (datetime.now(UTC) - timedelta(minutes=1)).strftime(
+            "%a, %d %b %Y %H:%M:%S UTC"
+        )
         release = (
-            f"Origin: {origin}\nSuite: {suite}\nDate: {(datetime.now(UTC) - timedelta(minutes=1)).strftime('%a, %d %b %Y %H:%M:%S UTC')}\n"
-            f"Valid-Until: {until.strftime('%a, %d %b %Y %H:%M:%S UTC')}\nSHA256:\n" + "\n".join(entries) + "\n"
+            f"Origin: {origin}\nSuite: {suite}\nDate: "
+            f"{release_date}\n"
+            f"Valid-Until: {until.strftime('%a, %d %b %Y %H:%M:%S UTC')}\nSHA256:\n"
+            + "\n".join(entries) + "\n"
         ).encode()
         clear = tmp_path / "InRelease"
         clear.write_bytes(release)
@@ -148,11 +162,19 @@ def repository(tmp_path, signing_material):
             release_path.write_bytes(release)
             files["Release"] = release
             files["Release.gpg"] = _run(
-                ["gpg", "--homedir", str(home), "--batch", "--yes", "--detach-sign", "--output", "-", str(release_path)]
+                [
+                    "gpg", "--homedir", str(home), "--batch", "--yes",
+                    "--detach-sign", "--output", "-", str(release_path),
+                ]
             )
             files.pop("InRelease", None)
         else:
-            signed = _run(["gpg", "--homedir", str(home), "--batch", "--yes", "--clearsign", "--output", "-", str(clear)])
+            signed = _run(
+                [
+                    "gpg", "--homedir", str(home), "--batch", "--yes",
+                    "--clearsign", "--output", "-", str(clear),
+                ]
+            )
             files["InRelease"] = signed
 
     sign()
@@ -164,7 +186,9 @@ def repository(tmp_path, signing_material):
                 return httpx.Response(404)
             return httpx.Response(200, content=files[name])
 
-        return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=False)
+        return httpx.Client(
+            transport=httpx.MockTransport(handler), follow_redirects=False
+        )
 
     settings = Settings.model_construct(
         agent_update_repository_url="https://repo.example.test",
@@ -211,7 +235,9 @@ def test_refresh_lifecycle_with_real_sqlmodel_session(
     files["main/release-catalog.json"] = json.dumps(catalog).encode()
     sign()
 
-    assert refresh_release_catalog(administrative_session, settings, client=client()) == 2
+    assert (
+        refresh_release_catalog(administrative_session, settings, client=client()) == 2
+    )
     releases = administrative_session.exec(select(AgentRelease)).all()
     assert {release.package_version for release in releases} == {
         "1.0.10-1",
@@ -219,7 +245,9 @@ def test_refresh_lifecycle_with_real_sqlmodel_session(
     }
 
     # A same-generation refresh exercises lookups and immutable identity checks.
-    assert refresh_release_catalog(administrative_session, settings, client=client()) == 2
+    assert (
+        refresh_release_catalog(administrative_session, settings, client=client()) == 2
+    )
     assert len(administrative_session.exec(select(AgentRelease)).all()) == 2
 
     # Removing a release from a newer signed catalog withdraws it, retaining history.
@@ -227,7 +255,9 @@ def test_refresh_lifecycle_with_real_sqlmodel_session(
     catalog["releases"] = [second]
     files["main/release-catalog.json"] = json.dumps(catalog).encode()
     sign()
-    assert refresh_release_catalog(administrative_session, settings, client=client()) == 1
+    assert (
+        refresh_release_catalog(administrative_session, settings, client=client()) == 1
+    )
     releases = administrative_session.exec(select(AgentRelease)).all()
     first_row = next(
         release for release in releases if release.package_version == "1.0.10-1"
@@ -382,7 +412,9 @@ def test_rejects_replay_and_same_generation_conflict(repository):
         refresh_release_catalog(session, settings, client=client())
 
 
-def test_refresh_failure_preserves_previous_evidence_and_withdrawal_keeps_row(repository):
+def test_refresh_failure_preserves_previous_evidence_and_withdrawal_keeps_row(
+    repository,
+):
     files, catalog, settings, client, sign = repository
     session = _Session()
     refresh_release_catalog(session, settings, client=client())
@@ -520,9 +552,14 @@ def test_worker_refreshes_only_the_configured_repository(monkeypatch):
     calls = []
     monkeypatch.setattr(worker, "get_settings", lambda: settings)
     monkeypatch.setattr(worker, "get_session", lambda: iter([session]))
-    monkeypatch.setattr(worker, "refresh_release_catalog", lambda current, configured: calls.append((current, configured)) or 0)
+    monkeypatch.setattr(
+        worker, "refresh_release_catalog",
+        lambda current, configured: calls.append((current, configured)) or 0,
+    )
     monkeypatch.setattr(worker, "sweep_stale_commands", lambda *_args, **_kwargs: 0)
-    monkeypatch.setattr(worker, "process_pending_enrichment_jobs", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        worker, "process_pending_enrichment_jobs", lambda *_args, **_kwargs: 0
+    )
     monkeypatch.setattr(worker, "_last_catalog_refresh", 0)
 
     worker.run_worker_once()

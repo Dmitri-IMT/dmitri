@@ -7,25 +7,51 @@ import type { components } from '@/types/openapi'
 
 type FindingRecord = components['schemas']['FindingRecord']
 
+type FindingColumnLabels = {
+  vulnerability: string
+  severity: string
+  machine: string
+  port: string
+  cve: string
+  firstSeen: string
+}
+
+const ENGLISH_LABELS: FindingColumnLabels = {
+  vulnerability: 'Vulnerability',
+  severity: 'Severity',
+  machine: 'Machine',
+  port: 'Port',
+  cve: 'CVE',
+  firstSeen: 'First seen',
+}
+
 function machineLabel(finding: FindingRecord): string {
   return finding.host_hostname || finding.host_ip || ''
 }
 
-export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
+export function scanFindingColumns(
+  sourceToolLabel?: string,
+  labels: FindingColumnLabels = ENGLISH_LABELS,
+): DataTableColumn<FindingRecord>[] {
   return [
     {
       key: 'title',
-      label: 'Vulnerability',
+      label: labels.vulnerability,
       width: 'w-2/5',
       render: (finding) => (
-        <span className="block truncate" title={finding.title}>
-          {finding.title}
+        <span className="block min-w-0" title={finding.title}>
+          <span className="block truncate">{finding.title}</span>
+          {sourceToolLabel && finding.source_script && (
+            <span className="block truncate text-caption-sm text-muted-foreground">
+              {sourceToolLabel}: {finding.source_script}
+            </span>
+          )}
         </span>
       ),
     },
     {
       key: 'host',
-      label: 'Machine',
+      label: labels.machine,
       width: 'w-9/50',
       render: (finding) => {
         const label = machineLabel(finding)
@@ -44,7 +70,7 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'port',
-      label: 'Port',
+      label: labels.port,
       width: 'w-3/25',
       render: (finding) =>
         finding.port == null ? (
@@ -55,7 +81,7 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'cve',
-      label: 'CVE',
+      label: labels.cve,
       width: 'w-7/50',
       render: (finding) =>
         finding.cve_id ? (
@@ -68,7 +94,7 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'first_seen',
-      label: 'First seen',
+      label: labels.firstSeen,
       width: 'w-4/25',
       render: (finding) =>
         finding.first_seen_at ? (
@@ -80,11 +106,13 @@ export function scanFindingColumns(): DataTableColumn<FindingRecord>[] {
   ]
 }
 
-export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
+export function hostFindingColumns(
+  labels: FindingColumnLabels = ENGLISH_LABELS,
+): DataTableColumn<FindingRecord>[] {
   return [
     {
       key: 'title',
-      label: 'Vulnerability',
+      label: labels.vulnerability,
       width: 'w-2/5',
       render: (finding) => (
         <span className="block truncate" title={finding.title}>
@@ -94,7 +122,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'port',
-      label: 'Port',
+      label: labels.port,
       width: 'w-1/10',
       render: (finding) =>
         finding.port == null ? (
@@ -105,7 +133,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'cve',
-      label: 'CVE',
+      label: labels.cve,
       width: 'w-9/50',
       render: (finding) =>
         finding.cve_id ? (
@@ -118,7 +146,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'first_seen',
-      label: 'First seen',
+      label: labels.firstSeen,
       width: 'w-4/25',
       render: (finding) =>
         finding.first_seen_at ? (
@@ -129,7 +157,7 @@ export function hostFindingColumns(): DataTableColumn<FindingRecord>[] {
     },
     {
       key: 'severity',
-      label: 'Severity',
+      label: labels.severity,
       width: 'w-4/25',
       render: (finding) => <SeverityWord severity={finding.severity} />,
     },

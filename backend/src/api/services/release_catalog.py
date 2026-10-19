@@ -61,9 +61,14 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
-def _get(client: httpx.Client, base: str, path: str, limit: int = _MAX_METADATA) -> bytes:
+def _get(
+    client: httpx.Client, base: str, path: str, limit: int = _MAX_METADATA
+) -> bytes:
     target = urljoin(base.rstrip("/") + "/", path)
-    if urlparse(target).scheme != "https" or urlparse(target).netloc != urlparse(base).netloc:
+    if (
+        urlparse(target).scheme != "https"
+        or urlparse(target).netloc != urlparse(base).netloc
+    ):
         raise CatalogError("repository metadata URL is not same-origin HTTPS")
     chunks = bytearray()
     with client.stream("GET", target, follow_redirects=False) as response:
@@ -75,7 +80,9 @@ def _get(client: httpx.Client, base: str, path: str, limit: int = _MAX_METADATA)
             try:
                 declared_length = int(content_length)
             except ValueError as exc:
-                raise CatalogError("invalid repository metadata content length") from exc
+                raise CatalogError(
+                    "invalid repository metadata content length"
+                ) from exc
             if declared_length > limit:
                 raise CatalogError("repository metadata exceeds size limit")
         for chunk in response.iter_bytes():
@@ -91,19 +98,28 @@ def _verify_metadata(settings: Settings, client: httpx.Client) -> tuple[bytes, s
     if not base or urlparse(base).scheme != "https" or not keyring.is_file():
         raise CatalogError("repository URL or dedicated keyring is not configured")
     try:
-        signed = _get(client, base, "dists/" + settings.agent_update_suite + "/InRelease")
+        signed = _get(
+            client, base, "dists/" + settings.agent_update_suite + "/InRelease"
+        )
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code != 404:
             raise
-        release = _get(client, base, "dists/" + settings.agent_update_suite + "/Release")
-        signature = _get(client, base, "dists/" + settings.agent_update_suite + "/Release.gpg")
+        release = _get(
+            client, base, "dists/" + settings.agent_update_suite + "/Release"
+        )
+        signature = _get(
+            client, base, "dists/" + settings.agent_update_suite + "/Release.gpg"
+        )
         with tempfile.TemporaryDirectory() as directory:
             release_path = Path(directory) / "Release"
             signature_path = Path(directory) / "Release.gpg"
             release_path.write_bytes(release)
             signature_path.write_bytes(signature)
             result = subprocess.run(
-                ["gpgv", "--keyring", str(keyring), str(signature_path), str(release_path)],
+                [
+                    "gpgv", "--keyring", str(keyring),
+                    str(signature_path), str(release_path),
+                ],
                 capture_output=True,
                 timeout=15,
                 shell=False,
@@ -116,7 +132,10 @@ def _verify_metadata(settings: Settings, client: httpx.Client) -> tuple[bytes, s
         release_path = Path(directory) / "Release"
         signed_path.write_bytes(signed)
         result = subprocess.run(
-            ["gpgv", "--keyring", str(keyring), "--output", str(release_path), str(signed_path)],
+            [
+                "gpgv", "--keyring", str(keyring), "--output",
+                str(release_path), str(signed_path),
+            ],
             capture_output=True,
             timeout=15,
             shell=False,
@@ -127,7 +146,9 @@ def _verify_metadata(settings: Settings, client: httpx.Client) -> tuple[bytes, s
     return release, hashlib.sha256(signed).hexdigest()
 
 
-def _release_fields(raw: bytes, settings: Settings) -> tuple[datetime, datetime, dict[str, tuple[str, int]]]:
+def _release_fields(
+    raw: bytes, settings: Settings
+) -> tuple[datetime, datetime, dict[str, tuple[str, int]]]:
     fields: dict[str, str] = {}
     current = None
     for line in raw.decode("utf-8").splitlines():
@@ -136,11 +157,18 @@ def _release_fields(raw: bytes, settings: Settings) -> tuple[datetime, datetime,
         elif ":" in line:
             current, value = line.split(":", 1)
             fields[current] = value.strip()
-    if fields.get("Origin") != settings.agent_update_origin or fields.get("Suite") != settings.agent_update_suite:
+    if (
+        fields.get("Origin") != settings.agent_update_origin
+        or fields.get("Suite") != settings.agent_update_suite
+    ):
         raise CatalogError("repository origin or suite mismatch")
     now = datetime.now(UTC)
-    date = datetime.strptime(fields["Date"], "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=UTC)
-    valid = datetime.strptime(fields["Valid-Until"], "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=UTC)
+    date = datetime.strptime(
+        fields["Date"], "%a, %d %b %Y %H:%M:%S %Z"
+    ).replace(tzinfo=UTC)
+    valid = datetime.strptime(
+        fields["Valid-Until"], "%a, %d %b %Y %H:%M:%S %Z"
+    ).replace(tzinfo=UTC)
     if date > now or valid <= now:
         raise CatalogError("repository metadata is not currently valid")
     indexes: dict[str, tuple[str, int]] = {}
@@ -151,7 +179,10 @@ def _release_fields(raw: bytes, settings: Settings) -> tuple[datetime, datetime,
     return date, valid, indexes
 
 
-def _verify_index(client: httpx.Client, base: str, suite: str, name: str, expected: tuple[str, int]) -> bytes:
+def _verify_index(
+    client: httpx.Client, base: str, suite: str, name: str,
+    expected: tuple[str, int],
+) -> bytes:
     digest, size = expected
     if size > _MAX_METADATA:
         raise CatalogError("APT index exceeds size limit")
@@ -161,7 +192,10 @@ def _verify_index(client: httpx.Client, base: str, suite: str, name: str, expect
     return content
 
 
-def refresh_release_catalog(session: Session, settings: Settings | None = None, *, client: httpx.Client | None = None) -> int:
+def refresh_release_catalog(
+    session: Session, settings: Settings | None = None, *,
+    client: httpx.Client | None = None,
+) -> int:
     settings = settings or get_settings()
     own_client = client is None
     client = client or httpx.Client(timeout=15, follow_redirects=False, trust_env=False)
@@ -169,10 +203,15 @@ def refresh_release_catalog(session: Session, settings: Settings | None = None, 
         release, _ = _verify_metadata(settings, client)
         published, valid_until, indexes = _release_fields(release, settings)
         suite = settings.agent_update_suite
-        catalog_name = next((name for name in indexes if name.endswith("release-catalog.json")), None)
+        catalog_name = next(
+            (name for name in indexes if name.endswith("release-catalog.json")), None
+        )
         if not catalog_name:
             raise CatalogError("signed Release does not index a release catalog")
-        catalog_bytes = _verify_index(client, settings.agent_update_repository_url, suite, catalog_name, indexes[catalog_name])
+        catalog_bytes = _verify_index(
+            client, settings.agent_update_repository_url, suite,
+            catalog_name, indexes[catalog_name],
+        )
         if len(catalog_bytes) > settings.agent_update_catalog_max_bytes:
             raise CatalogError("release catalog exceeds size limit")
         catalog = json.loads(catalog_bytes, object_pairs_hook=_unique_object)
@@ -187,21 +226,36 @@ def refresh_release_catalog(session: Session, settings: Settings | None = None, 
             .with_for_update()
         ).first()
         if state and state.generation:
-            if generation < state.generation or (generation == state.generation and digest != state.digest):
+            if generation < state.generation or (
+                generation == state.generation and digest != state.digest
+            ):
                 raise CatalogError("catalog replay or generation conflict")
         if generation < 1:
             raise CatalogError("invalid release catalog generation")
         packages: dict[tuple[str, str], dict[str, str]] = {}
         for index_name in indexes:
             if index_name.endswith("Packages"):
-                content = _verify_index(client, settings.agent_update_repository_url, suite, index_name, indexes[index_name])
+                content = _verify_index(
+                    client, settings.agent_update_repository_url, suite,
+                    index_name, indexes[index_name],
+                )
                 for paragraph in content.decode("utf-8").split("\n\n"):
-                    fields = dict(line.split(": ", 1) for line in paragraph.splitlines() if ": " in line and not line.startswith(" "))
+                    fields = dict(
+                        line.split(": ", 1)
+                        for line in paragraph.splitlines()
+                        if ": " in line and not line.startswith(" ")
+                    )
                     if fields.get("Package") == "hardware-agent":
-                        packages[(fields.get("Version", ""), fields.get("Architecture", ""))] = fields
+                        packages[
+                            (fields.get("Version", ""), fields.get("Architecture", ""))
+                        ] = fields
         seen: set[tuple[str, str, str]] = set()
         for item in releases:
-            required = {"id", "source_commit", "upstream_version", "package_version", "architecture", "suite", "sha256", "size_bytes", "required_protocol_version", "required_updater_version", "published_at"}
+            required = {
+                "id", "source_commit", "upstream_version", "package_version",
+                "architecture", "suite", "sha256", "size_bytes",
+                "required_protocol_version", "required_updater_version", "published_at",
+            }
             if not isinstance(item, dict) or not required.issubset(item):
                 raise CatalogError("invalid release entry")
             if (
@@ -224,11 +278,22 @@ def refresh_release_catalog(session: Session, settings: Settings | None = None, 
                 raise CatalogError("duplicate release identity")
             seen.add(key)
             package = packages.get((item["package_version"], item["architecture"]))
-            if not package or int(package.get("Size", "0")) != item["size_bytes"] or package.get("SHA256") != item["sha256"]:
+            if (
+                not package
+                or int(package.get("Size", "0")) != item["size_bytes"]
+                or package.get("SHA256") != item["sha256"]
+            ):
                 raise CatalogError("release does not match signed Packages index")
-            existing = session.exec(select(AgentRelease).where(AgentRelease.package_version == item["package_version"], AgentRelease.architecture == item["architecture"])).first()
+            existing = session.exec(
+                select(AgentRelease).where(
+                    AgentRelease.package_version == item["package_version"],
+                    AgentRelease.architecture == item["architecture"],
+                )
+            ).first()
             if existing:
-                published_at = datetime.fromisoformat(item["published_at"].replace("Z", "+00:00"))
+                published_at = datetime.fromisoformat(
+                    item["published_at"].replace("Z", "+00:00")
+                )
                 immutable = (
                     existing.sha256 == item["sha256"]
                     and str(existing.id) == item["id"]
@@ -236,21 +301,53 @@ def refresh_release_catalog(session: Session, settings: Settings | None = None, 
                     and existing.upstream_version == item["upstream_version"]
                     and existing.suite == item["suite"]
                     and existing.size_bytes == item["size_bytes"]
-                    and existing.required_protocol_version == item["required_protocol_version"]
-                    and existing.required_updater_version == item["required_updater_version"]
+                    and existing.required_protocol_version
+                    == item["required_protocol_version"]
+                    and existing.required_updater_version
+                    == item["required_updater_version"]
                     and existing.release_notes == item.get("release_notes", "")[:4000]
                     and existing.published_at == published_at
                 )
                 if not immutable:
                     raise CatalogError("published release identity collision")
-                existing.withdrawn_at = datetime.now(UTC) if item.get("withdrawn", False) else None
+                existing.withdrawn_at = (
+                    datetime.now(UTC) if item.get("withdrawn", False) else None
+                )
                 if not item.get("withdrawn", False):
                     existing.approved_at = existing.approved_at or datetime.now(UTC)
                 session.add(existing)
             else:
-                session.add(AgentRelease(id=item["id"], source_commit=item["source_commit"], upstream_version=item["upstream_version"], package="hardware-agent", package_version=item["package_version"], architecture=item["architecture"], suite=item["suite"], sha256=item["sha256"], size_bytes=item["size_bytes"], required_protocol_version=item["required_protocol_version"], required_updater_version=item["required_updater_version"], release_notes=item.get("release_notes", "")[:4000], published_at=datetime.fromisoformat(item["published_at"].replace("Z", "+00:00")), approved_at=None if item.get("withdrawn", False) else datetime.now(UTC), withdrawn_at=datetime.now(UTC) if item.get("withdrawn", False) else None))
+                session.add(
+                    AgentRelease(
+                        id=item["id"],
+                        source_commit=item["source_commit"],
+                        upstream_version=item["upstream_version"],
+                        package="hardware-agent",
+                        package_version=item["package_version"],
+                        architecture=item["architecture"],
+                        suite=item["suite"],
+                        sha256=item["sha256"],
+                        size_bytes=item["size_bytes"],
+                        required_protocol_version=item["required_protocol_version"],
+                        required_updater_version=item["required_updater_version"],
+                        release_notes=item.get("release_notes", "")[:4000],
+                        published_at=datetime.fromisoformat(
+                            item["published_at"].replace("Z", "+00:00")
+                        ),
+                        approved_at=(
+                            None if item.get("withdrawn", False) else datetime.now(UTC)
+                        ),
+                        withdrawn_at=(
+                            datetime.now(UTC) if item.get("withdrawn", False) else None
+                        ),
+                    )
+                )
         for previous in session.exec(select(AgentRelease)).all():
-            if ("hardware-agent", previous.package_version, previous.architecture) not in seen and previous.withdrawn_at is None:
+            if (
+                ("hardware-agent", previous.package_version, previous.architecture)
+                not in seen
+                and previous.withdrawn_at is None
+            ):
                 previous.withdrawn_at = datetime.now(UTC)
                 session.add(previous)
         if state is None:
@@ -300,7 +397,9 @@ def project_availability(
         return "unavailable", None
     latest = candidates[0]
     for candidate in candidates[1:]:
-        if debian_version_compare(candidate.package_version, "gt", latest.package_version):
+        if debian_version_compare(
+            candidate.package_version, "gt", latest.package_version
+        ):
             latest = candidate
     try:
         if debian_version_compare(installed_version, "ge", latest.package_version):

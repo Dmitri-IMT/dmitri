@@ -67,6 +67,20 @@ On Raspberry Pi armhf/arm64, that mode installs and verifies the service-targete
 tools and DIRB wordlist. It exits with an error if provisioning fails, so a
 successful install means those scan capabilities are available.
 
+The appliance installer `sudo sh hardware-agent/scripts/provision-pi.sh` also installs
+and verifies those prerequisites before reporting the Pi ready. If the Python agent
+was installed manually or as a package alone, run this from a repository checkout
+on the Pi to install the missing external tools and wordlist:
+
+```bash
+sudo bash hardware-agent/scripts/provision-targeted-tools.sh
+sudo bash hardware-agent/scripts/provision-targeted-tools.sh --verify-only
+```
+
+The second command only checks local versions, capabilities and the wordlist; it
+does not scan targets. Successful provisioning removes missing-tool gaps, while
+real target failures and timeouts still make a scan partial.
+
 Manual steps below remain valid if you prefer not to use the scripts.
 
 ---
@@ -435,11 +449,12 @@ Each of these has cost someone an afternoon:
   run DDL in transaction mode.
 - **Running a formatter.** `uv run ruff format` rewrites ~32 backend files that have
   nothing to do with your change.
-- **PDF report download fails on macOS.** The report renderer looks for a Unicode font only
-  at fixed paths: Windows Arial, or DejaVu Sans / Liberation Sans under
-  `/usr/share/fonts/truetype/` on Linux. macOS has none of these, so a report download
-  raises `A Unicode font is required to render scan reports` and returns a 500. The rest of
-  the app works. On Linux, install `fonts-dejavu-core` (Debian/Ubuntu) to fix it.
+- **PDF report download fails without a Unicode font.** The report renderer looks for a
+  Unicode font only at fixed paths: Arial under `/System/Library/Fonts/Supplemental/` on
+  macOS, Windows Arial, or DejaVu Sans / Liberation Sans under `/usr/share/fonts/truetype/`
+  on Linux. With none of these, a report download raises
+  `A Unicode font is required to render scan reports` and returns a 500. The rest of the app
+  works. On Linux, install `fonts-dejavu-core` (Debian/Ubuntu) to fix it.
 
 ---
 
