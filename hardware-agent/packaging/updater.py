@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import signal
 import socket
 import sqlite3
@@ -18,6 +19,7 @@ from typing import Any
 STATE_DIR = Path("/var/lib/dmitri/updates")
 RUNTIME_DIR = Path("/run/dmitri-agent-updater")
 GATE_PATH = Path("/var/lib/dmitri/update-gate.json")
+SCAN_CHECKPOINT_PATH = Path("/var/lib/dmitri/scan-finalization.json")
 SOCKET_PATH = RUNTIME_DIR / "control.sock"
 MAX_MESSAGE_BYTES = 4096
 CHECK_TIMEOUT_SECONDS = 600
@@ -54,11 +56,19 @@ class Updater:
         state_dir: Path = STATE_DIR,
         runtime_dir: Path = RUNTIME_DIR,
         gate_path: Path = GATE_PATH,
+        scan_checkpoint_path: Path = SCAN_CHECKPOINT_PATH,
+        readiness_identity: Any = None,
+        package_version: Any = None,
+        app_version: Any = None,
     ) -> None:
         self.state_dir = state_dir
         self.runtime_dir = runtime_dir
         self.journal_path = state_dir / "state.sqlite3"
         self.gate_path = gate_path
+        self.scan_checkpoint_path = scan_checkpoint_path
+        self.readiness_identity = readiness_identity or self._systemd_agent_identity
+        self.package_version = package_version or self._installed_agent_package_version
+        self.app_version = app_version or self._installed_agent_app_version
         self.socket_path = runtime_dir / "control.sock"
         self.mutex_path = runtime_dir / "transaction.lock"
         self.stopping = threading.Event()
@@ -227,13 +237,23 @@ class Updater:
             else:
                 try:
                     request = json.loads(data)
-                    if not isinstance(request, dict) or set(request) != {"command"}:
+                    if not isinstance(request, dict) or "command" not in request:
                         raise ValueError
                     command = request["command"]
                     if command == "inspect":
+                        if set(request) != {"command"}:
+                            raise ValueError
                         response = self.inspect()
                     elif command == "check":
+                        if set(request) != {"command"}:
+                            raise ValueError
                         response = self.check()
+                    elif command == "readiness":
+                        response = self._readiness_handshake(connection, request)
+                        connection.sendall(
+                            json.dumps(response, separators=(",", ":")).encode()
+                        )
+                        return
                     else:
                         response = {"ok": False, "error": "unsupported_command"}
                 except (ValueError, TypeError, json.JSONDecodeError):
@@ -246,12 +266,152 @@ class Updater:
             connection.sendall(payload[:MAX_MESSAGE_BYTES])
 
     @staticmethod
-    def _is_root_peer(connection: socket.socket) -> bool:
+    def _peer_credentials(connection: socket.socket) -> tuple[int, int] | None:
         if not hasattr(socket, "SO_PEERCRED"):
-            return False
+            return None
         credentials = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
         uid = int.from_bytes(credentials[4:8], byteorder=sys.byteorder, signed=True)
-        return uid == 0
+        pid = int.from_bytes(credentials[0:4], byteorder=sys.byteorder, signed=True)
+        return uid, pid
+
+    @classmethod
+    def _is_root_peer(cls, connection: socket.socket) -> bool:
+        credentials = cls._peer_credentials(connection)
+        return credentials is not None and credentials[0] == 0
+
+    @staticmethod
+    def _systemd_agent_identity() -> tuple[int, str]:
+        result = subprocess.run(
+            [
+                "systemctl",
+                "show",
+                "dmitri-agent.service",
+                "--property=MainPID,InvocationID",
+                "--value",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        lines = result.stdout.splitlines()
+        if (
+            len(lines) != 2
+            or not lines[0].isdigit()
+            or int(lines[0]) <= 0
+            or not lines[1]
+        ):
+            raise OSError("agent systemd identity unavailable")
+        return int(lines[0]), lines[1]
+
+    @staticmethod
+    def _installed_agent_package_version() -> str:
+        result = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Version}", "hardware-agent"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        version = result.stdout.strip()
+        if not version:
+            raise OSError("agent package version unavailable")
+        return version
+
+    @staticmethod
+    def _installed_agent_app_version() -> str:
+        result = subprocess.run(
+            [
+                "/opt/dmitri-agent/.venv/bin/python",
+                "-c",
+                "from agent.version import installed_version; "
+                "print(installed_version())",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
+        )
+        value = result.stdout.strip()
+        if not value:
+            raise OSError("agent application version unavailable")
+        return value
+
+    def _readiness_handshake(
+        self, connection: socket.socket, request: dict[str, Any]
+    ) -> dict[str, Any]:
+        if set(request) != {"command", "app_version", "package_version"}:
+            return {"ok": False, "error": "invalid_request"}
+        app_version = request["app_version"]
+        package_version = request["package_version"]
+        peer = self._peer_credentials(connection)
+        if (
+            peer is None
+            or peer[0] != 0
+            or not isinstance(app_version, str)
+            or not isinstance(package_version, str)
+        ):
+            return {"ok": False, "error": "stale_session"}
+        try:
+            pid, invocation = self.readiness_identity()
+            if (
+                peer[1] != pid
+                or self.package_version() != package_version
+                or self.app_version() != app_version
+            ):
+                return {"ok": False, "error": "stale_session"}
+            nonce = secrets.token_hex(24)
+            connection.sendall(
+                json.dumps(
+                    {
+                        "nonce": nonce,
+                        "main_pid": pid,
+                        "invocation_id": invocation,
+                    },
+                    separators=(",", ":"),
+                ).encode()
+                + b"\n"
+            )
+            response = bytearray()
+            while len(response) <= MAX_MESSAGE_BYTES:
+                chunk = connection.recv(MAX_MESSAGE_BYTES + 1 - len(response))
+                if not chunk:
+                    return {"ok": False, "error": "stale_session"}
+                if b"\n" in chunk:
+                    line, _, trailing = chunk.partition(b"\n")
+                    if trailing:
+                        return {"ok": False, "error": "invalid_request"}
+                    response.extend(line)
+                    break
+                response.extend(chunk)
+            evidence = json.loads(response)
+            if not isinstance(evidence, dict) or set(evidence) != {
+                "nonce",
+                "main_pid",
+                "invocation_id",
+                "app_version",
+                "package_version",
+            }:
+                return {"ok": False, "error": "invalid_request"}
+            if evidence != {
+                "nonce": nonce,
+                "main_pid": pid,
+                "invocation_id": invocation,
+                "app_version": app_version,
+                "package_version": package_version,
+            } or self.readiness_identity() != (pid, invocation):
+                return {"ok": False, "error": "stale_session"}
+            return {
+                "ok": True,
+                "main_pid": pid,
+                "invocation_id": invocation,
+                "app_version": app_version,
+                "package_version": package_version,
+                "nonce": nonce,
+            }
+        except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+            return {"ok": False, "error": "stale_session"}
 
     def inspect(self) -> dict[str, Any]:
         try:
@@ -262,14 +422,20 @@ class Updater:
         return {
             "ok": True,
             "capabilities": ["inspect", "check"],
-            "blocked": bool(active) or self.gate_path.exists(),
+            "blocked": bool(active)
+            or self.gate_path.exists()
+            or self.scan_checkpoint_path.exists(),
         }
 
     def check(self) -> dict[str, Any]:
         if self.stopping.is_set():
             return {"ok": False, "error": "supervisor_stopping"}
         try:
-            if self._active_operations() or self.gate_path.exists():
+            if (
+                self._active_operations()
+                or self.gate_path.exists()
+                or self.scan_checkpoint_path.exists()
+            ):
                 return {"ok": False, "error": "device_busy"}
         except StateCorrupt:
             self._write_gate("state_corrupt", [])

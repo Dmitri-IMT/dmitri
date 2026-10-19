@@ -372,6 +372,7 @@ def project_availability(
     *,
     installed_version: str | None,
     architecture: str,
+    suite: str | None = None,
     protocol_version: int | None,
     updater_version: int | None,
     catalog_valid_until: datetime | None,
@@ -388,6 +389,7 @@ def project_availability(
         if release.approved_at is not None
         and release.withdrawn_at is None
         and release.architecture == architecture
+        and (suite is None or release.suite == suite)
         and protocol_version is not None
         and updater_version is not None
         and protocol_version >= release.required_protocol_version

@@ -266,16 +266,24 @@ async def handle_agent_frame(
                 agent_version=parsed.frame.agent_version,
                 available_subnets=parsed.frame.available_subnets,
                 package_version=parsed.frame.package_version,
+                updater_version=parsed.frame.updater_version,
+                os_suite=parsed.frame.os_suite,
+                architecture=parsed.frame.architecture,
                 capabilities=frozenset(parsed.frame.capabilities),
                 now=now,
             )
-            if "scan_finalization_v1" in connection.capabilities:
+            negotiated = [
+                capability
+                for capability in ("scan_finalization_v1", "agent_update_v1")
+                if capability in connection.capabilities
+            ]
+            if negotiated:
                 await websocket.send_text(
                     UpdateSessionFrame(
                         type="update_session",
                         session_id=connection.session_id,
                         protocol_version=1,
-                        capabilities=["scan_finalization_v1"],
+                        capabilities=negotiated,
                     ).model_dump_json()
                 )
             await _send_pending_cancels(websocket, agent_id, pending_cancels)

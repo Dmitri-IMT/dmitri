@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,13 @@ class AgentProtocolSupport(BaseModel):
     capabilities: list[Literal["scan_finalization_v1"]]
 
 
+class AgentUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    release_id: UUID
+    expected_observed_version: str = Field(min_length=1, max_length=128)
+
+
 class ReleaseSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -42,6 +49,18 @@ class ReleaseSummary(BaseModel):
     required_updater_version: int = Field(ge=1)
     published_at: datetime
     release_notes: str = Field(max_length=4000)
+
+
+class AgentUpdateAvailability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    availability: Literal["available", "up_to_date", "unknown", "unavailable"]
+    release: ReleaseSummary | None = None
+    catalogue_checked_at: datetime | None
+    catalogue_valid_until: datetime | None
+    device_readiness: Literal[
+        "ready", "offline", "revoked", "bootstrap_required", "busy", "unknown"
+    ]
 
 
 class UpdateOperationView(BaseModel):
@@ -84,3 +103,97 @@ class AgentUpdateHistoryPage(BaseModel):
 
     data: list[UpdateOperationView]
     next_cursor: str | None = None
+
+
+class _UpdateErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    details: dict[str, object]
+
+
+class UpdateBusyError(_UpdateErrorDetail):
+    code: Literal["device_busy"]
+
+
+class UpdateVersionConflictError(_UpdateErrorDetail):
+    code: Literal["version_conflict"]
+
+
+class UpdateReleaseNotAllowedError(_UpdateErrorDetail):
+    code: Literal["release_not_allowed"]
+
+
+class UpdateIdempotencyConflictError(_UpdateErrorDetail):
+    code: Literal["idempotency_conflict"]
+
+
+class UpdateOfflineError(_UpdateErrorDetail):
+    code: Literal["device_offline"]
+
+
+class UpdateBootstrapRequiredError(_UpdateErrorDetail):
+    code: Literal["bootstrap_required"]
+
+
+class UpdateCatalogUnavailableError(_UpdateErrorDetail):
+    code: Literal["release_check_unavailable"]
+
+
+class UpdateRevokedError(_UpdateErrorDetail):
+    code: Literal["device_revoked"]
+
+
+class UpdateForbiddenError(_UpdateErrorDetail):
+    code: Literal["forbidden"]
+
+
+class UpdateUnauthorizedError(_UpdateErrorDetail):
+    code: Literal["unauthorized"]
+
+
+UpdateConflictDetail = Annotated[
+    Union[
+        UpdateBusyError,
+        UpdateVersionConflictError,
+        UpdateReleaseNotAllowedError,
+        UpdateIdempotencyConflictError,
+    ],
+    Field(discriminator="code"),
+]
+UpdateUnavailableDetail = Annotated[
+    Union[
+        UpdateOfflineError,
+        UpdateBootstrapRequiredError,
+        UpdateCatalogUnavailableError,
+    ],
+    Field(discriminator="code"),
+]
+UpdateForbiddenDetail = Annotated[
+    Union[UpdateRevokedError, UpdateForbiddenError],
+    Field(discriminator="code"),
+]
+
+
+class UpdateConflictResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: UpdateConflictDetail
+
+
+class UpdateUnavailableResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: UpdateUnavailableDetail
+
+
+class UpdateForbiddenResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: UpdateForbiddenDetail
+
+
+class UpdateUnauthorizedResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: UpdateUnauthorizedError

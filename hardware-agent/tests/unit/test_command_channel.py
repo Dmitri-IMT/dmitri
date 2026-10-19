@@ -204,6 +204,31 @@ class TestUpgradeTarget:
 
 
 class TestHello:
+    def test_probe_404_selects_legacy_but_transient_and_invalid_retry(self) -> None:
+        from unittest.mock import patch
+
+        from agent.transport.command_channel import _default_connect
+
+        client = CommandChannelClient(make_config(), connect=_default_connect)
+        with patch("agent.transport.command_channel.httpx.get") as get:
+            get.return_value.status_code = 404
+            assert client._probe_protocol() is False
+
+            get.return_value.status_code = 503
+            with pytest.raises(OSError):
+                client._probe_protocol()
+
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"capabilities": "invalid"}
+            with pytest.raises(OSError):
+                client._probe_protocol()
+
+            get.return_value.json.return_value = {
+                "protocol_versions": [1],
+                "capabilities": ["scan_finalization_v1"],
+            }
+            assert client._probe_protocol() is True
+
     @pytest.mark.asyncio
     async def test_hello_precedes_on_connected_and_first_read(self) -> None:
         dialer = Dialer([command_frame()])
@@ -259,6 +284,42 @@ class TestHello:
             for socket in dialer.sockets
         ]
         assert cidrs == ["10.0.0.0/24", "10.1.0.0/24"]
+
+    @pytest.mark.asyncio
+    async def test_supported_probe_sends_capability_and_waits_for_session(self) -> None:
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            detect_subnets=lambda: list(SUBNETS),
+            agent_version="9.9.9",
+            protocol_probe=lambda: True,
+        )
+        connected: list[str | None] = []
+
+        async def on_connected() -> None:
+            connected.append(str(client.session_id))
+
+        await drive(client, on_connected)
+
+        assert connected == [session]
+        assert json.loads(dialer.sockets[0].sent[0])["capabilities"] == [
+            "scan_finalization_v1"
+        ]
 
 
 class TestInboundValidation:

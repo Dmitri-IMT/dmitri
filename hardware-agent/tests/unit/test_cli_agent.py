@@ -66,9 +66,7 @@ def test_cli_passes_read_only_mapping_to_headless() -> None:
             ],
         ),
         patch("agent.cli._check_nmap", return_value=True),
-        patch(
-            "agent.headless.run_headless_scan", return_value=result
-        ) as run_scan,
+        patch("agent.headless.run_headless_scan", return_value=result) as run_scan,
     ):
         with pytest.raises(SystemExit) as exc_info:
             main()
@@ -219,6 +217,29 @@ def test_cli_bare_agent_checks_nmap_then_runs_daemon() -> None:
         main()
 
     assert order == ["nmap", "daemon"]
+
+
+def test_health_json_is_local_and_does_not_emit_configuration_values(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from agent.cli import main
+    from agent.paths import DmitriConfig
+
+    with (
+        patch.object(sys, "argv", ["dmitri", "health", "--json"]),
+        patch("agent.paths.load_config", return_value=DmitriConfig(str(tmp_path))),
+        patch("agent.version.installed_version", return_value="1.2.3"),
+    ):
+        main()
+
+    result = json.loads(capsys.readouterr().out)
+    assert result == {
+        "ok": True,
+        "imports": True,
+        "version": "1.2.3",
+        "config_readable": True,
+        "results_directory_accessible": True,
+    }
 
 
 def test_cli_bare_agent_nmap_missing_exits_20_without_daemon(

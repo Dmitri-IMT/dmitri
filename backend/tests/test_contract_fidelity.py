@@ -8,6 +8,7 @@ import pytest
 import yaml
 from api.core import home_constants
 from api.main import app
+from api.schemas.agent_frames import AgentUpdateFrame
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "contracts" / "openapi" / "openapi.yaml"
@@ -68,6 +69,11 @@ SCHEMA_NAMES = (
     "AgentSummary",
     "AgentDetail",
     "AgentProtocolSupport",
+    "AgentUpdateRequest",
+    "AgentUpdateAvailability",
+    "AgentUpdateHistoryPage",
+    "ReleaseSummary",
+    "UpdateOperationView",
     "AgentListResponse",
     "UpdateAgentTargetSubnetRequest",
     "HomeEvent",
@@ -157,6 +163,8 @@ def _property_shape(spec: dict[str, Any], prop: dict[str, Any]) -> dict[str, Any
         shape["format"] = prop["format"]
     if "minimum" in prop:
         shape["minimum"] = _normalize_minimum(prop["minimum"])
+    if "exclusiveMinimum" in prop:
+        shape["exclusiveMinimum"] = _normalize_minimum(prop["exclusiveMinimum"])
     if nullable:
         shape["nullable"] = True
     if prop_type is not None:
@@ -768,16 +776,56 @@ def test_cors_allowed_methods_example_includes_patch_and_delete():
 def _contract_error_codes(spec: dict[str, Any], response_name: str) -> set[str]:
     response = spec["components"]["responses"][response_name]
     schema = response["content"]["application/json"]["schema"]
-    for part in schema["allOf"]:
-        part = _resolve_ref(spec, part)
-        properties = part.get("properties", {})
-        if "error" not in properties:
-            continue
-        error_schema = _resolve_ref(spec, properties["error"])
-        code_schema = error_schema.get("properties", {}).get("code", {})
-        if "enum" in code_schema:
-            return set(code_schema["enum"])
-    raise AssertionError(f"{response_name} has no error.code enum")
+
+    def collect(node: Any) -> set[str]:
+        node = _resolve_ref(spec, node)
+        if not isinstance(node, dict):
+            return set()
+        codes: set[str] = set()
+        code = node.get("properties", {}).get("code", {})
+        if "const" in code:
+            codes.add(code["const"])
+        codes.update(code.get("enum", []))
+        for key in ("oneOf", "anyOf", "allOf"):
+            for part in node.get(key, []):
+                codes.update(collect(part))
+        for prop in node.get("properties", {}).values():
+            codes.update(collect(prop))
+        return codes
+
+    codes = collect(schema)
+    if codes:
+        return codes
+    raise AssertionError(f"{response_name} has no error.code values")
+
+
+def test_agent_update_error_contracts_have_closed_code_sets() -> None:
+    contract = _load_contract()
+    assert _contract_error_codes(contract, "AgentUpdateUnauthorized") == {
+        "unauthorized"
+    }
+    assert _contract_error_codes(contract, "AgentUpdateConflict") == {
+        "device_busy",
+        "version_conflict",
+        "release_not_allowed",
+        "idempotency_conflict",
+    }
+    assert _contract_error_codes(contract, "AgentUpdateUnavailable") == {
+        "device_offline",
+        "bootstrap_required",
+        "release_check_unavailable",
+    }
+
+
+def test_agent_update_frame_matches_backend_schema() -> None:
+    contract_schema = _load_contract()["components"]["schemas"]["AgentUpdateFrame"]
+    backend_schema = AgentUpdateFrame.model_json_schema()
+    assert contract_schema["required"] == backend_schema["required"]
+    assert contract_schema["additionalProperties"] is False
+    assert contract_schema["properties"]["type"]["const"] == "agent_update"
+    assert contract_schema["properties"]["sha256"]["pattern"] == backend_schema[
+        "properties"
+    ]["sha256"]["pattern"]
 
 
 def _route_error_codes_by_status(

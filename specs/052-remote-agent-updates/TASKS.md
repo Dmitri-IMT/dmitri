@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–7 concluídas. Próxima: #8, aguardando novo comando do usuário.**
+14 tasks. **Tasks 1–9 concluídas; Task 10 pendente.**
 
 ## Escopo e estado
 
@@ -203,8 +203,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Probe negocia `scan_finalization_v1`; 404/sem suporte mantém hello e ciclo de scan legados sem criar checkpoint v1. Um checkpoint v1 existente nunca é rebaixado; aguarda ACK compatível e bloqueia novos scans remotos/claims. Erros de rede/5xx/probe inválido usam retry. Capacidade de instalação só será anunciada na Task 12.
   - Saúde fixa verifica imports/versão/configuração/acesso a resultados sem scan ou segredos; handshake local associa MainPID/invocation/versões ao desafio atual, sem depender do backend e sem adquirir lease de scan.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 6
 
 ## Task 9: Expor consulta e admissão manual de atualizações
 - **Description**: Implementar consultas e solicitação manual em `INTEGRATION.md` (HTTP contract), preservando o probe entregue na Task 7, com reserva entre scans e updates e uma única entrega na sessão capturada. O backend suporta o protocolo antes de o agente anunciar prontidão na Task 12.
@@ -217,10 +217,11 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Criação requer UUID Idempotency-Key, corpo fechado e versão esperada; mesmo key/body retorna operação sem reenvio, corpo diferente conflita; conferir role viva na transação.
   - Admissão de scan e update usa a mesma Agent row e reserva persistida; proibir update enquanto scan/upload/finalização estão ativos e scan durante reserva de update.
   - Commit de intenção precede envio único na sessão corrente capturada; não reenviar após substituição, não enfileirar offline e não criar scan fictício. Só pedidos não reclamados expiram no worker.
+  - Admissão compara versão completa Debian e exige target estritamente mais novo e compatibilidade com o protocolo requerido; disponibilidade filtra suite/plataforma.
   - Rotas implementadas, envelope de erros e OpenAPI/tipos gerados permanecem fiéis; probe não significa que agente antigo pode se atualizar.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 2
 
 ## Task 10: Validar claim, eventos e confirmação observada no backend
 - **Description**: Implementar endpoints assinados de claim/eventos e reconciliação conforme `INTEGRATION.md` (State, deadlines e Persistence). Separar resultado local, contato e confirmação remota.
@@ -372,9 +373,9 @@ habilitar clientes capazes; nenhuma release intermediária incompleta é promovi
 | 4 | Publicador de teste | — | Sol high | COMPLETED |
 | 5 | Pacotes offline e baseline | 3 | Sol high | COMPLETED |
 | 6 | Leases em todos os scans | — | Sol high | COMPLETED |
-| 7 | Sessões, versões e ACK | 1 | Sol high | PENDING |
-| 8 | Finalização durável e saúde | 5, 6, 7 | Sol high | PENDING |
-| 9 | Consulta e admissão HTTP | 1, 2, 7 | Sol high | PENDING |
+| 7 | Sessões, versões e ACK | 1 | Sol high | COMPLETED |
+| 8 | Finalização durável e saúde | 5, 6, 7 | Sol high | COMPLETED |
+| 9 | Consulta e admissão HTTP | 1, 2, 7 | Sol high | COMPLETED |
 | 10 | Claim, eventos e confirmação | 7, 9 | Sol high | PENDING |
 | 11 | Instalação, recuperação e reporte | 3, 5, 6, 8, 10 | Sol high | PENDING |
 | 12 | Integração/capacidade no daemon | 7, 8, 10, 11 | Sol high | PENDING |

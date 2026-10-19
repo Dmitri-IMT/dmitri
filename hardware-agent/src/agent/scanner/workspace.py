@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -172,6 +173,15 @@ def write_scan_result(payload: ScanPayload, workspace_root: str) -> Path:
 
     file_path = dir_path / filename
     data = payload.model_dump(mode="json")
-    file_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    with file_path.open("w", encoding="utf-8") as stream:
+        stream.write(json.dumps(data, indent=2))
+        stream.flush()
+        os.fsync(stream.fileno())
+    if os.name == "posix":
+        directory_fd = os.open(dir_path, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     prune_results(dir_path)
     return file_path

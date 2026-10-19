@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
 from agent.headless import HeadlessScanResult, InvalidScanInput, run_headless_scan
+from agent.scanner.finalization import ScanFinalizationCheckpoint, ScanFinalizationStore
 from agent.scanner.live_progress import LiveProgressReporter, LiveProgressSnapshot
 from agent.scanner.scan_lock import (
     ScanLease,
@@ -22,14 +25,18 @@ from agent.transport.command_channel import (
     AgentProgressSnapshot,
     AgentStatus,
     CommandChannelClient,
+    ScanStatusAck,
 )
 from agent.transport.ingest import (
     IngestConfigError,
     ScanIngestClient,
+    SubmissionResult,
     load_ingest_config,
 )
 
 LOGGER = logging.getLogger(__name__)
+INGEST_RETRY_INITIAL_SECONDS = 1.0
+INGEST_RETRY_MAX_SECONDS = 30.0
 
 CommandStatus = Literal["running", "uploading", "done", "failed", "cancelled"]
 
@@ -113,10 +120,21 @@ class AgentDaemon:
         ingest: ScanIngestClient,
         *,
         run_scan: Callable[..., HeadlessScanResult] = run_headless_scan,
+        checkpoint_path: Path | None = None,
     ) -> None:
         self._client = client
         self._ingest = ingest
         self._run_scan = run_scan
+        self._checkpoint = ScanFinalizationStore(
+            checkpoint_path
+            or Path(
+                os.environ.get(
+                    "DMITRI_SCAN_FINALIZATION_PATH",
+                    "/var/lib/dmitri/scan-finalization.json",
+                )
+            )
+        )
+        self._durable_checkpoint = self._checkpoint.load()
         self.ledger: dict[UUID, CommandRecord] = {}
         self._active: UUID | None = None
         self._latest_progress: dict[UUID, AgentProgress] = {}
@@ -124,6 +142,12 @@ class AgentDaemon:
         self._progress_revision: dict[UUID, int] = {}
         self._task: asyncio.Task[None] | None = None
         self._stop = _ScanStop()
+        self._retry_stop = asyncio.Event()
+        self._replay_retry_task: asyncio.Task[None] | None = None
+        self._replay_lock = asyncio.Lock()
+        self._upload_lock = asyncio.Lock()
+        self._upload_worker: asyncio.Task[SubmissionResult] | None = None
+        self._upload_worker_key: tuple[UUID, UUID] | None = None
         self._upgrade_hold: ScanLease | None = None
 
     async def run(self) -> None:
@@ -133,6 +157,7 @@ class AgentDaemon:
                 self.replay_pending,
                 self._cancel_active,
                 on_cancel=self.handle_cancel,
+                on_scan_status_ack=self.handle_scan_status_ack,
             )
         finally:
             await self.close()
@@ -144,12 +169,36 @@ class AgentDaemon:
 
     async def _cancel_active(self) -> None:
         task, self._task = self._task, None
+        retry_task, self._replay_retry_task = self._replay_retry_task, None
         try:
+            self._retry_stop.set()
+            if retry_task is not None and not retry_task.done():
+                retry_task.cancel()
+                await asyncio.gather(retry_task, return_exceptions=True)
             if task is not None and not task.done():
                 self._stop.request_park()
                 await task
+            worker = self._upload_worker
+            if worker is not None and not worker.done():
+                await asyncio.shield(worker)
+            checkpoint = self._durable_checkpoint
+            if checkpoint is not None and checkpoint.phase == "running":
+                checkpoint = ScanFinalizationCheckpoint(
+                    command_id=checkpoint.command_id,
+                    scan_id=checkpoint.scan_id,
+                    session_id=checkpoint.session_id,
+                    phase="awaiting_ack",
+                    status="failed",
+                    error_code="scan_failed",
+                )
+                self._durable_checkpoint = checkpoint
+                self._checkpoint.save(checkpoint)
+                self.ledger[checkpoint.command_id] = CommandRecord(
+                    "failed", "scan_failed"
+                )
         finally:
-            self._release_hold()
+            if self._durable_checkpoint is None:
+                self._release_hold()
 
     async def handle_command(self, command: AgentCommand) -> None:
         if self._client.parked_reason is not None:
@@ -158,6 +207,24 @@ class AgentDaemon:
         if record is not None:
             await self._send(command.command_id, record)
             return
+        checkpoint = self._durable_checkpoint
+        if checkpoint is not None and checkpoint.command_id == command.command_id:
+            if checkpoint.phase == "uploading" and checkpoint.result_path is not None:
+                await self.replay_pending()
+                return
+            if checkpoint.status is not None:
+                record = CommandRecord(checkpoint.status, checkpoint.error_code)
+                self.ledger[command.command_id] = record
+                await self._send(command.command_id, record)
+            return
+        if self._durable_checkpoint is not None:
+            await self._update(command.command_id, "failed", "device_busy")
+            return
+        if getattr(self._client, "supports_scan_finalization", False):
+            session_id = getattr(self._client, "session_id", None)
+            if session_id is None:
+                await self._update(command.command_id, "failed", "device_busy")
+                return
         if self._active is not None:
             await self._update(command.command_id, "failed", "device_busy")
             return
@@ -173,7 +240,22 @@ class AgentDaemon:
         self._upgrade_hold = lock
         self._active = command.command_id
         self._stop = _ScanStop()
+        self._retry_stop = asyncio.Event()
         try:
+            if getattr(self._client, "supports_scan_finalization", False):
+                self._durable_checkpoint = ScanFinalizationCheckpoint(
+                    command_id=command.command_id,
+                    scan_id=command.scan_id,
+                    session_id=self._client.session_id,
+                    phase="running",
+                )
+                try:
+                    self._checkpoint.save(self._durable_checkpoint)
+                except OSError:
+                    self._durable_checkpoint = None
+                    self._release_hold()
+                    LOGGER.exception("Cannot persist remote scan checkpoint")
+                    return
             await self._update(command.command_id, "running")
             self._task = asyncio.create_task(self._execute(command))
         except BaseException:
@@ -190,6 +272,97 @@ class AgentDaemon:
         await self._send(command_id, record)
 
     async def replay_pending(self) -> None:
+        async with self._replay_lock:
+            await self._replay_pending()
+
+    async def _replay_pending(self) -> None:
+        checkpoint = self._durable_checkpoint
+        if checkpoint is not None and getattr(
+            self._client, "supports_scan_finalization", False
+        ):
+            if self._upgrade_hold is None:
+                try:
+                    self._upgrade_hold = acquire_scan_lease(
+                        allow_pending_finalization=True
+                    )
+                    self._active = checkpoint.command_id
+                except (UpgradeInProgressError, OSError):
+                    LOGGER.exception("Cannot restore scan finalization lease")
+                    return
+            if (
+                checkpoint.phase in {"running", "uploading"}
+                and self._active == checkpoint.command_id
+                and self._task is not None
+                and not self._task.done()
+            ):
+                record = self.ledger.get(checkpoint.command_id)
+                if record is not None:
+                    record.pending = True
+            elif checkpoint.phase == "running" or (
+                checkpoint.phase == "uploading" and checkpoint.result_path is None
+            ):
+                checkpoint = ScanFinalizationCheckpoint(
+                    command_id=checkpoint.command_id,
+                    scan_id=checkpoint.scan_id,
+                    session_id=checkpoint.session_id,
+                    phase="awaiting_ack",
+                    status="failed",
+                    error_code="scan_failed",
+                )
+                self._durable_checkpoint = checkpoint
+                self._checkpoint.save(checkpoint)
+                record = CommandRecord("failed", "scan_failed")
+                self.ledger[checkpoint.command_id] = record
+                await self._send(checkpoint.command_id, record)
+            elif checkpoint.phase == "uploading" and checkpoint.result_path is not None:
+                result_path = Path(checkpoint.result_path)
+                try:
+                    from agent.normalize.contracts import ScanPayload
+
+                    payload = ScanPayload.model_validate_json(
+                        result_path.read_text(encoding="utf-8")
+                    )
+                    submission = await self._submit_upload(
+                        payload, checkpoint.command_id, checkpoint.scan_id
+                    )
+                    if self._client.parked_reason is not None:
+                        return
+                    if submission.outcome == "accepted":
+                        checkpoint = ScanFinalizationCheckpoint(
+                            command_id=checkpoint.command_id,
+                            scan_id=checkpoint.scan_id,
+                            session_id=checkpoint.session_id,
+                            phase="awaiting_ack",
+                            status=checkpoint.status or "done",
+                            error_code=checkpoint.error_code,
+                            result_path=checkpoint.result_path,
+                        )
+                    elif submission.outcome in {"unavailable", "protocol_error"}:
+                        # Preserve the upload checkpoint and artifact for retry.
+                        self._schedule_replay_retry()
+                        return
+                    else:
+                        checkpoint = ScanFinalizationCheckpoint(
+                            command_id=checkpoint.command_id,
+                            scan_id=checkpoint.scan_id,
+                            session_id=checkpoint.session_id,
+                            phase="awaiting_ack",
+                            status="failed",
+                            error_code="ingest_failed",
+                            result_path=checkpoint.result_path,
+                        )
+                    self._durable_checkpoint = checkpoint
+                    self._checkpoint.save(checkpoint)
+                    record = CommandRecord(checkpoint.status, checkpoint.error_code)
+                    self.ledger[checkpoint.command_id] = record
+                    await self._send(checkpoint.command_id, record)
+                except (OSError, ValueError):
+                    LOGGER.exception("Cannot replay saved scan result")
+                    return
+            elif checkpoint.status is not None:
+                record = CommandRecord(checkpoint.status, checkpoint.error_code)
+                self.ledger[checkpoint.command_id] = record
+                await self._send(checkpoint.command_id, record)
         for command_id, record in list(self.ledger.items()):
             if record.pending:
                 await self._send(command_id, record)
@@ -203,6 +376,29 @@ class AgentDaemon:
         except Exception:
             LOGGER.exception("command %s ended unexpectedly", command.command_id)
             await self._update(command.command_id, "failed", "scan_failed")
+
+    def _schedule_replay_retry(self) -> None:
+        if self._replay_retry_task is None or self._replay_retry_task.done():
+            self._retry_stop.clear()
+            self._replay_retry_task = asyncio.create_task(self._retry_replay_pending())
+
+    async def _retry_replay_pending(self) -> None:
+        delay = INGEST_RETRY_INITIAL_SECONDS
+        try:
+            while (
+                self._durable_checkpoint is not None
+                and self._durable_checkpoint.phase == "uploading"
+                and self._client.parked_reason is None
+            ):
+                try:
+                    await asyncio.wait_for(self._retry_stop.wait(), timeout=delay)
+                    return
+                except TimeoutError:
+                    pass
+                await self.replay_pending()
+                delay = min(delay * 2, INGEST_RETRY_MAX_SECONDS)
+        except asyncio.CancelledError:
+            raise
 
     async def _run_command(self, command: AgentCommand) -> None:
         stop = self._stop
@@ -251,13 +447,57 @@ class AgentDaemon:
         )
         if final_progress is not None:
             await self._send_progress(final_progress)
+        if self._durable_checkpoint is not None:
+            self._durable_checkpoint = ScanFinalizationCheckpoint(
+                command_id=command.command_id,
+                scan_id=command.scan_id,
+                session_id=self._durable_checkpoint.session_id,
+                phase="uploading",
+                status=status,
+                error_code=error_code,
+                result_path=(
+                    str(Path(result.result_path).resolve())
+                    if result.result_path
+                    else None
+                ),
+            )
+            self._checkpoint.save(self._durable_checkpoint)
         await self._update(command.command_id, "uploading")
-        submission = await asyncio.to_thread(
-            self._ingest.submit, result.payload, scan_id=command.scan_id
-        )
+        retry_delay = INGEST_RETRY_INITIAL_SECONDS
+        while True:
+            if stop.parked or self._retry_stop.is_set():
+                return
+            submission = await self._submit_upload(
+                result.payload, command.command_id, command.scan_id
+            )
+            if (
+                submission.outcome not in {"unavailable", "protocol_error"}
+                or self._durable_checkpoint is None
+                or stop.parked
+            ):
+                break
+            LOGGER.warning(
+                "scan ingest remains pending: outcome=%s; retrying in %.0f seconds",
+                submission.outcome,
+                retry_delay,
+            )
+            try:
+                await asyncio.wait_for(self._retry_stop.wait(), timeout=retry_delay)
+                return
+            except TimeoutError:
+                pass
+            retry_delay = min(retry_delay * 2, INGEST_RETRY_MAX_SECONDS)
         # Park stays silent even after a cancel: an accepted upload already moved
         # the command to its terminal status on the backend.
         if stop.parked:
+            return
+        if (
+            submission.outcome in {"unavailable", "protocol_error"}
+            and self._durable_checkpoint is not None
+        ):
+            LOGGER.warning(
+                "scan ingest remains pending: outcome=%s", submission.outcome
+            )
             return
         if submission.outcome == "accepted":
             LOGGER.info(
@@ -284,6 +524,33 @@ class AgentDaemon:
         self, command_id: UUID, status: CommandStatus, error_code: str | None = None
     ) -> None:
         record = CommandRecord(status=status, error_code=error_code)
+        if (
+            self._durable_checkpoint is not None
+            and command_id == self._durable_checkpoint.command_id
+        ):
+            phase = (
+                "awaiting_ack"
+                if status in {"done", "failed", "cancelled"}
+                else ("uploading" if status == "uploading" else "running")
+            )
+            self._durable_checkpoint = ScanFinalizationCheckpoint(
+                command_id=self._durable_checkpoint.command_id,
+                scan_id=self._durable_checkpoint.scan_id,
+                session_id=self._durable_checkpoint.session_id,
+                phase=phase,
+                status=(
+                    status
+                    if phase == "awaiting_ack"
+                    else self._durable_checkpoint.status
+                ),
+                error_code=(
+                    error_code
+                    if phase == "awaiting_ack"
+                    else self._durable_checkpoint.error_code
+                ),
+                result_path=self._durable_checkpoint.result_path,
+            )
+            self._checkpoint.save(self._durable_checkpoint)
         self.ledger[command_id] = record
         if status in {"done", "failed", "cancelled"}:
             self._latest_progress.pop(command_id, None)
@@ -304,8 +571,54 @@ class AgentDaemon:
             command_id == self._active
             and not record.pending
             and record.status in {"done", "failed", "cancelled"}
+            and self._durable_checkpoint is None
         ):
             self._release_hold()
+
+    async def handle_scan_status_ack(self, receipt: ScanStatusAck) -> None:
+        checkpoint = self._durable_checkpoint
+        if (
+            checkpoint is None
+            or receipt.session_id != getattr(self._client, "session_id", None)
+            or receipt.command_id != checkpoint.command_id
+            or checkpoint.status is None
+            or checkpoint.phase != "awaiting_ack"
+            or (
+                self._upload_worker is not None
+                and not self._upload_worker.done()
+                and self._upload_worker_key
+                == (checkpoint.command_id, checkpoint.scan_id)
+            )
+        ):
+            return
+        self._checkpoint.clear()
+        self._durable_checkpoint = None
+        record = self.ledger.get(receipt.command_id)
+        if record is not None:
+            record.pending = False
+        self._release_hold()
+
+    async def _submit_upload(
+        self, payload: object, command_id: UUID, scan_id: UUID
+    ) -> SubmissionResult:
+        """Submit once per command while retaining the underlying thread task."""
+        key = (command_id, scan_id)
+        async with self._upload_lock:
+            worker = self._upload_worker
+            if worker is None or worker.done():
+                worker = asyncio.create_task(
+                    asyncio.to_thread(self._ingest.submit, payload, scan_id=scan_id)
+                )
+                self._upload_worker = worker
+                self._upload_worker_key = key
+            elif self._upload_worker_key != key:
+                raise RuntimeError("another scan upload is still running")
+        try:
+            return await asyncio.shield(worker)
+        finally:
+            if worker.done() and self._upload_worker is worker:
+                self._upload_worker = None
+                self._upload_worker_key = None
 
     def _record_progress(
         self,
@@ -371,5 +684,14 @@ def run_daemon() -> None:
     except IngestConfigError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(20) from exc
+    from agent.transport.readiness import SOCKET_PATH, readiness_handshake
+    from agent.version import installed_version
+
+    if SOCKET_PATH.exists():
+        try:
+            readiness_handshake(installed_version())
+        except OSError as exc:
+            LOGGER.error("Local updater readiness check failed: %s", type(exc).__name__)
+            raise SystemExit(20) from None
     daemon = AgentDaemon(CommandChannelClient(config), ScanIngestClient(config))
     asyncio.run(daemon.run())

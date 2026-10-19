@@ -266,6 +266,7 @@ def test_detail_reports_both_subnets_in_order(
         "observed_version",
         "observed_package_version",
         "version_observed_at",
+        "active_update_id",
     }
     assert body["available_subnets"] == REPORTED_SUBNETS
     assert body["online"] is True

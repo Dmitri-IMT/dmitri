@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -30,7 +31,9 @@ class AgentHelloFrame(BaseModel):
     updater_version: str | None = None
     os_suite: str | None = None
     architecture: str | None = None
-    capabilities: list[Literal["scan_finalization_v1"]] = Field(default_factory=list)
+    capabilities: list[
+        Literal["scan_finalization_v1", "agent_update_v1"]
+    ] = Field(default_factory=list)
 
 
 class UpdateSessionFrame(BaseModel):
@@ -39,7 +42,19 @@ class UpdateSessionFrame(BaseModel):
     type: Literal["update_session"]
     session_id: UUID
     protocol_version: Literal[1]
-    capabilities: list[Literal["scan_finalization_v1"]]
+    capabilities: list[Literal["scan_finalization_v1", "agent_update_v1"]]
+
+
+class AgentUpdateFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["agent_update"]
+    update_id: UUID
+    session_id: UUID
+    release_id: UUID
+    target_package_version: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expires_at: datetime
 
 
 class ScanStatusAckFrame(BaseModel):

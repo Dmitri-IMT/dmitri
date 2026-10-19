@@ -36,6 +36,7 @@ class AgentDetail(BaseModel):
     version_observed_at: datetime | None = None
     target_subnet: SubnetCIDR | None = None
     active_command_id: UUID | None = None
+    active_update_id: UUID | None = None
 
 
 class RegisterAgentRequest(BaseModel):

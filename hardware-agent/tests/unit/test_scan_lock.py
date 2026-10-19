@@ -72,6 +72,21 @@ def test_lock_path_does_not_depend_on_results(monkeypatch):
     assert scan_lock_path() == path
 
 
+def test_pending_finalization_blocks_scan_admission_except_checkpoint_recovery(
+    monkeypatch, tmp_path
+):
+    from agent.scanner import scan_lock
+
+    checkpoint = tmp_path / "scan-finalization.json"
+    checkpoint.write_text('{"protocol":1}', encoding="utf-8")
+    monkeypatch.setattr(scan_lock, "FINALIZATION_CHECKPOINT_PATH", checkpoint)
+
+    with pytest.raises(scan_lock.UpgradeInProgressError):
+        scan_lock._check_update_gate()
+
+    scan_lock._check_update_gate(allow_pending_finalization=True)
+
+
 @POSIX_FLOCK
 def test_missing_appliance_lock_fails_closed(monkeypatch):
     errors = []
@@ -122,15 +137,11 @@ def test_borrowed_lease_is_reused_without_becoming_owner():
     assert not lease.active
 
 
-def test_persistent_gate_blocks_even_without_live_update_process(
-    monkeypatch, tmp_path
-):
+def test_persistent_gate_blocks_even_without_live_update_process(monkeypatch, tmp_path):
     from agent.scanner import scan_lock
 
     gate = tmp_path / "update-gate.json"
-    gate.write_text(
-        '{"blocked":true,"reason":"recovery_required","operation_ids":[]}'
-    )
+    gate.write_text('{"blocked":true,"reason":"recovery_required","operation_ids":[]}')
     monkeypatch.setattr(scan_lock, "UPDATE_GATE_PATH", gate)
     with pytest.raises(scan_lock.UpgradeInProgressError, match="update in progress"):
         scan_lock._check_update_gate()
@@ -142,9 +153,7 @@ def test_scan_runner_refuses_persistent_gate_before_scan_body(monkeypatch, tmp_p
     from agent.scanner.scan_lock import UpgradeInProgressError
 
     gate = tmp_path / "update-gate.json"
-    gate.write_text(
-        '{"blocked":true,"reason":"recovery_required","operation_ids":[]}'
-    )
+    gate.write_text('{"blocked":true,"reason":"recovery_required","operation_ids":[]}')
     monkeypatch.setattr(scan_lock, "UPDATE_GATE_PATH", gate)
     errors = []
     calls = []

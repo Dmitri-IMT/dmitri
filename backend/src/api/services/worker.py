@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from api.core.config import get_settings
 from api.db.session import get_session
+from api.services.agent_updates_http import expire_unclaimed_updates
 from api.services.ai.groq import GroqProvider, build_ai_provider
 from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.commands import sweep_stale_commands
@@ -101,6 +102,11 @@ def run_worker_once(
             # The sweep is a janitor, not the point of the tick — a failure here
             # must not stop enrichment from draining its queue.
             logger.exception("stale command sweep failed; continuing")
+            session.rollback()
+        try:
+            expire_unclaimed_updates(session, now=datetime.now(UTC), batch_size=100)
+        except Exception:
+            logger.exception("unclaimed agent update expiry failed; continuing")
             session.rollback()
         return process_pending_enrichment_jobs(
             session,

@@ -250,7 +250,7 @@ def test_negotiated_hello_persists_observed_versions_and_returns_session(
     hello.update(
         {
             "package_version": "1.0.7-1",
-            "capabilities": ["scan_finalization_v1"],
+            "capabilities": ["scan_finalization_v1", "agent_update_v1"],
         }
     )
 
@@ -260,10 +260,19 @@ def test_negotiated_hello_persists_observed_versions_and_returns_session(
     ) as ws:
         ws.send_json(hello)
         session = ws.receive_json()
+        connection = agent_connections.get_connection(provisioned_agent.id)
+        assert connection is not None
+        assert connection.capabilities == frozenset(
+            {"scan_finalization_v1", "agent_update_v1"}
+        )
+        assert connection.protocol_version == 1
 
     assert session["type"] == "update_session"
     assert session["protocol_version"] == 1
-    assert session["capabilities"] == ["scan_finalization_v1"]
+    assert session["capabilities"] == [
+        "scan_finalization_v1",
+        "agent_update_v1",
+    ]
     assert not agent_connections.is_online(provisioned_agent.id)
     assert agent_connections.get_hello(provisioned_agent.id) is None
     administrative_session.expire_all()
@@ -272,6 +281,37 @@ def test_negotiated_hello_persists_observed_versions_and_returns_session(
     assert persisted.observed_package_version == "1.0.7-1"
     assert persisted.version_observed_at is not None
     assert persisted.version_observed_session_id is not None
+
+
+def test_agent_update_only_hello_negotiates_protocol_version(
+    client: TestClient,
+    provisioned_agent: Agent,
+    agent_keypair,
+) -> None:
+    private_key, _public_key = agent_keypair
+    hello = json.loads(_hello_payload())
+    hello.update(
+        {
+            "package_version": "1.0.7-1",
+            "updater_version": "1",
+            "os_suite": "trixie",
+            "architecture": "arm64",
+            "capabilities": ["agent_update_v1"],
+        }
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        session = ws.receive_json()
+        connection = agent_connections.get_connection(provisioned_agent.id)
+        assert connection is not None
+        assert connection.capabilities == frozenset({"agent_update_v1"})
+        assert connection.protocol_version == session["protocol_version"] == 1
+
+    assert session["capabilities"] == ["agent_update_v1"]
 
 
 def test_legacy_hello_keeps_last_observed_package_version(

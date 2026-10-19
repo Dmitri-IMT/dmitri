@@ -12,6 +12,7 @@ from starlette.websockets import WebSocket
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
+from api.models.agent_update import AgentUpdate
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
 from api.schemas.agent_frames import AgentCancelFrame, AgentCommandFrame
@@ -587,6 +588,18 @@ def _claim_agent(
     # command row; retire those first so a stale row cannot wedge the device.
     sweep_stale_commands(session, now=now, agent_id=agent_id)
     if active_command_for(session, agent_id) is not None:
+        raise DeviceBusyError
+    if session.exec(
+        select(AgentUpdate.id).where(
+            AgentUpdate.agent_id == agent_id,
+            AgentUpdate.phase.in_(
+                (
+                    "requested", "preparing", "installing", "verifying",
+                    "awaiting_confirmation", "recovering", "needs_intervention",
+                )
+            ),
+        )
+    ).first() is not None:
         raise DeviceBusyError
 
     hello = agent_connections.get_hello(agent_id)

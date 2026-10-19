@@ -48,6 +48,23 @@ def test_restart_restores_gate_for_pending_operation(tmp_path: Path):
     }
 
 
+def test_pending_scan_checkpoint_blocks_update_check_without_live_flock(
+    tmp_path: Path,
+):
+    checkpoint = tmp_path / "scan-finalization.json"
+    checkpoint.write_text('{"protocol":1}', encoding="utf-8")
+    instance = Updater(
+        tmp_path / "state",
+        tmp_path / "run",
+        tmp_path / "gate.json",
+        scan_checkpoint_path=checkpoint,
+    )
+    instance.initialize()
+
+    assert instance.check() == {"ok": False, "error": "device_busy"}
+    assert instance.inspect()["blocked"] is True
+
+
 def test_corrupt_journal_blocks_mutation_and_preserves_evidence(tmp_path: Path):
     state = tmp_path / "state"
     state.mkdir()
@@ -230,14 +247,225 @@ def test_malformed_and_unauthorized_socket_messages_are_rejected(
 
     client, server = socket.socketpair()
     monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
-    client.sendall(b'{"command":"inspect"}\n{"command":"check"}')
-    client.shutdown(socket.SHUT_WR)
     worker = threading.Thread(target=updater._handle_connection, args=(server,))
     worker.start()
+    client.sendall(b'{"command":"inspect"}\n{"command":"check"}')
+    client.shutdown(socket.SHUT_WR)
     response = json.loads(client.recv(1024))
     client.close()
     worker.join(timeout=1)
     assert response == {"ok": False, "error": "invalid_request"}
+
+
+def test_readiness_handshake_binds_nonce_mainpid_invocation_and_package(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    client, server = socket.socketpair()
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
+    monkeypatch.setattr(updater, "_peer_credentials", lambda _: (0, 412))
+    monkeypatch.setattr(updater, "readiness_identity", lambda: (412, "invocation-1"))
+    monkeypatch.setattr(updater, "package_version", lambda: "1.0.7-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.0.7")
+    worker = threading.Thread(target=updater._handle_connection, args=(server,))
+    worker.start()
+    client.sendall(
+        json.dumps(
+            {
+                "command": "readiness",
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    challenge = json.loads(client.recv(1024))
+    client.sendall(
+        json.dumps(
+            {
+                **challenge,
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    response = json.loads(client.recv(1024))
+    client.close()
+    worker.join(timeout=1)
+
+    assert response["ok"] is True
+    assert response["main_pid"] == 412
+    assert response["invocation_id"] == "invocation-1"
+    assert len(response["nonce"]) == 48
+
+
+def test_app_version_uses_installed_agent_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, "1.0.7\n", "")
+
+    monkeypatch.setattr(updater_module.subprocess, "run", run)
+
+    assert Updater._installed_agent_app_version() == "1.0.7"
+    assert calls[0][0] == [
+        "/opt/dmitri-agent/.venv/bin/python",
+        "-c",
+        "from agent.version import installed_version; print(installed_version())",
+    ]
+    assert calls[0][1]["check"] is True
+    assert calls[0][1]["timeout"] == 5
+
+
+def test_app_version_fails_closed_when_installed_runtime_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(1, "python")
+
+    monkeypatch.setattr(updater_module.subprocess, "run", run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        Updater._installed_agent_app_version()
+
+
+def test_readiness_rejects_stale_process_invocation(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    client, server = socket.socketpair()
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
+    monkeypatch.setattr(updater, "_peer_credentials", lambda _: (0, 412))
+    identities = iter([(412, "invocation-1"), (412, "invocation-2")])
+    monkeypatch.setattr(updater, "readiness_identity", lambda: next(identities))
+    monkeypatch.setattr(updater, "package_version", lambda: "1.0.7-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.0.7")
+    worker = threading.Thread(target=updater._handle_connection, args=(server,))
+    worker.start()
+    client.sendall(
+        json.dumps(
+            {
+                "command": "readiness",
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    challenge = json.loads(client.recv(1024))
+    client.sendall(
+        json.dumps(
+            {
+                **challenge,
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    response = json.loads(client.recv(1024))
+    client.close()
+    worker.join(timeout=1)
+
+    assert response == {"ok": False, "error": "stale_session"}
+
+
+def test_readiness_rejects_application_version_that_does_not_match_installed_identity(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    client, server = socket.socketpair()
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
+    monkeypatch.setattr(updater, "_peer_credentials", lambda _: (0, 412))
+    monkeypatch.setattr(updater, "readiness_identity", lambda: (412, "invocation-1"))
+    monkeypatch.setattr(updater, "package_version", lambda: "1.0.7-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.0.8")
+    worker = threading.Thread(target=updater._handle_connection, args=(server,))
+    worker.start()
+    client.sendall(
+        json.dumps(
+            {
+                "command": "readiness",
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    response = json.loads(client.recv(1024))
+    client.close()
+    worker.join(timeout=1)
+
+    assert response == {"ok": False, "error": "stale_session"}
+
+
+def test_readiness_rejects_peer_pid_that_is_not_mainpid(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    client, server = socket.socketpair()
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
+    monkeypatch.setattr(updater, "_peer_credentials", lambda _: (0, 411))
+    monkeypatch.setattr(updater, "readiness_identity", lambda: (412, "invocation-1"))
+    worker = threading.Thread(target=updater._handle_connection, args=(server,))
+    worker.start()
+    client.sendall(
+        json.dumps(
+            {
+                "command": "readiness",
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+
+    response = json.loads(client.recv(1024))
+    client.close()
+    worker.join(timeout=1)
+
+    assert response == {"ok": False, "error": "stale_session"}
+
+
+def test_readiness_rejects_wrong_nonce(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    client, server = socket.socketpair()
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _: True)
+    monkeypatch.setattr(updater, "_peer_credentials", lambda _: (0, 412))
+    monkeypatch.setattr(updater, "readiness_identity", lambda: (412, "invocation-1"))
+    monkeypatch.setattr(updater, "package_version", lambda: "1.0.7-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.0.7")
+    worker = threading.Thread(target=updater._handle_connection, args=(server,))
+    worker.start()
+    client.sendall(
+        json.dumps(
+            {
+                "command": "readiness",
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+    challenge = json.loads(client.recv(1024))
+    client.sendall(
+        json.dumps(
+            {
+                **challenge,
+                "nonce": "0" * 48,
+                "app_version": "1.0.7",
+                "package_version": "1.0.7-1",
+            }
+        ).encode()
+        + b"\n"
+    )
+
+    response = json.loads(client.recv(1024))
+    client.close()
+    worker.join(timeout=1)
+
+    assert response == {"ok": False, "error": "stale_session"}
 
 
 def _handle_socket_payload(

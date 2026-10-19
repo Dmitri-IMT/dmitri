@@ -35,8 +35,12 @@ class AgentConnection:
     connected_at: datetime
     last_seen_at: datetime
     session_id: UUID
+    protocol_version: int | None = None
     agent_version: str | None = None
     package_version: str | None = None
+    updater_version: str | None = None
+    os_suite: str | None = None
+    architecture: str | None = None
     available_subnets: list[AvailableSubnet] | None = None
     capabilities: frozenset[str] = frozenset()
 
@@ -115,6 +119,9 @@ async def set_hello(
     agent_version: str,
     available_subnets: list[AvailableSubnet],
     package_version: str | None = None,
+    updater_version: str | None = None,
+    os_suite: str | None = None,
+    architecture: str | None = None,
     capabilities: frozenset[str] = frozenset(),
     now: datetime,
 ) -> None:
@@ -125,6 +132,9 @@ async def set_hello(
             agent_version=agent_version,
             available_subnets=available_subnets,
             package_version=package_version,
+            updater_version=updater_version,
+            os_suite=os_suite,
+            architecture=architecture,
             capabilities=capabilities,
             now=now,
         )
@@ -137,6 +147,9 @@ def set_hello_locked(
     agent_version: str,
     available_subnets: list[AvailableSubnet],
     package_version: str | None,
+    updater_version: str | None = None,
+    os_suite: str | None = None,
+    architecture: str | None = None,
     capabilities: frozenset[str],
     now: datetime,
 ) -> bool:
@@ -145,7 +158,17 @@ def set_hello_locked(
         return False
     entry.agent_version = agent_version
     entry.package_version = package_version
+    entry.updater_version = updater_version
+    entry.os_suite = os_suite
+    entry.architecture = architecture
     entry.capabilities = capabilities
+    entry.protocol_version = (
+        1
+        if capabilities.intersection(
+            {"scan_finalization_v1", "agent_update_v1"}
+        )
+        else None
+    )
     entry.available_subnets = available_subnets
     entry.last_seen_at = now
     return True

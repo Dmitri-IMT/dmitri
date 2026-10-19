@@ -16,6 +16,11 @@ from pathlib import Path
 
 LOCK_PATH_FILE = Path("/usr/lib/dmitri/scan-lock-path")
 UPDATE_GATE_PATH = Path("/var/lib/dmitri/update-gate.json")
+FINALIZATION_CHECKPOINT_PATH = Path(
+    os.environ.get(
+        "DMITRI_SCAN_FINALIZATION_PATH", "/var/lib/dmitri/scan-finalization.json"
+    )
+)
 
 
 def _is_source_checkout() -> bool:
@@ -84,7 +89,7 @@ class ScanLease:
             self._descriptor = None
 
 
-def _check_update_gate() -> None:
+def _check_update_gate(*, allow_pending_finalization: bool = False) -> None:
     # Presence is the durable blocked signal. Invalid JSON is also blocking:
     # scans must not infer that a damaged gate is safe to ignore.
     if UPDATE_GATE_PATH.exists():
@@ -99,6 +104,10 @@ def _check_update_gate() -> None:
                 "Agent update state is unresolved; scans are blocked."
             )
         raise UpgradeInProgressError("Agent update in progress; try again later.")
+    if FINALIZATION_CHECKPOINT_PATH.exists() and not allow_pending_finalization:
+        raise UpgradeInProgressError(
+            "Remote scan finalization is unresolved; scans are blocked."
+        )
 
 
 def _check_installation_identity() -> None:
@@ -119,7 +128,7 @@ def _check_installation_identity() -> None:
         )
 
 
-def acquire_scan_lease() -> ScanLease:
+def acquire_scan_lease(*, allow_pending_finalization: bool = False) -> ScanLease:
     if sys.platform == "win32":
         return ScanLease(None, None)
 
@@ -140,7 +149,7 @@ def acquire_scan_lease() -> ScanLease:
             raise UpgradeInProgressError(
                 "Agent update in progress; try again later."
             ) from exc
-        _check_update_gate()
+        _check_update_gate(allow_pending_finalization=allow_pending_finalization)
         _check_installation_identity()
         return ScanLease(descriptor, path)
     except BaseException:

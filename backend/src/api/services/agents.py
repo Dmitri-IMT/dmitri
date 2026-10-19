@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, select, update
 from starlette.concurrency import run_in_threadpool
 
+from api.models.agent_update import AgentUpdate
 from api.models.command import Agent
 from api.models.identity import Org
 from api.schemas.agents import AgentDetail, AgentSummary
@@ -19,9 +20,11 @@ class AgentOfflineError(Exception):
     pass
 
 
-def _fields(session: Session, agent: Agent) -> dict[str, object]:
+def _fields(
+    session: Session, agent: Agent, *, include_active_update: bool = False
+) -> dict[str, object]:
     active = active_command_for(session, agent.id)
-    return {
+    fields = {
         "agent_id": agent.id,
         "display_name": agent.display_name,
         "online": agent_connections.is_online(agent.id),
@@ -30,6 +33,20 @@ def _fields(session: Session, agent: Agent) -> dict[str, object]:
         "target_subnet": agent.target_subnet,
         "active_command_id": None if active is None else active.id,
     }
+    if include_active_update:
+        update = session.exec(
+            select(AgentUpdate).where(
+                AgentUpdate.agent_id == agent.id,
+                AgentUpdate.phase.in_(
+                    (
+                        "requested", "preparing", "installing", "verifying",
+                        "awaiting_confirmation", "recovering", "needs_intervention",
+                    )
+                ),
+            )
+        ).first()
+        fields["active_update_id"] = None if update is None else update.id
+    return fields
 
 
 def register_agent(
@@ -73,7 +90,7 @@ def _agent(session: Session, agent_id: UUID, org_id: UUID) -> Agent | None:
 def _detail(session: Session, agent: Agent) -> AgentDetail:
     hello = agent_connections.get_hello(agent.id)
     return AgentDetail(
-        **_fields(session, agent),
+        **_fields(session, agent, include_active_update=True),
         available_subnets=[] if hello is None else hello[1],
         observed_version=agent.observed_version,
         observed_package_version=agent.observed_package_version,
@@ -110,7 +127,11 @@ def set_target_subnet(
 def _set_revoked_at(
     session: Session, *, agent_id: UUID, org_id: UUID, revoked_at: datetime | None
 ) -> AgentDetail | None:
-    agent = _agent(session, agent_id, org_id)
+    agent = session.exec(
+        select(Agent)
+        .where(Agent.id == agent_id, Agent.org_id == org_id)
+        .with_for_update()
+    ).first()
     if agent is None:
         return None
     if (agent.revoked_at is None) != (revoked_at is None):
@@ -127,13 +148,18 @@ async def revoke_agent(
 
     The write commits before the close, so the Pi cannot reconnect in between.
     """
-    detail = await run_in_threadpool(
-        _set_revoked_at, session, agent_id=agent_id, org_id=org_id, revoked_at=now
-    )
-    if detail is not None:
-        socket = agent_connections.get_socket(agent_id)
-        if socket is not None:
-            await agent_connections.close_revoked(socket)
+    async with agent_connections.device_guard(agent_id):
+        detail = await run_in_threadpool(
+            _set_revoked_at,
+            session,
+            agent_id=agent_id,
+            org_id=org_id,
+            revoked_at=now,
+        )
+        if detail is not None:
+            socket = agent_connections.get_socket(agent_id)
+            if socket is not None:
+                await agent_connections.close_revoked(socket)
     return detail
 
 
