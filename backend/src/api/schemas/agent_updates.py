@@ -20,6 +20,13 @@ UpdateErrorCode = Literal[
 LocalOutcome = Literal["succeeded", "failed", "rolled_back", "needs_intervention"]
 
 
+class AgentProtocolSupport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol_versions: list[Literal[1]]
+    capabilities: list[Literal["scan_finalization_v1"]]
+
+
 class ReleaseSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

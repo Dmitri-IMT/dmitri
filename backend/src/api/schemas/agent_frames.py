@@ -26,6 +26,30 @@ class AgentHelloFrame(BaseModel):
     type: Literal["hello"]
     agent_version: str
     available_subnets: list[AvailableSubnet]
+    package_version: str | None = None
+    updater_version: str | None = None
+    os_suite: str | None = None
+    architecture: str | None = None
+    capabilities: list[Literal["scan_finalization_v1"]] = Field(default_factory=list)
+
+
+class UpdateSessionFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["update_session"]
+    session_id: UUID
+    protocol_version: Literal[1]
+    capabilities: list[Literal["scan_finalization_v1"]]
+
+
+class ScanStatusAckFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["scan_status_ack"]
+    session_id: UUID
+    command_id: UUID
+    status: Literal["done", "failed", "cancelled", "expired"]
+    has_results: bool
 
 
 class AgentStatusFrame(BaseModel):

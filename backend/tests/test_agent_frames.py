@@ -12,6 +12,8 @@ from api.schemas.agent_frames import (
     AgentHelloFrame,
     AgentStatusFrame,
     AvailableSubnet,
+    ScanStatusAckFrame,
+    UpdateSessionFrame,
 )
 
 CONTRACT_PATH = (
@@ -175,6 +177,8 @@ def test_error_frame_validates_good_payload():
         ("AgentHelloFrame", AgentHelloFrame),
         ("AgentCommandFrame", AgentCommandFrame),
         ("AgentStatusFrame", AgentStatusFrame),
+        ("UpdateSessionFrame", UpdateSessionFrame),
+        ("ScanStatusAckFrame", ScanStatusAckFrame),
         ("AgentErrorFrame", AgentErrorFrame),
     ],
 )

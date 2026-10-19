@@ -8,6 +8,7 @@ from sqlalchemy import ColumnElement, case, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 from starlette.concurrency import run_in_threadpool
+from starlette.websockets import WebSocket
 
 from api.core.config import get_settings
 from api.core.error_codes import normalise_error_code
@@ -510,7 +511,22 @@ async def deliver(
     command: Command,
     now: datetime,
 ) -> Command:
-    socket = agent_connections.get_socket(command.agent_id)
+    async with agent_connections.device_guard(command.agent_id):
+        return await _deliver_current_socket(
+            session,
+            command=command,
+            now=now,
+            socket=agent_connections.get_socket(command.agent_id),
+        )
+
+
+async def _deliver_current_socket(
+    session: Session,
+    *,
+    command: Command,
+    now: datetime,
+    socket: WebSocket | None,
+) -> Command:
     # Read revocation before the `or` so short-circuiting cannot hide the check:
     # an idle revoked agent has a registered socket and has sent no frame, so
     # nothing else would catch it before the command goes out.
@@ -561,7 +577,9 @@ def _claim_agent(
 
     Sync DB phase, run in a threadpool — never call this on the event loop.
     """
-    agent = session.get(Agent, agent_id)
+    agent = session.exec(
+        select(Agent).where(Agent.id == agent_id).with_for_update()
+    ).first()
     if agent is None or agent.org_id != org_id:
         raise AgentNotFoundError
 
@@ -613,14 +631,20 @@ async def enqueue_for_agent(
     every live Pi command channel (see docs/research/sync-vs-async-db-stack.md
     Caveat 2). Only the frame send actually awaits.
     """
-    command = await run_in_threadpool(
-        _claim_agent,
-        session,
-        org_id=org_id,
-        agent_id=agent_id,
-        scan_mode=scan_mode,
-        subnet=subnet,
-        nspi_options=nspi_options,
-        now=now,
-    )
-    return await deliver(session, command=command, now=now)
+    async with agent_connections.device_guard(agent_id):
+        command = await run_in_threadpool(
+            _claim_agent,
+            session,
+            org_id=org_id,
+            agent_id=agent_id,
+            scan_mode=scan_mode,
+            subnet=subnet,
+            nspi_options=nspi_options,
+            now=now,
+        )
+        return await _deliver_current_socket(
+            session,
+            command=command,
+            now=now,
+            socket=agent_connections.get_socket(agent_id),
+        )

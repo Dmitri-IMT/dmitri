@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import ExitStack
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,7 +13,8 @@ from api.main import app
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
-from api.services import agent_connections, device_sig
+from api.services import agent_connections, agent_ws, device_sig
+from api.services.agent_ws import handle_agent_frame
 from conftest import ws_upgrade_headers
 from sqlmodel import Session
 from starlette.testclient import TestClient, WebSocketTestSession
@@ -236,6 +239,145 @@ def test_hello_frame_cached_in_registry_and_bumps_last_seen(
         assert provisioned_agent.last_seen_at > initial_last_seen
 
 
+def test_negotiated_hello_persists_observed_versions_and_returns_session(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    hello = json.loads(_hello_payload())
+    hello.update(
+        {
+            "package_version": "1.0.7-1",
+            "capabilities": ["scan_finalization_v1"],
+        }
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        session = ws.receive_json()
+
+    assert session["type"] == "update_session"
+    assert session["protocol_version"] == 1
+    assert session["capabilities"] == ["scan_finalization_v1"]
+    assert not agent_connections.is_online(provisioned_agent.id)
+    assert agent_connections.get_hello(provisioned_agent.id) is None
+    administrative_session.expire_all()
+    persisted = administrative_session.get(Agent, provisioned_agent.id)
+    assert persisted.observed_version == "0.2.0"
+    assert persisted.observed_package_version == "1.0.7-1"
+    assert persisted.version_observed_at is not None
+    assert persisted.version_observed_session_id is not None
+
+
+def test_legacy_hello_keeps_last_observed_package_version(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    provisioned_agent.observed_package_version = "1.0.7-1"
+    administrative_session.add(provisioned_agent)
+    administrative_session.commit()
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_text(_hello_payload())
+        _sync(ws)
+
+    administrative_session.expire_all()
+    persisted = administrative_session.get(Agent, provisioned_agent.id)
+    assert persisted.observed_version == "0.2.0"
+    assert persisted.observed_package_version == "1.0.7-1"
+
+
+def test_terminal_status_ack_follows_persisted_terminal_state(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    scan = _seed_scan(
+        administrative_session, seeded_org.id, agent_id=provisioned_agent.id
+    )
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="running",
+        scan_id=scan.scan_id,
+    )
+    hello = json.loads(_hello_payload())
+    hello["capabilities"] = ["scan_finalization_v1"]
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        session = ws.receive_json()
+        ws.send_text(_status_payload(command_id=command.id, status="failed"))
+        acknowledgement = ws.receive_json()
+
+    administrative_session.expire_all()
+    persisted = administrative_session.get(Command, command.id)
+    assert persisted.status == "failed"
+    assert acknowledgement == {
+        "type": "scan_status_ack",
+        "session_id": session["session_id"],
+        "command_id": str(command.id),
+        "status": "failed",
+        "has_results": False,
+    }
+
+
+def test_duplicate_terminal_status_gets_ack_of_effective_status(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    scan = _seed_scan(
+        administrative_session, seeded_org.id, agent_id=provisioned_agent.id
+    )
+    scan.status = "completed"
+    administrative_session.add(scan)
+    command = _seed_command(
+        administrative_session,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        status="done",
+        scan_id=scan.scan_id,
+    )
+    hello = json.loads(_hello_payload())
+    hello["capabilities"] = ["scan_finalization_v1"]
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        session = ws.receive_json()
+        ws.send_text(_status_payload(command_id=command.id, status="done"))
+        acknowledgement = ws.receive_json()
+
+    assert acknowledgement["type"] == "scan_status_ack"
+    assert acknowledgement["session_id"] == session["session_id"]
+    assert acknowledgement["status"] == "done"
+    assert acknowledgement["has_results"] is True
+
+
 def test_reconnect_replaces_old_socket_without_stale_unregister(
     client: TestClient,
     provisioned_agent: Agent,
@@ -277,6 +419,62 @@ def test_reconnect_replaces_old_socket_without_stale_unregister(
         assert not agent_connections.is_online(agent_id)
 
     assert not agent_connections.is_online(agent_id)
+
+
+def test_replaced_socket_status_is_ignored_before_database_work():
+    stale_socket = AsyncMock()
+    current_socket = AsyncMock()
+    session_factory = AsyncMock(side_effect=AssertionError("stale socket touched DB"))
+
+    async def run():
+        await agent_connections.register(provisioned_agent_id, stale_socket, now=T0)
+        await agent_connections.register(provisioned_agent_id, current_socket, now=T0)
+        await handle_agent_frame(
+            session_factory,
+            stale_socket,
+            agent_id=provisioned_agent_id,
+            raw_text=_status_payload(status="done"),
+            now=T0,
+        )
+
+    provisioned_agent_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    asyncio.run(run())
+
+    session_factory.assert_not_called()
+    stale_socket.send_text.assert_not_awaited()
+
+
+def test_terminal_status_processing_failure_sends_no_ack(monkeypatch):
+    websocket = AsyncMock()
+    agent_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+    async def failed_commit(*args, **kwargs):
+        raise RuntimeError("database commit failed")
+
+    monkeypatch.setattr(agent_ws, "_apply_status_frame", failed_commit)
+
+    async def run():
+        await agent_connections.register(agent_id, websocket, now=T0)
+        await agent_connections.set_hello(
+            agent_id,
+            websocket,
+            agent_version="1.0.0",
+            available_subnets=[],
+            capabilities=frozenset({"scan_finalization_v1"}),
+            now=T0,
+        )
+        await handle_agent_frame(
+            AsyncMock(),
+            websocket,
+            agent_id=agent_id,
+            raw_text=_status_payload(status="done"),
+            now=T0,
+        )
+
+    with pytest.raises(RuntimeError, match="database commit failed"):
+        asyncio.run(run())
+
+    websocket.send_text.assert_not_awaited()
 
 
 def test_reconnect_replaces_available_subnets_instead_of_merging(

@@ -31,6 +31,9 @@ class AgentDetail(BaseModel):
     last_seen_at: datetime | None
     revoked_at: datetime | None
     available_subnets: list[AvailableSubnet]
+    observed_version: str | None = None
+    observed_package_version: str | None = None
+    version_observed_at: datetime | None = None
     target_subnet: SubnetCIDR | None = None
     active_command_id: UUID | None = None
 

@@ -200,15 +200,19 @@ async def connect_agent_commands(
 ) -> None:
     await websocket.accept()
     now = utc_now()
-    await agent_connections.register(identity.agent_id, websocket, now=now)
-    await async_mark_connected(default_session_factory, identity.agent_id, now)
+    async with agent_connections.device_guard(identity.agent_id):
+        await agent_connections.register_locked(identity.agent_id, websocket, now=now)
+        await async_mark_connected(default_session_factory, identity.agent_id, now)
     try:
         await run_agent_channel(
             websocket, default_session_factory, agent_id=identity.agent_id
         )
     finally:
-        await agent_connections.unregister(identity.agent_id, websocket, now=utc_now())
-        await async_mark_disconnected(default_session_factory, identity.agent_id)
+        async with agent_connections.device_guard(identity.agent_id):
+            if agent_connections.unregister_locked(identity.agent_id, websocket):
+                await async_mark_disconnected(
+                    default_session_factory, identity.agent_id
+                )
 
 
 def agent_commands_preflight() -> None:

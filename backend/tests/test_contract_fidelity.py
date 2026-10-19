@@ -67,6 +67,7 @@ SCHEMA_NAMES = (
     "UpdateUserRoleRequest",
     "AgentSummary",
     "AgentDetail",
+    "AgentProtocolSupport",
     "AgentListResponse",
     "UpdateAgentTargetSubnetRequest",
     "HomeEvent",
@@ -232,6 +233,23 @@ def test_schema_matches_contract(schema_name: str):
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
     )
+
+
+def test_agent_protocol_probe_route_matches_contract():
+    contract_operation = _load_contract()["paths"][
+        "/api/v1/agents/{agent_id}/update-protocol"
+    ]["get"]
+    app_operation = app.openapi()["paths"][
+        "/api/v1/agents/{agent_id}/update-protocol"
+    ]["get"]
+
+    assert app_operation["operationId"] == contract_operation["operationId"]
+    assert app_operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"] == contract_operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]["$ref"]
+    assert contract_operation["security"] == [{"AgentSignatureAuth": []}]
 
 
 def _enum_values(spec: dict[str, Any], node: dict[str, Any]) -> list[str]:

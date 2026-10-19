@@ -401,6 +401,8 @@ export interface paths {
          *     | `status` | Pi → backend | `AgentStatusFrame` |
          *     | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
+         *     | `update_session` | backend → Pi, when `scan_finalization_v1` is negotiated | `UpdateSessionFrame` |
+         *     | `scan_status_ack` | backend → Pi, after a terminal command status commits | `ScanStatusAckFrame` |
          *
          *     Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
          *
@@ -458,6 +460,26 @@ export interface paths {
          * @description Chooses, from the networks the connected Pi reported, the one its scans use.
          */
         patch: operations["updateAgentTargetSubnet"];
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/update-protocol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read supported device protocol
+         * @description Signed read by the agent itself. Reports implemented protocol versions and capabilities without initiating an update.
+         */
+        get: operations["getAgentUpdateProtocol"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/agents/{agent_id}/revoke": {
@@ -1354,9 +1376,37 @@ export interface components {
             /** Format: date-time */
             revoked_at: string | null;
             available_subnets: components["schemas"]["AvailableSubnet"][];
+            observed_version?: string | null;
+            observed_package_version?: string | null;
+            /** Format: date-time */
+            version_observed_at?: string | null;
             target_subnet?: string | null;
             /** Format: uuid */
             active_command_id?: string | null;
+        };
+        UpdateSessionFrame: {
+            /** @constant */
+            type: "update_session";
+            /** Format: uuid */
+            session_id: string;
+            /** @constant */
+            protocol_version: 1;
+            capabilities: "scan_finalization_v1"[];
+        };
+        ScanStatusAckFrame: {
+            /** @constant */
+            type: "scan_status_ack";
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            command_id: string;
+            /** @enum {string} */
+            status: "done" | "failed" | "cancelled" | "expired";
+            has_results: boolean;
+        };
+        AgentProtocolSupport: {
+            protocol_versions: 1[];
+            capabilities: "scan_finalization_v1"[];
         };
         AgentSummary: {
             /** Format: uuid */
@@ -1406,6 +1456,12 @@ export interface components {
             /** @example 0.2.0 */
             agent_version: string;
             available_subnets: components["schemas"]["AvailableSubnet"][];
+            package_version?: string | null;
+            updater_version?: string | null;
+            os_suite?: string | null;
+            architecture?: string | null;
+            /** @default [] */
+            capabilities: "scan_finalization_v1"[];
         };
         /**
          * @description **Backend → Pi.** Delivered on the open socket when an operator triggers "Scan now".
@@ -3842,6 +3898,44 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["AgentOfflineConflict"];
             422: components["responses"]["TargetSubnetNotReported"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAgentUpdateProtocol: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported agent protocol features. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProtocolSupport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalServerError"];
         };
     };

@@ -27,6 +27,7 @@ from api.middleware import (
     build_cors_middleware_kwargs,
 )
 from api.routers import (
+    agent_updates,
     agents,
     ai,
     auth,
@@ -159,6 +160,7 @@ def options_health() -> None:
 
 
 app.include_router(agents.router)
+app.include_router(agent_updates.router)
 app.include_router(commands.router)
 app.include_router(auth.router)
 app.include_router(users.router)

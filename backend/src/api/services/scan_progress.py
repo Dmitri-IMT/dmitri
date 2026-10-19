@@ -21,6 +21,7 @@ def apply_progress(
     agent_id: UUID,
     frame: AgentProgressFrame,
     now: datetime,
+    commit: bool = True,
 ) -> ProgressApplyResult:
     """Persist only a newer snapshot for the matching active command and scan."""
     command = session.exec(
@@ -55,5 +56,6 @@ def apply_progress(
     scan.progress_seq = frame.sequence
     scan.progress_updated_at = now
     session.add(scan)
-    session.commit()
+    if commit:
+        session.commit()
     return "ok"

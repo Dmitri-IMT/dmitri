@@ -1083,6 +1083,8 @@ paths:
         | `status` | Pi → backend | `AgentStatusFrame` |
         | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
         | `error` | backend → Pi | `AgentErrorFrame` |
+        | `update_session` | backend → Pi, when `scan_finalization_v1` is negotiated | `UpdateSessionFrame` |
+        | `scan_status_ack` | backend → Pi, after a terminal command status commits | `ScanStatusAckFrame` |
 
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
 
@@ -1239,6 +1241,38 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/agents/{agent_id}/update-protocol:
+    get:
+      tags:
+        - agents
+      summary: Read supported device protocol
+      description: Signed read by the agent itself. Reports implemented protocol versions and capabilities without initiating an update.
+      operationId: getAgentUpdateProtocol
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      responses:
+        '200':
+          description: Supported agent protocol features.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentProtocolSupport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /api/v1/agents/{agent_id}/revoke:
     post:
@@ -4593,6 +4627,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailableSubnet'
+        observed_version:
+          type:
+            - string
+            - 'null'
+        observed_package_version:
+          type:
+            - string
+            - 'null'
+        version_observed_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
         target_subnet:
           type:
             - string
@@ -4603,6 +4650,75 @@ components:
             - string
             - 'null'
           format: uuid
+    UpdateSessionFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - session_id
+        - protocol_version
+        - capabilities
+      properties:
+        type:
+          type: string
+          const: update_session
+        session_id:
+          type: string
+          format: uuid
+        protocol_version:
+          type: integer
+          const: 1
+        capabilities:
+          type: array
+          items:
+            type: string
+            const: scan_finalization_v1
+    ScanStatusAckFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - session_id
+        - command_id
+        - status
+        - has_results
+      properties:
+        type:
+          type: string
+          const: scan_status_ack
+        session_id:
+          type: string
+          format: uuid
+        command_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - done
+            - failed
+            - cancelled
+            - expired
+        has_results:
+          type: boolean
+
+    AgentProtocolSupport:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_versions
+        - capabilities
+      properties:
+        protocol_versions:
+          type: array
+          items:
+            type: integer
+            const: 1
+        capabilities:
+          type: array
+          items:
+            type: string
+            const: scan_finalization_v1
 
     AgentSummary:
       type: object
@@ -4730,6 +4846,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailableSubnet'
+        package_version:
+          type:
+            - string
+            - 'null'
+        updater_version:
+          type:
+            - string
+            - 'null'
+        os_suite:
+          type:
+            - string
+            - 'null'
+        architecture:
+          type:
+            - string
+            - 'null'
+        capabilities:
+          type: array
+          items:
+            type: string
+            const: scan_finalization_v1
+          default: []
     AgentCommandFrame:
       type: object
       additionalProperties: false

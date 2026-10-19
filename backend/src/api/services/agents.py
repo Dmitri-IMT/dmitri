@@ -75,6 +75,9 @@ def _detail(session: Session, agent: Agent) -> AgentDetail:
     return AgentDetail(
         **_fields(session, agent),
         available_subnets=[] if hello is None else hello[1],
+        observed_version=agent.observed_version,
+        observed_package_version=agent.observed_package_version,
+        version_observed_at=agent.version_observed_at,
     )
 
 

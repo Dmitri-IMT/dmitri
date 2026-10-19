@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–6 concluídas. Próxima: #7.** Execução da Task 7 autorizada após a correção da incompatibilidade de ingestão; Task 8 aguarda novo comando do usuário.
+14 tasks. **Tasks 1–7 concluídas. Próxima: #8, aguardando novo comando do usuário.**
 
 ## Escopo e estado
 
@@ -187,7 +187,7 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Expor GET assinado `update-protocol` para o próprio dispositivo, com versões e `scan_finalization_v1` suportados; leitura sem efeito colateral. Isso permite o probe da Task 8 antes da API de admissão da Task 9.
   - Contrato de scans/ingest e clientes antigos permanecem cobertos; tipos gerados refletem apenas mudanças implementadas.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
+- **Status**: COMPLETED
 - **Review Rejections**: 0
 
 ## Task 8: Recuperar finalização de scan e provar saúde local do agente

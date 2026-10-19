@@ -100,3 +100,9 @@ porta 55432 e banco chamado `dmitri_test`, com armazenamento temporário em mem�
 - `PLAN.md` registra seis entregas futuras e distribuição de modelos; `PROMPTS.md` prepara retomada, criação de tarefas, coder/tester/reviewer e docs-sync sem repetir a conversa inteira.
 - `USAGE.md` registra os contadores reportados das sessões uma vez por papel; cache não é somado novamente e uso não é convertido em porcentagem do plano Codex.
 - Somente esta pasta de specs foi criada no repositório. Sem desenvolvimento de produto, testes, publicação, commit/sync, SSH ou mudança de serviço.
+
+## Implementação de produto
+
+- Task 7 concluída após autorização do usuário em 2026-10-18. Backend negocia `scan_finalization_v1` por sessão, persiste versões observadas, rejeita frames de sockets substituídos e confirma estados terminais somente após commit; o probe assinado é restrito ao próprio agente e não anuncia capacidade de instalação.
+- Validação focal em PostgreSQL 17 isolado `dmitri_test`: 243 casos passaram na suíte de seis arquivos; após corrigir os três mocks restantes, os mesmos três casos passaram individualmente (246 casos cobertos no total, sem uma única execução final all-green dos seis arquivos). Ruff 0.15.21 passou, OpenAPI gerou tipos byte-idênticos e `npm run typecheck` passou.
+- Revisão independente: `[APPROVE]`, sem pendências. Task 8 permanece PENDING, aguardando novo comando do usuário. Nenhum commit/sync, deploy, SSH ou scan real nesta entrega.
