@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–10 concluídas; Task 11 pendente.**
+14 tasks. **Tasks 1–12 concluídas; Task 13 pendente.**
 
 ## Escopo e estado
 
@@ -254,13 +254,13 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Falha após mutação tenta uma recuperação offline controlada do pacote/árvore/venv anterior; falha de recuperação conserva gate/evidências e resulta em `needs_intervention`, sem loop de repair geral.
   - Reporter independente usa assinatura existente, nova nonce a cada retry, sequência/ack persistidos e backoff; sobrevive à troca/falha do agente e pausa em 403 sem perder resultado. Não apagar identidade, configuração ou resultados ao limpar cache.
 - **Models**: Coder/tester Luna medium; reviewer Sol high; decisão arquitetural nova exige Sol high antes de ampliar escopo.
-- **Status**: PENDING
-- **Review Rejections**: 3
+- **Status**: COMPLETED
+- **Review Rejections**: 5
 
 ## Task 12: Conectar o daemon ao atualizador e habilitar capacidade real
 - **Description**: Fechar entrega WS → daemon → socket companion e o hello de reconciliação em `INTEGRATION.md`. Anunciar `agent_update_v1` apenas com suporte negociado, instalação preparada e supervisor pronto.
 - **Dependencies**: Tasks 7, 8, 10, 11
-- **Target Files**: `hardware-agent/src/agent/transport/command_channel.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/packaging/updater.py`, `hardware-agent/tests/unit/test_command_channel.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_updater.py`.
+- **Target Files**: `hardware-agent/src/agent/transport/command_channel.py`, `hardware-agent/src/agent/daemon.py`, `hardware-agent/packaging/updater.py`, `hardware-agent/tests/unit/test_command_channel.py`, `hardware-agent/tests/unit/test_daemon.py`, `hardware-agent/tests/unit/test_updater.py`; protocol alignment required for implementation: `backend/src/api/schemas/agent_updates.py`, `backend/src/api/routers/agent_updates.py`, `backend/src/api/services/agent_ws.py`, `backend/tests/test_agent_read_routes.py`, `backend/tests/test_agent_ws_channel.py`, `backend/tests/test_contract_fidelity.py`, `contracts/openapi/openapi.yaml`, generated `frontend/src/types/openapi.d.ts`, `specs/052-remote-agent-updates/INTEGRATION.md`.
 - **Tests**: Frame completo/malformado, sessão antiga, expiração, entrega duplicada, supervisor ausente/incompatível, checkpoint pendente, reconexão durante instalação e hello com contexto de recuperação.
 - **Success Criteria**:
   - U07/U08/U10/U12/U13/U16: probe por conexão e supervisor pronto governam capability; ausência exige bootstrap, independentemente de número de versão.
@@ -269,8 +269,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Hello incorpora contexto observado pelo supervisor para operação/invocation/versão; o daemon substituído não é dono exclusivo da conclusão.
   - Entrega de update não chama start/cancel de scan; não anunciar capacidade se checkpoint/estado local impedir a operação.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 1
 
 ## Task 13: Oferecer atualização manual e histórico na página do dispositivo
 - **Description**: Implementar a seção de atualização conforme `DESIGN.md` e os tipos gerados do contrato estabilizado. Mostrar disponibilidade, versões, confirmação, andamento e histórico usando componentes existentes.

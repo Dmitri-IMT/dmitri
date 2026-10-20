@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import re
 import secrets
 import shutil
@@ -600,12 +601,58 @@ class Updater:
         except StateCorrupt:
             self._write_gate("state_corrupt", [])
             raise
+        update_context: dict[str, str] | None = None
+        try:
+            with closing(self._connect()) as db:
+                row = db.execute(
+                    "SELECT operation_id, invocation_id, target_version, phase "
+                    "FROM update_details ORDER BY rowid DESC LIMIT 1"
+                ).fetchone()
+            if row is not None:
+                operation_id, invocation_id, target_version, phase = row
+                update_context = {"operation_id": operation_id, "phase": phase}
+                if invocation_id:
+                    update_context["invocation_id"] = invocation_id
+                if target_version:
+                    update_context["target_package_version"] = target_version
+        except sqlite3.DatabaseError:
+            self._write_gate("state_corrupt", [])
+            raise StateCorrupt("journal schema")
+        os_release: dict[str, str] = {}
+        try:
+            for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key in {"VERSION_CODENAME", "DEBIAN_CODENAME"}:
+                    os_release[key] = value.strip().strip('"')
+        except OSError:
+            pass
+        machine = platform.machine().lower()
+        architecture = "arm64" if machine in {"aarch64", "arm64"} else machine
+        try:
+            _, suite = _verify_dedicated_apt_source()
+            prepared = suite == "stable" or suite == os_release.get(
+                "VERSION_CODENAME", suite
+            )
+        except (OSError, UpdateFailure, ValueError):
+            suite = ""
+            prepared = False
+        checkpoint_pending = self.scan_checkpoint_path.exists()
         return {
             "ok": True,
-            "capabilities": ["inspect", "check"],
+            "capabilities": ["inspect", "check", "accept_update"],
+            "updater_version": UPDATER_COMPAT_LEVEL,
+            "agent_update_ready": bool(
+                prepared
+                and architecture == "arm64"
+                and not self.stopping.is_set()
+            ),
+            "scan_checkpoint_pending": checkpoint_pending,
+            "os_suite": suite or None,
+            "architecture": architecture,
+            "update_context": update_context,
             "blocked": bool(active)
             or self.gate_path.exists()
-            or self.scan_checkpoint_path.exists(),
+            or checkpoint_pending,
         }
 
     def check(self) -> dict[str, Any]:
@@ -730,10 +777,12 @@ class Updater:
     ) -> dict[str, Any]:
         with closing(self._connect()) as db:
             existing = db.execute(
-                "SELECT phase FROM update_details WHERE operation_id=?",
+                "SELECT phase, session_id FROM update_details WHERE operation_id=?",
                 (update_id,),
             ).fetchone()
         if existing:
+            if existing[1] != session_id:
+                return {"ok": False, "error": "stale_session"}
             return {"ok": True, "phase": existing[0], "replayed": True}
         package = PACKAGE_CACHE / f"{digest}.deb"
         try:
@@ -937,9 +986,14 @@ class Updater:
 
     def _record_expired(self, update_id: str, session_id: str, release_id: str, target: str, digest: str, deadline: datetime) -> None:
         with closing(self._connect()) as db, db:
-            db.execute("INSERT OR IGNORE INTO operations VALUES (?, 'preparing')", (update_id,))
-            db.execute("INSERT OR IGNORE INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,phase) VALUES(?,?,?,?,?,?, 'preparing')", (update_id, session_id, release_id, target, digest, deadline.isoformat()))
-        self._emit(update_id, session_id, "expired", "expired", None, error="request_expired")
+            # Only the backend worker may expire an unclaimed remote request.
+            # Keep a local idempotency tombstone, without an invalid HTTP event.
+            db.execute("INSERT INTO operations VALUES (?, 'expired')", (update_id,))
+            db.execute(
+                "INSERT INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,phase,error_code) "
+                "VALUES(?,?,?,?,?,?,'expired','request_expired')",
+                (update_id, session_id, release_id, target, digest, deadline.isoformat()),
+            )
 
     def _resume_interrupted_update(self) -> None:
         """Reconcile one journaled package transaction before agent startup."""
@@ -2107,12 +2161,12 @@ def _failure_code(error: Exception) -> str:
     message = str(error).lower()
     if "artifact" in message or "package_identity" in message:
         return "artifact_mismatch"
+    if "metadata_expired" in message:
+        return "metadata_expired"
     if "authorization_expired" in message:
         return "authorization_expired"
     if "authorization" in message or "expired" in message:
         return "request_expired"
-    if "metadata_expired" in message:
-        return "metadata_expired"
     if "metadata" in message or "origin" in message or "suite" in message:
         return "metadata_untrusted"
     if "prerequisite" in message or "updater" in message:
@@ -2121,7 +2175,14 @@ def _failure_code(error: Exception) -> str:
         return "unsupported_platform"
     if "resource" in message or "space" in message or "inode" in message:
         return "insufficient_resources"
-    if "dpkg" in message or "package_plan" in message or "apt" in message:
+    # A failing dpkg invocation is an installation failure; mentioning the
+    # executable in CalledProcessError does not mean the package manager was
+    # busy. Lock contention is reported explicitly as package_manager_busy.
+    if (
+        "package_manager_busy" in message
+        or "package_plan" in message
+        or "apt" in message
+    ):
         return "package_manager_busy"
     if "health" in message:
         return "local_health_failed"

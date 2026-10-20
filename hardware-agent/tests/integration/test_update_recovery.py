@@ -141,8 +141,12 @@ echo 'dpkg offline install, CLI smoke, and failed-install recovery passed'
     sys.platform != "linux" or not shutil.which("docker"),
     reason="requires Docker to run a real dpkg update and rollback in isolation",
 )
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_error"),
+    [("health", "local_health_failed"), ("dpkg", "install_failed")],
+)
 def test_companion_dpkg_transaction_rolls_back_snapshot_and_reports_evidence(
-    tmp_path: Path,
+    tmp_path: Path, failure_kind: str, expected_error: str,
 ):
     """Exercise the companion transaction with real dpkg in an isolated Linux container."""
     transaction = r'''import hashlib
@@ -200,6 +204,13 @@ updater.initialize()
 updater._run_metadata_refresh = lambda: True
 def verify_local_health(target):
     if target == "1.0.2-1":
+        if "__FAILURE_KIND__" == "dpkg":
+            subprocess.run(
+                ["/usr/bin/dpkg", "--install", "/tmp/missing-invalid.deb"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         raise module.UpdateFailure("local_health_failed")
     return "rollback-invocation"
 updater._verify_local_health = verify_local_health
@@ -231,8 +242,10 @@ assert (module.AGENT_ROOT / "current.txt").read_text() == "old-runtime\n"
 assert [event["phase"] for event in events] == [
     "preparing", "installing", "verifying", "recovering", "rolled_back"
 ]
+assert events[-2]["error_code"] == "__EXPECTED_ERROR__"
 terminal = events[-1]
 assert terminal["local_outcome"] == "rolled_back"
+assert terminal["error_code"] == "__EXPECTED_ERROR__"
 assert terminal["package_version"] == "1.0.1-1"
 assert terminal["evidence"] == {
     "package_status": "configured",
@@ -242,6 +255,8 @@ assert terminal["evidence"] == {
 assert not module.GATE_PATH.exists()
 print("real dpkg install, snapshot restore, rollback, and durable evidence passed")
 '''
+    transaction = transaction.replace("__FAILURE_KIND__", failure_kind)
+    transaction = transaction.replace("__EXPECTED_ERROR__", expected_error)
     (tmp_path / "transaction.py").write_text(transaction, encoding="utf-8")
     harness = r'''set -eu
 make_deb() {
@@ -539,7 +554,11 @@ assert result == {"ok": False, "error": "unsupported_platform"}, result
 assert cached_target.read_bytes() == target_path.read_bytes()
 assert not any("hardware-agent_1.2.3-1_arm64.deb" in request for request in requests)
 
-inrelease = next(Path("/var/lib/apt/lists").glob("*apt.task11.test*stable*InRelease"))
+inrelease = next(
+    path
+    for path in Path("/var/lib/apt/lists").glob("*apt.task11.test*InRelease")
+    if "_dists_stable_inrelease" in path.name.lower()
+)
 inrelease.write_bytes(Path("/fixtures/expired.InRelease").read_bytes())
 try:
     module._verify_apt_metadata_dates("https://apt.task11.test:8443")

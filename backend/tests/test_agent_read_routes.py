@@ -384,7 +384,7 @@ def test_agent_protocol_probe_is_signed_owned_and_read_only(
     assert response.status_code == 200
     assert response.json() == {
         "protocol_versions": [1],
-        "capabilities": ["scan_finalization_v1"],
+        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
     }
     administrative_session.refresh(provisioned_agent)
     assert provisioned_agent.observed_version is None

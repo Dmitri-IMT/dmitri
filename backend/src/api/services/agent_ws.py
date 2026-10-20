@@ -269,11 +269,7 @@ async def handle_agent_frame(
                 session_id=connection.session_id,
                 agent_version=parsed.frame.agent_version,
                 package_version=parsed.frame.package_version,
-                update_context=(
-                    parsed.frame.update_context
-                    if "agent_update_v1" in parsed.frame.capabilities
-                    else None
-                ),
+                update_context=parsed.frame.update_context,
                 now=now,
             )
             if gate == "revoked":

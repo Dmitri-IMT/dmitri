@@ -1,6 +1,6 @@
 # Progresso — atualização remota do agente
 
-- Estado atual: Tasks 1–10 concluídas; Task 11 é a próxima pendente.
+- Estado atual: Tasks 1–12 concluídas; Task 13 pendente.
 - Autorizações registradas: Tasks 8 e 9 concluídas nesta sequência, conforme comando explícito do usuário em 2026-10-19.
 - Bypass autorizado pelo usuário para concluir os gates: usar PostgreSQL isolado em Docker,
   com banco `dmitri_test`, porta em loopback e armazenamento tmpfs, como exceção ao bootstrap
@@ -158,3 +158,16 @@ porta 55432 e banco chamado `dmitri_test`, com armazenamento temporário em mem�
   de enum/migração ou OpenAPI/tipos foi necessária. Sem commit/sync/deploy, SSH, scan,
   ou alterações da Task 11/hardware-agent.
 - Validação independente final em PostgreSQL 17 descartável tmpfs (`127.0.0.1:55434/dmitri_test`): sete arquivos, **287 passed**, 12 warnings; probe de recuperação/intervenção/rollback: **1 passed**. Ruff e `git diff --check` passaram; OpenAPI gerou tipos byte-equivalentes e typecheck teve zero diagnostics. Review round 3: `[APPROVE]`. Sem commit/sync/deploy, SSH, scan ou alteração da Task 11.
+
+### Task 11 — concluída após reavaliação estrutural e revisão independente
+
+- O companion faz preflight, claim idempotente, instalação offline pelo APT previamente provisionado, verificação local, rollback limitado e reporte durável independente. A recuperação preserva gate e evidências quando exige intervenção.
+- A revisão encontrou e corrigiu: evento de expiração incompatível antes do claim (agora tombstone local; o worker expira pedidos não reclamados), falha real do `dpkg` reportada com código aceito durante recuperação, e ordem de classificação de `metadata_expired`. Fixtures corrigidas para isolar suite APT `stable` e exercitar keyring ausente com fonte root-owned.
+- Validação independente final em WSL/Linux: **62 passed** em `test_updater.py` e `test_update_recovery.py`, incluindo APT HTTPS assinado e rollback Docker com falha real do `dpkg`; Ruff e whitespace scoped passaram. Backend update/migration/contract havia passado **185 testes** em PostgreSQL descartável; geração de tipos OpenAPI e typecheck passaram sem diff.
+- Revisão independente final: `[APPROVE]`. Limites: não comprova rollout no Raspberry nem systemd real; conexão daemon → companion e capability são Task 12, integração completa é Task 14. Sem commit/sync/deploy, SSH ou scan real.
+
+### Task 12 — iniciada conforme comando explícito do usuário
+
+- Escopo: fechar WS → daemon → socket companion, reconciliar contexto no hello e anunciar `agent_update_v1` somente quando suporte negociado, instalação preparada e supervisor estiverem prontos. O fluxo de update não inicia nem cancela scans.
+- Task 12 concluída após correções e revisão independente final `[APPROVE]`. O probe backend e o agente negociam `agent_update_v1`; o daemon encaminha frames fechados ao companion, e o hello relata contexto durável para reconciliação. Durante `verifying`/`awaiting_confirmation`, a invocation observada pelo handshake preenche contexto ausente do journal somente se a versão do pacote corresponder. Estado `blocked` suprime a capability para novos pedidos, mas ainda permite reconciliar a operação atual; falhas de subprocesso na inspeção degradam a capability sem derrubar o canal de scan.
+- Validação independente final: 184 testes focais do hardware agent e 40 testes backend passaram em PostgreSQL 17 descartável; Ruff passou, geração OpenAPI coincidiu com os tipos TypeScript, e `npm run typecheck` passou. Revisão Sol high: `[APPROVE]`. A integração ponta a ponta e o deploy no Raspberry permanecem para Task 14; nenhum scan real, SSH, deploy ou commit/sync foi feito nesta tarefa.

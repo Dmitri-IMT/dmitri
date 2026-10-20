@@ -1,4 +1,4 @@
-# Reavaliação estrutural — Task 4
+# Reavaliação estrutural — histórico das Tasks 4 e 11
 
 ## Sintoma
 
@@ -85,3 +85,31 @@ etapa de confirmação. O bypass não substitui o `[APPROVE]` do reviewer.
 H1/H2/H6 continuam pendentes para publicação operacional. Nenhuma chave de
 produção, repositório externo, workflow, instalação APT no host, operação no Pi,
 scan ou commit está incluído na retomada proposta.
+
+## Task 11 — aprovada após cinco rejeições
+
+### Reavaliação
+
+As rejeições identificaram fronteiras concretas entre o estado local do companion
+e o contrato já definido pelo backend: resultado local inválido em expiração,
+classificação de falha real do `dpkg`, e reporte remoto de uma solicitação que
+expirou antes do claim. Também foi corrigida a precedência de `metadata_expired`
+no classificador de erros. A decomposição e o protocolo público permanecem
+adequados; nenhum endpoint, enum ou migração adicional foi necessário.
+
+### Reparos e evidência
+
+- Expiração pré-claim agora cria tombstone local idempotente, sem outbox HTTP; o
+  worker do backend continua encerrando solicitações não reclamadas. Teste cobre
+  expiração durante preflight, ausência de evento/dpkg e replay depois de restart.
+- Falha real de execução do `dpkg` é classificada como `install_failed`; teste
+  integrado executa `dpkg --install` sobre pacote ausente em container isolado e
+  confirma recuperação real/rollback reportado.
+- `metadata_expired` preserva seu código específico; fixtures APT distinguem
+  precisamente stable de unstable e validam fonte root-owned sem keyring.
+- Reteste independente WSL/Linux: 62 testes focados passaram, incluindo fixtures
+  Docker; Ruff e whitespace passaram. Revisão independente final: `[APPROVE]`.
+
+As cinco rejeições e a reavaliação não alteraram escopo nem justificaram uma nova
+aprovação arquitetural. Os limites de rollout real/systemd permanecem para a
+validação operacional futura, sem bloquear o handoff da Task 12.

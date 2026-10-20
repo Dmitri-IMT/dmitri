@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import socket
+import subprocess
 import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -24,6 +28,7 @@ from agent.transport.command_channel import (
     AgentProgress,
     AgentProgressSnapshot,
     AgentStatus,
+    AgentUpdate,
     CommandChannelClient,
     ScanStatusAck,
 )
@@ -35,6 +40,9 @@ from agent.transport.ingest import (
 )
 
 LOGGER = logging.getLogger(__name__)
+UPDATER_SOCKET = Path("/run/dmitri-agent-updater/control.sock")
+UPDATER_MESSAGE_LIMIT = 4096
+UPDATER_UPDATE_TIMEOUT_SECONDS = 20 * 60 + 30
 INGEST_RETRY_INITIAL_SECONDS = 1.0
 INGEST_RETRY_MAX_SECONDS = 30.0
 
@@ -46,6 +54,53 @@ class CommandRecord:
     status: CommandStatus
     error_code: str | None = None
     pending: bool = True
+
+
+def _request_updater(
+    command: str,
+    *,
+    socket_path: Path = UPDATER_SOCKET,
+    **fields: object,
+) -> dict[str, object]:
+    allowed = {
+        "inspect": set(),
+        "accept_update": {
+            "update_id",
+            "session_id",
+            "release_id",
+            "target_package_version",
+            "sha256",
+            "expires_at",
+        },
+    }
+    if command not in allowed or set(fields) != allowed[command]:
+        raise ValueError("unsupported updater request")
+    payload = json.dumps(
+        {"command": command, **fields}, separators=(",", ":")
+    ).encode() + b"\n"
+    if len(payload) > UPDATER_MESSAGE_LIMIT:
+        raise ValueError("updater request too large")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(
+            UPDATER_UPDATE_TIMEOUT_SECONDS if command == "accept_update" else 3
+        )
+        connection.connect(str(socket_path))
+        connection.sendall(payload)
+        response = bytearray()
+        while len(response) <= UPDATER_MESSAGE_LIMIT:
+            chunk = connection.recv(UPDATER_MESSAGE_LIMIT + 1 - len(response))
+            if not chunk:
+                break
+            response.extend(chunk)
+    if len(response) > UPDATER_MESSAGE_LIMIT:
+        raise OSError("invalid updater response")
+    try:
+        result = json.loads(response)
+    except (ValueError, TypeError) as exc:
+        raise OSError("invalid updater response") from exc
+    if not isinstance(result, dict):
+        raise OSError("invalid updater response")
+    return result
 
 
 class _ScanStop:
@@ -121,8 +176,12 @@ class AgentDaemon:
         *,
         run_scan: Callable[..., HeadlessScanResult] = run_headless_scan,
         checkpoint_path: Path | None = None,
+        update_state_provider: Callable[[], dict[str, object]] | None = None,
+        updater_request: Callable[..., dict[str, object]] = _request_updater,
     ) -> None:
         self._client = client
+        self._update_state_provider = update_state_provider
+        self._updater_request = updater_request
         self._ingest = ingest
         self._run_scan = run_scan
         self._checkpoint = ScanFinalizationStore(
@@ -149,6 +208,9 @@ class AgentDaemon:
         self._upload_worker: asyncio.Task[SubmissionResult] | None = None
         self._upload_worker_key: tuple[UUID, UUID] | None = None
         self._upgrade_hold: ScanLease | None = None
+        set_provider = getattr(self._client, "set_update_state_provider", None)
+        if set_provider is not None:
+            set_provider(self._update_hello_state)
 
     async def run(self) -> None:
         try:
@@ -158,6 +220,7 @@ class AgentDaemon:
                 self._cancel_active,
                 on_cancel=self.handle_cancel,
                 on_scan_status_ack=self.handle_scan_status_ack,
+                on_agent_update=self.handle_agent_update,
             )
         finally:
             await self.close()
@@ -270,6 +333,108 @@ class AgentDaemon:
             self._stop.request_cancel()
             return
         await self._send(command_id, record)
+
+    async def handle_agent_update(self, frame: AgentUpdate) -> None:
+        """Forward one negotiated, current-session update to the companion."""
+        if (
+            getattr(self._client, "parked_reason", None) is not None
+            or not getattr(self._client, "supports_agent_updates", False)
+            or frame.session_id != getattr(self._client, "session_id", None)
+            or frame.expires_at <= datetime.now(UTC)
+        ):
+            return
+        try:
+            result = await asyncio.to_thread(
+                self._updater_request,
+                "accept_update",
+                update_id=str(frame.update_id),
+                session_id=str(frame.session_id),
+                release_id=str(frame.release_id),
+                target_package_version=frame.target_package_version,
+                sha256=frame.sha256,
+                expires_at=frame.expires_at.isoformat(),
+            )
+        except (OSError, ValueError, TypeError):
+            LOGGER.exception("Local updater did not accept the update request")
+            return
+        if result.get("ok") is not True:
+            LOGGER.warning(
+                "Local updater refused update request: %s",
+                result.get("error", "unknown"),
+            )
+
+    async def _update_hello_state(self) -> dict[str, object] | None:
+        if self._update_state_provider is not None:
+            state = await asyncio.to_thread(self._update_state_provider)
+        else:
+            state = await asyncio.to_thread(self._inspect_update_runtime)
+        if not isinstance(state, dict):
+            return None
+        state = dict(state)
+        if self._durable_checkpoint is not None:
+            state["scan_checkpoint_pending"] = True
+        return state
+
+    def _inspect_update_runtime(self) -> dict[str, object] | None:
+        try:
+            from agent.transport.readiness import readiness_handshake
+            from agent.version import installed_version
+
+            inspection = self._updater_request("inspect")
+            if inspection.get("ok") is not True:
+                return None
+            updater_version = inspection.get("updater_version")
+            ready = (
+                inspection.get("agent_update_ready") is True
+                and inspection.get("blocked") is not True
+                and type(updater_version) is int
+                and updater_version == 1
+            )
+            evidence = readiness_handshake(installed_version())
+            package_version = evidence.get("package_version")
+            if not isinstance(package_version, str) or not package_version:
+                return None
+            context = inspection.get("update_context")
+            safe_context = None
+            if isinstance(context, dict):
+                update_id = context.get("update_id", context.get("operation_id"))
+                invocation_id = context.get("invocation_id")
+                if (
+                    not invocation_id
+                    and context.get("phase")
+                    in {"verifying", "awaiting_confirmation"}
+                    and context.get("target_package_version") == package_version
+                ):
+                    invocation_id = evidence.get("invocation_id")
+                if isinstance(update_id, str) and isinstance(invocation_id, str):
+                    try:
+                        safe_context = {
+                            "update_id": str(UUID(update_id)),
+                            "invocation_id": str(UUID(invocation_id)),
+                        }
+                    except ValueError:
+                        safe_context = None
+            return {
+                "ready": ready,
+                "supervisor_ready": True,
+                "updater_version": updater_version,
+                "package_version": package_version,
+                "os_suite": inspection.get("os_suite"),
+                "architecture": inspection.get("architecture"),
+                "scan_checkpoint_pending": inspection.get(
+                    "scan_checkpoint_pending", False
+                ),
+                "update_context": safe_context,
+            }
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            RuntimeError,
+            subprocess.SubprocessError,
+        ):
+            LOGGER.info("Remote update capability unavailable: local readiness failed")
+            return None
 
     async def replay_pending(self) -> None:
         async with self._replay_lock:

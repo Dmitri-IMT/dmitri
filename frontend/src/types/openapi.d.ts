@@ -1500,7 +1500,7 @@ export interface components {
         };
         AgentProtocolSupport: {
             protocol_versions: 1[];
-            capabilities: "scan_finalization_v1"[];
+            capabilities: ("scan_finalization_v1" | "agent_update_v1")[];
         };
         AgentUpdateRequest: {
             /** Format: uuid */

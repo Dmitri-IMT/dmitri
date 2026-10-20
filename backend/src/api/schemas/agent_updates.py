@@ -45,7 +45,7 @@ class AgentProtocolSupport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     protocol_versions: list[Literal[1]]
-    capabilities: list[Literal["scan_finalization_v1"]]
+    capabilities: list[Literal["scan_finalization_v1", "agent_update_v1"]]
 
 
 class AgentUpdateRequest(BaseModel):

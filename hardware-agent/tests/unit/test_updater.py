@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 
 import pytest
@@ -98,6 +99,7 @@ def test_pending_scan_checkpoint_blocks_update_check_without_live_flock(
 
     assert instance.check() == {"ok": False, "error": "device_busy"}
     assert instance.inspect()["blocked"] is True
+    assert instance.inspect()["scan_checkpoint_pending"] is True
 
 
 def test_corrupt_journal_blocks_mutation_and_preserves_evidence(tmp_path: Path):
@@ -632,6 +634,60 @@ def test_readiness_rejects_wrong_nonce(
     worker.join(timeout=1)
 
     assert response == {"ok": False, "error": "stale_session"}
+
+
+def test_inspect_reports_update_context_and_suppresses_ready_without_trust(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    def missing_trust():
+        raise updater_module.UpdateFailure("apt_keyring")
+
+    monkeypatch.setattr(updater_module, "_verify_dedicated_apt_source", missing_trust)
+    with updater._connect() as db, db:
+        db.execute("INSERT INTO operations VALUES ('op-1', 'installing')")
+        db.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,sha256,deadline,"
+            "phase,invocation_id) "
+            "VALUES('op-1','session-1','release-1','1.2.3-1',?,"
+            "'2099-01-01T00:00:00+00:00','installing','invocation-1')",
+            ("a" * 64,),
+        )
+
+    result = updater.inspect()
+
+    assert result["agent_update_ready"] is False
+    assert result["updater_version"] == 1
+    assert result["update_context"] == {
+        "operation_id": "op-1",
+        "phase": "installing",
+        "invocation_id": "invocation-1",
+        "target_package_version": "1.2.3-1",
+    }
+
+
+def test_update_journal_duplicate_is_idempotent_and_old_session_is_rejected(
+    updater: Updater,
+):
+    with updater._connect() as db, db:
+        db.execute("INSERT INTO operations VALUES ('op-1', 'installing')")
+        db.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,sha256,deadline,phase) "
+            "VALUES('op-1','session-1','release-1','1.2.3-1',?,'2099-01-01T00:00:00+00:00','installing')",
+            ("a" * 64,),
+        )
+
+    deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=1)
+    same = updater._apply_claimed_update(
+        "op-1", "session-1", "release-1", "1.2.3-1", "a" * 64, deadline
+    )
+    stale = updater._apply_claimed_update(
+        "op-1", "session-2", "release-1", "1.2.3-1", "a" * 64, deadline
+    )
+
+    assert same == {"ok": True, "phase": "installing", "replayed": True}
+    assert stale == {"ok": False, "error": "stale_session"}
 
 
 def _handle_socket_payload(
@@ -1191,6 +1247,17 @@ def test_apt_source_rejects_trusted_yes_and_requires_dedicated_keyring(
         f"Signed-By: {keyring_dir / 'missing.gpg'}\n",
         encoding="utf-8",
     )
+    original_lstat = Path.lstat
+
+    def source_is_root_owned(path: Path):
+        result = original_lstat(path)
+        if path == source_file:
+            values = list(result)
+            values[4] = 0
+            return os.stat_result(values)
+        return result
+
+    monkeypatch.setattr(Path, "lstat", source_is_root_owned)
     with pytest.raises(updater_module.UpdateFailure, match="apt_keyring"):
         updater_module._verify_dedicated_apt_source()
 
@@ -1403,6 +1470,98 @@ def test_expired_phase_has_no_local_outcome(updater: Updater, monkeypatch):
     assert calls[0][0][2:5] == ("expired", None, None)
 
 
+def test_preclaim_expiry_is_local_only_and_survives_restart(
+    updater: Updater, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    class Clock(dt.datetime):
+        current = dt.datetime.now(dt.timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            value = cls.current
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(updater_module, "datetime", Clock)
+    cache = tmp_path / "preclaim-cache"
+    cache.mkdir()
+    target = cache / "target.deb"
+    target.write_bytes(b"target")
+    digest = updater_module._sha256(target)
+    target.rename(cache / f"{digest}.deb")
+    (cache / "1.2.2-1.deb").write_bytes(b"prior")
+    monkeypatch.setattr(updater_module, "PACKAGE_CACHE", cache)
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.2-1")
+    monkeypatch.setattr(updater, "_run_metadata_refresh", lambda: True)
+    monkeypatch.setattr(updater_module, "_verify_apt_origin_suite", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_verify_cache_digest", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_verify_package", lambda *_args: None)
+
+    deadline = Clock.current + dt.timedelta(seconds=1)
+
+    def preflight(*_args):
+        Clock.current = deadline + dt.timedelta(seconds=1)
+
+    monkeypatch.setattr(updater_module, "_preflight", preflight)
+    monkeypatch.setattr(updater_module, "_cache_versioned_package", lambda *_args: None)
+    reporter_calls = []
+
+    def post(path, _body):
+        reporter_calls.append(path)
+        pytest.fail("an unclaimed expired request must not be reported")
+
+    monkeypatch.setattr(updater, "_post_json", post)
+    monkeypatch.setattr(
+        updater,
+        "_run_checked",
+        lambda *_args, **_kwargs: pytest.fail("dpkg must not run"),
+    )
+    update_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+    release_id = str(uuid.uuid4())
+    result = updater._apply_claimed_update(
+        update_id, session_id, release_id, "1.2.3-1", digest, deadline
+    )
+    assert result == {"ok": False, "error": "authorization_expired"}
+    assert reporter_calls == []
+
+    with sqlite3.connect(updater.journal_path) as database:
+        assert database.execute(
+            "SELECT phase FROM operations WHERE operation_id=?", (update_id,)
+        ).fetchone() == ("expired",)
+        assert database.execute(
+            "SELECT phase,error_code,sequence,pending_event FROM update_details "
+            "WHERE operation_id=?",
+            (update_id,),
+        ).fetchone() == ("expired", "request_expired", 0, None)
+        assert database.execute(
+            "SELECT COUNT(*) FROM update_events WHERE operation_id=?", (update_id,)
+        ).fetchone() == (0,)
+
+    restarted = Updater(
+        updater.state_dir,
+        updater.runtime_dir,
+        updater.gate_path,
+        package_version=lambda: "1.2.2-1",
+    )
+    restarted.initialize()
+    monkeypatch.setattr(restarted, "_post_json", post)
+    assert restarted._apply_claimed_update(
+        update_id,
+        session_id,
+        release_id,
+        "1.2.3-1",
+        digest,
+        Clock.current + dt.timedelta(minutes=5),
+    ) == {"ok": True, "phase": "expired", "replayed": True}
+    assert reporter_calls == []
+
+
+def test_metadata_expired_maps_to_metadata_expired_not_request_expired():
+    assert updater_module._failure_code(
+        updater_module.UpdateFailure("metadata_expired")
+    ) == "metadata_expired"
+
+
 def test_reporter_403_pause_blocks_direct_flush(updater: Updater, monkeypatch):
     pause = updater.state_dir / "reporting-paused-403"
     pause.write_text("paused\n", encoding="ascii")
@@ -1452,3 +1611,13 @@ def test_update_failure_codes_match_backend_error_vocabulary():
     assert updater_module._failure_code(
         updater_module.UpdateFailure("insufficient_resources")
     ) == "insufficient_resources"
+    dpkg_failure = subprocess.CalledProcessError(
+        1, ["/usr/bin/dpkg", "--install", "/tmp/hardware-agent.deb"]
+    )
+    assert updater_module._failure_code(dpkg_failure) == "install_failed"
+    assert (
+        updater_module._failure_code(
+            updater_module.UpdateFailure("package_manager_busy")
+        )
+        == "package_manager_busy"
+    )

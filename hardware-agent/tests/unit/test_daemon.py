@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import sys
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -19,6 +20,7 @@ from agent.transport.command_channel import (
     AgentCommand,
     AgentProgress,
     AgentStatus,
+    AgentUpdate,
     NspiOptions,
     ScanStatusAck,
 )
@@ -146,10 +148,16 @@ class FakeClient:
         self.delivered_progress: list[AgentProgress] = []
         self.order: list[tuple[str, Any]] = []
         self.parked_reason: str | None = None
+        self.supports_agent_updates = False
+        self.session_id: UUID | None = None
         self.closed = False
         self.connected = True
         self.cancel_latencies: list[float] = []
         self._script = list(script or [])
+        self.update_state_provider: Any = None
+
+    def set_update_state_provider(self, provider: Any) -> None:
+        self.update_state_provider = provider
 
     async def run(
         self,
@@ -159,6 +167,7 @@ class FakeClient:
         *,
         on_cancel: Any = None,
         on_scan_status_ack: Any = None,
+        on_agent_update: Any = None,
     ) -> None:
         for step in self._script:
             if self.parked_reason is not None:
@@ -243,6 +252,196 @@ async def drain() -> None:
 async def dispatch(daemon: AgentDaemon, subject: AgentCommand) -> None:
     await daemon.handle_command(subject)
     await drain()
+
+
+class TestRemoteUpdateDispatch:
+    def test_local_updater_protocol_rejects_arbitrary_fields(self):
+        from agent.daemon import _request_updater
+
+        with pytest.raises(ValueError, match="unsupported updater request"):
+            _request_updater("accept_update", shell="echo unsafe")
+        with pytest.raises(ValueError, match="unsupported updater request"):
+            _request_updater("inspect", update_id="unexpected")
+
+    def test_hello_context_maps_local_operation_to_closed_wire_shape(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        update_id = "11111111-1111-4111-8111-111111111111"
+        invocation_id = "22222222-2222-4222-8222-222222222222"
+        daemon, _, _, _ = build()
+        monkeypatch.setattr(
+            "agent.transport.readiness.readiness_handshake",
+            lambda version: {
+                "ok": True,
+                "app_version": version,
+                "package_version": "1.2.3-1",
+            },
+        )
+        monkeypatch.setattr(
+            "agent.version.installed_version", lambda: "1.2.3"
+        )
+        daemon._updater_request = lambda command: {
+            "ok": True,
+            "agent_update_ready": True,
+            "updater_version": 1,
+            "os_suite": "stable",
+            "architecture": "arm64",
+            "update_context": {
+                "operation_id": update_id,
+                "invocation_id": invocation_id,
+                "phase": "recovering",
+                "target_package_version": "1.2.4-1",
+            },
+        }
+
+        state = daemon._inspect_update_runtime()
+
+        assert state["update_context"] == {
+            "update_id": update_id,
+            "invocation_id": invocation_id,
+        }
+
+    @pytest.mark.parametrize(
+        ("observed_package", "expected_context"),
+        [
+            (
+                "1.2.4-1",
+                {
+                    "update_id": "11111111-1111-4111-8111-111111111111",
+                    "invocation_id": "22222222-2222-4222-8222-222222222222",
+                },
+            ),
+            ("1.2.5-1", None),
+        ],
+    )
+    def test_verifying_update_uses_live_readiness_invocation_only_for_matching_target(
+        self, monkeypatch, observed_package, expected_context
+    ):
+        daemon, _, _, _ = build()
+        monkeypatch.setattr(
+            "agent.transport.readiness.readiness_handshake",
+            lambda version: {
+                "ok": True,
+                "package_version": observed_package,
+                "invocation_id": "22222222-2222-4222-8222-222222222222",
+            },
+        )
+        monkeypatch.setattr("agent.version.installed_version", lambda: "1.2.4")
+        daemon._updater_request = lambda command: {
+            "ok": True,
+            "agent_update_ready": True,
+            "blocked": True,
+            "updater_version": 1,
+            "os_suite": "stable",
+            "architecture": "arm64",
+            "update_context": {
+                "operation_id": "11111111-1111-4111-8111-111111111111",
+                "phase": "verifying",
+                "target_package_version": "1.2.4-1",
+                "invocation_id": None,
+            },
+        }
+
+        state = daemon._inspect_update_runtime()
+
+        assert state["update_context"] == expected_context
+        assert state["ready"] is False
+
+    def test_readiness_subprocess_error_degrades_update_inspection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        daemon, _, _, _ = build()
+        monkeypatch.setattr(
+            "agent.transport.readiness.readiness_handshake",
+            lambda version: (_ for _ in ()).throw(
+                subprocess.CalledProcessError(1, ["dpkg-query"])
+            ),
+        )
+        monkeypatch.setattr("agent.version.installed_version", lambda: "1.2.4")
+        daemon._updater_request = lambda command: {
+            "ok": True,
+            "agent_update_ready": True,
+            "updater_version": 1,
+        }
+
+        assert daemon._inspect_update_runtime() is None
+
+    @pytest.mark.asyncio
+    async def test_update_handoff_is_session_bound_and_never_starts_a_scan(self):
+        client = FakeClient()
+        client.supports_agent_updates = True
+        client.session_id = uuid4()
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        def updater_request(command_name: str, **fields: object):
+            calls.append((command_name, fields))
+            return {"ok": True, "phase": "preparing"}
+
+        scan = FakeScan()
+        daemon = AgentDaemon(
+            client,
+            FakeIngest(),
+            run_scan=scan,
+            updater_request=updater_request,
+            update_state_provider=lambda: {
+                "ready": True,
+                "updater_version": 1,
+                "package_version": "1.0.0-1",
+            },
+        )
+        future = datetime.now(UTC).replace(microsecond=0) + timedelta(minutes=2)
+        frame = AgentUpdate(
+            type="agent_update",
+            update_id=uuid4(),
+            session_id=client.session_id,
+            release_id=uuid4(),
+            target_package_version="1.2.3-1",
+            sha256="a" * 64,
+            expires_at=future,
+        )
+
+        await daemon.handle_agent_update(frame)
+        await daemon.handle_agent_update(
+            frame.model_copy(update={"session_id": uuid4()})
+        )
+        await daemon.handle_agent_update(
+            frame.model_copy(
+                update={
+                    "expires_at": datetime.now(UTC) - timedelta(seconds=1)
+                }
+            )
+        )
+
+        assert len(calls) == 1
+        assert calls[0][0] == "accept_update"
+        assert calls[0][1]["session_id"] == str(client.session_id)
+        assert scan.calls == []
+
+    @pytest.mark.asyncio
+    async def test_scan_checkpoint_is_reported_to_hello_capability_provider(
+        self, tmp_path: Path
+    ):
+        client = FakeClient()
+        store = tmp_path / "scan-finalization.json"
+        store.write_text(
+            '{"protocol":1,"command_id":"11111111-1111-4111-8111-111111111111",'
+            '"scan_id":"22222222-2222-4222-8222-222222222222",'
+            '"session_id":"33333333-3333-4333-8333-333333333333",'
+            '"phase":"awaiting_ack","status":"done","error_code":null,'
+            '"result_path":null}',
+            encoding="utf-8",
+        )
+        AgentDaemon(
+            client,
+            FakeIngest(),
+            checkpoint_path=store,
+            update_state_provider=lambda: {"ready": True},
+        )
+
+        assert client.update_state_provider is not None
+        state = await client.update_state_provider()
+        assert state["scan_checkpoint_pending"] is True
+        assert state["ready"] is True
 
 
 class TestFrameOrder:

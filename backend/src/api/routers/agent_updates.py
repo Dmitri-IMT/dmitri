@@ -181,7 +181,8 @@ def read_agent_update_protocol(
     if identity.agent_id != agent_id:
         raise HTTPException(status_code=404, detail="Agent not found")
     return AgentProtocolSupport(
-        protocol_versions=[1], capabilities=["scan_finalization_v1"]
+        protocol_versions=[1],
+        capabilities=["scan_finalization_v1", "agent_update_v1"],
     )
 
 

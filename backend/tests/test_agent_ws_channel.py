@@ -378,7 +378,9 @@ def test_matching_current_hello_confirms_durable_local_update_success(
         {
             "agent_version": "0.2.0",
             "package_version": "1.0.7-1",
-            "capabilities": ["agent_update_v1"],
+            # A blocked companion suppresses agent_update_v1, but still reports
+            # authoritative context for an operation already in progress.
+            "capabilities": ["scan_finalization_v1"],
             "update_context": {
                 "update_id": str(update_id),
                 "invocation_id": str(invocation_id),
@@ -391,7 +393,9 @@ def test_matching_current_hello_confirms_durable_local_update_success(
         headers=ws_upgrade_headers(private_key, provisioned_agent.id),
     ) as ws:
         ws.send_json(hello)
-        assert ws.receive_json()["type"] == "update_session"
+        session = ws.receive_json()
+        assert session["type"] == "update_session"
+        assert session["capabilities"] == ["scan_finalization_v1"]
 
     administrative_session.expire_all()
     confirmed = administrative_session.get(AgentUpdate, update_id)
