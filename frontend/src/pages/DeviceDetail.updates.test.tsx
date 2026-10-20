@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { Route, Routes } from 'react-router'
@@ -72,8 +72,11 @@ function mockAvailability(value: Availability) {
   )
 }
 
-function renderDeviceDetail(toastDuration?: number) {
-  return renderWithProviders(
+async function renderDeviceDetail(
+  toastDuration?: number,
+  expandUpdateSection = true,
+) {
+  const rendered = renderWithProviders(
     <LanguageProvider>
       <Routes>
         <Route path="/devices/:agentId" element={<DeviceDetail />} />
@@ -81,9 +84,49 @@ function renderDeviceDetail(toastDuration?: number) {
     </LanguageProvider>,
     { route: agentRoute, toastDuration },
   )
+  if (expandUpdateSection) {
+    fireEvent.click(await screen.findByTestId('agent-update-toggle'))
+  }
+  return rendered
 }
 
 describe('Device update section', () => {
+  it('starts collapsed, shows an available update badge, and sits between scan and history', async () => {
+    agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
+    mockAvailability(available)
+    await renderDeviceDetail(undefined, false)
+
+    const scanNow = await screen.findByTestId('agents-scan-now')
+    const updateSection = await screen.findByTestId('agent-update-section')
+    const scanHistory = screen.getByTestId('device-scan-history')
+    const toggle = screen.getByTestId('agent-update-toggle')
+
+    expect(
+      scanNow.compareDocumentPosition(updateSection) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
+    expect(
+      updateSection.compareDocumentPosition(scanHistory) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(
+      screen.getByTestId('agent-update-available-badge'),
+    ).toHaveTextContent('Update available')
+    expect(screen.getByTestId('agent-update-content')).toHaveAttribute(
+      'data-state',
+      'closed',
+    )
+
+    await userEvent.setup().click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('agent-update-content')).toHaveAttribute(
+      'data-state',
+      'open',
+    )
+  })
+
   it.each([
     [
       'availability',
@@ -100,7 +143,7 @@ describe('Device update section', () => {
         ),
       )
       agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
-      renderDeviceDetail()
+      await renderDeviceDetail()
 
       expect(await screen.findByTestId('toast')).toHaveTextContent(message)
       expect(
@@ -128,7 +171,7 @@ describe('Device update section', () => {
       }),
     )
     const user = userEvent.setup()
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     await user.click(await screen.findByTestId('agent-update-trigger'))
     await user.click(
@@ -167,7 +210,7 @@ describe('Device update section', () => {
     )
     mockAvailability(available)
     const user = userEvent.setup()
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(await screen.findByTestId('toast')).toHaveTextContent(
       'Could not update the remote status of this operation.',
@@ -227,7 +270,7 @@ describe('Device update section', () => {
         }),
       )
       mockAvailability(available)
-      renderDeviceDetail(60000)
+      await renderDeviceDetail(60000, false)
 
       // Let the initial requests settle while advancing fake timers in small steps.
       for (
@@ -239,6 +282,7 @@ describe('Device update section', () => {
           await vi.advanceTimersByTimeAsync(50)
         })
       }
+      fireEvent.click(screen.getByTestId('agent-update-toggle'))
       expect(operationCalls).toBe(1)
       expect(screen.getByTestId('agent-update-current')).toHaveTextContent(
         'Installing',
@@ -319,7 +363,7 @@ describe('Device update section', () => {
       }),
     )
 
-    renderDeviceDetail()
+    await renderDeviceDetail()
     await user.click(await screen.findByTestId('agent-update-trigger'))
     expect(
       await screen.findByRole('heading', { name: 'Update this device?' }),
@@ -359,7 +403,7 @@ describe('Device update section', () => {
       observed_version: '1.0.5',
     })
     mockAvailability({ ...available, device_readiness: 'revoked' })
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(
       await screen.findByTestId('agent-update-section'),
@@ -378,7 +422,7 @@ describe('Device update section', () => {
   it('does not offer an update while the device is offline and does not promise a queue', async () => {
     agentDetail({ ...defaultAgent, observed_version: '1.0.5', online: false })
     mockAvailability({ ...available, device_readiness: 'offline' })
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(
       await screen.findByText('Offline', { selector: 'dd' }),
@@ -406,7 +450,7 @@ describe('Device update section', () => {
         HttpResponse.json(awaiting),
       ),
     )
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     const current = await screen.findByTestId('agent-update-current')
     expect(current).toHaveTextContent('Awaiting confirmation')
@@ -469,7 +513,7 @@ describe('Device update section', () => {
       }),
     )
     const user = userEvent.setup()
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(
       await screen.findByText('1.0.5', { selector: 'dd' }),
@@ -531,7 +575,7 @@ describe('Device update section', () => {
         HttpResponse.json(operation),
       ),
     )
-    renderDeviceDetail()
+    await renderDeviceDetail()
     expect(await screen.findByTestId('agent-update-current')).toHaveTextContent(
       label,
     )
@@ -541,7 +585,7 @@ describe('Device update section', () => {
     localStorage.setItem('dmitri-language', 'pt-BR')
     agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
     mockAvailability(available)
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(await screen.findByText('Atualização do agente')).toBeInTheDocument()
     expect(
@@ -569,7 +613,7 @@ describe('Device update section', () => {
         device_readiness: readiness,
         release: state === 'available' ? release : null,
       })
-      renderDeviceDetail()
+      await renderDeviceDetail()
 
       await screen.findByTestId('agent-update-section')
       if (canUpdate) {
@@ -590,7 +634,7 @@ describe('Device update section', () => {
     const user = userEvent.setup()
     agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
     mockAvailability(available)
-    renderDeviceDetail()
+    await renderDeviceDetail()
     const trigger = await screen.findByTestId('agent-update-trigger')
     await user.click(trigger)
 
@@ -635,7 +679,7 @@ describe('Device update section', () => {
     )
     agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
     mockAvailability(available)
-    renderDeviceDetail()
+    await renderDeviceDetail()
 
     expect(await screen.findByText('Обновление агента')).toBeInTheDocument()
     expect(

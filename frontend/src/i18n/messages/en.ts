@@ -469,6 +469,7 @@ export const catalog = {
   'ai.partialLimit': 'Some checks in this scan did not finish.',
   'ai.unknownLimit': 'This scan does not report whether every check finished.',
   'updates.title': 'Agent update',
+  'updates.availableBadge': 'Update available',
   'updates.installedVersion': 'Installed version',
   'updates.installedPackageVersion': 'Installed package version',
   'updates.availableVersion': 'Available version',

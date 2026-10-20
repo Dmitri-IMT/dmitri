@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Dialog } from 'radix-ui'
+import { ChevronRight } from 'lucide-react'
+import { Collapsible, Dialog } from 'radix-ui'
 import DialogShell from '@/components/DialogShell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -209,6 +210,7 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [open, setOpen] = useState(false)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const notifiedFailures = useRef(new Map<string, boolean>())
   const updates = useAgentUpdate(agent.agent_id)
@@ -290,175 +292,213 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
   }
 
   return (
-    <Card data-testid="agent-update-section">
-      <CardHeader>
-        <h2 className="text-title-sm">{t('updates.title')}</h2>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <dl className="flex flex-col gap-3">
-          <VersionRow
-            label={t('updates.installedVersion')}
-            value={installedVersion}
-            empty={t('updates.unknownValue')}
-          />
-          <VersionRow
-            label={t('updates.installedPackageVersion')}
-            value={agent.observed_package_version}
-            empty={t('updates.unknownValue')}
-          />
-          <VersionRow
-            label={t('updates.versionObservedAt')}
-            value={
-              formatDate(agent.version_observed_at ?? null, language) ??
-              t('updates.unknownValue')
-            }
-          />
-          <VersionRow
-            label={t('updates.availableVersion')}
-            value={release?.upstream_version ?? null}
-            empty={
-              availability ? t('updates.unknownValue') : t('updates.loading')
-            }
-          />
-          <VersionRow
-            label={t('updates.availablePackageVersion')}
-            value={release?.package_version ?? null}
-            empty={
-              availability ? t('updates.unknownValue') : t('updates.loading')
-            }
-          />
-          {availability && (
-            <VersionRow
-              label={t('updates.availability')}
-              value={t(availabilityKeys[availability.availability])}
-            />
-          )}
-          {availability && (
-            <VersionRow
-              label={t('updates.readiness')}
-              value={t(readinessKeys[availability.device_readiness])}
-            />
-          )}
-          {availability && (
-            <VersionRow
-              label={t('updates.catalogueCheckedAt')}
-              value={
-                formatDate(availability.catalogue_checked_at, language) ??
-                t('updates.unknownValue')
-              }
-            />
-          )}
-        </dl>
-
-        {release && (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-title-sm">{t('updates.releaseNotes')}</h3>
-            <p className="max-w-prose whitespace-pre-wrap break-words text-body-md">
-              {release.release_notes}
-            </p>
-          </div>
-        )}
-        {agent.revoked_at !== null && (
-          <p className="text-body-sm">{t('updates.revokedReadOnly')}</p>
-        )}
-        {availability?.device_readiness === 'offline' && (
-          <p className="text-body-sm">{t('updates.offlineNotQueued')}</p>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {canRequest && release && (
-            <Button
-              type="button"
-              onClick={() => setDialogOpen(true)}
-              data-testid="agent-update-trigger"
-            >
-              {t('updates.updateDevice')}
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void refresh()}
-            disabled={refreshing}
+    <Collapsible.Root open={open} onOpenChange={setOpen}>
+      <Card data-testid="agent-update-section">
+        <CardHeader className="p-0">
+          <Collapsible.Trigger
+            className="group flex w-full cursor-pointer items-center justify-between px-6 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            data-testid="agent-update-toggle"
           >
-            {refreshing ? t('updates.refreshing') : t('updates.refreshStatus')}
-          </Button>
-        </div>
-        {currentOperation && (
-          <OperationDetails
-            operation={currentOperation}
-            language={language}
-            t={t}
-            live
-          />
-        )}
-        {updates.history.data?.data.length ? (
-          <div
-            className="flex flex-col gap-4"
-            aria-label={t('updates.history')}
+            <span className="flex min-w-0 items-center gap-3">
+              <h2 className="text-title-sm">{t('updates.title')}</h2>
+              {availability?.availability === 'available' && (
+                <span
+                  data-testid="agent-update-available-badge"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-caption-sm font-medium text-primary"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+                  />
+                  {t('updates.availableBadge')}
+                </span>
+              )}
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
+            />
+          </Collapsible.Trigger>
+        </CardHeader>
+        <Collapsible.Content forceMount asChild>
+          <CardContent
+            data-testid="agent-update-content"
+            className="flex flex-col gap-6 data-[state=closed]:hidden"
           >
-            <h3 className="text-title-sm">{t('updates.history')}</h3>
-            {updates.history.data.data.map((item) => (
-              <OperationDetails
-                key={item.update_id}
-                operation={item}
-                language={language}
-                t={t}
+            <dl className="flex flex-col gap-3">
+              <VersionRow
+                label={t('updates.installedVersion')}
+                value={installedVersion}
+                empty={t('updates.unknownValue')}
               />
-            ))}
-          </div>
-        ) : !updates.history.isLoading && !updates.history.isError ? (
-          <p className="text-body-sm text-muted-foreground">
-            {t('updates.noHistory')}
-          </p>
-        ) : null}
-      </CardContent>
+              <VersionRow
+                label={t('updates.installedPackageVersion')}
+                value={agent.observed_package_version}
+                empty={t('updates.unknownValue')}
+              />
+              <VersionRow
+                label={t('updates.versionObservedAt')}
+                value={
+                  formatDate(agent.version_observed_at ?? null, language) ??
+                  t('updates.unknownValue')
+                }
+              />
+              <VersionRow
+                label={t('updates.availableVersion')}
+                value={release?.upstream_version ?? null}
+                empty={
+                  availability
+                    ? t('updates.unknownValue')
+                    : t('updates.loading')
+                }
+              />
+              <VersionRow
+                label={t('updates.availablePackageVersion')}
+                value={release?.package_version ?? null}
+                empty={
+                  availability
+                    ? t('updates.unknownValue')
+                    : t('updates.loading')
+                }
+              />
+              {availability && (
+                <VersionRow
+                  label={t('updates.availability')}
+                  value={t(availabilityKeys[availability.availability])}
+                />
+              )}
+              {availability && (
+                <VersionRow
+                  label={t('updates.readiness')}
+                  value={t(readinessKeys[availability.device_readiness])}
+                />
+              )}
+              {availability && (
+                <VersionRow
+                  label={t('updates.catalogueCheckedAt')}
+                  value={
+                    formatDate(availability.catalogue_checked_at, language) ??
+                    t('updates.unknownValue')
+                  }
+                />
+              )}
+            </dl>
 
-      <DialogShell
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          if (!submitting) setDialogOpen(open)
-        }}
-        testId="agent-update-dialog"
-        locked={submitting}
-        initialFocusRef={confirmRef}
-      >
-        <div className="flex flex-col gap-3">
-          <Dialog.Title className="text-title-sm">
-            {t('updates.confirmTitle')}
-          </Dialog.Title>
-          <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
-            {t('updates.confirmDescription', {
-              device: agent.display_name,
-              version: release?.upstream_version ?? '',
-            })}
-          </Dialog.Description>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            {!submitting && (
+            {release && (
+              <div className="flex flex-col gap-2">
+                <h3 className="text-title-sm">{t('updates.releaseNotes')}</h3>
+                <p className="max-w-prose whitespace-pre-wrap break-words text-body-md">
+                  {release.release_notes}
+                </p>
+              </div>
+            )}
+            {agent.revoked_at !== null && (
+              <p className="text-body-sm">{t('updates.revokedReadOnly')}</p>
+            )}
+            {availability?.device_readiness === 'offline' && (
+              <p className="text-body-sm">{t('updates.offlineNotQueued')}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {canRequest && release && (
+                <Button
+                  type="button"
+                  onClick={() => setDialogOpen(true)}
+                  data-testid="agent-update-trigger"
+                >
+                  {t('updates.updateDevice')}
+                </Button>
+              )}
               <Button
-                className="w-full sm:w-auto"
                 type="button"
                 variant="outline"
-                onClick={() => setDialogOpen(false)}
+                onClick={() => void refresh()}
+                disabled={refreshing}
               >
-                {t('updates.back')}
+                {refreshing
+                  ? t('updates.refreshing')
+                  : t('updates.refreshStatus')}
               </Button>
+            </div>
+            {currentOperation && (
+              <OperationDetails
+                operation={currentOperation}
+                language={language}
+                t={t}
+                live
+              />
             )}
-            <Button
-              ref={confirmRef}
-              className="w-full sm:w-auto"
-              type="button"
-              onClick={() => void confirmUpdate()}
-              disabled={submitting}
-              aria-label={t('updates.confirmAccessible', {
+            {updates.history.data?.data.length ? (
+              <div
+                className="flex flex-col gap-4"
+                aria-label={t('updates.history')}
+              >
+                <h3 className="text-title-sm">{t('updates.history')}</h3>
+                {updates.history.data.data.map((item) => (
+                  <OperationDetails
+                    key={item.update_id}
+                    operation={item}
+                    language={language}
+                    t={t}
+                  />
+                ))}
+              </div>
+            ) : !updates.history.isLoading && !updates.history.isError ? (
+              <p className="text-body-sm text-muted-foreground">
+                {t('updates.noHistory')}
+              </p>
+            ) : null}
+          </CardContent>
+        </Collapsible.Content>
+
+        <DialogShell
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            if (!submitting) setDialogOpen(open)
+          }}
+          testId="agent-update-dialog"
+          locked={submitting}
+          initialFocusRef={confirmRef}
+        >
+          <div className="flex flex-col gap-3">
+            <Dialog.Title className="text-title-sm">
+              {t('updates.confirmTitle')}
+            </Dialog.Title>
+            <Dialog.Description className="max-w-prose text-body-md text-muted-foreground">
+              {t('updates.confirmDescription', {
+                device: agent.display_name,
                 version: release?.upstream_version ?? '',
               })}
-            >
-              {submitting ? t('updates.submitting') : t('updates.updateDevice')}
-            </Button>
+            </Dialog.Description>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {!submitting && (
+                <Button
+                  className="w-full sm:w-auto"
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                >
+                  {t('updates.back')}
+                </Button>
+              )}
+              <Button
+                ref={confirmRef}
+                className="w-full sm:w-auto"
+                type="button"
+                onClick={() => void confirmUpdate()}
+                disabled={submitting}
+                aria-label={t('updates.confirmAccessible', {
+                  version: release?.upstream_version ?? '',
+                })}
+              >
+                {submitting
+                  ? t('updates.submitting')
+                  : t('updates.updateDevice')}
+              </Button>
+            </div>
           </div>
-        </div>
-      </DialogShell>
-    </Card>
+        </DialogShell>
+      </Card>
+    </Collapsible.Root>
   )
 }
 

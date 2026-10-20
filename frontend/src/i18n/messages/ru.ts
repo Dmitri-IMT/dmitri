@@ -484,6 +484,7 @@ export const catalog: Catalog = {
   'ai.partialLimit': 'Некоторые проверки в этом сканировании не завершились.',
   'ai.unknownLimit': 'Сканирование не сообщает, завершились ли все проверки.',
   'updates.title': 'Обновление агента',
+  'updates.availableBadge': 'Доступно обновление',
   'updates.installedVersion': 'Установленная версия',
   'updates.installedPackageVersion': 'Установленная версия пакета',
   'updates.availableVersion': 'Доступная версия',

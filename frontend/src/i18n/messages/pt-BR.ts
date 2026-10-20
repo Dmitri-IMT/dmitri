@@ -499,6 +499,7 @@ export const catalog: Catalog = {
   'ai.unknownLimit':
     'Esta varredura não informa se todas as verificações terminaram.',
   'updates.title': 'Atualização do agente',
+  'updates.availableBadge': 'Atualização disponível',
   'updates.installedVersion': 'Versão instalada',
   'updates.installedPackageVersion': 'Versão instalada do pacote',
   'updates.availableVersion': 'Versão disponível',

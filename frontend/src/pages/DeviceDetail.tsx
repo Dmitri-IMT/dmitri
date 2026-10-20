@@ -35,6 +35,7 @@ function RevokedDeviceSections({ agent }: { agent: AgentDetail }) {
     <>
       <WatchedNetworkReadOnly agent={agent} />
       <DeviceRestore agent={agent} onRestored={focusPresence} />
+      <AgentUpdateSection agent={agent} />
       <DeviceScanHistory agentId={agent.agent_id} />
     </>
   )
@@ -82,6 +83,7 @@ function LiveDeviceSections({ agent }: { agent: AgentDetail }) {
           />
         </div>
       )}
+      <AgentUpdateSection agent={agent} />
       <DeviceScanHistory agentId={agent.agent_id} />
       <DeviceRevoke agent={agent} onRevoked={focusPresence} />
     </>
@@ -93,7 +95,6 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
     <div className="flex flex-col gap-12">
       <BackLink fallback="/devices" testId="device-detail-back" />
       <AgentIdentity agent={agent} />
-      <AgentUpdateSection agent={agent} />
       {readAgentPresence(agent).kind === 'revoked' ? (
         <RevokedDeviceSections agent={agent} />
       ) : (
