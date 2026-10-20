@@ -10,7 +10,6 @@ import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import get_ident
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -1493,14 +1492,14 @@ def test_manual_update_commits_and_delivers_once_per_idempotency_key(
     administrative_session.add(provisioned_agent)
     websocket = AsyncMock()
 
-    send_thread_ids: list[int] = []
-    query_thread_ids: list[int] = []
+    send_threads: list[threading.Thread] = []
+    query_threads: list[threading.Thread] = []
 
     async def capture_send(_text: str) -> None:
-        send_thread_ids.append(get_ident())
+        send_threads.append(threading.current_thread())
 
     def capture_query_thread(*_args) -> None:
-        query_thread_ids.append(get_ident())
+        query_threads.append(threading.current_thread())
 
     websocket.send_text.side_effect = capture_send
     asyncio.run(agent_connections.register(provisioned_agent.id, websocket, now=now))
@@ -1570,9 +1569,9 @@ def test_manual_update_commits_and_delivers_once_per_idempotency_key(
     assert changed_body.status_code == 409
     assert changed_body.json()["error"]["code"] == "idempotency_conflict"
     assert websocket.send_text.await_count == 1
-    assert len(send_thread_ids) == 1
-    assert query_thread_ids
-    assert send_thread_ids[0] not in query_thread_ids
+    assert len(send_threads) == 1
+    assert query_threads
+    assert send_threads[0] not in query_threads
 
 
 @pytest.mark.parametrize(
