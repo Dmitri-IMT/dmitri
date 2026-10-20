@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–12 concluídas; Task 13 pendente.**
+14 tasks. **Tasks 1–14 concluídas.**
 
 ## Escopo e estado
 
@@ -286,8 +286,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Erros usam toasts localizados; fatos persistidos continuam no histórico. Dialog/foco/aria-live funcionam e layout estreito não esconde estado.
   - Todos os textos próprios da feature têm pt-BR/en/ru; usar tokens/componentes existentes e tipos gerados. Atualizar jamais chama scan start/cancel; reserva de update impede ação remota incompatível.
 - **Models**: Coder Luna medium; frontend-test-engineer Luna medium; frontend-code-reviewer Sol medium. Alteração de contrato/segurança retorna ao reviewer Sol high responsável.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 2
 
 ## Task 14: Fechar integração, falhas e documentação verificável
 - **Description**: Exercitar os contratos completos em ambiente descartável e fechar os gates de `PLAN.md`, sem rollout implícito. Sincronizar documentação uma vez após aprovação das tarefas de produto, com fatos demonstrados e bloqueios operacionais separados.
@@ -303,8 +303,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Atualizar ADRs para política manual/check-only, cadeia APT, companion, exclusão mútua e saúde local/remota; guias distinguem preparação, uso e intervenção.
   - Registrar resultados reais, limitações e H1–H6 atendidos/pendentes. Não publicar, instalar no Pi, executar scan real, fazer commit/push ou declarar rollout concluído como parte desta tarefa.
 - **Models**: Coder/testers Luna medium por camada; reviewers Sol high para integração/segurança e Sol medium para UI/docs; docs-sync Luna medium uma vez.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 1
 
 ## Cobertura dos critérios de TRUTH.md
 
@@ -379,7 +379,7 @@ habilitar clientes capazes; nenhuma release intermediária incompleta é promovi
 | 8 | Finalização durável e saúde | 5, 6, 7 | Sol high | COMPLETED |
 | 9 | Consulta e admissão HTTP | 1, 2, 7 | Sol high | COMPLETED |
 | 10 | Claim, eventos e confirmação | 7, 9 | Sol high | COMPLETED |
-| 11 | Instalação, recuperação e reporte | 3, 5, 6, 8, 10 | Sol high | PENDING |
-| 12 | Integração/capacidade no daemon | 7, 8, 10, 11 | Sol high | PENDING |
-| 13 | Interface web localizada | 9, 10, 12 | Sol medium | PENDING |
-| 14 | Integração, gates e docs | 2–13 | Sol high + medium por camada | PENDING |
+| 11 | Instalação, recuperação e reporte | 3, 5, 6, 8, 10 | Sol high | COMPLETED |
+| 12 | Integração/capacidade no daemon | 7, 8, 10, 11 | Sol high | COMPLETED |
+| 13 | Interface web localizada | 9, 10, 12 | Sol medium | COMPLETED |
+| 14 | Integração, gates e docs | 2–13 | Sol high + medium por camada | COMPLETED |

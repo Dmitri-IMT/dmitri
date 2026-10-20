@@ -1,293 +1,191 @@
-# Pi Installer Playbook (vendor)
+# Pi installer playbook
 
-> **Audience:** the technical installer who deploys a Dmitri appliance on-site.
-> **Scope:** flashing, provisioning, registering and enabling one Raspberry Pi.
-> Self-service pairing and device-key rotation are Phase 2 — see
-> [`roadmap/AUTH.md`](roadmap/AUTH.md).
+Audience: the technical installer who prepares and registers a Dmitri Raspberry Pi.
+This describes the current assisted package bootstrap. The original manual installation
+was exercised on hardware on 2026-09-11; the later signed-package bootstrap has only
+been validated on a disposable Debian 13 arm64 VM so far. It has not been run on the
+production Pi. Do not interpret the historical hardware date as validation of this new
+procedure.
 
-Every step below was executed against real hardware on 2026-09-11. Use the script.
-The manual steps after it are the troubleshooting path for the same work.
+## Requirements
 
-## Provision with the script
+- Raspberry Pi OS based on Debian 13 (Trixie), `arm64`.
+- A reviewed checkout containing `hardware-agent/scripts/provision-pi.sh` and the
+  canonical public keyring at `backend/agent-release/public-keyring.gpg`.
+- The agent and updater `.deb` files from a published signed APT snapshot. Their bytes
+  must match the package hashes and control fields in its signed `Packages` index.
+- The repository fingerprint confirmed out of band:
+  `92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A`.
+- A backend on the reviewed migration head and an admin account for device registration.
 
-Flash the card (sections 0 and 1), boot, and SSH in (section 2). Clone this
-repo on the Pi, then run:
+The selected repository URL is `https://dmitri-imt.github.io/dmitri/`, but a selected
+URL alone does not prove that a signed release has been published or that production is
+configured. Check [the rollout ledger](../specs/052-remote-agent-updates/ROLLOUT.md)
+before scheduling a production installation.
+
+## 1. Flash and connect
+
+Flash Raspberry Pi OS Lite 64-bit, configure the installer account, enable SSH, and
+connect the device to the authorized network. After first boot, SSH to the device and
+confirm its platform:
 
 ```bash
-sudo hardware-agent/scripts/provision-pi.sh
+cat /etc/os-release
+dpkg --print-architecture  # must be arm64
 ```
 
-The script installs `nmap` and `uv`, builds the `hardware-agent` package from the
-checkout, and installs it with `dpkg -i`. Then it runs `dmitri provision`, which
-asks for the deployed backend URL (`https://` only, because the admin password goes
-to it), an admin email and password for that backend, and a name for this Pi. The Pi
-joins the org of that admin account. `dmitri provision` creates the device key on the
-Pi, registers the device, and writes `/etc/dmitri/agent.env`. The script then starts
-`dmitri-agent` and exits when the current process logs `command channel connected`.
+The bootstrap refuses other architectures and Debian versions. For a new device, clone
+the reviewed repository checkout. On an existing device, keep its current checkout and
+identity; do not replace `/etc/dmitri/agent.env`, its results, or the persistent lock.
 
-The package installs `dmitri-agent.service` and the daily update timer
-([ADR-021](adr/ADR-021-pi-agent-updates.md)).
+Before registering a Pi, confirm the backend has been migrated to the reviewed Alembic
+head. The current source head is `20261019_43`; use the deployment runbook to verify the
+actual deployed head and backup before applying any production migration.
 
-For service-targeted scans, install the additional tools from the same checkout
-after the agent package is installed:
+## 2. Prepare OS tools and the pinned runtime
+
+Install the packages used for scanning, TLS, and the bootstrap's OpenPGP fingerprint
+check. Install the pinned `uv` release and Python runtime required by the agent package:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates gnupg nmap
+
+UV_VERSION=0.11.20
+curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | \
+  sudo env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
+sudo /usr/local/bin/uv --version  # must report uv 0.11.20
+
+sudo env UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+  UV_PYTHON_BIN_DIR=/opt/uv-python/bin \
+  /usr/local/bin/uv python install --default 3.12.15
+sudo /opt/uv-python/bin/python -V  # must report Python 3.12.15
+```
+
+The agent package's `postinst` uses `/usr/local/bin/uv` 0.11.20 and
+`/opt/uv-python/bin/python` 3.12 to create its virtual environment from the bundled,
+hash-checked wheelhouse. Do not use an unpinned `uv` installation, run `uv sync`, or
+install the agent's Python dependencies from the network on the Pi.
+
+The bootstrap takes the persistent scan/update lock before modifying packages. The lock
+file must already exist. On a **new, otherwise unprovisioned** Pi only, create it once,
+and create the agent runtime directory before the bootstrap starts the supervisor:
+
+```bash
+sudo install -d -o root -g root -m 0755 /var/lib/dmitri
+sudo install -o root -g root -m 0644 /dev/null /var/lib/dmitri/scan.lock
+sudo install -d -o root -g root -m 0755 /opt/dmitri-agent
+```
+
+The supervisor systemd unit uses `/opt/dmitri-agent` in `ReadWritePaths` and the
+provisioning script starts it before installing the agent package, so this directory must
+exist on a new Pi first. Do not run these commands on an existing installation: replacing
+its lock file can split the inode shared by scans and updates, and changing the agent tree
+can damage its runtime. The bootstrap refuses to proceed if an existing scan or update
+owns the lock.
+
+For an **existing Pi**, wait until the scan is terminal in the UI and result upload or
+finalization has completed. Then stop the agent before bootstrap; the script rejects an
+active `dmitri-agent.service`, even when it is idle, and restarts it after installation:
+
+```bash
+sudo systemctl stop dmitri-agent.service
+sudo systemctl is-active dmitri-agent.service || true  # should report inactive
+```
+
+Do not stop the service during a scan or while results are still being finalized. Do not
+create or replace `/var/lib/dmitri/scan.lock` or `/opt/dmitri-agent` on an existing device.
+
+## 3. Verify the trust anchor and obtain packages
+
+From the reviewed checkout, inspect the key fingerprint and compare it out of band with
+the approved value above:
+
+```bash
+gpg --batch --show-keys --fingerprint \
+  ./backend/agent-release/public-keyring.gpg
+```
+
+Obtain both package files from the published repository. The repository stores packages
+by content hash, so local filenames may differ. The bootstrap refreshes signed metadata
+and verifies each package's identity, version, architecture, and hash before installation.
+It will reject mismatched bytes. Do not install either package manually with `dpkg -i`.
+
+## 4. Run the assisted bootstrap
+
+Run from the repository checkout on the Pi. Use package file paths whose bytes came from
+the release being verified:
+
+```bash
+sudo hardware-agent/scripts/provision-pi.sh \
+  --repository https://dmitri-imt.github.io/dmitri/ \
+  --fingerprint 92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A \
+  --public-key ./backend/agent-release/public-keyring.gpg \
+  -- /path/to/hardware-agent-package.deb /path/to/hardware-agent-updater-package.deb
+```
+
+The script requires Debian 13 arm64, the prepared runtime above, and both package files.
+It verifies the public key, stages the inputs safely, configures the signed HTTPS APT
+source, verifies signed metadata and package hashes, preserves a recovery baseline, and
+installs both packages while holding the scan/update lock. It then runs `dmitri provision`
+to collect the deployed HTTPS backend URL, an admin email and password, and the device
+name. Provisioning generates the device key on the Pi, registers it, writes
+`/etc/dmitri/agent.env`, and starts the agent. The private device key stays on the Pi.
+
+The agent package installs `dmitri-agent.service`. The companion package installs the
+durable updater supervisor and `dmitri-agent-update.timer`. During bootstrap,
+`provision-pi.sh` installs the approved APT keyring and configures the signed APT source;
+these are not installed by the companion `.deb`. The daily timer invokes a **metadata
+check only**; it never installs packages. Each package update must be requested from the
+device page and explicitly approved by an admin.
+
+For service-targeted scans, install and verify their additional tools after bootstrap:
 
 ```bash
 sudo hardware-agent/scripts/provision-targeted-tools.sh
 sudo hardware-agent/scripts/provision-targeted-tools.sh --verify-only
 ```
 
-The script supports Raspberry Pi OS Bookworm and Trixie on armhf or arm64. It
-selects the matching Debian `testssl.sh` package version and verifies the
-installed tools, pinned sources, and DIRB wordlist. The verification runs
-development smoke tests only when the checkout has a dev virtual environment
-with `pytest`; the production agent does not contain `pytest` or tests. To run
-those smoke tests before deployment, use `uv sync --extra dev` in
-`hardware-agent/` and run the script with `--verify-only` on an ARM Linux host.
+That tool script supports Raspberry Pi OS Bookworm and Trixie on armhf or arm64. Its
+broader platform support does not change the updater bootstrap's Debian 13 arm64 limit.
 
-Run it again on an already provisioned Pi and it installs the package from the
-checkout; the package restarts the agent. It does not generate a new key. This is also
-how a Pi installed by hand before the package gets it. Trigger the scan from the web UI (section 9). The
-script does not pick a subnet.
+## 5. Verify without starting a scan
 
-The installer refuses to run while a scan or another update holds the appliance
-lock. The timer skips that attempt. Both use the path installed in
-`/usr/lib/dmitri/scan-lock-path`, also read by the daemon, headless CLI and TUI.
-The daemon keeps the lock through result upload and pending terminal-status replay.
+```bash
+sudo systemctl status dmitri-agent.service dmitri-agent-update.service \
+  dmitri-agent-update.timer --no-pager
+sudo journalctl -u dmitri-agent.service -n 100 --no-pager
+sudo /usr/bin/python3 /usr/lib/dmitri/updater.py --inspect
+```
 
-Before registration, the private key is saved as `/etc/dmitri/device.key` (0600).
-The complete `agent.env` is written only after registration returns a device ID.
-If the connection drops after registration commits, rerun the script: the same
-organization and public key return the same device ID. A retry does not rename or
-restore a revoked device. Keep the key file when recovering an incomplete install.
+Confirm that the agent and updater supervisor are active, the timer is enabled, inspection
+reports a healthy/unblocked state, and the device page shows the same registered device.
+The agent log should report `command channel connected`. Do not run a scan solely to test
+the installer. If a functional scan test is needed, schedule it on an authorized test
+subnet and confirm the uploaded result in the UI.
 
-Deploy the backend with Alembic revision `20260924_35` before using this installer.
-Run `alembic upgrade head`. The migration rejects duplicate `(org_id, public_key)`
-rows; resolve any existing duplicates before deployment without deleting their
-scan history automatically.
+Legacy devices that do not yet have `hardware-agent-updater` need this assisted bootstrap
+before they can use the update UI. A backend deployment alone does not install the Pi
+companion.
 
-## 0. Hardware
+## Troubleshooting and recovery
 
-| Item | Value |
+| Symptom | Action |
 |---|---|
-| Board | Raspberry Pi 4 Model B (ADR-001 target) |
-| Power | USB-C, 3 A. **Not** micro-USB — that is the Pi 3 connector |
-| Video (if needed) | micro-HDMI |
-| Storage | microSD, 8 GB minimum |
-| Network | Ethernet |
+| Bootstrap says the persistent scan lock is missing | For a new Pi, initialize it once as shown in section 2. For an existing device, do not replace the lock; inspect its installation history and escalate. |
+| Bootstrap says a scan or update is in progress | Wait for it to finish. Do not remove or recreate the lock. |
+| Bootstrap rejects the public-key fingerprint or package bytes | Stop. Confirm the key fingerprint out of band and obtain packages from the same signed repository snapshot. Never bypass signature verification. |
+| `postinst` says the runtime is missing or has the wrong version | Check `/usr/local/bin/uv` is 0.11.20 and `/opt/uv-python/bin/python` is Python 3.12.15. Prepare the runtime before retrying. |
+| Agent does not connect | Check `/etc/dmitri/agent.env`, network reachability, and `journalctl -u dmitri-agent.service`. Keep the private key and device identity intact. |
+| Update fails or inspection reports recovery needed | Follow [PI-RECOVERY](PI-RECOVERY.md), preserve the journal and update gate, and do not retry until an operator reviews the recovery state. |
 
-**Verify the card before trusting it.** A counterfeit or failing microSD writes
-successfully, then silently discards the data — the board simply never boots. Use an
-imaging tool that reads back and verifies what it wrote. Do not use bare `dd`, which
-reports success without checking.
-
-## 1. Flash the OS
-
-Raspberry Pi OS Lite, 64-bit. Configure in the imager's settings screen before writing:
-
-- hostname
-- SSH enabled, password authentication
-- the installer account username and password
-- locale and timezone
-
-Leave Wi-Fi unset when deploying on Ethernet.
-
-> **Debian release matters.** Trixie ships Python 3.13, and
-> `hardware-agent/pyproject.toml` requires `>=3.11,<3.13`. The system interpreter
-> therefore cannot run the agent. This is expected and handled: `uv` provisions its own
-> Python 3.12 in step 3. Do not "fix" it by installing a system Python.
-
-## 2. First boot and network
-
-Boot with the Ethernet cable connected. Find the device and open a session:
-
-```bash
-ping <hostname>.local
-ssh <user>@<address>
-```
-
-Give the first boot 90 seconds — it resizes the filesystem and reboots once.
-
-Record the address. Assign a **static IP or a DHCP reservation** on the router: the
-backend addresses the device by its registered agent, but operators and installers need
-a stable address for support.
-
-## 3. Install the runtime
-
-```bash
-sudo apt-get update
-sudo apt-get install -y nmap
-curl -LsSf https://astral.sh/uv/install.sh | sudo env HOME=/root UV_INSTALL_DIR=/usr/local/bin sh
-```
-
-`nmap` is the scanning engine (ADR-002). `uv` manages the agent's Python. It goes in
-`/usr/local/bin` because the package's `postinst` runs `uv` as root.
-
-## 4. Install the agent
-
-The agent lives in `/opt/dmitri-agent`, owned by root. Build the package from a
-checkout of this repo and install it:
-
-```bash
-sh hardware-agent/packaging/build-deb.sh /tmp/hardware-agent.deb
-agent_lock=$(cat hardware-agent/packaging/scan-lock-path)
-sudo mkdir -p "$(dirname "$agent_lock")"
-sudo flock -n -x "$agent_lock" dpkg -i /tmp/hardware-agent.deb
-```
-
-The package installs the tree, `dmitri-agent.service`, and the update timer. Its
-`postinst` runs `uv sync` once, production dependencies only. `pytest` and `ruff` never reach a customer appliance.
-
-> **`UV_PYTHON_INSTALL_DIR` is not optional.** By default `uv` puts its interpreter under
-> `/root/.local/share/uv/`, and the venv's `bin/python` becomes a symlink into `/root`.
-> The service runs with `ProtectHome=true`, which hides `/root` — so systemd fails with
-> `203/EXEC "No such file or directory"` even though the executable is plainly there.
-> Installing the interpreter under `/opt/uv-python` keeps the whole runtime in one place
-> that the hardened unit can reach. The package's `postinst` sets it.
-
-Verify the runtime on the device:
-
-```bash
-sudo /opt/dmitri-agent/.venv/bin/python -V     # expect 3.12.x
-```
-
-> **The test suite does not run here.** `tests/test_contract_models.py` resolves
-> `contracts/openapi/openapi.yaml` two directories above the agent, which is repository
-> layout, not a runtime dependency — `agent.normalize.contracts` is an in-tree Python
-> module and nothing at runtime reads that YAML. Prove the suite on the vendor machine
-> against the release being shipped; the appliance receives the runtime, the virtualenv
-> and the unit, and nothing else.
-
-## 5. Generate the device keypair **on the Pi**
-
-The private key is created on the device and never leaves it. Only the public key is
-transmitted, and that channel needs integrity, not confidentiality.
-
-```bash
-sudo mkdir -p /etc/dmitri && sudo chmod 700 /etc/dmitri
-
-sudo /opt/dmitri-agent/.venv/bin/python - <<'PY'
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives import serialization as s
-
-key = Ed25519PrivateKey.generate()
-private_hex = key.private_bytes(
-    s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()
-).hex()
-public_hex = key.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw).hex()
-
-with open("/etc/dmitri/agent.env", "w") as env:
-    env.write("DEVICE_PRIVATE_KEY=" + private_hex + "\n")
-
-print("PUBLIC_KEY=" + public_hex)
-PY
-
-sudo chmod 600 /etc/dmitri/agent.env
-sudo chown root:root /etc/dmitri/agent.env
-```
-
-Carry the printed `PUBLIC_KEY` to step 6.
-
-> **One copy of the private key, in one place.** The daemon reads `DEVICE_PRIVATE_KEY` from
-> the environment via `load_ingest_config()` and never opens a key file, so a separate
-> `device.key` would be private material on disk with no consumer — surface area for nothing.
-> The key is written straight into `agent.env`, and the private hex is never printed, never
-> written to `/tmp`, and never leaves the device.
-
-## 6. Register the public key with the backend
-
-Run by the **vendor**, against the target environment. Use `--public-key` with the value
-from step 5 — never `--generate`, which would create the private key off-device and
-defeat the model.
-
-```bash
-cd backend
-railway run --service api --environment <env> \
-  uv run backend-provision-agent \
-  --org-id <ORG_ID> \
-  --display-name <device-name> \
-  --public-key <PUBLIC_KEY from step 5>
-```
-
-It prints `agent_id=<uuid>`. That UUID is the `DEVICE_ID`.
-
-## 7. Complete `/etc/dmitri/agent.env`
-
-Step 5 already wrote `DEVICE_PRIVATE_KEY`. Append the other two — `agent/transport/ingest.py`
-validates all three:
-
-| Variable | Format |
-|---|---|
-| `BACKEND_URL` | http/https origin, no credentials |
-| `DEVICE_ID` | UUID — the `agent_id` from step 6 |
-| `DEVICE_PRIVATE_KEY` | 64 hex characters — written in step 5 |
-
-```bash
-sudo sh -c 'printf "BACKEND_URL=%s\nDEVICE_ID=%s\n" \
-  "<backend origin>" "<agent_id>" >> /etc/dmitri/agent.env'
-sudo chmod 600 /etc/dmitri/agent.env
-```
-
-## 8. Enable the service
-
-The package already installed and enabled the unit. Start it now that `agent.env` is
-complete:
-
-```bash
-sudo systemctl restart dmitri-agent
-systemctl status dmitri-agent
-journalctl -u dmitri-agent -f
-```
-
-A healthy start logs:
-
-```
-agent.transport.command_channel: command channel connected
-```
-
-Confirm it is not restart-looping:
-
-```bash
-systemctl show dmitri-agent -p ActiveState,SubState,NRestarts
-# ActiveState=active  SubState=running  NRestarts=0
-```
-
-Scan results land in `/var/lib/dmitri`, set by `XDG_DATA_HOME` in the unit. Without it the
-agent writes under `/root`, which `ProtectHome=true` makes unreachable.
-
-The unit runs as **root** deliberately: `nmap` requires root for TCP/IP fingerprinting.
-Without it every scan finishes `partial` (exit 10) with *"TCP/IP fingerprinting (for OS
-scan) requires root privileges"*.
-
-`Restart=always` with `StartLimitIntervalSec=0` covers the scheduled-reboot policy — the
-daemon reconnects to the command channel by itself after any reboot or backend restart.
-
-## 9. Verify end to end
-
-```bash
-curl -s <BACKEND_URL>/api/v1/health          # {"status":"ok",...}
-systemctl is-active dmitri-agent             # active
-```
-
-Then trigger a scan from the web UI and confirm results arrive on the read path.
-
-## Troubleshooting
-
-| Symptom | Cause |
-|---|---|
-| Board never appears on the network | Bad microSD. Verify the write; check whether `userconf.txt` is still on the boot partition — the OS deletes it during a successful first boot |
-| Scan ends `partial`, exit 10 | `nmap` not running as root |
-| `IngestConfigError` on start | `agent.env` malformed — `BACKEND_URL` must be a bare origin, `DEVICE_ID` a UUID, `DEVICE_PRIVATE_KEY` 64 hex characters |
-| Device shows **Revoked** or the Pi log says `command channel parked` | Use the [Pi recovery guide](PI-RECOVERY.md). A parked agent stays running and retries once per hour |
-| Under-voltage or throttling | Check `vcgencmd get_throttled`; `0x0` means healthy |
+The updater's daily timer only checks signed metadata. For package failures, retain
+`/var/lib/dmitri/updates/` and `/var/lib/dmitri/update-gate.json`; see the
+[agent update recovery procedure](PI-RECOVERY.md#agent-update-recovery).
 
 ## Not covered
 
-- **Agent updates.** [ADR-021](adr/ADR-021-pi-agent-updates.md). The package is
-  `hardware-agent/packaging/build-deb.sh`. Provisioning installs it with `dpkg -i`.
-  An upgrade restarts `dmitri-agent`. The package enables a daily timer that runs
-  `apt-get install --only-upgrade hardware-agent` and skips the upgrade while a scan
-  runs (every scan holds a shared lock on `/var/lib/dmitri/dmitri/scan.lock`). There
-  is no apt repository yet, so a later upgrade is still a new `.deb` installed by hand
-  until that repository exists.
-- Self-service pairing and device-key rotation (Phase 2).
+- Self-service pairing and device-key rotation (Phase 2; see
+  [`roadmap/AUTH.md`](roadmap/AUTH.md)).
+- Raspberry Pi OS upgrades or general OS patch management.
 - Wi-Fi capture via the ALFA adapter.

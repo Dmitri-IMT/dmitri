@@ -113,3 +113,87 @@ adequados; nenhum endpoint, enum ou migração adicional foi necessário.
 As cinco rejeições e a reavaliação não alteraram escopo nem justificaram uma nova
 aprovação arquitetural. Os limites de rollout real/systemd permanecem para a
 validação operacional futura, sem bloquear o handoff da Task 12.
+
+## Task 13 — erros dos três GETs da seção de atualização
+
+### Achado estrutural
+
+Duas revisões independentes rejeitaram o tratamento incompleto de erros de leitura.
+Na primeira rodada, disponibilidade e histórico eram exibidos como erros inline e
+o POST também precisava de toast; esses caminhos passaram a usar toast. Na segunda,
+o GET da operação ativa (`/agent-updates/{id}`), inclusive seu polling, continuou
+sem notificação. `AgentUpdateSection` observa `availability.isError` e
+`history.isError`, mas não `operation.isError`. O botão de atualização manual também
+exibe `updates.refreshFailed` além dos toasts dos GETs que falharem.
+
+O limite de responsabilidade é o conjunto das três queries de leitura de
+`useAgentUpdate`: disponibilidade, histórico e operação. TanStack Query v5 não
+oferece `onError` por query; a seção que consome as três queries deve observar seus
+resultados. O estado `isError` sozinho não identifica uma nova falha: ele permanece
+verdadeiro durante renders e novas tentativas de polling. No pacote v5 instalado,
+`errorUpdateCount` cresce quando a busca termina em erro, depois dos retries, e
+um sucesso limpa `error`/`isError` sem apagar `data` em uma falha anterior. Um efeito
+que chama `show` sempre que `isError` é verdadeiro pode repetir toasts; um efeito
+que observa apenas a borda `false → true` perde a distinção entre operações ao
+trocar a query key.
+
+### Decisão e handoff de implementação
+
+1. Centralizar a notificação dos três GETs em `AgentUpdateSection`, usando o mesmo
+   pequeno mecanismo para os três resultados, sem `onError` de query e sem
+   tratamento de erro dentro de `queryFn`. Associar cada resultado à identidade
+   efetiva da query: tipo + `agentId` para disponibilidade/histórico, e tipo +
+   `update_id` para operação. Ignorar a query de operação enquanto não houver
+   `update_id` e ela estiver desabilitada.
+2. Manter, em `useRef`, um registro de episódio de falha por identidade. Ao observar
+   `isError` com `errorUpdateCount > 0`, emitir **um** toast localizado se ainda
+   não houve notificação nesse episódio; marcar o episódio antes de chamar `show`.
+   Enquanto continuar em erro, novos `errorUpdateCount` do polling, retries de
+   refetch, renders e mudanças de função de tradução não emitem outro toast. Um
+   resultado `isSuccess` encerra o episódio; a próxima falha pode gerar um novo
+   toast. A mudança de agente ou operação usa uma identidade nova, sem herdar o
+   bloqueio da anterior. Não usar apenas `errorUpdatedAt` como deduplicador: cada
+   falha subsequente de polling tem um timestamp novo.
+3. Usar `updates.readFailed` para disponibilidade e `updates.historyFailed` para
+   histórico. Acrescentar uma chave própria para falha de leitura da operação,
+   com texto em en, pt-BR e ru. O texto deve indicar impossibilidade de atualizar
+   o **status remoto**, sem afirmar falha de instalação, rollback ou perda do
+   resultado persistido. Não exibir mensagem bruta da API.
+4. O botão **Atualizar status** deve chamar os refetches existentes e tratar a
+   rejeição da Promise, mas não emitir o toast genérico `updates.refreshFailed`.
+   Cada GET malsucedido passa pelo mesmo notificador; uma falha já notificada e
+   ainda não recuperada pertence ao mesmo episódio. Assim, um clique não duplica
+   o toast da query e não cria uma segunda mensagem genérica para a mesma falha.
+   O POST mantém seu toast próprio, separado dos erros de leitura gerados pelas
+   invalidações posteriores a um aceite bem-sucedido.
+5. Preservar `operation.data ?? history.data?.data[0]` e os dados de histórico
+   durante falhas de refetch. O toast sinaliza falha de comunicação, não substitui
+   fase, resultado local ou evidência já persistida. Para uma operação ativa cujo
+   primeiro GET falhou, usar a fase do item correspondente no histórico como base
+   do intervalo de polling até existir `operation.data`; assim o GET continua
+   tentando a cada 5 segundos e pode recuperar sem exigir clique. Fase terminal
+   encerra o polling como antes. Não alterar endpoints nem o contrato do backend.
+
+### Critérios focais para coder, tester e reviewer
+
+- Falha inicial de cada um dos três GETs gera seu toast correto e localizado; a
+  falha da operação é testada com histórico carregado e `update_id` ativo. Nenhum
+  erro de GET aparece como texto inline ou substitui o estado da operação.
+- Com timers controlados, vários ciclos de 5 segundos retornando erro para a
+  mesma operação geram apenas um toast no episódio, inclusive após os retries
+  internos; renders e troca de idioma não repetem a notificação. Um GET bem-sucedido
+  rearma a notificação e uma falha posterior gera um novo toast.
+- Um primeiro GET da operação que falha continua elegível a polling enquanto a
+  fase do histórico estiver ativa; após recuperação, o detalhe atualizado aparece.
+  Durante falhas de polling/refetch, a última operação e o histórico continuam
+  visíveis com seus fatos persistidos.
+- Falha de um ou mais GETs no refresh manual não produz `refreshFailed` além dos
+  toasts específicos. Se a query já estiver no mesmo episódio de erro, o clique
+  não repete o aviso; após sucesso intermediário, nova falha é avisada. Confirmar
+  que rejeições de Promise do refresh são tratadas, sem erro não observado.
+- A falha do POST continua produzindo somente seu toast de solicitação; um POST
+  aceito não vira falha visual da operação quando uma invalidação de leitura falha.
+  Confirmar a chave nova em en, pt-BR e ru e ausência de `onError` de query.
+
+Esta reavaliação não amplia o escopo da Task 13, não aprova código nem altera o
+ledger. A correção deve passar por nova revisão independente após os testes focais.

@@ -47,7 +47,41 @@ def read_catalog(path):
     return value
 
 
-def package_control(path, version, architecture):
+def read_updater_provenance(path):
+    if not path.exists():
+        return []
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"updater provenance is unreadable: {exc}")
+    if not isinstance(entries, list):
+        fail("updater provenance has an invalid shape")
+    seen = set()
+    for item in entries:
+        if not isinstance(item, dict) or set(item) != {
+            "package", "package_version", "architecture", "source_commit", "sha256", "size_bytes"
+        }:
+            fail("updater provenance has an invalid entry")
+        identity = (item["package"], item["package_version"], item["architecture"])
+        if (
+            item["package"] != "hardware-agent-updater"
+            or item["architecture"] != "all"
+            or not isinstance(item["package_version"], str)
+            or not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}", item["package_version"])
+            or not isinstance(item["source_commit"], str)
+            or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", item["source_commit"])
+            or not isinstance(item["sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+            or type(item["size_bytes"]) is not int
+            or item["size_bytes"] < 0
+            or identity in seen
+        ):
+            fail("updater provenance contains an invalid or duplicate identity")
+        seen.add(identity)
+    return entries
+
+
+def package_control(path, package_name, version, architecture):
     control = run(["dpkg-deb", "--field", str(path)]).stdout.rstrip()
     fields = {}
     for line in control.splitlines():
@@ -58,10 +92,20 @@ def package_control(path, version, architecture):
             key, value = line.split(": ", 1)
             fields[key] = value
     if (fields.get("Package"), fields.get("Version"), fields.get("Architecture")) != (
-        "hardware-agent", version, architecture
+        package_name, version, architecture
     ):
         fail("package control fields do not match the release identity")
     return control
+
+
+def package_stanzas(path):
+    if path is None or not path.is_file():
+        return []
+    return [
+        dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+        for block in path.read_text(encoding="utf-8").strip().split("\n\n")
+        if block.strip()
+    ]
 
 
 def sha256_entries(suite_root):
@@ -87,6 +131,8 @@ def validate_args(args):
             fail("release id must be a UUID")
         if str(parsed) != args.release_id.lower():
             fail("release id must be a canonical UUID")
+    if args.updater_package and not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", args.updater_source_commit):
+        fail("updater source commit must be a lowercase 40- or 64-character hash")
     if not args.origin or any(ord(char) < 32 or ord(char) == 127 for char in args.origin):
         fail("origin must be a non-empty single-line value")
     if len(args.release_notes) > 4000 or "\x00" in args.release_notes:
@@ -250,6 +296,7 @@ def prepare(args):
     stage.mkdir()
     suite_root = stage / "dists" / args.suite
     index_dir = suite_root / "main" / "binary-arm64"
+    updater_index_dir = suite_root / "main" / "binary-all"
     managed_dir(repo, f".staging/{stage_id}/dists/{args.suite}/main/binary-arm64", create=True)
     current = managed_current_suite(repo, args.suite)
     if current.is_symlink() and not current.exists():
@@ -265,7 +312,7 @@ def prepare(args):
         package = args.package.resolve(strict=True)
         package_hash, package_size = digest_file(package)
         deb_version = args.upstream_version + "-1"
-        control = package_control(package, deb_version, args.architecture)
+        control = package_control(package, "hardware-agent", deb_version, args.architecture)
         filename = f"pool/sha256/{package_hash}.deb"
         target = pool_root / f"{package_hash}.deb"
         if target.exists():
@@ -309,11 +356,81 @@ def prepare(args):
                 f"SHA256: {package_hash}",
             ])
         )
+    updater_lines = []
+    old_updater_packages = current / "main" / "binary-all" / "Packages" if current.exists() else None
+    provenance_path = suite_root / "main" / "updater-provenance.json"
+    old_provenance_path = current / "main" / "updater-provenance.json" if current.exists() else None
+    provenance = read_updater_provenance(old_provenance_path) if old_provenance_path else []
+    if old_updater_packages and old_updater_packages.is_file():
+        updater_lines.extend(old_updater_packages.read_text(encoding="utf-8").strip().split("\n\n"))
+    if args.updater_package:
+        updater = args.updater_package.resolve(strict=True)
+        updater_version = args.updater_version
+        if not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}", updater_version):
+            fail("updater version must be a valid Debian version")
+        control = package_control(updater, "hardware-agent-updater", updater_version, "all")
+        updater_hash, updater_size = digest_file(updater)
+        existing_updater = [
+            item for item in package_stanzas(old_updater_packages)
+            if (item.get("Package"), item.get("Version"), item.get("Architecture"))
+            == ("hardware-agent-updater", updater_version, "all")
+        ]
+        if len(existing_updater) > 1:
+            fail("updater package index contains a duplicate identity")
+        if existing_updater:
+            existing = existing_updater[0]
+            if (existing.get("SHA256"), existing.get("Size")) != (updater_hash, str(updater_size)):
+                fail("updater package identity already exists with different immutable bytes")
+        else:
+            updater_lines.append("\n".join([
+                control,
+                f"Filename: pool/sha256/{updater_hash}.deb",
+                f"Size: {updater_size}",
+                f"SHA256: {updater_hash}",
+            ]))
+        filename = f"pool/sha256/{updater_hash}.deb"
+        target = pool_root / f"{updater_hash}.deb"
+        if target.exists():
+            if target.is_symlink() or not target.is_file() or digest_file(target) != (updater_hash, updater_size):
+                fail("content-addressed package path collision")
+        else:
+            temporary = target.with_name(target.name + ".tmp-" + stage_id)
+            shutil.copyfile(updater, temporary)
+            temporary.chmod(0o444)
+            os.replace(temporary, target)
+        existing_provenance = [
+            item for item in provenance
+            if (item["package_version"], item["architecture"])
+            == (updater_version, "all")
+        ]
+        if len(existing_provenance) > 1:
+            fail("updater provenance contains a duplicate identity")
+        if existing_provenance:
+            existing = existing_provenance[0]
+            if (existing["sha256"], existing["size_bytes"]) != (updater_hash, updater_size):
+                fail("updater provenance identity already exists with different immutable bytes")
+        else:
+            provenance.append({
+                "package": "hardware-agent-updater",
+                "package_version": updater_version,
+                "architecture": "all",
+                "source_commit": args.updater_source_commit,
+                "sha256": updater_hash,
+                "size_bytes": updater_size,
+            })
+        updater_index_dir.mkdir(parents=True, exist_ok=True)
     if not catalog["releases"]:
         fail("cannot prepare a repository without a release")
     package_text = "\n\n".join(line for line in package_lines if line) + "\n"
     (index_dir / "Packages").write_text(package_text, encoding="utf-8")
     write_by_hash(index_dir / "Packages", index_dir)
+    if updater_lines:
+        updater_index_dir.mkdir(parents=True, exist_ok=True)
+        (updater_index_dir / "Packages").write_text("\n\n".join(updater_lines) + "\n", encoding="utf-8")
+        write_by_hash(updater_index_dir / "Packages", updater_index_dir)
+    if provenance:
+        atomic_json(provenance_path, provenance)
+        write_by_hash(provenance_path, suite_root / "main")
     (suite_root / "main").mkdir(exist_ok=True)
     catalog_path = suite_root / "main" / "release-catalog.json"
     catalog_bytes = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -331,7 +448,7 @@ def prepare(args):
         f"Label: {args.origin}",
         f"Suite: {args.suite}",
         f"Codename: {args.suite}",
-        "Architectures: arm64",
+        "Architectures: arm64 all",
         "Components: main",
         "Acquire-By-Hash: yes",
         f"Date: {now.strftime('%a, %d %b %Y %H:%M:%S UTC')}",
@@ -353,16 +470,34 @@ def sign(args):
     if not release.is_file():
         fail("candidate Release metadata is missing")
     home = Path(args.gnupg_home).resolve(strict=True)
+    passphrase_args = []
+    if args.passphrase_file:
+        passphrase_file = Path(args.passphrase_file)
+        try:
+            info = passphrase_file.lstat()
+        except OSError as exc:
+            fail(f"signing passphrase file is unavailable: {exc}")
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or stat.S_ISLNK(info.st_mode)
+            or info.st_mode & 0o077
+        ):
+            fail("signing passphrase file must be a private regular file")
+        passphrase_args = [
+            "--pinentry-mode",
+            "loopback",
+            "--passphrase-file",
+            str(passphrase_file.resolve(strict=True)),
+        ]
     temp_signed = stage / "InRelease.tmp"
     temp_detached = stage / "Release.gpg.tmp"
-    run(["gpg", "--homedir", str(home), "--batch", "--yes", "--local-user", args.key_id, "--clearsign", "--output", str(temp_signed), str(release)])
-    run(["gpg", "--homedir", str(home), "--batch", "--yes", "--local-user", args.key_id, "--detach-sign", "--output", str(temp_detached), str(release)])
+    run(["gpg", "--homedir", str(home), "--batch", "--yes", *passphrase_args, "--local-user", args.key_id, "--clearsign", "--output", str(temp_signed), str(release)])
+    run(["gpg", "--homedir", str(home), "--batch", "--yes", *passphrase_args, "--local-user", args.key_id, "--detach-sign", "--output", str(temp_detached), str(release)])
     os.replace(temp_signed, release.parent / "InRelease")
     os.replace(temp_detached, release.parent / "Release.gpg")
 
 
-def verify_candidate(repo, stage, suite, keyring):
-    suite_root = stage / "dists" / suite
+def verify_signed_suite(repo, suite_root, suite, keyring):
     release = suite_root / "Release"
     if not all(path.is_file() for path in (release, suite_root / "InRelease", suite_root / "Release.gpg")):
         fail("candidate metadata has not been signed")
@@ -395,10 +530,57 @@ def verify_candidate(repo, stage, suite, keyring):
         fail("Release does not cover the catalog and Packages index")
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     packages = packages_path.read_text(encoding="utf-8")
+    package_indexes = [packages_path]
+    updater_packages_path = suite_root / "main" / "binary-all" / "Packages"
+    if updater_packages_path.exists():
+        package_indexes.append(updater_packages_path)
+    if any(path.relative_to(suite_root).as_posix() not in entries for path in package_indexes):
+        fail("Release does not authenticate every package index")
+    identities = set()
+    for package_index in package_indexes:
+        for block in package_index.read_text(encoding="utf-8").split("\n\n"):
+            fields = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+            if not fields:
+                continue
+            identity = (fields.get("Package"), fields.get("Version"), fields.get("Architecture"))
+            if identity in identities:
+                fail("Packages contains a duplicate package/version/architecture identity")
+            identities.add(identity)
+            filename = fields.get("Filename", "")
+            if not re.fullmatch(r"pool/sha256/[0-9a-f]{64}\.deb", filename):
+                fail("Packages contains an unsafe package path")
+            package_path = repo / filename
+            digest = fields.get("SHA256", "")
+            try:
+                size = int(fields.get("Size", ""))
+            except ValueError:
+                fail("Packages contains an invalid package size")
+            if package_path.is_symlink() or not package_path.is_file() or digest_file(package_path) != (digest, size):
+                fail("Packages references a missing or changed package")
+            package_control(package_path, *identity)
+    provenance_path = suite_root / "main" / "updater-provenance.json"
+    if provenance_path.exists():
+        if "main/updater-provenance.json" not in entries:
+            fail("Release does not authenticate updater provenance")
+        provenance = read_updater_provenance(provenance_path)
+        for item in provenance:
+            identity = (item.get("package"), item.get("package_version"), item.get("architecture"))
+            package_index = suite_root / "main" / f"binary-{identity[2]}" / "Packages"
+            matching = [
+                block for block in package_index.read_text(encoding="utf-8").split("\n\n")
+                if f"Package: {identity[0]}\n" in block
+                and f"Version: {identity[1]}\n" in block
+                and f"Architecture: {identity[2]}\n" in block
+            ] if package_index.is_file() else []
+            if len(matching) != 1:
+                fail("updater provenance does not map to one package index entry")
+            fields = dict(line.split(": ", 1) for line in matching[0].splitlines() if ": " in line)
+            if fields.get("SHA256") != item.get("sha256") or int(fields.get("Size", "0")) != item.get("size_bytes"):
+                fail("updater provenance does not match its immutable package bytes")
     for item in catalog["releases"]:
         if item.get("suite") != suite or item.get("architecture") != "arm64":
             fail("catalog contains a release outside this suite/platform")
-        matches = [block for block in packages.split("\n\n") if f"Version: {item['package_version']}\n" in block]
+        matches = [block for block in packages.split("\n\n") if f"Package: hardware-agent\n" in block and f"Version: {item['package_version']}\n" in block and f"Architecture: {item['architecture']}\n" in block]
         if len(matches) != 1:
             fail("catalog release does not map to one Packages entry")
         fields = dict(line.split(": ", 1) for line in matches[0].splitlines() if ": " in line)
@@ -409,6 +591,18 @@ def verify_candidate(repo, stage, suite, keyring):
             fail("catalog release does not match Packages metadata")
         if package_path.is_symlink() or not package_path.is_file() or digest_file(package_path) != (item["sha256"], item["size_bytes"]):
             fail("catalog references a missing or changed package")
+
+
+def verify_candidate(repo, stage, suite, keyring):
+    verify_signed_suite(repo, stage / "dists" / suite, suite, keyring)
+
+
+def verify_current(args):
+    repo = managed_repo(args)
+    current = managed_current_suite(repo, args.suite)
+    if not current.exists():
+        fail("current signed APT snapshot is missing")
+    verify_signed_suite(repo, current, args.suite, args.keyring)
 
 
 def promote(args):
@@ -463,6 +657,9 @@ def main():
     prepare_parser = subparsers.add_parser("prepare")
     prepare_parser.add_argument("--repo", type=Path, required=True)
     prepare_parser.add_argument("--package", type=Path)
+    prepare_parser.add_argument("--updater-package", type=Path)
+    prepare_parser.add_argument("--updater-version", default="")
+    prepare_parser.add_argument("--updater-source-commit", default="")
     prepare_parser.add_argument("--release-id", default=str(uuid4()))
     prepare_parser.add_argument("--source-commit", default="")
     prepare_parser.add_argument("--upstream-version", default="")
@@ -480,6 +677,7 @@ def main():
     sign_parser.add_argument("--suite", default="stable")
     sign_parser.add_argument("--gnupg-home", required=True)
     sign_parser.add_argument("--key-id", required=True)
+    sign_parser.add_argument("--passphrase-file")
     sign_parser.set_defaults(func=sign)
     promote_parser = subparsers.add_parser("promote")
     promote_parser.add_argument("--repo", type=Path, required=True)
@@ -487,6 +685,11 @@ def main():
     promote_parser.add_argument("--suite", default="stable")
     promote_parser.add_argument("--keyring", type=Path, required=True)
     promote_parser.set_defaults(func=promote)
+    verify_parser = subparsers.add_parser("verify-current")
+    verify_parser.add_argument("--repo", type=Path, required=True)
+    verify_parser.add_argument("--suite", default="stable")
+    verify_parser.add_argument("--keyring", type=Path, required=True)
+    verify_parser.set_defaults(func=verify_current)
     args = parser.parse_args()
     validate_suite(args.suite)
     repo = safe_repo(args.repo, create=True)

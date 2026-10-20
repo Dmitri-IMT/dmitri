@@ -555,7 +555,7 @@ def test_status_frame_fails_closed_when_revocation_read_raises(monkeypatch):
 
 
 def _unknown_command(session: MagicMock) -> None:
-    session.exec.return_value.first.side_effect = [MagicMock(spec=Agent), None]
+    session.exec.return_value.first.side_effect = [_agent_stub(), None]
 
 
 @pytest.mark.parametrize("raw_text", INVALID_FRAMES)

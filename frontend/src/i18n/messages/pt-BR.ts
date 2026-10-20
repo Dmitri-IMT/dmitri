@@ -498,4 +498,117 @@ export const catalog: Catalog = {
   'ai.partialLimit': 'Algumas verificações desta varredura não terminaram.',
   'ai.unknownLimit':
     'Esta varredura não informa se todas as verificações terminaram.',
+  'updates.title': 'Atualização do agente',
+  'updates.installedVersion': 'Versão instalada',
+  'updates.installedPackageVersion': 'Versão instalada do pacote',
+  'updates.availableVersion': 'Versão disponível',
+  'updates.availablePackageVersion': 'Versão disponível do pacote',
+  'updates.versionObservedAt': 'Versão observada em',
+  'updates.packageVersion': 'Versão observada do pacote',
+  'updates.observedVersion': 'Versão observada',
+  'updates.availability': 'Disponibilidade',
+  'updates.readiness': 'Preparação do dispositivo',
+  'updates.catalogueCheckedAt': 'Catálogo verificado em',
+  'updates.unknownValue': 'Desconhecida',
+  'updates.availability.available': 'Atualização disponível',
+  'updates.availability.upToDate': 'Atualizado',
+  'updates.availability.unknown': 'Versão instalada desconhecida',
+  'updates.availability.unavailable': 'Catálogo indisponível',
+  'updates.readiness.ready': 'Pronto para atualizar',
+  'updates.readiness.offline': 'Offline',
+  'updates.readiness.revoked': 'Revogado',
+  'updates.readiness.bootstrap':
+    'É necessária preparação assistida antes de atualizações remotas',
+  'updates.readiness.busy': 'Dispositivo ocupado',
+  'updates.readiness.unknown': 'Preparação desconhecida',
+  'updates.releaseNotes': 'Notas da versão',
+  'updates.updateDevice': 'Atualizar dispositivo',
+  'updates.refreshStatus': 'Atualizar status',
+  'updates.refreshing': 'Atualizando…',
+  'updates.readFailed':
+    'Não foi possível carregar a disponibilidade. Atualize o status para tentar novamente.',
+  'updates.operationReadFailed':
+    'NÃ£o foi possÃ­vel atualizar o status remoto desta operaÃ§Ã£o.',
+  'updates.historyFailed':
+    'Não foi possível carregar o histórico de atualizações.',
+  'updates.refreshFailed':
+    'Não foi possível atualizar o status. Tente novamente.',
+  'updates.requestFailed':
+    'Não foi possível concluir a solicitação. O status salvo da operação não foi alterado.',
+  'updates.revokedReadOnly':
+    'Este dispositivo revogado é somente leitura e não pode ser atualizado.',
+  'updates.offlineNotQueued':
+    'Este dispositivo está offline. A atualização não será enfileirada.',
+  'updates.history': 'Histórico de atualizações',
+  'updates.noHistory': 'Ainda não há histórico de atualizações.',
+  'updates.localOutcome': 'Resultado local',
+  'updates.outcome.pending': 'Pendente',
+  'updates.outcome.succeeded': 'Instalado e saudável localmente',
+  'updates.outcome.failed': 'Falhou',
+  'updates.outcome.rolled_back': 'Versão anterior restaurada',
+  'updates.outcome.needs_intervention': 'É necessária intervenção assistida',
+  'updates.phase.requested': 'Solicitação aceita',
+  'updates.phase.preparing': 'Preparando',
+  'updates.phase.installing': 'Instalando',
+  'updates.phase.verifying': 'Verificando',
+  'updates.phase.awaitingConfirmation': 'Aguardando confirmação',
+  'updates.phase.recovering': 'Recuperando',
+  'updates.phase.succeeded': 'Confirmada',
+  'updates.phase.failed': 'Falhou',
+  'updates.phase.expired': 'Expirada',
+  'updates.phase.rolledBack': 'Versão anterior restaurada',
+  'updates.phase.intervention': 'É necessária intervenção assistida',
+  'updates.awaitingRemoteConfirmation':
+    'A instalação local foi concluída. Aguardando confirmação remota.',
+  'updates.interventionNextStep':
+    'Entre em contato com a pessoa responsável pela manutenção do dispositivo.',
+  'updates.requestedBy': 'Solicitada por',
+  'updates.requestedAt': ({ date }) => `Solicitada em: ${date}`,
+  'updates.localCompletedAt': ({ date }) => `Conclusão local: ${date}`,
+  'updates.confirmedAt': ({ date }) => `Confirmação remota: ${date}`,
+  'updates.lastContactAt': ({ date }) =>
+    `Último contato do dispositivo: ${date}`,
+  'updates.contactUnknown': 'O contato do dispositivo não foi informado.',
+  'updates.confirmTitle': 'Atualizar este dispositivo?',
+  'updates.confirmDescription': ({ device, version }) =>
+    `Atualizar “${device}” para a versão ${version}?`,
+  'updates.confirmAccessible': ({ version }) =>
+    `Confirmar atualização para a versão ${version}`,
+  'updates.back': 'Voltar',
+  'updates.submitting': 'Solicitando atualização…',
+  'updates.loading': 'Carregando…',
+  'updates.error.deviceBusy':
+    'O dispositivo está ocupado. Atualize o status antes de tentar novamente.',
+  'updates.error.sessionReplaced':
+    'A conexão do dispositivo mudou. Atualize o status para reconciliar a operação.',
+  'updates.error.requestExpired':
+    'A solicitação expirou antes de ser aceita pelo dispositivo.',
+  'updates.error.releaseNotAllowed':
+    'Esta publicação não está mais disponível para o dispositivo.',
+  'updates.error.versionConflict':
+    'A versão instalada mudou. Atualize o status antes de solicitar uma atualização.',
+  'updates.error.metadataUntrusted':
+    'Não foi possível verificar os metadados da publicação.',
+  'updates.error.metadataExpired':
+    'Os metadados da publicação expiraram antes da instalação.',
+  'updates.error.artifactMismatch':
+    'O pacote não corresponde à publicação verificada.',
+  'updates.error.unsupportedPlatform':
+    'A plataforma deste dispositivo não é compatível com a publicação.',
+  'updates.error.prerequisiteMissing':
+    'É necessária preparação assistida antes de atualizar este dispositivo remotamente.',
+  'updates.error.insufficientResources':
+    'O dispositivo não tinha recursos suficientes para continuar.',
+  'updates.error.packageManagerBusy':
+    'O gerenciador de pacotes está ocupado. Atualize o status antes de tentar novamente.',
+  'updates.error.authorizationExpired':
+    'A autorização expirou antes da instalação.',
+  'updates.error.installFailed':
+    'A instalação falhou. Consulte o status observado da operação.',
+  'updates.error.localHealthFailed':
+    'A verificação local de saúde falhou após a instalação.',
+  'updates.error.recoveryFailed':
+    'Não foi possível confirmar a recuperação. É necessária intervenção assistida.',
+  'updates.error.stateCorrupt':
+    'Não foi possível ler o estado da atualização com segurança. É necessária intervenção assistida.',
 }

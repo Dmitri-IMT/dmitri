@@ -1,6 +1,20 @@
 # Progresso — atualização remota do agente
 
-- Estado atual: Tasks 1–12 concluídas; Task 13 pendente.
+## Preparação para uso real — 2026-10-20
+
+- As Tasks 1–14 abaixo estão concluídas no código. A ativação operacional está em andamento
+  e tem critérios próprios em [ROLLOUT.md](ROLLOUT.md); ainda não foi concluída em produção.
+- O1: concluída e aprovada por revisão independente. O pacote ARM64 atual executou o `postinst`
+  real sem rede, com uv 0.11.20/Python 3.12.15; instalação offline e smoke test passaram e os
+  dados/lock do Raspberry permaneceram intactos. Os serviços da VM foram restaurados.
+- O2: reparos de CI e fluxo protegido de release concluídos e aprovados por revisão independente.
+- O usuário informou não ter acesso à Railway. Configuração, migrações e deploy de produção
+  dependem de um responsável autorizado. Nenhum runtime de produção ou pacote do Raspberry
+  foi alterado nesta preparação.
+
+## Estado das tarefas de desenvolvimento
+
+- Estado atual: Tasks 1–14 concluídas após revisão independente do produto e da documentação.
 - Autorizações registradas: Tasks 8 e 9 concluídas nesta sequência, conforme comando explícito do usuário em 2026-10-19.
 - Bypass autorizado pelo usuário para concluir os gates: usar PostgreSQL isolado em Docker,
   com banco `dmitri_test`, porta em loopback e armazenamento tmpfs, como exceção ao bootstrap
@@ -171,3 +185,72 @@ porta 55432 e banco chamado `dmitri_test`, com armazenamento temporário em mem�
 - Escopo: fechar WS → daemon → socket companion, reconciliar contexto no hello e anunciar `agent_update_v1` somente quando suporte negociado, instalação preparada e supervisor estiverem prontos. O fluxo de update não inicia nem cancela scans.
 - Task 12 concluída após correções e revisão independente final `[APPROVE]`. O probe backend e o agente negociam `agent_update_v1`; o daemon encaminha frames fechados ao companion, e o hello relata contexto durável para reconciliação. Durante `verifying`/`awaiting_confirmation`, a invocation observada pelo handshake preenche contexto ausente do journal somente se a versão do pacote corresponder. Estado `blocked` suprime a capability para novos pedidos, mas ainda permite reconciliar a operação atual; falhas de subprocesso na inspeção degradam a capability sem derrubar o canal de scan.
 - Validação independente final: 184 testes focais do hardware agent e 40 testes backend passaram em PostgreSQL 17 descartável; Ruff passou, geração OpenAPI coincidiu com os tipos TypeScript, e `npm run typecheck` passou. Revisão Sol high: `[APPROVE]`. A integração ponta a ponta e o deploy no Raspberry permanecem para Task 14; nenhum scan real, SSH, deploy ou commit/sync foi feito nesta tarefa.
+
+### Task 13 — concluída após revisão independente
+
+- Página do dispositivo agora exibe disponibilidade, readiness, versões observadas, operação atual e histórico. Admin pode solicitar atualização manual com confirmação e chave de idempotência estável; Viewer, dispositivo revogado, offline, busy, legado e demais estados não elegíveis não recebem ação de mutação. Fluxo de atualização permanece separado dos controles de scan.
+- Estados de progresso, sucesso local aguardando confirmação remota e resultado confirmado são distintos; sem percentual fabricado. Interface e erros estão localizados em en/pt-BR/ru, com diálogo acessível e anúncios de fase.
+- Uma reavaliação estrutural em `STRUCTURAL_REEVAL.md` definiu notificação localizada, deduplicada por episódio para erros dos GETs de disponibilidade/histórico/operação, retenção de dados persistidos durante falha e polling de recuperação para operação ativa.
+- Validação independente final: quatro suítes focadas (update, DeviceDetail, comando e cancelamento) **76 passed**; lint, format check, typecheck, build e diff-check passaram. Lint reportou duas advertências preexistentes de Fast Refresh em `LanguageProvider.tsx`; build reportou chunk grande. A execução integral concorrente inicial teve 754/762 aprovados e oito falhas em quatro suítes (`Users.removeMember`, `ResetPassword`, `eslint-rules/no-dark-variant`, `PasswordDialog`); na Task 14, o gate integral serial passou **779/779**, e essas falhas anteriores não se reproduziram. Não restaram falhas frontend pendentes.
+- Revisão independente final: `[APPROVE]` após duas rejeições e reavaliação arquitetural. Sem alterações de contrato/tipos, deploy, scan real, SSH ou commit/sync.
+
+### Task 14 — iniciada conforme autorização sequencial do usuário
+
+- Escopo: executar integração/gates completos por camada e Linux compatível, fechar matriz de falhas U01–U16, revisar documentação factual e registrar dependências de rollout. Nenhuma publicação ou instalação real será efetuada.
+
+### Task 14 — validação integrada e documentação (concluída)
+
+- Backend: suíte integral independente **1.773 passed, 0 failed** em PostgreSQL 17 descartável;
+  a rodada focal adicional após o último patch cobriu **9/9** casos de atualização. A execução
+  separada de `test_contract_fidelity.py` concluiu **150/150 passed**. Ruff passou. Os números
+  são execuções separadas: os 9 casos novos não fazem parte da suíte integral independente acima.
+- Hardware agent em Linux/WSL: **1.597 passed** na suíte integral; `test_updater.py` passou
+  **62** testes e, em arquivo/execução separada, `test_update_recovery.py` passou **4** testes de
+  recuperação com Docker. Os 4 testes Docker não estão incluídos nos 62. Ruff passou. O teste
+  de evento com ACK perdido/restart confirma replay do mesmo evento persistido, sem duplicar o journal.
+- Frontend: suíte serial **779/779 passed** (serializada após timeouts/falhas intermitentes sob
+  concorrência). Lint, Prettier, typecheck e build passaram; tipos OpenAPI gerados coincidem
+  byte a byte com `frontend/src/types/openapi.d.ts`. Permanecem avisos de lint Fast Refresh já
+  conhecidos e aviso de chunk grande no build.
+- Integração/documentação: cobertura representativa rastreada na matriz abaixo. Todos os casos
+  usam fixtures, sockets, banco e pacote de teste; não houve publicação, deploy, instalação no
+  Raspberry, execução de systemd real ou scan real. **H1–H6 permanecem pendentes**, portanto
+  estes gates demonstram validação do código, não prontidão operacional.
+- Docs-sync executado uma vez para o diff desta feature: code-map atualizado para companion,
+  daemon/canal e UI/API; `TASKS.md` agora reflete Tasks 11–13 como concluídas. ADRs e runbooks
+  não foram reescritos: veja a decisão documental no fim desta seção. Task 14 segue IN_PROGRESS
+  até aprovação independente desta documentação.
+
+| Critério | Evidência automatizada representativa | Resultado nesta rodada |
+|---|---|---|
+| U01 versão/procedência | `backend/tests/test_agent_updates.py`; `backend/tests/test_agent_ws_channel.py`; `hardware-agent/tests/unit/test_updater.py`; `frontend/src/pages/DeviceDetail.updates.test.tsx` | backend/contrato/UI passaram; pacote e versão local verificados em Linux |
+| U02 publicação disponível | `backend/tests/test_release_catalog.py`; `backend/tests/test_agent_updates.py`; `frontend/src/pages/DeviceDetail.updates.test.tsx` | catálogo e projeção de disponibilidade cobertos; sem publicação hospedada |
+| U03 permissões | `backend/tests/test_agent_updates.py`; `frontend/src/pages/DeviceDetail.updates.test.tsx` | autorização backend e ocultação/bloqueio UI passaram |
+| U04 confirmação manual | `frontend/src/pages/DeviceDetail.updates.test.tsx`; `backend/tests/test_agent_updates.py` | confirmação e admissão manual cobertas |
+| U05 scan/upload/finalização concorrente | `hardware-agent/tests/unit/test_scan_lock.py`; `hardware-agent/tests/unit/test_daemon.py`; `hardware-agent/tests/unit/test_updater.py` | bloqueio compartilhado validado em Linux; nenhum scan real |
+| U06 exclusão mútua local/remota | `hardware-agent/tests/unit/test_scan_lock.py`; `hardware-agent/tests/unit/test_updater.py`; `backend/tests/test_agent_updates.py` | testes de lock/reserva e concorrência passaram |
+| U07 offline ou agente legado | `backend/tests/test_agent_ws_channel.py`; `hardware-agent/tests/unit/test_daemon.py`; `frontend/src/pages/DeviceDetail.updates.test.tsx` | capability/readiness degradada e estados não elegíveis cobertos |
+| U08 idempotência/reconexão | `backend/tests/test_agent_updates.py`; `backend/tests/test_agent_ws_channel.py`; `hardware-agent/tests/unit/test_updater.py` | replay e contexto de sessão cobertos; ACK perdido/restart reenvia mesmo evento |
+| U09 catálogo/publicação inválida | `backend/tests/test_release_catalog.py`; `hardware-agent/tests/unit/test_updater.py` | assinatura, validade, origem/suite, hash e colisão rejeitados nas fixtures |
+| U10 reinício previsto | `hardware-agent/tests/unit/test_updater.py`; `hardware-agent/tests/integration/test_update_recovery.py`; `backend/tests/test_agent_ws_channel.py` | recuperação/reconciliação simuladas passaram; sem systemd real |
+| U11 falha/rollback/intervenção | `hardware-agent/tests/unit/test_updater.py`; `hardware-agent/tests/integration/test_update_recovery.py`; `backend/tests/test_agent_updates.py` | `test_updater.py`: 62 passed; em arquivo/execução separada, `test_update_recovery.py`: 4 Docker passed (não incluídos nos 62) |
+| U12 interrupção de rede/energia | `hardware-agent/tests/unit/test_updater.py`; `hardware-agent/tests/integration/test_update_recovery.py` | journal persistente, retry e reinício testados em Linux descartável |
+| U13 backend indisponível | `hardware-agent/tests/unit/test_updater.py`; `backend/tests/test_agent_updates.py` | eventos pendentes são mantidos/retry; fluxo focal backend 9/9 passou |
+| U14 histórico/privacidade | `backend/tests/test_agent_updates.py`; `frontend/src/pages/DeviceDetail.updates.test.tsx` | snapshots de auditoria e apresentação sem segredos cobertos |
+| U15 localizado/acessível | `frontend/src/pages/DeviceDetail.updates.test.tsx`; `frontend/src/i18n/messages/{en,pt-BR,ru}.ts` | teclado/foco, anúncio e cópias nos três idiomas passaram nos testes e typecheck |
+| U16 preparação/distribuição | `backend/tests/test_release_catalog.py`; `hardware-agent/tests/unit/test_updater.py`; `hardware-agent/tests/integration/test_update_recovery.py` | cadeia local de teste validada; H1–H6 seguem pendentes para uso operacional |
+
+#### Limites e decisões documentais
+
+- Não foi executada atualização ou bootstrap de dispositivo real; não se afirma que o Raspberry
+  possua companion, timer ou repositório configurado. Evidência de pacote/recovery é descartável.
+- `docs/DEV-SETUP.md`, `docs/PI-INSTALLER.md` e `docs/PI-RECOVERY.md` não receberam mudança
+  de comando ou ambiente neste diff que exigisse ajuste factual adicional. ADR-011 e ADR-021
+  registram decisões aceitas; a skill `architecture-adr-sync` não está disponível nesta sessão,
+  então decisões/claims alvo não foram reescritos. Uma revisão arquitetural humana pode decidir
+  se a nota histórica de ADR-021 sobre UI e versão persistida deve receber adendo de implementação.
+- A checagem ampla do code-map encontrou links antigos quebrados em conceitos não alterados,
+  apontando para specs históricos ausentes neste checkout; e `MAINTAINING.md` contém o link
+  `./concept.md` apenas como exemplo de formato. Os links novos e os índices afetados foram
+  verificados e resolvem. Os links históricos fora do diff não foram reescritos nesta rodada.
+- Revisão integrada de produto: `[APPROVE]`; revisão documental após correções factuais: `[APPROVE]` em 2026-10-20. Tasks 1–14 concluídas. Sem commit/push, publicação, deploy ou operação no Raspberry.

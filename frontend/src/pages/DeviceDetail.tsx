@@ -11,6 +11,7 @@ import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
 import { readAgentPresence } from '@/lib/agentPresence'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
+import AgentUpdateSection from '@/pages/agents/AgentUpdateSection'
 import DeviceRestore from '@/pages/agents/DeviceRestore'
 import DeviceRevoke from '@/pages/agents/DeviceRevoke'
 import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
@@ -92,6 +93,7 @@ function DeviceDetailBody({ agent }: { agent: AgentDetail }) {
     <div className="flex flex-col gap-12">
       <BackLink fallback="/devices" testId="device-detail-back" />
       <AgentIdentity agent={agent} />
+      <AgentUpdateSection agent={agent} />
       {readAgentPresence(agent).kind === 'revoked' ? (
         <RevokedDeviceSections agent={agent} />
       ) : (

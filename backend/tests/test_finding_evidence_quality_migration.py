@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
-from conftest import _migrate
+from conftest import _migrate, _truncate_application_tables
 from sqlalchemy.engine import Engine
 
 
@@ -115,7 +115,7 @@ def test_finding_evidence_migration_upgrades_and_downgrades_known_aliases(
     _migrate(postgres_engine, "head")
     with postgres_engine.connect() as connection:
         assert MigrationContext.configure(connection).get_current_heads() == (
-            "20261018_42",
+            "20261019_43",
         )
 
 
@@ -126,10 +126,11 @@ def test_finding_evidence_migration_upgrades_and_downgrades_known_aliases(
 def test_merge_revision_upgrades_from_each_parent(
     postgres_engine: Engine, starting_revision: str
 ) -> None:
+    _truncate_application_tables(postgres_engine)
     _migrate(postgres_engine, "base")
     _migrate(postgres_engine, starting_revision)
     _migrate(postgres_engine, "head")
     with postgres_engine.connect() as connection:
         assert MigrationContext.configure(connection).get_current_heads() == (
-            "20261018_42",
+            "20261019_43",
         )

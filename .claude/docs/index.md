@@ -28,8 +28,9 @@ The Pi appliance: the Nmap scan pipeline, normalization, and the Textual TUI. Fu
 * [hardware-agent/tui](./hardware-agent/tui.md) — The Textual application — app root, screens, and shared widgets.
 * [hardware-agent/ot](./hardware-agent/ot.md) — Modbus inspection package, digest, read-only client, OT stage.
 * [hardware-agent/utils](./hardware-agent/utils.md) — Local-network detection/connectivity and the Nmap/NSE XML parsers.
-* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process runs one remote scan, stops it on park or remote cancel, uploads partials only for cancel, and resumes after the command channel recovers.
-* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state.
+* [hardware-agent/daemon](./hardware-agent/daemon.md) — The long-lived device process runs remote scans, reports progress, and delegates negotiated updates to the persistent companion.
+* [hardware-agent/command-channel](./hardware-agent/command-channel.md) — The signed device WebSocket: command/cancel and negotiated update frames, transient backoff, and hourly recovery from a typed parked state.
+* [hardware-agent/updater](./hardware-agent/updater.md) — The root-owned companion's durable update journal, signed APT package checks, claim/install/recovery flow, event replay, and shared scan/update lock.
 * [hardware-agent/transport](./hardware-agent/transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome.
 
 ### Scan engine — `scanner/`
@@ -67,14 +68,16 @@ The React 19 + TypeScript SPA. Full listing in [frontend/index.md](./frontend/in
 
 * [frontend/overview](./frontend/overview.md) — The React 19 + TypeScript SPA — contract-typed API access, auth/session plumbing, public and guarded screens, local UI-foundation lint rules, and Railway static deployment.
 * [frontend/linting](./frontend/linting.md) — The local ESLint plugin that enforces named Tailwind width, type and spacing tokens and shared interactive primitives in authored application source.
-* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
+* [frontend/api](./frontend/api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account, org-administration and remote-agent-update resource modules.
 * [frontend/auth](./frontend/auth.md) — The SessionProvider (boot refresh modelled as a query), the useSession accessor, and the RequireSession route guard.
 * [frontend/app](./frontend/app.md) — The React root's provider nest and App's route table — public auth, the guarded shell (including scans/network/devices), nested admin Users, and a catch-all that renders rather than redirects.
 * [frontend/review](./frontend/review.md) — useHome() loads GET /home as one query and maps the snapshot to loading, error, blank, clear, or pending.
 * [frontend/scan-failure-reasons](./frontend/scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [frontend/scan-status](./frontend/scan-status.md) — scanStatusLabel maps every ScanStatus including cancelled and Stopped early; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [frontend/command-status](./frontend/command-status.md) — commandStatusLabel maps every CommandStatus including cancelled; isTerminalCommandStatus stops the device-detail command poll.
-* [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
+* [frontend/devices-screen](./frontend/devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scan and remote-update controls, plus admin revoke/restore and readiness-gates update requests.
+* [frontend/agent-update-section](./frontend/agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
+* [frontend/agent-update-hook](./frontend/agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [frontend/scan-ai](./frontend/scan-ai.md) — Scan Detail card that GETs analysis status, offers Explain this scan once, polls only while pending or processing, and renders the Groq overview when completed.
 * [frontend/tables](./frontend/tables.md) — DataTable with rowAction, rowTone and collapsedGroup; ListSurface and ReadDetailGate; Pagination; EmptyState; SeverityWord; LoadingSkeleton.
 * [frontend/host-detail](./frontend/host-detail.md) — readDetailState turns one detail query into loading/error/notFound/ready, ReadDetailGate renders the three non-ready states, and the host's findings section owns its own.

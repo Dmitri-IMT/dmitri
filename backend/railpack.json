@@ -1,6 +1,12 @@
 {
   "$schema": "https://schema.railpack.com",
   "deploy": {
-    "aptPackages": ["...", "fonts-dejavu-core"]
+    "aptPackages": [
+      "...",
+      "fonts-dejavu-core",
+      "ca-certificates",
+      "dpkg",
+      "gpgv"
+    ]
   }
 }

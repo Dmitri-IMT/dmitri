@@ -5,6 +5,7 @@ import json
 import subprocess
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -208,6 +209,52 @@ def test_imports_signed_release_and_checks_packages_chain(repository):
     assert session.state.generation == 1
     assert session.rows[0].approved_at is not None
     assert session.rows[0].package_version == "1.0.10-1"
+
+
+def test_railpack_runtime_includes_catalog_tools_and_approved_keyring():
+    backend_root = Path(__file__).resolve().parents[1]
+    deployment = json.loads((backend_root / "railpack.json").read_text())
+    packages = set(deployment["deploy"]["aptPackages"])
+    assert {"ca-certificates", "dpkg", "gpgv"}.issubset(packages)
+
+    keyring = backend_root / "agent-release/public-keyring.gpg"
+    assert keyring.is_file()
+    assert not (backend_root.parent / "agent-release/public-keyring.gpg").exists()
+    assert hashlib.sha256(keyring.read_bytes()).hexdigest() == (
+        "e133d6975f2e5df775ce407ba902cb6bd40f19f5972c3bc61c991392d96346aa"
+    )
+    key_listing = subprocess.run(
+        ["gpg", "--batch", "--show-keys", "--with-colons", str(keyring)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    fingerprints = {
+        fields[9]
+        for line in key_listing.stdout.splitlines()
+        if (fields := line.split(":"))[0] == "fpr"
+    }
+    assert "92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A" in fingerprints
+    assert "49B97982F566B0FEF9F2412FDC0B27B955B74936" in fingerprints
+    assert subprocess.run(
+        ["gpgv", "--version"], capture_output=True, timeout=5
+    ).returncode == 0
+    assert subprocess.run(
+        ["dpkg", "--compare-versions", "1.0", "lt", "1.1"],
+        capture_output=True,
+        timeout=5,
+    ).returncode == 0
+
+
+def test_approved_keyring_rejects_signature_from_another_key(repository):
+    _, _, settings, client, _ = repository
+    settings.agent_update_keyring_path = str(
+        Path(__file__).resolve().parents[1] / "agent-release/public-keyring.gpg"
+    )
+
+    with pytest.raises(CatalogError, match="InRelease signature verification failed"):
+        refresh_release_catalog(_Session(), settings, client=client())
 
 
 def test_refresh_lifecycle_with_real_sqlmodel_session(

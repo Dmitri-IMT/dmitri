@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import type { components } from '../types/openapi'
 
-type AgentDetail = components['schemas']['AgentDetail']
+export type AgentDetail = components['schemas']['AgentDetail']
 type AgentListResponse = components['schemas']['AgentListResponse']
 type UpdateAgentTargetSubnetRequest =
   components['schemas']['UpdateAgentTargetSubnetRequest']

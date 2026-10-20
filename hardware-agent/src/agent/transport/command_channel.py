@@ -251,10 +251,9 @@ class CommandChannelClient:
         ] = detect_available_subnets,
         agent_version: str | None = None,
         protocol_probe: Callable[[], bool] | None = None,
-        update_state_provider: Callable[
-            [], Awaitable[dict[str, Any] | None]
-        ]
-        | None = None,
+        update_state_provider: (
+            Callable[[], Awaitable[dict[str, Any] | None]] | None
+        ) = None,
     ) -> None:
         self._device_id = str(config.device_id)
         self._private_key = config.private_key
@@ -294,8 +293,7 @@ class CommandChannelClient:
     @property
     def supports_agent_updates(self) -> bool:
         return (
-            "agent_update_v1" in self._probe_capabilities
-            and self._agent_update_ready
+            "agent_update_v1" in self._probe_capabilities and self._agent_update_ready
         )
 
     def set_update_state_provider(
@@ -328,7 +326,10 @@ class CommandChannelClient:
             self._ready = False
             try:
                 await self._serve_once(
-                    on_command, on_cancel, on_connected, on_scan_status_ack,
+                    on_command,
+                    on_cancel,
+                    on_connected,
+                    on_scan_status_ack,
                     on_agent_update,
                 )
             except _TRANSPORT_ERRORS as exc:

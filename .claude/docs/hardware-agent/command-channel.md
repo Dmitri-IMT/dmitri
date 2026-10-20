@@ -1,10 +1,10 @@
 ---
 type: Module
 title: command-channel — the signed WebSocket client and shared signer
-description: "The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state."
+description: "The signed device WebSocket: command and cancel frames, negotiated update capability and frames, short transient backoff, and hourly recovery from a typed parked state."
 resource: hardware-agent/src/agent/transport/command_channel.py
 tags: [hardware-agent, transport, websocket, ed25519, signatures, reconnect, daemon, cancel]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # command-channel — the signed WebSocket client
@@ -17,6 +17,9 @@ socket — URL conversion, the signed upgrade, frame validation, send serializat
 timing — and nothing about scans. Command execution belongs to the
 [daemon](/hardware-agent/daemon.md); the client only hands it validated `AgentCommand`s and
 `AgentCancel`s and carries `AgentStatus` and compact `AgentProgress` frames back.
+For remote updates it negotiates `agent_update_v1` in hello, carries persisted update context, and
+delivers a validated update frame to the daemon only when the companion reports readiness. Update
+messages remain distinct from scan commands and do not interrupt scan lifecycle handling.
 
 `agent.transport.signing` is the small shared helper it and the [ingest
 client](/hardware-agent/transport.md) both sign through. DMI-66 extracted it out of `ingest.py`
@@ -31,22 +34,23 @@ ingest. That split is the contract, not an implementation detail.
 | Name | What it does | Ref |
 |------|--------------|-----|
 | `build_device_signature_headers(method, path, body, device_id, private_key_bytes)` | Builds the five proof headers from a fresh timestamp, nonce, body SHA-256 and signature. Stores nothing; the key never reaches an attribute, a log or an exception message. | `transport/signing.py:10` |
-| `AvailableSubnet` | `interface`, `cidr`, required `is_default_route`. Mirrors the contract component. | `command_channel.py:52` |
-| `AgentHello` | `type="hello"`, `agent_version`, `available_subnets`. | `command_channel.py:60` |
-| `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:92` |
-| `AgentCancel` | `type="cancel"`, `command_id`. Backend → Pi stop frame (DMI-145). | `command_channel.py:111` |
-| `AgentStatus` | `type="status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`/`cancelled`), nullable `error_code`. | `command_channel.py:118` |
-| `AgentProgressSnapshot` / `AgentProgress` | Stage, percent below 100, five nullable counters, command/scan ids, and a positive sequence. No result arrays or raw evidence. | `command_channel.py:127` |
-| `InboundCommandFrame` | Discriminated union `AgentCommand \| AgentCancel` on `type`. | `command_channel.py:127` |
-| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. All four seams are injectable, which lets tests run both reconnect policies with no socket or wall clock. | `command_channel.py:164` |
-| `.run(on_command, on_connected=None, on_parked=None, *, on_cancel=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. `on_cancel` receives each validated `AgentCancel.command_id`. | `command_channel.py:229` |
-| `.send_status(status)` | Returns `False` rather than raising when disconnected — the daemon records that as pending. | `command_channel.py:263` |
-| `.send_progress(progress)` | Uses the same serialized send lock; transient transport failure returns `False` so the daemon can retain and replay its newest snapshot. | `command_channel.py:273` |
-| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:243`, `:247` |
-| `_websocket_origin(backend_url)` | `http://`→`ws://`, `https://`→`wss://`. No scheme check: `load_ingest_config` has already rejected anything that is not http/https. | `command_channel.py:134` |
-| `_park_reason(exc)` | Maps upgrade `403` and private close codes to `refused`, `replaced`, or `revoked`. | `command_channel.py:143` |
-| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()`. A `finally` always cancels and awaits both child tasks so outer cancellation or `close()` cannot leave the hourly sleeper pending. Shutdown wins on `close()` even if it runs before the wait starts; a full sleep clears the reason. Sleeper cancellation and other errors propagate. | `command_channel.py:309` |
-| `_parse_command(raw)` | Strict parse of either inbound frame (`command` or `cancel`); returns `None` for anything else. Old Pi builds that only understood `command` drop unknown frames the same way. | `command_channel.py:383` |
+| `AvailableSubnet` | `interface`, `cidr`, required `is_default_route`. Mirrors the contract component. | `command_channel.py:55` |
+| `AgentHello` | `type="hello"`, `agent_version`, `available_subnets`, negotiated capabilities and update context. | `command_channel.py:70` |
+| `AgentUpdateHelloContext` / `UpdateSession` | Closed hello context for operation reconciliation and its bound remote session. | `command_channel.py:63`, `:84` |
+| `AgentUpdate` | Validated update request frame with operation, release, package version, digest and deadline fields. | `command_channel.py:92` |
+| `AgentCommand` | `type="command"`, `command_id`, `scan_id`, `scan_mode` (`Literal` over `config.SCAN_MODES`), `subnet`. | `command_channel.py:142` |
+| `AgentCancel` | `type="cancel"`, `command_id`. Backend → Pi stop frame (DMI-145). | `command_channel.py:159` |
+| `AgentStatus` | `type="status"`, `command_id`, `status` (`running`/`uploading`/`done`/`failed`/`cancelled`), nullable `error_code`. | `command_channel.py:166` |
+| `AgentProgressSnapshot` / `AgentProgress` | Stage, percent below 100, five nullable counters, command/scan ids, and a positive sequence. No result arrays or raw evidence. | `command_channel.py:175`, `:195` |
+| `InboundCommandFrame` | Discriminated union of the validated inbound command/cancel/update variants. | `command_channel.py:205` |
+| `CommandChannelClient(config, *, connect, sleep, detect_subnets, agent_version)` | The client. Its seams are injectable, which lets tests run reconnect and update negotiation with no socket or wall clock. | `command_channel.py:242` |
+| `.run(on_command, on_connected=None, on_parked=None, *, on_cancel=None)` | The connect → hello → replay → receive loop. A park calls `on_parked`, waits one hour, clears the reason, and dials again; only close or cancellation ends the loop. | `command_channel.py:308` |
+| `.send_status(status)` / `.send_progress(progress)` | Return `False` rather than raising when disconnected, allowing the daemon to retain and replay pending status or progress. | `command_channel.py:350`, `:360` |
+| `supports_agent_updates` / `set_update_state_provider()` | Advertises update support only when backend negotiation and local readiness both succeed; hello also includes durable operation context. | `command_channel.py:294`, `:299` |
+| `.park(reason)` / `.close()` | `park` records the first typed reason and drops the socket; `close` sets `_closed`, signals `_shutdown`, and drops the socket without parking. | `command_channel.py:370`, `:374` |
+| `_websocket_origin(backend_url)` / `_park_reason(exc)` | Converts backend URL scheme for the signed WS and classifies upgrade/close failures into the closed parked-reason set. | `command_channel.py:212`, `:221` |
+| `_wait_out_park()` | Returns immediately when already closed. Logs the typed reason and next UTC attempt, then races the injected 3600-second sleeper against `_shutdown.wait()` and cancels/awaits both child tasks on exit. | `command_channel.py:575` |
+| `_parse_command(raw)` | Strict parse of supported inbound frame variants; returns `None` for anything else. | `command_channel.py:609` |
 
 ### The upgrade envelope
 
@@ -93,7 +97,8 @@ The process stays alive throughout.
 * Enumerates via [`detect_available_subnets`](/hardware-agent/utils.md).
 * Driven by [`AgentDaemon`](/hardware-agent/daemon.md), which supplies `on_command`,
   `on_connected`, `on_cancel` (`handle_cancel`), and the park stop callback for `on_parked`; the
-  daemon replays only the latest active progress snapshot after reconnect.
+  daemon replays only the latest active progress snapshot after reconnect and routes negotiated
+  update frames to the companion.
 * Talks to the backend WS route and its frame schemas ([backend/schemas](/backend/schemas.md),
   [backend/services](/backend/services.md)); the normative shapes live in
   [contracts](/contracts.md).

@@ -24,10 +24,11 @@ component in active development. Source lives at `hardware-agent/src/agent/`.
 
 ## Remote control & upload
 
-* [daemon](./daemon.md) — The long-lived device process runs one remote scan, streams compact progress snapshots, stops on park or remote cancel, uploads partials for cancel, and resumes after reconnect.
-* [command-channel](./command-channel.md) — The signed device WebSocket: command and cancel frames, short transient backoff, and hourly recovery from a typed parked state.
+* [daemon](./daemon.md) — The long-lived device process runs remote scans, reports compact progress, and delegates negotiated update requests to the persistent companion.
+* [command-channel](./command-channel.md) — The signed device WebSocket: command/cancel and negotiated update frames, transient backoff, and hourly recovery from a typed parked state.
 * [transport](./transport.md) — The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome. Wired to the daemon since DMI-66.
 * [provisioning](./provisioning.md) — HTTPS agent registration, local Ed25519 key handling, and atomic configuration writes.
+* [updater](./updater.md) — The root-owned companion's durable update journal, readiness handshake, signed APT package checks, claim/install/recovery flow, event replay, and shared scan/update lock.
 
 ## TUI
 

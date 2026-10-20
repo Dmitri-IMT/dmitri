@@ -1,10 +1,10 @@
 ---
 type: Module
 title: frontend API layer
-description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
+description: The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account, org-administration and remote-agent-update resource modules.
 resource: frontend/src/api/client.ts
 tags: [frontend, api, axios, auth, refresh, invites]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # frontend API layer
@@ -52,11 +52,12 @@ On top of that sit the thin, contract-typed read modules the screens call.
 | `getHome(pages)` | `GET /home` with the three page integers. Page sizes are server constants mirrored as `HOME_*_PER_PAGE`. | `frontend/src/api/home.ts:16` |
 | `HOME_SEVERITIES` | `['critical','high'] as const satisfies readonly Severity[]`. Host-detail findings still load one severity at a time; Home no longer uses this list. | `frontend/src/api/findings.ts:19` |
 | `listAgents()` / `getAgent()` / `updateAgentTargetSubnet()` / `revokeAgent()` / `restoreAgent()` / `createScanCommand()` | Agents resource module. Revoke/restore are bodyless POSTs returning `AgentDetail`; all shapes come from generated OpenAPI types. | `frontend/src/api/agents.ts:10` |
+| `getAgentUpdateAvailability()` / `listAgentUpdates()` / `getAgentUpdate()` / `requestAgentUpdate()` | Contract-typed wrappers for update availability, per-agent history, one operation, and manual request. The request sends an `Idempotency-Key`; all shapes come from generated OpenAPI schemas. | `frontend/src/api/agentUpdates.ts:13` |
 | `getCommand(commandId)` | `GET /commands/{id}` → `CommandDetail` (includes `has_results`). Top-level resource, own module. | `frontend/src/api/commands.ts:8` |
 | `cancelCommand(commandId)` | `POST /commands/{id}/cancel` → `CommandDetail` (`202`/`200`). Used by [devices-screen](./devices-screen.md)'s `useScanCommand.cancel`. | `frontend/src/api/commands.ts:13` |
 | `COMMAND_POLL_INTERVAL_MS` | `5_000` — the Agents command poll interval. | `frontend/src/api/commands.ts:6` |
 | `useRefreshAfterDelete()` | Returns one async function that invalidates `home.all`, `scans.all`, `hosts.all`, `findings.all` and `commands.all` — everything a scan or machine delete can change. Called by `ScanDelete`, `HostDelete` and `DeleteDataPanel` after a successful delete (after navigating away, for the detail screens). | `frontend/src/hooks/useRefreshAfterDelete.ts` |
-| `queryKeys` | Prefix-shaped TanStack keys: `home` (`home.all` is the prefix), `scans`, `hosts`, `findings`, `agents`, `commands`, and `ai` (`ai.usage(limit)`). `home.snapshot(pages)` includes the three page integers. `scans.analysis(scanId, language)` keys the AI overview per language. `agents.list()` is a no-arg function; `commands` is a separate top-level group (not nested under `agents`) so agent invalidation does not restart a stopped command poll. **First invalidation call site:** `useScanCommand` sweeps `scans.all`, `hosts.all`, `findings.all`, and `agents.detail` when a followed command reaches `done` or `cancelled`, and again when a cancelled command gains results. | `frontend/src/api/queryKeys.ts:8` |
+| `queryKeys` | Prefix-shaped TanStack keys: `home` (`home.all` is the prefix), `scans`, `hosts`, `findings`, `agents`, `agentUpdates`, `commands`, and `ai` (`ai.usage(limit)`). Update availability/history are keyed per agent; operations are keyed by update id. Update terminal states refresh device detail and availability. | `frontend/src/api/queryKeys.ts:8` |
 
 ## How it connects
 
@@ -72,9 +73,10 @@ On top of that sit the thin, contract-typed read modules the screens call.
   the Bearer and refresh-retry interceptors.
 - `emitSessionExpired()` is consumed by [auth](./auth.md)'s `SessionProvider`, which clears the
   token + query cache and navigates to `/login`.
-- Home consumes [review](./review.md)'s `useHome()` / `getHome`. Scan/host list
+- Home consumes [review](./review.md)'s `useHome()` / `getHome`. Device update reads/writes are
+  consumed by [agent-update-hook](./agent-update-hook.md)'s `useAgentUpdate()`. Scan/host list
   and detail screens call `listScans` / `getScan` / `listHosts` / `getHost` / `listFindings`
-  directly. [devices-screen](./devices-screen.md) calls `agents.ts` and `commands.ts`. The six org
+  directly. [devices-screen](./devices-screen.md) calls `agents.ts`, `agentUpdates.ts` and `commands.ts`. The six org
   calls in `users.ts`/`invites.ts` are consumed by [directory](./directory.md)'s
   `useOrgDirectory()` and by the Users screen's four dialogs.
 - Consumes the generated types from `src/types/openapi.d.ts` (see [overview](./overview.md)).

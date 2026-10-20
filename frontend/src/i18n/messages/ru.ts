@@ -483,4 +483,114 @@ export const catalog: Catalog = {
     'Совпадения CVE и записи NVD не подтверждают, что уязвимость затрагивает проверенные устройства. Проверьте установленное ПО и его версию.',
   'ai.partialLimit': 'Некоторые проверки в этом сканировании не завершились.',
   'ai.unknownLimit': 'Сканирование не сообщает, завершились ли все проверки.',
+  'updates.title': 'Обновление агента',
+  'updates.installedVersion': 'Установленная версия',
+  'updates.installedPackageVersion': 'Установленная версия пакета',
+  'updates.availableVersion': 'Доступная версия',
+  'updates.availablePackageVersion': 'Доступная версия пакета',
+  'updates.versionObservedAt': 'Версия получена',
+  'updates.packageVersion': 'Наблюдаемая версия пакета',
+  'updates.observedVersion': 'Наблюдаемая версия',
+  'updates.availability': 'Доступность',
+  'updates.readiness': 'Состояние устройства',
+  'updates.catalogueCheckedAt': 'Каталог проверен',
+  'updates.unknownValue': 'Неизвестно',
+  'updates.availability.available': 'Доступно обновление',
+  'updates.availability.upToDate': 'Обновлено',
+  'updates.availability.unknown': 'Версия не известна',
+  'updates.availability.unavailable': 'Каталог недоступен',
+  'updates.readiness.ready': 'Готово к обновлению',
+  'updates.readiness.offline': 'Не в сети',
+  'updates.readiness.revoked': 'Отозвано',
+  'updates.readiness.bootstrap':
+    'Перед удалёнными обновлениями требуется подготовка специалистом',
+  'updates.readiness.busy': 'Устройство занято',
+  'updates.readiness.unknown': 'Состояние неизвестно',
+  'updates.releaseNotes': 'Список изменений',
+  'updates.updateDevice': 'Обновить устройство',
+  'updates.refreshStatus': 'Обновить статус',
+  'updates.refreshing': 'Обновление…',
+  'updates.readFailed':
+    'Не удалось загрузить доступность обновления. Обновите статус и повторите попытку.',
+  'updates.historyFailed': 'Не удалось загрузить историю обновлений.',
+  'updates.operationReadFailed':
+    'Не удалось обновить удалённый статус этой операции.',
+  'updates.refreshFailed': 'Не удалось обновить статус. Повторите попытку.',
+  'updates.requestFailed':
+    'Не удалось выполнить запрос. Сохранённый статус операции не изменён.',
+  'updates.revokedReadOnly':
+    'Отозванное устройство доступно только для чтения и не может быть обновлено.',
+  'updates.offlineNotQueued':
+    'Устройство не в сети. Обновление не будет поставлено в очередь.',
+  'updates.history': 'История обновлений',
+  'updates.noHistory': 'История обновлений пока пуста.',
+  'updates.localOutcome': 'Локальный результат',
+  'updates.outcome.pending': 'Ожидается',
+  'updates.outcome.succeeded': 'Установлено, локальная проверка пройдена',
+  'updates.outcome.failed': 'Ошибка',
+  'updates.outcome.rolled_back': 'Предыдущая версия восстановлена',
+  'updates.outcome.needs_intervention': 'Требуется помощь специалиста',
+  'updates.phase.requested': 'Запрос принят',
+  'updates.phase.preparing': 'Подготовка',
+  'updates.phase.installing': 'Установка',
+  'updates.phase.verifying': 'Проверка',
+  'updates.phase.awaitingConfirmation': 'Ожидание подтверждения',
+  'updates.phase.recovering': 'Восстановление',
+  'updates.phase.succeeded': 'Подтверждено',
+  'updates.phase.failed': 'Ошибка',
+  'updates.phase.expired': 'Срок действия истёк',
+  'updates.phase.rolledBack': 'Предыдущая версия восстановлена',
+  'updates.phase.intervention': 'Требуется помощь специалиста',
+  'updates.awaitingRemoteConfirmation':
+    'Локальная установка завершена. Ожидается подтверждение сервера.',
+  'updates.interventionNextStep':
+    'Обратитесь к ответственному за обслуживание устройства.',
+  'updates.requestedBy': 'Запросил пользователь',
+  'updates.requestedAt': ({ date }) => `Запрошено: ${date}`,
+  'updates.localCompletedAt': ({ date }) => `Локальное завершение: ${date}`,
+  'updates.confirmedAt': ({ date }) => `Подтверждение сервера: ${date}`,
+  'updates.lastContactAt': ({ date }) =>
+    `Последняя связь с устройством: ${date}`,
+  'updates.contactUnknown': 'Время связи с устройством неизвестно.',
+  'updates.confirmTitle': 'Обновить это устройство?',
+  'updates.confirmDescription': ({ device, version }) =>
+    `Обновить «${device}» до версии ${version}?`,
+  'updates.confirmAccessible': ({ version }) =>
+    `Подтвердить обновление до версии ${version}`,
+  'updates.back': 'Назад',
+  'updates.submitting': 'Отправка запроса…',
+  'updates.loading': 'Загрузка…',
+  'updates.error.deviceBusy':
+    'Устройство занято. Обновите статус и повторите попытку.',
+  'updates.error.sessionReplaced':
+    'Подключение устройства изменилось. Обновите статус операции.',
+  'updates.error.requestExpired':
+    'Срок запроса истёк до подтверждения устройства.',
+  'updates.error.releaseNotAllowed':
+    'Этот выпуск больше недоступен для устройства.',
+  'updates.error.versionConflict':
+    'Установленная версия изменилась. Обновите статус перед запросом обновления.',
+  'updates.error.metadataUntrusted': 'Не удалось проверить метаданные выпуска.',
+  'updates.error.metadataExpired':
+    'Срок метаданных выпуска истёк до установки.',
+  'updates.error.artifactMismatch':
+    'Пакет не соответствует проверенному выпуску.',
+  'updates.error.unsupportedPlatform':
+    'Платформа устройства не поддерживается этим выпуском.',
+  'updates.error.prerequisiteMissing':
+    'Для удалённого обновления устройства требуется подготовка специалистом.',
+  'updates.error.insufficientResources':
+    'На устройстве недостаточно ресурсов для продолжения.',
+  'updates.error.packageManagerBusy':
+    'Менеджер пакетов занят. Обновите статус и повторите попытку.',
+  'updates.error.authorizationExpired':
+    'Срок разрешения на обновление истёк до установки.',
+  'updates.error.installFailed':
+    'Установка не удалась. Проверьте наблюдаемый статус операции.',
+  'updates.error.localHealthFailed':
+    'После установки локальная проверка состояния не пройдена.',
+  'updates.error.recoveryFailed':
+    'Не удалось подтвердить восстановление. Требуется помощь специалиста.',
+  'updates.error.stateCorrupt':
+    'Не удалось безопасно прочитать состояние обновления. Требуется помощь специалиста.',
 }

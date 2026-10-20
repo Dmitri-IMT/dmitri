@@ -32,7 +32,7 @@ backend-provision-agent = "api.management.provision_agent:main"
 backend-repair-host-identities = "api.management.repair_host_identities:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "pyyaml"]
+dev = ["pytest", "ruff", "pyyaml", "pymodbus==3.13.1", "ssh-audit==3.9.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/api"]

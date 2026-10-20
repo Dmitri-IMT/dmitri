@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import importlib.util
 import json
+import os
+import socket
+import sys
+import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from threading import get_ident
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from api.db.session import get_session
@@ -18,6 +25,7 @@ from api.models.agent_update import (
 )
 from api.models.command import Agent, Command
 from api.models.identity import Org, User
+from api.models.persistence import ScanRecord
 from api.schemas.agent_updates import (
     AgentUpdateClaimRequest,
     AgentUpdateEventRequest,
@@ -35,11 +43,279 @@ from api.services.agent_updates import (
 from api.services.agent_updates_http import UpdateAdmissionError, _reserve
 from api.services.agents import revoke_agent
 from api.services.release_catalog import project_availability
+from api.services.tokens import decode_access_token
+from conftest import ws_upgrade_headers
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import Session, select
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Requires Linux Unix domain sockets")
+def test_admin_update_flows_through_websocket_daemon_companion_and_signed_event_replay(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    actor_headers,
+    agent_keypair,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Exercise the production protocol across API, WS, daemon, and updater.
+
+    Package installation and systemd are host effects, so this harness replaces
+    only those boundaries. The HTTP request, WS handlers, daemon dispatch, Unix
+    socket protocol, updater journal/claim, signed event routes, and Postgres
+    writes use their real implementations.
+    """
+    hardware_src = Path(__file__).resolve().parents[2] / "hardware-agent" / "src"
+    packaging_dir = Path(__file__).resolve().parents[2] / "hardware-agent" / "packaging"
+    if str(hardware_src) not in sys.path:
+        sys.path.insert(0, str(hardware_src))
+
+    pytest.importorskip("pymodbus", reason="Install hardware-agent test dependencies")
+    pytest.importorskip("ssh_audit", reason="Install hardware-agent test dependencies")
+    from agent.daemon import AgentDaemon, _request_updater
+    from agent.transport.command_channel import AgentUpdate as DeviceUpdateFrame
+
+    updater_spec = importlib.util.spec_from_file_location(
+        "dmitri_test_updater", packaging_dir / "updater.py"
+    )
+    assert updater_spec is not None and updater_spec.loader is not None
+    updater_module = importlib.util.module_from_spec(updater_spec)
+    updater_spec.loader.exec_module(updater_module)
+
+    now = datetime.now(timezone.utc)
+    provisioned_agent.observed_version = "1.0.0"
+    provisioned_agent.observed_package_version = "1.0.0-1"
+    provisioned_agent.version_observed_at = now
+    release = AgentRelease(
+        source_commit="a" * 40,
+        upstream_version="1.2.3",
+        package_version="1.2.3-1",
+        architecture="arm64",
+        suite="trixie",
+        sha256=hashlib.sha256(b"target package fixture").hexdigest(),
+        size_bytes=123,
+        required_protocol_version=1,
+        required_updater_version=1,
+        published_at=now,
+        approved_at=now,
+    )
+    catalog = AgentReleaseCatalogState(
+        singleton_id=1,
+        generation=1,
+        digest="c" * 64,
+        validated_at=now,
+        valid_until=now + timedelta(days=1),
+    )
+    administrative_session.add_all([provisioned_agent, release, catalog])
+    administrative_session.commit()
+
+    private_key, _ = agent_keypair
+    hello = {
+        "type": "hello",
+        "agent_version": "1.0.0",
+        "available_subnets": [],
+        "package_version": "1.0.0-1",
+        "updater_version": "1",
+        "os_suite": "trixie",
+        "architecture": "arm64",
+        "capabilities": ["agent_update_v1"],
+    }
+    frame_holder: dict[str, object] = {}
+    socket_path = tmp_path / "control.sock"
+    versions = {"package": "1.0.0-1", "app": "1.0.0"}
+    updater = updater_module.Updater(
+        state_dir=tmp_path / "state",
+        runtime_dir=tmp_path / "runtime",
+        gate_path=tmp_path / "gate.json",
+        scan_checkpoint_path=tmp_path / "scan-checkpoint.json",
+        readiness_identity=lambda: (0, "", "", ""),
+        package_version=lambda: versions["package"],
+        app_version=lambda: versions["app"],
+    )
+
+    def install_package(*_args, **_kwargs) -> str:
+        versions["package"] = "1.2.3-1"
+        versions["app"] = "1.2.3"
+        return ""
+
+    def signed_post(path: str, body: dict[str, object]) -> dict[str, object]:
+        raw = json.dumps(body, separators=(",", ":")).encode()
+        response = client.post(
+            path,
+            content=raw,
+            headers=_signed_headers(
+                private_key=private_key,
+                agent_id=provisioned_agent.id,
+                path=path,
+                body=raw,
+                nonce=uuid4().hex,
+            ),
+        )
+        assert response.status_code == 200, response.text
+        if path.endswith("/events") and body.get("sequence") == 4:
+            if not frame_holder.get("dropped_ack"):
+                frame_holder["dropped_ack"] = True
+                raise OSError("simulated lost event acknowledgement")
+        return response.json()
+
+    monkeypatch.setattr(updater, "_post_json", signed_post)
+    monkeypatch.setattr(updater, "_is_root_peer", lambda _connection: True)
+    monkeypatch.setattr(updater, "_run_metadata_refresh", lambda: True)
+    monkeypatch.setattr(updater_module, "_verify_apt_origin_suite", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_verify_package", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_preflight", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_cache_versioned_package", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_systemctl", lambda *_args: None)
+    monkeypatch.setattr(updater, "_run_checked", install_package)
+    invocation_id = uuid4()
+    monkeypatch.setattr(
+        updater,
+        "_verify_local_health",
+        lambda _target: str(invocation_id),
+    )
+    monkeypatch.setattr(updater_module, "AGENT_ROOT", tmp_path / "agent-root")
+    (tmp_path / "agent-root").mkdir()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(updater_module, "PACKAGE_CACHE", cache_dir)
+    target_package = cache_dir / f"{release.sha256}.deb"
+    prior_package = cache_dir / "1.0.0-1.deb"
+    target_package.write_bytes(b"target package fixture")
+    prior_package.write_bytes(b"prior package fixture")
+    (cache_dir / "1.0.0-1.sha256").write_text(
+        hashlib.sha256(b"prior package fixture").hexdigest(), encoding="ascii"
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "SCAN_LOCK_PATH_FILE",
+        tmp_path / "scan-lock-path",
+    )
+    monkeypatch.setattr(updater_module, "SCAN_LOCK_PATH", tmp_path / "scan.lock")
+    (tmp_path / "scan-lock-path").write_text(
+        str(tmp_path / "scan.lock"), encoding="ascii"
+    )
+
+    updater.initialize()
+    unix_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    unix_server.bind(str(socket_path))
+    unix_server.listen(1)
+    unix_server.settimeout(10)
+
+    def serve_one_request() -> None:
+        connection, _ = unix_server.accept()
+        updater._handle_connection(connection)
+
+    socket_thread = threading.Thread(target=serve_one_request, daemon=True)
+    socket_thread.start()
+
+    class DeviceClient:
+        supports_agent_updates = True
+        parked_reason = None
+
+        def __init__(self, session_id):
+            self.session_id = session_id
+
+    with client.websocket_connect(
+        f"/api/v1/agents/{provisioned_agent.id}/commands",
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        session = ws.receive_json()
+        assert session["type"] == "update_session"
+        ws_session_id = session["session_id"]
+        admin_headers = actor_headers(seeded_org.id, "admin")
+        admin_headers["Idempotency-Key"] = str(uuid4())
+        monkeypatch.setattr(
+            "api.services.agent_updates_http.debian_version_compare",
+            lambda *_args: True,
+        )
+        request = client.post(
+            f"/api/v1/agents/{provisioned_agent.id}/updates",
+            headers=admin_headers,
+            json={
+                "release_id": str(release.id),
+                "expected_observed_version": "1.0.0",
+            },
+        )
+        assert request.status_code == 202, request.text
+        operation_id = request.json()["update_id"]
+        raw_frame = ws.receive_json()
+        assert raw_frame["type"] == "agent_update"
+        frame = DeviceUpdateFrame.model_validate(raw_frame)
+        assert str(frame.update_id) == operation_id
+        frame_holder["update_id"] = str(frame.update_id)
+
+        daemon = AgentDaemon(
+            DeviceClient(UUID(ws_session_id)),
+            object(),
+            checkpoint_path=tmp_path / "scan-finalization.json",
+            updater_request=lambda command, **fields: _request_updater(
+                command, socket_path=socket_path, **fields
+            ),
+        )
+        asyncio.run(daemon.handle_agent_update(frame))
+        socket_thread.join(timeout=10)
+        assert not socket_thread.is_alive()
+        assert frame_holder["dropped_ack"] is True
+
+    # The updater journal kept sequence 4 after the server committed it but its
+    # acknowledgement was lost. Replaying the exact durable body is idempotent.
+    assert updater._flush_events(str(frame.update_id)) is True
+    with updater._connect() as journal:
+        ack_sequence, event_count = journal.execute(
+            "SELECT ack_sequence, (SELECT COUNT(*) FROM update_events "
+            "WHERE operation_id=?) "
+            "FROM update_details WHERE operation_id=?",
+            (str(frame.update_id), str(frame.update_id)),
+        ).fetchone()
+    assert ack_sequence == 4
+    assert event_count == 4
+    administrative_session.expire_all()
+    operation = administrative_session.get(AgentUpdate, frame.update_id)
+    assert operation is not None
+    assert operation.phase == "awaiting_confirmation"
+    assert (
+        len(
+            administrative_session.exec(
+                select(AgentUpdateEvent).where(
+                    AgentUpdateEvent.update_id == frame.update_id,
+                    AgentUpdateEvent.sequence == 4,
+                )
+            ).all()
+        )
+        == 1
+    )
+
+    # The next real WS hello after local health verification confirms the remote
+    # version observation independently of the updater's local-success event.
+    monkeypatch.setattr(updater, "_post_json", lambda *_args: {})
+    with client.websocket_connect(
+        f"/api/v1/agents/{provisioned_agent.id}/commands",
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        hello.update(
+            {
+                "agent_version": "1.2.3",
+                "package_version": "1.2.3-1",
+                "update_context": {
+                    "update_id": str(frame.update_id),
+                    "invocation_id": str(invocation_id),
+                },
+            }
+        )
+        ws.send_json(hello)
+        assert ws.receive_json()["type"] == "update_session"
+    administrative_session.expire_all()
+    confirmed = administrative_session.get(AgentUpdate, frame.update_id)
+    assert confirmed is not None
+    assert confirmed.phase == "succeeded"
+    assert confirmed.confirmed_at is not None
+    unix_server.close()
 
 
 @pytest.fixture
@@ -1297,6 +1573,171 @@ def test_manual_update_commits_and_delivers_once_per_idempotency_key(
     assert len(send_thread_ids) == 1
     assert query_thread_ids
     assert send_thread_ids[0] not in query_thread_ids
+
+
+@pytest.mark.parametrize(
+    ("principal_case", "expected_status"),
+    [
+        ("viewer", 403),
+        ("foreign_org", 404),
+        ("role_downgrade", 403),
+        ("running_command", 409),
+        ("uploading_command", 409),
+    ],
+)
+def test_manual_update_denies_unauthorized_principals_without_delivery_or_reservation(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    actor_headers,
+    principal_case: str,
+    expected_status: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime.now(timezone.utc)
+    provisioned_agent.observed_version = "1.0.0"
+    provisioned_agent.observed_package_version = "1.0.0-1"
+    provisioned_agent.version_observed_at = now
+    websocket = AsyncMock()
+    asyncio.run(agent_connections.register(provisioned_agent.id, websocket, now=now))
+    connection = agent_connections.get_connection(provisioned_agent.id)
+    assert connection is not None
+    connection.capabilities = frozenset({"agent_update_v1"})
+    connection.protocol_version = 1
+    connection.architecture = "arm64"
+    connection.os_suite = "trixie"
+    connection.updater_version = "1"
+    provisioned_agent.version_observed_session_id = connection.session_id
+    release = AgentRelease(
+        source_commit="a" * 40,
+        upstream_version="1.2.3",
+        package_version="1.2.3-1",
+        architecture="arm64",
+        suite="trixie",
+        sha256="b" * 64,
+        size_bytes=123,
+        required_protocol_version=1,
+        required_updater_version=1,
+        published_at=now,
+        approved_at=now,
+    )
+    administrative_session.add_all(
+        [
+            provisioned_agent,
+            release,
+            AgentReleaseCatalogState(
+                singleton_id=1,
+                generation=1,
+                digest="c" * 64,
+                validated_at=now,
+                valid_until=now + timedelta(days=1),
+            ),
+        ]
+    )
+    administrative_session.commit()
+
+    if principal_case == "viewer":
+        headers = actor_headers(seeded_org.id, "viewer")
+    elif principal_case == "foreign_org":
+        foreign_org = Org(name=f"foreign-{uuid4()}")
+        administrative_session.add(foreign_org)
+        administrative_session.commit()
+        headers = actor_headers(foreign_org.id, "admin")
+    elif principal_case in {"running_command", "uploading_command"}:
+        headers = actor_headers(seeded_org.id, "admin")
+        scan_id = uuid4()
+        scan = ScanRecord(
+            scan_id=scan_id,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            timestamp=now,
+            subnet="192.168.1.0/24",
+            scan_mode="standard",
+            status="running",
+        )
+        administrative_session.add(scan)
+        administrative_session.flush()
+        administrative_session.add(
+            Command(
+                org_id=seeded_org.id,
+                agent_id=provisioned_agent.id,
+                scan_id=scan_id,
+                scan_mode="standard",
+                subnet="192.168.1.0/24",
+                status=principal_case.removesuffix("_command"),
+            )
+        )
+        administrative_session.commit()
+    else:
+        headers = actor_headers(seeded_org.id, "admin")
+        token = headers["Authorization"].removeprefix("Bearer ")
+        actor_id = UUID(decode_access_token(token)["sub"])
+        actor = administrative_session.get(User, actor_id)
+        assert actor is not None
+        actor.role = "viewer"
+        administrative_session.add(actor)
+        administrative_session.commit()
+
+    monkeypatch.setattr(
+        "api.services.agent_updates_http.debian_version_compare",
+        lambda *_args: True,
+    )
+    headers["Idempotency-Key"] = str(uuid4())
+    response = client.post(
+        f"/api/v1/agents/{provisioned_agent.id}/updates",
+        headers=headers,
+        json={
+            "release_id": str(release.id),
+            "expected_observed_version": "1.0.0",
+        },
+    )
+
+    assert response.status_code == expected_status
+    assert (
+        administrative_session.exec(
+            select(AgentUpdate).where(AgentUpdate.agent_id == provisioned_agent.id)
+        ).first()
+        is None
+    )
+    assert websocket.send_text.await_count == 0
+
+
+@pytest.mark.parametrize(
+    "active_phase", ["requested", "awaiting_confirmation", "needs_intervention"]
+)
+def test_scan_enqueue_rejects_active_update_without_command_or_ws_delivery(
+    client: TestClient,
+    administrative_session: Session,
+    seeded_org: Org,
+    actor_headers,
+    active_phase: str,
+) -> None:
+    org, actor, agent, release = _fixture_rows(administrative_session)
+    websocket = AsyncMock()
+    asyncio.run(
+        agent_connections.register(agent.id, websocket, now=datetime.now(timezone.utc))
+    )
+    operation = _operation(org, actor, agent, release)
+    operation.phase = active_phase
+    administrative_session.add(operation)
+    administrative_session.commit()
+
+    response = client.post(
+        f"/api/v1/agents/{agent.id}/commands",
+        headers=actor_headers(org.id, "admin"),
+        json={"scan_mode": "standard", "subnet": "192.168.1.0/24"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "device_busy"
+    assert (
+        administrative_session.exec(
+            select(Command).where(Command.agent_id == agent.id)
+        ).first()
+        is None
+    )
+    assert websocket.send_text.await_count == 0
 
 
 @pytest.mark.parametrize(

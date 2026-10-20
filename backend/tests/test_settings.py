@@ -86,6 +86,13 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     monkeypatch.setenv("AI_MAX_ATTEMPTS", "3")
     monkeypatch.setenv("AI_RETRY_DELAY_SECONDS", "15")
     monkeypatch.setenv("AI_POLL_INTERVAL_SECONDS", "2.5")
+    monkeypatch.setenv("AGENT_UPDATE_REPOSITORY_URL", "https://updates.example.test/")
+    monkeypatch.setenv(
+        "AGENT_UPDATE_KEYRING_PATH", "/app/agent-release/public-keyring.gpg"
+    )
+    monkeypatch.setenv("AGENT_UPDATE_ORIGIN", "Dmitri")
+    monkeypatch.setenv("AGENT_UPDATE_SUITE", "stable")
+    monkeypatch.setenv("AGENT_UPDATE_REFRESH_INTERVAL_SECONDS", "420")
 
     settings = Settings()
 
@@ -113,6 +120,11 @@ def test_carried_fields_read_from_env_with_correct_aliases(
     assert settings.ai_max_attempts == 3
     assert settings.ai_retry_delay_seconds == 15
     assert settings.ai_poll_interval_seconds == 2.5
+    assert settings.agent_update_repository_url == "https://updates.example.test/"
+    assert settings.agent_update_keyring_path == "/app/agent-release/public-keyring.gpg"
+    assert settings.agent_update_origin == "Dmitri"
+    assert settings.agent_update_suite == "stable"
+    assert settings.agent_update_refresh_interval_seconds == 420
 
 
 def test_carried_fields_default_when_env_unset(
@@ -144,6 +156,11 @@ def test_carried_fields_default_when_env_unset(
         "AI_MAX_ATTEMPTS",
         "AI_RETRY_DELAY_SECONDS",
         "AI_POLL_INTERVAL_SECONDS",
+        "AGENT_UPDATE_REPOSITORY_URL",
+        "AGENT_UPDATE_KEYRING_PATH",
+        "AGENT_UPDATE_ORIGIN",
+        "AGENT_UPDATE_SUITE",
+        "AGENT_UPDATE_REFRESH_INTERVAL_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -178,6 +195,11 @@ def test_carried_fields_default_when_env_unset(
     assert settings.ai_max_attempts == 2
     assert settings.ai_retry_delay_seconds == 30
     assert settings.ai_poll_interval_seconds == 5.0
+    assert settings.agent_update_repository_url == ""
+    assert settings.agent_update_keyring_path == ""
+    assert settings.agent_update_origin == ""
+    assert settings.agent_update_suite == ""
+    assert settings.agent_update_refresh_interval_seconds == 300
 
 
 def test_ai_provider_is_not_a_setting() -> None:

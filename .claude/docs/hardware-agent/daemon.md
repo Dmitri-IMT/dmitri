@@ -1,10 +1,10 @@
 ---
 type: Entry Point
 title: daemon — the unattended command executor
-description: The long-lived device process runs one remote scan, streams compact progress snapshots, stops on park or remote cancel, uploads partials for cancel, and resumes after reconnect.
+description: The long-lived device process runs remote scans, reports compact progress, and delegates negotiated update requests to the persistent companion.
 resource: hardware-agent/src/agent/daemon.py
 tags: [hardware-agent, daemon, command-channel, ingest, lifecycle, asyncio, cancel]
-timestamp: 2026-10-02T20:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # daemon — the unattended command executor
@@ -24,6 +24,11 @@ events to compact snapshots and hands them from the worker thread to this asynci
 cancel uploads any partial payload then reports `cancelled`; park/revoke stays silent (no upload,
 no status).
 
+The update path is a separate, negotiated companion channel. The daemon advertises
+`agent_update_v1` only when backend support and local readiness are both true, forwards accepted
+update frames over the restricted Unix socket, and supplies durable update context during hello.
+Updater probe/socket failures degrade update capability without taking down scan-channel service.
+
 ## Key classes / functions
 
 | Name | What it does | Ref |
@@ -41,6 +46,7 @@ no status).
 | `_scan_outcome(result, *, cancelled)` | Pure map from a finished scan to `(status, error_code)`: `cancelled` whenever stopped; otherwise `failed/scan_failed` (no payload), `failed/result_unavailable`, `failed/scan_failed` (fatal), or `done`. | `daemon.py` |
 | `._send` / `._update` | Deliver status; clear per-command progress state on terminal status and release the scan lock when terminal delivery succeeds. | `daemon.py:284`, `:295` |
 | `run_daemon()` | Configures INFO logging to stdout, loads `load_ingest_config()` once, constructs both clients, and runs the loop. An `IngestConfigError` prints and exits `20` before anything is constructed. | `daemon.py:366` |
+| `_request_updater()` / `_inspect_update_runtime()` | Send the closed local request vocabulary to the updater socket and expose checked readiness/context to hello; inspection failures disable update capability without stopping scans. | `daemon.py:59`, `:379` |
 
 ## The state machine
 

@@ -3,6 +3,17 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-20
+
+* **Creation**: Added the frontend device update section/hook code-map docs for localized
+  availability, readiness, operation history, idempotent requests and active-operation polling.
+* **Creation**: Added the hardware-agent updater code-map for the companion journal, signed APT
+  validation, event replay and recovery; refreshed daemon and command-channel entries for capability
+  negotiation and the companion socket.
+* **Update**: Refreshed frontend API/device-detail concepts and root/component indexes for the
+  remote-update resource and UI. Updated the 052 progress record with independent validation and
+  limits; no deployment or real Raspberry Pi verification was performed.
+
 ## 2026-10-17
 
 * **Creation**: Added the hardware-agent provisioning code map for HTTPS agent registration,

@@ -1,8 +1,10 @@
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -10,6 +12,206 @@ from uuid import UUID, uuid4
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _bootstrap_staging_code(parent: Path):
+    script = (ROOT / "scripts/provision-pi.sh").read_text()
+    function = script.split("stage_bootstrap_inputs() {\n", 1)[1]
+    code = function.split("<<'PY'\n", 1)[1].split("\nPY\n}", 1)[0]
+    return (
+        code.replace("(Path('/'), Path('/run'))", f"(Path({str(parent)!r}),)")
+        .replace("dir='/run'", f"dir={str(parent)!r}")
+        .replace("info.st_uid != 0", "info.st_uid != os.getuid()")
+    )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file permissions required")
+@pytest.mark.parametrize("unsafe_parent", ["symlink", "writable"])
+def test_bootstrap_staging_rejects_unsafe_parent_before_mutation(
+    tmp_path, unsafe_parent
+):
+    target = tmp_path / "target"
+    target.mkdir(mode=0o700)
+    sentinel = target / "sentinel"
+    sentinel.write_bytes(b"preserve")
+    parent = tmp_path / "run"
+    if unsafe_parent == "symlink":
+        parent.symlink_to(target, target_is_directory=True)
+    else:
+        parent = target
+        parent.chmod(0o777)
+    before = target.stat().st_mode
+    result = subprocess.run(
+        [sys.executable, "-c", _bootstrap_staging_code(parent)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert "untrusted staging parent" in result.stderr
+    assert target.stat().st_mode == before
+    assert list(target.iterdir()) == [sentinel]
+    assert sentinel.read_bytes() == b"preserve"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX shell required")
+def test_bootstrap_consumes_staged_bytes_after_original_inputs_are_replaced(
+    tmp_path, apt_test_signer
+):
+    script = (ROOT / "scripts/provision-pi.sh").read_text()
+    parent = tmp_path / "run"
+    parent.mkdir(mode=0o700)
+    _, fingerprint, keyring = apt_test_signer
+    originals = [tmp_path / name for name in ("key.gpg", "agent.deb", "updater.deb")]
+    originals[0].write_bytes(keyring.read_bytes())
+    agent = _artificial_deb(tmp_path, "staged-agent", "1.2.3", b"agent payload")
+    originals[1].write_bytes(agent.read_bytes())
+    control = tmp_path / "updater-root" / "DEBIAN"
+    control.mkdir(parents=True)
+    (control / "control").write_text(
+        "Package: hardware-agent-updater\nVersion: 1.2.3-1\nArchitecture: all\n"
+        "Maintainer: Test <test@example.test>\nDescription: staged updater\n"
+    )
+    subprocess.run(
+        ["dpkg-deb", "--build", str(control.parent), str(originals[2])],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    expected = [path.read_bytes() for path in originals]
+    result = subprocess.run(
+        [sys.executable, "-c", _bootstrap_staging_code(parent), *map(str, originals)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    stage = Path(result.stdout.strip())
+    staged = [
+        stage / name
+        for name in ("public-key", "hardware-agent.deb", "hardware-agent-updater.deb")
+    ]
+    assert stage.stat().st_mode & 0o777 == 0o700
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in staged)
+    # The validation boundary observes only private copies.
+    key_info = subprocess.run(
+        ["gpg", "--batch", "--show-keys", "--with-colons", str(staged[0])],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+    assert any(
+        line.startswith("fpr:") and line.split(":")[9] == fingerprint
+        for line in key_info.splitlines()
+    )
+    assert [path.read_bytes() for path in staged] == expected
+    helper_spec = importlib.util.spec_from_file_location(
+        "staged_bootstrap_verifier", ROOT / "packaging/verify-bootstrap-packages.py"
+    )
+    assert helper_spec is not None and helper_spec.loader is not None
+    helper = importlib.util.module_from_spec(helper_spec)
+    helper_spec.loader.exec_module(helper)
+    records = {}
+    for name, architecture, contents in zip(
+        ("hardware-agent", "hardware-agent-updater"), ("arm64", "all"), expected[1:]
+    ):
+        records[name] = (
+            f"Package: {name}\nVersion: 1.2.3-1\nArchitecture: {architecture}\n"
+            f"SHA256: {hashlib.sha256(contents).hexdigest()}\nSize: {len(contents)}\n"
+        )
+
+    class SignedApt:
+        def _verify_dedicated_apt_source(self):
+            return "https://apt.example.test", "/etc/apt/keyrings/dmitri.gpg"
+
+        def _verify_apt_metadata_dates(self, uri):
+            assert uri == "https://apt.example.test"
+
+        def _trusted_apt_package_record(self, version, uri, package_name, architecture):
+            return records[package_name]
+
+        def _apt_record_matches(
+            self, record, version, digest, package_name, architecture
+        ):
+            return f"SHA256: {digest}\n" in record
+
+    helper.verify_packages(staged[1:], "https://apt.example.test", SignedApt())
+    for original in originals:
+        replacement = original.with_suffix(".replacement")
+        replacement.write_bytes(b"attacker replacement")
+        replacement.replace(original)
+
+    # Run the actual keyring, installation and cache consumers with isolated paths.
+    trust = tmp_path / "trust"
+    trust.mkdir()
+    cache = tmp_path / "cache"
+    cache.mkdir(mode=0o700)
+    key_install = script.split("keyring_tmp=$(mktemp", 1)[1].split("printf 'deb ", 1)[0]
+    key_install = "keyring_tmp=$(mktemp" + key_install
+    install_lines = [
+        line for line in script.splitlines() if line.startswith('apt-get install -y "')
+    ]
+    assert len(install_lines) == 2
+    cache_code = script.split("<<'PY'\nimport hashlib, os, shutil, sys, tempfile\n", 1)[
+        1
+    ].split("\nPY\n", 1)[0]
+    cache_code = "import hashlib, os, shutil, sys, tempfile\n" + cache_code
+    cache_code = cache_code.replace(
+        "Path('/var/lib/dmitri/updates/cache')", f"Path({str(cache)!r})"
+    )
+    commands_dir = tmp_path / "bin"
+    commands_dir.mkdir()
+    apt = commands_dir / "apt-get"
+    apt.write_text(
+        '#!/bin/sh\ncp -- "$3" "$installed_packages/installed-$(basename "$3")"\n'
+    )
+    apt.chmod(0o755)
+    environment = {
+        **os.environ,
+        "PATH": f"{commands_dir}{os.pathsep}{os.environ['PATH']}",
+        "input_stage": str(stage),
+        "keyring_directory": str(trust),
+        "keyring": str(trust / "installed.gpg"),
+        "installed_packages": str(tmp_path),
+    }
+    assignments = script.split("public_key=$input_stage/public-key\n", 1)[1].split(
+        '[ -f "$agent_deb" ]', 1
+    )[0]
+    commands = (
+        "set -eu\nexec 9>/dev/null\npublic_key=$input_stage/public-key\n"
+        + assignments
+        + '\ndie() { echo "$*" >&2; exit 1; }\n'
+        + key_install
+        + "\n"
+        + "\n".join(install_lines)
+    )
+    consumed = subprocess.run(
+        ["sh", "-c", commands],
+        env=environment,
+        capture_output=True,
+        timeout=10,
+    )
+    assert consumed.returncode == 0, consumed.stderr.decode()
+    subprocess.run(
+        [sys.executable, "-c", cache_code, str(staged[1]), "1.2.3-1"],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert (trust / "installed.gpg").read_bytes() == expected[0]
+    assert (tmp_path / "installed-hardware-agent.deb").read_bytes() == expected[1]
+    assert (tmp_path / "installed-hardware-agent-updater.deb").read_bytes() == expected[
+        2
+    ]
+    assert (cache / "1.2.3-1.deb").read_bytes() == expected[1]
+    assert (cache / "1.2.3-1.sha256").read_text().strip() == hashlib.sha256(
+        expected[1]
+    ).hexdigest()
+    assert script.index("input_stage=$(stage_bootstrap_inputs)") < script.index(
+        "actual_fingerprint=$(gpg"
+    )
+    assert '--repository "$repository" "$agent_deb" "$updater_deb"' in script
 
 
 def test_default_helper_only_requests_metadata_check():
@@ -85,7 +287,19 @@ def test_provision_refuses_to_mutate_while_scan_holds_lock(tmp_path: Path):
     with lock.open() as handle:
         fcntl.flock(handle, fcntl.LOCK_SH)
         result = subprocess.run(
-            ["sh", str(provision), str(agent_package), str(updater_package)],
+            [
+                "sh",
+                str(provision),
+                "--repository",
+                "https://apt.example.test",
+                "--fingerprint",
+                "A" * 40,
+                "--public-key",
+                str(tmp_path / "key.gpg"),
+                "--",
+                str(agent_package),
+                str(updater_package),
+            ],
             env=environment,
             capture_output=True,
             text=True,
@@ -116,7 +330,18 @@ def test_provision_rejects_traversal_lock_path_even_inside_data_directory(tmp_pa
     identity.write_text("#!/bin/sh\necho 0\n")
     identity.chmod(0o755)
     result = subprocess.run(
-        ["sh", str(provision), *(str(package) for package in packages)],
+        [
+            "sh",
+            str(provision),
+            "--repository",
+            "https://apt.example.test",
+            "--fingerprint",
+            "A" * 40,
+            "--public-key",
+            str(tmp_path / "key.gpg"),
+            "--",
+            *(str(package) for package in packages),
+        ],
         env={**os.environ, "PATH": f"{commands}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
@@ -132,6 +357,9 @@ def test_provision_idle_check_detects_controlled_scan_process(tmp_path):
     start = script.index("assert_legacy_idle() {")
     end = script.index("\nassert_legacy_idle\n", start)
     function = script[start:end]
+    python = shutil.which("python3") or shutil.which("python")
+    assert python is not None
+    function = function.replace("/usr/bin/python3", python)
     proc_root = tmp_path / "proc"
     process = proc_root / "4242"
     process.mkdir(parents=True)
@@ -180,8 +408,8 @@ def test_bootstrap_baseline_lists_existing_units_and_helpers_as_separate_paths()
 
 def test_build_script_creates_separate_offline_arm64_and_companion_packages():
     builder = (ROOT / "packaging/build-deb.sh").read_text()
-    assert 'cross_arm64=false' in builder
-    assert 'DIMITRI_BUILD_ARM64_CROSS:-0' in builder
+    assert "cross_arm64=false" in builder
+    assert "DIMITRI_BUILD_ARM64_CROSS:-0" in builder
     assert "Architecture: arm64" in builder
     assert "Package: hardware-agent-updater" in builder
     assert 'cp "$1" "$agent_root/opt/dmitri-agent/"' in builder
@@ -246,9 +474,13 @@ def test_companion_ownership_transfer_cutoff_is_independent_of_agent_version():
 def test_bootstrap_requires_prebuilt_packages_and_retains_recovery_baseline():
     provision = (ROOT / "scripts/provision-pi.sh").read_text()
     assert (
-        "usage: provision-pi.sh HARDWARE_AGENT.deb HARDWARE_AGENT_UPDATER.deb"
-        in provision
+        "usage: provision-pi.sh --repository HTTPS_URL --fingerprint "
+        "FINGERPRINT --public-key KEYFILE" in provision
     )
+    assert "verify-bootstrap-packages.py" in provision
+    assert "bootstrap packages do not match authenticated signed metadata" in provision
+    assert "--fingerprint" in provision
+    assert "--public-key" in provision
     assert 'apt-get install -y "$updater_deb" 9>&-' in provision
     assert 'apt-get install -y "$agent_deb" 9>&-' in provision
     assert "packaging/build-deb.sh" not in provision
@@ -263,6 +495,11 @@ def test_bootstrap_requires_prebuilt_packages_and_retains_recovery_baseline():
     assert 'case "$lock" in /var/lib/dmitri/*)' not in provision
     assert "flock -u 9" in provision
     assert "systemctl start dmitri-agent-update.service 9>&-" in provision
+    assert "systemctl enable --now dmitri-agent-update.timer" in provision
+    assert "systemctl show -p Unit --value dmitri-agent-update.timer" in provision
+    assert "dmitri-agent-update-check.service" in provision
+    assert "${installed_version}.sha256" not in provision
+    assert "hashlib.sha256(source.read_bytes())" not in provision
 
 
 @pytest.fixture
@@ -353,6 +590,8 @@ def _apt_publish(
     failpoint=None,
     release_id=None,
     valid_days=7,
+    updater_package=None,
+    updater_version=None,
 ):
     home, fingerprint, keyring = signer
     script = ROOT / "packaging/publish-apt.sh"
@@ -374,6 +613,17 @@ def _apt_publish(
                 "1",
                 "--release-notes",
                 notes,
+            ]
+        )
+    if updater_package is not None:
+        command.extend(
+            [
+                "--updater-package",
+                str(updater_package),
+                "--updater-version",
+                updater_version,
+                "--updater-source-commit",
+                "b" * 40,
             ]
         )
     command.extend(["--valid-days", str(valid_days)])
@@ -420,6 +670,334 @@ def _apt_publish(
         timeout=30,
     )
     return promoted
+
+
+def _apt_verify_current(signer, repo):
+    _, _, keyring = signer
+    return subprocess.run(
+        [
+            "sh",
+            str(ROOT / "packaging/publish-apt.sh"),
+            "verify-current",
+            "--repo",
+            str(repo),
+            "--suite",
+            "stable",
+            "--keyring",
+            str(keyring),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+def test_apt_publisher_indexes_independently_versioned_updater_package(
+    tmp_path: Path, apt_test_signer
+):
+    repo = tmp_path / "repo"
+    agent = _artificial_deb(tmp_path, "agent", "1.2.3", b"agent")
+    updater_root = tmp_path / "updater-root"
+    control = updater_root / "DEBIAN"
+    control.mkdir(parents=True)
+    (control / "control").write_text(
+        "Package: hardware-agent-updater\nVersion: 1.2.3-1\nArchitecture: all\n"
+        "Maintainer: Test <test@example.test>\nDescription: updater fixture\n",
+        encoding="utf-8",
+    )
+    updater_package = tmp_path / "hardware-agent-updater.deb"
+    subprocess.run(
+        ["dpkg-deb", "--build", str(updater_root), str(updater_package)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    result = _apt_publish(
+        tmp_path,
+        apt_test_signer,
+        repo,
+        agent,
+        version="1.2.3",
+        updater_package=updater_package,
+        updater_version="1.2.3-1",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    snapshot = (repo / "dists/stable").resolve()
+    arm64 = (snapshot / "main/binary-arm64/Packages").read_text(encoding="utf-8")
+    all_arch = (snapshot / "main/binary-all/Packages").read_text(encoding="utf-8")
+    assert "Package: hardware-agent\nVersion: 1.2.3-1\nArchitecture: arm64" in arm64
+    assert (
+        "Package: hardware-agent-updater\nVersion: 1.2.3-1\nArchitecture: all"
+        in all_arch
+    )
+    catalog = json.loads(
+        (snapshot / "main/release-catalog.json").read_text(encoding="utf-8")
+    )
+    assert len(catalog["releases"]) == 1
+    provenance = json.loads(
+        (snapshot / "main/updater-provenance.json").read_text(encoding="utf-8")
+    )
+    assert provenance == [
+        {
+            "package": "hardware-agent-updater",
+            "package_version": "1.2.3-1",
+            "architecture": "all",
+            "source_commit": "b" * 40,
+            "sha256": hashlib.sha256(updater_package.read_bytes()).hexdigest(),
+            "size_bytes": updater_package.stat().st_size,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "main/release-catalog.json",
+        "main/binary-arm64/Packages",
+    ],
+)
+def test_apt_publisher_rejects_tampered_previous_signed_index(
+    tmp_path: Path, apt_test_signer, relative_path: str
+):
+    repo = tmp_path / "repo"
+    agent = _artificial_deb(tmp_path, "agent", "1.2.3", b"agent")
+    published = _apt_publish(tmp_path, apt_test_signer, repo, agent, version="1.2.3")
+    assert published.returncode == 0, published.stdout + published.stderr
+
+    current = (repo / "dists/stable").resolve()
+    previous_index = current / relative_path
+    previous_index.write_bytes(previous_index.read_bytes() + b" ")
+
+    verified = _apt_verify_current(apt_test_signer, repo)
+    assert verified.returncode != 0
+    assert "metadata hash/size mismatch" in verified.stderr
+
+
+def test_apt_publisher_reuses_identical_updater_for_next_agent_release(
+    tmp_path: Path, apt_test_signer
+):
+    repo = tmp_path / "repo"
+    agent_one = _artificial_deb(tmp_path, "agent-one", "1.2.3", b"agent-one")
+    agent_two = _artificial_deb(tmp_path, "agent-two", "1.2.4", b"agent-two")
+    updater_root = tmp_path / "updater-root"
+    control = updater_root / "DEBIAN"
+    control.mkdir(parents=True)
+    (control / "control").write_text(
+        "Package: hardware-agent-updater\nVersion: 1.2.3-1\nArchitecture: all\n"
+        "Maintainer: Test <test@example.test>\nDescription: updater fixture\n",
+        encoding="utf-8",
+    )
+    updater_package = tmp_path / "hardware-agent-updater.deb"
+    subprocess.run(
+        ["dpkg-deb", "--build", str(updater_root), str(updater_package)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    first = _apt_publish(
+        tmp_path,
+        apt_test_signer,
+        repo,
+        agent_one,
+        version="1.2.3",
+        updater_package=updater_package,
+        updater_version="1.2.3-1",
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+    second = _apt_publish(
+        tmp_path,
+        apt_test_signer,
+        repo,
+        agent_two,
+        version="1.2.4",
+        updater_package=updater_package,
+        updater_version="1.2.3-1",
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+
+    current = (repo / "dists/stable").resolve()
+    updater_index = (current / "main/binary-all/Packages").read_text(encoding="utf-8")
+    provenance = json.loads(
+        (current / "main/updater-provenance.json").read_text(encoding="utf-8")
+    )
+    assert updater_index.count("Package: hardware-agent-updater") == 1
+    assert len(provenance) == 1
+
+
+def test_apt_publisher_rejects_changed_bytes_for_existing_updater_identity(
+    tmp_path: Path, apt_test_signer
+):
+    repo = tmp_path / "repo"
+    agent_one = _artificial_deb(tmp_path, "agent-one", "1.2.3", b"agent-one")
+    agent_two = _artificial_deb(tmp_path, "agent-two", "1.2.4", b"agent-two")
+
+    def updater(payload: bytes, name: str) -> Path:
+        root = tmp_path / name
+        control = root / "DEBIAN"
+        control.mkdir(parents=True)
+        (control / "control").write_text(
+            "Package: hardware-agent-updater\nVersion: 1.2.3-1\nArchitecture: all\n"
+            "Maintainer: Test <test@example.test>\nDescription: updater fixture\n",
+            encoding="utf-8",
+        )
+        (root / "usr/share/fixture").parent.mkdir(parents=True)
+        (root / "usr/share/fixture").write_bytes(payload)
+        package = tmp_path / f"{name}.deb"
+        subprocess.run(
+            ["dpkg-deb", "--build", str(root), str(package)],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+        return package
+
+    first_updater = updater(b"same identity, first bytes", "updater-first")
+    changed_updater = updater(b"same identity, changed bytes", "updater-changed")
+    first = _apt_publish(
+        tmp_path,
+        apt_test_signer,
+        repo,
+        agent_one,
+        version="1.2.3",
+        updater_package=first_updater,
+        updater_version="1.2.3-1",
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+
+    rejected = subprocess.run(
+        [
+            "sh",
+            str(ROOT / "packaging/publish-apt.sh"),
+            "prepare",
+            "--repo",
+            str(repo),
+            "--package",
+            str(agent_two),
+            "--release-id",
+            str(uuid4()),
+            "--source-commit",
+            "a" * 40,
+            "--upstream-version",
+            "1.2.4",
+            "--updater-package",
+            str(changed_updater),
+            "--updater-version",
+            "1.2.3-1",
+            "--updater-source-commit",
+            "b" * 40,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert rejected.returncode != 0
+    assert "different immutable bytes" in rejected.stderr
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or shutil.which("dpkg-deb") is None,
+    reason="POSIX dpkg-deb required",
+)
+def test_bootstrap_verifier_binds_local_bytes_to_package_identity_and_signed_record(
+    tmp_path: Path,
+):
+    helper_path = ROOT / "packaging/verify-bootstrap-packages.py"
+    spec = importlib.util.spec_from_file_location("bootstrap_verifier", helper_path)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    packages = []
+    records = {}
+    for package_name, architecture in (
+        ("hardware-agent", "arm64"),
+        ("hardware-agent-updater", "all"),
+    ):
+        package_root = tmp_path / package_name
+        control = package_root / "DEBIAN"
+        control.mkdir(parents=True)
+        (control / "control").write_text(
+            f"Package: {package_name}\nVersion: 1.2.3-1\n"
+            f"Architecture: {architecture}\nMaintainer: Test <test@example.test>\n"
+            "Description: bootstrap verification fixture\n",
+            encoding="utf-8",
+        )
+        payload = package_root / "usr/share/dmitri/fixture"
+        payload.parent.mkdir(parents=True)
+        payload.write_text(package_name, encoding="utf-8")
+        package = tmp_path / f"{package_name}.deb"
+        subprocess.run(
+            ["dpkg-deb", "--build", str(package_root), str(package)],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        records[(package_name, architecture)] = {
+            "Package": package_name,
+            "Version": "1.2.3-1",
+            "Architecture": architecture,
+            "SHA256": digest,
+            "Size": str(package.stat().st_size),
+        }
+        packages.append(package)
+
+    class SignedApt:
+        def _verify_dedicated_apt_source(self):
+            return "https://apt.example.test", "/etc/apt/keyrings/dmitri.gpg"
+
+        def _verify_apt_metadata_dates(self, uri):
+            assert uri == "https://apt.example.test"
+
+        def _trusted_apt_package_record(self, version, uri, package_name, architecture):
+            assert version == "1.2.3-1"
+            assert uri == "https://apt.example.test"
+            return "\n".join(
+                f"{key}: {value}"
+                for key, value in records[(package_name, architecture)].items()
+            )
+
+        def _apt_record_matches(
+            self, record, version, digest, package_name, architecture
+        ):
+            return (
+                f"Package: {package_name}" in record
+                and f"Version: {version}" in record
+                and f"Architecture: {architecture}" in record
+                and f"SHA256: {digest}" in record
+            )
+
+    result = helper.verify_packages(packages, "https://apt.example.test/", SignedApt())
+
+    assert result == [
+        (
+            "hardware-agent",
+            "1.2.3-1",
+            "arm64",
+            records[("hardware-agent", "arm64")]["SHA256"],
+        ),
+        (
+            "hardware-agent-updater",
+            "1.2.3-1",
+            "all",
+            records[("hardware-agent-updater", "all")]["SHA256"],
+        ),
+    ]
+    (tmp_path / "hardware-agent/usr/share/dmitri/fixture").write_text(
+        "changed after authentication", encoding="utf-8"
+    )
+    changed_package = tmp_path / "hardware-agent-changed.deb"
+    subprocess.run(
+        ["dpkg-deb", "--build", str(tmp_path / "hardware-agent"), str(changed_package)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    changed_package.replace(packages[0])
+    with pytest.raises(ValueError, match="not authenticated"):
+        helper.verify_packages(packages, "https://apt.example.test", SignedApt())
 
 
 def _prepare_only(tmp_path, signer, repo, package, version):
@@ -1106,3 +1684,101 @@ def test_promote_rejects_snapshot_parent_escape_without_external_writes(
     assert result.returncode != 0
     assert sentinel.read_text(encoding="utf-8") == "preserve"
     assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
+
+
+def test_apt_signer_uses_private_passphrase_file_and_rejects_broad_permissions(
+    tmp_path, apt_test_signer
+):
+    home, fingerprint, keyring = apt_test_signer
+    package = _artificial_deb(tmp_path, "passphrase-file", "1.0.1", b"fixture")
+    repo = tmp_path / "repo"
+    candidate = _prepare_only(tmp_path, apt_test_signer, repo, package, "1.0.1")
+    passphrase = tmp_path / "signing-passphrase"
+    passphrase.write_text("", encoding="ascii")
+    passphrase.chmod(0o600)
+    command = [
+        "sh",
+        str(ROOT / "packaging/publish-apt.sh"),
+        "sign",
+        "--repo",
+        str(repo),
+        "--candidate",
+        candidate,
+        "--gnupg-home",
+        str(home),
+        "--key-id",
+        fingerprint,
+        "--passphrase-file",
+        str(passphrase),
+    ]
+    signed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert signed.returncode == 0, signed.stdout + signed.stderr
+
+    passphrase.chmod(0o644)
+    rejected = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    assert rejected.returncode != 0
+    assert "private regular file" in rejected.stderr
+
+    promoted = subprocess.run(
+        [
+            "sh",
+            str(ROOT / "packaging/publish-apt.sh"),
+            "promote",
+            "--repo",
+            str(repo),
+            "--candidate",
+            candidate,
+            "--keyring",
+            str(keyring),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert promoted.returncode == 0, promoted.stdout + promoted.stderr
+
+
+def test_pages_export_flattens_signed_suite_and_retains_content_addressed_pool(
+    tmp_path, apt_test_signer
+):
+    package = _artificial_deb(tmp_path, "pages-export", "1.0.1", b"pages fixture")
+    repo = tmp_path / "repo"
+    result = _apt_publish(tmp_path, apt_test_signer, repo, package, version="1.0.1")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    helper_path = ROOT / "packaging/prepare-pages.py"
+    spec = importlib.util.spec_from_file_location("prepare_pages", helper_path)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    output = tmp_path / "pages"
+    size = helper.prepare(repo, output, apt_test_signer[2])
+
+    digest = hashlib.sha256(package.read_bytes()).hexdigest()
+    assert size > 0
+    assert (output / "dists/stable/Release").is_file()
+    assert not (output / "dists/stable").is_symlink()
+    assert (
+        output / "pool/sha256" / f"{digest}.deb"
+    ).read_bytes() == package.read_bytes()
+    assert not (output / ".staging").exists()
+    assert not (output / ".publish.lock").exists()
+
+
+def test_pages_export_rejects_a_suite_link_outside_retained_snapshots(tmp_path):
+    helper_path = ROOT / "packaging/prepare-pages.py"
+    spec = importlib.util.spec_from_file_location("prepare_pages", helper_path)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    repo = tmp_path / "repo"
+    for directory in (repo / "pool/sha256", repo / "dists", repo / "snapshots"):
+        directory.mkdir(parents=True, exist_ok=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "dists/stable").symlink_to(outside, target_is_directory=True)
+    keyring = tmp_path / "public.gpg"
+    keyring.write_bytes(b"unused")
+
+    with pytest.raises(SystemExit, match="escapes retained snapshots"):
+        helper.prepare(repo, tmp_path / "pages", keyring)

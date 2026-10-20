@@ -618,22 +618,21 @@ class Updater:
         except sqlite3.DatabaseError:
             self._write_gate("state_corrupt", [])
             raise StateCorrupt("journal schema")
-        os_release: dict[str, str] = {}
-        try:
-            for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
-                key, separator, value = line.partition("=")
-                if separator and key in {"VERSION_CODENAME", "DEBIAN_CODENAME"}:
-                    os_release[key] = value.strip().strip('"')
-        except OSError:
-            pass
         machine = platform.machine().lower()
         architecture = "arm64" if machine in {"aarch64", "arm64"} else machine
+        suite = ""
         try:
-            _, suite = _verify_dedicated_apt_source()
-            prepared = suite == "stable" or suite == os_release.get(
-                "VERSION_CODENAME", suite
-            )
-        except (OSError, UpdateFailure, ValueError):
+            installed_package_version = self.package_version()
+            recovery_package = PACKAGE_CACHE / f"{installed_package_version}.deb"
+            _verify_cache_digest(recovery_package, installed_package_version)
+            recovery_digest = _sha256(recovery_package)
+            _verify_package(recovery_package, installed_package_version)
+            _verify_apt_origin_suite(installed_package_version, recovery_digest)
+            _read_env(AGENT_ENV)
+            # The verifier accepts only the authenticated stable repository suite.
+            suite = "stable"
+            prepared = True
+        except (OSError, subprocess.SubprocessError, UpdateFailure, ValueError):
             suite = ""
             prepared = False
         checkpoint_pending = self.scan_checkpoint_path.exists()
@@ -642,17 +641,13 @@ class Updater:
             "capabilities": ["inspect", "check", "accept_update"],
             "updater_version": UPDATER_COMPAT_LEVEL,
             "agent_update_ready": bool(
-                prepared
-                and architecture == "arm64"
-                and not self.stopping.is_set()
+                prepared and architecture == "arm64" and not self.stopping.is_set()
             ),
             "scan_checkpoint_pending": checkpoint_pending,
             "os_suite": suite or None,
             "architecture": architecture,
             "update_context": update_context,
-            "blocked": bool(active)
-            or self.gate_path.exists()
-            or checkpoint_pending,
+            "blocked": bool(active) or self.gate_path.exists() or checkpoint_pending,
         }
 
     def check(self) -> dict[str, Any]:
@@ -723,9 +718,7 @@ class Updater:
                 return {"ok": False, "error": "authorization_expired"}
         except (ValueError, TypeError, AttributeError):
             return {"ok": False, "error": "invalid_request"}
-        if (
-            self.stopping.is_set()
-        ):
+        if self.stopping.is_set():
             return {"ok": False, "error": "device_busy"}
         lock_fd = os.open(self.mutex_path, os.O_RDWR | os.O_CREAT, 0o600)
         scan_fd = -1
@@ -738,6 +731,7 @@ class Updater:
                 return {"ok": False, "error": "device_busy"}
             try:
                 import fcntl
+
                 path = Path(SCAN_LOCK_PATH_FILE.read_text(encoding="ascii").strip())
                 if path != SCAN_LOCK_PATH:
                     raise OSError("invalid scan lock contract")
@@ -809,12 +803,28 @@ class Updater:
             _preflight(package, prior, target)
             _cache_versioned_package(package, target)
             if datetime.now(timezone.utc) >= deadline:
-                self._record_expired(update_id, session_id, release_id, target, digest, deadline)
+                self._record_expired(
+                    update_id, session_id, release_id, target, digest, deadline
+                )
                 return {"ok": False, "error": "authorization_expired"}
             # Record the idempotent claim intent before contacting the backend.
             with closing(self._connect()) as db, db:
-                db.execute("INSERT OR IGNORE INTO operations VALUES (?, 'requested')", (update_id,))
-                db.execute("INSERT OR IGNORE INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,prior_version,phase) VALUES(?,?,?,?,?,?,?,'claim_pending')", (update_id, session_id, release_id, target, digest, deadline.isoformat(), prior))
+                db.execute(
+                    "INSERT OR IGNORE INTO operations VALUES (?, 'requested')",
+                    (update_id,),
+                )
+                db.execute(
+                    "INSERT OR IGNORE INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,prior_version,phase) VALUES(?,?,?,?,?,?,?,'claim_pending')",
+                    (
+                        update_id,
+                        session_id,
+                        release_id,
+                        target,
+                        digest,
+                        deadline.isoformat(),
+                        prior,
+                    ),
+                )
             claim = self._post_json(
                 f"/api/v1/agent-updates/{update_id}/claim",
                 {
@@ -825,11 +835,19 @@ class Updater:
                 },
             )
             if not _claim_receipt_matches(
-                claim, digest, target,
-                update_id=update_id, session_id=session_id, release_id=release_id,
+                claim,
+                digest,
+                target,
+                update_id=update_id,
+                session_id=session_id,
+                release_id=release_id,
             ):
                 self._emit(
-                    update_id, session_id, "failed", "failed", None,
+                    update_id,
+                    session_id,
+                    "failed",
+                    "failed",
+                    None,
                     error="artifact_mismatch",
                 )
                 return {"ok": False, "error": "claim_mismatch"}
@@ -843,8 +861,14 @@ class Updater:
             ):
                 raise UpdateFailure("snapshot_filesystem_mismatch")
             with closing(self._connect()) as db, db:
-                db.execute("UPDATE operations SET phase='preparing' WHERE operation_id=?", (update_id,))
-                db.execute("UPDATE update_details SET deadline=?,snapshot=?,phase='preparing' WHERE operation_id=?", (deadline.isoformat(), str(snapshot), update_id))
+                db.execute(
+                    "UPDATE operations SET phase='preparing' WHERE operation_id=?",
+                    (update_id,),
+                )
+                db.execute(
+                    "UPDATE update_details SET deadline=?,snapshot=?,phase='preparing' WHERE operation_id=?",
+                    (deadline.isoformat(), str(snapshot), update_id),
+                )
             self._write_gate("operation_pending", [update_id])
             self._emit(update_id, session_id, "preparing", None, None)
             if datetime.now(timezone.utc) >= deadline:
@@ -984,7 +1008,15 @@ class Updater:
                 ).fetchall()
             ]
 
-    def _record_expired(self, update_id: str, session_id: str, release_id: str, target: str, digest: str, deadline: datetime) -> None:
+    def _record_expired(
+        self,
+        update_id: str,
+        session_id: str,
+        release_id: str,
+        target: str,
+        digest: str,
+        deadline: datetime,
+    ) -> None:
         with closing(self._connect()) as db, db:
             # Only the backend worker may expire an unclaimed remote request.
             # Keep a local idempotency tombstone, without an invalid HTTP event.
@@ -992,7 +1024,14 @@ class Updater:
             db.execute(
                 "INSERT INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,phase,error_code) "
                 "VALUES(?,?,?,?,?,?,'expired','request_expired')",
-                (update_id, session_id, release_id, target, digest, deadline.isoformat()),
+                (
+                    update_id,
+                    session_id,
+                    release_id,
+                    target,
+                    digest,
+                    deadline.isoformat(),
+                ),
             )
 
     def _resume_interrupted_update(self) -> None:
@@ -1037,14 +1076,24 @@ class Updater:
                 "WHERE o.phase IN ('preparing','installing','verifying','recovering') OR (o.phase='requested' AND d.phase='claim_pending') "
                 "ORDER BY d.operation_id"
             ).fetchall()
-        for update_id, session_id, target, phase, recovery_attempts, release_id, digest in rows:
+        for (
+            update_id,
+            session_id,
+            target,
+            phase,
+            recovery_attempts,
+            release_id,
+            digest,
+        ) in rows:
             if phase == "claim_pending":
                 self._reconcile_claim_locked(
                     update_id, session_id, target, release_id, digest
                 )
                 continue
             if phase == "preparing":
-                self._recover_update(update_id, session_id, "interrupted_before_install")
+                self._recover_update(
+                    update_id, session_id, "interrupted_before_install"
+                )
                 continue
             if phase == "recovering" and recovery_attempts:
                 self._needs_intervention(update_id, session_id)
@@ -1086,7 +1135,9 @@ class Updater:
                     except (OSError, ValueError):
                         return False
                     pending_ids = sorted(row[0] for row in rows)
-                    gate_ids = gate.get("operation_ids") if isinstance(gate, dict) else None
+                    gate_ids = (
+                        gate.get("operation_ids") if isinstance(gate, dict) else None
+                    )
                     if (
                         not isinstance(gate, dict)
                         or gate.get("blocked") is not True
@@ -1158,13 +1209,21 @@ class Updater:
             )
             return False
         if not _claim_receipt_matches(
-            claim, digest, target,
-            update_id=update_id, session_id=session_id, release_id=release_id,
+            claim,
+            digest,
+            target,
+            update_id=update_id,
+            session_id=session_id,
+            release_id=release_id,
         ):
             # Report a terminal pre-mutation rejection. If the backend cannot
             # accept it yet, _emit retains the durable event for retry.
             self._emit(
-                update_id, session_id, "failed", "failed", None,
+                update_id,
+                session_id,
+                "failed",
+                "failed",
+                None,
                 error="artifact_mismatch",
             )
             return True
@@ -1353,21 +1412,25 @@ class Updater:
                 "sequence": seq,
                 "phase": phase,
                 "local_outcome": outcome,
-                "observed_version": self.app_version()
-                if outcome in {"succeeded", "rolled_back"}
-                else None,
+                "observed_version": (
+                    self.app_version()
+                    if outcome in {"succeeded", "rolled_back"}
+                    else None
+                ),
                 "package_version": self.package_version(),
                 "invocation_id": invocation,
                 "session_id": session_id,
                 "occurred_at": datetime.now(timezone.utc).isoformat(),
                 "error_code": error,
-                "evidence": {
-                    "package_status": "configured",
-                    "service_active": True,
-                    "health_check": "passed",
-                }
-                if outcome in {"succeeded", "rolled_back"}
-                else None,
+                "evidence": (
+                    {
+                        "package_status": "configured",
+                        "service_active": True,
+                        "health_check": "passed",
+                    }
+                    if outcome in {"succeeded", "rolled_back"}
+                    else None
+                ),
             }
             encoded = json.dumps(body, separators=(",", ":"), sort_keys=True)
             db.execute(
@@ -1603,7 +1666,11 @@ def _verify_package(package: Path, expected_version: str) -> None:
         key, separator, value = line.partition(":")
         if separator:
             fields[key.strip()] = value.strip()
-    if fields != {"Package": "hardware-agent", "Version": expected_version, "Architecture": "arm64"}:
+    if fields != {
+        "Package": "hardware-agent",
+        "Version": expected_version,
+        "Architecture": "arm64",
+    }:
         raise UpdateFailure("package_identity_mismatch")
 
 
@@ -1675,7 +1742,7 @@ def _verify_apt_origin_suite(version: str, expected_digest: str | None = None) -
         if stripped.startswith("Candidate:"):
             if stripped.split(":", 1)[1].strip() == version:
                 version_found = True
-        version_row = re.match(r"^([^\s]+)\s+\d+(?:\s|$)", stripped)
+        version_row = re.match(r"^(?:\*\*\*\s+)?([^\s]+)\s+\d+(?:\s|$)", stripped)
         if version_row:
             active_version = version_row.group(1) == version
             active_uri = False
@@ -1697,13 +1764,16 @@ def _verify_apt_origin_suite(version: str, expected_digest: str | None = None) -
         raise UpdateFailure("metadata_untrusted")
     if expected_digest is not None:
         record = _trusted_apt_package_record(version, uri)
-        if record is None or not _apt_record_matches(
-            record, version, expected_digest
-        ):
+        if record is None or not _apt_record_matches(record, version, expected_digest):
             raise UpdateFailure("artifact_mismatch")
 
 
-def _trusted_apt_package_record(version: str, source_uri: str) -> str | None:
+def _trusted_apt_package_record(
+    version: str,
+    source_uri: str,
+    package_name: str = "hardware-agent",
+    required_architecture: str = "arm64",
+) -> str | None:
     """Read the package record only from the Packages index at the pinned URI.
 
     apt's index target list maps each authenticated index file back to its
@@ -1722,7 +1792,10 @@ def _trusted_apt_package_record(version: str, source_uri: str) -> str | None:
         timeout=30,
         env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"},
     )
-    expected_uri = source_uri.rstrip("/") + "/dists/stable/main/binary-arm64/Packages"
+    expected_uri = (
+        source_uri.rstrip("/")
+        + f"/dists/stable/main/binary-{required_architecture}/Packages"
+    )
     index_files: list[Path] = []
     for line in index_targets.stdout.splitlines():
         parts = line.split("|", 5)
@@ -1734,7 +1807,7 @@ def _trusted_apt_package_record(version: str, source_uri: str) -> str | None:
             and identifier == "Packages"
             and release == "stable"
             and component == "main"
-            and architecture == "arm64"
+            and architecture == required_architecture
         ):
             path = Path(filename)
             try:
@@ -1761,7 +1834,7 @@ def _trusted_apt_package_record(version: str, source_uri: str) -> str | None:
             key, separator, value = field_line.partition(":")
             if separator and not field_line[:1].isspace():
                 fields[key.strip()] = value.strip()
-        if fields.get("Package") == "hardware-agent" and fields.get("Version") == version:
+        if fields.get("Package") == package_name and fields.get("Version") == version:
             return record
     return None
 
@@ -1770,7 +1843,11 @@ def _verify_dedicated_apt_source() -> tuple[str, str]:
     """Require one enabled HTTPS stable source pinned to a root-owned keyring."""
     from urllib.parse import urlsplit
 
-    source_files = [APT_SOURCE_LIST, *APT_SOURCE_DIR.glob("*.sources"), *APT_SOURCE_DIR.glob("*.list")]
+    source_files = [
+        APT_SOURCE_LIST,
+        *APT_SOURCE_DIR.glob("*.sources"),
+        *APT_SOURCE_DIR.glob("*.list"),
+    ]
     candidates: list[tuple[str, str, Path]] = []
     for source_file in source_files:
         try:
@@ -1781,7 +1858,11 @@ def _verify_dedicated_apt_source() -> tuple[str, str]:
             for stanza in re.split(r"\n\s*\n", content):
                 fields = {}
                 for line in stanza.splitlines():
-                    if line[:1].isspace() or not line.strip() or line.lstrip().startswith("#"):
+                    if (
+                        line[:1].isspace()
+                        or not line.strip()
+                        or line.lstrip().startswith("#")
+                    ):
                         continue
                     key, separator, value = line.partition(":")
                     if separator:
@@ -1794,7 +1875,9 @@ def _verify_dedicated_apt_source() -> tuple[str, str]:
                 options = " ".join(
                     value
                     for key, value in fields.items()
-                    if key.lower().startswith(("trusted", "allow-insecure", "allow-weak", "check-valid-until"))
+                    if key.lower().startswith(
+                        ("trusted", "allow-insecure", "allow-weak", "check-valid-until")
+                    )
                 ).lower()
                 if any(value in options for value in ("yes", "true", "no")):
                     raise UpdateFailure("metadata_untrusted")
@@ -1824,10 +1907,22 @@ def _verify_dedicated_apt_source() -> tuple[str, str]:
                     options, uri, suite = match.groups()
                     key = re.search(r"(?:^|\s)signed-by=(\S+)", options)
                     options = match.group(1).lower()
-                    if "trusted=yes" in options or "allow-insecure=yes" in options or "check-valid-until=no" in options:
+                    if (
+                        "trusted=yes" in options
+                        or "allow-insecure=yes" in options
+                        or "check-valid-until=no" in options
+                    ):
                         raise UpdateFailure("metadata_untrusted")
                     parsed = urlsplit(uri)
-                    if suite == "stable" and key and parsed.hostname and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment:
+                    if (
+                        suite == "stable"
+                        and key
+                        and parsed.hostname
+                        and not parsed.username
+                        and not parsed.password
+                        and not parsed.query
+                        and not parsed.fragment
+                    ):
                         candidates.append((uri.rstrip("/"), key.group(1), source_file))
     unique = {(uri, keyring, source_file) for uri, keyring, source_file in candidates}
     if len(unique) != 1:
@@ -1837,7 +1932,11 @@ def _verify_dedicated_apt_source() -> tuple[str, str]:
         source_stat = source_file.lstat()
     except OSError as exc:
         raise UpdateFailure("prerequisite_missing: apt_source") from exc
-    if source_file.is_symlink() or source_stat.st_uid != 0 or source_stat.st_mode & 0o022:
+    if (
+        source_file.is_symlink()
+        or source_stat.st_uid != 0
+        or source_stat.st_mode & 0o022
+    ):
         raise UpdateFailure("prerequisite_missing: apt_source")
     key_path = Path(keyring)
     try:
@@ -1905,8 +2004,12 @@ def _verify_apt_metadata_dates(source_uri: str) -> None:
         if fields.get("Origin") != "Dmitri" or fields.get("Suite") != "stable":
             continue
         try:
-            issued = datetime.strptime(fields["Date"], "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
-            expiry = datetime.strptime(fields["Valid-Until"], "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+            issued = datetime.strptime(
+                fields["Date"], "%a, %d %b %Y %H:%M:%S %Z"
+            ).replace(tzinfo=timezone.utc)
+            expiry = datetime.strptime(
+                fields["Valid-Until"], "%a, %d %b %Y %H:%M:%S %Z"
+            ).replace(tzinfo=timezone.utc)
         except (KeyError, ValueError) as exc:
             raise UpdateFailure("metadata_expired") from exc
         if issued > now or expiry <= now:
@@ -1915,16 +2018,22 @@ def _verify_apt_metadata_dates(source_uri: str) -> None:
     raise UpdateFailure("metadata_unavailable")
 
 
-def _apt_record_matches(record: str, version: str, digest: str) -> bool:
+def _apt_record_matches(
+    record: str,
+    version: str,
+    digest: str,
+    package_name: str = "hardware-agent",
+    required_architecture: str = "arm64",
+) -> bool:
     fields: dict[str, str] = {}
     for line in record.splitlines():
         key, separator, value = line.partition(":")
         if separator:
             fields[key.strip()] = value.strip()
     return (
-        fields.get("Package") == "hardware-agent"
+        fields.get("Package") == package_name
         and fields.get("Version") == version
-        and fields.get("Architecture") == "arm64"
+        and fields.get("Architecture") == required_architecture
         and fields.get("SHA256") == digest
         and bool(fields.get("Filename"))
         and not fields["Filename"].startswith("/")
@@ -1988,8 +2097,11 @@ def _preflight(package: Path, prior: str, target: str) -> None:
     if status.stdout.strip():
         raise UpdateFailure("dpkg_unhealthy")
     architecture = subprocess.run(
-        ["/usr/bin/dpkg", "--print-architecture"], check=True,
-        capture_output=True, text=True, timeout=10,
+        ["/usr/bin/dpkg", "--print-architecture"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
     ).stdout.strip()
     if architecture != "arm64":
         raise UpdateFailure("unsupported_platform")
@@ -2008,8 +2120,14 @@ def _preflight(package: Path, prior: str, target: str) -> None:
     if AGENT_ROOT.exists() and AGENT_ROOT.stat().st_dev != STATE_DIR.stat().st_dev:
         raise UpdateFailure("snapshot_filesystem_mismatch")
     snapshot_bytes, snapshot_inodes = _tree_size(AGENT_ROOT)
-    journal_bytes = (STATE_DIR / "state.sqlite3").stat().st_size if (STATE_DIR / "state.sqlite3").exists() else 0
-    needed_bytes = snapshot_bytes + (package.stat().st_size * 2) + journal_bytes + 64 * 1024 * 1024
+    journal_bytes = (
+        (STATE_DIR / "state.sqlite3").stat().st_size
+        if (STATE_DIR / "state.sqlite3").exists()
+        else 0
+    )
+    needed_bytes = (
+        snapshot_bytes + (package.stat().st_size * 2) + journal_bytes + 64 * 1024 * 1024
+    )
     needed_inodes = snapshot_inodes + 128
     if usage.free < needed_bytes or stats.f_favail < needed_inodes:
         raise UpdateFailure("insufficient_resources")

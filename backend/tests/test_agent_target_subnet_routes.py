@@ -107,8 +107,12 @@ def test_choosing_a_reported_subnet_returns_detail_and_is_readable(
         "last_seen_at",
         "revoked_at",
         "available_subnets",
+        "observed_version",
+        "observed_package_version",
+        "version_observed_at",
         "target_subnet",
         "active_command_id",
+        "active_update_id",
     }
     assert body["target_subnet"] == WIFI
     assert body["available_subnets"] == REPORTED_SUBNETS

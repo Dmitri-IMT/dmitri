@@ -75,9 +75,10 @@ def _request_updater(
     }
     if command not in allowed or set(fields) != allowed[command]:
         raise ValueError("unsupported updater request")
-    payload = json.dumps(
-        {"command": command, **fields}, separators=(",", ":")
-    ).encode() + b"\n"
+    payload = (
+        json.dumps({"command": command, **fields}, separators=(",", ":")).encode()
+        + b"\n"
+    )
     if len(payload) > UPDATER_MESSAGE_LIMIT:
         raise ValueError("updater request too large")
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
@@ -401,8 +402,7 @@ class AgentDaemon:
                 invocation_id = context.get("invocation_id")
                 if (
                     not invocation_id
-                    and context.get("phase")
-                    in {"verifying", "awaiting_confirmation"}
+                    and context.get("phase") in {"verifying", "awaiting_confirmation"}
                     and context.get("target_package_version") == package_version
                 ):
                     invocation_id = evidence.get("invocation_id")
