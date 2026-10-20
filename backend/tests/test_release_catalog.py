@@ -607,7 +607,11 @@ def test_worker_refreshes_only_the_configured_repository(monkeypatch):
     monkeypatch.setattr(
         worker, "process_pending_enrichment_jobs", lambda *_args, **_kwargs: 0
     )
-    monkeypatch.setattr(worker, "_last_catalog_refresh", 0)
+    # GitHub-hosted runners can have a monotonic clock value below the refresh
+    # interval shortly after boot. Use a definitely stale timestamp so this
+    # test does not depend on runner uptime.
+    stale_refresh_time = -settings.agent_update_refresh_interval_seconds
+    monkeypatch.setattr(worker, "_last_catalog_refresh", stale_refresh_time)
 
     worker.run_worker_once()
     worker.run_worker_once()
@@ -615,6 +619,6 @@ def test_worker_refreshes_only_the_configured_repository(monkeypatch):
     assert calls == [(session, settings)]
 
     settings.agent_update_repository_url = ""
-    monkeypatch.setattr(worker, "_last_catalog_refresh", 0)
+    monkeypatch.setattr(worker, "_last_catalog_refresh", stale_refresh_time)
     worker.run_worker_once()
     assert calls == [(session, settings)]
