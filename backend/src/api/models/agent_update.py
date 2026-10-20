@@ -9,14 +9,35 @@ from sqlmodel import Field, SQLModel, UniqueConstraint
 from api.models.persistence import UTC_TIMESTAMP, utc_now
 
 RELEASE_PHASES = (
-    "requested", "preparing", "installing", "verifying", "awaiting_confirmation",
-    "recovering", "succeeded", "failed", "expired", "rolled_back", "needs_intervention",
+    "requested",
+    "preparing",
+    "installing",
+    "verifying",
+    "awaiting_confirmation",
+    "recovering",
+    "succeeded",
+    "failed",
+    "expired",
+    "rolled_back",
+    "needs_intervention",
 )
 UPDATE_ERROR_CODES = (
-    "device_busy", "session_replaced", "request_expired", "release_not_allowed",
-    "version_conflict", "metadata_untrusted", "metadata_expired", "artifact_mismatch",
-    "unsupported_platform", "prerequisite_missing", "insufficient_resources",
-    "package_manager_busy", "install_failed", "local_health_failed", "recovery_failed",
+    "device_busy",
+    "session_replaced",
+    "request_expired",
+    "release_not_allowed",
+    "version_conflict",
+    "metadata_untrusted",
+    "metadata_expired",
+    "artifact_mismatch",
+    "unsupported_platform",
+    "prerequisite_missing",
+    "insufficient_resources",
+    "package_manager_busy",
+    "authorization_expired",
+    "install_failed",
+    "local_health_failed",
+    "recovery_failed",
     "state_corrupt",
 )
 LOCAL_OUTCOMES = ("succeeded", "failed", "rolled_back", "needs_intervention")
@@ -44,9 +65,7 @@ class AgentRelease(SQLModel, table=True):
         ),
         CheckConstraint("package = 'hardware-agent'", name="ck_agent_releases_package"),
         CheckConstraint("size_bytes > 0", name="ck_agent_releases_size_positive"),
-        CheckConstraint(
-            "sha256 ~ '^[0-9a-f]{64}$'", name="ck_agent_releases_sha256"
-        ),
+        CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'", name="ck_agent_releases_sha256"),
         CheckConstraint(
             "required_protocol_version >= 1 AND required_updater_version >= 1",
             name="ck_agent_releases_requirements",

@@ -1524,6 +1524,7 @@ export interface components {
             release_id: string;
             target_package_version: string;
             sha256: string;
+            required_updater_version: number;
             /** Format: date-time */
             authorization_deadline: string;
         };
@@ -1545,7 +1546,7 @@ export interface components {
             session_id: string;
             /** Format: date-time */
             occurred_at: string;
-            error_code?: ("device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt") | null;
+            error_code?: ("device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "authorization_expired" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt") | null;
             evidence?: components["schemas"]["AgentUpdateEvidence"] | null;
         };
         AgentUpdateEventAck: {
@@ -1608,7 +1609,7 @@ export interface components {
             /** @enum {string|null} */
             local_outcome: "succeeded" | "failed" | "rolled_back" | "needs_intervention" | null;
             /** @enum {string|null} */
-            error_code: "device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt" | null;
+            error_code: "device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "authorization_expired" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt" | null;
             actor_display_snapshot: string;
             /** Format: date-time */
             requested_at: string;

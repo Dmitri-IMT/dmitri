@@ -32,6 +32,7 @@ UpdateErrorCode = Literal[
     "prerequisite_missing",
     "insufficient_resources",
     "package_manager_busy",
+    "authorization_expired",
     "install_failed",
     "local_health_failed",
     "recovery_failed",
@@ -142,6 +143,7 @@ class AgentUpdateClaimReceipt(BaseModel):
     release_id: UUID
     target_package_version: str
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    required_updater_version: int = Field(ge=1)
     authorization_deadline: datetime
 
 

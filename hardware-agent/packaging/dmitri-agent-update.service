@@ -20,6 +20,6 @@ UMask=0077
 NoNewPrivileges=true
 ProtectHome=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/dmitri /run/dmitri-agent-updater /var/lib/apt/lists /var/lib/apt/lists/partial
+ReadWritePaths=/var/lib/dmitri /run/dmitri-agent-updater /var/lib/apt/lists /var/lib/apt/lists/partial /var/lib/dpkg /var/cache/apt /etc /usr/lib/systemd/system /lib/systemd/system /opt/dmitri-agent
 StandardOutput=journal
 StandardError=journal

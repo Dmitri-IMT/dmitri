@@ -85,7 +85,7 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Upgrade parte do head efetivo; downgrade recusa perda de registros/reservas de update e é testado em `dmitri_test`.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
 - **Status**: COMPLETED
-- **Review Rejections**: 2
+- **Review Rejections**: 4
 
 ## Task 2: Importar e projetar o catálogo de releases verificadas
 - **Description**: Implementar a cadeia de confiança e disponibilidade em `ARCHITECTURE.md` (Release identity and trust) e `INTEGRATION.md`. Importação periódica usa somente o repositório configurado e persiste evidências verificadas.
@@ -242,10 +242,12 @@ publicação de release, scan real e commit/push dependem de autorização para 
 - **Description**: Completar o companion com preflight, claim, instalação offline, verificação local, recuperação e reporter durável em `ARCHITECTURE.md` (Installation and recovery). Usar o protocolo real das Tasks 9/10, com clientes falsos somente em testes.
 - **Absorbed**: Reporter HTTP assinado, retenção de cache/snapshot e deadlines integram a máquina de estados durável, cuja validade depende desses comportamentos.
 - **Dependencies**: Tasks 3, 5, 6, 8, 10
-- **Target Files**: `hardware-agent/packaging/updater.py`, `hardware-agent/packaging/apt-upgrade-agent`, `hardware-agent/packaging/build-deb.sh`, `hardware-agent/src/agent/transport/signing.py`, `hardware-agent/tests/unit/test_updater.py`, `hardware-agent/tests/integration/test_update_recovery.py`.
-- **Tests**: APT/dpkg/uv/systemd/HTTP controlados e fixtures Linux; pacote/hash/plataforma incompatível, pacote anterior ausente, lock/recursos insuficientes, postinst/uv/OOM/saúde falhando, perda de energia simulada em cada fronteira e agente/venv inacessível.
+- **Target Files**: `hardware-agent/packaging/updater.py`, `hardware-agent/packaging/dmitri-agent-update.service`, `hardware-agent/packaging/apt-upgrade-agent`, `hardware-agent/packaging/build-deb.sh`, `hardware-agent/src/agent/transport/signing.py`, `hardware-agent/tests/unit/test_updater.py`, `hardware-agent/tests/integration/test_update_recovery.py`; extensão delimitada do receipt da Task 10 em `backend/src/api/schemas/agent_updates.py`, `backend/src/api/services/agent_updates.py`, `backend/src/api/models/agent_update.py`, migração `backend/alembic/versions/20261019_43_update_authorization_expired.py`, `contracts/openapi/openapi.yaml`, `frontend/src/types/openapi.d.ts`, `backend/tests/test_agent_updates.py`, `backend/tests/test_agent_updates_migration.py` e `backend/tests/test_contract_fidelity.py`; atualizar `INTEGRATION.md`, `TASKS.md` e `PROGRESS.md` para registrar o contrato.
+- **Tests**: APT/dpkg/uv/systemd/HTTP controlados e fixtures Linux; pacote/hash/plataforma incompatível, pacote anterior ausente, lock/recursos insuficientes, postinst/uv/OOM/saúde falhando, perda de energia simulada em cada fronteira e agente/venv inacessível. Receipt deve incluir o `required_updater_version` inteiro da release e replay deve preservar valor/deadline; testar compatibilidade no companion e fidelidade OpenAPI/tipos. Validar em Linux isolado source `HTTPS` com `Signed-By` dedicado, Origin/suite esperados e metadata expirado/inválido; source/keyring ausente é falha de preflight e não dispara mutação.
 - **Success Criteria**:
   - U05/U06/U08–U14: verificar confiança APT, versão/plataforma/updater, espaço/inodes e estado dpkg; simulação recusa remoções e alterações fora de hardware-agent.
+  - O receipt de claim traz o `required_updater_version` da release imutável; o companion compara o nível inteiro de compatibilidade do runtime e recusa receipt ausente/incompatível antes de parar o agente. Esse nível é independente da versão Debian em `packaging/updater-version` e será anunciado na Task 12.
+  - Usar somente source APT previamente provisionado; validar HTTPS, `Signed-By` dedicado e legível, Origin/suite esperados e validade de Release/Packages. Task 11 não instala nem aprova chave/fingerprint; ausência de bootstrap resulta em prerequisite failure.
   - Sob exclusão mútua, journal/claim/recibo/gate duráveis precedem mutação; cache e rehash de alvo e anterior são obrigatórios. Deadlines impedem mutação tardia e não matam dpkg cegamente.
   - Parar agente/cgroup, salvar árvore/venv e instalar versão/digest exatos sem rede; FD exclusivo não chega a dpkg/postinst/agente reiniciado.
   - Saúde exige dpkg configurado, CLI fixa e handshake do processo esperado; ausência de backend mantém confirmação pendente e não provoca recuperação.
@@ -253,7 +255,7 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - Reporter independente usa assinatura existente, nova nonce a cada retry, sequência/ack persistidos e backoff; sobrevive à troca/falha do agente e pausa em 403 sem perder resultado. Não apagar identidade, configuração ou resultados ao limpar cache.
 - **Models**: Coder/tester Luna medium; reviewer Sol high; decisão arquitetural nova exige Sol high antes de ampliar escopo.
 - **Status**: PENDING
-- **Review Rejections**: 0
+- **Review Rejections**: 3
 
 ## Task 12: Conectar o daemon ao atualizador e habilitar capacidade real
 - **Description**: Fechar entrega WS → daemon → socket companion e o hello de reconciliação em `INTEGRATION.md`. Anunciar `agent_update_v1` apenas com suporte negociado, instalação preparada e supervisor pronto.

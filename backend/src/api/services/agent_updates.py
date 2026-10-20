@@ -62,6 +62,7 @@ def _claim_receipt(
         release_id=release.id,
         target_package_version=release.package_version,
         sha256=release.sha256,
+        required_updater_version=release.required_updater_version,
         authorization_deadline=operation.authorization_deadline,
     )
 
@@ -215,7 +216,9 @@ def _validate_event_combination(
         )
     elif body.phase == "needs_intervention":
         valid = body.local_outcome == "needs_intervention" and body.error_code in {
-            "recovery_failed", "state_corrupt", operation.error_code
+            "recovery_failed",
+            "state_corrupt",
+            operation.error_code,
         }
     elif body.phase == "succeeded":
         # The tuple is locally coherent, but backend success still requires hello.
@@ -229,7 +232,8 @@ def _validate_event_combination(
     elif body.phase == "recovering":
         valid = (
             body.local_outcome is None
-            and body.error_code in {"install_failed", "local_health_failed"}
+            and body.error_code
+            in {"authorization_expired", "install_failed", "local_health_failed"}
             and evidence is None
         )
     elif body.phase in {"preparing", "installing", "verifying"}:

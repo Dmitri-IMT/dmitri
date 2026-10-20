@@ -212,6 +212,7 @@ def test_claim_receipt_is_idempotent_and_deadline_does_not_extend(
         now=now + timedelta(minutes=5),
     )
     assert receipt == repeated
+    assert receipt.required_updater_version == release.required_updater_version
     administrative_session.refresh(operation)
     assert operation.phase == "preparing"
     assert operation.authorization_deadline == receipt.authorization_deadline
@@ -747,14 +748,17 @@ def test_preparing_expiry_requires_deadline_and_no_mutation(
         session_id=session_id,
         occurred_at=now - timedelta(minutes=10),
     )
-    assert record_update_event(
-        administrative_session,
-        agent_id=agent.id,
-        update_id=operation.id,
-        body=event,
-        now=now,
-        current_session_id=session_id,
-    ) == 1
+    assert (
+        record_update_event(
+            administrative_session,
+            agent_id=agent.id,
+            update_id=operation.id,
+            body=event,
+            now=now,
+            current_session_id=session_id,
+        )
+        == 1
+    )
     administrative_session.refresh(operation)
     assert operation.phase == "expired"
     assert operation.local_outcome is None
@@ -837,6 +841,67 @@ def test_recovery_preserves_install_cause_and_requires_rollback_health(
     assert operation.phase == "rolled_back"
     assert operation.local_outcome == "rolled_back"
     assert operation.error_code == "install_failed"
+
+
+def test_authorization_expiry_after_installing_uses_valid_recovery_outcome(
+    administrative_session: Session,
+) -> None:
+    org, user, agent, release = _fixture_rows(administrative_session)
+    now = datetime.now(timezone.utc)
+    session_id = uuid4()
+    operation = _operation(org, user, agent, release)
+    operation.phase = "installing"
+    operation.session_id = session_id
+    operation.claimed_at = now - timedelta(minutes=1)
+    operation.mutation_started_at = now - timedelta(seconds=10)
+    operation.previous_version = "1.0.0"
+    operation.previous_package_version = "1.0.0-1"
+    administrative_session.add(operation)
+    administrative_session.commit()
+
+    record_update_event(
+        administrative_session,
+        agent_id=agent.id,
+        update_id=operation.id,
+        body=AgentUpdateEventRequest(
+            sequence=1,
+            phase="recovering",
+            session_id=session_id,
+            occurred_at=now,
+            error_code="authorization_expired",
+        ),
+        now=now,
+        current_session_id=session_id,
+    )
+    administrative_session.refresh(operation)
+    assert operation.phase == "recovering"
+    assert operation.error_code == "authorization_expired"
+
+    record_update_event(
+        administrative_session,
+        agent_id=agent.id,
+        update_id=operation.id,
+        body=AgentUpdateEventRequest(
+            sequence=2,
+            phase="rolled_back",
+            local_outcome="rolled_back",
+            observed_version="1.0.0",
+            package_version="1.0.0-1",
+            invocation_id=uuid4(),
+            session_id=session_id,
+            occurred_at=now + timedelta(seconds=1),
+            error_code="authorization_expired",
+            evidence=AgentUpdateEvidence(
+                package_status="configured", service_active=True, health_check="passed"
+            ),
+        ),
+        now=now + timedelta(seconds=1),
+        current_session_id=session_id,
+    )
+    administrative_session.refresh(operation)
+    assert operation.phase == "rolled_back"
+    assert operation.local_outcome == "rolled_back"
+    assert operation.error_code == "authorization_expired"
 
 
 def test_awaiting_confirmation_cannot_enter_recovery(

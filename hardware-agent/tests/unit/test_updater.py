@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 import os
@@ -18,10 +19,44 @@ updater_module = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(updater_module)
 Updater = updater_module.Updater
+_read_env = updater_module._read_env
+
+
+def test_verify_package_parses_real_dpkg_deb_field_output(tmp_path, monkeypatch):
+    package = tmp_path / "agent.deb"
+
+    class Result:
+        stdout = "Package: hardware-agent\nVersion: 1.2.3-1\nArchitecture: arm64\n"
+
+    monkeypatch.setattr(updater_module.subprocess, "run", lambda *a, **k: Result())
+    updater_module._verify_package(package, "1.2.3-1")
+
+
+@pytest.mark.parametrize(
+    ("required", "expected"),
+    [(1, True), (2, False), (True, False), (None, False)],
+)
+def test_claim_receipt_enforces_runtime_compatibility_level(required, expected):
+    claim = {
+        "sha256": "a" * 64,
+        "target_package_version": "1.2.3-1",
+        "required_updater_version": required,
+    }
+
+    assert (
+        updater_module._claim_receipt_matches(claim, "a" * 64, "1.2.3-1")
+        is expected
+    )
 
 
 @pytest.fixture
-def updater(tmp_path: Path) -> Updater:
+def updater(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Updater:
+    scan_lock = tmp_path / "scan.lock"
+    scan_lock.touch()
+    scan_lock_contract = tmp_path / "scan-lock-path"
+    scan_lock_contract.write_text(str(scan_lock), encoding="ascii")
+    monkeypatch.setattr(updater_module, "SCAN_LOCK_PATH", scan_lock)
+    monkeypatch.setattr(updater_module, "SCAN_LOCK_PATH_FILE", scan_lock_contract)
     instance = Updater(tmp_path / "state", tmp_path / "run", tmp_path / "gate.json")
     instance.initialize()
     return instance
@@ -128,6 +163,108 @@ def test_existing_gate_is_not_cleared_without_recovery(updater: Updater):
     assert gate["operation_ids"] == ["op-2"]
 
 
+def test_restart_preserves_claim_pending_gate_for_matching_reporter_retry(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('pending-gate', 'requested')")
+        database.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,"
+            "sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "pending-gate", "session", "release", "1.2.3-1", "a" * 64,
+                "2030-01-01T00:00:00+00:00", "claim_pending",
+            ),
+        )
+    updater._write_gate("operation_pending", ["pending-gate"])
+    updater._restore_gate()
+    attempts = []
+
+    def offline(path, _body):
+        attempts.append(path)
+        raise OSError("offline")
+
+    monkeypatch.setattr(
+        updater, "_post_json", offline
+    )
+
+    assert updater._reconcile_pending_claims() is False
+    assert attempts == ["/api/v1/agent-updates/pending-gate/claim"]
+    assert json.loads(updater.gate_path.read_text())["reason"] == "operation_pending"
+
+
+def test_claim_pending_expiry_is_decided_only_by_backend_410(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('expired-claim', 'requested')")
+        database.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,"
+            "sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "expired-claim", "session", "release", "1.2.3-1", "a" * 64,
+                "2000-01-01T00:00:00+00:00", "claim_pending",
+            ),
+        )
+    attempts = []
+
+    def post(path, _body):
+        attempts.append(path)
+        raise HTTPError(
+            "https://backend.invalid/claim", 410, "gone", {},
+            BytesIO(b'{"error":{"code":"request_expired"}}'),
+        )
+
+    monkeypatch.setattr(updater, "_post_json", post)
+    assert updater._reconcile_pending_claims() is True
+    assert attempts == ["/api/v1/agent-updates/expired-claim/claim"]
+    with sqlite3.connect(updater.journal_path) as database:
+        assert database.execute(
+            "SELECT phase FROM operations WHERE operation_id='expired-claim'"
+        ).fetchone() == ("expired",)
+
+
+def test_claim_pending_409_is_retried_without_local_expiry(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute(
+            "INSERT INTO operations VALUES ('claim-conflict', 'requested')"
+        )
+        database.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,"
+            "sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "claim-conflict", "session", "release", "1.2.3-1", "a" * 64,
+                "2000-01-01T00:00:00+00:00", "claim_pending",
+            ),
+        )
+    monkeypatch.setattr(
+        updater,
+        "_post_json",
+        lambda *_args: (_ for _ in ()).throw(
+            HTTPError(
+                "https://backend.invalid/claim", 409, "conflict", {}, BytesIO(b"{}")
+            )
+        ),
+    )
+
+    assert updater._reconcile_pending_claims() is False
+    with sqlite3.connect(updater.journal_path) as database:
+        assert database.execute(
+            "SELECT phase FROM operations WHERE operation_id='claim-conflict'"
+        ).fetchone() == ("requested",)
+
+
 def test_malformed_gate_is_preserved_as_evidence(updater: Updater):
     updater.gate_path.write_text("not-json")
 
@@ -206,7 +343,7 @@ def test_metadata_refresh_uses_only_fixed_apt_update(
     assert updater._run_metadata_refresh() is True
     assert calls == [
         (
-            ["/usr/bin/apt-get", "update"],
+            ["/usr/bin/apt-get", "-o", "APT::Update::Error-Mode=any", "update"],
             {
                 "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
                 "DEBIAN_FRONTEND": "noninteractive",
@@ -297,6 +434,35 @@ def test_readiness_handshake_binds_nonce_mainpid_invocation_and_package(
     assert response["main_pid"] == 412
     assert response["invocation_id"] == "invocation-1"
     assert len(response["nonce"]) == 48
+
+
+def test_boot_recovery_reuses_matching_handshake_from_already_ready_agent(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    updater.last_readiness = (412, "boot-invocation", "1.2.3", "1.2.3-1")
+    calls = []
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.3-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.2.3")
+    monkeypatch.setattr(
+        updater, "readiness_identity", lambda: (412, "boot-invocation")
+    )
+    monkeypatch.setattr(
+        updater,
+        "_run_checked",
+        lambda argv, **_kwargs: (
+            "install ok installed"
+            if "dpkg-query" in argv[0]
+            else '{"ok":true,"version":"1.2.3"}'
+        ),
+    )
+    monkeypatch.setattr(
+        updater_module, "_systemctl", lambda *args: calls.append(args)
+    )
+    monkeypatch.setattr(updater_module.time, "sleep", lambda _seconds: None)
+
+    assert updater._verify_local_health("1.2.3-1") == "boot-invocation"
+    assert calls == [("start", "dmitri-agent.service")]
+    assert updater.last_readiness == (412, "boot-invocation", "1.2.3", "1.2.3-1")
 
 
 def test_app_version_uses_installed_agent_runtime(
@@ -539,3 +705,750 @@ def test_gate_remains_world_readable_under_restrictive_umask(updater: Updater):
         os.umask(previous_umask)
 
     assert updater.gate_path.stat().st_mode & 0o777 == 0o644
+
+
+def test_update_environment_parser_does_not_evaluate_shell(tmp_path: Path):
+    path = tmp_path / "agent.env"
+    path.write_text(
+        "BACKEND_URL=https://example.test\n"
+        "DEVICE_ID=00000000-0000-0000-0000-000000000001\n"
+        "DEVICE_PRIVATE_KEY=" + "a" * 64 + "\n",
+        encoding="utf-8",
+    )
+
+    values = _read_env(path)
+
+    assert values["BACKEND_URL"] == "https://example.test"
+    path.write_text(
+        "BACKEND_URL=$(touch /tmp/should-not-exist)\n"
+        "DEVICE_ID=00000000-0000-0000-0000-000000000001\n"
+        "DEVICE_PRIVATE_KEY=" + "a" * 64 + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        _read_env(path)
+
+
+def test_update_event_reporter_retries_oldest_unacked_sequence(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-9', 'installing')")
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,"
+            "sha256,deadline,phase,sequence,pending_event,ack_sequence) "
+            "VALUES('op-9','session','release','1.2.3','" + "a" * 64 + "',"
+            "'2030-01-01T00:00:00+00:00','installing',2,'{}',0)"
+        )
+        database.execute(
+            "INSERT INTO update_events VALUES ('op-9',1,'{\"sequence\":1}')"
+        )
+        database.execute(
+            "INSERT INTO update_events VALUES ('op-9',2,'{\"sequence\":2}')"
+        )
+    posted: list[dict[str, object]] = []
+
+    def post(_path: str, body: dict[str, object]) -> dict[str, object]:
+        posted.append(body)
+        return {"ack_sequence": body["sequence"]}
+
+    monkeypatch.setattr(updater, "_post_json", post)
+
+    updater._flush_events("op-9")
+
+    assert [event["sequence"] for event in posted] == [1, 2]
+    with sqlite3.connect(updater.journal_path) as database:
+        ack_sequence = database.execute(
+            "SELECT ack_sequence FROM update_details WHERE operation_id='op-9'"
+        ).fetchone()[0]
+    assert ack_sequence == 2
+
+
+def test_replayed_update_frame_returns_journaled_phase_without_install(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-replay', 'installing')")
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,"
+            "sha256,deadline,phase) VALUES('op-replay','session','release','1.2.3','"
+            + "a" * 64
+            + "','2030-01-01T00:00:00+00:00','installing')"
+        )
+    monkeypatch.setattr(
+        updater,
+        "_run_checked",
+        lambda *_args, **_kwargs: pytest.fail("must not install"),
+    )
+
+    result = updater._apply_claimed_update(
+        "op-replay",
+        "session",
+        "release",
+        "1.2.3",
+        "a" * 64,
+        updater_module.datetime.now(updater_module.timezone.utc),
+    )
+
+    assert result == {"ok": True, "phase": "installing", "replayed": True}
+
+
+def test_startup_resumes_verified_target_without_reinstall(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-resume', 'verifying')")
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,"
+            "sha256,deadline,phase) VALUES('op-resume','session','release','1.2.3','"
+            + "a" * 64
+            + "','2030-01-01T00:00:00+00:00','verifying')"
+        )
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.3")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.2.3")
+    monkeypatch.setattr(updater, "_verify_local_health", lambda _target: "invocation")
+    monkeypatch.setattr(
+        updater,
+        "_post_json",
+        lambda *_args, **_kwargs: {"ack_sequence": 1},
+    )
+    updater._write_gate("operation_pending", ["op-resume"])
+
+    updater._resume_interrupted_update()
+
+    with sqlite3.connect(updater.journal_path) as database:
+        phases = [
+            json.loads(row[0])["phase"]
+            for row in database.execute(
+                "SELECT body FROM update_events "
+                "WHERE operation_id='op-resume' ORDER BY sequence"
+            )
+        ]
+    assert phases == ["awaiting_confirmation"]
+    assert not updater.gate_path.exists()
+
+
+@pytest.mark.parametrize("phase", ["installing", "verifying"])
+def test_restart_accepts_installed_target_without_replaying_dpkg(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch, phase: str
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-boundary', ?)", (phase,))
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "op-boundary",
+                "session",
+                "release",
+                "1.2.3",
+                "a" * 64,
+                "2030-01-01T00:00:00+00:00",
+                phase,
+            ),
+        )
+    emitted = []
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.3")
+    monkeypatch.setattr(updater, "_verify_local_health", lambda _target: "invocation")
+    monkeypatch.setattr(updater, "_emit", lambda *args, **kwargs: emitted.append(args))
+    monkeypatch.setattr(
+        updater,
+        "_recover_update",
+        lambda *_args: pytest.fail("healthy target must not be reinstalled"),
+    )
+    updater._write_gate("operation_pending", ["op-boundary"])
+
+    updater._resume_interrupted_update()
+
+    expected = []
+    if phase == "installing":
+        expected.append(("op-boundary", "session", "verifying", None, None))
+    expected.append(
+        ("op-boundary", "session", "awaiting_confirmation", "succeeded", "invocation")
+    )
+    assert emitted == expected
+    assert not updater.gate_path.exists()
+
+
+def test_restart_with_unverified_target_attempts_recovery_once(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-mismatch', 'installing')")
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "op-mismatch",
+                "session",
+                "release",
+                "1.2.3",
+                "a" * 64,
+                "2030-01-01T00:00:00+00:00",
+                "installing",
+            ),
+        )
+    calls = []
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.2")
+    monkeypatch.setattr(
+        updater,
+        "_recover_update",
+        lambda *args: calls.append(args) or {"ok": False, "error": "rolled_back"},
+    )
+
+    updater._resume_interrupted_update()
+
+    assert calls == [("op-mismatch", "session", "install_failed")]
+
+
+def test_restart_does_not_repeat_interrupted_recovery(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute(
+            "INSERT INTO operations VALUES ('op-recovering', 'recovering')"
+        )
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,sha256,deadline,phase,recovery_attempts) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (
+                "op-recovering",
+                "session",
+                "release",
+                "1.2.3",
+                "a" * 64,
+                "2030-01-01T00:00:00+00:00",
+                "recovering",
+                1,
+            ),
+        )
+    emitted = []
+    monkeypatch.setattr(updater, "_emit", lambda *args, **kwargs: emitted.append(args))
+    monkeypatch.setattr(
+        updater,
+        "_recover_update",
+        lambda *_args: pytest.fail("recovery must not loop after restart"),
+    )
+
+    updater._resume_interrupted_update()
+
+    assert emitted[0][:5] == (
+        "op-recovering",
+        "session",
+        "needs_intervention",
+        "needs_intervention",
+        None,
+    )
+    assert updater.gate_path.exists()
+
+
+def test_startup_recovery_holds_exclusive_scan_lock(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    if os.name != "posix":
+        pytest.skip("Linux flock semantics")
+    import fcntl
+
+    lock_path = tmp_path / "scan.lock"
+    lock_path.touch()
+    lock_contract = tmp_path / "scan-lock-path"
+    lock_contract.write_text(str(lock_path), encoding="ascii")
+    monkeypatch.setattr(updater_module, "SCAN_LOCK_PATH", lock_path)
+    monkeypatch.setattr(updater_module, "SCAN_LOCK_PATH_FILE", lock_contract)
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('op-lock', 'verifying')")
+        database.execute(
+            "INSERT INTO update_details(operation_id,session_id,release_id,"
+            "target_version,"
+            "sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "op-lock",
+                "session",
+                "release",
+                "1.2.3",
+                "a" * 64,
+                "2030-01-01T00:00:00+00:00",
+                "verifying",
+            ),
+        )
+    entered = threading.Event()
+    release = threading.Event()
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.3")
+
+    def health(_target: str) -> str:
+        entered.set()
+        assert release.wait(5)
+        return "invocation"
+
+    monkeypatch.setattr(updater, "_verify_local_health", health)
+    monkeypatch.setattr(updater, "_emit", lambda *_args, **_kwargs: None)
+    worker = threading.Thread(target=updater._resume_interrupted_update)
+    worker.start()
+    try:
+        assert entered.wait(5)
+        contender = os.open(lock_path, os.O_RDWR)
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(contender)
+    finally:
+        release.set()
+        worker.join(5)
+    assert not worker.is_alive()
+
+
+def test_apt_policy_requires_fixed_origin_and_suite(monkeypatch: pytest.MonkeyPatch):
+    class Result:
+        stdout = (
+            "hardware-agent:\n"
+            "  Candidate: 1.2.3-1\n"
+            "  Version table:\n"
+            "     1.2.3-1 500\n"
+            "        500 https://apt.example stable/main arm64 Packages\n"
+            "           release o=Dmitri,a=stable,n=stable,l=Dmitri,c=main,b=arm64\n"
+        )
+
+    monkeypatch.setattr(
+        updater_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: Result(),
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "_verify_dedicated_apt_source",
+        lambda: ("https://apt.example", "/etc/apt/keyrings/dmitri.gpg"),
+    )
+    monkeypatch.setattr(
+        updater_module, "_verify_apt_metadata_dates", lambda *_args: None
+    )
+    updater_module._verify_apt_origin_suite("1.2.3-1")
+    Result.stdout = Result.stdout.replace("https://apt.example", "https://other.example")
+    with pytest.raises(updater_module.UpdateFailure, match="metadata_untrusted"):
+        updater_module._verify_apt_origin_suite("1.2.3-1")
+
+
+def test_apt_policy_rejects_target_available_only_from_other_source(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class Result:
+        stdout = (
+            "hardware-agent:\n  Candidate: 1.2.3-1\n  Version table:\n"
+            "     1.2.3-1 500\n"
+            "        500 https://untrusted.example stable/main arm64 Packages\n"
+            "           release o=Dmitri,a=stable,n=stable\n"
+        )
+
+    monkeypatch.setattr(
+        updater_module.subprocess, "run", lambda *_args, **_kwargs: Result()
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "_verify_dedicated_apt_source",
+        lambda: ("https://apt.example", "/etc/apt/keyrings/dmitri.gpg"),
+    )
+    monkeypatch.setattr(
+        updater_module, "_verify_apt_metadata_dates", lambda *_args: None
+    )
+    with pytest.raises(updater_module.UpdateFailure, match="metadata_untrusted"):
+        updater_module._verify_apt_origin_suite("1.2.3-1")
+
+
+def test_apt_package_hash_must_match_signed_index_record(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import tempfile
+
+    class Result:
+        def __init__(self, stdout: str):
+            self.stdout = stdout
+
+    policy = Result(
+        "hardware-agent:\n  Candidate: 1.2.3-1\n  Version table:\n"
+        "     1.2.3-1 500\n"
+        "        500 https://apt.example stable/main arm64 Packages\n"
+        "           release o=Dmitri,a=stable,n=stable\n"
+    )
+    package_record = (
+        "Package: hardware-agent\nVersion: 1.2.3-1\n"
+        "Architecture: arm64\nFilename: pool/main/h/hardware-agent.deb\nSHA256: "
+        + "a" * 64
+        + "\n"
+    )
+    list_dir = Path(tempfile.mkdtemp())
+    index_file = list_dir / "apt.example_dists_stable_main_binary-arm64_Packages.lz4"
+    index_file.write_bytes(b"signed-index-cache")
+    monkeypatch.setattr(updater_module, "APT_LIST_DIR", list_dir)
+
+    def run(args, **_kwargs):
+        if args[1] == "policy":
+            return policy
+        if args[1] == "indextargets":
+            return Result(
+                "https://apt.example/dists/stable/main/binary-arm64/Packages|"
+                f"{index_file}|Packages|stable|main|arm64\n"
+                "https://other.example/dists/stable/main/binary-arm64/Packages|"
+                f"{index_file}|Packages|stable|main|arm64\n"
+            )
+        assert args[1:3] == ["cat-file", str(index_file)]
+        # A competing global apt-cache record must not influence the decision.
+        return Result(package_record)
+
+    monkeypatch.setattr(
+        updater_module.subprocess, "run", run
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "_verify_dedicated_apt_source",
+        lambda: ("https://apt.example", "/etc/apt/keyrings/dmitri.gpg"),
+    )
+    monkeypatch.setattr(
+        updater_module, "_verify_apt_metadata_dates", lambda *_args: None
+    )
+    updater_module._verify_apt_origin_suite("1.2.3-1", "a" * 64)
+    with pytest.raises(updater_module.UpdateFailure, match="artifact_mismatch"):
+        updater_module._verify_apt_origin_suite("1.2.3-1", "b" * 64)
+
+
+def test_apt_hash_cannot_be_satisfied_by_competing_source_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    class Result:
+        def __init__(self, stdout: str):
+            self.stdout = stdout
+
+    policy = Result(
+        "hardware-agent:\n  Candidate: 1.2.3-1\n  Version table:\n"
+        "     1.2.3-1 500\n"
+        "        500 https://apt.example stable/main arm64 Packages\n"
+    )
+    lists = tmp_path / "lists"
+    lists.mkdir()
+    other_index = lists / "other_dists_stable_Packages.lz4"
+    other_index.write_bytes(b"other")
+    dedicated_index = lists / "apt.example_dists_stable_main_binary-arm64_Packages.lz4"
+    dedicated_index.write_bytes(b"dedicated")
+    monkeypatch.setattr(
+        updater_module,
+        "APT_LIST_DIR",
+        lists,
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "_verify_dedicated_apt_source",
+        lambda: ("https://apt.example", "/etc/apt/keyrings/dmitri.gpg"),
+    )
+    monkeypatch.setattr(
+        updater_module, "_verify_apt_metadata_dates", lambda *_args: None
+    )
+
+    def run(args, **_kwargs):
+        if args[1] == "policy":
+            return policy
+        if args[1] == "indextargets":
+            return Result(
+                "https://other.example/dists/stable/main/binary-arm64/Packages|"
+                f"{other_index}|Packages|stable|main|arm64\n"
+                "https://apt.example/dists/stable/main/binary-arm64/Packages|"
+                f"{dedicated_index}|Packages|stable|main|arm64\n"
+            )
+        return Result(
+            "Package: hardware-agent\nVersion: 1.2.3-1\nArchitecture: arm64\n"
+            "Filename: pool/main/h/target.deb\nSHA256: " + "b" * 64 + "\n"
+        )
+
+    monkeypatch.setattr(updater_module.subprocess, "run", run)
+    with pytest.raises(updater_module.UpdateFailure, match="artifact_mismatch"):
+        updater_module._verify_apt_origin_suite("1.2.3-1", "a" * 64)
+
+
+def test_apt_source_rejects_trusted_yes_and_requires_dedicated_keyring(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    source_dir = tmp_path / "sources.list.d"
+    source_dir.mkdir()
+    keyring_dir = tmp_path / "keyrings"
+    keyring_dir.mkdir()
+    source_file = source_dir / "dmitri.sources"
+    source_file.write_text(
+        "Types: deb\nURIs: https://apt.example\nSuites: stable\n"
+        f"Signed-By: {keyring_dir / 'dmitri.gpg'}\nTrusted: yes\n",
+        encoding="utf-8",
+    )
+    keyring = keyring_dir / "dmitri.gpg"
+    keyring.write_bytes(b"keyring")
+    monkeypatch.setattr(updater_module, "APT_SOURCE_LIST", tmp_path / "missing.list")
+    monkeypatch.setattr(updater_module, "APT_SOURCE_DIR", source_dir)
+    monkeypatch.setattr(updater_module, "APT_KEYRING_DIR", keyring_dir)
+    with pytest.raises(updater_module.UpdateFailure, match="metadata_untrusted"):
+        updater_module._verify_dedicated_apt_source()
+    source_file.write_text(
+        "Types: deb\nURIs: https://apt.example\nSuites: stable\n"
+        f"Signed-By: {keyring_dir / 'missing.gpg'}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(updater_module.UpdateFailure, match="apt_keyring"):
+        updater_module._verify_dedicated_apt_source()
+
+
+def test_metadata_expiry_is_checked_for_the_configured_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import datetime
+
+    lists = tmp_path / "lists"
+    lists.mkdir()
+    expired = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=1
+    )
+    date = expired.strftime("%a, %d %b %Y %H:%M:%S UTC")
+    inrelease = lists / "apt.example_dists_stable_InRelease"
+    inrelease.write_text(
+        f"Origin: Dmitri\nSuite: stable\nDate: {date}\nValid-Until: {date}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(updater_module, "APT_LIST_DIR", lists)
+    with pytest.raises(updater_module.UpdateFailure, match="metadata_expired"):
+        updater_module._verify_apt_metadata_dates("https://apt.example")
+
+
+def test_metadata_list_name_matches_https_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import datetime
+
+    lists = tmp_path / "lists"
+    lists.mkdir()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    issued = now.strftime("%a, %d %b %Y %H:%M:%S UTC")
+    expiry = (now + datetime.timedelta(days=1)).strftime("%a, %d %b %Y %H:%M:%S UTC")
+    inrelease = lists / "apt.example:8443_dists_stable_InRelease"
+    inrelease.write_text(
+        f"Origin: Dmitri\nSuite: stable\nDate: {issued}\nValid-Until: {expiry}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(updater_module, "APT_LIST_DIR", lists)
+    updater_module._verify_apt_metadata_dates("https://apt.example:8443")
+
+
+def test_cached_target_still_refreshes_and_validates_signed_package_metadata(
+    updater: Updater, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    monkeypatch.setattr(updater_module, "PACKAGE_CACHE", cache)
+    package = cache / "target.deb"
+    package.write_bytes(b"cached target")
+    digest = updater_module._sha256(package)
+    package.rename(cache / f"{digest}.deb")
+    package = cache / f"{digest}.deb"
+    previous = cache / "1.2.2-1.deb"
+    previous.write_bytes(b"cached previous")
+    (cache / "1.2.2-1.sha256").write_text(
+        updater_module._sha256(previous), encoding="ascii"
+    )
+    calls: list[str] = []
+    deadline = updater_module.datetime.now(updater_module.timezone.utc).replace(
+        year=2030
+    ).isoformat()
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.2-1")
+    monkeypatch.setattr(
+        updater, "_run_metadata_refresh", lambda: calls.append("refresh") or True
+    )
+    monkeypatch.setattr(
+        updater_module,
+        "_verify_apt_origin_suite",
+        lambda version, sha: calls.append(f"verify:{version}:{sha}"),
+    )
+    monkeypatch.setattr(updater_module, "_verify_package", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_preflight", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_systemctl", lambda *_args: None)
+    monkeypatch.setattr(updater, "_run_checked", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(updater, "_verify_local_health", lambda _target: "invocation")
+    monkeypatch.setattr(
+        updater,
+        "_recover_update",
+        lambda _update_id, _session_id, reason: {"reason": reason},
+    )
+    monkeypatch.setattr(updater, "_emit", lambda *_args, **_kwargs: None)
+    posts: list[str] = []
+    monkeypatch.setattr(
+        updater,
+        "_post_json",
+        lambda path, _body: (
+            posts.append(path)
+            or
+            {
+                "update_id": "update",
+                "session_id": "session",
+                "release_id": "release",
+                "sha256": digest,
+                "target_package_version": "1.2.3-1",
+                "required_updater_version": 1,
+                "authorization_deadline": deadline,
+            }
+            if path.endswith("/claim")
+            else {"ack_sequence": 1}
+        ),
+    )
+    result = updater._apply_claimed_update(
+        "update", "session", "release", "1.2.3-1", digest,
+        updater_module.datetime.fromisoformat(deadline),
+    )
+    assert result == {"ok": True, "phase": "awaiting_confirmation"}, (
+        result,
+        calls,
+        posts,
+    )
+    assert calls == ["refresh", f"verify:1.2.3-1:{digest}"]
+
+
+@pytest.mark.parametrize("expire_during", ["event_send", "service_stop"])
+def test_deadline_expiring_before_dpkg_never_starts_target_install(
+    updater: Updater, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    expire_during: str,
+):
+    class Clock(dt.datetime):
+        current = dt.datetime.now(dt.timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            value = cls.current
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(updater_module, "datetime", Clock)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    target_package = cache / "target.deb"
+    target_package.write_bytes(b"target")
+    target_digest = updater_module._sha256(target_package)
+    target_package.rename(cache / f"{target_digest}.deb")
+    target_package = cache / f"{target_digest}.deb"
+    prior_package = cache / "1.2.2-1.deb"
+    prior_package.write_bytes(b"prior")
+    monkeypatch.setattr(updater_module, "PACKAGE_CACHE", cache)
+    root = tmp_path / "agent-root"
+    root.mkdir()
+    (root / "runtime.txt").write_text("prior\n", encoding="ascii")
+    monkeypatch.setattr(updater_module, "AGENT_ROOT", root)
+    monkeypatch.setattr(updater, "package_version", lambda: "1.2.2-1")
+    monkeypatch.setattr(updater, "app_version", lambda: "1.2.2")
+    monkeypatch.setattr(updater, "_run_metadata_refresh", lambda: True)
+    monkeypatch.setattr(updater_module, "_verify_apt_origin_suite", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_verify_cache_digest", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_verify_package", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_preflight", lambda *_args: None)
+    monkeypatch.setattr(updater_module, "_cache_versioned_package", lambda *_args: None)
+    monkeypatch.setattr(updater, "_verify_local_health", lambda _version: "rollback-id")
+    deadline = Clock.current + dt.timedelta(seconds=30)
+    commands = []
+    events = []
+
+    def systemctl(action, _service):
+        if action == "stop" and expire_during == "service_stop":
+            Clock.current = deadline + dt.timedelta(seconds=1)
+
+    def run_checked(argv, **_kwargs):
+        commands.append(argv)
+        return ""
+
+    def post(path, body):
+        if path.endswith("/claim"):
+            return {
+                "update_id": "expire-stop",
+                "session_id": "session",
+                "release_id": "release",
+                "sha256": target_digest,
+                "target_package_version": "1.2.3-1",
+                "required_updater_version": 1,
+                "authorization_deadline": deadline.isoformat(),
+            }
+        events.append(body)
+        if body["phase"] == "installing" and expire_during == "event_send":
+            Clock.current = deadline + dt.timedelta(seconds=1)
+        return {"ack_sequence": body["sequence"]}
+
+    monkeypatch.setattr(updater_module, "_systemctl", systemctl)
+    monkeypatch.setattr(updater, "_run_checked", run_checked)
+    monkeypatch.setattr(updater, "_post_json", post)
+    result = updater._apply_claimed_update(
+        "expire-stop", "session", "release", "1.2.3-1", target_digest, deadline
+    )
+
+    assert result == {"ok": False, "error": "rolled_back"}
+    assert not any(
+        "--install" in command and "--force-downgrade" not in command
+        for command in commands
+    )
+    assert any("--force-downgrade" in command for command in commands)
+    assert [event["phase"] for event in events] == [
+        "preparing", "installing", "recovering", "rolled_back"
+    ]
+    assert events[2]["error_code"] == "authorization_expired"
+    assert events[2]["local_outcome"] is None
+
+
+def test_expired_phase_has_no_local_outcome(updater: Updater, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        updater,
+        "_emit",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    updater._expire_before_mutation("update", "session")
+    assert calls[0][0][2:5] == ("expired", None, None)
+
+
+def test_reporter_403_pause_blocks_direct_flush(updater: Updater, monkeypatch):
+    pause = updater.state_dir / "reporting-paused-403"
+    pause.write_text("paused\n", encoding="ascii")
+    monkeypatch.setattr(
+        updater, "_post_json", lambda *_args: pytest.fail("403 pause bypassed")
+    )
+    updater._flush_events("missing-operation")
+
+
+def test_claim_pending_retries_until_receipt_is_reconciled(
+    updater: Updater, monkeypatch: pytest.MonkeyPatch
+):
+    with sqlite3.connect(updater.journal_path) as database:
+        database.execute("INSERT INTO operations VALUES ('pending-claim', 'requested')")
+        database.execute(
+            "INSERT INTO update_details("
+            "operation_id,session_id,release_id,target_version,"
+            "sha256,deadline,phase) VALUES(?,?,?,?,?,?,?)",
+            (
+                "pending-claim", "session", "release", "1.2.3-1", "a" * 64,
+                "2030-01-01T00:00:00+00:00", "claim_pending",
+            ),
+        )
+    attempts = []
+
+    def post(path, _body):
+        attempts.append(path)
+        raise OSError("offline")
+
+    monkeypatch.setattr(updater, "_post_json", post)
+    updater._reconcile_pending_claims()
+    updater._reconcile_pending_claims()
+    assert attempts == [
+        "/api/v1/agent-updates/pending-claim/claim",
+        "/api/v1/agent-updates/pending-claim/claim",
+    ]
+    with sqlite3.connect(updater.journal_path) as database:
+        assert database.execute(
+            "SELECT phase FROM update_details WHERE operation_id='pending-claim'"
+        ).fetchone() == ("claim_pending",)
+
+
+def test_update_failure_codes_match_backend_error_vocabulary():
+    assert updater_module._failure_code(
+        updater_module.UpdateFailure("metadata_untrusted")
+    ) == "metadata_untrusted"
+    assert updater_module._failure_code(
+        updater_module.UpdateFailure("insufficient_resources")
+    ) == "insufficient_resources"
