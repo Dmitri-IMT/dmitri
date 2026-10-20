@@ -65,7 +65,7 @@ Não são tarefas automáticas de código, nem condições para inventar uma inf
 | H3 | Inventário da appliance: Debian/arm64/Python/uv/dependências, recursos e baseline recuperável; plataforma inicial proposta deve ser confirmada. | Bootstrap e deploy; testes compatíveis continuam isolados. |
 | H4 | Responsável/acesso para bootstrap assistido e manutenção ociosa; validar Signed-By, companion, timer check-only e preservação de dados. | Habilitar capacidade de atualização num dispositivo real. |
 | H5 | Responsável por canário e recuperação assistida, com evidências de falha/reinício e artefatos anteriores retidos. | Uso operacional e expansão do rollout. |
-| H6 | Integração humana de `.github/workflows/agent-release.yml` e ajustes de `.github/workflows/ci.yml`, com tags/ambientes protegidos e jobs separados de build e assinatura. | Pipeline de publicação operacional; criar workflow/segredos não é efeito automático deste ledger. |
+| H6 | Integração humana de `.github/workflows/agent-release.yml` e ajustes de `.github/workflows/ci.yml`, com publicação após merge na `main`, ambientes protegidos e jobs separados de build e assinatura. | Pipeline de publicação operacional; criar workflow/segredos não é efeito automático deste ledger. |
 
 As Tasks 2–4 podem ser verificadas com catálogo/repositório e pacotes de teste. Isso não
 remove H1–H6. A Task 14 distingue fechamento do código de prontidão operacional e não

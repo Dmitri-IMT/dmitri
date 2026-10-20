@@ -15,10 +15,29 @@ def test_release_workflow_keeps_signing_and_publication_permissions_separate():
         "cancel-in-progress": "false",
     }
     assert workflow["permissions"] == {"contents": "read"}
-    assert "agent-v*" in workflow["on"]["push"]["tags"]
+    assert workflow["on"]["push"]["branches"] == ["main"]
+    assert "hardware-agent/src/**" in workflow["on"]["push"]["paths"]
+    assert "hardware-agent/pyproject.toml" in workflow["on"]["push"]["paths"]
+    assert "agent-v*" not in workflow["on"]["push"].get("tags", [])
     assert "schedule" in workflow["on"]
 
     jobs = workflow["jobs"]
+    assert jobs["build"]["if"] == (
+        "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    )
+    source_step = next(
+        step
+        for step in jobs["build"]["steps"]
+        if step.get("id") == "source"
+    )
+    assert "package version" in source_step["name"].lower()
+    assert "$GITHUB_REF_NAME" not in source_step["run"]
+    assert "source_version" in source_step["run"]
+    assert 'if [[ "$GITHUB_EVENT_NAME" == push ]]' in next(
+        step["run"]
+        for step in jobs["sign"]["steps"]
+        if step.get("id") == "prepare"
+    )
     assert jobs["build"]["permissions"] == {"contents": "read"}
     assert jobs["sign"]["permissions"] == {"contents": "read"}
     assert jobs["sign"]["environment"]["name"] == "agent-release-signing"

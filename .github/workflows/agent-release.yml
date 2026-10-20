@@ -2,8 +2,13 @@ name: Agent APT release
 
 on:
   push:
-    tags:
-      - "agent-v*"
+    branches:
+      - main
+    paths:
+      - "hardware-agent/pyproject.toml"
+      - "hardware-agent/uv.lock"
+      - "hardware-agent/src/**"
+      - "hardware-agent/packaging/**"
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
@@ -17,7 +22,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -31,22 +36,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate immutable source tag and version
+      - name: Validate main source and package version
         id: source
         shell: bash
         run: |
           set -euo pipefail
           test "$(git status --porcelain)" = ""
-          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD
-          tag_version="${GITHUB_REF_NAME#agent-v}"
           source_version=$(sed -n 's/^version = "\(.*\)"/\1/p' hardware-agent/pyproject.toml)
-          [[ "$GITHUB_REF_NAME" =~ ^agent-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$tag_version" = "$source_version"
+          [[ "$source_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           test -f .github/workflows/agent-release.yml
           test -f hardware-agent/packaging/publish-apt.sh
-          echo "version=$tag_version" >> "$GITHUB_OUTPUT"
+          echo "version=$source_version" >> "$GITHUB_OUTPUT"
           echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Install package build tools
@@ -165,7 +167,7 @@ jobs:
     needs: build
     if: >-
       always() &&
-      (github.ref_type == 'tag' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     environment:
@@ -183,7 +185,7 @@ jobs:
           persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push'
         with:
           name: agent-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/packages
@@ -234,12 +236,12 @@ jobs:
             git -C "$state" checkout --detach -q "$base_sha"
             sh hardware-agent/packaging/publish-apt.sh verify-current \
               --repo "$state" --suite stable --keyring backend/agent-release/public-keyring.gpg
-          elif [[ "$GITHUB_REF_TYPE" != tag ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" != push ]]; then
             echo 'should_publish=false' >> "$GITHUB_OUTPUT"
             echo 'No retained state exists yet; scheduled metadata refresh is a no-op.'
             exit 0
           fi
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
             manifest="$RUNNER_TEMP/packages/release-manifest.json"
             agent_package="$RUNNER_TEMP/packages/hardware-agent.deb"
             updater_package="$RUNNER_TEMP/packages/hardware-agent-updater.deb"

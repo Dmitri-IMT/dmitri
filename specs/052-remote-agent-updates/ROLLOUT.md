@@ -16,8 +16,10 @@ Authoritative managed APT state belongs on isolated **`agent-apt-state`** in the
 never execute code from this data branch. The protected environments
 **`agent-release-signing`** and **`agent-release-publishing`** exist with reviewer **`Chambs`**
 and deployment rules for branch `main` and tags `agent-v*`. Verify actual rules at execution.
-Protect tags against replacement/deletion and require release commits reachable from reviewed
-source. Build has no signing secret or write permission.
+The release workflow publishes from protected `main` pushes that change agent source, package
+inputs, or `hardware-agent/pyproject.toml`; it does not require a release tag. Each intended
+agent release must bump `hardware-agent/pyproject.toml` because published APT package identities
+are immutable. Build has no signing secret or write permission.
 
 The coordinating agent generated the official certification-only primary fingerprint
 **`92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A`** and signing-only subkey fingerprint
@@ -141,8 +143,9 @@ zero-skip gate. Use PostgreSQL `dmitri_test` and the repository database prepara
 
 Release flow must have separate jobs and permissions:
 
-1. Validate protected immutable `agent-v*` version tag, clean committed source and version
-   identity; tag commit must contain the reviewed payload and trusted workflow/tools.
+1. On a protected `main` push that changes release inputs, validate clean committed source and
+   the semantic version in `hardware-agent/pyproject.toml`. Bump that version for every agent
+   release; never reuse an immutable published APT package identity.
 2. Build/test arm64 artifacts without signing or publication credentials. Record commit,
    UUID, package versions, hashes/sizes, tool versions and test evidence.
 3. Signing job uses `agent-release-signing`, read-only source/state access and no hosting
