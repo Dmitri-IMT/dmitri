@@ -1302,6 +1302,99 @@ paths:
         - $ref: '#/components/parameters/AgentId'
       responses:
         '204': { $ref: '#/components/responses/CorsPreflightNoContent' }
+
+  /api/v1/agent-updates/{update_id}/claim:
+    post:
+      tags: [agents]
+      summary: Claim a requested agent update
+      description: Signed device request. Commits one immutable, deadline-bounded receipt before authorizing preparation; retries return the same receipt.
+      operationId: claimAgentUpdate
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdateClaimRequest'
+      responses:
+        '200':
+          description: Existing or newly committed claim receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateClaimReceipt'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Claim rejected or current session replaced.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '410':
+          description: Claim deadline expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+  /api/v1/agent-updates/{update_id}/events:
+    post:
+      tags: [agents]
+      summary: Record an agent update event
+      description: Signed device request with a strict increasing sequence. Persists only bounded evidence; identical retries acknowledge the stored sequence.
+      operationId: reportAgentUpdateEvent
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdateEventRequest'
+      responses:
+        '200':
+          description: Event is durably committed or an identical sequence was already committed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateEventAck'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Event sequence or transition rejected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '410':
+          description: First mutation authorization deadline expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
   /api/v1/agents/{agent_id}/updates:
     get:
       tags: [agents]
@@ -4896,6 +4989,100 @@ components:
       properties:
         release_id: { type: string, format: uuid }
         expected_observed_version: { type: string, minLength: 1, maxLength: 128 }
+    AgentUpdateClaimRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id, release_id, target_package_version, sha256]
+      properties:
+        session_id: { type: string, format: uuid }
+        release_id: { type: string, format: uuid }
+        target_package_version: { type: string, minLength: 1, maxLength: 128 }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    AgentUpdateClaimReceipt:
+      type: object
+      additionalProperties: false
+      required: [update_id, session_id, release_id, target_package_version, sha256, authorization_deadline]
+      properties:
+        update_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        release_id: { type: string, format: uuid }
+        target_package_version: { type: string }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        authorization_deadline: { type: string, format: date-time }
+    AgentUpdateEvidence:
+      type: object
+      additionalProperties: false
+      description: Closed, bounded health evidence; logs and configuration are not accepted.
+      properties:
+        package_status:
+          anyOf:
+            - { type: string, const: configured }
+            - { type: 'null' }
+        service_active:
+          anyOf:
+            - { type: boolean }
+            - { type: 'null' }
+        health_check:
+          anyOf:
+            - { type: string, enum: [passed, failed] }
+            - { type: 'null' }
+    AgentUpdateEventRequest:
+      type: object
+      additionalProperties: false
+      required: [sequence, phase, session_id, occurred_at]
+      properties:
+        sequence: { type: integer, exclusiveMinimum: 0 }
+        phase:
+          type: string
+          enum: [requested, preparing, installing, verifying, awaiting_confirmation, recovering, succeeded, failed, expired, rolled_back, needs_intervention]
+        local_outcome:
+          anyOf:
+            - { type: string, enum: [succeeded, failed, rolled_back, needs_intervention] }
+            - { type: 'null' }
+        observed_version:
+          anyOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: 'null' }
+        package_version:
+          anyOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: 'null' }
+        invocation_id:
+          anyOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        session_id: { type: string, format: uuid }
+        occurred_at: { type: string, format: date-time }
+        error_code:
+          anyOf:
+            - { type: string, enum: [device_busy, session_replaced, request_expired, release_not_allowed, version_conflict, metadata_untrusted, metadata_expired, artifact_mismatch, unsupported_platform, prerequisite_missing, insufficient_resources, package_manager_busy, install_failed, local_health_failed, recovery_failed, state_corrupt] }
+            - { type: 'null' }
+        evidence:
+          anyOf:
+            - { $ref: '#/components/schemas/AgentUpdateEvidence' }
+            - { type: 'null' }
+    AgentUpdateEventAck:
+      type: object
+      additionalProperties: false
+      required: [ack_sequence]
+      properties:
+        ack_sequence: { type: integer, exclusiveMinimum: 0 }
+    UpdateProtocolErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          enum: [not_found, device_revoked, release_not_allowed, artifact_mismatch, session_replaced, request_expired, authorization_expired, claim_state_invalid, illegal_transition, sequence_conflict, sequence_out_of_order, claim_required, local_health_evidence_required, hello_confirmation_required, recovery_required, invalid_event_time, invalid_event_combination]
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+    UpdateProtocolErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/UpdateProtocolErrorDetail' }
     ReleaseSummary:
       type: object
       additionalProperties: false
@@ -5446,6 +5633,17 @@ components:
             type: string
             enum: [scan_finalization_v1, agent_update_v1]
           default: []
+        update_context:
+          anyOf:
+            - $ref: '#/components/schemas/AgentUpdateHelloContext'
+            - type: 'null'
+    AgentUpdateHelloContext:
+      type: object
+      additionalProperties: false
+      required: [update_id, invocation_id]
+      properties:
+        update_id: { type: string, format: uuid }
+        invocation_id: { type: string, format: uuid }
     AgentCommandFrame:
       type: object
       additionalProperties: false

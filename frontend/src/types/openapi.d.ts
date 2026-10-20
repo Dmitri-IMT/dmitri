@@ -499,6 +499,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-updates/{update_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a requested agent update
+         * @description Signed device request. Commits one immutable, deadline-bounded receipt before authorizing preparation; retries return the same receipt.
+         */
+        post: operations["claimAgentUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-updates/{update_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an agent update event
+         * @description Signed device request with a strict increasing sequence. Persists only bounded evidence; identical retries acknowledge the stored sequence.
+         */
+        post: operations["reportAgentUpdateEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/updates": {
         parameters: {
             query?: never;
@@ -1467,6 +1507,61 @@ export interface components {
             release_id: string;
             expected_observed_version: string;
         };
+        AgentUpdateClaimRequest: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            release_id: string;
+            target_package_version: string;
+            sha256: string;
+        };
+        AgentUpdateClaimReceipt: {
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            release_id: string;
+            target_package_version: string;
+            sha256: string;
+            /** Format: date-time */
+            authorization_deadline: string;
+        };
+        /** @description Closed, bounded health evidence; logs and configuration are not accepted. */
+        AgentUpdateEvidence: {
+            package_status?: "configured" | null;
+            service_active?: boolean | null;
+            health_check?: ("passed" | "failed") | null;
+        };
+        AgentUpdateEventRequest: {
+            sequence: number;
+            /** @enum {string} */
+            phase: "requested" | "preparing" | "installing" | "verifying" | "awaiting_confirmation" | "recovering" | "succeeded" | "failed" | "expired" | "rolled_back" | "needs_intervention";
+            local_outcome?: ("succeeded" | "failed" | "rolled_back" | "needs_intervention") | null;
+            observed_version?: string | null;
+            package_version?: string | null;
+            invocation_id?: string | null;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: date-time */
+            occurred_at: string;
+            error_code?: ("device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt") | null;
+            evidence?: components["schemas"]["AgentUpdateEvidence"] | null;
+        };
+        AgentUpdateEventAck: {
+            ack_sequence: number;
+        };
+        UpdateProtocolErrorDetail: {
+            /** @enum {string} */
+            code: "not_found" | "device_revoked" | "release_not_allowed" | "artifact_mismatch" | "session_replaced" | "request_expired" | "authorization_expired" | "claim_state_invalid" | "illegal_transition" | "sequence_conflict" | "sequence_out_of_order" | "claim_required" | "local_health_evidence_required" | "hello_confirmation_required" | "recovery_required" | "invalid_event_time" | "invalid_event_combination";
+            message: string;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateProtocolErrorResponse: {
+            error: components["schemas"]["UpdateProtocolErrorDetail"];
+        };
         ReleaseSummary: {
             /** Format: uuid */
             release_id: string;
@@ -1758,6 +1853,13 @@ export interface components {
             architecture?: string | null;
             /** @default [] */
             capabilities: ("scan_finalization_v1" | "agent_update_v1")[];
+            update_context?: components["schemas"]["AgentUpdateHelloContext"] | null;
+        };
+        AgentUpdateHelloContext: {
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            invocation_id: string;
         };
         /**
          * @description **Backend → Pi.** Delivered on the open socket when an operator triggers "Scan now".
@@ -4311,6 +4413,126 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    claimAgentUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing or newly committed claim receipt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateClaimReceipt"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Claim rejected or current session replaced. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            /** @description Claim deadline expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reportAgentUpdateEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Event is durably committed or an identical sequence was already committed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateEventAck"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Event sequence or transition rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            /** @description First mutation authorization deadline expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     listAgentUpdates: {

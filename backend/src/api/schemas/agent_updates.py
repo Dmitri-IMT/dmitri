@@ -7,14 +7,34 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 UpdatePhase = Literal[
-    "requested", "preparing", "installing", "verifying", "awaiting_confirmation",
-    "recovering", "succeeded", "failed", "expired", "rolled_back", "needs_intervention",
+    "requested",
+    "preparing",
+    "installing",
+    "verifying",
+    "awaiting_confirmation",
+    "recovering",
+    "succeeded",
+    "failed",
+    "expired",
+    "rolled_back",
+    "needs_intervention",
 ]
 UpdateErrorCode = Literal[
-    "device_busy", "session_replaced", "request_expired", "release_not_allowed",
-    "version_conflict", "metadata_untrusted", "metadata_expired", "artifact_mismatch",
-    "unsupported_platform", "prerequisite_missing", "insufficient_resources",
-    "package_manager_busy", "install_failed", "local_health_failed", "recovery_failed",
+    "device_busy",
+    "session_replaced",
+    "request_expired",
+    "release_not_allowed",
+    "version_conflict",
+    "metadata_untrusted",
+    "metadata_expired",
+    "artifact_mismatch",
+    "unsupported_platform",
+    "prerequisite_missing",
+    "insufficient_resources",
+    "package_manager_busy",
+    "install_failed",
+    "local_health_failed",
+    "recovery_failed",
     "state_corrupt",
 ]
 LocalOutcome = Literal["succeeded", "failed", "rolled_back", "needs_intervention"]
@@ -96,6 +116,96 @@ class AgentUpdateEventView(BaseModel):
     observed_package_version: str | None = None
     occurred_at: datetime
     error_code: UpdateErrorCode | None = None
+
+
+class AgentUpdateHelloContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    update_id: UUID
+    invocation_id: UUID
+
+
+class AgentUpdateClaimRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: UUID
+    release_id: UUID
+    target_package_version: str = Field(min_length=1, max_length=128)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class AgentUpdateClaimReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    update_id: UUID
+    session_id: UUID
+    release_id: UUID
+    target_package_version: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authorization_deadline: datetime
+
+
+class AgentUpdateEvidence(BaseModel):
+    """Small, closed health evidence allowlist; never accepts logs or config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    package_status: Literal["configured"] | None = None
+    service_active: bool | None = None
+    health_check: Literal["passed", "failed"] | None = None
+
+
+class AgentUpdateEventRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sequence: int = Field(gt=0)
+    phase: UpdatePhase
+    local_outcome: LocalOutcome | None = None
+    observed_version: str | None = Field(default=None, min_length=1, max_length=128)
+    package_version: str | None = Field(default=None, min_length=1, max_length=128)
+    invocation_id: UUID | None = None
+    session_id: UUID
+    occurred_at: datetime
+    error_code: UpdateErrorCode | None = None
+    evidence: AgentUpdateEvidence | None = None
+
+
+class AgentUpdateEventAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ack_sequence: int = Field(gt=0)
+
+
+class UpdateProtocolErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Literal[
+        "not_found",
+        "device_revoked",
+        "release_not_allowed",
+        "artifact_mismatch",
+        "session_replaced",
+        "request_expired",
+        "authorization_expired",
+        "claim_state_invalid",
+        "illegal_transition",
+        "sequence_conflict",
+        "sequence_out_of_order",
+        "claim_required",
+        "local_health_evidence_required",
+        "hello_confirmation_required",
+        "recovery_required",
+        "invalid_event_time",
+        "invalid_event_combination",
+    ]
+    message: str
+    details: dict[str, object]
+
+
+class UpdateProtocolErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: UpdateProtocolErrorDetail
 
 
 class AgentUpdateHistoryPage(BaseModel):

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 
+from api.schemas.agent_updates import AgentUpdateHelloContext
 from api.schemas.commands import NspiOptions
 from api.schemas.scan import ScanMode, SubnetCIDR
 from api.schemas.scan_progress import ScanProgressSnapshot
@@ -31,9 +32,10 @@ class AgentHelloFrame(BaseModel):
     updater_version: str | None = None
     os_suite: str | None = None
     architecture: str | None = None
-    capabilities: list[
-        Literal["scan_finalization_v1", "agent_update_v1"]
-    ] = Field(default_factory=list)
+    capabilities: list[Literal["scan_finalization_v1", "agent_update_v1"]] = Field(
+        default_factory=list
+    )
+    update_context: AgentUpdateHelloContext | None = None
 
 
 class UpdateSessionFrame(BaseModel):

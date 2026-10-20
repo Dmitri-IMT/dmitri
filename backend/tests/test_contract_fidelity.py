@@ -70,6 +70,13 @@ SCHEMA_NAMES = (
     "AgentDetail",
     "AgentProtocolSupport",
     "AgentUpdateRequest",
+    "AgentUpdateClaimRequest",
+    "AgentUpdateClaimReceipt",
+    "AgentUpdateEvidence",
+    "AgentUpdateEventRequest",
+    "AgentUpdateEventAck",
+    "UpdateProtocolErrorDetail",
+    "UpdateProtocolErrorResponse",
     "AgentUpdateAvailability",
     "AgentUpdateHistoryPage",
     "ReleaseSummary",
@@ -247,17 +254,86 @@ def test_agent_protocol_probe_route_matches_contract():
     contract_operation = _load_contract()["paths"][
         "/api/v1/agents/{agent_id}/update-protocol"
     ]["get"]
-    app_operation = app.openapi()["paths"][
-        "/api/v1/agents/{agent_id}/update-protocol"
-    ]["get"]
+    app_operation = app.openapi()["paths"]["/api/v1/agents/{agent_id}/update-protocol"][
+        "get"
+    ]
 
     assert app_operation["operationId"] == contract_operation["operationId"]
-    assert app_operation["responses"]["200"]["content"]["application/json"][
-        "schema"
-    ]["$ref"] == contract_operation["responses"]["200"]["content"][
-        "application/json"
-    ]["schema"]["$ref"]
+    assert (
+        app_operation["responses"]["200"]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        == contract_operation["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]["$ref"]
+    )
     assert contract_operation["security"] == [{"AgentSignatureAuth": []}]
+
+
+@pytest.mark.parametrize(
+    ("path", "operation_id", "request_schema", "response_schema"),
+    [
+        (
+            "/api/v1/agent-updates/{update_id}/claim",
+            "claimAgentUpdate",
+            "AgentUpdateClaimRequest",
+            "AgentUpdateClaimReceipt",
+        ),
+        (
+            "/api/v1/agent-updates/{update_id}/events",
+            "reportAgentUpdateEvent",
+            "AgentUpdateEventRequest",
+            "AgentUpdateEventAck",
+        ),
+    ],
+)
+def test_signed_update_report_routes_match_contract(
+    path: str, operation_id: str, request_schema: str, response_schema: str
+) -> None:
+    contract_operation = _load_contract()["paths"][path]["post"]
+    app_operation = app.openapi()["paths"][path]["post"]
+    assert (
+        app_operation["operationId"]
+        == contract_operation["operationId"]
+        == operation_id
+    )
+    assert contract_operation["security"] == [{"AgentSignatureAuth": []}]
+    assert (
+        contract_operation["requestBody"]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        == f"#/components/schemas/{request_schema}"
+    )
+    assert (
+        app_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        == f"#/components/schemas/{request_schema}"
+    )
+    assert (
+        contract_operation["responses"]["200"]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        == f"#/components/schemas/{response_schema}"
+    )
+    assert (
+        app_operation["responses"]["200"]["content"]["application/json"]["schema"][
+            "$ref"
+        ]
+        == f"#/components/schemas/{response_schema}"
+    )
+    for status in ("409", "410"):
+        expected_error = "#/components/schemas/UpdateProtocolErrorResponse"
+        assert (
+            contract_operation["responses"][status]["content"]["application/json"][
+                "schema"
+            ]["$ref"]
+            == expected_error
+        )
+        assert (
+            app_operation["responses"][status]["content"]["application/json"]["schema"][
+                "$ref"
+            ]
+            == expected_error
+        )
 
 
 def _enum_values(spec: dict[str, Any], node: dict[str, Any]) -> list[str]:
@@ -327,9 +403,7 @@ def test_assessment_field_limits_match_contract(
 def test_finding_evidence_contract_limits_match_openapi_and_backend() -> None:
     contract = _load_contract()
     app_spec = app.openapi()
-    observation = contract["components"]["schemas"][
-        "FindingEvidenceObservationPayload"
-    ]
+    observation = contract["components"]["schemas"]["FindingEvidenceObservationPayload"]
     app_observation = app_spec["components"]["schemas"][
         "FindingEvidenceObservationPayload"
     ]
@@ -455,9 +529,10 @@ def test_finding_evidence_read_summary_is_additive_and_counts_records() -> None:
         )
 
     for schema_name in ("ScanDetailResponse", "FindingListResponse"):
-        assert "evidence_summary" in contract["components"]["schemas"][
-            schema_name
-        ]["properties"]
+        assert (
+            "evidence_summary"
+            in contract["components"]["schemas"][schema_name]["properties"]
+        )
 
 
 @pytest.mark.parametrize(
@@ -823,9 +898,10 @@ def test_agent_update_frame_matches_backend_schema() -> None:
     assert contract_schema["required"] == backend_schema["required"]
     assert contract_schema["additionalProperties"] is False
     assert contract_schema["properties"]["type"]["const"] == "agent_update"
-    assert contract_schema["properties"]["sha256"]["pattern"] == backend_schema[
-        "properties"
-    ]["sha256"]["pattern"]
+    assert (
+        contract_schema["properties"]["sha256"]["pattern"]
+        == backend_schema["properties"]["sha256"]["pattern"]
+    )
 
 
 def _route_error_codes_by_status(

@@ -1,6 +1,6 @@
 # Tasks — Atualização remota do agente (`052-remote-agent-updates`)
 
-14 tasks. **Tasks 1–9 concluídas; Task 10 pendente.**
+14 tasks. **Tasks 1–10 concluídas; Task 11 pendente.**
 
 ## Escopo e estado
 
@@ -235,8 +235,8 @@ publicação de release, scan real e commit/push dependem de autorização para 
   - `succeeded` exige evento durável de saúde local e hello atual correspondente à operação/invocation/versão em qualquer ordem; hello isolado não prova instalação saudável.
   - Rede/backend indisponível não vira falha local nem rollback; `needs_intervention` conserva reserva, revogação bloqueia admissão/reporte remoto sem cancelar recuperação local.
 - **Models**: Coder/tester Luna medium; reviewer Sol high.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETED
+- **Review Rejections**: 2
 
 ## Task 11: Instalar, verificar e recuperar pelo supervisor independente
 - **Description**: Completar o companion com preflight, claim, instalação offline, verificação local, recuperação e reporter durável em `ARCHITECTURE.md` (Installation and recovery). Usar o protocolo real das Tasks 9/10, com clientes falsos somente em testes.
@@ -376,7 +376,7 @@ habilitar clientes capazes; nenhuma release intermediária incompleta é promovi
 | 7 | Sessões, versões e ACK | 1 | Sol high | COMPLETED |
 | 8 | Finalização durável e saúde | 5, 6, 7 | Sol high | COMPLETED |
 | 9 | Consulta e admissão HTTP | 1, 2, 7 | Sol high | COMPLETED |
-| 10 | Claim, eventos e confirmação | 7, 9 | Sol high | PENDING |
+| 10 | Claim, eventos e confirmação | 7, 9 | Sol high | COMPLETED |
 | 11 | Instalação, recuperação e reporte | 3, 5, 6, 8, 10 | Sol high | PENDING |
 | 12 | Integração/capacidade no daemon | 7, 8, 10, 11 | Sol high | PENDING |
 | 13 | Interface web localizada | 9, 10, 12 | Sol medium | PENDING |

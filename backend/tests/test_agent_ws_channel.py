@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from api.db.session import get_session
 from api.main import app
+from api.models.agent_update import AgentRelease, AgentUpdate, AgentUpdateEvent
 from api.models.command import Agent, Command
 from api.models.identity import Org
 from api.models.persistence import ScanRecord
@@ -132,9 +133,7 @@ def test_progress_frame_persists_snapshot_without_changing_command_status(
         headers=ws_upgrade_headers(private_key, provisioned_agent.id),
     ) as ws:
         ws.send_text(
-            _progress_payload(
-                command_id=command.id, scan_id=scan.scan_id, sequence=1
-            )
+            _progress_payload(command_id=command.id, scan_id=scan.scan_id, sequence=1)
         )
         _sync(ws)
 
@@ -226,9 +225,7 @@ def test_hello_frame_cached_in_registry_and_bumps_last_seen(
         hello = agent_connections.get_hello(provisioned_agent.id)
         assert hello is not None
         assert hello[0] == "0.2.0"
-        assert [
-            (s.interface, s.cidr, s.is_default_route) for s in hello[1]
-        ] == [
+        assert [(s.interface, s.cidr, s.is_default_route) for s in hello[1]] == [
             ("eth0", "10.0.0.0/24", False),
             ("wlan0", "192.168.1.0/24", True),
         ]
@@ -312,6 +309,163 @@ def test_agent_update_only_hello_negotiates_protocol_version(
         assert connection.protocol_version == session["protocol_version"] == 1
 
     assert session["capabilities"] == ["agent_update_v1"]
+
+
+def test_matching_current_hello_confirms_durable_local_update_success(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+) -> None:
+    private_key, _public_key = agent_keypair
+    invocation_id = uuid4()
+    update_id = uuid4()
+    release = AgentRelease(
+        source_commit="a" * 40,
+        upstream_version="0.2.0",
+        package_version="1.0.7-1",
+        architecture="arm64",
+        suite="trixie",
+        sha256="b" * 64,
+        size_bytes=123,
+        required_protocol_version=1,
+        required_updater_version=1,
+        published_at=T0,
+    )
+    operation = AgentUpdate(
+        id=update_id,
+        org_id=provisioned_agent.org_id,
+        agent_id=provisioned_agent.id,
+        actor_display_snapshot="admin@example.test",
+        idempotency_key=str(uuid4()),
+        request_digest="c" * 64,
+        release_id=release.id,
+        target_version="0.2.0",
+        target_package_version="1.0.7-1",
+        session_id=uuid4(),
+        invocation_id=invocation_id,
+        phase="awaiting_confirmation",
+        local_outcome="succeeded",
+        claimed_at=T0,
+        local_completed_at=T0,
+    )
+    administrative_session.add_all(
+        [
+            release,
+            operation,
+            AgentUpdateEvent(
+                update_id=update_id,
+                sequence=1,
+                body_digest="d" * 64,
+                phase="awaiting_confirmation",
+                local_outcome="succeeded",
+                observed_version="0.2.0",
+                observed_package_version="1.0.7-1",
+                invocation_id=invocation_id,
+                session_id=operation.session_id,
+                occurred_at=T0,
+                evidence_json={
+                    "package_status": "configured",
+                    "service_active": True,
+                    "health_check": "passed",
+                },
+            ),
+        ]
+    )
+    administrative_session.commit()
+    hello = json.loads(_hello_payload())
+    hello.update(
+        {
+            "agent_version": "0.2.0",
+            "package_version": "1.0.7-1",
+            "capabilities": ["agent_update_v1"],
+            "update_context": {
+                "update_id": str(update_id),
+                "invocation_id": str(invocation_id),
+            },
+        }
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        assert ws.receive_json()["type"] == "update_session"
+
+    administrative_session.expire_all()
+    confirmed = administrative_session.get(AgentUpdate, update_id)
+    assert confirmed is not None
+    assert confirmed.phase == "succeeded"
+    assert confirmed.local_outcome == "succeeded"
+    assert confirmed.confirmed_at is not None
+
+
+def test_hello_with_mismatched_update_context_does_not_confirm(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+) -> None:
+    private_key, _public_key = agent_keypair
+    update_id = uuid4()
+    invocation_id = uuid4()
+    release = AgentRelease(
+        source_commit="a" * 40,
+        upstream_version="0.2.0",
+        package_version="1.0.7-1",
+        architecture="arm64",
+        suite="trixie",
+        sha256="b" * 64,
+        size_bytes=123,
+        required_protocol_version=1,
+        required_updater_version=1,
+        published_at=T0,
+    )
+    operation = AgentUpdate(
+        id=update_id,
+        org_id=provisioned_agent.org_id,
+        agent_id=provisioned_agent.id,
+        actor_display_snapshot="admin@example.test",
+        idempotency_key=str(uuid4()),
+        request_digest="c" * 64,
+        release_id=release.id,
+        target_version="0.2.0",
+        target_package_version="1.0.7-1",
+        session_id=uuid4(),
+        invocation_id=invocation_id,
+        phase="awaiting_confirmation",
+        local_outcome="succeeded",
+        claimed_at=T0,
+        local_completed_at=T0,
+    )
+    administrative_session.add_all([release, operation])
+    administrative_session.commit()
+    hello = json.loads(_hello_payload())
+    hello.update(
+        {
+            "agent_version": "0.2.0",
+            "package_version": "1.0.7-1",
+            "capabilities": ["agent_update_v1"],
+            "update_context": {
+                "update_id": str(update_id),
+                "invocation_id": str(uuid4()),
+            },
+        }
+    )
+
+    with client.websocket_connect(
+        _ws_path(provisioned_agent.id),
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id),
+    ) as ws:
+        ws.send_json(hello)
+        assert ws.receive_json()["type"] == "update_session"
+
+    administrative_session.expire_all()
+    unchanged = administrative_session.get(AgentUpdate, update_id)
+    assert unchanged is not None
+    assert unchanged.phase == "awaiting_confirmation"
+    assert unchanged.confirmed_at is None
 
 
 def test_legacy_hello_keeps_last_observed_package_version(

@@ -1,6 +1,6 @@
 # Progresso — atualização remota do agente
 
-- Estado atual: Tasks 1–9 concluídas; Task 10 é a próxima pendente.
+- Estado atual: Tasks 1–10 concluídas; Task 11 é a próxima pendente.
 - Autorizações registradas: Tasks 8 e 9 concluídas nesta sequência, conforme comando explícito do usuário em 2026-10-19.
 - Bypass autorizado pelo usuário para concluir os gates: usar PostgreSQL isolado em Docker,
   com banco `dmitri_test`, porta em loopback e armazenamento tmpfs, como exceção ao bootstrap
@@ -110,3 +110,51 @@ porta 55432 e banco chamado `dmitri_test`, com armazenamento temporário em mem�
 - Task 8 concluída após revisão independente `[APPROVE]` em 2026-10-19. Implementados checkpoint/replay duráveis de finalização, retry de ingest com backoff, single-flight compartilhado entre execução e recuperação, reconciliação de park/reconnect sem reexecutar scan, validação local de readiness e proteção de sessão/ACK. Testes focais Windows: 222 passed, 16 skipped; Linux: 238 passed no foco POSIX; suíte completa Linux: 1.523 passed, 16 skipped. Os 15 testes de `test_update_scripts.py` antes pulados por dependências passaram em execução separada (33 passed no arquivo); teste de recuperação isolada com Docker nested passou (1 passed). Ruff/format dos arquivos alterados aprovados. O Ruff global reporta 9 achados em testes não alterados; reservados para fechamento de camada/Task 14. Nenhum scan, SSH, deploy ou alteração do Raspberry.
 - Task 9 iniciada em sequência após aprovação da Task 8, conforme autorização do usuário. Escopo: rotas de consulta e admissão manual, controle transacional de permissões/idempotência, exclusão mútua scan/update, envio único na sessão capturada e sincronização OpenAPI/tipos. Sem implementação de claim/eventos da Task 10.
 - Task 9 concluída após duas rodadas de correção e revisão independente `[APPROVE]`. A API consulta disponibilidade/histórico/operação e admite atualização manual com autorização viva, idempotência, reserva compartilhada com scans, entrega única à sessão capturada, expiração de pedidos não reclamados e compatibilidade de versão Debian/protocolo/suite. O hello aceita a capability de update sem anunciá-la no agente, que permanece para a Task 12. OpenAPI e tipos foram sincronizados. Suíte focada independente: 220 passed; Ruff nos arquivos backend alterados, geração OpenAPI e typecheck passaram. Warning-only de depreciações Starlette/httpx e chave curta de fixture. Sem commit/sync, deploy, SSH ou scan real.
+- Task 10 concluída após revisão independente `[APPROVE]`. Backend valida claims e eventos assinados, aplica sequência e digest idempotentes, mantém autorização sem estender deadline, aceita replay tardio de `installing` somente quando `occurred_at` comprova início antes do prazo, e reconcilia evento local de saúde com hello da sessão atual em qualquer ordem. Expiração só libera reserva antes da mutação; recuperação conserva sua causa, `rolled_back` exige saúde da versão anterior e `needs_intervention` mantém a reserva. Erros 409/410 estão documentados no OpenAPI e tipos sincronizados.
+- Gates focais: `tests/test_agent_updates.py` 24 passed; `tests/test_agent_ws_channel.py` 26 passed; subconjunto de fidelidade de contrato 7 passed / 73 deselected; Ruff nos arquivos alterados, `compileall`, parse YAML, geração de tipos e `npm run typecheck` passaram. A suíte completa de `test_contract_fidelity.py` foi interrompida após 30 s (23 casos vistos), sem resultado final; não há pytest ativo.
+- Testes executados somente no PostgreSQL descartável `dmitri-task10-postgres`, tmpfs, bind em `127.0.0.1:55432`; permanece ativo para a revisão independente. Uma tentativa inicial identificou que `127.0.0.1:54322/dmitri_test` é banco compartilhado incompatível com migrações; ele não foi mais usado nem alterado.
+
+
+### Task 10 - coder round 2 apos rejeicao
+
+- Regras de tempo: o inicio autorizado e `occurred_at` do primeiro evento `installing`,
+  vinculado a `claimed_at`, a sessao persistida e a `authorization_deadline` imutavel.
+  Eventos sao monot?nicos por sequencia e aceitam no maximo dois minutos de avanco de relogio.
+  Um evento assinado que chega apos o deadline e aceito se ocorreu dentro da janela; isso nao
+  move nem prolonga o deadline. Timestamp invalido e rejeitado sem expirar a operacao nem
+  liberar a reserva, pois a mutacao pode ter comecado localmente.
+- Validacao fase/outcome/evidencia: falha exige outcome `failed` e codigo de erro; sucesso local
+  exige outcome `succeeded` e prova de saude; rollback exige versao/pacote anteriores,
+  invocation e prova de pacote configurado, servico ativo e health check aprovado;
+  `needs_intervention` exige erro e mantem a fase que reserva o dispositivo. Combinacoes
+  incoerentes sao rejeitadas antes de persistencia.
+- OpenAPI: rotas assinadas de claim e eventos agora publicam o envelope real de erro nos
+  status 409/410, com codigos enumerados; tipos TypeScript regenerados.
+- Regressoes adicionadas para replay de evento tardio, timestamp apos deadline, falha com
+  outcome de sucesso, rollback sem saude e retencao de reserva em `needs_intervention`.
+- Validacao local: `test_agent_updates.py` 27 passed; fidelidade OpenAPI selecionada
+  82 passed, 68 deselected; Ruff nos arquivos backend alterados passou; geracao de tipos
+  OpenAPI e `npm run typecheck` passaram. PostgreSQL 17 descartavel usa tmpfs e bind
+  `127.0.0.1:55433`, banco `dmitri_test`; nenhum teste usou a porta compartilhada 54322.
+  O ambiente Python tambem foi criado em pasta temporaria fora dos venvs ligados do checkout.
+- Sem commit/sync/deploy, SSH, scan ou alteracao da Task 11/hardware-agent. Task 10 aguarda
+  revisao independente.
+
+### Task 10 - coder round 3 após segunda rejeição
+
+- Corrigido o estado `preparing -> expired`: só aceita evento `request_expired` após o
+  authorization deadline, com `occurred_at` no deadline ou depois e sem mutação iniciada;
+  grava evento, outcome nulo e fase terminal, liberando a reserva.
+- Recuperação agora exige mutação previamente registrada e causa `install_failed` ou
+  `local_health_failed`; não há transição para recuperação a partir de
+  `awaiting_confirmation`. A causa permanece no registro durante progresso e rollback;
+  rollback exige versões anteriores, invocation e prova completa de saúde. Falha de
+  recuperação pode ser auditada no evento de `needs_intervention` sem apagar a causa.
+- Regressões focais cobrem expiração e liberação de reserva, bloqueio após mutação,
+  preservação da causa no rollback e ausência de recuperação após confirmação local.
+- PostgreSQL 17 descartável em tmpfs, porta `127.0.0.1:55434`, banco `dmitri_test`.
+  `test_agent_updates.py`: 30 passed; fidelidade OpenAPI focada: 2 passed;
+  Ruff dos arquivos de serviço/teste e `npm run typecheck` passaram. Nenhuma mudança
+  de enum/migração ou OpenAPI/tipos foi necessária. Sem commit/sync/deploy, SSH, scan,
+  ou alterações da Task 11/hardware-agent.
+- Validação independente final em PostgreSQL 17 descartável tmpfs (`127.0.0.1:55434/dmitri_test`): sete arquivos, **287 passed**, 12 warnings; probe de recuperação/intervenção/rollback: **1 passed**. Ruff e `git diff --check` passaram; OpenAPI gerou tipos byte-equivalentes e typecheck teve zero diagnostics. Review round 3: `[APPROVE]`. Sem commit/sync/deploy, SSH, scan ou alteração da Task 11.

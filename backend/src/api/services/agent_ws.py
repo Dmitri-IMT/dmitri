@@ -22,8 +22,10 @@ from api.schemas.agent_frames import (
     ScanStatusAckFrame,
     UpdateSessionFrame,
 )
+from api.schemas.agent_updates import AgentUpdateHelloContext
 from api.services import agent_connections
 from api.services.agent_presence import SessionFactory, async_agent_is_revoked
+from api.services.agent_updates import reconcile_update_hello
 from api.services.commands import pending_operator_cancels, transition_command
 from api.services.scan_progress import apply_progress
 
@@ -190,6 +192,7 @@ def _hello_gate(
     session_id: UUID,
     agent_version: str,
     package_version: str | None,
+    update_context: AgentUpdateHelloContext | None = None,
     now: datetime,
 ) -> tuple[Literal["ok", "revoked"], list[UUID]]:
     session = session_factory()
@@ -209,6 +212,17 @@ def _hello_gate(
             agent.observed_package_version = package_version
         agent.version_observed_at = now
         agent.version_observed_session_id = session_id
+        if update_context is not None:
+            reconcile_update_hello(
+                session,
+                agent=agent,
+                session_id=session_id,
+                update_id=update_context.update_id,
+                invocation_id=update_context.invocation_id,
+                agent_version=agent_version,
+                package_version=package_version,
+                now=now,
+            )
         pending_cancels = pending_operator_cancels(session, agent_id=agent_id, now=now)
         session.commit()
         return "ok", pending_cancels
@@ -255,6 +269,11 @@ async def handle_agent_frame(
                 session_id=connection.session_id,
                 agent_version=parsed.frame.agent_version,
                 package_version=parsed.frame.package_version,
+                update_context=(
+                    parsed.frame.update_context
+                    if "agent_update_v1" in parsed.frame.capabilities
+                    else None
+                ),
                 now=now,
             )
             if gate == "revoked":
@@ -270,6 +289,7 @@ async def handle_agent_frame(
                 os_suite=parsed.frame.os_suite,
                 architecture=parsed.frame.architecture,
                 capabilities=frozenset(parsed.frame.capabilities),
+                update_context=parsed.frame.update_context,
                 now=now,
             )
             negotiated = [

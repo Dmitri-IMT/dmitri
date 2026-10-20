@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from starlette.websockets import WebSocket, WebSocketState
 
 from api.schemas.agent_frames import AvailableSubnet
+from api.schemas.agent_updates import AgentUpdateHelloContext
 
 CLOSE_REPLACED = 4000
 CLOSE_REVOKED = 4001
@@ -43,6 +44,7 @@ class AgentConnection:
     architecture: str | None = None
     available_subnets: list[AvailableSubnet] | None = None
     capabilities: frozenset[str] = frozenset()
+    update_context: AgentUpdateHelloContext | None = None
 
 
 async def register(agent_id: UUID, websocket: WebSocket, *, now: datetime) -> None:
@@ -123,6 +125,7 @@ async def set_hello(
     os_suite: str | None = None,
     architecture: str | None = None,
     capabilities: frozenset[str] = frozenset(),
+    update_context: AgentUpdateHelloContext | None = None,
     now: datetime,
 ) -> None:
     async with device_guard(agent_id):
@@ -136,6 +139,7 @@ async def set_hello(
             os_suite=os_suite,
             architecture=architecture,
             capabilities=capabilities,
+            update_context=update_context,
             now=now,
         )
 
@@ -151,6 +155,7 @@ def set_hello_locked(
     os_suite: str | None = None,
     architecture: str | None = None,
     capabilities: frozenset[str],
+    update_context: AgentUpdateHelloContext | None = None,
     now: datetime,
 ) -> bool:
     entry = _registry.get(agent_id)
@@ -162,11 +167,10 @@ def set_hello_locked(
     entry.os_suite = os_suite
     entry.architecture = architecture
     entry.capabilities = capabilities
+    entry.update_context = update_context
     entry.protocol_version = (
         1
-        if capabilities.intersection(
-            {"scan_finalization_v1", "agent_update_v1"}
-        )
+        if capabilities.intersection({"scan_finalization_v1", "agent_update_v1"})
         else None
     )
     entry.available_subnets = available_subnets

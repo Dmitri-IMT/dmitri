@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlmodel import Session
+from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_session
 from api.dependencies.agent_auth import AgentIdentity, require_agent
@@ -13,13 +14,24 @@ from api.errors import ApiError
 from api.schemas.agent_updates import (
     AgentProtocolSupport,
     AgentUpdateAvailability,
+    AgentUpdateClaimReceipt,
+    AgentUpdateClaimRequest,
+    AgentUpdateEventAck,
+    AgentUpdateEventRequest,
     AgentUpdateHistoryPage,
     AgentUpdateRequest,
     UpdateConflictResponse,
     UpdateForbiddenResponse,
     UpdateOperationView,
+    UpdateProtocolErrorResponse,
     UpdateUnauthorizedResponse,
     UpdateUnavailableResponse,
+)
+from api.services import agent_connections
+from api.services.agent_updates import (
+    UpdateProtocolError,
+    claim_update,
+    record_update_event,
 )
 from api.services.agent_updates_http import (
     UpdateAdmissionError,
@@ -30,6 +42,131 @@ from api.services.agent_updates_http import (
 )
 
 router = APIRouter()
+
+
+def _raise_update_protocol_error(exc: UpdateProtocolError) -> None:
+    messages = {
+        "not_found": "Update operation not found.",
+        "device_revoked": "The device is revoked.",
+        "release_not_allowed": "The release is not allowed.",
+        "artifact_mismatch": "The claimed artifact does not match the release.",
+        "session_replaced": "The update session is no longer current.",
+        "request_expired": "The update request has expired.",
+        "authorization_expired": "The update authorization has expired.",
+        "claim_state_invalid": "The update claim is invalid.",
+        "illegal_transition": "The update transition is not allowed.",
+        "sequence_conflict": (
+            "The event sequence was already used with different content."
+        ),
+        "sequence_out_of_order": "The next event sequence is required.",
+        "claim_required": "A valid update claim is required.",
+        "local_health_evidence_required": "Local health evidence is required.",
+        "hello_confirmation_required": "A current hello is required for confirmation.",
+        "recovery_required": "A recovery event is required after mutation failure.",
+        "invalid_event_time": "The event time is invalid.",
+        "invalid_event_combination": "Event phase, outcome, and evidence do not match.",
+    }
+    raise ApiError(
+        exc.status,
+        messages.get(exc.code, "Update event rejected."),
+        code=exc.code,
+    ) from exc
+
+
+@router.post(
+    "/api/v1/agent-updates/{update_id}/claim",
+    response_model=AgentUpdateClaimReceipt,
+    operation_id="claimAgentUpdate",
+    responses={
+        401: {"description": "Invalid device signature"},
+        403: {"description": "Device revoked"},
+        404: {"description": "Update not found"},
+        409: {"model": UpdateProtocolErrorResponse, "description": "Claim rejected"},
+        410: {"model": UpdateProtocolErrorResponse, "description": "Claim expired"},
+    },
+)
+async def post_agent_update_claim(
+    update_id: UUID,
+    body: AgentUpdateClaimRequest,
+    identity: AgentIdentity = Depends(require_agent),
+    session: Session = Depends(get_session),
+) -> AgentUpdateClaimReceipt:
+    async with agent_connections.device_guard(identity.agent_id):
+        connection = agent_connections.get_connection(identity.agent_id)
+        current_session_id = (
+            connection.session_id
+            if connection is not None and "agent_update_v1" in connection.capabilities
+            else None
+        )
+        try:
+            return await run_in_threadpool(
+                claim_update,
+                session,
+                agent_id=identity.agent_id,
+                update_id=update_id,
+                body=body,
+                current_session_id=current_session_id,
+                now=datetime.now(UTC),
+            )
+        except UpdateProtocolError as exc:
+            _raise_update_protocol_error(exc)
+
+
+@router.post(
+    "/api/v1/agent-updates/{update_id}/events",
+    response_model=AgentUpdateEventAck,
+    operation_id="reportAgentUpdateEvent",
+    responses={
+        401: {"description": "Invalid device signature"},
+        403: {"description": "Device revoked"},
+        404: {"description": "Update not found"},
+        409: {"model": UpdateProtocolErrorResponse, "description": "Event rejected"},
+        410: {
+            "model": UpdateProtocolErrorResponse,
+            "description": "Authorization expired",
+        },
+        422: {"description": "Invalid event"},
+    },
+)
+async def post_agent_update_event(
+    update_id: UUID,
+    body: AgentUpdateEventRequest,
+    identity: AgentIdentity = Depends(require_agent),
+    session: Session = Depends(get_session),
+) -> AgentUpdateEventAck:
+    async with agent_connections.device_guard(identity.agent_id):
+        connection = agent_connections.get_connection(identity.agent_id)
+        has_current_update_hello = bool(
+            connection is not None and "agent_update_v1" in connection.capabilities
+        )
+        try:
+            sequence = await run_in_threadpool(
+                record_update_event,
+                session,
+                agent_id=identity.agent_id,
+                update_id=update_id,
+                body=body,
+                now=datetime.now(UTC),
+                current_session_id=(connection.session_id if connection else None),
+                hello_context=(
+                    (
+                        connection.update_context.update_id,
+                        connection.update_context.invocation_id,
+                    )
+                    if has_current_update_hello
+                    and connection.update_context is not None
+                    else None
+                ),
+                hello_agent_version=connection.agent_version
+                if has_current_update_hello
+                else None,
+                hello_package_version=connection.package_version
+                if has_current_update_hello
+                else None,
+            )
+            return AgentUpdateEventAck(ack_sequence=sequence)
+        except UpdateProtocolError as exc:
+            _raise_update_protocol_error(exc)
 
 
 @router.get(
