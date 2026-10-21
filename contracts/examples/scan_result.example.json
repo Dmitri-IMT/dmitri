@@ -176,7 +176,36 @@
                 "user_token_types": ["Anonymous"],
                 "target_matches": true
               }
-            ]
+            ],
+            "mapping": {
+              "phase": {
+                "status": "partial",
+                "reason_codes": ["no_eligible_variables"],
+                "truncated": false,
+                "observed_at": "2026-09-12T14:03:14Z"
+              },
+              "nodes": [
+                {
+                  "node_id": "ns=0;i=86",
+                  "parent_node_id": "ns=0;i=85",
+                  "depth": 1,
+                  "node_class": "Object",
+                  "browse_name": "Objects",
+                  "display_name": "Objects",
+                  "value_read_status": null
+                }
+              ],
+              "references": [{"source_node_id": "ns=0;i=85", "target_node_id": "ns=0;i=86", "reference_type_id": "ns=0;i=35", "is_forward": true}],
+              "references_observed": 1,
+              "value_reads_attempted": 0,
+              "selected_endpoint_index": 0,
+              "anonymous_session_activated": true,
+              "browse_succeeded": true,
+              "application_value_read_succeeded": null,
+              "value_good_count": 0,
+              "security_mode": {"value": "None", "source": "get_endpoints", "status": "Good"},
+              "security_policy": {"value": "http://opcfoundation.org/UA/SecurityPolicy#None", "source": "get_endpoints", "status": "Good"}
+            }
           }
         }
       ]

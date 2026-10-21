@@ -32,6 +32,8 @@ from agent.normalize.contracts import (
     ModbusUnitPayload,
     OpcUaEndpointPayload,
     OpcUaIdentityPayload,
+    OpcUaMappedNodePayload,
+    OpcUaMappingPayload,
     OpcUaObservationPayload,
     OpcUaPhasePayload,
     OpcUaTcpServicePayload,
@@ -58,6 +60,8 @@ CONTRACT_MODELS = (
     ("OpcUaObservationPayload", OpcUaObservationPayload),
     ("OpcUaEndpointPayload", OpcUaEndpointPayload),
     ("OpcUaIdentityPayload", OpcUaIdentityPayload),
+    ("OpcUaMappedNodePayload", OpcUaMappedNodePayload),
+    ("OpcUaMappingPayload", OpcUaMappingPayload),
     ("ModbusUnitPayload", ModbusUnitPayload),
     ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
     ("PortPayload", PortPayload),
@@ -585,6 +589,12 @@ def test_host_contract_accepts_legacy_modbus_and_strict_opcua_union() -> None:
     assert "units" not in host.industrial_services[0].model_dump()
     phase = ua["observation"]["inventory_phase"]
     observation = ua["observation"]
+    for reason in (
+        "opaque_node_id_omitted",
+        "observation_size_limit",
+        "decode_error",
+    ):
+        OpcUaPhasePayload.model_validate({**phase, "reason_codes": [reason]})
     for field in ("reason_codes",):
         with pytest.raises(ValidationError):
             OpcUaPhasePayload.model_validate(

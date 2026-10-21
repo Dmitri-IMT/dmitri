@@ -262,7 +262,15 @@ class OpcUaIdentityPayload(BaseModel):
 class OpcUaPhasePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["completed", "partial", "failed", "timed_out", "skipped"]
+    status: Literal[
+        "completed",
+        "partial",
+        "failed",
+        "timed_out",
+        "skipped",
+        "denied",
+        "unsupported_security",
+    ]
     reason_codes: list[
         Literal[
             "timeout",
@@ -281,6 +289,9 @@ class OpcUaPhasePayload(BaseModel):
             "global_deadline",
             "decode_limit",
             "byte_limit",
+            "opaque_node_id_omitted",
+            "observation_size_limit",
+            "decode_error",
             "authentication_required",
             "anonymous_denied",
             "security_configuration_required",
@@ -288,6 +299,7 @@ class OpcUaPhasePayload(BaseModel):
             "page_limit",
             "node_limit",
             "depth_limit",
+            "no_eligible_variables",
         ]
     ] = Field(max_length=16)
     truncated: StrictBool
@@ -302,6 +314,59 @@ class OpcUaObservationPayload(BaseModel):
     identity: OpcUaIdentityPayload | None = None
     certificate_sha256: constr(pattern=r"^[0-9a-f]{64}$") | None = None
     endpoints: list[OpcUaEndpointPayload] = Field(max_length=16)
+    mapping: "OpcUaMappingPayload | None" = None
+
+
+class OpcUaMappedReferencePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_node_id: constr(min_length=1, max_length=256)
+    target_node_id: constr(min_length=1, max_length=256)
+    reference_type_id: constr(min_length=1, max_length=256)
+    is_forward: StrictBool
+
+
+class OpcUaMappedNodePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: constr(min_length=1, max_length=256)
+    parent_node_id: constr(max_length=256) | None = None
+    depth: Annotated[int, Field(ge=0, le=4, strict=True)]
+    node_class: Literal["Object", "Variable"]
+    browse_name: constr(max_length=128) | None = None
+    display_name: constr(max_length=128) | None = None
+    data_type: constr(max_length=256) | None = None
+    value_rank: int | None = None
+    access_level: Annotated[int | None, Field(ge=0, le=255, strict=True)] = None
+    user_access_level: Annotated[int | None, Field(ge=0, le=255, strict=True)] = None
+    value_read_status: Literal["Good", "Denied", "Error", "Skipped"] | None = None
+
+
+class OpcUaSecurityFactPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: constr(min_length=1, max_length=256)
+    source: Literal["get_endpoints"]
+    status: Literal["Good", "Bad"]
+
+
+class OpcUaMappingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phase: OpcUaPhasePayload
+    nodes: list[OpcUaMappedNodePayload] = Field(max_length=128)
+    references: list[OpcUaMappedReferencePayload] = Field(
+        default_factory=list, max_length=512
+    )
+    references_observed: Annotated[int, Field(ge=0, le=512, strict=True)]
+    value_reads_attempted: Annotated[int, Field(ge=0, le=8, strict=True)]
+    selected_endpoint_index: Annotated[int, Field(ge=0, le=15, strict=True)] | None
+    anonymous_session_activated: StrictBool | None
+    browse_succeeded: StrictBool | None
+    application_value_read_succeeded: StrictBool | None
+    value_good_count: Annotated[int, Field(ge=0, le=8, strict=True)]
+    security_mode: OpcUaSecurityFactPayload
+    security_policy: OpcUaSecurityFactPayload
 
 
 class OpcUaTcpServicePayload(BaseModel):

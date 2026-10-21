@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 UaClientStatus = Literal["ok", "error"]
@@ -79,3 +79,46 @@ class OpcUaClientResult:
     error: UaClientError | None = None
     stats: OpcUaRequestStats = field(default_factory=OpcUaRequestStats)
     endpoints_truncated: bool = False
+    mapping: "OpcUaMappingResult | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class OpcUaMappedNode:
+    node_id: str
+    parent_node_id: str | None
+    depth: int
+    node_class: str
+    browse_name: str | None = None
+    display_name: str | None = None
+    data_type: str | None = None
+    value_rank: int | None = None
+    access_level: int | None = None
+    user_access_level: int | None = None
+    value_read_status: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OpcUaMappedReference:
+    source_node_id: str
+    target_node_id: str
+    reference_type_id: str
+    is_forward: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OpcUaMappingResult:
+    status: str
+    reason_codes: tuple[str, ...] = ()
+    nodes: tuple[OpcUaMappedNode, ...] = ()
+    references: tuple[OpcUaMappedReference, ...] = ()
+    references_observed: int = 0
+    value_reads_attempted: int = 0
+    selected_endpoint_index: int | None = None
+    anonymous_session_activated: bool | None = None
+    browse_succeeded: bool | None = None
+    application_value_read_succeeded: bool | None = None
+    value_good_count: int = 0
+    security_mode: dict[str, str] = field(default_factory=dict)
+    security_policy: dict[str, str] = field(default_factory=dict)
+    observed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    truncated: bool = False

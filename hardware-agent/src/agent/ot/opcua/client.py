@@ -11,6 +11,9 @@ from typing import Any
 from .models import (
     OpcUaClientResult,
     OpcUaEndpoint,
+    OpcUaMappedNode,
+    OpcUaMappedReference,
+    OpcUaMappingResult,
     OpcUaRequestStats,
 )
 
@@ -79,6 +82,43 @@ class OpcUaClient:
             timeout=timeout,
         )
 
+    async def map_anonymous(
+        self,
+        host: str,
+        port: int,
+        endpoint: OpcUaEndpoint,
+        *,
+        request_budget: int = MAX_REQUEST_BUDGET,
+        timeout: float = MAX_OPERATION_TIMEOUT_SECONDS,
+        deadline: float = 90.0,
+    ) -> OpcUaClientResult:
+        """Map one explicitly anonymous None endpoint in the helper process."""
+        try:
+            target = ipaddress.IPv4Address(host)
+        except ipaddress.AddressValueError:
+            return OpcUaClientResult("error", error="invalid_target")
+        if not 1 <= port <= 65535:
+            return OpcUaClientResult("error", error="invalid_target")
+        if (
+            endpoint.security_policy_uri
+            != "http://opcfoundation.org/UA/SecurityPolicy#None"
+            or endpoint.security_mode != "None"
+            or "Anonymous" not in endpoint.user_token_types
+            or not endpoint.endpoint_url
+        ):
+            return OpcUaClientResult("error", error="unsupported_operation")
+        budget = min(max(int(request_budget), 1), MAX_REQUEST_BUDGET)
+        timeout_ms = min(max(int(timeout * 1000), 1), 2000)
+        return await self._invoke(
+            "map_anonymous",
+            str(target),
+            port,
+            request_budget=budget,
+            timeout=timeout_ms / 1000,
+            overall_timeout=min(max(float(deadline), 0.1), 90.0),
+            endpoint_url=endpoint.endpoint_url,
+        )
+
     async def _invoke(
         self,
         operation: str,
@@ -87,6 +127,8 @@ class OpcUaClient:
         *,
         request_budget: int,
         timeout: float,
+        endpoint_url: str | None = None,
+        overall_timeout: float | None = None,
     ) -> OpcUaClientResult:
 
         budget = min(max(int(request_budget), 1), MAX_REQUEST_BUDGET)
@@ -98,6 +140,14 @@ class OpcUaClient:
                 "port": port,
                 "request_budget": budget,
                 "timeout_ms": timeout_ms,
+                "deadline_ms": min(
+                    max(
+                        int((overall_timeout or (timeout_ms / 1000)) * 1000),
+                        1,
+                    ),
+                    90000,
+                ),
+                **({"endpoint_url": endpoint_url} if endpoint_url else {}),
             },
             separators=(",", ":"),
         ).encode("utf-8")
@@ -114,7 +164,13 @@ class OpcUaClient:
 
         try:
             stdout, _ = await asyncio.wait_for(
-                process.communicate(request), timeout=timeout_ms / 1000 + 1.0
+                process.communicate(request),
+                timeout=(
+                    overall_timeout
+                    if overall_timeout is not None
+                    else timeout_ms / 1000
+                )
+                + 1.0,
             )
         except (asyncio.TimeoutError, asyncio.CancelledError):
             try:
@@ -130,6 +186,12 @@ class OpcUaClient:
             response = json.loads(stdout)
             stats = _parse_stats(response)
             if response.get("status") == "ok":
+                if operation == "map_anonymous":
+                    return OpcUaClientResult(
+                        "ok",
+                        mapping=_parse_mapping(response.get("mapping")),
+                        stats=stats,
+                    )
                 endpoints = tuple(
                     _parse_endpoint(item) for item in response["endpoints"]
                 )
@@ -233,6 +295,141 @@ def _parse_endpoint(value: Any) -> OpcUaEndpoint:
             value.get("certificate_sha256"), 64, pattern="hex64"
         ),
     )
+
+
+def _parse_mapping(value: Any) -> OpcUaMappingResult:
+    if not isinstance(value, dict):
+        raise TypeError("invalid mapping")
+    statuses = {
+        "completed",
+        "partial",
+        "denied",
+        "unsupported_security",
+        "failed",
+        "timed_out",
+        "skipped",
+    }
+    phase = value.get("phase", {})
+    if not isinstance(phase, dict):
+        raise TypeError("invalid mapping phase")
+    status = phase.get("status")
+    if status not in statuses:
+        raise ValueError("invalid mapping status")
+    allowed_reasons = {
+        "timeout",
+        "request_budget_exhausted",
+        "service_error",
+        "invalid_response",
+        "message_size_limit",
+        "service_not_allowed",
+        "authentication_required",
+        "anonymous_denied",
+        "security_configuration_required",
+        "external_reference",
+        "page_limit",
+        "node_limit",
+        "depth_limit",
+        "decode_limit",
+        "opaque_node_id_omitted",
+        "observation_size_limit",
+        "decode_error",
+        "byte_limit",
+        "no_eligible_variables",
+        "cancelled",
+        "host_deadline",
+        "stage_deadline",
+        "global_deadline",
+    }
+    reasons = tuple(
+        reason
+        for reason in phase.get("reason_codes", [])[:16]
+        if reason in allowed_reasons
+    )
+    nodes: list[OpcUaMappedNode] = []
+    raw_nodes = value.get("nodes", [])
+    if not isinstance(raw_nodes, list) or len(raw_nodes) > 128:
+        raise TypeError("invalid mapping nodes")
+    for item in raw_nodes:
+        if not isinstance(item, dict):
+            continue
+        node_class = item.get("node_class")
+        if node_class not in {"Object", "Variable"}:
+            continue
+        nodes.append(
+            OpcUaMappedNode(
+                node_id=_safe_text(item.get("node_id"), 256),
+                parent_node_id=_safe_optional(item.get("parent_node_id"), 256),
+                depth=min(max(int(item.get("depth", 0)), 0), 4),
+                node_class=node_class,
+                browse_name=_safe_optional(item.get("browse_name"), 128),
+                display_name=_safe_optional(item.get("display_name"), 128),
+                data_type=_safe_optional(item.get("data_type"), 256),
+                value_rank=min(max(int(item["value_rank"]), -(2**31)), 2**31 - 1)
+                if isinstance(item.get("value_rank"), int)
+                else None,
+                access_level=min(max(int(item["access_level"]), 0), 255)
+                if isinstance(item.get("access_level"), int)
+                else None,
+                user_access_level=min(max(int(item["user_access_level"]), 0), 255)
+                if isinstance(item.get("user_access_level"), int)
+                else None,
+                value_read_status=item.get("value_read_status")
+                if item.get("value_read_status")
+                in {"Good", "Denied", "Error", "Skipped"}
+                else None,
+            )
+        )
+    raw_references = value.get("references", [])
+    if not isinstance(raw_references, list) or len(raw_references) > 512:
+        raise TypeError("invalid mapping references")
+    return OpcUaMappingResult(
+        status=status,
+        reason_codes=reasons,
+        nodes=tuple(nodes),
+        references=tuple(
+            OpcUaMappedReference(
+                source_node_id=_safe_text(reference.get("source_node_id"), 256),
+                target_node_id=_safe_text(reference.get("target_node_id"), 256),
+                reference_type_id=_safe_text(reference.get("reference_type_id"), 256),
+                is_forward=reference.get("is_forward") is True,
+            )
+            for reference in raw_references
+            if isinstance(reference, dict)
+        ),
+        references_observed=min(max(int(value.get("references_observed", 0)), 0), 512),
+        value_reads_attempted=min(
+            max(int(value.get("value_reads_attempted", 0)), 0), 8
+        ),
+        selected_endpoint_index=(
+            min(max(int(value["selected_endpoint_index"]), 0), 15)
+            if isinstance(value.get("selected_endpoint_index"), int)
+            else None
+        ),
+        anonymous_session_activated=value.get("anonymous_session_activated")
+        if isinstance(value.get("anonymous_session_activated"), bool)
+        else None,
+        browse_succeeded=value.get("browse_succeeded")
+        if isinstance(value.get("browse_succeeded"), bool)
+        else None,
+        application_value_read_succeeded=value.get("application_value_read_succeeded")
+        if isinstance(value.get("application_value_read_succeeded"), bool)
+        else None,
+        value_good_count=min(max(int(value.get("value_good_count", 0)), 0), 8),
+        security_mode=_parse_security_fact(value.get("security_mode")),
+        security_policy=_parse_security_fact(value.get("security_policy")),
+        truncated=bool(phase.get("truncated", False)),
+    )
+
+
+def _parse_security_fact(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    fact_value = _safe_text(value.get("value"), 256)
+    source = value.get("source")
+    status = value.get("status")
+    if not fact_value or source != "get_endpoints" or status not in {"Good", "Bad"}:
+        return {}
+    return {"value": fact_value, "source": source, "status": status}
 
 
 def _safe_text(value: Any, limit: int) -> str:

@@ -42,6 +42,56 @@ static byte[] Hello(uint receiveBuffer, uint sendBuffer, uint maxMessage, uint m
     return frame;
 }
 
+var metadataAttributes = Enumerable.Range(0, 8 * 7)
+    .Select(_ => new ReadValueId { NodeId = NodeId.Null, AttributeId = Attributes.NodeClass })
+    .ToArray();
+var metadataBatches = OpcUaMapper.SplitMetadataReadBatches(metadataAttributes).ToArray();
+Require(metadataBatches.Sum(batch => batch.Length) == 56, "metadata_batches_dropped_attributes");
+Require(metadataBatches.All(batch => batch.Length <= OpcUaMapper.MaxMetadataReadAttributes), "metadata_read_batch_exceeded_16");
+
+var malformedReadNode = new OpcUaMapper.MapNode { node_id = "ns=2;i=1", node_class = "Variable", value_read_status = "Skipped" };
+Require(OpcUaMapper.ApplicationValueReadSucceeded(1, [malformedReadNode]) is null, "malformed_value_read_claimed_success_or_denial");
+var timedOutReadNode = new OpcUaMapper.MapNode { node_id = "ns=2;i=1", node_class = "Variable" };
+Require(OpcUaMapper.ApplicationValueReadSucceeded(1, [timedOutReadNode]) is null, "timed_out_value_read_claimed_success_or_denial");
+var deniedReadNode = new OpcUaMapper.MapNode { node_id = "ns=2;i=1", node_class = "Variable", value_read_status = "Denied" };
+Require(OpcUaMapper.ApplicationValueReadSucceeded(1, [deniedReadNode]) is false, "valid_negative_value_read_not_false");
+var goodReadNode = new OpcUaMapper.MapNode { node_id = "ns=2;i=1", node_class = "Variable", value_read_status = "Good" };
+Require(OpcUaMapper.ApplicationValueReadSucceeded(1, [goodReadNode]) is true, "good_value_read_not_true");
+
+var boundedNodes = new List<OpcUaMapper.MapNode>();
+for (var index = 0; index < 140; index++)
+{
+    if (!OpcUaMapper.TryAddNode(boundedNodes, new OpcUaMapper.MapNode { node_id = $"ns=2;i={index}" })) break;
+}
+Require(boundedNodes.Count == 128, "helper_node_cap_exceeded_or_dropped_early");
+
+var sentinelBytes = System.Text.Encoding.UTF8.GetBytes("OPAQUE_NODE_SENTINEL");
+var opaqueNodeId = NodeId.Parse($"ns=2;b={Convert.ToBase64String(sentinelBytes)}");
+Require(opaqueNodeId.IdType == IdType.Opaque && OpcUaMapper.ShouldOmitNodeId(opaqueNodeId), "opaque_node_id_not_omitted");
+var opaqueOnlyMapping = new OpcUaMapper.MappingPayload
+{
+    phase = new OpcUaMapper.MappingPhase { status = "partial", reason_codes = ["opaque_node_id_omitted"], truncated = true },
+    nodes = [],
+    references = []
+};
+var opaqueJson = JsonSerializer.Serialize(opaqueOnlyMapping, BridgeJson.Options);
+Require(!opaqueJson.Contains(Convert.ToBase64String(sentinelBytes), StringComparison.Ordinal) && !opaqueJson.Contains("OPAQUE_NODE_SENTINEL", StringComparison.Ordinal), "opaque_node_id_bytes_reached_mapping_json");
+
+var oversizedMapping = new OpcUaMapper.MappingPayload
+{
+    phase = new OpcUaMapper.MappingPhase { status = "completed", observed_at = DateTime.UtcNow },
+    nodes = Enumerable.Range(0, 128).Select(index => new OpcUaMapper.MapNode { node_id = $"ns=2;s={index}" + new string('N', 128), browse_name = new string('B', 128), display_name = new string('D', 128), parent_node_id = $"ns=2;s={index}" + new string('P', 128), node_class = "Variable", depth = 1, value_read_status = "Good" }).ToArray(),
+    references = Enumerable.Range(0, 512).Select(index => new OpcUaMapper.MapReference { source_node_id = $"ns=2;s={index}" + new string('S', 128), target_node_id = $"ns=2;s={index}" + new string('T', 128), reference_type_id = new string('R', 128), is_forward = true }).ToArray(),
+    value_good_count = 128,
+    application_value_read_succeeded = true
+};
+var sizeStats = new TransportStats(32, TimeSpan.Zero);
+var boundedResponse = Dmitri.OpcUaBridge.Program.FitMappingResponse(oversizedMapping, sizeStats, value => JsonSerializer.SerializeToUtf8Bytes(value, BridgeJson.Options).Length);
+var boundedResponseBytes = JsonSerializer.SerializeToUtf8Bytes(boundedResponse, BridgeJson.Options);
+Require(boundedResponseBytes.Length <= 128 * 1024, "mapping_response_exceeded_128k_utf8_bytes");
+Require(oversizedMapping.phase.status == "partial" && oversizedMapping.phase.truncated && oversizedMapping.phase.reason_codes.Contains("observation_size_limit"), "oversized_mapping_missing_truncation_reason");
+Require(oversizedMapping.nodes.Length < 128 || oversizedMapping.references.Length < 512, "oversized_mapping_was_not_trimmed");
+
 var stats = new TransportStats(32, TimeSpan.Zero);
 var telemetry = DefaultTelemetry.Create(_ => { });
 using (var channel = new GuardedTransportChannel(new BoundedTcpChannel(telemetry, stats), stats))
@@ -177,7 +227,7 @@ var gracefulClose = await LifecycleCleanup.CloseWithinDeadlineAsync(
     token => { cleanupCalled = true; activeCleanupToken = token; return ValueTask.CompletedTask; },
     () => cleanupAborted = true,
     activeCleanupSource.Token);
-Require(gracefulClose && cleanupCalled && !cleanupAborted && activeCleanupToken == activeCleanupSource.Token, "cleanup_did_not_use_supplied_deadline_token");
+Require(gracefulClose && cleanupCalled && !cleanupAborted && activeCleanupToken != activeCleanupSource.Token && activeCleanupToken.CanBeCanceled, "cleanup_did_not_use_bounded_linked_deadline_token");
 
 using var expiredDuringClose = new CancellationTokenSource();
 cleanupCalled = false;

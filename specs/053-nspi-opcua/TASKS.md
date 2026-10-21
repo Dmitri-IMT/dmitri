@@ -33,11 +33,11 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 ## Task 3: Implementar sessão anônima e mapeamento limitado
 - **Description**: Sobre Task 2, abrir somente a sessão explicitamente permitida pela arquitetura e executar Browse/BrowseNext/Read limitados, com BFS, paginação, status e privacidade. Governam A04–A10 e A14.
 - **Dependencies**: Task 2
-- **Target Files**: `hardware-agent/src/agent/ot/opcua/mapper.py`, `hardware-agent/src/agent/ot/opcua/models.py`
-- **Tests**: `hardware-agent/tests/unit/test_opcua_mapper.py`, `test_opcua_untrusted.py`, `test_opcua_client.py`.
+- **Target Files**: `hardware-agent/src/agent/ot/opcua/mapper.py`, `hardware-agent/src/agent/ot/opcua/models.py`, `hardware-agent/src/agent/ot/opcua/client.py`, `hardware-agent/src/agent/ot/opcua/helper/Program.cs`, `hardware-agent/src/agent/normalize/contracts.py`, `contracts/openapi/openapi.yaml`, `contracts/examples/scan_result.example.json`
+- **Tests**: `hardware-agent/tests/unit/test_opcua_mapper.py`, `hardware-agent/tests/unit/test_opcua_untrusted.py`, `hardware-agent/tests/unit/test_opcua_client.py`, `hardware-agent/tests/test_contract_models.py`, `hardware-agent/tests/fixtures/opcua_lab.py`, `hardware-agent/tests/dotnet/opcua-bridge.tests/Program.cs`.
 - **Success Criteria**: nenhum downgrade/credencial; limites de profundidade, nós, referências, páginas e leituras são respeitados; referências externas e loops terminam deterministicamente; somente status/metadados permitidos saem; valor bruto e derivados não aparecem em JSON/logs/exceções; recusa/timeout não vira resultado negativo global.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (aprovada na quarta revisão)
+- **Review Rejections**: 3
 
 ## Task 4: Integrar protocolos no estágio industrial e nos chamadores
 - **Description**: Integrar inventário e mapping UA ao estágio NSPi compartilhado, preservando Modbus, limites, progresso e cancelamento. Ajustar apenas compatibilidade mínima da TUI; o front continua interface principal. Governam A01, A10–A11, A15.
@@ -109,7 +109,7 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 |---|------|--------|
 | 1 | Cliente limitado e laboratório local | COMPLETE |
 | 2 | Inventário e contrato do agente | COMPLETE |
-| 3 | Sessão anônima e mapeamento | PENDING |
+| 3 | Sessão anônima e mapeamento | COMPLETE |
 | 4 | Integração do estágio e chamadores | PENDING |
 | 5 | Persistência, ingest e read | PENDING |
 | 6 | Interface web | PENDING |
