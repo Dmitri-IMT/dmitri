@@ -255,6 +255,22 @@ export const catalog: Catalog = {
   'evidence.result.inconclusive': 'Неоднозначный результат',
   'evidence.truncated':
     'Некоторые записи доказательств не показаны из-за ограничения объёма.',
+  'common.vulnerabilitiesInScanCaption': 'Уязвимости в этом сканировании',
+  'evidence.filter.label': 'Фильтр уязвимостей по доказательствам',
+  'evidence.filter.all': 'Уязвимости',
+  'evidence.filter.confirmed': 'Подтверждённые',
+  'evidence.filter.unverified': 'Непроверенные',
+  'evidence.filter.empty.all': 'В этом сканировании нет уязвимостей.',
+  'evidence.filter.empty.confirmed':
+    'Ни одна уязвимость в этом сканировании не подтверждена прямой проверкой или наблюдаемой настройкой.',
+  'evidence.filter.empty.unverified':
+    'Все уязвимости в этом сканировании подтверждены.',
+  'evidence.row.confirmed': 'Подтверждена',
+  'evidence.row.unverified': 'Не проверена',
+  'evidence.verdict.confirmed': 'Подтверждено.',
+  'evidence.verdict.unverified': 'Не проверено.',
+  'evidence.technicalDetails': 'Технические подробности',
+  'evidence.otherChecks': ({ count }) => 'Другие проверки: ' + count,
   'common.exploitabilityIndex': 'Индекс эксплуатируемости',
   'common.whatItIs': 'Что это',
   'common.whatToDo': 'Что делать',
@@ -274,10 +290,6 @@ export const catalog: Catalog = {
           : 'уязвимостей'
     return SEVERITY[severity] + ': ' + count + ' ' + word
   },
-  'common.severityGroupToggle': ({ severity }) =>
-    'Показать или скрыть уязвимости: ' + SEVERITY[severity],
-  'common.severityGroupCaption': ({ severity }) =>
-    'Уязвимости в этом скане: ' + SEVERITY[severity],
   'common.findingsLoadError': 'Не удалось загрузить уязвимости устройства.',
   'common.noVulnerabilities': 'На этом устройстве уязвимостей нет.',
   'common.vulnerabilitiesOnMachine': 'Уязвимости устройства',

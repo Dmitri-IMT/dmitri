@@ -1,4 +1,5 @@
 import ContextChat from '@/components/ContextChat'
+import Disclosure from '@/components/Disclosure'
 import { Button } from '@/components/ui/button'
 import useI18n from '@/i18n/useI18n'
 import type { components } from '@/types/openapi'
@@ -505,6 +506,154 @@ function FindingPanel({ finding }: { finding: FindingRecord }) {
       <ContextChat
         scope="finding"
         contextId={finding.finding_id}
+        title={t('ai.findingExplanation')}
+        presetQuestion={t('ai.defaultFindingQuestion')}
+        askLabel={t('ai.explainFinding')}
+        askingLabel={t('ai.explainFindingLoading')}
+      />
+    </div>
+  )
+}
+
+export function ScanFindingPanel({ finding }: { finding: FindingRecord }) {
+  const { t } = useI18n()
+  const id = finding.finding_id
+  const seen = seenOn(finding)
+  const method = finding.detection_method ?? 'unknown'
+  const status = finding.evidence_status ?? 'unknown'
+  const confidence = finding.confidence
+
+  return (
+    <div
+      data-testid={`finding-panel-${id}`}
+      className="flex flex-col gap-6 p-4"
+    >
+      <div className="flex max-w-prose flex-col gap-4 text-body-md">
+        <p data-testid={`finding-verdict-${id}`}>
+          <span className="font-semibold">
+            {finding.demonstrated
+              ? t('evidence.verdict.confirmed')
+              : t('evidence.verdict.unverified')}
+          </span>{' '}
+          {evidenceExplanation(finding, t)}
+        </p>
+        {hasText(finding.description) && <p>{finding.description}</p>}
+        {hasText(finding.recommendation) && (
+          <p>
+            <span className="font-semibold">{t('common.whatToDo')}:</span>{' '}
+            {finding.recommendation}
+          </p>
+        )}
+      </div>
+      {hasText(finding.evidence) && (
+        <pre className="overflow-x-auto border-l border-border pl-4 font-mono text-caption-md whitespace-pre">
+          {finding.evidence}
+        </pre>
+      )}
+      <Disclosure
+        label={t('evidence.technicalDetails')}
+        testId={`finding-details-${id}`}
+        caretTestId={`finding-details-caret-${id}`}
+      >
+        <div className="flex w-full flex-col gap-6 pt-4">
+          <dl className="flex flex-col gap-2">
+            <div data-testid={`finding-method-${id}`} className="flex gap-4">
+              <Label>{t('evidence.methodLabel')}</Label>
+              <dd className="text-body-md">{methodLabel(method, t)}</dd>
+            </div>
+            <div data-testid={`finding-status-${id}`} className="flex gap-4">
+              <Label>{t('evidence.statusLabel')}</Label>
+              <dd className="text-body-md">{statusLabel(status, method, t)}</dd>
+            </div>
+            <div
+              data-testid={`finding-confidence-${id}`}
+              className="flex gap-4"
+            >
+              <Label>{t('evidence.confidenceLabel')}</Label>
+              <dd className="text-body-md">
+                {confidence
+                  ? confidenceLabel(confidence, t)
+                  : t('evidence.confidence.notReported')}
+              </dd>
+            </div>
+            {hasText(finding.cve_id) && (
+              <div className="flex gap-4">
+                <Label>{t('common.cve')}</Label>
+                <dd className="font-mono text-body-md">{finding.cve_id}</dd>
+              </div>
+            )}
+            {finding.cvss_score != null && (
+              <div
+                data-testid={`findings-panel-cvss-${id}`}
+                className="flex gap-4"
+              >
+                <Label>{t('common.cvss')}</Label>
+                <dd className="text-body-md">{finding.cvss_score}</dd>
+              </div>
+            )}
+            {seen != null && (
+              <div className="flex gap-4">
+                <Label>{t('common.seenOn')}</Label>
+                <dd className="text-body-md">{seen}</dd>
+              </div>
+            )}
+            <div className="flex gap-4">
+              <Label>{t('common.riskScore')}</Label>
+              <dd className="min-w-0 max-w-prose text-body-md">
+                {finding.risk_score == null
+                  ? t('common.riskScoreNotCalculated')
+                  : t('common.riskScoreValue', {
+                      score: Math.round(finding.risk_score),
+                    })}
+                {finding.exploitability != null && (
+                  <p>
+                    {t('common.exploitabilityIndex')}:{' '}
+                    {finding.exploitability.toFixed(2)} / 1
+                  </p>
+                )}
+                {finding.risk_rationale && <p>{finding.risk_rationale}</p>}
+              </dd>
+            </div>
+            {finding.references.length > 0 && (
+              <div className="flex gap-4">
+                <Label>{t('common.references')}</Label>
+                <dd
+                  data-testid={`findings-panel-refs-${id}`}
+                  className="flex min-w-0 flex-1 flex-col gap-2"
+                >
+                  {finding.references.map((url) => (
+                    <Button
+                      key={url}
+                      asChild
+                      variant="link"
+                      className="h-auto max-w-full justify-start p-0 text-caption-md"
+                    >
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        title={url}
+                        className="truncate"
+                      >
+                        {url}
+                      </a>
+                    </Button>
+                  ))}
+                </dd>
+              </div>
+            )}
+          </dl>
+          <ObservationList
+            observations={finding.evidence_observations ?? []}
+            truncated={finding.evidence_truncated}
+            testId={`finding-observations-${id}`}
+            title={t('evidence.recordedTitle')}
+          />
+        </div>
+      </Disclosure>
+      <ContextChat
+        scope="finding"
+        contextId={id}
         title={t('ai.findingExplanation')}
         presetQuestion={t('ai.defaultFindingQuestion')}
         askLabel={t('ai.explainFinding')}

@@ -347,6 +347,7 @@ def test_legacy_confirmed_without_provenance_is_not_demonstrated(
     assert row["detection_method"] == "unknown"
     assert row["evidence_status"] == "unknown"
     assert row["evidence_observations"] == []
+    assert row["demonstrated"] is False
     assert summary["by_confidence"]["confirmed"] == 1
     assert summary["demonstrated_records"] == 0
 
@@ -412,3 +413,10 @@ def test_evidence_summary_tracks_methods_conflict_and_demonstration(
     assert summary["by_method"]["configuration_observation"] == 2
     assert summary["conflicting_records"] == 1
     assert summary["demonstrated_records"] == 1
+    demonstrated = {
+        item["finding_id"]: item["demonstrated"]
+        for item in response.json()["findings"]
+    }
+    assert demonstrated[str(supported.finding_id)] is True
+    assert demonstrated[str(conflicting.finding_id)] is False
+    assert sum(demonstrated.values()) == summary["demonstrated_records"]

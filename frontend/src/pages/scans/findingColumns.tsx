@@ -14,6 +14,9 @@ type FindingColumnLabels = {
   port: string
   cve: string
   firstSeen: string
+  status: string
+  confirmed: string
+  unverified: string
 }
 
 const ENGLISH_LABELS: FindingColumnLabels = {
@@ -23,6 +26,9 @@ const ENGLISH_LABELS: FindingColumnLabels = {
   port: 'Port',
   cve: 'CVE',
   firstSeen: 'First seen',
+  status: 'Status',
+  confirmed: 'Confirmed',
+  unverified: 'Unverified',
 }
 
 function machineLabel(finding: FindingRecord): string {
@@ -37,7 +43,7 @@ export function scanFindingColumns(
     {
       key: 'title',
       label: labels.vulnerability,
-      width: 'w-2/5',
+      width: 'w-1/2',
       render: (finding) => (
         <span className="block min-w-0" title={finding.title}>
           <span className="block truncate">{finding.title}</span>
@@ -52,7 +58,7 @@ export function scanFindingColumns(
     {
       key: 'host',
       label: labels.machine,
-      width: 'w-9/50',
+      width: 'w-1/5',
       render: (finding) => {
         const label = machineLabel(finding)
         if (label === '') return <EmptyMark />
@@ -69,39 +75,21 @@ export function scanFindingColumns(
       },
     },
     {
-      key: 'port',
-      label: labels.port,
-      width: 'w-3/25',
+      key: 'status',
+      label: labels.status,
+      width: 'w-3/20',
       render: (finding) =>
-        finding.port == null ? (
-          <EmptyMark />
+        finding.demonstrated ? (
+          <span>{labels.confirmed}</span>
         ) : (
-          <span className="block pr-3 tabular-nums">{finding.port}</span>
+          <span className="text-muted-foreground">{labels.unverified}</span>
         ),
     },
     {
-      key: 'cve',
-      label: labels.cve,
-      width: 'w-7/50',
-      render: (finding) =>
-        finding.cve_id ? (
-          <span className="block truncate font-mono" title={finding.cve_id}>
-            {finding.cve_id}
-          </span>
-        ) : (
-          <EmptyMark />
-        ),
-    },
-    {
-      key: 'first_seen',
-      label: labels.firstSeen,
-      width: 'w-4/25',
-      render: (finding) =>
-        finding.first_seen_at ? (
-          <Timestamp value={finding.first_seen_at} />
-        ) : (
-          <EmptyMark />
-        ),
+      key: 'severity',
+      label: labels.severity,
+      width: 'w-3/20',
+      render: (finding) => <SeverityWord severity={finding.severity} />,
     },
   ]
 }

@@ -71,6 +71,7 @@ from api.services.industrial import industrial_services_for_scan_host
 from api.services.inventory import latest_scan_host_for_host
 from api.services.scan_evidence import (
     evidence_completeness,
+    finding_is_demonstrated,
     is_cve_correlation,
     parse_coverage,
     parse_targeted_coverage,
@@ -916,6 +917,9 @@ def _to_finding_read(
         evidence_status=evidence[1],
         evidence_observations=evidence[2],
         evidence_truncated=evidence[3],
+        demonstrated=finding_is_demonstrated(
+            evidence[1], evidence[3], evidence[2], finding.cve_id
+        ),
     )
 
 

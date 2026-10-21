@@ -4,16 +4,19 @@ import { useParams, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queryKeys'
 import { getScan } from '@/api/scans'
+import Disclosure from '@/components/Disclosure'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
 import PageHeader from '@/components/PageHeader'
 import ReadDetailGate from '@/components/ReadDetailGate'
 import { Card, CardContent } from '@/components/ui/card'
 import { readDetailState } from '@/lib/detailState'
 import { isUnfinished } from '@/lib/scanStatus'
-import { SEVERITY_ORDER } from '@/lib/severity'
 import ExposureTable from '@/pages/scans/ExposureTable'
 import FindingsTable from '@/pages/scans/FindingsTable'
-import { EvidenceSummary, ObservationList } from '@/pages/scans/FindingPanel'
+import FindingEvidenceFilter, {
+  type EvidenceFilter,
+} from '@/pages/scans/FindingEvidenceFilter'
+import { ObservationList } from '@/pages/scans/FindingPanel'
 import ScanAIAnalysis from '@/pages/scans/ScanAIAnalysis'
 import ScanCoverage from '@/pages/scans/ScanCoverage'
 import ScanDelete from '@/pages/scans/ScanDelete'
@@ -29,12 +32,6 @@ import ScanDetailSection from '@/pages/scans/ScanDetailSection'
 import { isTargetedFinding, scanDetailView } from '@/pages/scans/scanDetailView'
 import ServiceTargetedFindings from '@/pages/scans/ServiceTargetedFindings'
 import useI18n from '@/i18n/useI18n'
-import type { components } from '@/types/openapi'
-
-type FindingRecord = components['schemas']['FindingRecord']
-type Severity = components['schemas']['Severity']
-
-const SEVERITIES = Object.keys(SEVERITY_ORDER) as Severity[]
 
 function ScanDetail() {
   const { t } = useI18n()
@@ -44,6 +41,7 @@ function ScanDetail() {
     searchParams.get('finding'),
   )
   const [openExposureId, setOpenExposureId] = useState<string | null>(null)
+  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all')
 
   const query = useQuery({
     queryKey: queryKeys.scans.detail(scanId),
@@ -96,12 +94,12 @@ function ScanDetail() {
         const severityFindings = scan.findings.filter(
           (finding) => !isTargetedFinding(finding),
         )
-        const groups = SEVERITIES.map((severity) => ({
-          severity,
-          findings: severityFindings.filter(
-            (finding: FindingRecord) => finding.severity === severity,
-          ),
-        })).filter((group) => group.findings.length > 0)
+        const visibleFindings = severityFindings.filter(
+          (finding) =>
+            evidenceFilter === 'all' ||
+            finding.demonstrated === (evidenceFilter === 'confirmed'),
+        )
+        const observations = scan.finding_observations ?? []
         const view = scanDetailView(scan)
         const metadata = scan.metadata ?? {}
         const opensTargetedDeepLink = scan.findings.some(
@@ -167,40 +165,21 @@ function ScanDetail() {
                     }
                     triggerAriaLabel={t('common.vulnerabilitiesInScanToggle')}
                   >
-                    <div className="flex flex-col gap-8">
-                      {groups.map((group) => {
-                        const opensForDeepLink = group.findings.some(
-                          (finding) => finding.finding_id === openFindingId,
-                        )
-                        return (
-                          <ScanDetailSection
-                            key={group.severity}
-                            title={t('common.severityGroupTitle', {
-                              severity: group.severity,
-                              count: group.findings.length,
-                            })}
-                            openToken={
-                              opensForDeepLink
-                                ? (openFindingId ?? undefined)
-                                : undefined
-                            }
-                            triggerAriaLabel={t('common.severityGroupToggle', {
-                              severity: group.severity,
-                            })}
-                          >
-                            <FindingsTable
-                              findings={group.findings}
-                              variant="scan"
-                              testId={`findings-${group.severity}`}
-                              caption={t('common.severityGroupCaption', {
-                                severity: group.severity,
-                              })}
-                              openFindingId={openFindingId}
-                              onOpenFindingChange={setOpenFindingId}
-                            />
-                          </ScanDetailSection>
-                        )
-                      })}
+                    <div className="flex flex-col gap-6">
+                      <FindingEvidenceFilter
+                        findings={severityFindings}
+                        value={evidenceFilter}
+                        onChange={setEvidenceFilter}
+                      />
+                      <FindingsTable
+                        findings={visibleFindings}
+                        variant="scan"
+                        testId="findings"
+                        caption={t('common.vulnerabilitiesInScanCaption')}
+                        openFindingId={openFindingId}
+                        onOpenFindingChange={setOpenFindingId}
+                        empty={t(`evidence.filter.empty.${evidenceFilter}`)}
+                      />
                     </div>
                   </ScanDetailSection>
                 )}
@@ -254,13 +233,16 @@ function ScanDetail() {
                           const finding = scan.findings.find(
                             (item) => item.finding_id === id,
                           )
-                          flushSync(() => setOpenFindingId(id))
+                          flushSync(() => {
+                            setEvidenceFilter('all')
+                            setOpenFindingId(id)
+                          })
                           if (finding == null) {
                             return
                           }
                           const table = isTargetedFinding(finding)
                             ? `targeted-${finding.severity}`
-                            : `findings-${finding.severity}`
+                            : 'findings'
                           document
                             .querySelector<HTMLButtonElement>(
                               `[data-testid="${table}-caret-${id}"]`,
@@ -290,16 +272,25 @@ function ScanDetail() {
                 {view.sections.coverage && (
                   <ScanDetailSection title={t('scans.checkCoverage')}>
                     <div className="flex flex-col gap-6">
-                      <EvidenceSummary
-                        summary={scan.evidence_summary}
-                        scope="scan"
-                      />
-                      <ObservationList
-                        observations={scan.finding_observations ?? []}
-                        truncated={scan.finding_observations_truncated}
-                        testId="scan-finding-observations"
-                        title={t('evidence.observationsTitle')}
-                      />
+                      {(observations.length > 0 ||
+                        scan.finding_observations_truncated) && (
+                        <Disclosure
+                          label={t('evidence.otherChecks', {
+                            count: observations.length,
+                          })}
+                          testId="scan-other-checks"
+                          caretTestId="scan-other-checks-caret"
+                        >
+                          <div className="w-full pt-4">
+                            <ObservationList
+                              observations={observations}
+                              truncated={scan.finding_observations_truncated}
+                              testId="scan-finding-observations"
+                              title={t('evidence.observationsTitle')}
+                            />
+                          </div>
+                        </Disclosure>
+                      )}
                       <ScanCoverage
                         coverage={scan.coverage ?? []}
                         omittedUnlisted={omittedUnlisted}
