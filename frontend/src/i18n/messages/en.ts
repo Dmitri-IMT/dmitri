@@ -264,6 +264,8 @@ export const catalog = {
     'No vulnerability in this scan was confirmed by a direct check or an observed setting.',
   'evidence.filter.empty.unverified':
     'Every vulnerability in this scan was confirmed.',
+  'evidence.row.confirmed': 'Confirmed',
+  'evidence.row.unverified': 'Unverified',
   'evidence.verdict.confirmed': 'Confirmed.',
   'evidence.verdict.unverified': 'Unverified.',
   'evidence.technicalDetails': 'Technical details',

@@ -271,6 +271,8 @@ export const catalog: Catalog = {
     'Nenhuma vulnerabilidade desta varredura foi confirmada por uma verificação direta ou por uma configuração observada.',
   'evidence.filter.empty.unverified':
     'Todas as vulnerabilidades desta varredura foram confirmadas.',
+  'evidence.row.confirmed': 'Confirmada',
+  'evidence.row.unverified': 'Não verificada',
   'evidence.verdict.confirmed': 'Confirmada.',
   'evidence.verdict.unverified': 'Não verificada.',
   'evidence.technicalDetails': 'Detalhes técnicos',
