@@ -23,7 +23,7 @@ dependencies = [
 dmitri = "agent.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "ruff", "pyyaml"]
+dev = ["pytest", "pytest-asyncio", "ruff", "pyyaml", "asyncua==2.1.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent"]
