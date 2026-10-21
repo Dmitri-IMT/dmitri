@@ -236,6 +236,82 @@ def test_technical_report_preview_returns_downloadable_json_shape(
     assert payload["sections"]["scan"]["scan_id"] == str(seeded["scan"].scan_id)
 
 
+def test_technical_report_preserves_evidence_observations_and_policy_fields(
+    client,
+    administrative_session,
+    bearer_headers,
+):
+    seeded = seed_read_graph(administrative_session)
+    scan = seeded["scan"]
+    finding = seeded["finding"]
+    standalone = {
+        "ip": "192.168.1.10",
+        "port": 445,
+        "protocol": "tcp",
+        "unit_id": None,
+        "condition_key": "SMBv1 availability",
+        "method": "configuration_observation",
+        "result": "negative",
+        "source": "nmap_nse",
+        "source_script": "smb-protocols",
+        "rule_id": "smb:smbv1",
+        "rule_version": "1",
+        "evidence": "SMBv1 not offered",
+        "facts": {"dialect": "SMBv2"},
+    }
+    associated = {
+        "ip": "192.168.1.10",
+        "port": 80,
+        "protocol": "tcp",
+        "unit_id": None,
+        "condition_key": "CVE-2023-38408",
+        "method": "version_correlation",
+        "result": "positive",
+        "source": "nmap_vulners",
+        "source_script": None,
+        "rule_id": "catalog:nmap-vulners",
+        "rule_version": "1",
+        "evidence": "Observed package version matched the advisory range",
+        "facts": {
+            "product": "openssh",
+            "version": "9.2p1",
+            "cve_id": "CVE-2023-38408",
+        },
+    }
+    scan.finding_evidence_policy_version = "1"
+    scan.finding_observations_json = [standalone]
+    scan.finding_observations_truncated = True
+    finding.source = "nmap_vulners"
+    finding.cve_id = "CVE-2023-38408"
+    finding.finding_evidence_policy_version = "1"
+    finding.evidence_observations_json = [associated]
+    finding.evidence_truncated = True
+    finding.confidence = "probable"
+    administrative_session.add(scan)
+    administrative_session.add(finding)
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{scan.scan_id}/reports/technical",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["sections"]["scan"]
+    assert payload["finding_evidence_policy_version"] == "1"
+    assert payload["finding_observations"] == [standalone]
+    assert payload["finding_observations_truncated"] is True
+    exported = next(
+        item for item in payload["findings"]
+        if item["finding_id"] == str(finding.finding_id)
+    )
+    assert exported["evidence_observations"] == [associated]
+    assert exported["evidence_truncated"] is True
+    assert exported["detection_method"] == "version_correlation"
+    assert exported["evidence_status"] == "inconclusive"
+    assert exported["confidence"] == "probable"
+
+
 @pytest.mark.parametrize("language", ["pt-BR", "en", "ru"])
 def test_explained_report_download_renders_long_escaped_details(
     client,

@@ -226,5 +226,30 @@ POOP.md
 docs/ui/nous-research/
 
 # Agents
-.agents/
-.codex/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/consult-docs/
+!.agents/skills/feature-planning/
+!.agents/skills/create-tasks/
+!.agents/skills/feature-orchestrator/
+!.agents/skills/tdd/
+!.agents/skills/frontend-conventions/
+!.agents/skills/frontend-design-system/
+!.agents/skills/openapi-contract-sync/
+!.agents/skills/docs-sync/
+.codex/*
+!.codex/config.toml
+!.codex/agents/
+.codex/agents/*
+!.codex/agents/agent-developer.toml
+!.codex/agents/test-engineer.toml
+!.codex/agents/frontend-test-engineer.toml
+!.codex/agents/code-reviewer.toml
+!.codex/agents/code-reviewer-high.toml
+!.codex/agents/frontend-code-reviewer.toml
+!.codex/agents/frontend-code-reviewer-high.toml
+!.codex/agents/architecture-agent.toml
+!.codex/agents/frontend-design-agent.toml
+!.codex/agents/feature-orchestrator.toml
+!.codex/agents/docs-sync-agent.toml

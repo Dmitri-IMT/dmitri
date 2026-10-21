@@ -3,6 +3,46 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-17
+
+* **Creation**: Added the hardware-agent provisioning code map for HTTPS agent registration,
+  local key handling and atomic configuration writes.
+* **Update**: Documented finding-evidence policy v1, bounded finding and standalone observations,
+  local evidence categories, serializer/reconciliation identity, and partial-result propagation.
+  The local TUI now distinguishes finding records from evidence status and keeps standalone checks
+  separate; targeted tool witnesses and the synthetic offline corpus limitations are recorded.
+  Corrected workspace documentation to reflect persistence before daemon upload.
+
+## 2026-10-16
+
+* **Update**: Attack-surface tables now explain row expansion, show localized service/review counts
+  in scan detail, and translate endpoint, service role, confidence, evidence, and related-finding
+  labels in English, Brazilian Portuguese, and Russian. Host detail keeps its existing count.
+* **Update**: Service-targeted findings now use severity groups like standard findings and
+  show the reporting tool below each title. Section copy, severity controls, finding table
+  labels, row actions and finding details are translated in English, Brazilian Portuguese
+  and Russian.
+* **Update**: Extensive targeted assessments now budget for the selected capped plan,
+  preserving individual timeouts and explicit overall deadlines. Other modes retain their
+  budgets. The frontend and Foundations duration text now allows for runs over an hour.
+* **Update**: ffuf's native maximum-runtime stop is now an incomplete unit, including when
+  a valid partial report and exit zero are returned. Existing validation of partial
+  candidates and precedence of cancellation and deadlines are preserved.
+* **Update**: Nikto host error-limit aborts and testssl runtime errors no longer count as
+  completed checks. Partial affirmative evidence survives; testssl runtime error records
+  never become vulnerabilities. Removed the printer exclusion at the operator's request.
+  Targeted documentation distinguishes ineligible services from skipped checks and records
+  the existing serial stage budgets.
+* **Update**: Targeted tools now receive isolated writable configuration under systemd;
+  ffuf startup diagnostics and Nikto stdout time limits are preserved. Cancellation no
+  longer reports a stage-budget expiry. Per-unit sanitized diagnostics reach the journal.
+
+## 2026-10-15
+
+* **Creation**: `hardware-agent/targeted.md` documents native ssh-audit 3.9.0 parsing,
+  per-tool coverage gaps and pinned Raspberry Pi tool provisioning.
+* **Update**: `hardware-agent/index.md` links the targeted stage; `docs/DEV-SETUP.md`
+  explains package-only prerequisites and the Pi provisioner's tool verification.
 ## 2026-10-14
 
 * **Update**: PR #165 review fixes. Inventory rebuild now owns identity, seen times, counts,

@@ -9,13 +9,24 @@ from api.schemas.ai import (
     ProviderScanAIAnalysis,
     ProviderScanAIChildAnalysis,
 )
-from api.schemas.read import SeverityBreakdown
+from api.schemas.read import (
+    FindingEvidenceConfidenceCounts,
+    FindingEvidenceMethodCounts,
+    FindingEvidenceSummary,
+    SeverityBreakdown,
+)
 from api.services.ai.context import (
     AIFindingContext,
     FindingChatContext,
     ScanAIContext,
 )
-from api.services.ai.groq import SYSTEM_PROMPT, AIProviderError, GroqProvider
+from api.services.ai.groq import (
+    AI_PROMPT_VERSION,
+    SYSTEM_PROMPT,
+    USER_CHAT_PROMPT,
+    AIProviderError,
+    GroqProvider,
+)
 
 TEST_TOKEN = "test-token"
 
@@ -37,6 +48,19 @@ def _context(
         max_risk_score=None,
         severity=SeverityBreakdown(),
         top_findings=[],
+        evidence_summary=FindingEvidenceSummary(
+            scope="scan",
+            total_records=0,
+            by_method=FindingEvidenceMethodCounts(
+                version_correlation=0, configuration_observation=0,
+                specific_check=0, textual_reference=0, unknown=0,
+            ),
+            by_confidence=FindingEvidenceConfidenceCounts(
+                tentative=0, probable=0, confirmed=0, unknown=0,
+            ),
+            conflicting_records=0,
+            demonstrated_records=0,
+        ),
     )
 
 
@@ -97,7 +121,7 @@ def test_groq_provider_requests_strict_structured_output():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert "Never claim a network" in payload["messages"][0]["content"]
     assert TEST_TOKEN not in json.dumps(payload)
-    assert '"context_version":"4"' in payload["messages"][1]["content"]
+    assert '"context_version":"5"' in payload["messages"][1]["content"]
     assert not payload["messages"][1]["content"].startswith("Coverage limit:")
     assert "scan_id" not in payload["messages"][1]["content"]
     usage = provider.drain_usage_events()
@@ -241,6 +265,21 @@ def test_groq_provider_records_usage_without_prompt_content():
 
 def test_system_prompt_uses_a_language_placeholder():
     assert "{language_name}" in SYSTEM_PROMPT
+
+
+def test_system_prompt_preserves_evidence_uncertainty_and_sample_limits():
+    assert AI_PROMPT_VERSION == "7"
+    prompts = " ".join(f"{SYSTEM_PROMPT} {USER_CHAT_PROMPT}".split())
+    for rule in (
+        "inconclusive evidence",
+        "conflicting evidence",
+        "truncated evidence",
+        "Negative observations apply",
+        "never prove that a target is safe",
+        "evidence_summary describes the full scope",
+        "Do not treat a sample as a full list",
+    ):
+        assert rule in prompts
 
 
 @pytest.mark.parametrize(
@@ -414,13 +453,28 @@ def test_groq_provider_answers_chat_with_bounded_structured_schema():
                 cvss_score=None,
                 severity="high",
                 confidence=None,
+                evidence_basis="unknown",
+                detection_method="specific_check",
+                evidence_status="inconclusive",
+                evidence_truncated=True,
                 risk_score=None,
                 exploitability=None,
                 epss_score=None,
                 epss_percentile=None,
                 is_kev=False,
                 known_ransomware=False,
-            )
+            ),
+            evidence_summary=FindingEvidenceSummary(
+                scope="filtered_findings", total_records=1,
+                by_method=FindingEvidenceMethodCounts(
+                    version_correlation=0, configuration_observation=0,
+                    specific_check=0, textual_reference=0, unknown=1,
+                ),
+                by_confidence=FindingEvidenceConfidenceCounts(
+                    tentative=0, probable=0, confirmed=0, unknown=1,
+                ),
+                conflicting_records=0, demonstrated_records=0,
+            ),
         ),
         "O que devo corrigir primeiro?",
     )
@@ -430,3 +484,10 @@ def test_groq_provider_answers_chat_with_bounded_structured_schema():
     assert payload["response_format"]["json_schema"]["strict"] is True
     assert payload["max_completion_tokens"] == 1024
     assert "O que devo corrigir primeiro?" in payload["messages"][1]["content"]
+    submitted_context = payload["messages"][1]["content"]
+    assert '"evidence_status":"inconclusive"' in submitted_context
+    assert '"evidence_truncated":true' in submitted_context
+    assert '"scope":"filtered_findings"' in submitted_context
+    system_prompt = payload["messages"][0]["content"]
+    assert "never prove that a target is safe" in system_prompt
+    assert "Never elevate" in submitted_context

@@ -24,6 +24,7 @@ from api.schemas.ai import (
     ScanAIAnalysis,
 )
 from api.schemas.read import (
+    FindingEvidenceSummary,
     FindingRead,
     MachineType,
     ScanMode,
@@ -31,7 +32,7 @@ from api.schemas.read import (
     SeverityBreakdown,
 )
 from api.schemas.scan import TERMINATED_BY_USER_CANCEL
-from api.services.read import get_scan_risk_summary
+from api.services.read import get_scan_detail, get_scan_risk_summary
 from api.services.scan_evidence import (
     EvidenceCompleteness,
     evidence_completeness,
@@ -40,7 +41,7 @@ from api.services.scan_evidence import (
     parse_coverage,
 )
 
-AI_CONTEXT_VERSION = "4"
+AI_CONTEXT_VERSION = "5"
 
 MAX_AI_FINDINGS = 15
 _REFERENCE_PATTERN = re.compile(r"\b(?:finding|machine)_[1-9][0-9]*\b")
@@ -57,9 +58,20 @@ class AIFindingContext(BaseModel):
     cvss_score: Annotated[float | None, Field(ge=0, le=10)]
     severity: Severity
     confidence: Literal["tentative", "probable", "confirmed"] | None
-    evidence_basis: Literal["cve_correlation", "target_observation"] = (
-        "target_observation"
-    )
+    evidence_basis: Literal[
+        "cve_correlation", "target_observation", "unknown"
+    ] = "unknown"
+    detection_method: Literal[
+        "version_correlation",
+        "configuration_observation",
+        "specific_check",
+        "textual_reference",
+        "unknown",
+    ] = "unknown"
+    evidence_status: Literal[
+        "supported", "inconclusive", "conflicting", "unknown"
+    ] = "unknown"
+    evidence_truncated: bool = False
     risk_score: Annotated[float | None, Field(ge=0, le=100)]
     exploitability: Annotated[float | None, Field(ge=0, le=1)]
     epss_score: Annotated[float | None, Field(ge=0, le=1)]
@@ -71,7 +83,7 @@ class AIFindingContext(BaseModel):
 class ScanAIContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["4"] = AI_CONTEXT_VERSION
+    context_version: Literal["5"] = AI_CONTEXT_VERSION
     scan_mode: ScanMode
     evidence_completeness: EvidenceCompleteness = "unknown"
     incomplete_check_count: Annotated[int, Field(ge=0)] = 0
@@ -86,6 +98,7 @@ class ScanAIContext(BaseModel):
     max_risk_score: Annotated[float | None, Field(ge=0, le=100)]
     severity: SeverityBreakdown
     top_findings: Annotated[list[AIFindingContext], Field(max_length=15)]
+    evidence_summary: FindingEvidenceSummary
 
     _finding_ids_by_ref: dict[str, UUID] = PrivateAttr(default_factory=dict)
     _display_values_by_ref: dict[str, str] = PrivateAttr(default_factory=dict)
@@ -115,7 +128,7 @@ class MachineVulnerabilityCount(BaseModel):
 class ScanChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["4"] = AI_CONTEXT_VERSION
+    context_version: Literal["5"] = AI_CONTEXT_VERSION
     scope: Literal["scan"] = "scan"
     scan_mode: ScanMode
     status: ScanStatus
@@ -125,20 +138,22 @@ class ScanChatContext(BaseModel):
     aggregate: ChatAggregate
     top_findings: list[AIFindingContext]
     machine_vulnerability_summary: list[MachineVulnerabilityCount]
+    evidence_summary: FindingEvidenceSummary
 
 
 class FindingChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["4"] = AI_CONTEXT_VERSION
+    context_version: Literal["5"] = AI_CONTEXT_VERSION
     scope: Literal["finding"] = "finding"
     finding: AIFindingContext
+    evidence_summary: FindingEvidenceSummary
 
 
 class HostChatContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    context_version: Literal["4"] = AI_CONTEXT_VERSION
+    context_version: Literal["5"] = AI_CONTEXT_VERSION
     scope: Literal["host"] = "host"
     machine_ref: Annotated[str, Field(pattern=r"^machine_[1-9][0-9]*$")]
     machine_type: MachineType
@@ -146,6 +161,7 @@ class HostChatContext(BaseModel):
     highest_severity: Severity | None
     open_ports_count: Annotated[int, Field(ge=0)]
     findings: list[AIFindingContext]
+    evidence_summary: FindingEvidenceSummary
 
 
 AIChatContext = ScanChatContext | FindingChatContext | HostChatContext
@@ -196,8 +212,15 @@ def build_finding_contexts(
                 evidence_basis=(
                     "cve_correlation"
                     if is_cve_correlation(finding.cve_id, finding.source)
-                    else "target_observation"
+                    else (
+                        "target_observation"
+                        if finding.evidence_observations
+                        else "unknown"
+                    )
                 ),
+                detection_method=finding.detection_method,
+                evidence_status=finding.evidence_status,
+                evidence_truncated=finding.evidence_truncated,
                 risk_score=finding.risk_score,
                 exploitability=finding.exploitability,
                 epss_score=epss.epss_score if epss is not None else None,
@@ -240,6 +263,9 @@ def build_scan_ai_context(
         .select_from(ScanHostRecord)
         .where(ScanHostRecord.scan_id == scan.scan_id)
     ).one()
+    detail = get_scan_detail(session, scan.scan_id, org_id=scan.org_id)
+    if detail is None or detail.evidence_summary is None:
+        return None
 
     cve_ids = {
         finding.cve_id.upper()
@@ -277,6 +303,7 @@ def build_scan_ai_context(
         max_risk_score=risk.max_risk_score,
         severity=risk.severity,
         top_findings=bundle.contexts,
+        evidence_summary=detail.evidence_summary,
     )
     context._finding_ids_by_ref = bundle.finding_ids_by_ref
     context._display_values_by_ref = bundle.display_values_by_ref

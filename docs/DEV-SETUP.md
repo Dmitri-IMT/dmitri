@@ -67,6 +67,20 @@ On Raspberry Pi armhf/arm64, that mode installs and verifies the service-targete
 tools and DIRB wordlist. It exits with an error if provisioning fails, so a
 successful install means those scan capabilities are available.
 
+The appliance installer `sudo sh hardware-agent/scripts/provision-pi.sh` also installs
+and verifies those prerequisites before reporting the Pi ready. If the Python agent
+was installed manually or as a package alone, run this from a repository checkout
+on the Pi to install the missing external tools and wordlist:
+
+```bash
+sudo bash hardware-agent/scripts/provision-targeted-tools.sh
+sudo bash hardware-agent/scripts/provision-targeted-tools.sh --verify-only
+```
+
+The second command only checks local versions, capabilities and the wordlist; it
+does not scan targets. Successful provisioning removes missing-tool gaps, while
+real target failures and timeouts still make a scan partial.
+
 Manual steps below remain valid if you prefer not to use the scripts.
 
 ---

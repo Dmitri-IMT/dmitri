@@ -3736,6 +3736,13 @@ components:
           type:
             - string
             - 'null'
+        issue_key:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 256
+          default: null
         cve_id:
           type:
             - string
@@ -3773,6 +3780,16 @@ components:
             - 'null'
           minimum: 0
           maximum: 255
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 16
+          title: Evidence Observations
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+          default: false
     CoverageObservationPayload:
       properties:
         observation_key:
@@ -3963,6 +3980,23 @@ components:
           items:
             $ref: '#/components/schemas/ExposurePayload'
           default: []
+        finding_evidence_policy_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Finding Evidence Policy Version
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 512
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
+          default: false
     ScanIngestAcceptedResponse:
       type: object
       additionalProperties: false
@@ -4152,6 +4186,27 @@ components:
           anyOf:
             - $ref: '#/components/schemas/TerminatedBy'
             - type: 'null'
+        finding_evidence_policy_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Finding Evidence Policy Version
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 512
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
+          default: false
+        evidence_summary:
+          anyOf:
+          - $ref: '#/components/schemas/FindingEvidenceSummary'
+          - type: 'null'
     TargetedToolCoverage:
       type: object
       additionalProperties: false
@@ -5293,6 +5348,39 @@ components:
             - type: string
               format: date-time
             - type: 'null'
+        detection_method:
+          type: string
+          enum:
+          - version_correlation
+          - configuration_observation
+          - specific_check
+          - textual_reference
+          - unknown
+          title: Detection Method
+          default: unknown
+        evidence_status:
+          type: string
+          enum:
+          - supported
+          - inconclusive
+          - conflicting
+          - unknown
+          title: Evidence Status
+          default: unknown
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          maxItems: 16
+          title: Evidence Observations
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+          default: false
+        demonstrated:
+          type: boolean
+          title: Demonstrated
+          default: false
     FindingListResponse:
       type: object
       additionalProperties: false
@@ -5311,6 +5399,10 @@ components:
         page:
           type: integer
           minimum: 1
+        evidence_summary:
+          anyOf:
+          - $ref: '#/components/schemas/FindingEvidenceSummary'
+          - type: 'null'
     SeverityBreakdown:
       type: object
       additionalProperties: false
@@ -5519,6 +5611,16 @@ components:
             type: integer
           type: object
           title: Evidence Counts
+        evidence_summary:
+          $ref: '#/components/schemas/FindingEvidenceSummary'
+        finding_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Finding Observations
+        finding_observations_truncated:
+          type: boolean
+          title: Finding Observations Truncated
         service_counts:
           additionalProperties:
             type: integer
@@ -5597,6 +5699,9 @@ components:
       - issue_groups
       - severity_counts
       - evidence_counts
+      - evidence_summary
+      - finding_observations
+      - finding_observations_truncated
       - service_counts
       - affected_hosts
       - hosts_without_findings
@@ -5791,6 +5896,30 @@ components:
       title: ReportDevice
     ReportFinding:
       properties:
+        detection_method:
+          type: string
+          title: Detection Method
+        evidence_status:
+          type: string
+          title: Evidence Status
+        confidence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Evidence Observations
+        semantic_limit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Semantic Limit
         finding_id:
           type: string
           title: Finding Id
@@ -5868,6 +5997,12 @@ components:
       additionalProperties: false
       type: object
       required:
+      - detection_method
+      - evidence_status
+      - confidence
+      - evidence_truncated
+      - evidence_observations
+      - semantic_limit
       - finding_id
       - group
       - address
@@ -5889,6 +6024,25 @@ components:
       title: ReportFinding
     ReportIssueGroup:
       properties:
+        detection_method:
+          type: string
+          title: Detection Method
+        evidence_status:
+          type: string
+          title: Evidence Status
+        confidence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confidence
+        evidence_truncated:
+          type: boolean
+          title: Evidence Truncated
+        evidence_observations:
+          items:
+            $ref: '#/components/schemas/FindingEvidenceObservationPayload'
+          type: array
+          title: Evidence Observations
         id:
           type: string
           title: Id
@@ -5988,6 +6142,11 @@ components:
       additionalProperties: false
       type: object
       required:
+      - detection_method
+      - evidence_status
+      - confidence
+      - evidence_truncated
+      - evidence_observations
       - id
       - address
       - hostname
@@ -6656,6 +6815,199 @@ components:
           type: string
         details:
           $ref: '#/components/schemas/ErrorDetail'
+    FindingEvidenceObservationPayload:
+      properties:
+        ip:
+          anyOf:
+          - type: string
+            format: ipv4
+          - type: 'null'
+          title: Ip
+        port:
+          anyOf:
+          - type: integer
+            maximum: 65535.0
+            minimum: 1.0
+          - type: 'null'
+          title: Port
+        protocol:
+          anyOf:
+          - type: string
+            enum:
+            - tcp
+            - udp
+          - type: 'null'
+          title: Protocol
+        unit_id:
+          anyOf:
+          - type: integer
+            maximum: 255.0
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Id
+        condition_key:
+          type: string
+          maxLength: 256
+          minLength: 1
+          title: Condition Key
+        method:
+          type: string
+          enum:
+          - version_correlation
+          - configuration_observation
+          - specific_check
+          - textual_reference
+          - unknown
+          title: Method
+        result:
+          type: string
+          enum:
+          - positive
+          - negative
+          - inconclusive
+          title: Result
+        source:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Source
+        source_script:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Source Script
+        rule_id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Rule Id
+        rule_version:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Rule Version
+        evidence:
+          type: string
+          maxLength: 512
+          minLength: 1
+          title: Evidence
+        facts:
+          additionalProperties:
+            anyOf:
+            - type: string
+              maxLength: 160
+            - type: integer
+            - type: boolean
+          propertyNames:
+            maxLength: 64
+            minLength: 1
+          type: object
+          maxProperties: 8
+          title: Facts
+      additionalProperties: false
+      type: object
+      required:
+      - condition_key
+      - method
+      - result
+      - source
+      - rule_id
+      - rule_version
+      - evidence
+      title: FindingEvidenceObservationPayload
+    FindingEvidenceMethodCounts:
+      properties:
+        version_correlation:
+          type: integer
+          minimum: 0.0
+          title: Version Correlation
+        configuration_observation:
+          type: integer
+          minimum: 0.0
+          title: Configuration Observation
+        specific_check:
+          type: integer
+          minimum: 0.0
+          title: Specific Check
+        textual_reference:
+          type: integer
+          minimum: 0.0
+          title: Textual Reference
+        unknown:
+          type: integer
+          minimum: 0.0
+          title: Unknown
+      additionalProperties: false
+      type: object
+      required:
+      - version_correlation
+      - configuration_observation
+      - specific_check
+      - textual_reference
+      - unknown
+      title: FindingEvidenceMethodCounts
+    FindingEvidenceConfidenceCounts:
+      properties:
+        tentative:
+          type: integer
+          minimum: 0.0
+          title: Tentative
+        probable:
+          type: integer
+          minimum: 0.0
+          title: Probable
+        confirmed:
+          type: integer
+          minimum: 0.0
+          title: Confirmed
+        unknown:
+          type: integer
+          minimum: 0.0
+          title: Unknown
+      additionalProperties: false
+      type: object
+      required:
+      - tentative
+      - probable
+      - confirmed
+      - unknown
+      title: FindingEvidenceConfidenceCounts
+    FindingEvidenceSummary:
+      properties:
+        scope:
+          type: string
+          enum:
+          - scan
+          - filtered_findings
+          title: Scope
+        total_records:
+          type: integer
+          minimum: 0.0
+          title: Total Records
+        by_method:
+          $ref: '#/components/schemas/FindingEvidenceMethodCounts'
+        by_confidence:
+          $ref: '#/components/schemas/FindingEvidenceConfidenceCounts'
+        conflicting_records:
+          type: integer
+          minimum: 0.0
+          title: Conflicting Records
+        demonstrated_records:
+          type: integer
+          minimum: 0.0
+          title: Demonstrated Records
+      additionalProperties: false
+      type: object
+      required:
+      - scope
+      - total_records
+      - by_method
+      - by_confidence
+      - conflicting_records
+      - demonstrated_records
+      title: FindingEvidenceSummary
     ErrorResponse:
       type: object
       additionalProperties: false

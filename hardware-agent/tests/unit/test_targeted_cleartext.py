@@ -62,7 +62,11 @@ def ftp_listener(expected: list[bytes]):
             connection, _ = server.accept()
             with connection:
                 connection.sendall(b"220 FTP ready\r\n")
-                replies = [b"211 AUTH TLS\r\n", b"331 password\r\n", b"230 logged in\r\n"]
+                replies = [
+                    b"211 AUTH TLS\r\n",
+                    b"331 password\r\n",
+                    b"230 logged in\r\n",
+                ]
                 for reply in replies:
                     received.append(connection.recv(128))
                     connection.sendall(reply)
@@ -81,15 +85,43 @@ def _ftp_unit(port: int) -> TargetedUnit:
 
 
 def test_ftp_checks_only_feature_and_standard_anonymous_login() -> None:
-    active = FakeSocket([b"220 FTP ready\r\n", b"211 AUTH TLS\r\n", b"331 password\r\n", b"230 logged in\r\n"])
-    result = run_ftp_check(TargetedUnit("192.0.2.10", 21, "tcp", "ftp", TargetedTool.FTP_CHECK), FakeExecutor(), socket_factory=lambda *_args: active)
-    assert {issue.issue_key for issue in result.issues} == {"ftp:cleartext", "ftp:anonymous-login"}
-    assert active.sent == [b"FEAT\r\n", b"USER anonymous\r\n", b"PASS dmitri@localhost\r\n"]
+    active = FakeSocket(
+        [
+            b"220 FTP ready\r\n",
+            b"211 AUTH TLS\r\n",
+            b"331 password\r\n",
+            b"230 logged in\r\n",
+        ]
+    )
+    result = run_ftp_check(
+        TargetedUnit("192.0.2.10", 21, "tcp", "ftp", TargetedTool.FTP_CHECK),
+        FakeExecutor(),
+        socket_factory=lambda *_args: active,
+    )
+    assert {issue.issue_key for issue in result.issues} == {
+        "ftp:cleartext",
+        "ftp:anonymous-login",
+    }
+    anonymous = next(
+        issue for issue in result.issues if issue.issue_key == "ftp:anonymous-login"
+    )
+    assert anonymous.method == "specific_check"
+    assert anonymous.rule_id == "targeted:ftp-check-anonymous"
+    assert anonymous.facts == {"anonymous_login_accepted": True}
+    assert active.sent == [
+        b"FEAT\r\n",
+        b"USER anonymous\r\n",
+        b"PASS dmitri@localhost\r\n",
+    ]
 
 
 def test_telnet_reads_banner_without_sending_credentials() -> None:
     active = FakeSocket([b"\xff\xfb\x01login:"])
-    result = run_telnet_check(TargetedUnit("192.0.2.10", 23, "tcp", "telnet", TargetedTool.TELNET_CHECK), FakeExecutor(), socket_factory=lambda *_args: active)
+    result = run_telnet_check(
+        TargetedUnit("192.0.2.10", 23, "tcp", "telnet", TargetedTool.TELNET_CHECK),
+        FakeExecutor(),
+        socket_factory=lambda *_args: active,
+    )
     assert result.issues[0].issue_key == "telnet:cleartext"
     assert active.sent == []
 
@@ -99,7 +131,10 @@ def test_ftp_listener_receives_only_bounded_safe_commands() -> None:
     with ftp_listener(expected) as (port, _received):
         result = run_ftp_check(_ftp_unit(port), FakeExecutor())
     assert result.outcome == TargetedOutcome.COMPLETED
-    assert {issue.issue_key for issue in result.issues} == {"ftp:cleartext", "ftp:anonymous-login"}
+    assert {issue.issue_key for issue in result.issues} == {
+        "ftp:cleartext",
+        "ftp:anonymous-login",
+    }
 
 
 def test_telnet_banner_read_is_bounded_and_never_sends_credentials() -> None:
@@ -112,7 +147,9 @@ def test_telnet_banner_read_is_bounded_and_never_sends_credentials() -> None:
     assert result.outcome == TargetedOutcome.COMPLETED
     assert active.recv_sizes == [4096]
     assert active.sent == []
-    assert len(result.issues[0].evidence) <= 4096 + len("telnet-check: reachable; banner=")
+    assert len(result.issues[0].evidence) <= 4096 + len(
+        "telnet-check: reachable; banner="
+    )
 
 
 def test_ftp_cancellation_after_greeting_does_not_attempt_login() -> None:
@@ -166,13 +203,22 @@ def test_cleartext_refreshes_socket_timeout_for_each_operation() -> None:
         def settimeout(self, value: float) -> None:
             self.timeouts.append(value)
 
-    active = TrackingSocket([b"220 FTP ready\r\n", b"211 AUTH TLS\r\n", b"331 password\r\n", b"530 denied\r\n"])
+    active = TrackingSocket(
+        [
+            b"220 FTP ready\r\n",
+            b"211 AUTH TLS\r\n",
+            b"331 password\r\n",
+            b"530 denied\r\n",
+        ]
+    )
     result = run_ftp_check(
         _ftp_unit(21), FakeExecutor(), socket_factory=lambda *_args: active
     )
     assert result.outcome == TargetedOutcome.COMPLETED
     assert len(active.timeouts) >= 8
-    assert all(left >= right for left, right in zip(active.timeouts, active.timeouts[1:]))
+    assert all(
+        left >= right for left, right in zip(active.timeouts, active.timeouts[1:])
+    )
 
 
 def test_cleartext_pre_cancellation_skips_before_connect() -> None:

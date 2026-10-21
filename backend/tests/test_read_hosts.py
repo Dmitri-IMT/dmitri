@@ -14,7 +14,7 @@ from api.models.persistence import (
 )
 from api.services.inventory import reconcile_scan_inventory
 from api.services.read import get_host_detail
-from read_factories import make_org, seed_read_graph
+from read_factories import make_finding, make_org, seed_read_graph
 from sqlmodel import Session
 from starlette.testclient import TestClient
 
@@ -880,3 +880,29 @@ def test_sort_by_vulnerability_count_ranks_the_whole_network_not_the_page(
     counts = [row["vulnerability_count"] for page in pages for row in page["data"]]
     assert counts == sorted(counts, reverse=True)
     assert counts == list(range(44, -1, -1))
+
+
+def test_host_findings_summary_covers_all_matching_pages(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    for index in range(23):
+        make_finding(
+            administrative_session,
+            seeded["scan"].scan_id,
+            seeded["scan_host"].id,
+            f"host-summary-{index}",
+            severity="high",
+        )
+
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['host'].id}&severity=high&page=2&per_page=10",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["data"]) == 10
+    assert body["total"] == 24
+    assert body["evidence_summary"]["total_records"] == 24
+    assert body["evidence_summary"]["scope"] == "filtered_findings"

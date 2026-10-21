@@ -9,6 +9,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
     constr,
     field_validator,
     model_validator,
@@ -154,6 +157,41 @@ class HostPayload(BaseModel):
     device_profile: DeviceProfilePayload | None = None
 
 
+class FindingEvidenceObservationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ip: IPv4Address | None = None
+    port: Annotated[int | None, Field(default=None, ge=1, le=65535)] = None
+    protocol: Literal["tcp", "udp"] | None = None
+    unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
+    condition_key: constr(min_length=1, max_length=256, strip_whitespace=True)
+    method: Literal[
+        "version_correlation",
+        "configuration_observation",
+        "specific_check",
+        "textual_reference",
+        "unknown",
+    ]
+    result: Literal["positive", "negative", "inconclusive"]
+    source: constr(min_length=1, max_length=64, strip_whitespace=True)
+    source_script: constr(
+        min_length=1, max_length=64, strip_whitespace=True
+    ) | None = None
+    rule_id: constr(min_length=1, max_length=128, strip_whitespace=True)
+    rule_version: constr(min_length=1, max_length=64, strip_whitespace=True)
+    evidence: constr(min_length=1, max_length=512, strip_whitespace=True)
+    facts: dict[
+        constr(min_length=1, max_length=64, strip_whitespace=True),
+        Annotated[StrictStr, Field(max_length=160)] | StrictInt | StrictBool,
+    ] = Field(default_factory=dict, max_length=8)
+
+    @field_validator("facts")
+    @classmethod
+    def validate_fact_values(cls, value):
+        return value
+
+
+
 class FindingPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -163,6 +201,7 @@ class FindingPayload(BaseModel):
     service: str | None = None
     source: str | None = None
     source_script: str | None = None
+    issue_key: constr(min_length=1, max_length=256, strip_whitespace=True) | None = None
     cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
     cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Literal["low", "medium", "high", "critical"]
@@ -172,6 +211,10 @@ class FindingPayload(BaseModel):
     evidence: constr(min_length=3)
     references: list[constr(min_length=1)] = Field(default_factory=list)
     unit_id: Annotated[int | None, Field(default=None, ge=0, le=255)] = None
+    evidence_observations: list[FindingEvidenceObservationPayload] = Field(
+        default_factory=list, max_length=16
+    )
+    evidence_truncated: bool = False
 
 
 EvidenceCompleteness = Literal["complete", "partial", "unknown"]
@@ -224,9 +267,17 @@ class ScanIngestRequest(BaseModel):
     metadata: dict[str, str | int | float | bool] | None = None
     assessment_policy_version: constr(min_length=1, strip_whitespace=True) | None = None
     exposures: list[ExposurePayload] = Field(default_factory=list)
+    finding_evidence_policy_version: constr(
+        min_length=1, max_length=64, strip_whitespace=True
+    ) | None = None
+    finding_observations: list[FindingEvidenceObservationPayload] = Field(
+        default_factory=list, max_length=512
+    )
+    finding_observations_truncated: bool = False
 
     @model_validator(mode="after")
     def validate_assessment_snapshot(self) -> ScanIngestRequest:
+        self._validate_finding_evidence()
         has_host_assessment = any(
             host.machine_type is not None or host.device_profile is not None
             for host in self.hosts
@@ -261,6 +312,67 @@ class ScanIngestRequest(BaseModel):
                 "current payloads require exactly one exposure per open endpoint"
             )
         return self
+
+    def _validate_finding_evidence(self) -> None:
+        has_evidence_metadata = bool(
+            self.finding_observations
+            or self.finding_observations_truncated
+            or any(
+                f.evidence_observations or f.evidence_truncated
+                for f in self.findings
+            )
+        )
+        if self.finding_evidence_policy_version is None and has_evidence_metadata:
+            raise ValueError("finding evidence metadata requires a policy version")
+        hosts = {str(host.ip) for host in self.hosts}
+        for finding in self.findings:
+            for observation in finding.evidence_observations:
+                expected_condition = (
+                    finding.cve_id
+                    if observation.method == "version_correlation"
+                    or (
+                        observation.method == "specific_check"
+                        and (
+                            observation.rule_id.endswith("ms17-010")
+                            or finding.issue_key == finding.cve_id
+                        )
+                    )
+                    else finding.issue_key
+                )
+                if (
+                    expected_condition is not None
+                    and observation.condition_key != expected_condition
+                ):
+                    raise ValueError(
+                        "finding observation condition must match its finding"
+                    )
+                if observation.ip is not None and str(observation.ip) != str(
+                    finding.ip
+                ):
+                    raise ValueError("finding observation IP must match its finding")
+                if observation.port is not None and observation.port != finding.port:
+                    raise ValueError("finding observation port must match its finding")
+                if (
+                    observation.protocol is not None
+                    and observation.protocol != finding.protocol
+                ):
+                    raise ValueError(
+                        "finding observation protocol must match its finding"
+                    )
+                if (
+                    observation.unit_id is not None
+                    and observation.unit_id != finding.unit_id
+                ):
+                    raise ValueError(
+                        "finding observation unit must match its finding"
+                    )
+        for observation in self.finding_observations:
+            if observation.result == "positive":
+                raise ValueError("standalone finding observations cannot be positive")
+            if observation.ip is not None and str(observation.ip) not in hosts:
+                raise ValueError(
+                    "standalone finding observation IP must belong to the scan"
+                )
 
 
 class ScanIngestAcceptedResponse(BaseModel):

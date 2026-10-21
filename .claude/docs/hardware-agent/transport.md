@@ -4,7 +4,7 @@ title: transport — the signed scan-ingest client
 description: "The device-side ingest client: environment-loaded config, the Ed25519 request envelope, bounded retries, and the typed submission outcome."
 resource: hardware-agent/src/agent/transport/ingest.py
 tags: [hardware-agent, transport, ingest, ed25519, signatures, http, retry]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # transport — the signed scan-ingest client
@@ -79,6 +79,11 @@ database round trip per host, per port and per finding, and a read timeout is a 
 therefore retried — sizing it generously keeps attempt two off the wire while attempt one is still
 inside its transaction.
 
+The serialized body includes the finding-evidence policy version, finding `issue_key` values and
+bounded evidence observations, plus scan-level non-positive observations when present. The durable
+local result and ingest request use the same payload model, so the signed body retains these fields
+without a retry-time fallback that strips them.
+
 ## How it connects
 
 * Consumes [`ScanPayload`](/hardware-agent/normalize.md) — the same model
@@ -108,6 +113,8 @@ inside its transaction.
   "it stored it just now".
 * `X-Device-Id` identifies the *agent*, not a host — one of the two deliberate survivors of the
   `device`→`host` rename.
+* Agent registration and local key persistence live in [provisioning](/hardware-agent/provisioning.md),
+  a separate path from this result-ingest client.
 
 # Citations
 

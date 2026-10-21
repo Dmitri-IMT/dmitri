@@ -1,17 +1,20 @@
 ## Codex layout
 
-This repository mirrors Claude Code guidance from `.claude/` into Codex-native paths:
+Repository guidance and reusable workflows live in these Codex paths. `.claude/docs/` remains
+the canonical code-map and is shared by both harnesses:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | Instructions | `AGENTS.md` (this file) + nested `AGENTS.md` | Persistent project rules |
-| Skills | `.agents/skills/` | Reusable workflows (`$skill-name` or implicit match) |
-| Subagents | `.codex/agents/*.toml` | Specialized roles (reviewer, verifier, design agents) |
-| Code-map | `.codex/docs/index.md` | OKF bundle — module map and architecture references |
-| MCP | `.codex/config.toml` | Project-scoped MCP servers (trusted repos only) |
+| Skills | `.agents/skills/<name>/SKILL.md` | Reusable workflows (`$skill-name` or implicit match) |
+| Subagents | `.codex/agents/*.toml` | Specialized roles; discovered for new spawned sessions |
+| Code-map | `.claude/docs/index.md` | Canonical OKF bundle — module map and architecture references |
+| Project config | `.codex/config.toml` | Project-scoped Codex settings (trusted repos only) |
 
-Start at `.codex/docs/index.md` when you need to find where code lives. Invoke skills
-from `.agents/skills/` before improvising a workflow that already exists.
+Start at `.claude/docs/index.md` when you need to find where code lives. Invoke skills
+from `.agents/skills/` before improvising a workflow that already exists. Codex discovers
+repo skills on a new session; after adding or changing skills, restart the client if they
+do not appear in `/skills`.
 
 ## Integration rules
 

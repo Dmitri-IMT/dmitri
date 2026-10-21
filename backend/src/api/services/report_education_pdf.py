@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from xml.sax.saxutils import escape
 
+from pydantic import TypeAdapter
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -162,10 +163,20 @@ def _table(rows, widths):
     return table
 
 
+def _evidence_status_label(method, status, language):
+    key = "status_supported_version" if (
+        status == "supported" and method == "version_correlation"
+    ) else "status_" + status
+    return text(key, language)
+
+
 def append_education(
     story: list[Any], education: ExplainedReportSections, styles: Any,
     copy: dict[str, str], language: AILanguage, width: float, font_name: str,
 ) -> None:
+    education = TypeAdapter(ExplainedReportSections).dump_python(
+        education, mode="json"
+    )
     devices = education["devices"]
     labels = _LABELS[language]
     chart_width = width - 12
@@ -245,6 +256,27 @@ def append_education(
     ))
     for key in ("evidence_lesson", "correlation_limit", "reachability"):
         lesson(key)
+    evidence_summary = education["evidence_summary"]
+    body(text("evidence_summary_scope", language))
+    body(
+        f'{text("evidence_summary_records", language)}: '
+        f'{evidence_summary["total_records"]} | '
+        f'{text("evidence_summary_demonstrated", language)}: '
+        f'{evidence_summary["demonstrated_records"]} | '
+        f'{text("evidence_summary_conflicting", language)}: '
+        f'{evidence_summary["conflicting_records"]}'
+    )
+    for label, counts in (
+        ("method", evidence_summary["by_method"]),
+        ("confidence", evidence_summary["by_confidence"]),
+    ):
+        body(
+            text(label, language) + ": " + "; ".join(
+                f'{text(label + "_" + key, language)}: {count}'
+                for key, count in counts.items()
+            )
+        )
+    lesson("evidence_summary_note")
     completeness = education["evidence_completeness"]
     lesson("coverage_" + completeness)
     if education["coverage_recorded"]:
@@ -252,6 +284,69 @@ def append_education(
                incomplete=education["checks_incomplete"])
     else:
         lesson("coverage_missing")
+    standalone = education["finding_observations"]
+    if standalone:
+        story.append(p(
+            text("standalone_observations_title", language), "ReportHeading"
+        ))
+        lesson("standalone_observations_count", count=len(standalone))
+        lesson("observation_scope_note")
+        for observation in standalone:
+            result = text("observation_" + observation["result"], language)
+            method = text("method_" + observation["method"], language)
+            endpoint_parts = []
+            if observation.get("ip"):
+                endpoint_parts.append(observation["ip"])
+            if observation.get("port"):
+                endpoint_parts.append(
+                    f'{observation["port"]}/{observation.get("protocol") or ""}'
+                )
+            endpoint = ":".join(endpoint_parts[:1])
+            if len(endpoint_parts) > 1:
+                endpoint += " " + endpoint_parts[1]
+            if observation.get("unit_id") is not None:
+                endpoint += " (" + text("observation_unit", language) + " "
+                endpoint += str(observation["unit_id"]) + ")"
+            pieces = [
+                f'<b>{_safe(text("observation_condition", language))}:</b> '
+                f'{_safe(observation["condition_key"])}',
+                f'<b>{_safe(text("observation_result", language))}:</b> '
+                f'{_safe(result)}',
+                f'<b>{_safe(text("method", language))}:</b> {_safe(method)}',
+            ]
+            if endpoint:
+                pieces.append(
+                    f'<b>{_safe(text("observation_endpoint", language))}:</b> '
+                    f'{_safe(endpoint)}'
+                )
+            source = observation["source"]
+            if observation.get("source_script"):
+                source += " / " + observation["source_script"]
+            source += " / " + observation["rule_id"]
+            source += " " + observation["rule_version"]
+            pieces.append(
+                f'<b>{_safe(text("observation_source", language))}:</b> '
+                f'{_safe(source)}'
+            )
+            pieces.append(
+                f'<b>{_safe(text("observation_evidence", language))}:</b> '
+                f'{_safe(observation["evidence"])}'
+            )
+            facts = observation.get("facts") or {}
+            if facts:
+                fact_text = "; ".join(
+                    f"{key}={value}" for key, value in sorted(facts.items())
+                )
+                pieces.append(
+                    f'<b>{_safe(text("observation_facts", language))}:</b> '
+                    f'{_safe(fact_text)}'
+                )
+            story.append(KeepTogether([
+                Paragraph("<br/>".join(pieces), styles["ReportSmall"]),
+                Spacer(1, 2 * mm),
+            ]))
+        if education["finding_observations_truncated"]:
+            lesson("evidence_truncated")
     if any(education["enrichment"].values()):
         lesson("enrichment_pending", **education["enrichment"])
     if education["unassigned_findings"]:
@@ -338,6 +433,22 @@ def append_education(
                     f"{group['finding_count']} | "
                     + text("basis_" + group["basis"], language))
         body(metadata)
+        field(
+            text("method", language),
+            text("method_" + group["detection_method"], language),
+        )
+        field(
+            text("status", language),
+            _evidence_status_label(
+                group["detection_method"], group["evidence_status"], language
+            ),
+        )
+        field(
+            text("confidence", language),
+            text("confidence_" + (group["confidence"] or "unknown"), language),
+        )
+        if group["evidence_truncated"]:
+            lesson("evidence_truncated")
         if group["basis"] in {"correlation", "service"}:
             lesson("group_" + group["basis"], count=group["finding_count"],
                    version=group["version"] or text("version_unknown", language))
@@ -427,13 +538,35 @@ def append_education(
             effect = text("basis_observation", language)
         title = record["title"] if record["reference"] else group_names[record["group"]]
         identity = f"{record['group']} | {title}"
+        confidence_label = text(
+            "confidence_" + (record["confidence"] or "unknown"), language
+        )
+        status_label = _evidence_status_label(
+            record["detection_method"], record["evidence_status"], language
+        )
+        metadata = (
+            f'<br/><b>{_safe(text("method", language))}:</b> '
+            f'{_safe(text("method_" + record["detection_method"], language))}'
+            f'<br/><b>{_safe(text("status", language))}:</b> '
+            f'{_safe(status_label)}'
+            f'<br/><b>{_safe(text("confidence", language))}:</b> '
+            f'{_safe(confidence_label)}'
+        )
+        if record["evidence_truncated"]:
+            metadata += f'<br/><b>{_safe(text("limit", language))}:</b> '
+            metadata += _safe(text("evidence_truncated", language))
+        if record.get("semantic_limit"):
+            metadata += f'<br/><b>{_safe(text("limit", language))}:</b> '
+            metadata += _safe(record["semantic_limit"])
         if record["reference"]:
             identity_cell = Paragraph(
                 f'<link href="{_safe(record["reference"])}" color="#600BB5">'
-                f'{_safe(identity)}</link>', styles["ReportSmall"]
+                f'{_safe(identity)}</link>{metadata}', styles["ReportSmall"]
             )
         else:
-            identity_cell = p(identity, "ReportSmall")
+            identity_cell = Paragraph(
+                f'{_safe(identity)}{metadata}', styles["ReportSmall"]
+            )
         rows.append([
             p(f"{record['address'] or '-'} | {record['port'] or '-'}", "ReportSmall"),
             identity_cell,

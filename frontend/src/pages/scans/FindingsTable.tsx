@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react'
 import DataTable from '@/components/DataTable'
-import FindingPanel from '@/pages/scans/FindingPanel'
+import FindingPanel, { ScanFindingPanel } from '@/pages/scans/FindingPanel'
+import useI18n from '@/i18n/useI18n'
 import {
   hostFindingColumns,
   scanFindingColumns,
@@ -14,9 +16,11 @@ type FindingsTableProps = {
   isPending?: boolean
   testId: string
   caption: string
+  sourceToolLabel?: string
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
   variant: 'scan' | 'host'
+  empty?: ReactNode
 }
 
 function FindingsTable({
@@ -24,18 +28,35 @@ function FindingsTable({
   isPending = false,
   testId,
   caption,
+  sourceToolLabel,
   openFindingId,
   onOpenFindingChange,
   variant,
+  empty,
 }: FindingsTableProps) {
+  const { t } = useI18n()
+  const labels = {
+    vulnerability: t('common.vulnerability'),
+    severity: t('common.severityLabel'),
+    machine: t('common.machine'),
+    port: t('common.port'),
+    cve: t('common.cve'),
+    firstSeen: t('common.firstSeen'),
+    status: t('common.status'),
+    confirmed: t('evidence.filter.confirmed'),
+    unverified: t('evidence.filter.unverified'),
+  }
   const columns =
-    variant === 'scan' ? scanFindingColumns() : hostFindingColumns()
+    variant === 'scan'
+      ? scanFindingColumns(sourceToolLabel, labels)
+      : hostFindingColumns(labels)
 
   const table = {
     columns,
     rowId: (finding: FindingRecord) => finding.finding_id,
     testId,
     caption,
+    empty,
   }
 
   if (isPending) return <DataTable {...table} rows={[]} isPending />
@@ -46,8 +67,14 @@ function FindingsTable({
       rows={[...findings].sort(bySeverityDesc)}
       rowAction={{
         kind: 'expand',
-        panel: (finding) => <FindingPanel finding={finding} />,
-        label: (finding) => `Show details for ${finding.title}`,
+        panel: (finding) =>
+          variant === 'scan' ? (
+            <ScanFindingPanel finding={finding} />
+          ) : (
+            <FindingPanel finding={finding} />
+          ),
+        label: (finding) =>
+          t('common.showFindingDetails', { title: finding.title }),
         openRowId: openFindingId,
         onOpenRowChange: onOpenFindingChange,
       }}

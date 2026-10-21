@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "split": "evaluation",
+  "notes": {
+    "sample_size": 12,
+    "limitations": [
+      "Small synthetic evaluation is not a representative estimate of production precision or recall.",
+      "Labels classify the reduced response, not the actual security state of any device.",
+      "False-positive rate is suppressed until at least 10 negative references are available.",
+      "All addresses and content are fictitious test data.",
+      "Baseline predictions were produced by the pinned pre-change implementation at 471739f; see baseline-471739f.json for per-case outputs and input digests."
+    ]
+  },
+  "baseline": {
+    "id": "findings-extractor-471739f",
+    "source_revision": "471739f",
+    "artifact": "baseline-471739f.json",
+    "description": "Auditable predictions from the pre-change extract_findings implementation pinned at 471739f, run on the evaluation corpus."
+  },
+  "cases": [
+    {
+      "id": "eval-ms17-positive-control",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb-vuln-ms17-010"
+      },
+      "condition": "CVE-2017-0143 on TCP/445",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "specific_check",
+      "input": {
+        "ip": "192.0.2.20",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "VULNERABLE",
+        "data": {
+          "state": "VULNERABLE",
+          "title": "SMB remote code execution",
+          "IDS": [
+            "CVE:CVE-2017-0143"
+          ]
+        }
+      }
+    },
+    {
+      "id": "eval-structured-negative-cve-reference",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "generic-vuln-check"
+      },
+      "condition": "CVE-2020-1234 on TCP/445",
+      "reference_label": "negative",
+      "expected_current": "negative",
+      "expected_method": "unknown",
+      "input": {
+        "ip": "192.0.2.21",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "NOT VULNERABLE; CVE-2020-1234",
+        "data": {
+          "state": "NOT VULNERABLE",
+          "IDS": {
+            "CVE": "CVE-2020-1234"
+          }
+        }
+      }
+    },
+    {
+      "id": "eval-text-cve-reference",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "unmapped-script"
+      },
+      "condition": "CVE-2024-12345 mentioned in text",
+      "reference_label": "inconclusive",
+      "expected_current": "inconclusive",
+      "expected_method": "textual_reference",
+      "input": {
+        "ip": "192.0.2.22",
+        "port": 443,
+        "protocol": "tcp",
+        "service": "https",
+        "output": "See CVE-2024-12345 for details",
+        "data": null
+      }
+    },
+    {
+      "id": "eval-unknown-structured-state",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "generic-vuln-check"
+      },
+      "condition": "CVE-2021-2345 on TCP/445",
+      "reference_label": "inconclusive",
+      "expected_current": "inconclusive",
+      "expected_method": "unknown",
+      "input": {
+        "ip": "192.0.2.23",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "Unable to test CVE-2021-2345",
+        "data": {
+          "state": "UNKNOWN (unable to test)",
+          "IDS": {
+            "CVE": "CVE-2021-2345"
+          }
+        }
+      }
+    },
+    {
+      "id": "eval-ftp-positive-control",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "ftp-anon"
+      },
+      "condition": "Anonymous FTP login on TCP/21",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "specific_check",
+      "input": {
+        "ip": "192.0.2.24",
+        "port": 21,
+        "protocol": "tcp",
+        "service": "ftp",
+        "output": "Anonymous FTP login allowed (FTP code 230)",
+        "data": null
+      }
+    },
+    {
+      "id": "eval-http-observed-configuration",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "http-methods"
+      },
+      "condition": "HTTP PUT method on TCP/8080",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "configuration_observation",
+      "input": {
+        "ip": "192.0.2.25",
+        "port": 8080,
+        "protocol": "tcp",
+        "service": "http",
+        "output": "Supported Methods: GET HEAD POST PUT",
+        "data": null
+      }
+    },
+    {
+      "id": "eval-version-correlation-only",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "vulners"
+      },
+      "condition": "CVE-2024-1000 associated with an observed service CPE",
+      "reference_label": "inconclusive",
+      "expected_current": "inconclusive",
+      "expected_method": "version_correlation",
+      "input": {
+        "ip": "192.0.2.26",
+        "port": 22,
+        "protocol": "tcp",
+        "service": "ssh",
+        "cpes": [
+          "cpe:/a:openbsd:openssh:8.9"
+        ],
+        "output": "CVE-2024-1000",
+        "data": {
+          "cpe:/a:openbsd:openssh:8.9": [
+            {
+              "id": "CVE-2024-1000",
+              "cvss": 7.5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "eval-likely-vulnerable-is-inconclusive",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "generic-vuln-check"
+      },
+      "condition": "CVE-2022-3456 on TCP/445",
+      "reference_label": "inconclusive",
+      "expected_current": "inconclusive",
+      "expected_method": "unknown",
+      "input": {
+        "ip": "192.0.2.27",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "LIKELY VULNERABLE CVE-2022-3456",
+        "data": {
+          "state": "LIKELY VULNERABLE",
+          "IDS": {
+            "CVE": "CVE-2022-3456"
+          }
+        }
+      }
+    },
+    {
+      "id": "eval-mixed-independent-checks",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb-vuln-ms17-010"
+      },
+      "condition": "CVE-2017-0143 positive and independent CVE-2020-1234 negative on TCP/445",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "specific_check",
+      "input": {
+        "ip": "192.0.2.28",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "One condition is vulnerable; another is not vulnerable",
+        "data": [
+          {
+            "state": "NOT VULNERABLE",
+            "IDS": {
+              "CVE": "CVE-2020-1234"
+            }
+          },
+          {
+            "state": "VULNERABLE",
+            "title": "SMB remote code execution",
+            "IDS": {
+              "CVE": "CVE-2017-0143"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "eval-conflicting-same-condition",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb-vuln-ms17-010"
+      },
+      "condition": "Contradictory states for CVE-2017-0143 on TCP/445",
+      "reference_label": "inconclusive",
+      "expected_current": "inconclusive",
+      "expected_method": "specific_check",
+      "input": {
+        "ip": "192.0.2.29",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "Conflicting results",
+        "data": [
+          {
+            "state": "NOT VULNERABLE",
+            "IDS": {
+              "CVE": "CVE-2017-0143"
+            }
+          },
+          {
+            "state": "VULNERABLE",
+            "title": "SMB remote code execution",
+            "IDS": {
+              "CVE": "CVE-2017-0143"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "eval-repeated-positive-witness",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "smb-vuln-ms17-010"
+      },
+      "condition": "Repeated positive response for CVE-2017-0143 on TCP/445",
+      "reference_label": "positive",
+      "expected_current": "positive",
+      "expected_method": "specific_check",
+      "input": {
+        "ip": "192.0.2.30",
+        "port": 445,
+        "protocol": "tcp",
+        "service": "microsoft-ds",
+        "output": "VULNERABLE",
+        "data": [
+          {
+            "state": "VULNERABLE",
+            "title": "SMB remote code execution",
+            "IDS": {
+              "CVE": "CVE-2017-0143"
+            }
+          },
+          {
+            "state": "VULNERABLE",
+            "title": "SMB remote code execution",
+            "IDS": {
+              "CVE": "CVE-2017-0143"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "eval-no-response-not-evaluable",
+      "origin": {
+        "tool": "Nmap NSE",
+        "version": "7.95",
+        "script": "unmapped-script"
+      },
+      "condition": "No response available for TCP/8081 check",
+      "reference_label": "not_evaluable",
+      "expected_current": "not_evaluable",
+      "expected_method": null,
+      "input": {
+        "ip": "192.0.2.31",
+        "port": 8081,
+        "protocol": "tcp",
+        "service": "http",
+        "output": "",
+        "data": null
+      }
+    }
+  ]
+}

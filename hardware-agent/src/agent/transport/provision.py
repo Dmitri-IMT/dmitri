@@ -60,6 +60,10 @@ def _write_private_file(path: Path, lines: list[str], *, replace: bool = True) -
 
 
 def _sync_directory(path: Path) -> None:
+    if os.name == "nt":
+        # Windows does not support opening directories for fsync. The file itself
+        # is flushed before replace; directory syncing remains enabled on POSIX.
+        return
     fd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(fd)

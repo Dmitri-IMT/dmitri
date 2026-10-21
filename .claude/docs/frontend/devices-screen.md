@@ -4,7 +4,7 @@ title: Devices list, detail, scan and revocation
 description: Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
 resource: frontend/src/pages/Devices.tsx
 tags: [frontend, agents, devices, commands, tanstack-query]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 
 # Devices list, detail, scan and revocation
@@ -35,7 +35,7 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
 | `DeviceRevoke` | Admin-only revoke section. POSTs revoke inside the shared `ConfirmDialog` (which owns pending), invalidates `queryKeys.agents.all`, and raises the success toast. | `frontend/src/pages/agents/DeviceRevoke.tsx:13` |
 | `DeviceRestore` | Revoked banner; viewers get explanation only. Admins get an inline restore button that owns its pending and error state, invalidates `queryKeys.agents.all`, and raises the success toast. | `frontend/src/pages/agents/DeviceRestore.tsx:13` |
 | `ScanTypeTabs` / `ScanTypeReadOnly` | Radix `Tabs` over `SCAN_MODE_ORDER` with per-mode description; read-only shows the default mode label for viewers. | `frontend/src/pages/agents/ScanTypeTabs.tsx:13` |
-| `DEFAULT_SCAN_MODE` / `SCAN_MODE_LABEL` / `SCAN_MODE_DESCRIPTION` | Pure scan-mode vocabulary; default is `standard`, not `quick`. | `frontend/src/lib/scanModes.ts:5` |
+| `DEFAULT_SCAN_MODE` / `SCAN_MODE_LABEL` / `SCAN_MODE_DESCRIPTION` | Pure scan-mode vocabulary; default is `standard`, not `quick`. Extensive duration depends on discovered services and can exceed an hour. | `frontend/src/lib/scanModes.ts:5` |
 | `useScanCommand(agent)` | Latches `followedCommandId` (never cleared on terminal — only replaced by a newer id). Polls `GET /commands/{id}` every 5s until [command-status](./command-status.md)'s `isSettledCommand`, so a cancelled command without results keeps polling for a late upload. On `done` or `cancelled`, invalidates `scans`, `hosts`, `findings`, and `agents.detail` once per outcome (`command_id:status:has_results`), so late results sweep again. `trigger(scanMode)` posts `{ scan_mode, subnet }` and resolves to **one** `TriggerOutcome`. `cancel()` sets one `cancelIntentId` and POSTs `/commands/{id}/cancel`; `cancelling` is that intent on a non-terminal command, and an error clears it. The sweep effect toasts that the scan finished first when the intent's command ends `done`; `409` toasts that results are already uploading. | `frontend/src/hooks/useScanCommand.ts` |
 | `TriggerOutcome` | `'followed' \| 'subnet-stale' \| 'refused'` — the hook's whole answer to one press. | `frontend/src/hooks/useScanCommand.ts` |
 | `subnetLabel()` / `subnetOptionSuffix()` / `findAvailableSubnet()` | Pure interface→label mapping plus the internet-route suffix. No React. | `frontend/src/lib/subnetLabel.ts:15` |

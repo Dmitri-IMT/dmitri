@@ -199,6 +199,10 @@ def run_ftp_check(
                 sanitize_evidence(
                     f"ftp-check: greeting={greeting_code}; auth_tls={'advertised' if b'AUTH TLS' in feat.upper() else 'not-advertised'}"
                 ),
+                method="configuration_observation",
+                result="positive",
+                rule_id="targeted:ftp-check-cleartext-control",
+                facts={"auth_tls_advertised": b"AUTH TLS" in feat.upper()},
             )
         ]
         if re.match(rb"\s*230\b", pass_reply):
@@ -210,6 +214,10 @@ def run_ftp_check(
                     "high",
                     "Disable anonymous FTP access or isolate the service and remove sensitive content.",
                     "ftp-check: anonymous login accepted",
+                    method="specific_check",
+                    result="positive",
+                    rule_id="targeted:ftp-check-anonymous",
+                    facts={"anonymous_login_accepted": True},
                 )
             )
         _ = user_reply
@@ -276,6 +284,10 @@ def run_telnet_check(
                     "high",
                     "Disable Telnet and use an encrypted remote-access protocol.",
                     f"telnet-check: reachable; banner={evidence or '[empty]'}",
+                    method="specific_check",
+                    result="positive",
+                    rule_id="targeted:telnet-check-reachable",
+                    facts={"tcp_connection_accepted": True},
                 )
             ],
         )

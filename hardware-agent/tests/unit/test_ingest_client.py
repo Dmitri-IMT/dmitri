@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from agent.normalize.contracts import HostPayload, ScanPayload
+from agent.normalize.contracts import FindingPayload, HostPayload, ScanPayload
 from agent.transport import (
     IngestConfig,
     ScanIngestClient,
@@ -115,6 +115,38 @@ class TestRequestEnvelope:
         PUBLIC_KEY.verify(
             bytes.fromhex(request.headers["X-Signature"]), canonical.encode("utf-8")
         )
+
+    def test_signed_body_preserves_evidence_policy_and_issue_key(self) -> None:
+        payload = make_payload().model_copy(
+            update={
+                "finding_evidence_policy_version": "1",
+                "findings": [
+                    FindingPayload(
+                        ip="192.168.1.10",
+                        issue_key="smb:signing",
+                        severity="high",
+                        title="SMB signing disabled",
+                        description="The SMB service does not require signing.",
+                        recommendation="Require SMB signing.",
+                        evidence="The service reported signing as disabled.",
+                    )
+                ],
+            }
+        )
+        requests: list[httpx.Request] = []
+        client, _ = build_client(respond(202, accepted_body(payload)), requests)
+
+        client.submit(payload)
+
+        request = requests[0]
+        body = json.loads(request.content)
+        assert body["finding_evidence_policy_version"] == "1"
+        assert body["findings"][0]["issue_key"] == "smb:signing"
+        assert request.content == payload.model_dump_json().encode("utf-8")
+        assert request.headers["X-Body-SHA256"] == hashlib.sha256(
+            request.content
+        ).hexdigest()
+        verify_signature(request)
 
     def test_signature_rejects_trailing_newline_variant(self) -> None:
         payload = make_payload()

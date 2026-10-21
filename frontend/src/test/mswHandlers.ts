@@ -254,6 +254,11 @@ export const criticalFinding: FindingRecord = {
   first_seen_at: weeksAgo(3),
   last_seen_at: minutesAgo(60),
   fixed_at: null,
+  detection_method: 'unknown',
+  evidence_status: 'unknown',
+  evidence_observations: [],
+  evidence_truncated: false,
+  demonstrated: false,
 }
 
 export const highFinding: FindingRecord = {
@@ -279,6 +284,11 @@ export const highFinding: FindingRecord = {
   first_seen_at: weeksAgo(2),
   last_seen_at: minutesAgo(59),
   fixed_at: null,
+  detection_method: 'unknown',
+  evidence_status: 'unknown',
+  evidence_observations: [],
+  evidence_truncated: false,
+  demonstrated: false,
 }
 
 const scanModes = [
@@ -444,6 +454,8 @@ export const scanDetailFixtures: ScanDetailResponse[] = scanFixtures.map(
     assessment_status: 'unavailable',
     assessment_policy_version: null,
     exposures: [],
+    finding_observations: [],
+    finding_observations_truncated: false,
     error_code: scan.status === 'failed' ? 'device_offline' : null,
   }),
 )

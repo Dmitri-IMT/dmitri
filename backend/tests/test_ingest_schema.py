@@ -14,6 +14,7 @@ from api.schemas import (
 )
 from api.schemas.persistence import PersistedScanDetail, PersistedScanSummary
 from api.schemas.read import Port
+from api.schemas.scan import FindingPayload
 
 EXAMPLE_PATH = (
     Path(__file__).resolve().parents[2]
@@ -583,3 +584,250 @@ def test_assessment_models_enforce_string_and_collection_bounds() -> None:
     ]
     with pytest.raises(pydantic.ValidationError):
         ScanIngestRequest.model_validate(too_many_conflicts)
+
+
+def _evidence_observation(**overrides: object) -> dict:
+    observation = {
+        "ip": "192.168.1.10",
+        "port": 22,
+        "protocol": "tcp",
+        "condition_key": "CVE-2026-1234",
+        "method": "specific_check",
+        "result": "negative",
+        "source": "nmap",
+        "rule_id": "nse:test-rule",
+        "rule_version": "1",
+        "evidence": "Structured response recorded.",
+        "facts": {"state": "not_vulnerable", "attempted": False},
+    }
+    observation.update(overrides)
+    return observation
+
+
+def test_finding_evidence_contract_accepts_bounded_records_and_legacy() -> None:
+    legacy = ScanIngestRequest.model_validate(_base_payload(findings=[]))
+    assert legacy.finding_evidence_policy_version is None
+    assert legacy.finding_observations == []
+
+    payload = _current_payload(
+        finding_evidence_policy_version="1",
+        findings=[
+            {
+                "ip": "192.168.1.10",
+                "port": 22,
+                "protocol": "tcp",
+                "unit_id": None,
+                "severity": "high",
+                "title": "Observed condition",
+                "description": "The condition was tested.",
+                "recommendation": "Review the result.",
+                "evidence": "Existing evidence text.",
+                "evidence_observations": [_evidence_observation()],
+            }
+        ],
+    )
+    result = ScanIngestRequest.model_validate(payload)
+    assert result.findings[0].evidence_observations[0].facts["attempted"] is False
+
+
+def test_finding_issue_key_is_optional_bounded_and_binds_conditions() -> None:
+    base = {
+        "ip": "192.168.1.10",
+        "port": 22,
+        "protocol": "tcp",
+        "severity": "high",
+        "title": "Observed condition",
+        "description": "The condition was tested.",
+        "recommendation": "Review the result.",
+        "evidence": "Existing evidence text.",
+    }
+    assert FindingPayload.model_validate(base).issue_key is None
+    assert FindingPayload.model_validate({**base, "issue_key": " x "}).issue_key == "x"
+    for value in (" ", "x" * 257):
+        with pytest.raises(pydantic.ValidationError):
+            FindingPayload.model_validate({**base, "issue_key": value})
+
+    observation = _evidence_observation(
+        condition_key="smb:signing",
+        method="configuration_observation",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        facts={"signing_required": False},
+    )
+    payload = _current_payload(
+        finding_evidence_policy_version="1",
+        findings=[
+            {
+                **base,
+                "issue_key": "smb:signing",
+                "evidence_observations": [observation],
+            }
+        ],
+    )
+    assert ScanIngestRequest.model_validate(payload).findings[0].issue_key == (
+        "smb:signing"
+    )
+    payload["findings"][0]["issue_key"] = "CVE-2026-1234"
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        {"method": "made_up"},
+        {"result": "unknown"},
+        {"facts": {"nested": ["no"]}},
+        {"facts": {"number": 1.5}},
+        {"facts": {"text": "x" * 161}},
+        {"facts": {str(index): index for index in range(9)}},
+        {"extra": "rejected"},
+    ],
+)
+def test_finding_evidence_contract_rejects_open_or_unbounded_values(
+    observation,
+) -> None:
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(
+            _current_payload(
+                finding_evidence_policy_version="1",
+                finding_observations=[_evidence_observation(**observation)],
+            )
+        )
+
+
+def test_finding_evidence_contract_enforces_version_limits_and_scope() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(
+            _current_payload(finding_observations=[_evidence_observation()])
+        )
+
+    too_many = _current_payload(finding_evidence_policy_version="1")
+    too_many["finding_observations"] = [
+        _evidence_observation() for _ in range(513)
+    ]
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(too_many)
+
+    wrong_ip = _current_payload(
+        finding_evidence_policy_version="1",
+        finding_observations=[_evidence_observation(ip="192.168.1.99")],
+    )
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(wrong_ip)
+
+    positive_standalone = _current_payload(
+        finding_evidence_policy_version="1",
+        finding_observations=[_evidence_observation(result="positive")],
+    )
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(positive_standalone)
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        {"ip": "2001:db8::1"},
+        {"port": 0},
+        {"port": 65536},
+        {"protocol": "icmp"},
+        {"unit_id": -1},
+        {"unit_id": 256},
+        {"condition_key": ""},
+        {"condition_key": "x" * 257},
+        {"source": "x" * 65},
+        {"source_script": "x" * 65},
+        {"rule_id": "x" * 129},
+        {"rule_version": "x" * 65},
+        {"evidence": "x" * 513},
+        {"facts": {"x" * 65: "value"}},
+        {"facts": {"value": None}},
+        {"facts": {"value": ["nested"]}},
+        {"facts": {"value": {"nested": "value"}}},
+    ],
+)
+def test_finding_evidence_observation_rejects_invalid_field_bounds(observation) -> None:
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(
+            _current_payload(
+                finding_evidence_policy_version="1",
+                finding_observations=[_evidence_observation(**observation)],
+            )
+        )
+
+
+def test_finding_evidence_version_flags_and_observation_limits() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(
+            _current_payload(finding_observations_truncated=True)
+        )
+
+    future = ScanIngestRequest.model_validate(
+        _current_payload(
+            finding_evidence_policy_version="future-policy",
+            finding_observations=[_evidence_observation()],
+        )
+    )
+    assert future.finding_evidence_policy_version == "future-policy"
+
+    truncated = ScanIngestRequest.model_validate(
+        _current_payload(
+            finding_evidence_policy_version="1",
+            finding_observations_truncated=True,
+        )
+    )
+    assert truncated.finding_observations_truncated is True
+
+    findings = _current_payload(finding_evidence_policy_version="1")
+    findings["findings"] = [
+        {
+            "ip": "192.168.1.10",
+            "port": 22,
+            "protocol": "tcp",
+            "severity": "high",
+            "title": "Observed condition",
+            "description": "The condition was tested.",
+            "recommendation": "Review the result.",
+            "evidence": "Existing evidence text.",
+            "evidence_observations": [_evidence_observation() for _ in range(16)],
+        }
+    ]
+    assert (
+        len(ScanIngestRequest.model_validate(findings).findings[0].evidence_observations)
+        == 16
+    )
+    findings["findings"][0]["evidence_observations"].append(_evidence_observation())
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(findings)
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        {"ip": "192.168.1.11"},
+        {"port": 80},
+        {"protocol": "udp"},
+        {"unit_id": 1},
+    ],
+)
+def test_finding_observation_endpoint_must_match_finding(observation) -> None:
+    payload = _current_payload(
+        finding_evidence_policy_version="1",
+        findings=[
+            {
+                "ip": "192.168.1.10",
+                "port": 22,
+                "protocol": "tcp",
+                "unit_id": 0,
+                "severity": "high",
+                "title": "Observed condition",
+                "description": "The condition was tested.",
+                "recommendation": "Review the result.",
+                "evidence": "Existing evidence text.",
+                "evidence_observations": [_evidence_observation(**observation)],
+            }
+        ],
+    )
+    with pytest.raises(pydantic.ValidationError):
+        ScanIngestRequest.model_validate(payload)

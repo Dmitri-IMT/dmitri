@@ -15,6 +15,7 @@ from api.schemas.ai import (
     ProviderAIChatResponse,
 )
 from api.schemas.read import (
+    FindingEvidenceSummary,
     FindingRead,
     HostDetailResponse,
     ScanDetailResponse,
@@ -35,7 +36,10 @@ from api.services.ai.context import (
     replace_ai_references,
 )
 from api.services.ai.groq import AIProviderError
-from api.services.scan_evidence import incomplete_check_count
+from api.services.scan_evidence import (
+    incomplete_check_count,
+    summarize_finding_evidence,
+)
 
 MAX_CHAT_HISTORY = 10
 MAX_CHAT_FINDINGS = 5
@@ -93,6 +97,10 @@ def build_scan_chat_bundle(
             machine_vulnerability_summary=_machine_vulnerability_summary(
                 detail.findings, machine_refs
             ),
+            evidence_summary=detail.evidence_summary
+            or FindingEvidenceSummary.model_validate(
+                summarize_finding_evidence(detail.findings, scope="scan")
+            ),
         ),
         finding_ids_by_ref=bundle.finding_ids_by_ref,
         display_values_by_ref=bundle.display_values_by_ref,
@@ -103,14 +111,21 @@ def build_finding_chat_bundle(finding: FindingRead) -> AIChatContextBundle:
     machine_refs: dict[UUID | None, str] = {}
     bundle = build_finding_contexts([finding], machine_refs=machine_refs)
     return AIChatContextBundle(
-        provider_context=FindingChatContext(finding=bundle.contexts[0]),
+        provider_context=FindingChatContext(
+            finding=bundle.contexts[0],
+            evidence_summary=FindingEvidenceSummary.model_validate(
+                summarize_finding_evidence([finding], scope="filtered_findings")
+            ),
+        ),
         finding_ids_by_ref=bundle.finding_ids_by_ref,
         display_values_by_ref=bundle.display_values_by_ref,
     )
 
 
 def build_host_chat_bundle(
-    host: HostDetailResponse, findings: list[FindingRead]
+    host: HostDetailResponse,
+    findings: list[FindingRead],
+    evidence_summary: FindingEvidenceSummary | None = None,
 ) -> AIChatContextBundle:
     machine_refs: dict[UUID | None, str] = {}
     machine_ref = assign_machine_ref(machine_refs, host.host_id)
@@ -129,6 +144,12 @@ def build_host_chat_bundle(
             highest_severity=host.highest_severity,
             open_ports_count=host.open_ports_count,
             findings=bundle.contexts,
+            evidence_summary=evidence_summary
+            or FindingEvidenceSummary.model_validate(
+                summarize_finding_evidence(
+                    findings, scope="filtered_findings"
+                )
+            ),
         ),
         finding_ids_by_ref=bundle.finding_ids_by_ref,
         display_values_by_ref=bundle.display_values_by_ref,

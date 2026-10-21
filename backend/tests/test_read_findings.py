@@ -238,6 +238,7 @@ def test_get_finding_by_id_returns_evidence_and_risk(
 ) -> None:
     seeded = seed_read_graph(administrative_session)
     finding = seeded["finding"]
+    finding.confidence = "confirmed"
     administrative_session.add(
         RiskSnapshotRecord(
             finding_id=finding.id,
@@ -275,3 +276,146 @@ def test_get_finding_by_id_hides_foreign_and_unknown_ids(
         response = client.get(f"/api/v1/findings/{finding_id}", headers=headers)
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "not_found"
+
+
+def test_finding_summary_uses_exact_filters_before_pagination(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    seeded["finding"].confidence = "confirmed"
+    administrative_session.add(seeded["finding"])
+    for index in range(25):
+        finding = make_finding(
+            administrative_session,
+            seeded["scan"].scan_id,
+            seeded["scan_host"].id,
+            f"filtered-{index}",
+            severity="high",
+        )
+        finding.confidence = "probable" if index % 2 else "tentative"
+        administrative_session.add(finding)
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/findings?host_id={seeded['host'].id}"
+        f"&scan_id={seeded['scan'].scan_id}&severity=high&page=3&per_page=10",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    summary = body["evidence_summary"]
+    assert body["total"] == 26
+    assert len(body["data"]) == 6
+    assert summary["scope"] == "filtered_findings"
+    assert summary["total_records"] == 26
+    assert sum(summary["by_method"].values()) == 26
+    assert summary["by_confidence"] == {
+        "tentative": 13,
+        "probable": 12,
+        "confirmed": 1,
+        "unknown": 0,
+    }
+    assert summary["conflicting_records"] == 0
+    assert summary["demonstrated_records"] == 0
+
+
+def test_legacy_confirmed_without_provenance_is_not_demonstrated(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    finding = seeded["finding"]
+    finding.confidence = "confirmed"
+    finding.finding_evidence_policy_version = None
+    finding.evidence_observations_json = None
+    administrative_session.add(finding)
+    administrative_session.commit()
+
+    response = client.get(
+        "/api/v1/findings", headers=bearer_headers(seeded["org"].id, "viewer")
+    )
+
+    assert response.status_code == 200
+    row = next(
+        item
+        for item in response.json()["data"]
+        if item["finding_id"] == str(finding.finding_id)
+    )
+    summary = response.json()["evidence_summary"]
+    assert row["confidence"] == "confirmed"
+    assert row["detection_method"] == "unknown"
+    assert row["evidence_status"] == "unknown"
+    assert row["evidence_observations"] == []
+    assert row["demonstrated"] is False
+    assert summary["by_confidence"]["confirmed"] == 1
+    assert summary["demonstrated_records"] == 0
+
+
+def test_evidence_summary_tracks_methods_conflict_and_demonstration(
+    client: TestClient, administrative_session: Session, bearer_headers
+) -> None:
+    seeded = seed_read_graph(administrative_session)
+    supported = seeded["finding"]
+    supported.ip = "192.168.1.10"
+    supported.port = 445
+    supported.issue_key = "smb:signing"
+    supported.finding_evidence_policy_version = "1"
+    supported.confidence = "confirmed"
+    positive = {
+        "ip": "192.168.1.10",
+        "port": 445,
+        "protocol": "tcp",
+        "condition_key": "smb:signing",
+        "method": "configuration_observation",
+        "result": "positive",
+        "source": "nmap_nse",
+        "source_script": "smb2-security-mode",
+        "rule_id": "nse:smb2-security-mode",
+        "rule_version": "1",
+        "evidence": "Message signing is not required.",
+        "facts": {"signing_required": False},
+    }
+    supported.evidence_observations_json = [positive]
+    conflicting = make_finding(
+        administrative_session,
+        seeded["scan"].scan_id,
+        seeded["scan_host"].id,
+        "conflicting-evidence",
+        severity="high",
+    )
+    conflicting.ip = "192.168.1.10"
+    conflicting.port = 445
+    conflicting.issue_key = "smb:signing"
+    conflicting.finding_evidence_policy_version = "1"
+    conflicting.confidence = "tentative"
+    conflicting.evidence_observations_json = [
+        positive,
+        {
+            **positive,
+            "result": "negative",
+            "evidence": "Message signing is required.",
+            "facts": {"signing_required": True},
+        },
+    ]
+    administrative_session.add_all((supported, conflicting))
+    administrative_session.commit()
+
+    response = client.get(
+        f"/api/v1/scans/{seeded['scan'].scan_id}",
+        headers=bearer_headers(seeded["org"].id, "viewer"),
+    )
+
+    assert response.status_code == 200
+    summary = response.json()["evidence_summary"]
+    assert summary["total_records"] == 3
+    assert sum(summary["by_method"].values()) == 3
+    assert summary["by_method"]["configuration_observation"] == 2
+    assert summary["conflicting_records"] == 1
+    assert summary["demonstrated_records"] == 1
+    demonstrated = {
+        item["finding_id"]: item["demonstrated"]
+        for item in response.json()["findings"]
+    }
+    assert demonstrated[str(supported.finding_id)] is True
+    assert demonstrated[str(conflicting.finding_id)] is False
+    assert sum(demonstrated.values()) == summary["demonstrated_records"]

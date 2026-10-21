@@ -1,10 +1,10 @@
 ---
 type: Module
 title: normalize — contracts & findings extraction
-description: The Pydantic scan payloads for observations, profiles, exposures and findings, plus the NSE finding extractor.
+description: The Pydantic scan payloads, versioned finding evidence metadata, local interpretation, and NSE/targeted finding extraction.
 resource: hardware-agent/src/agent/normalize/contracts.py
 tags: [hardware-agent, normalize, contracts, findings, pydantic]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 
 # normalize — contracts & findings
@@ -12,8 +12,10 @@ timestamp: 2026-10-01T00:00:00Z
 ## Purpose
 
 `normalize/` turns the agent's in-memory scan state into the shared wire contract. `contracts.py`
-holds the Pydantic models serialized to disk and uploaded; `findings.py` walks parsed
-NSE output and emits structured `FindingPayload`s; `coverage.py` flattens recorded stage and targeted results into `CoverageUnitPayload`s. The `ScanPayload` is the cross-component boundary
+holds the Pydantic models serialized to disk and uploaded; `findings.py` walks parsed NSE and
+targeted output and emits structured `FindingPayload`s with bounded evidence observations, while
+keeping unattached negative and inconclusive NSE observations at scan level. `coverage.py` flattens
+recorded stage and targeted results into `CoverageUnitPayload`s. The `ScanPayload` is the cross-component boundary
 object that binds the agent to the backend ingest route. Modbus process values remain on the Pi;
 only range status and an optional keyed digest cross this boundary.
 
@@ -21,24 +23,27 @@ only range status and an optional keyed digest cross this boundary.
 
 | Symbol | What it does | Ref |
 |--------|--------------|-----|
-| `ScanPayload` | Top-level result including optional `assessment_policy_version` and `exposures`; absence marks a legacy scan whose assessment is unavailable. `coverage` (default `[]`) lists what each check reached. | `contracts.py:302` |
-| `CoverageUnitPayload` / `CoverageObservationPayload` | One checked unit per `ip` + `stage` with `outcome`, `reason_code`, `evidence_source`, `issue_keys`, and bounded `observations`. Mirrored by the backend schema. | `contracts.py:279` |
-| `HostPayload` | A host on the wire: original observations plus optional `machine_type` and `device_profile`. | `contracts.py:233` |
-| `AssessmentEvidencePayload` | Bounded evidence item with a closed kind, source, and normalized value. | `contracts.py:64` |
-| `ExposurePayload` | One open endpoint's role, attention, confidence, reason, and evidence; separate from findings. | `contracts.py:93` |
-| `DeviceProfilePayload` | Evidence-backed machine type, manufacturer/product/model assessment, confidence, conflicts, and limitations. | `contracts.py:118` |
-| `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`, CPEs. | `contracts.py:31` |
-| `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:106`, `:90` |
-| `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:68` |
-| `FindingPayload` | A vulnerability/observation with optional `unit_id` for Modbus attribution. | `contracts.py:128` |
+| `ScanPayload` | Top-level result including optional assessment and finding-evidence policy versions, endpoint exposures and bounded standalone observations; missing evidence policy marks a legacy result. | `contracts.py:344` |
+| `FindingEvidenceObservationPayload` | Bounded witness tied to a condition and optional host/endpoint/unit, with method, result, source, rule/version, excerpt and primitive facts. | `contracts.py:248` |
+| `CoverageUnitPayload` / `CoverageObservationPayload` | One checked unit per `ip` + `stage` with `outcome`, `reason_code`, `evidence_source`, `issue_keys`, and bounded `observations`. Mirrored by the backend schema. | `contracts.py:320` |
+| `HostPayload` | A host on the wire: original observations plus optional `machine_type` and `device_profile`. | `contracts.py:236` |
+| `AssessmentEvidencePayload` | Bounded evidence item with a closed kind, source, and normalized value. | `contracts.py:67` |
+| `ExposurePayload` | One open endpoint's role, attention, confidence, reason, and evidence; separate from findings. | `contracts.py:96` |
+| `DeviceProfilePayload` | Evidence-backed machine type, manufacturer/product/model assessment, confidence, conflicts, and limitations. | `contracts.py:121` |
+| `PortPayload` | A port: `port` (1–65535), `protocol` enum, `state` enum, `service`, `version`, CPEs. | `contracts.py:149` |
+| `ModbusTcpServicePayload` / `ModbusUnitPayload` | Bounded industrial service and unit evidence. | `contracts.py:224`, `:208` |
+| `ModbusAddressRangePayload` | Address, status, timestamp, and optional `hmac-sha256` digest; no process values or aggregates. | `contracts.py:186` |
+| `FindingPayload` | A finding with optional stable `issue_key`, up to 16 evidence observations and a truncation flag. | `contracts.py:282` |
 | `extract_coverage()` | Flattens each host's `stage_coverage` and `targeted_results` into `CoverageUnitPayload[]`, sanitizing targeted observations. Targeted units skipped by a scan stop (`scan_cancelled`/`scan_timeout`) report `evidence_source="not_run"`. | `coverage.py:15` |
-| `extract_findings()` | Walks host scripts, port scripts, and per-unit Modbus read findings. Dedups by `(ip, port, unit_id, script, cve/title)`. | `findings.py:17` |
-| `_extract_modbus_read_findings()` | One finding per unit that has a readable range, with that `unit_id`. NSE findings omit `unit_id`. | `findings.py:39` |
-| `_EXTRACTORS` | Dispatch table: `vulners`, `smb2-security-mode`, `smb-protocols`, `http-methods`, `ssh-auth-methods`, `ssl-cert`, `ssl-enum-ciphers`, `ftp-anon`. | `findings.py:703` |
-| `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:104` |
-| `_extract_smb_signing_finding()` | Emits an SMB-signing finding from either a host script or a port script; the port fields remain null for host-scoped NSE output. | `findings.py:161` |
-| `_extract_smbv1_finding()` | Emits an SMBv1 finding from either script scope while rejecting SMB2-only protocol output. | `findings.py:200` |
-| `_extract_generic_findings()` | Fallback for unknown scripts: generic vuln-table walk, else CVE-regex scrape. | `findings.py:64` |
+| `extract_findings_and_observations()` | Returns deduplicated findings, up to 512 unattached non-positive NSE observations, and a truncation flag. Supported negative witnesses bind to matching findings; failed or unsupported checks do not negate a finding. | `findings.py:430` |
+| `extract_findings()` | Compatibility wrapper. Evidence fields are omitted by default; callers can opt in to the metadata. | `findings.py:412` |
+| `assess_local_evidence()` | Applies closed local predicates to retained witnesses and categorizes evidence as supported, conflicting or inconclusive with categorical confidence. | `findings.py:30` |
+| `_extract_modbus_read_findings()` | One finding per unit that has a readable range, with that `unit_id`. NSE findings omit `unit_id`. | `findings.py:606` |
+| `_EXTRACTORS` | Dispatch table for supported NSE scripts. | `findings.py:1869` |
+| `_extract_vulners_findings()` | Correlates CVE + CVSS from the `vulners` NSE table → severity. | `findings.py:1041` |
+| `_extract_smb_signing_finding()` | Emits an SMB-signing finding from either a host script or a port script; the port fields remain null for host-scoped NSE output. | `findings.py:1114` |
+| `_extract_smbv1_finding()` | Emits an SMBv1 finding from either script scope while rejecting SMB2-only protocol output. | `findings.py:1154` |
+| `_extract_generic_findings()` | Fallback for unknown scripts: generic vuln-table walk, else CVE-regex scrape. | `findings.py:992` |
 
 ## How it connects
 
@@ -55,6 +60,14 @@ only range status and an optional keyed digest cross this boundary.
 
 ## Notes / gotchas
 
+- The scan runner emits finding evidence policy version `1` and serializes `issue_key` for
+  reconciliation. A finding record is not proof of a vulnerability. Methods and confidence are
+  local categories, not percentages or backend enrichment. Evidence is bounded; truncation makes
+  interpretation inconclusive. Standalone observations are negative or inconclusive only; positive
+  witnesses belong to a finding.
+- The offline corpus in `hardware-agent/tests/fixtures/finding_evidence_quality/` compares the
+  parser with predictions pinned to revision `471739f`. Its small synthetic examples verify
+  regressions and explicit denominators, but do not estimate production precision or recall.
 - **`HostPayload` (formerly `DevicePayload`).** ADR-013 retired the frozen ingest word "device" from
   the wire; the agent now emits `ScanPayload.hosts` (`HostPayload[]`) end to end, matching the
   domain term **host** used everywhere else in the agent. See [glossary](/glossary.md).

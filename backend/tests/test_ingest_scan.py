@@ -22,8 +22,10 @@ from api.models.persistence import (
     HostFindingRecord,
     HostPortRecord,
     HostRecord,
+    IndustrialServiceRecord,
     KevCacheRecord,
     KevRecord,
+    ModbusUnitRecord,
     PortRecord,
     RiskSnapshotRecord,
     ScanHostRecord,
@@ -31,6 +33,7 @@ from api.models.persistence import (
     ServiceRecord,
 )
 from api.schemas import HostPayload, PortPayload, ScanIngestRequest
+from api.schemas.scan import FindingEvidenceObservationPayload, FindingPayload
 from api.services import commands as commands_module
 from api.services import persistence as persistence_module
 from api.services import worker
@@ -1196,6 +1199,588 @@ def test_first_completed_ingest_writes_no_machine_first_seen(
     )
 
     assert len(_activity_rows(runtime_session, seeded_org.id, "scan_finished")) == 1
+
+
+def test_finding_observation_merge_is_order_independent_and_confidence_is_final(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    positive = FindingEvidenceObservationPayload(
+        ip="10.0.0.50",
+        port=445,
+        protocol="tcp",
+        condition_key="smb:signing",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="Message signing is not required.",
+        facts={"signing_required": False},
+    )
+    negative = positive.model_copy(
+        update={
+            "result": "negative",
+            "evidence": "Message signing is required.",
+            "facts": {"signing_required": True},
+        }
+    )
+    findings = [
+        FindingPayload(
+            ip="10.0.0.50",
+            port=445,
+            protocol="tcp",
+            issue_key="smb:signing",
+            source="nmap_nse",
+            source_script="smb2-security-mode",
+            severity="high",
+            title="SMB signing not required",
+            description="The SMB service does not require signing.",
+            recommendation="Require SMB signing.",
+            evidence="Signing is optional.",
+            evidence_observations=[positive],
+        ),
+        FindingPayload(
+            ip="10.0.0.50",
+            port=445,
+            protocol="tcp",
+            issue_key="smb:signing",
+            source="nmap_nse",
+            source_script="smb2-security-mode",
+            severity="high",
+            title="SMB signing not required",
+            description="The SMB service does not require signing.",
+            recommendation="Require SMB signing.",
+            evidence="Signing is optional.",
+            evidence_observations=[positive],
+        ),
+    ]
+    outcomes = []
+    for ordered_findings in (findings, list(reversed(findings))):
+        scan_id = uuid4()
+        now = datetime.now(timezone.utc)
+        scan = ScanIngestRequest(
+            scan_id=scan_id,
+            timestamp=now,
+            subnet="10.0.0.0/24",
+            scan_mode="standard",
+            hosts=[
+                HostPayload(
+                    ip="10.0.0.50",
+                    mac=None,
+                    hostname="host",
+                    vendor="vendor",
+                    ports=[
+                        PortPayload(
+                            port=445,
+                            protocol="tcp",
+                            state="open",
+                            service="smb",
+                            cpes=[],
+                        )
+                    ],
+                )
+            ],
+            findings=ordered_findings,
+            finding_evidence_policy_version="1",
+            finding_observations=[negative],
+        )
+        persist_scan(
+            runtime_session,
+            scan,
+            org_id=seeded_org.id,
+            agent_id=provisioned_agent.id,
+            command=None,
+            now=now,
+            existing=None,
+        )
+        finding = runtime_session.exec(
+            select(FindingRecord).where(FindingRecord.scan_id == scan_id)
+        ).one()
+        snapshot = runtime_session.exec(
+            select(RiskSnapshotRecord).where(
+                RiskSnapshotRecord.finding_id == finding.id
+            )
+        ).one()
+        outcomes.append(
+            (
+                finding.confidence,
+                finding.issue_key,
+                finding.issue_key_ambiguous,
+                finding.evidence_observations_json,
+                snapshot.confidence,
+            )
+        )
+
+    assert outcomes[0] == outcomes[1]
+    assert outcomes[0][0] == outcomes[0][4] == "tentative"
+    assert outcomes[0][1] == "smb:signing"
+    assert outcomes[0][2] is False
+    assert len(outcomes[0][3]) == 2
+
+
+def test_standalone_observation_reingest_caps_union_and_keeps_truncation(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    now = datetime.now(timezone.utc)
+    observations = [
+        FindingEvidenceObservationPayload(
+            condition_key=f"check:{index}",
+            method="specific_check",
+            result="negative",
+            source="nmap_nse",
+            source_script="check",
+            rule_id="nse:check",
+            rule_version="1",
+            evidence=f"No finding for check {index}.",
+            facts={"state": "not_vulnerable"},
+        )
+        for index in range(512)
+    ]
+    scan_id = uuid4()
+    first = ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[],
+        findings=[],
+        finding_evidence_policy_version="1",
+        finding_observations=observations,
+    )
+    scan_record = persist_scan(
+        runtime_session,
+        first,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=None,
+    )
+    second = first.model_copy(
+        update={
+            "finding_observations": [
+                observations[0].model_copy(
+                    update={"condition_key": "check:new", "evidence": "new"}
+                )
+            ]
+        }
+    )
+    persist_scan(
+        runtime_session,
+        second,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=scan_record,
+    )
+    runtime_session.refresh(scan_record)
+    assert len(scan_record.finding_observations_json) == 512
+    assert scan_record.finding_observations_truncated is True
+
+
+def test_standalone_only_reingest_reassesses_existing_finding_and_snapshot(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    positive = FindingEvidenceObservationPayload(
+        ip="10.0.0.60",
+        port=445,
+        protocol="tcp",
+        condition_key="smb:signing",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="Signing is not required.",
+        facts={"signing_required": False},
+    )
+    negative = positive.model_copy(
+        update={
+            "result": "negative",
+            "evidence": "Signing is required.",
+            "facts": {"signing_required": True},
+        }
+    )
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    finding = FindingPayload(
+        ip="10.0.0.60",
+        port=445,
+        protocol="tcp",
+        issue_key="smb:signing",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        severity="high",
+        title="SMB signing is optional",
+        description="The SMB service does not require signing.",
+        recommendation="Require SMB signing.",
+        evidence="Signing is not required.",
+        evidence_observations=[positive],
+    )
+    first = ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[
+            HostPayload(
+                ip="10.0.0.60",
+                mac=None,
+                hostname="host",
+                vendor="vendor",
+                ports=[
+                    PortPayload(
+                        port=445,
+                        protocol="tcp",
+                        state="open",
+                        service="smb",
+                    )
+                ],
+            )
+        ],
+        findings=[finding],
+        finding_evidence_policy_version="1",
+    )
+    scan_record = persist_scan(
+        runtime_session,
+        first,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=None,
+    )
+    finding_record = runtime_session.exec(select(FindingRecord)).one()
+    snapshot = runtime_session.exec(
+        select(RiskSnapshotRecord).where(
+            RiskSnapshotRecord.finding_id == finding_record.id
+        )
+    ).one()
+    assert finding_record.confidence == snapshot.confidence == "confirmed"
+
+    replay = first.model_copy(
+        update={"hosts": [], "findings": [], "finding_observations": [negative]}
+    )
+    persist_scan(
+        runtime_session,
+        replay,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=scan_record,
+    )
+    runtime_session.refresh(finding_record)
+    runtime_session.refresh(snapshot)
+    assert finding_record.confidence == snapshot.confidence == "tentative"
+    assert {item["result"] for item in finding_record.evidence_observations_json} == {
+        "negative",
+        "positive",
+    }
+
+
+def test_truncation_flag_only_reingest_reassesses_finding_and_snapshot(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    positive = FindingEvidenceObservationPayload(
+        ip="10.0.0.60",
+        port=445,
+        protocol="tcp",
+        condition_key="smb:signing",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="Signing is not required.",
+        facts={"signing_required": False},
+    )
+    now = datetime.now(timezone.utc)
+    finding = FindingPayload(
+        ip="10.0.0.60",
+        port=445,
+        protocol="tcp",
+        issue_key="smb:signing",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        severity="high",
+        title="SMB signing is optional",
+        description="The SMB service does not require signing.",
+        recommendation="Require SMB signing.",
+        evidence="Signing is not required.",
+        evidence_observations=[positive],
+    )
+    first = ScanIngestRequest(
+        scan_id=uuid4(),
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[],
+        findings=[finding],
+        finding_evidence_policy_version="1",
+    )
+    scan_record = persist_scan(
+        runtime_session,
+        first,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=None,
+    )
+    finding_record = runtime_session.exec(select(FindingRecord)).one()
+    snapshot = runtime_session.exec(
+        select(RiskSnapshotRecord).where(
+            RiskSnapshotRecord.finding_id == finding_record.id
+        )
+    ).one()
+    assert finding_record.confidence == snapshot.confidence == "confirmed"
+
+    replay = first.model_copy(
+        update={
+            "findings": [],
+            "finding_observations": [],
+            "finding_observations_truncated": True,
+        }
+    )
+    persist_scan(
+        runtime_session,
+        replay,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=scan_record,
+    )
+    runtime_session.refresh(finding_record)
+    runtime_session.refresh(snapshot)
+    assert finding_record.confidence == snapshot.confidence == "tentative"
+
+
+def test_reassessment_uses_modbus_wire_unit_not_foreign_key(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    now = datetime.now(timezone.utc)
+    observation = FindingEvidenceObservationPayload(
+        ip="10.0.0.61",
+        port=502,
+        protocol="tcp",
+        unit_id=7,
+        condition_key="modbus:read-only",
+        method="specific_check",
+        result="positive",
+        source="modbus-read-only-assessment",
+        source_script="modbus-read-only-assessment",
+        rule_id="modbus:read-only",
+        rule_version="1",
+        evidence="Read-only register assessment succeeded.",
+        facts={"read_result": True},
+    )
+    finding = FindingPayload(
+        ip="10.0.0.61",
+        port=502,
+        protocol="tcp",
+        unit_id=7,
+        issue_key="modbus:read-only",
+        severity="high",
+        title="Unauthenticated Modbus data read is reachable",
+        description="A read-only request succeeded.",
+        recommendation="Restrict Modbus access.",
+        evidence="Read-only register assessment succeeded.",
+        evidence_observations=[observation],
+    )
+    first = ScanIngestRequest(
+        scan_id=uuid4(),
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[
+            HostPayload(
+                ip="10.0.0.61",
+                mac=None,
+                hostname="modbus-host",
+                vendor="Unknown",
+                ports=[
+                    PortPayload(
+                        port=502, protocol="tcp", state="open", service="modbus"
+                    )
+                ],
+            )
+        ],
+        findings=[finding],
+        finding_evidence_policy_version="1",
+    )
+    scan_record = persist_scan(
+        runtime_session,
+        first,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=None,
+    )
+    scan_host = runtime_session.exec(
+        select(ScanHostRecord).where(ScanHostRecord.scan_id == scan_record.scan_id)
+    ).one()
+    service = IndustrialServiceRecord(
+        scan_host_id=scan_host.id,
+        protocol="modbus_tcp",
+        port=502,
+        confidence="confirmed",
+    )
+    runtime_session.add(service)
+    runtime_session.flush()
+    unit = ModbusUnitRecord(
+        industrial_service_id=service.id,
+        unit_id=7,
+        status="responding",
+    )
+    runtime_session.add(unit)
+    runtime_session.flush()
+    finding_record = runtime_session.exec(select(FindingRecord)).one()
+    assert unit.id != unit.unit_id
+    finding_record.modbus_unit_id = unit.id
+    runtime_session.add(finding_record)
+    runtime_session.flush()
+    contradictory = observation.model_copy(
+        update={
+            "result": "negative",
+            "evidence": "The read-only assessment did not succeed.",
+            "facts": {"read_result": False},
+        }
+    )
+    replay = first.model_copy(
+        update={
+            "hosts": [],
+            "findings": [],
+            "finding_observations": [contradictory],
+        }
+    )
+    persist_scan(
+        runtime_session,
+        replay,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=scan_record,
+    )
+    runtime_session.refresh(finding_record)
+    assert len(finding_record.evidence_observations_json) == 2
+    assert finding_record.confidence == "tentative"
+
+
+def test_colliding_issue_keys_are_absorbing_and_keep_all_evidence(
+    runtime_session: Session,
+    seeded_org: Org,
+    provisioned_agent: Agent,
+) -> None:
+    signing = FindingEvidenceObservationPayload(
+        ip="10.0.0.51",
+        port=445,
+        protocol="tcp",
+        condition_key="smb:signing",
+        method="configuration_observation",
+        result="positive",
+        source="nmap_nse",
+        source_script="smb2-security-mode",
+        rule_id="nse:smb2-security-mode",
+        rule_version="1",
+        evidence="Message signing is not required.",
+        facts={"signing_required": False},
+    )
+    dialect = signing.model_copy(
+        update={
+            "condition_key": "smb:protocol:smbv1",
+            "source_script": "smb-protocols",
+            "rule_id": "nse:smb-protocols",
+            "evidence": "SMBv1 is enabled.",
+            "facts": {"dialect": "SMBv1"},
+        }
+    )
+    shared = {
+        "ip": "10.0.0.51",
+        "port": 445,
+        "protocol": "tcp",
+        "severity": "high",
+        "title": "SMB configuration finding",
+        "description": "A supported SMB configuration was observed.",
+        "recommendation": "Review SMB configuration.",
+        "evidence": "A structured SMB response was observed.",
+    }
+    scan_id = uuid4()
+    now = datetime.now(timezone.utc)
+    scan = ScanIngestRequest(
+        scan_id=scan_id,
+        timestamp=now,
+        subnet="10.0.0.0/24",
+        scan_mode="standard",
+        hosts=[
+            HostPayload(
+                ip="10.0.0.51",
+                mac=None,
+                hostname="host",
+                vendor="vendor",
+                ports=[
+                    PortPayload(
+                        port=445,
+                        protocol="tcp",
+                        state="open",
+                        service="smb",
+                        cpes=[],
+                    )
+                ],
+            )
+        ],
+        findings=[
+            FindingPayload(
+                **shared,
+                issue_key="smb:signing",
+                evidence_observations=[signing],
+            ),
+            FindingPayload(
+                **shared,
+                issue_key="smb:protocol:smbv1",
+                evidence_observations=[dialect],
+            ),
+            FindingPayload(**shared, evidence_truncated=True),
+        ],
+        finding_evidence_policy_version="1",
+    )
+    persist_scan(
+        runtime_session,
+        scan,
+        org_id=seeded_org.id,
+        agent_id=provisioned_agent.id,
+        command=None,
+        now=now,
+        existing=None,
+    )
+    finding = runtime_session.exec(
+        select(FindingRecord).where(FindingRecord.scan_id == scan_id)
+    ).one()
+    assert finding.issue_key is None
+    assert finding.issue_key_ambiguous is True
+    assert finding.confidence == "tentative"
+    assert finding.evidence_truncated is True
+    assert {item["condition_key"] for item in finding.evidence_observations_json} == {
+        "smb:signing",
+        "smb:protocol:smbv1",
+    }
     assert _activity_rows(runtime_session, seeded_org.id, "machine_first_seen") == []
 
 
