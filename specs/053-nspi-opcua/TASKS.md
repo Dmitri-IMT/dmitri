@@ -24,11 +24,11 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 ## Task 2: Inventariar endpoints e definir contrato do agente
 - **Description**: Descobrir OPC UA em candidatos existentes, validar respostas e sanitizar identidade/endpoints/políticas anunciadas. Acrescentar o payload interno estrito sem mudar o membro Modbus legado; governam A02–A03, A08, A13–A14.
 - **Dependencies**: Task 1
-- **Target Files**: `hardware-agent/src/agent/ot/opcua/inventory.py`, `hardware-agent/src/agent/ot/opcua/models.py`, `hardware-agent/src/agent/normalize/contracts.py`, `contracts/openapi/openapi.yaml`, `contracts/examples/scan_result.example.json`
-- **Tests**: `hardware-agent/tests/unit/test_opcua_inventory.py`, `hardware-agent/tests/test_contract_models.py`; atualizar fixtures/contratos legados aplicáveis.
-- **Success Criteria**: resposta OPC UA semanticamente válida é necessária para confirmar protocolo; URLs são limitadas ao IP/porta descobertos; identidade/certificado ficam limitados e sanitizados; payload antigo Modbus permanece aceito; anúncio não gera finding.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Target Files**: `hardware-agent/src/agent/ot/opcua/inventory.py`, `hardware-agent/src/agent/ot/opcua/models.py`, `hardware-agent/src/agent/ot/opcua/client.py`, `hardware-agent/src/agent/ot/opcua/helper/Program.cs`, `hardware-agent/src/agent/normalize/contracts.py`, `contracts/openapi/openapi.yaml`, `contracts/examples/scan_result.example.json`
+- **Tests**: `hardware-agent/tests/unit/test_opcua_inventory.py`, `hardware-agent/tests/test_contract_models.py`, `hardware-agent/tests/dotnet/opcua-bridge.tests/`; atualizar fixtures/contratos legados aplicáveis.
+- **Success Criteria**: resposta OPC UA semanticamente válida é necessária para confirmar protocolo; URLs são limitadas ao IP/porta descobertos; identidade anunciada, tipos de autenticação e impressão digital SHA-256 do certificado ficam limitados/sanitizados; respostas truncadas são parciais; modelos UA têm enums fechados e campos de fase requeridos; payload antigo Modbus permanece aceito; anúncio não gera finding.
+- **Status**: COMPLETE
+- **Review Rejections**: 3
 
 ## Task 3: Implementar sessão anônima e mapeamento limitado
 - **Description**: Sobre Task 2, abrir somente a sessão explicitamente permitida pela arquitetura e executar Browse/BrowseNext/Read limitados, com BFS, paginação, status e privacidade. Governam A04–A10 e A14.
@@ -108,7 +108,7 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 | # | Task | Status |
 |---|------|--------|
 | 1 | Cliente limitado e laboratório local | COMPLETE |
-| 2 | Inventário e contrato do agente | PENDING |
+| 2 | Inventário e contrato do agente | COMPLETE |
 | 3 | Sessão anônima e mapeamento | PENDING |
 | 4 | Integração do estágio e chamadores | PENDING |
 | 5 | Persistência, ingest e read | PENDING |

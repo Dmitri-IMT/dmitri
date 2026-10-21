@@ -152,7 +152,8 @@ vazia válida registra inventário vazio, sem inventar endpoints ou identidade.
 Mapeamento usa `not_requested|completed|partial|denied|unsupported_security|failed|timed_out|skipped`;
 razões limitadas incluem request/page/node/depth/byte/decode limits, cancelamento,
 host/stage/global deadline, authentication_required, anonymous_denied,
-security_configuration_required, endpoint_target_mismatch e external_reference.
+security_configuration_required, endpoint_target_mismatch, endpoint_limit e
+external_reference.
 `completed` significa terminou a amostra planejada dentro dos limites; nunca afirma
 que o address space inteiro foi lido. Qualquer truncamento torna a fase `partial`.
 

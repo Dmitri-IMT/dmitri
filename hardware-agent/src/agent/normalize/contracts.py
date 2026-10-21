@@ -233,6 +233,90 @@ class ModbusTcpServicePayload(BaseModel):
     units: list[ModbusUnitPayload] = Field(default_factory=list)
 
 
+class OpcUaEndpointPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint_url: constr(min_length=1, max_length=256)
+    security_policy_uri: constr(min_length=1, max_length=256)
+    security_mode: Literal["None", "Sign", "SignAndEncrypt"]
+    transport_profile_uri: constr(min_length=1, max_length=256)
+    security_level: Annotated[int, Field(ge=0, le=255, strict=True)]
+    user_token_count: Annotated[int, Field(ge=0, le=8, strict=True)]
+    user_token_types: list[
+        Literal["Anonymous", "UserName", "Certificate", "IssuedToken"]
+    ] = Field(max_length=8)
+    target_matches: StrictBool
+
+
+class OpcUaIdentityPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    application_uri: constr(max_length=128) | None = None
+    product_uri: constr(max_length=128) | None = None
+    application_name: constr(max_length=128) | None = None
+    application_type: (
+        Literal["Server", "Client", "ClientAndServer", "DiscoveryServer"] | None
+    ) = None
+
+
+class OpcUaPhasePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "partial", "failed", "timed_out", "skipped"]
+    reason_codes: list[
+        Literal[
+            "timeout",
+            "endpoint_discovery_failed",
+            "endpoint_target_mismatch",
+            "endpoint_limit",
+            "message_size_limit",
+            "request_budget_exhausted",
+            "service_not_allowed",
+            "service_error",
+            "invalid_response",
+            "helper_unavailable",
+            "cancelled",
+            "host_deadline",
+            "stage_deadline",
+            "global_deadline",
+            "decode_limit",
+            "byte_limit",
+            "authentication_required",
+            "anonymous_denied",
+            "security_configuration_required",
+            "external_reference",
+            "page_limit",
+            "node_limit",
+            "depth_limit",
+        ]
+    ] = Field(max_length=16)
+    truncated: StrictBool
+    observed_at: datetime
+
+
+class OpcUaObservationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1]
+    inventory_phase: OpcUaPhasePayload
+    identity: OpcUaIdentityPayload | None = None
+    certificate_sha256: constr(pattern=r"^[0-9a-f]{64}$") | None = None
+    endpoints: list[OpcUaEndpointPayload] = Field(max_length=16)
+
+
+class OpcUaTcpServicePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol: Literal["opcua_tcp"]
+    port: Annotated[int, Field(ge=1, le=65535, strict=True)]
+    confidence: Literal["suspected", "confirmed"]
+    evidence_sources: list[constr(min_length=1, max_length=64)] = Field(
+        default_factory=list, max_length=8
+    )
+    write_requests_sent: Annotated[int, Field(default=0, ge=0, strict=True)]
+    observation: OpcUaObservationPayload
+
+
 class HostPayload(BaseModel):
     ip: IPv4Address
     mac: constr(pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$") | None = None
@@ -240,7 +324,22 @@ class HostPayload(BaseModel):
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
     ports: list[PortPayload] = Field(default_factory=list)
-    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
+    industrial_services: list[ModbusTcpServicePayload | OpcUaTcpServicePayload] = Field(
+        default_factory=list
+    )
+
+    @field_validator("industrial_services", mode="before")
+    @classmethod
+    def normalize_legacy_modbus_protocol(cls, value):
+        if not isinstance(value, list):
+            return value
+        normalized = []
+        for item in value:
+            if isinstance(item, dict) and "protocol" not in item and "units" in item:
+                item = {**item, "protocol": "modbus_tcp"}
+            normalized.append(item)
+        return normalized
+
     machine_type: MachineType | None = None
     device_profile: DeviceProfilePayload | None = None
 

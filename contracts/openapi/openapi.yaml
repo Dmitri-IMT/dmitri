@@ -3790,6 +3790,73 @@ components:
           items:
             $ref: '#/components/schemas/ModbusUnitPayload'
           default: []
+    OpcUaEndpointPayload:
+      type: object
+      additionalProperties: false
+      required: [endpoint_url, security_policy_uri, security_mode, transport_profile_uri, security_level, user_token_count, user_token_types, target_matches]
+      properties:
+        endpoint_url: {type: string, minLength: 1, maxLength: 256}
+        security_policy_uri: {type: string, minLength: 1, maxLength: 256}
+        security_mode: {type: string, enum: [None, Sign, SignAndEncrypt]}
+        transport_profile_uri: {type: string, minLength: 1, maxLength: 256}
+        security_level: {type: integer, minimum: 0, maximum: 255}
+        user_token_count: {type: integer, minimum: 0, maximum: 8}
+        user_token_types:
+          type: array
+          maxItems: 8
+          items: {type: string, enum: [Anonymous, UserName, Certificate, IssuedToken]}
+        target_matches: {type: boolean}
+    OpcUaIdentityPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        application_uri: {type: [string, 'null'], maxLength: 128}
+        product_uri: {type: [string, 'null'], maxLength: 128}
+        application_name: {type: [string, 'null'], maxLength: 128}
+        application_type: {type: [string, 'null'], enum: [Server, Client, ClientAndServer, DiscoveryServer, null]}
+    OpcUaPhasePayload:
+      type: object
+      additionalProperties: false
+      required: [status, reason_codes, truncated, observed_at]
+      properties:
+        status: {type: string, enum: [completed, partial, failed, timed_out, skipped]}
+        reason_codes:
+          type: array
+          maxItems: 16
+          items: {type: string, enum: [timeout, endpoint_discovery_failed, endpoint_target_mismatch, endpoint_limit, message_size_limit, request_budget_exhausted, service_not_allowed, service_error, invalid_response, helper_unavailable, cancelled, host_deadline, stage_deadline, global_deadline, decode_limit, byte_limit, authentication_required, anonymous_denied, security_configuration_required, external_reference, page_limit, node_limit, depth_limit]}
+        truncated: {type: boolean}
+        observed_at: {type: string, format: date-time}
+    OpcUaObservationPayload:
+      type: object
+      additionalProperties: false
+      required: [schema_version, inventory_phase, endpoints]
+      properties:
+        schema_version: {type: integer, const: 1}
+        inventory_phase: {$ref: '#/components/schemas/OpcUaPhasePayload'}
+        identity:
+          anyOf:
+            - {$ref: '#/components/schemas/OpcUaIdentityPayload'}
+            - {type: 'null'}
+        certificate_sha256: {type: [string, 'null'], pattern: '^[0-9a-f]{64}$'}
+        endpoints:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/OpcUaEndpointPayload'}
+    OpcUaTcpServicePayload:
+      type: object
+      additionalProperties: false
+      required: [protocol, port, confidence, observation]
+      properties:
+        protocol: {type: string, const: opcua_tcp}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        confidence: {type: string, enum: [suspected, confirmed]}
+        evidence_sources:
+          type: array
+          maxItems: 8
+          items: {type: string, minLength: 1, maxLength: 64}
+          default: []
+        write_requests_sent: {type: integer, minimum: 0, default: 0}
+        observation: {$ref: '#/components/schemas/OpcUaObservationPayload'}
     HostPayload:
       type: object
       additionalProperties: false
@@ -3826,7 +3893,9 @@ components:
         industrial_services:
           type: array
           items:
-            $ref: '#/components/schemas/ModbusTcpServicePayload'
+            oneOf:
+              - {$ref: '#/components/schemas/ModbusTcpServicePayload'}
+              - {$ref: '#/components/schemas/OpcUaTcpServicePayload'}
           default: []
         machine_type:
           anyOf:

@@ -30,6 +30,11 @@ from agent.normalize.contracts import (
     ModbusDeviceIdentificationPayload,
     ModbusTcpServicePayload,
     ModbusUnitPayload,
+    OpcUaEndpointPayload,
+    OpcUaIdentityPayload,
+    OpcUaObservationPayload,
+    OpcUaPhasePayload,
+    OpcUaTcpServicePayload,
     OperatingSystemDetection,
     PortPayload,
     ScanPayload,
@@ -49,6 +54,10 @@ CONTRACT_MODELS = (
     ("HostPayload", HostPayload),
     ("OperatingSystemDetection", OperatingSystemDetection),
     ("ModbusTcpServicePayload", ModbusTcpServicePayload),
+    ("OpcUaTcpServicePayload", OpcUaTcpServicePayload),
+    ("OpcUaObservationPayload", OpcUaObservationPayload),
+    ("OpcUaEndpointPayload", OpcUaEndpointPayload),
+    ("OpcUaIdentityPayload", OpcUaIdentityPayload),
     ("ModbusUnitPayload", ModbusUnitPayload),
     ("ModbusDeviceIdentificationPayload", ModbusDeviceIdentificationPayload),
     ("PortPayload", PortPayload),
@@ -63,10 +72,7 @@ CONTRACT_MODELS = (
 )
 
 OPENAPI_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "contracts"
-    / "openapi"
-    / "openapi.yaml"
+    Path(__file__).resolve().parents[2] / "contracts" / "openapi" / "openapi.yaml"
 )
 
 
@@ -147,9 +153,12 @@ def test_scan_payload_accepts_modbus_inventory() -> None:
     dumped = host.model_dump(mode="json")
 
     assert dumped["industrial_services"][0]["protocol"] == "modbus_tcp"
-    assert dumped["industrial_services"][0]["units"][0][
-        "device_identification"
-    ]["product_code"] == "BMX P34"
+    assert (
+        dumped["industrial_services"][0]["units"][0]["device_identification"][
+            "product_code"
+        ]
+        == "BMX P34"
+    )
 
 
 @pytest.mark.parametrize("accuracy", [0, 100])
@@ -298,10 +307,14 @@ def test_agent_operating_system_schema_matches_published_contract() -> None:
 
     assert contract_schema["additionalProperties"] is False
     assert model_schema["additionalProperties"] is False
-    assert set(contract_schema["required"]) == set(model_schema["required"]) == {
-        "name",
-        "accuracy",
-    }
+    assert (
+        set(contract_schema["required"])
+        == set(model_schema["required"])
+        == {
+            "name",
+            "accuracy",
+        }
+    )
     assert set(contract_schema["properties"]) == set(model_schema["properties"])
 
     for schema in (contract_schema, model_schema):
@@ -389,9 +402,7 @@ def test_host_summary_requires_first_seen_at() -> None:
     assert schema["properties"]["first_seen_at"]["format"] == "date-time"
 
 
-def test_scan_host_view_requires_host_id_and_is_used_by_scan_detail_response() -> (
-    None
-):
+def test_scan_host_view_requires_host_id_and_is_used_by_scan_detail_response() -> None:
     spec = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     scan_host_view = spec["components"]["schemas"]["ScanHostView"]
     assert "host_id" in scan_host_view["required"]
@@ -481,12 +492,15 @@ def test_port_payload_preserves_optional_cpes_for_backend_enrichment() -> None:
     assert "cpes" in schema["properties"]
     assert "cpes" not in schema["required"]
     assert "cpes" in PortPayload.model_fields
-    assert PortPayload(
-        port=502,
-        protocol="tcp",
-        state="open",
-        service="modbus",
-    ).cpes == []
+    assert (
+        PortPayload(
+            port=502,
+            protocol="tcp",
+            state="open",
+            service="modbus",
+        ).cpes
+        == []
+    )
 
 
 def test_modbus_wire_models_forbid_removed_process_fields() -> None:
@@ -522,6 +536,135 @@ def test_modbus_wire_models_forbid_unknown_fields() -> None:
                 "values": [0, 1, 0, 1],
             }
         )
+
+
+def test_host_contract_accepts_legacy_modbus_and_strict_opcua_union() -> None:
+    legacy = HostPayload.model_validate(
+        {
+            "ip": "192.168.0.20",
+            "hostname": "host",
+            "vendor": "unknown",
+            "industrial_services": [
+                {"port": 502, "confidence": "suspected", "units": []}
+            ],
+        }
+    )
+    assert isinstance(legacy.industrial_services[0], ModbusTcpServicePayload)
+    ua = {
+        "protocol": "opcua_tcp",
+        "port": 4840,
+        "confidence": "confirmed",
+        "evidence_sources": ["opcua_get_endpoints"],
+        "observation": {
+            "schema_version": 1,
+            "inventory_phase": {
+                "status": "completed",
+                "reason_codes": [],
+                "truncated": False,
+                "observed_at": datetime.now(timezone.utc),
+            },
+            "identity": {
+                "application_uri": None,
+                "product_uri": None,
+                "application_name": None,
+                "application_type": None,
+            },
+            "certificate_sha256": None,
+            "endpoints": [],
+        },
+    }
+    host = HostPayload.model_validate(
+        {
+            "ip": "192.168.0.20",
+            "hostname": "host",
+            "vendor": "unknown",
+            "industrial_services": [ua],
+        }
+    )
+    assert isinstance(host.industrial_services[0], OpcUaTcpServicePayload)
+    assert "units" not in host.industrial_services[0].model_dump()
+    phase = ua["observation"]["inventory_phase"]
+    observation = ua["observation"]
+    for field in ("reason_codes",):
+        with pytest.raises(ValidationError):
+            OpcUaPhasePayload.model_validate(
+                {key: value for key, value in phase.items() if key != field}
+            )
+    for field in ("schema_version", "endpoints"):
+        with pytest.raises(ValidationError):
+            OpcUaObservationPayload.model_validate(
+                {key: value for key, value in observation.items() if key != field}
+            )
+    phase_schema = OpcUaPhasePayload.model_json_schema()
+    observation_schema = OpcUaObservationPayload.model_json_schema()
+    openapi = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    components = openapi["components"]["schemas"]
+    assert set(phase_schema["required"]) == set(
+        components["OpcUaPhasePayload"]["required"]
+    )
+    assert set(observation_schema["required"]) == set(
+        components["OpcUaObservationPayload"]["required"]
+    )
+    assert {"status", "reason_codes", "truncated", "observed_at"} <= set(
+        phase_schema["required"]
+    )
+    assert {"schema_version", "inventory_phase", "endpoints"} <= set(
+        observation_schema["required"]
+    )
+    assert (
+        phase_schema["properties"]["status"]["enum"]
+        == components["OpcUaPhasePayload"]["properties"]["status"]["enum"]
+    )
+    assert (
+        phase_schema["properties"]["reason_codes"]["items"]["enum"]
+        == components["OpcUaPhasePayload"]["properties"]["reason_codes"]["items"][
+            "enum"
+        ]
+    )
+    example_path = OPENAPI_PATH.parents[1] / "examples" / "scan_result.example.json"
+    example = json.loads(example_path.read_text(encoding="utf-8"))
+    ua_service = next(
+        service
+        for host_payload in example["hosts"]
+        for service in host_payload.get("industrial_services", [])
+        if service.get("protocol") == "opcua_tcp"
+    )
+    OpcUaTcpServicePayload.model_validate(ua_service)
+    with pytest.raises(ValidationError):
+        OpcUaObservationPayload.model_validate(
+            {
+                **ua["observation"],
+                "inventory_phase": {
+                    **ua["observation"]["inventory_phase"],
+                    "reason_codes": ["arbitrary"],
+                },
+            }
+        )
+    with pytest.raises(ValidationError):
+        OpcUaObservationPayload.model_validate(
+            {
+                **ua["observation"],
+                "inventory_phase": {
+                    key: value
+                    for key, value in ua["observation"]["inventory_phase"].items()
+                    if key != "truncated"
+                },
+            }
+        )
+    for invalid in (
+        {key: value for key, value in ua.items() if key != "protocol"},
+        {**ua, "unexpected": "field"},
+        {**ua, "observation": {**ua["observation"], "process_data": "secret"}},
+        {
+            **ua,
+            "observation": {
+                **ua["observation"],
+                "certificate_sha256": "subject=secret",
+            },
+        },
+    ):
+        with pytest.raises(ValidationError):
+            OpcUaTcpServicePayload.model_validate(invalid)
 
 
 def test_health_503_references_database_unavailable_error() -> None:
@@ -878,8 +1021,9 @@ def test_finding_evidence_observation_rejects_invalid_field_bounds(
         FindingEvidenceObservationPayload.model_validate(observation)
 
 
-def test_finding_evidence_accepts_future_version_and_rejects_incoherent_metadata(
-) -> None:
+def test_finding_evidence_accepts_future_version_and_rejects_incoherent_metadata() -> (
+    None
+):
     host = HostPayload(ip="192.168.0.20", hostname="host", vendor="unknown")
     base = {
         "scan_id": uuid4(),

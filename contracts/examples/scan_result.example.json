@@ -143,6 +143,41 @@
               ]
             }
           ]
+        },
+        {
+          "protocol": "opcua_tcp",
+          "port": 4840,
+          "confidence": "confirmed",
+          "evidence_sources": ["opcua_get_endpoints"],
+          "write_requests_sent": 0,
+          "observation": {
+            "schema_version": 1,
+            "inventory_phase": {
+              "status": "completed",
+              "reason_codes": [],
+              "truncated": false,
+              "observed_at": "2026-09-12T14:03:13Z"
+            },
+            "identity": {
+              "application_uri": null,
+              "product_uri": null,
+              "application_name": null,
+              "application_type": null
+            },
+            "certificate_sha256": null,
+            "endpoints": [
+              {
+                "endpoint_url": "opc.tcp://192.168.1.50:4840/",
+                "security_policy_uri": "http://opcfoundation.org/UA/SecurityPolicy#None",
+                "security_mode": "None",
+                "transport_profile_uri": "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",
+                "security_level": 0,
+                "user_token_count": 1,
+                "user_token_types": ["Anonymous"],
+                "target_matches": true
+              }
+            ]
+          }
         }
       ]
     },

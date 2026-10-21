@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using System.Security.Cryptography;
 using Opc.Ua;
 using Opc.Ua.Bindings;
 
@@ -74,22 +75,36 @@ internal static class Program
                     }, cancellation.Token);
                 }
                 var discovered = serviceResponse.Endpoints;
+                var endpointsTruncated = discovered.Count > ProtocolLimits.MaxEndpoints;
                 var endpoints = new List<EndpointSummary>();
                 for (var i = 0; i < Math.Min(discovered.Count, ProtocolLimits.MaxEndpoints); i++)
                 {
                     var item = discovered[i];
+                    var server = item.Server;
+                    var certificate = item.ServerCertificate;
+                    var fingerprint = certificate.IsNull || certificate.Length > ProtocolLimits.MaxCertificateBytes
+                        ? null
+                        : ComputeCertificateFingerprint(certificate.ToArray());
+                    var tokenTypes = new List<string>();
+                    for (var tokenIndex = 0; tokenIndex < item.UserIdentityTokens.Count && tokenIndex < 8; tokenIndex++)
+                    {
+                        tokenTypes.Add(item.UserIdentityTokens[tokenIndex].TokenType.ToString());
+                    }
                     endpoints.Add(new EndpointSummary(
                         EndpointUrlSanitizer.Sanitize(item.EndpointUrl, address, port),
                         SafeSecurityPolicy(item.SecurityPolicyUri),
                         item.SecurityMode is MessageSecurityMode.None or MessageSecurityMode.Sign or MessageSecurityMode.SignAndEncrypt ? item.SecurityMode.ToString() : string.Empty,
                         item.TransportProfileUri == Profiles.UaTcpTransport ? Profiles.UaTcpTransport : string.Empty,
                         Math.Clamp((int)item.SecurityLevel, 0, 255),
-                        Math.Min(item.UserIdentityTokens.Count, 8)));
+                        Math.Min(item.UserIdentityTokens.Count, 8),
+                        tokenTypes.ToArray(),
+                        SafeText(server?.ApplicationUri, 128), SafeText(server?.ProductUri, 128),
+                        SafeText(server?.ApplicationName.Text, 128), server?.ApplicationType.ToString() ?? string.Empty, fingerprint));
                 }
                 var closed = await LifecycleCleanup.CloseWithinDeadlineAsync(channel.CloseAsync, channel.Abort, cancellation.Token);
                 if (!closed) return Fail("timeout", stats);
                 if (cancellation.IsCancellationRequested) { channel.Abort(); return Fail("timeout", stats); }
-                Write(new { status = "ok", endpoints = operation == "get_endpoints" ? endpoints : [], requests = stats.RequestCounts, requests_total = stats.RequestCount, request_attempts = stats.AttemptCount, requests_blocked = stats.BlockedRequestCount, bytes_sent = stats.BytesSent, bytes_received = stats.BytesReceived, chunks_sent = stats.ChunksSent, chunks_received = stats.ChunksReceived, hello_limits = stats.HelloLimits });
+                Write(new { status = "ok", endpoints = operation == "get_endpoints" ? endpoints : [], endpoints_truncated = operation == "get_endpoints" && endpointsTruncated, requests = stats.RequestCounts, requests_total = stats.RequestCount, request_attempts = stats.AttemptCount, requests_blocked = stats.BlockedRequestCount, bytes_sent = stats.BytesSent, bytes_received = stats.BytesReceived, chunks_sent = stats.ChunksSent, chunks_received = stats.ChunksReceived, hello_limits = stats.HelloLimits });
                 return 0;
             }
             catch (OperationCanceledException) { channel.Abort(); return Fail("timeout", stats); }
@@ -113,6 +128,10 @@ internal static class Program
         SecurityPolicies.Aes256_Sha256_RsaPss => SecurityPolicies.Aes256_Sha256_RsaPss,
         _ => string.Empty
     };
+    private static string SafeText(string? value, int limit) => value is null ? string.Empty : new string(value.Take(limit).Where(c => !char.IsControl(c)).ToArray());
+    internal static string? ComputeCertificateFingerprint(byte[]? der) => der is { Length: > 0 and <= ProtocolLimits.MaxCertificateBytes }
+        ? Convert.ToHexString(SHA256.HashData(der)).ToLowerInvariant()
+        : null;
     private static RequestHeader Header(uint handle, int timeoutMs) => new() { RequestHandle = handle, Timestamp = DateTime.UtcNow, TimeoutHint = (uint)timeoutMs };
     private static int Fail(string code, TransportStats? stats = null)
     {
@@ -120,7 +139,7 @@ internal static class Program
         return 1;
     }
     private static void Write(object value) => Console.Out.WriteLine(JsonSerializer.Serialize(value, BridgeJson.Options));
-    internal sealed record EndpointSummary(string EndpointUrl, string SecurityPolicy, string SecurityMode, string TransportProfile, int SecurityLevel, int UserTokenCount);
+    internal sealed record EndpointSummary(string EndpointUrl, string SecurityPolicy, string SecurityMode, string TransportProfile, int SecurityLevel, int UserTokenCount, string[] UserTokenTypes, string ApplicationUri, string ProductUri, string ApplicationName, string ApplicationType, string? CertificateSha256);
 }
 
 internal static class BridgeJson
@@ -180,6 +199,7 @@ internal static class LifecycleCleanup
 
 internal static class ProtocolLimits
 {
+    internal const int MaxCertificateBytes = 64 * 1024;
     internal const int MaxMessageSize = 128 * 1024;
     internal const int MaxBufferSize = 64 * 1024;
     internal const int MaxChunkCount = MaxMessageSize / 8192;

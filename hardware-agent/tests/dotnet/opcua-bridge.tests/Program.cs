@@ -2,6 +2,7 @@ using Dmitri.OpcUaBridge;
 using Opc.Ua;
 using System.Net;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 static void Require(bool value, string name)
 {
@@ -203,8 +204,11 @@ foreach (var unsafeUrl in unsafeEndpointUrls)
     Require(EndpointUrlSanitizer.Sanitize(unsafeUrl, IPAddress.Loopback, 4840) == string.Empty, "unsafe_endpoint_url_was_not_dropped");
 var safeEndpointUrl = EndpointUrlSanitizer.Sanitize("opc.tcp://127.0.0.1:4840/safe-path_1/", IPAddress.Loopback, 4840);
 Require(safeEndpointUrl == "opc.tcp://127.0.0.1:4840/safe-path_1/", "safe_endpoint_path_was_not_preserved");
+var certDer = new byte[] { 1, 2, 3, 4 };
+Require(Dmitri.OpcUaBridge.Program.ComputeCertificateFingerprint(certDer) == Convert.ToHexString(SHA256.HashData(certDer)).ToLowerInvariant(), "certificate_fingerprint_mismatch");
+Require(Dmitri.OpcUaBridge.Program.ComputeCertificateFingerprint(new byte[Dmitri.OpcUaBridge.ProtocolLimits.MaxCertificateBytes + 1]) is null, "oversized_certificate_was_hashed");
 var endpointJson = JsonSerializer.Serialize(
-    new Dmitri.OpcUaBridge.Program.EndpointSummary(safeEndpointUrl, "http://opcfoundation.org/UA/SecurityPolicy#None", "None", "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary", 0, 1),
+    new Dmitri.OpcUaBridge.Program.EndpointSummary(safeEndpointUrl, "http://opcfoundation.org/UA/SecurityPolicy#None", "None", "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary", 0, 1, ["Anonymous"], "urn:example:server", "urn:example:product", "Example", "Server", null),
     BridgeJson.Options);
 using (var endpointDocument = JsonDocument.Parse(endpointJson))
 {
@@ -212,6 +216,8 @@ using (var endpointDocument = JsonDocument.Parse(endpointJson))
     Require(endpoint.TryGetProperty("endpoint_url", out var endpointUrl) && endpointUrl.GetString() == safeEndpointUrl, "endpoint_url_json_contract_mismatch");
     Require(endpoint.TryGetProperty("security_policy", out var securityPolicy) && securityPolicy.GetString() == "http://opcfoundation.org/UA/SecurityPolicy#None", "endpoint_security_policy_json_contract_mismatch");
     Require(endpoint.TryGetProperty("user_token_count", out var tokenCount) && tokenCount.GetInt32() == 1, "endpoint_token_count_json_contract_mismatch");
+    Require(endpoint.TryGetProperty("user_token_types", out var tokenTypes) && tokenTypes[0].GetString() == "Anonymous", "endpoint_token_types_json_contract_mismatch");
+    Require(endpoint.TryGetProperty("application_uri", out var appUri) && appUri.GetString() == "urn:example:server", "endpoint_application_uri_missing");
     Require(!endpointJson.Contains(sentinel, StringComparison.Ordinal), "endpoint_url_secret_reached_ipc");
 }
 

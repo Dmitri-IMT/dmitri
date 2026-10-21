@@ -133,7 +133,15 @@ class OpcUaClient:
                 endpoints = tuple(
                     _parse_endpoint(item) for item in response["endpoints"]
                 )
-                return OpcUaClientResult("ok", endpoints=endpoints, stats=stats)
+                endpoints_truncated = response.get("endpoints_truncated", False)
+                if not isinstance(endpoints_truncated, bool):
+                    return OpcUaClientResult("error", error="invalid_response")
+                return OpcUaClientResult(
+                    "ok",
+                    endpoints=endpoints,
+                    endpoints_truncated=endpoints_truncated,
+                    stats=stats,
+                )
             error = response.get("code")
             if error not in _ERRORS:
                 error = "service_error"
@@ -205,6 +213,25 @@ def _parse_endpoint(value: Any) -> OpcUaEndpoint:
         transport_profile_uri=_safe_text(value.get("transport_profile"), 128),
         security_level=min(max(int(value.get("security_level", 0)), 0), 255),
         user_token_count=min(max(int(value.get("user_token_count", 0)), 0), 8),
+        user_token_types=tuple(
+            text
+            for item in value.get("user_token_types", [])[:8]
+            if (text := _safe_text(item, 32))
+            in {"Anonymous", "UserName", "Certificate", "IssuedToken"}
+        )
+        if isinstance(value.get("user_token_types", []), list)
+        else (),
+        application_uri=_safe_optional(value.get("application_uri"), 128),
+        product_uri=_safe_optional(value.get("product_uri"), 128),
+        application_name=_safe_optional(value.get("application_name"), 128),
+        application_type=_safe_optional(
+            value.get("application_type"),
+            32,
+            {"Server", "Client", "ClientAndServer", "DiscoveryServer"},
+        ),
+        certificate_sha256=_safe_optional(
+            value.get("certificate_sha256"), 64, pattern="hex64"
+        ),
     )
 
 
@@ -212,3 +239,16 @@ def _safe_text(value: Any, limit: int) -> str:
     if not isinstance(value, str):
         return ""
     return "".join(char for char in value[:limit] if char.isprintable())
+
+
+def _safe_optional(
+    value: Any, limit: int, allowed: set[str] | None = None, pattern: str | None = None
+) -> str | None:
+    text = _safe_text(value, limit)
+    if not text or (allowed is not None and text not in allowed):
+        return None
+    if pattern == "hex64" and (
+        len(text) != 64 or any(ch not in "0123456789abcdef" for ch in text)
+    ):
+        return None
+    return text
