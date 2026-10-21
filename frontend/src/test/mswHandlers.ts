@@ -258,6 +258,7 @@ export const criticalFinding: FindingRecord = {
   evidence_status: 'unknown',
   evidence_observations: [],
   evidence_truncated: false,
+  demonstrated: false,
 }
 
 export const highFinding: FindingRecord = {
@@ -287,6 +288,7 @@ export const highFinding: FindingRecord = {
   evidence_status: 'unknown',
   evidence_observations: [],
   evidence_truncated: false,
+  demonstrated: false,
 }
 
 const scanModes = [

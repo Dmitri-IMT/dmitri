@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react'
 import DataTable from '@/components/DataTable'
-import FindingPanel from '@/pages/scans/FindingPanel'
+import FindingPanel, { ScanFindingPanel } from '@/pages/scans/FindingPanel'
 import useI18n from '@/i18n/useI18n'
 import {
   hostFindingColumns,
@@ -19,6 +20,7 @@ type FindingsTableProps = {
   openFindingId: string | null
   onOpenFindingChange: (id: string | null) => void
   variant: 'scan' | 'host'
+  empty?: ReactNode
 }
 
 function FindingsTable({
@@ -30,6 +32,7 @@ function FindingsTable({
   openFindingId,
   onOpenFindingChange,
   variant,
+  empty,
 }: FindingsTableProps) {
   const { t } = useI18n()
   const labels = {
@@ -39,6 +42,9 @@ function FindingsTable({
     port: t('common.port'),
     cve: t('common.cve'),
     firstSeen: t('common.firstSeen'),
+    status: t('common.status'),
+    confirmed: t('evidence.filter.confirmed'),
+    unverified: t('evidence.filter.unverified'),
   }
   const columns =
     variant === 'scan'
@@ -50,6 +56,7 @@ function FindingsTable({
     rowId: (finding: FindingRecord) => finding.finding_id,
     testId,
     caption,
+    empty,
   }
 
   if (isPending) return <DataTable {...table} rows={[]} isPending />
@@ -60,7 +67,12 @@ function FindingsTable({
       rows={[...findings].sort(bySeverityDesc)}
       rowAction={{
         kind: 'expand',
-        panel: (finding) => <FindingPanel finding={finding} />,
+        panel: (finding) =>
+          variant === 'scan' ? (
+            <ScanFindingPanel finding={finding} />
+          ) : (
+            <FindingPanel finding={finding} />
+          ),
         label: (finding) =>
           t('common.showFindingDetails', { title: finding.title }),
         openRowId: openFindingId,
