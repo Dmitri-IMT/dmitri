@@ -1643,6 +1643,11 @@ export interface components {
              * @default false
              */
             evidence_truncated: boolean;
+            /**
+             * Demonstrated
+             * @default false
+             */
+            demonstrated: boolean;
         };
         FindingListResponse: {
             data: components["schemas"]["FindingRecord"][];

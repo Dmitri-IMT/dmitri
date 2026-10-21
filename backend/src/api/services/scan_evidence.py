@@ -612,6 +612,25 @@ def _conflict_pairs(
     return sorted(pairs)
 
 
+def finding_is_demonstrated(
+    status: str,
+    truncated: bool,
+    observations: Sequence[Any],
+    cve_id: str | None,
+) -> bool:
+    return (
+        status == "supported"
+        and not truncated
+        and any(
+            _rule_result(_as_observation(item), cve_id)[1] == "supported"
+            and _as_observation(item).method
+            in {"configuration_observation", "specific_check"}
+            and _as_observation(item).result == "positive"
+            for item in observations
+        )
+    )
+
+
 def summarize_finding_evidence(
     records: Sequence[Any], *, scope: str
 ) -> dict[str, Any]:
@@ -639,14 +658,11 @@ def summarize_finding_evidence(
         confidence[value if value in confidence else "unknown"] += 1
         status = get("evidence_status", "unknown")
         conflicts += status == "conflicting"
-        observations = get("evidence_observations", ()) or ()
-        truncated = bool(get("evidence_truncated", False))
-        if status == "supported" and not truncated and any(
-            _rule_result(_as_observation(item), get("cve_id"))[1] == "supported"
-            and _as_observation(item).method
-            in {"configuration_observation", "specific_check"}
-            and _as_observation(item).result == "positive"
-            for item in observations
+        if finding_is_demonstrated(
+            status,
+            bool(get("evidence_truncated", False)),
+            get("evidence_observations", ()) or (),
+            get("cve_id"),
         ):
             demonstrated += 1
     return {
