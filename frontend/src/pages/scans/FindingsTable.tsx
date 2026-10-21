@@ -43,8 +43,8 @@ function FindingsTable({
     cve: t('common.cve'),
     firstSeen: t('common.firstSeen'),
     status: t('common.status'),
-    confirmed: t('evidence.filter.confirmed'),
-    unverified: t('evidence.filter.unverified'),
+    confirmed: t('evidence.row.confirmed'),
+    unverified: t('evidence.row.unverified'),
   }
   const columns =
     variant === 'scan'

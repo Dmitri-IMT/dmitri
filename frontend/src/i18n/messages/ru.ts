@@ -265,6 +265,8 @@ export const catalog: Catalog = {
     'Ни одна уязвимость в этом сканировании не подтверждена прямой проверкой или наблюдаемой настройкой.',
   'evidence.filter.empty.unverified':
     'Все уязвимости в этом сканировании подтверждены.',
+  'evidence.row.confirmed': 'Подтверждена',
+  'evidence.row.unverified': 'Не проверена',
   'evidence.verdict.confirmed': 'Подтверждено.',
   'evidence.verdict.unverified': 'Не проверено.',
   'evidence.technicalDetails': 'Технические подробности',

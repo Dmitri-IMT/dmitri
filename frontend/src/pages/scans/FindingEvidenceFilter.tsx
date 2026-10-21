@@ -46,7 +46,7 @@ function FindingEvidenceFilter({
             key={filter}
             value={filter}
             data-testid={`evidence-filter-${filter}`}
-            className="flex-none flex-col items-start gap-1 px-0 py-2 text-muted-foreground data-active:text-foreground"
+            className="flex-none flex-col items-start gap-1 px-0 py-2 text-muted-foreground after:hidden data-active:text-foreground"
           >
             <span className="text-title-lg tabular-nums">{counts[filter]}</span>
             <span className="text-caption-md">
