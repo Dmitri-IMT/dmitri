@@ -894,6 +894,7 @@ def _to_finding_read(
         service=finding.service,
         source=finding.source,
         source_script=finding.source_script,
+        issue_key=finding.issue_key,
         cve_id=finding.cve_id,
         cvss_score=finding.cvss_score,
         severity=finding.severity,

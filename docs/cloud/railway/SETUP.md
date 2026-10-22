@@ -65,9 +65,14 @@ The `api` and `worker` services build with **Railpack** (Railway's default build
 repo root (`/backend/railway.api.toml`, `/backend/railway.worker.toml` — the config path does
 **not** follow Root Directory).
 
-`backend/railpack.json` adds `fonts-dejavu-core` to the runtime image. The API needs this Unicode
-font to render downloadable scan reports in Portuguese and Russian. This setting is in the shared
-`/backend` build context used by both API and worker services.
+`backend/railpack.json` adds `fonts-dejavu-core`, `ca-certificates`, `dpkg`, and `gpgv` to the
+runtime image. The API needs the Unicode font to render downloadable scan reports in Portuguese
+and Russian. The API and worker also need CA trust, Debian version comparison, and OpenPGP
+signature verification for the agent release catalog. The one approved public keyring is tracked
+at `backend/agent-release/public-keyring.gpg`; the shared `/backend` build context places it in
+the application image at `/app/agent-release/public-keyring.gpg`. The release workflow consumes
+that same file. Do not create a separate keyring copy or configure a key supplied by an
+untrusted runtime variable.
 
 ## Frontend static service (DMI-91)
 
@@ -184,9 +189,10 @@ railway variable delete DATABASE_URL_DIRECT --service worker --environment "$ENV
 railway variable list --service api --environment "$ENV" --project "$PROJECT" --json
 railway variable list --service worker --environment "$ENV" --project "$PROJECT" --json
 
-# 4. Redeploy both so the new credential takes effect
-railway up --detach --service api --environment "$ENV" --project "$PROJECT"
-railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+# 4. Restart the existing builds so the new credential takes effect.
+# `railway redeploy` reuses the deployment's already-built source artifact.
+railway redeploy --service api --environment "$ENV" --project "$PROJECT" --yes
+railway redeploy --service worker --environment "$ENV" --project "$PROJECT" --yes
 
 # 5. Poll to a terminal state and confirm the health probe / worker boot
 railway deployment list --service api --environment "$ENV" --project "$PROJECT" --json
@@ -200,6 +206,56 @@ railway logs --service worker --environment "$ENV" --project "$PROJECT"
 loop starting without the previous `psycopg` authentication/undefined-table errors once the
 hosted schema is migrated (see the Supabase runbook).
 
+### Agent release catalog
+
+The agent update catalog is a fixed HTTPS source at
+`https://dmitri-imt.github.io/dmitri/`. Its signed metadata is verified by the worker with the
+keyring baked into both backend images. API and worker must use the same repository, keyring,
+origin, suite, and refresh interval. The worker refreshes and persists the catalog; the API only
+serves the resulting read model and update operations. A blank repository URL disables catalog
+refresh, so leaving it unset makes update availability unknown.
+
+Configure these non-secret variables on **both** services. Do this only after O4 has published
+the signed Pages repository and the reviewed backend source is available. Applying variables with
+`--skip-deploys` avoids starting one service with a different configuration; then deploy API and
+worker from the same source revision after confirming the database migration head:
+
+```bash
+# Set only after identifying the actual production Railway project/environment.
+# In particular, do not assume that the existing nspi environment is production.
+PROJECT="<verified-production-project-id>"
+ENV="<verified-production-environment>"
+
+for SERVICE in api worker; do
+  railway variable set AGENT_UPDATE_REPOSITORY_URL="https://dmitri-imt.github.io/dmitri/" --service "$SERVICE" --environment "$ENV" --project "$PROJECT" --skip-deploys
+  railway variable set AGENT_UPDATE_KEYRING_PATH="/app/agent-release/public-keyring.gpg" --service "$SERVICE" --environment "$ENV" --project "$PROJECT" --skip-deploys
+  railway variable set AGENT_UPDATE_ORIGIN="Dmitri" --service "$SERVICE" --environment "$ENV" --project "$PROJECT" --skip-deploys
+  railway variable set AGENT_UPDATE_SUITE="stable" --service "$SERVICE" --environment "$ENV" --project "$PROJECT" --skip-deploys
+  railway variable set AGENT_UPDATE_REFRESH_INTERVAL_SECONDS="300" --service "$SERVICE" --environment "$ENV" --project "$PROJECT" --skip-deploys
+done
+
+# Confirm the five values on both services in Railway's Variables view.
+
+# Before using `railway up`, prepare a clean worktree at the exact reviewed commit.
+# `railway up` uploads this directory's current files; it does not fetch the GitHub SHA.
+RAILWAY_SOURCE_SHA="<full-reviewed-commit-sha>"
+git worktree add --detach ../dmitri-railway-deploy "$RAILWAY_SOURCE_SHA"
+cd ../dmitri-railway-deploy
+test -z "$(git status --porcelain)"
+test "$(git rev-parse HEAD)" = "$RAILWAY_SOURCE_SHA"
+
+# Deploy both services from that verified checkout, then inspect their logs.
+railway up --detach --service api --environment "$ENV" --project "$PROJECT"
+railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+railway logs --service api --environment "$ENV" --project "$PROJECT"
+railway logs --service worker --environment "$ENV" --project "$PROJECT"
+```
+
+Treat Railway as unconfigured until these variables and the signed repository are present. The
+public Pages URL and signature workflow do not by themselves prove a release has been published
+or that production services have been configured. Confirm a successful worker refresh and a
+catalog row/generation before enabling the frontend update action.
+
 ### Optional: AI scan analysis
 
 Set the same pair on **both** `api` and `worker`. The API returns `unavailable`
@@ -212,8 +268,8 @@ railway variable set AI_ENABLED=true --service api --environment "$ENV" --projec
 railway variable set AI_ENABLED=true --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
 railway variable set AI_API_KEY="<GROQ_API_KEY>" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
 railway variable set AI_API_KEY="<GROQ_API_KEY>" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
-railway up --detach --service api --environment "$ENV" --project "$PROJECT"
-railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+railway redeploy --service api --environment "$ENV" --project "$PROJECT" --yes
+railway redeploy --service worker --environment "$ENV" --project "$PROJECT" --yes
 ```
 
 After restart, `worker` logs should show both the enrichment loop and
@@ -227,8 +283,8 @@ both call the NVD client during enrichment:
 ```bash
 railway variable set NVD_API_KEY="<NVD_API_KEY>" --service api --environment "$ENV" --project "$PROJECT" --skip-deploys
 railway variable set NVD_API_KEY="<NVD_API_KEY>" --service worker --environment "$ENV" --project "$PROJECT" --skip-deploys
-railway up --detach --service api --environment "$ENV" --project "$PROJECT"
-railway up --detach --service worker --environment "$ENV" --project "$PROJECT"
+railway redeploy --service api --environment "$ENV" --project "$PROJECT" --yes
+railway redeploy --service worker --environment "$ENV" --project "$PROJECT" --yes
 ```
 
 ### Required: `JWT_SIGNING_SECRET`

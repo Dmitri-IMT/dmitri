@@ -1,13 +1,7 @@
 #!/bin/sh
-# Skip the upgrade while a scan runs. An upgrade restarts dmitri-agent and
-# drops the in-process scan ledger. Every scan holds a shared lock on this
-# file (agent/scanner/scan_lock.py) until it ends.
 set -eu
-lock=$(cat /usr/lib/dmitri/scan-lock-path)
-exec 9>>"$lock"
-if ! flock -n -x 9; then
-    echo "hardware-agent: scan in progress, not upgrading"
-    exit 0
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--check" ]; }; then
+    echo "usage: apt-upgrade-agent [--check]" >&2
+    exit 2
 fi
-apt-get update
-apt-get install -y --only-upgrade hardware-agent 9>&-
+exec /usr/bin/python3 /usr/lib/dmitri/updater.py --check

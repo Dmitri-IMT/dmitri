@@ -57,6 +57,9 @@ outlined buttons sit in card footers.
 - **No `dark:`**, no theme toggle, desktop only (1440 target, 1280 minimum).
 - **Severity has no hue.** `SeverityWord` renders a bold ink word; API `Severity` is four
   members: critical, high, medium, low.
+- **Never add coloured tags.** No chip, pill, tag or badge (a tinted, rounded label) for any
+  state: availability, status, counts, versions. Say the state as a plain word or sentence in
+  `--ink` or `--ink-muted`.
 - **Vocabulary:** a *device* is the Dmitri box (`/devices`); a *machine* is a host on the
   customer's network (`/network`). Do not swap them in copy.
 

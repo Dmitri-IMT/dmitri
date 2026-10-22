@@ -11,6 +11,7 @@ import { DEFAULT_SCAN_MODE } from '@/lib/scanModes'
 import { readDetailState } from '@/lib/detailState'
 import { readAgentPresence } from '@/lib/agentPresence'
 import AgentIdentity from '@/pages/agents/AgentIdentity'
+import AgentUpdateSection from '@/pages/agents/AgentUpdateSection'
 import DeviceRestore from '@/pages/agents/DeviceRestore'
 import DeviceRevoke from '@/pages/agents/DeviceRevoke'
 import DeviceScanHistory from '@/pages/agents/DeviceScanHistory'
@@ -34,6 +35,7 @@ function RevokedDeviceSections({ agent }: { agent: AgentDetail }) {
     <>
       <WatchedNetworkReadOnly agent={agent} />
       <DeviceRestore agent={agent} onRestored={focusPresence} />
+      <AgentUpdateSection agent={agent} />
       <DeviceScanHistory agentId={agent.agent_id} />
     </>
   )
@@ -81,6 +83,7 @@ function LiveDeviceSections({ agent }: { agent: AgentDetail }) {
           />
         </div>
       )}
+      <AgentUpdateSection agent={agent} />
       <DeviceScanHistory agentId={agent.agent_id} />
       <DeviceRevoke agent={agent} onRevoked={focusPresence} />
     </>

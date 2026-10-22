@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
-from api.models.command import Agent
+from api.models.command import Agent, Command
 from api.schemas.agent_frames import (
     AgentCancelFrame,
     AgentErrorFrame,
@@ -106,9 +106,12 @@ def _tracking_session_factory(
         if get_error is not None:
             session.get.side_effect = get_error
         else:
-            session.get.return_value = loaded
+            session.get.side_effect = lambda model, *_args, **_kwargs: (
+                loaded if model is Agent else None
+            )
         exec_result = MagicMock()
         exec_result.all.return_value = []
+        exec_result.first.side_effect = [loaded, MagicMock(spec=Command)]
         session.exec.return_value = exec_result
         if configure is not None:
             configure(session)
@@ -465,7 +468,7 @@ def _connected_ws() -> AsyncMock:
 def test_revoked_status_frame_writes_no_transition_and_closes(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(
-        agent_ws, "apply_status", lambda *a, **k: calls.append((a, k)) or True
+        agent_ws, "transition_command", lambda *a, **k: calls.append((a, k)) or True
     )
     ws = _connected_ws()
     session_factory = _tracking_session_factory(agent=_agent_stub(revoked_at=T0))
@@ -524,19 +527,22 @@ def test_status_frame_loads_the_agent_once():
     asyncio.run(_handle(_status_payload(), session_factory, ws, agent_id=AGENT_ID))
 
     session = session_factory.open_sessions[0]
-    assert session.get.call_count == 1
-    assert session.get.call_args.args[0] is Agent
+    assert session.exec.call_count >= 2
+    agent_lock_query = session.exec.call_args_list[0].args[0]
+    assert "FOR UPDATE" in str(agent_lock_query).upper()
     ws.close.assert_not_awaited()
 
 
 def test_status_frame_fails_closed_when_revocation_read_raises(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(
-        agent_ws, "apply_status", lambda *a, **k: calls.append((a, k)) or True
+        agent_ws, "transition_command", lambda *a, **k: calls.append((a, k)) or True
     )
     ws = _connected_ws()
     session_factory = _tracking_session_factory(
-        get_error=RuntimeError("database down")
+        configure=lambda session: setattr(
+            session, "exec", MagicMock(side_effect=RuntimeError("database down"))
+        )
     )
     asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))
 
@@ -549,7 +555,7 @@ def test_status_frame_fails_closed_when_revocation_read_raises(monkeypatch):
 
 
 def _unknown_command(session: MagicMock) -> None:
-    session.exec.return_value.first.return_value = None
+    session.exec.return_value.first.side_effect = [_agent_stub(), None]
 
 
 @pytest.mark.parametrize("raw_text", INVALID_FRAMES)
@@ -570,7 +576,6 @@ def test_revoked_invalid_frame_sends_error_then_closes(raw_text: str):
 
 
 def test_unknown_command_id_opens_no_second_session(monkeypatch):
-    monkeypatch.setattr(agent_ws, "apply_status", lambda *a, **k: False)
     ws = _connected_ws()
     session_factory = _tracking_session_factory(configure=_unknown_command)
     asyncio.run(agent_connections.register(AGENT_ID, ws, now=T0))

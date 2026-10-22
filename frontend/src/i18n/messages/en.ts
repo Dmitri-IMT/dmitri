@@ -480,4 +480,115 @@ export const catalog = {
     'CVE matches and NVD records do not confirm that a vulnerability applies to scanned machines. Verify the affected software and version.',
   'ai.partialLimit': 'Some checks in this scan did not finish.',
   'ai.unknownLimit': 'This scan does not report whether every check finished.',
+  'updates.title': 'Agent update',
+  'updates.status': 'Status',
+  'updates.updateTo': ({ version }) => `Update to ${version}`,
+  'updates.whatsNew': ({ version }) => `What’s new in ${version}`,
+  'updates.technicalDetails': 'Technical details',
+  'updates.installedVersion': 'Installed version',
+  'updates.installedPackageVersion': 'Installed package version',
+  'updates.availableVersion': 'Available version',
+  'updates.availablePackageVersion': 'Available package version',
+  'updates.versionObservedAt': 'Version observed',
+  'updates.packageVersion': 'Observed package version',
+  'updates.observedVersion': 'Observed version',
+  'updates.catalogueCheckedAt': 'Catalogue checked',
+  'updates.unknownValue': 'Unknown',
+  'updates.availability.available': 'Update available',
+  'updates.availability.upToDate': 'Up to date',
+  'updates.availability.unknown': 'Installed version unknown',
+  'updates.availability.unavailable': 'Catalogue unavailable',
+  'updates.readiness.ready': 'Ready to update',
+  'updates.readiness.offline': 'Offline',
+  'updates.readiness.revoked': 'Revoked',
+  'updates.readiness.bootstrap':
+    'Assisted setup required before remote updates',
+  'updates.readiness.busy': 'Device busy',
+  'updates.readiness.unknown': 'Readiness unknown',
+  'updates.updateDevice': 'Update device',
+  'updates.refreshStatus': 'Refresh status',
+  'updates.refreshing': 'Refreshing…',
+  'updates.readFailed':
+    'Could not load update availability. Refresh status to try again.',
+  'updates.historyFailed': 'Could not load update history.',
+  'updates.operationReadFailed':
+    'Could not update the remote status of this operation.',
+  'updates.refreshFailed': 'Could not refresh update status. Try again.',
+  'updates.requestFailed':
+    'The update request could not be completed. The saved operation status is unchanged.',
+  'updates.revokedReadOnly':
+    'This revoked device is read-only and cannot be updated.',
+  'updates.offlineNotQueued':
+    'This device is offline. An update will not be queued.',
+  'updates.history': 'Update history',
+  'updates.noHistory': 'No update history yet.',
+  'updates.localOutcome': 'Local outcome',
+  'updates.outcome.pending': 'Pending',
+  'updates.outcome.succeeded': 'Installed and healthy locally',
+  'updates.outcome.failed': 'Failed',
+  'updates.outcome.rolled_back': 'Previous version restored',
+  'updates.outcome.needs_intervention': 'Assisted intervention required',
+  'updates.phase.requested': 'Request accepted',
+  'updates.phase.preparing': 'Preparing',
+  'updates.phase.installing': 'Installing',
+  'updates.phase.verifying': 'Verifying',
+  'updates.phase.awaitingConfirmation': 'Awaiting confirmation',
+  'updates.phase.recovering': 'Recovering',
+  'updates.phase.succeeded': 'Confirmed',
+  'updates.phase.failed': 'Failed',
+  'updates.phase.expired': 'Expired',
+  'updates.phase.rolledBack': 'Previous version restored',
+  'updates.phase.intervention': 'Assisted intervention required',
+  'updates.awaitingRemoteConfirmation':
+    'Local installation succeeded. Waiting for remote confirmation.',
+  'updates.interventionNextStep':
+    'Contact the person responsible for device maintenance.',
+  'updates.requestedBy': 'Requested by',
+  'updates.requestedAt': ({ date }) => `Requested: ${date}`,
+  'updates.localCompletedAt': ({ date }) => `Local completion: ${date}`,
+  'updates.confirmedAt': ({ date }) => `Remote confirmation: ${date}`,
+  'updates.lastContactAt': ({ date }) => `Last device contact: ${date}`,
+  'updates.contactUnknown': 'Device contact has not been reported.',
+  'updates.confirmTitle': 'Update this device?',
+  'updates.confirmDescription': ({ device, version }) =>
+    `Update “${device}” to version ${version}?`,
+  'updates.confirmAccessible': ({ version }) =>
+    `Confirm update to version ${version}`,
+  'updates.back': 'Back',
+  'updates.submitting': 'Requesting update…',
+  'updates.loading': 'Loading…',
+  'updates.error.deviceBusy':
+    'The device is busy. Refresh its status before trying again.',
+  'updates.error.sessionReplaced':
+    'The device connection changed. Refresh status to reconcile the operation.',
+  'updates.error.requestExpired':
+    'The update request expired before the device accepted it.',
+  'updates.error.releaseNotAllowed':
+    'This release is no longer available for this device.',
+  'updates.error.versionConflict':
+    'The installed version changed. Refresh status before requesting an update.',
+  'updates.error.metadataUntrusted':
+    'The release metadata could not be verified.',
+  'updates.error.metadataExpired':
+    'The release metadata expired before installation.',
+  'updates.error.artifactMismatch':
+    'The package did not match the verified release.',
+  'updates.error.unsupportedPlatform':
+    'This device platform is not supported by the release.',
+  'updates.error.prerequisiteMissing':
+    'Assisted setup is required before this device can update remotely.',
+  'updates.error.insufficientResources':
+    'The device did not have enough resources to continue.',
+  'updates.error.packageManagerBusy':
+    'The package manager is busy. Refresh status before trying again.',
+  'updates.error.authorizationExpired':
+    'The update authorization expired before installation.',
+  'updates.error.installFailed':
+    'Installation failed. Review the observed operation status.',
+  'updates.error.localHealthFailed':
+    'The local health check did not pass after installation.',
+  'updates.error.recoveryFailed':
+    'Recovery could not be confirmed. Assisted intervention is required.',
+  'updates.error.stateCorrupt':
+    'Update state could not be read safely. Assisted intervention is required.',
 } satisfies Record<string, Value>

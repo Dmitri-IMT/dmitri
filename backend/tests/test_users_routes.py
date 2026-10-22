@@ -2,15 +2,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import pytest
-from api.db.session import get_session
-from api.main import app
 from api.models.identity import Org, User
 from api.services.passwords import hash_password
 from api.services.tokens import create_access_token
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session
 from starlette.testclient import TestClient
 
 VALID_PASSWORD = "Xk9$mQvL2pTz"
@@ -24,30 +19,6 @@ def _assert_error_envelope(response, status_code: int, code: str) -> None:
     assert set(body["error"].keys()) == {"code", "message", "details"}
     assert body["error"]["code"] == code
     assert body["error"]["details"] == {}
-
-
-@pytest.fixture()
-def session() -> Session:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
-@pytest.fixture()
-def client(session: Session) -> TestClient:
-    def _override_get_session():
-        yield session
-
-    app.dependency_overrides[get_session] = _override_get_session
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.pop(get_session, None)
 
 
 def _seed_user(session: Session, *, role: str, email: str = "alice@corp.com") -> User:
@@ -76,17 +47,17 @@ def _user_bearer_headers(user: User, *, role: str | None = None) -> dict[str, st
 
 
 def test_users_me_without_bearer_returns_401_envelope(
-    client: TestClient, session: Session
+    client: TestClient, administrative_session: Session
 ) -> None:
-    _seed_user(session, role="admin")
+    _seed_user(administrative_session, role="admin")
     response = client.get("/api/v1/users/me")
     _assert_error_envelope(response, 401, "unauthorized")
 
 
 def test_users_me_with_garbage_bearer_returns_401_envelope(
-    client: TestClient, session: Session
+    client: TestClient, administrative_session: Session
 ) -> None:
-    _seed_user(session, role="admin")
+    _seed_user(administrative_session, role="admin")
     response = client.get(
         "/api/v1/users/me",
         headers={"Authorization": "Bearer not-a-jwt"},
@@ -94,8 +65,10 @@ def test_users_me_with_garbage_bearer_returns_401_envelope(
     _assert_error_envelope(response, 401, "unauthorized")
 
 
-def test_users_me_admin_returns_profile(client: TestClient, session: Session) -> None:
-    user = _seed_user(session, role="admin")
+def test_users_me_admin_returns_profile(
+    client: TestClient, administrative_session: Session
+) -> None:
+    user = _seed_user(administrative_session, role="admin")
     response = client.get("/api/v1/users/me", headers=_user_bearer_headers(user))
     assert response.status_code == 200
     body = response.json()
@@ -105,8 +78,10 @@ def test_users_me_admin_returns_profile(client: TestClient, session: Session) ->
     assert "password_expires_at" not in body
 
 
-def test_users_me_viewer_returns_profile(client: TestClient, session: Session) -> None:
-    user = _seed_user(session, role="viewer", email="viewer@corp.com")
+def test_users_me_viewer_returns_profile(
+    client: TestClient, administrative_session: Session
+) -> None:
+    user = _seed_user(administrative_session, role="viewer", email="viewer@corp.com")
     response = client.get("/api/v1/users/me", headers=_user_bearer_headers(user))
     assert response.status_code == 200
     body = response.json()
@@ -116,8 +91,10 @@ def test_users_me_viewer_returns_profile(client: TestClient, session: Session) -
     assert "password_expires_at" not in body
 
 
-def test_users_me_role_from_row_not_jwt(client: TestClient, session: Session) -> None:
-    user = _seed_user(session, role="viewer")
+def test_users_me_role_from_row_not_jwt(
+    client: TestClient, administrative_session: Session
+) -> None:
+    user = _seed_user(administrative_session, role="viewer")
     response = client.get(
         "/api/v1/users/me",
         headers=_user_bearer_headers(user, role="admin"),
@@ -127,12 +104,12 @@ def test_users_me_role_from_row_not_jwt(client: TestClient, session: Session) ->
 
 
 def test_users_me_missing_user_row_returns_401_envelope(
-    client: TestClient, session: Session
+    client: TestClient, administrative_session: Session
 ) -> None:
     org = Org(name="Org A")
-    session.add(org)
-    session.commit()
-    session.refresh(org)
+    administrative_session.add(org)
+    administrative_session.commit()
+    administrative_session.refresh(org)
     token = create_access_token(
         user_id=UUID("00000000-0000-0000-0000-000000000001"),
         org_id=org.id,

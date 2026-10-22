@@ -14,6 +14,7 @@ from agent.transport.command_channel import (
     AgentProgress,
     AgentProgressSnapshot,
     AgentStatus,
+    AgentUpdate,
     CommandChannelClient,
 )
 from agent.transport.ingest import IngestConfig
@@ -204,6 +205,46 @@ class TestUpgradeTarget:
 
 
 class TestHello:
+    def test_probe_404_selects_legacy_but_transient_and_invalid_retry(self) -> None:
+        from unittest.mock import patch
+
+        from agent.transport.command_channel import _default_connect
+
+        client = CommandChannelClient(make_config(), connect=_default_connect)
+        with patch("agent.transport.command_channel.httpx.get") as get:
+            get.return_value.status_code = 404
+            assert client._probe_protocol() is False
+
+            get.return_value.status_code = 503
+            with pytest.raises(OSError):
+                client._probe_protocol()
+
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"capabilities": "invalid"}
+            with pytest.raises(OSError):
+                client._probe_protocol()
+
+            get.return_value.json.return_value = {
+                "protocol_versions": [1],
+                "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+            }
+            assert client._probe_protocol() is True
+            assert client._probe_capabilities == {
+                "scan_finalization_v1",
+                "agent_update_v1",
+            }
+            get.return_value.status_code = 404
+            assert client._probe_protocol() is False
+            assert client._probe_capabilities == set()
+
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {
+                "protocol_versions": [2],
+                "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+            }
+            assert client._probe_protocol() is False
+            assert client._probe_capabilities == set()
+
     @pytest.mark.asyncio
     async def test_hello_precedes_on_connected_and_first_read(self) -> None:
         dialer = Dialer([command_frame()])
@@ -260,6 +301,320 @@ class TestHello:
         ]
         assert cidrs == ["10.0.0.0/24", "10.1.0.0/24"]
 
+    @pytest.mark.asyncio
+    async def test_supported_probe_sends_capability_and_waits_for_session(self) -> None:
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            detect_subnets=lambda: list(SUBNETS),
+            agent_version="9.9.9",
+            protocol_probe=lambda: True,
+        )
+        connected: list[str | None] = []
+
+        async def on_connected() -> None:
+            connected.append(str(client.session_id))
+
+        await drive(client, on_connected)
+
+        assert connected == [session]
+        assert json.loads(dialer.sockets[0].sent[0])["capabilities"] == [
+            "scan_finalization_v1"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_update_capability_requires_probe_and_ready_supervisor(self) -> None:
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            detect_subnets=lambda: list(SUBNETS),
+            agent_version="9.9.9",
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(
+                0,
+                result={
+                    "ready": True,
+                    "supervisor_ready": True,
+                    "updater_version": 1,
+                    "package_version": "9.9.9-1",
+                    "os_suite": "bookworm",
+                    "architecture": "arm64",
+                    "update_context": {
+                        "update_id": "11111111-1111-4111-8111-111111111111",
+                        "invocation_id": "22222222-2222-4222-8222-222222222222",
+                    },
+                },
+            ),
+        )
+        await drive(client)
+        hello = json.loads(dialer.sockets[0].sent[0])
+        assert hello["capabilities"] == ["scan_finalization_v1", "agent_update_v1"]
+        assert hello["updater_version"] == "1"
+        assert hello["package_version"] == "9.9.9-1"
+        assert hello["update_context"] == {
+            "update_id": "11111111-1111-4111-8111-111111111111",
+            "invocation_id": "22222222-2222-4222-8222-222222222222",
+        }
+
+    @pytest.mark.asyncio
+    async def test_checkpoint_suppresses_update_capability_but_keeps_scan_capability(
+        self,
+    ) -> None:
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            agent_version="9.9.9",
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(
+                0,
+                result={"ready": True, "scan_checkpoint_pending": True},
+            ),
+        )
+        await drive(client)
+        assert json.loads(dialer.sockets[0].sent[0])["capabilities"] == [
+            "scan_finalization_v1"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_session_acknowledges_advertised_caps_when_updater_unready(
+        self,
+    ):
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            detect_subnets=lambda: list(SUBNETS),
+            agent_version="9.9.9",
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(
+                0, result={"ready": False, "supervisor_ready": False}
+            ),
+        )
+
+        commands = await drive(client)
+
+        hello = json.loads(dialer.sockets[0].sent[0])
+        assert hello["capabilities"] == ["scan_finalization_v1"]
+        assert [command.command_id for command in commands] == [COMMAND_ID]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "state",
+        [
+            None,
+            {"ready": False, "supervisor_ready": True},
+            {"ready": True, "supervisor_ready": False},
+            {"ready": True, "supervisor_ready": True, "updater_version": 2},
+        ],
+    )
+    async def test_missing_or_incompatible_supervisor_suppresses_capability(
+        self, state
+    ):
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+                    }
+                ),
+                command_frame(),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            agent_version="9.9.9",
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(0, result=state),
+        )
+
+        await drive(client)
+
+        assert json.loads(dialer.sockets[0].sent[0])["capabilities"] == [
+            "scan_finalization_v1"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_reconnect_hello_reports_companion_recovery_context_again(self):
+        sessions = [
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        ]
+
+        def session_frame(session_id):
+            return json.dumps(
+                {
+                    "type": "update_session",
+                    "session_id": session_id,
+                    "protocol_version": 1,
+                    "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+                }
+            )
+
+        from agent.transport.command_channel import _parse_command
+
+        assert _parse_command(session_frame(sessions[0])) is not None
+
+        dialer = Dialer(
+            [session_frame(sessions[0]), closed(1006, "lost")],
+            [session_frame(sessions[1]), command_frame()],
+        )
+        states = [
+            {
+                "ready": True,
+                "supervisor_ready": True,
+                "updater_version": 1,
+                "package_version": "1.2.3-1",
+                "update_context": {
+                    "update_id": "11111111-1111-4111-8111-111111111111",
+                    "invocation_id": "22222222-2222-4222-8222-222222222222",
+                },
+            }
+        ]
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            agent_version="1.2.3",
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(0, result=states[0]),
+        )
+
+        await drive(client)
+
+        assert len(dialer.sockets) == 2
+        for socket in dialer.sockets:
+            hello = json.loads(socket.sent[0])
+            assert hello["update_context"] == states[0]["update_context"]
+
+    @pytest.mark.asyncio
+    async def test_update_frame_requires_current_session_and_unexpired_authorization(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        update_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        release_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        frame = {
+            "type": "agent_update",
+            "update_id": update_id,
+            "session_id": session,
+            "release_id": release_id,
+            "target_package_version": "1.2.3-1",
+            "sha256": "a" * 64,
+            "expires_at": (now + timedelta(minutes=1)).isoformat(),
+        }
+        dialer = Dialer(
+            [
+                json.dumps(
+                    {
+                        "type": "update_session",
+                        "session_id": session,
+                        "protocol_version": 1,
+                        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+                    }
+                ),
+                json.dumps(
+                    {**frame, "session_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd"}
+                ),
+                json.dumps(
+                    {
+                        **frame,
+                        "expires_at": (now - timedelta(seconds=1)).isoformat(),
+                    }
+                ),
+                json.dumps(frame),
+            ]
+        )
+        client = CommandChannelClient(
+            make_config(),
+            connect=dialer,
+            sleep=Sleeper(),
+            protocol_probe=lambda: {"scan_finalization_v1", "agent_update_v1"},
+            update_state_provider=lambda: asyncio.sleep(
+                0,
+                result={
+                    "ready": True,
+                    "supervisor_ready": True,
+                    "updater_version": 1,
+                },
+            ),
+        )
+        received: list[AgentUpdate] = []
+        with contextlib.suppress(Halt):
+            await client.run(
+                lambda _: asyncio.sleep(0),
+                on_agent_update=lambda item: asyncio.sleep(
+                    0, result=received.append(item)
+                ),
+            )
+        assert len(received) == 1
+        assert received[0].update_id == UUID(update_id)
+
 
 class TestInboundValidation:
     @pytest.mark.asyncio
@@ -270,6 +625,29 @@ class TestInboundValidation:
             json.dumps({"type": "error", "error_code": "boom"}),
             command_frame(type="status"),
             json.dumps({"type": "cancel", "command_id": "not-a-uuid"}),
+            json.dumps(
+                {
+                    "type": "agent_update",
+                    "update_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "release_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    "target_package_version": "1.2.3-1",
+                    "sha256": "not-a-digest",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "agent_update",
+                    "update_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "release_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    "target_package_version": "1.2.3-1",
+                    "sha256": "a" * 64,
+                    "expires_at": "2099-01-01T00:00:00Z",
+                    "shell": "true",
+                }
+            ),
             command_frame(priority="high"),
             command_frame(command_id="not-a-uuid"),
             command_frame(scan_mode="turbo"),

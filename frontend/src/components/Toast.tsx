@@ -8,7 +8,13 @@ type RaisedToast = {
   message: string
 }
 
-function ToastProvider({ children }: { children: ReactNode }) {
+function ToastProvider({
+  children,
+  duration = 5000,
+}: {
+  children: ReactNode
+  duration?: number
+}) {
   const [raised, setRaised] = useState<RaisedToast | null>(null)
 
   const show = useCallback((message: string) => {
@@ -19,7 +25,7 @@ function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider value={value}>
-      <Toast.Provider duration={5000}>
+      <Toast.Provider duration={duration}>
         {children}
         {raised && (
           <Toast.Root

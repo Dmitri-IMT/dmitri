@@ -333,9 +333,7 @@ class TestPruneLogs:
         remaining = [d for d in logs_dir.iterdir() if d.is_dir()]
         assert len(remaining) == 4
 
-    def test_failed_scan_survives_later_completed_scans(
-        self, tmp_path: Path
-    ) -> None:
+    def test_failed_scan_survives_later_completed_scans(self, tmp_path: Path) -> None:
         logs_dir = tmp_path / "logs"
         failed = self._make_run_dir(
             logs_dir, 1, "f1", parent_scan_id="scan-failed", terminated_by="error"
@@ -1019,10 +1017,14 @@ def test_mkdir_oserror_propagates(tmp_path, monkeypatch):
 
 
 def test_write_text_oserror_propagates(tmp_path, monkeypatch):
-    def _raise(self: Path, *args, **kwargs) -> None:
-        raise OSError("write boom")
+    original_open = Path.open
 
-    monkeypatch.setattr(Path, "write_text", _raise)
+    def _raise(self: Path, *args, **kwargs):
+        if self.name.endswith(".json"):
+            raise OSError("write boom")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _raise)
 
     payload = _make_payload()
     with pytest.raises(OSError):

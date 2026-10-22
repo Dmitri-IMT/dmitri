@@ -169,6 +169,7 @@ def test_fills_requested_scan_and_links_agent(
     provisioned_agent: Agent,
     agent_keypair,
     seeded_org: Org,
+    bearer_headers,
 ) -> None:
     private_key, _ = agent_keypair
     now = utc_now()
@@ -201,6 +202,7 @@ def test_ingest_persists_explicit_finding_issue_key(
     provisioned_agent: Agent,
     agent_keypair,
     seeded_org: Org,
+    bearer_headers,
 ) -> None:
     private_key, _ = agent_keypair
     now = utc_now()
@@ -249,6 +251,16 @@ def test_ingest_persists_explicit_finding_issue_key(
     assert finding_record.issue_key_ambiguous is False
     assert finding_record.confidence == "tentative"
     assert finding_record.evidence_observations_json[0]["condition_key"] == (
+        "ssh:weak-cipher"
+    )
+    read_response = client.get(
+        f"/api/v1/scans/{scan_id}",
+        headers=bearer_headers(seeded_org.id, "viewer"),
+    )
+    assert read_response.status_code == 200
+    read_finding = read_response.json()["findings"][0]
+    assert read_finding["issue_key"] == "ssh:weak-cipher"
+    assert read_finding["evidence_observations"][0]["condition_key"] == (
         "ssh:weak-cipher"
     )
 

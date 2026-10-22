@@ -241,7 +241,7 @@ def test_deadline_rechecked_after_tempdir_setup_before_spawn(
 
         def __enter__(self) -> str:
             directory = self._manager.__enter__()
-            monkeypatch.setattr(executor_module, "perf_counter", lambda: stage_deadline)
+            monkeypatch.setattr(executor_module, "perf_counter", lambda: float("inf"))
             return directory
 
         def __exit__(self, *args) -> None:
@@ -775,8 +775,9 @@ def test_timeout_kills_child_after_parent_exits(
         f"open({str(child_pid)!r}, 'w').write(str(child.pid)); "
         "import time; time.sleep(30)"
     )
+    timeout_s = 1.0
     now = time.monotonic()
-    deadline = now + 0.1
+    deadline = now + timeout_s
 
     def expire_after_child_starts() -> float:
         try:
@@ -791,7 +792,7 @@ def test_timeout_kills_child_after_parent_exits(
             tool=TargetedTool.SSH_AUDIT,
             argv=(sys.executable, "-c", script),
             report_mode="stdout",
-            timeout_s=0.1,
+            timeout_s=timeout_s,
         )
     )
 

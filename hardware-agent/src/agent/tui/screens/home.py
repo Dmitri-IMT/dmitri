@@ -10,6 +10,11 @@ from textual.widgets import Button, OptionList, Static
 from textual.widgets.option_list import Option
 
 from agent.paths import load_config
+from agent.scanner.scan_lock import (
+    ScanLease,
+    UpgradeInProgressError,
+    acquire_scan_lease,
+)
 from agent.scanner.workspace import write_scan_result
 from agent.tui.screens.base import DmitriScreen
 from agent.tui.screens.network import NetworkScreen
@@ -70,16 +75,33 @@ class HomeScreen(DmitriScreen):
         if result is None:
             return
         subnet, mode, nspi_submode = result
-        self.app.push_screen(
-            ScanProgressScreen(
-                subnet=subnet,
-                scan_mode=mode,
-                nspi_submode=nspi_submode,
-            ),
-            callback=self._on_scan_complete,
-        )
+        try:
+            lease = acquire_scan_lease()
+        except (OSError, UpgradeInProgressError) as exc:
+            self.notify(str(exc), severity="error")
+            return
+        self._pending_scan_lease: ScanLease | None = lease
+        try:
+            self.app.push_screen(
+                ScanProgressScreen(
+                    subnet=subnet,
+                    scan_mode=mode,
+                    nspi_submode=nspi_submode,
+                    scan_lease=lease,
+                ),
+                callback=self._on_scan_complete,
+            )
+        except BaseException:
+            self._release_scan_lease()
+            raise
 
     def _on_scan_complete(self, result) -> None:
+        try:
+            self._persist_scan_completion(result)
+        finally:
+            self._release_scan_lease()
+
+    def _persist_scan_completion(self, result) -> None:
         if result is None:
             return
 
@@ -131,6 +153,12 @@ class HomeScreen(DmitriScreen):
             self.app.push_screen(
                 ScanViewScreen(scan_path=self._last_scan_path, payload=payload)
             )
+
+    def _release_scan_lease(self) -> None:
+        lease = getattr(self, "_pending_scan_lease", None)
+        if lease is not None:
+            lease.close()
+            self._pending_scan_lease = None
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-view-full-scan":

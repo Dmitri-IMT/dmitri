@@ -6,7 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import update
-from sqlmodel import Session
+from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_engine
@@ -38,7 +38,9 @@ def touch_unless_revoked(
 
 
 def mark_connected(session: Session, agent_id: UUID, now: datetime) -> None:
-    agent = session.get(Agent, agent_id)
+    agent = session.exec(
+        select(Agent).where(Agent.id == agent_id).with_for_update()
+    ).first()
     if agent is None:
         return
     agent.connected_at = now
@@ -47,7 +49,9 @@ def mark_connected(session: Session, agent_id: UUID, now: datetime) -> None:
 
 
 def mark_disconnected(session: Session, agent_id: UUID) -> None:
-    agent = session.get(Agent, agent_id)
+    agent = session.exec(
+        select(Agent).where(Agent.id == agent_id).with_for_update()
+    ).first()
     if agent is None:
         return
     agent.connected_at = None

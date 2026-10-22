@@ -24,6 +24,10 @@ class Agent(SQLModel, table=True):
     connected_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTC_TIMESTAMP)
     target_subnet: str | None = None
+    observed_version: str | None = None
+    observed_package_version: str | None = None
+    version_observed_at: datetime | None = Field(default=None, sa_type=UTC_TIMESTAMP)
+    version_observed_session_id: UUID | None = None
 
 
 class AgentNonce(SQLModel, table=True):

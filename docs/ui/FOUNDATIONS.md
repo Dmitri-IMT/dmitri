@@ -76,6 +76,9 @@ not scale tokens even when the pixels match.
   word** — in a table cell and as a section heading alike. No chip, pill, tag, dot, badge,
   coloured text, coloured side bar or coloured card edge, anywhere. The API `Severity` union has
   four members — `critical`, `high`, `medium`, `low`.
+- **Never add coloured tags.** No chip, pill, tag or badge — a tinted, rounded label — for any
+  state: availability, status, counts, versions, anywhere in the app. State is a plain word or
+  sentence in `--ink` or `--ink-muted`.
 
 ## Spacing
 

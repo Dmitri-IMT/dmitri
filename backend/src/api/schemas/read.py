@@ -184,6 +184,7 @@ class FindingRead(BaseModel):
     service: str | None = None
     source: str | None = None
     source_script: str | None = None
+    issue_key: str | None = None
     cve_id: constr(pattern=r"^CVE-[0-9]{4}-[0-9]{4,}$") | None = None
     cvss_score: Annotated[float | None, Field(default=None, ge=0, le=10)]
     severity: Severity

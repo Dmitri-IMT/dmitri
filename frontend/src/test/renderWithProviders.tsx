@@ -21,7 +21,11 @@ function initialEntry(
 
 export function renderWithProviders(
   ui: ReactElement,
-  { route = '/', state }: { route?: string; state?: unknown } = {},
+  {
+    route = '/',
+    state,
+    toastDuration,
+  }: { route?: string; state?: unknown; toastDuration?: number } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -31,7 +35,7 @@ export function renderWithProviders(
     <MemoryRouter initialEntries={[initialEntry(route, state)]}>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          <ToastProvider>{ui}</ToastProvider>
+          <ToastProvider duration={toastDuration}>{ui}</ToastProvider>
         </SessionProvider>
       </QueryClientProvider>
     </MemoryRouter>,

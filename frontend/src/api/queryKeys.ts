@@ -42,6 +42,15 @@ export const queryKeys = {
     list: () => ['agents', 'list'] as const,
     detail: (agentId: string) => ['agents', 'detail', agentId] as const,
   },
+  agentUpdates: {
+    all: ['agent-updates'] as const,
+    availability: (agentId: string) =>
+      ['agent-updates', 'availability', agentId] as const,
+    history: (agentId: string) =>
+      ['agent-updates', 'history', agentId] as const,
+    operation: (updateId: string) =>
+      ['agent-updates', 'operation', updateId] as const,
+  },
   commands: {
     all: ['commands'] as const,
     detail: (commandId: string) => ['commands', 'detail', commandId] as const,

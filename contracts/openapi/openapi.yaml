@@ -1083,6 +1083,8 @@ paths:
         | `status` | Pi → backend | `AgentStatusFrame` |
         | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
         | `error` | backend → Pi | `AgentErrorFrame` |
+        | `update_session` | backend → Pi, when `scan_finalization_v1` is negotiated | `UpdateSessionFrame` |
+        | `scan_status_ack` | backend → Pi, after a terminal command status commits | `ScanStatusAckFrame` |
 
         Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
 
@@ -1239,6 +1241,271 @@ paths:
       responses:
         '204':
           $ref: '#/components/responses/CorsPreflightNoContent'
+
+  /api/v1/agents/{agent_id}/update-protocol:
+    get:
+      tags:
+        - agents
+      summary: Read supported device protocol
+      description: Signed read by the agent itself. Reports implemented protocol versions and capabilities without initiating an update.
+      operationId: getAgentUpdateProtocol
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      responses:
+        '200':
+          description: Supported agent protocol features.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentProtocolSupport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/agents/{agent_id}/updates/availability:
+    get:
+      tags: [agents]
+      summary: Read update availability
+      operationId: getAgentUpdateAvailability
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Current catalogue and device readiness projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateAvailability'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    options:
+      tags: [agents]
+      operationId: optionsAgentUpdateAvailability
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '204': { $ref: '#/components/responses/CorsPreflightNoContent' }
+
+  /api/v1/agent-updates/{update_id}/claim:
+    post:
+      tags: [agents]
+      summary: Claim a requested agent update
+      description: Signed device request. Commits one immutable, deadline-bounded receipt before authorizing preparation; retries return the same receipt.
+      operationId: claimAgentUpdate
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdateClaimRequest'
+      responses:
+        '200':
+          description: Existing or newly committed claim receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateClaimReceipt'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Claim rejected or current session replaced.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '410':
+          description: Claim deadline expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+  /api/v1/agent-updates/{update_id}/events:
+    post:
+      tags: [agents]
+      summary: Record an agent update event
+      description: Signed device request with a strict increasing sequence. Persists only bounded evidence; identical retries acknowledge the stored sequence.
+      operationId: reportAgentUpdateEvent
+      security:
+        - AgentSignatureAuth: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/DeviceIdHeader'
+        - $ref: '#/components/parameters/TimestampHeader'
+        - $ref: '#/components/parameters/NonceHeader'
+        - $ref: '#/components/parameters/BodySha256Header'
+        - $ref: '#/components/parameters/SignatureHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdateEventRequest'
+      responses:
+        '200':
+          description: Event is durably committed or an identical sequence was already committed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateEventAck'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Event sequence or transition rejected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '410':
+          description: First mutation authorization deadline expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UpdateProtocolErrorResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+  /api/v1/agents/{agent_id}/updates:
+    get:
+      tags: [agents]
+      summary: List update history
+      operationId: listAgentUpdates
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: [string, 'null'], format: uuid }
+      responses:
+        '200':
+          description: Newest operations first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentUpdateHistoryPage'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    options:
+      tags: [agents]
+      operationId: optionsAgentUpdates
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '204': { $ref: '#/components/responses/CorsPreflightNoContent' }
+    post:
+      tags: [agents]
+      summary: Request a manual agent update
+      operationId: requestAgentUpdate
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdateRequest'
+      responses:
+        '202':
+          description: Intent committed and sent once to the captured session.
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateOperationView'
+        '200':
+          description: Existing operation returned for the same key and body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateOperationView'
+        '401': { $ref: '#/components/responses/AgentUpdateUnauthorized' }
+        '403': { $ref: '#/components/responses/AgentUpdateForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/AgentUpdateConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AgentUpdateUnavailable' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+  /api/v1/agent-updates/{update_id}:
+    get:
+      tags: [agents]
+      summary: Read an update operation
+      operationId: getAgentUpdate
+      security:
+        - FrontendBearerAuth: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Update operation state and audit timestamps.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateOperationView'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+    options:
+      tags: [agents]
+      operationId: optionsAgentUpdate
+      security: []
+      parameters:
+        - name: update_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { $ref: '#/components/responses/CorsPreflightNoContent' }
 
   /api/v1/agents/{agent_id}/revoke:
     post:
@@ -2265,6 +2532,30 @@ components:
                   message: Request body validation failed.
                   details:
                     field: hosts[0].ip
+    AgentUpdateConflict:
+      description: The update request conflicts with current device state or prior idempotency-key use.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateConflictResponse'
+    AgentUpdateUnavailable:
+      description: The device or release catalogue is currently unavailable for an update.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateUnavailableResponse'
+    AgentUpdateForbidden:
+      description: The caller lacks permission or the device is revoked.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateForbiddenResponse'
+    AgentUpdateUnauthorized:
+      description: Authentication is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateUnauthorizedResponse'
     DeviceBusyError:
       description: |
         The Pi is already `running` or `uploading` a scan — one scan at a time per agent (B6).
@@ -4593,6 +4884,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailableSubnet'
+        observed_version:
+          type:
+            - string
+            - 'null'
+        observed_package_version:
+          type:
+            - string
+            - 'null'
+        version_observed_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
         target_subnet:
           type:
             - string
@@ -4603,7 +4907,585 @@ components:
             - string
             - 'null'
           format: uuid
+        active_update_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+    UpdateSessionFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - session_id
+        - protocol_version
+        - capabilities
+      properties:
+        type:
+          type: string
+          const: update_session
+        session_id:
+          type: string
+          format: uuid
+        protocol_version:
+          type: integer
+          const: 1
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [scan_finalization_v1, agent_update_v1]
+    ScanStatusAckFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - session_id
+        - command_id
+        - status
+        - has_results
+      properties:
+        type:
+          type: string
+          const: scan_status_ack
+        session_id:
+          type: string
+          format: uuid
+        command_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - done
+            - failed
+            - cancelled
+            - expired
+        has_results:
+          type: boolean
 
+    AgentProtocolSupport:
+      type: object
+      additionalProperties: false
+      required:
+        - protocol_versions
+        - capabilities
+      properties:
+        protocol_versions:
+          type: array
+          items:
+            type: integer
+            const: 1
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [scan_finalization_v1, agent_update_v1]
+
+    AgentUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [release_id, expected_observed_version]
+      properties:
+        release_id: { type: string, format: uuid }
+        expected_observed_version: { type: string, minLength: 1, maxLength: 128 }
+    AgentUpdateClaimRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id, release_id, target_package_version, sha256]
+      properties:
+        session_id: { type: string, format: uuid }
+        release_id: { type: string, format: uuid }
+        target_package_version: { type: string, minLength: 1, maxLength: 128 }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    AgentUpdateClaimReceipt:
+      type: object
+      additionalProperties: false
+      required: [update_id, session_id, release_id, target_package_version, sha256, required_updater_version, authorization_deadline]
+      properties:
+        update_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        release_id: { type: string, format: uuid }
+        target_package_version: { type: string }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        required_updater_version: { type: integer, minimum: 1 }
+        authorization_deadline: { type: string, format: date-time }
+    AgentUpdateEvidence:
+      type: object
+      additionalProperties: false
+      description: Closed, bounded health evidence; logs and configuration are not accepted.
+      properties:
+        package_status:
+          anyOf:
+            - { type: string, const: configured }
+            - { type: 'null' }
+        service_active:
+          anyOf:
+            - { type: boolean }
+            - { type: 'null' }
+        health_check:
+          anyOf:
+            - { type: string, enum: [passed, failed] }
+            - { type: 'null' }
+    AgentUpdateEventRequest:
+      type: object
+      additionalProperties: false
+      required: [sequence, phase, session_id, occurred_at]
+      properties:
+        sequence: { type: integer, exclusiveMinimum: 0 }
+        phase:
+          type: string
+          enum: [requested, preparing, installing, verifying, awaiting_confirmation, recovering, succeeded, failed, expired, rolled_back, needs_intervention]
+        local_outcome:
+          anyOf:
+            - { type: string, enum: [succeeded, failed, rolled_back, needs_intervention] }
+            - { type: 'null' }
+        observed_version:
+          anyOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: 'null' }
+        package_version:
+          anyOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: 'null' }
+        invocation_id:
+          anyOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        session_id: { type: string, format: uuid }
+        occurred_at: { type: string, format: date-time }
+        error_code:
+          anyOf:
+            - { type: string, enum: [device_busy, session_replaced, request_expired, release_not_allowed, version_conflict, metadata_untrusted, metadata_expired, artifact_mismatch, unsupported_platform, prerequisite_missing, insufficient_resources, package_manager_busy, authorization_expired, install_failed, local_health_failed, recovery_failed, state_corrupt] }
+            - { type: 'null' }
+        evidence:
+          anyOf:
+            - { $ref: '#/components/schemas/AgentUpdateEvidence' }
+            - { type: 'null' }
+    AgentUpdateEventAck:
+      type: object
+      additionalProperties: false
+      required: [ack_sequence]
+      properties:
+        ack_sequence: { type: integer, exclusiveMinimum: 0 }
+    UpdateProtocolErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          enum: [not_found, device_revoked, release_not_allowed, artifact_mismatch, session_replaced, request_expired, authorization_expired, claim_state_invalid, illegal_transition, sequence_conflict, sequence_out_of_order, claim_required, local_health_evidence_required, hello_confirmation_required, recovery_required, invalid_event_time, invalid_event_combination]
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+    UpdateProtocolErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/UpdateProtocolErrorDetail' }
+    ReleaseSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - release_id
+        - package
+        - upstream_version
+        - package_version
+        - architecture
+        - suite
+        - sha256
+        - size_bytes
+        - required_protocol_version
+        - required_updater_version
+        - published_at
+        - release_notes
+      properties:
+        release_id: { type: string, format: uuid }
+        package: { type: string, const: hardware-agent }
+        upstream_version: { type: string }
+        package_version: { type: string }
+        architecture: { type: string }
+        suite: { type: string }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        size_bytes: { type: integer, exclusiveMinimum: 0 }
+        required_protocol_version: { type: integer, minimum: 1 }
+        required_updater_version: { type: integer, minimum: 1 }
+        published_at: { type: string, format: date-time }
+        release_notes: { type: string, maxLength: 4000 }
+    AgentUpdateAvailability:
+      type: object
+      additionalProperties: false
+      required: [availability, catalogue_checked_at, catalogue_valid_until, device_readiness]
+      properties:
+        availability:
+          type: string
+          enum: [available, up_to_date, unknown, unavailable]
+        release:
+          anyOf:
+            - $ref: '#/components/schemas/ReleaseSummary'
+            - type: 'null'
+        catalogue_checked_at: { type: [string, 'null'], format: date-time }
+        catalogue_valid_until: { type: [string, 'null'], format: date-time }
+        device_readiness:
+          type: string
+          enum: [ready, offline, revoked, bootstrap_required, busy, unknown]
+    UpdateOperationView:
+      type: object
+      additionalProperties: false
+      required:
+        - update_id
+        - agent_id
+        - release_id
+        - previous_version
+        - previous_package_version
+        - target_version
+        - target_package_version
+        - observed_version
+        - observed_package_version
+        - phase
+        - local_outcome
+        - error_code
+        - actor_display_snapshot
+        - requested_at
+        - claimed_at
+        - local_completed_at
+        - confirmed_at
+        - last_contact_at
+      properties:
+        update_id: { type: string, format: uuid }
+        agent_id: { type: string, format: uuid }
+        release_id: { type: string, format: uuid }
+        previous_version: { type: [string, 'null'] }
+        previous_package_version: { type: [string, 'null'] }
+        target_version: { type: string }
+        target_package_version: { type: string }
+        observed_version: { type: [string, 'null'] }
+        observed_package_version: { type: [string, 'null'] }
+        phase:
+          type: string
+          enum: [requested, preparing, installing, verifying, awaiting_confirmation, recovering, succeeded, failed, expired, rolled_back, needs_intervention]
+        local_outcome:
+          type: [string, 'null']
+          enum: [succeeded, failed, rolled_back, needs_intervention, null]
+        error_code:
+          type: [string, 'null']
+          enum: [device_busy, session_replaced, request_expired, release_not_allowed, version_conflict, metadata_untrusted, metadata_expired, artifact_mismatch, unsupported_platform, prerequisite_missing, insufficient_resources, package_manager_busy, authorization_expired, install_failed, local_health_failed, recovery_failed, state_corrupt, null]
+        actor_display_snapshot: { type: string }
+        requested_at: { type: string, format: date-time }
+        claimed_at: { type: [string, 'null'], format: date-time }
+        local_completed_at: { type: [string, 'null'], format: date-time }
+        confirmed_at: { type: [string, 'null'], format: date-time }
+        last_contact_at: { type: [string, 'null'], format: date-time }
+    AgentUpdateHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UpdateOperationView' }
+        next_cursor: { type: [string, 'null'] }
+
+    UpdateBootstrapRequiredError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: bootstrap_required
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateBootstrapRequiredError
+    UpdateBusyError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: device_busy
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateBusyError
+    UpdateCatalogUnavailableError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: release_check_unavailable
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateCatalogUnavailableError
+    UpdateConflictResponse:
+      properties:
+        error:
+          oneOf:
+          - $ref: '#/components/schemas/UpdateBusyError'
+          - $ref: '#/components/schemas/UpdateVersionConflictError'
+          - $ref: '#/components/schemas/UpdateReleaseNotAllowedError'
+          - $ref: '#/components/schemas/UpdateIdempotencyConflictError'
+          title: Error
+          discriminator:
+            propertyName: code
+            mapping:
+              device_busy: '#/components/schemas/UpdateBusyError'
+              idempotency_conflict: '#/components/schemas/UpdateIdempotencyConflictError'
+              release_not_allowed: '#/components/schemas/UpdateReleaseNotAllowedError'
+              version_conflict: '#/components/schemas/UpdateVersionConflictError'
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: UpdateConflictResponse
+    UpdateForbiddenError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: forbidden
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateForbiddenError
+    UpdateForbiddenResponse:
+      properties:
+        error:
+          oneOf:
+          - $ref: '#/components/schemas/UpdateRevokedError'
+          - $ref: '#/components/schemas/UpdateForbiddenError'
+          title: Error
+          discriminator:
+            propertyName: code
+            mapping:
+              device_revoked: '#/components/schemas/UpdateRevokedError'
+              forbidden: '#/components/schemas/UpdateForbiddenError'
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: UpdateForbiddenResponse
+    UpdateIdempotencyConflictError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: idempotency_conflict
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateIdempotencyConflictError
+    UpdateOfflineError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: device_offline
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateOfflineError
+    UpdateReleaseNotAllowedError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: release_not_allowed
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateReleaseNotAllowedError
+    UpdateRevokedError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: device_revoked
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateRevokedError
+    UpdateUnauthorizedError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: unauthorized
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateUnauthorizedError
+    UpdateUnauthorizedResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/UpdateUnauthorizedError'
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: UpdateUnauthorizedResponse
+    UpdateUnavailableResponse:
+      properties:
+        error:
+          oneOf:
+          - $ref: '#/components/schemas/UpdateOfflineError'
+          - $ref: '#/components/schemas/UpdateBootstrapRequiredError'
+          - $ref: '#/components/schemas/UpdateCatalogUnavailableError'
+          title: Error
+          discriminator:
+            propertyName: code
+            mapping:
+              bootstrap_required: '#/components/schemas/UpdateBootstrapRequiredError'
+              device_offline: '#/components/schemas/UpdateOfflineError'
+              release_check_unavailable: '#/components/schemas/UpdateCatalogUnavailableError'
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: UpdateUnavailableResponse
+    UpdateVersionConflictError:
+      properties:
+        message:
+          type: string
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+        code:
+          type: string
+          const: version_conflict
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      - details
+      - code
+      title: UpdateVersionConflictError
+    AgentUpdateFrame:
+      type: object
+      additionalProperties: false
+      required:
+      - type
+      - update_id
+      - session_id
+      - release_id
+      - target_package_version
+      - sha256
+      - expires_at
+      properties:
+        type:
+          type: string
+          const: agent_update
+        update_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        release_id:
+          type: string
+          format: uuid
+        target_package_version:
+          type: string
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expires_at:
+          type: string
+          format: date-time
+      description: Backend ? Pi. Delivers one committed update intent to the captured WebSocket session.
     AgentSummary:
       type: object
       additionalProperties: false
@@ -4730,6 +5612,39 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailableSubnet'
+        package_version:
+          type:
+            - string
+            - 'null'
+        updater_version:
+          type:
+            - string
+            - 'null'
+        os_suite:
+          type:
+            - string
+            - 'null'
+        architecture:
+          type:
+            - string
+            - 'null'
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [scan_finalization_v1, agent_update_v1]
+          default: []
+        update_context:
+          anyOf:
+            - $ref: '#/components/schemas/AgentUpdateHelloContext'
+            - type: 'null'
+    AgentUpdateHelloContext:
+      type: object
+      additionalProperties: false
+      required: [update_id, invocation_id]
+      properties:
+        update_id: { type: string, format: uuid }
+        invocation_id: { type: string, format: uuid }
     AgentCommandFrame:
       type: object
       additionalProperties: false
@@ -5288,6 +6203,10 @@ components:
             - type: string
             - type: 'null'
         source_script:
+          anyOf:
+            - type: string
+            - type: 'null'
+        issue_key:
           anyOf:
             - type: string
             - type: 'null'

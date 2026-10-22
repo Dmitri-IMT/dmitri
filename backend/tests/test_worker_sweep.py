@@ -69,9 +69,12 @@ def _seed_command(
 def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
     session = object()
     sweep_calls: list[dict] = []
+    expiry_calls: list[dict] = []
     enrichment_calls: list[tuple] = []
+    call_order: list[str] = []
 
     def _fake_sweep(sess, *, now, grace_seconds=None, agent_id=None):
+        call_order.append("sweep")
         sweep_calls.append(
             {
                 "session": sess,
@@ -82,12 +85,19 @@ def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
         )
         return 0
 
+    def _fake_expiry(sess, *, now, batch_size):
+        call_order.append("expiry")
+        expiry_calls.append({"session": sess, "now": now, "batch_size": batch_size})
+        return 0
+
     def _fake_enrichment(sess, *, batch_size, client=None):
+        call_order.append("enrichment")
         enrichment_calls.append((sess, batch_size))
         return 4
 
     monkeypatch.setattr(worker_module, "get_session", lambda: iter([session]))
     monkeypatch.setattr(worker_module, "sweep_stale_commands", _fake_sweep)
+    monkeypatch.setattr(worker_module, "expire_unclaimed_updates", _fake_expiry)
     monkeypatch.setattr(
         worker_module, "process_pending_enrichment_jobs", _fake_enrichment
     )
@@ -97,6 +107,11 @@ def test_run_worker_once_calls_global_sweep_before_enrichment(monkeypatch):
     assert sweep_calls[0]["session"] is session
     assert sweep_calls[0]["agent_id"] is None
     assert sweep_calls[0]["now"].tzinfo is not None
+    assert len(expiry_calls) == 1
+    assert expiry_calls[0]["session"] is session
+    assert expiry_calls[0]["batch_size"] == 100
+    assert expiry_calls[0]["now"].tzinfo is not None
+    assert call_order == ["sweep", "expiry", "enrichment"]
     assert enrichment_calls == [(session, 9)]
 
 

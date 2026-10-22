@@ -1,4 +1,4 @@
-﻿# Design — Qualidade da evidência dos achados
+# Design — Qualidade da evidência dos achados
 
 Status: aprovado pelo usuário em 2026-10-10, ao solicitar avanço após revisar a proposta e a prévia · Entrega A
 
@@ -231,12 +231,3 @@ Acceptance mapping: **A01–A03** negative/reference/mixed results; **A04–A06*
 - Preserve existing severity grouping, details, AI control, report menu and technical JSON flow.
 - Architecture field details remain subject to the approved `ARCHITECTURE.md` / `INTEGRATION.md`; if those documents change enum or summary names, update this spec before implementation.
 - The preview is a local, renderizable HTML file using the real Inter Variable and Geist Mono Variable font assets from `frontend/node_modules`. It is a static browser preview rather than a published Artifact. It is optimized for the 1440px desktop target; mobile is not a product requirement. Human visual approval remains pending.
-
-
-
-
-
-
-
-
-

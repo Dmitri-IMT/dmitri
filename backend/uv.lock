@@ -117,9 +117,11 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "pymodbus" },
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "ssh-audit" },
 ]
 
 [package.metadata]
@@ -133,12 +135,14 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.6.0" },
     { name = "pydantic-settings", specifier = ">=2.2.1" },
     { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "pymodbus", marker = "extra == 'dev'", specifier = "==3.13.1" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pyyaml", marker = "extra == 'dev'" },
     { name = "reportlab", specifier = ">=4.2" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "sqlmodel", specifier = ">=0.0.21" },
+    { name = "ssh-audit", marker = "extra == 'dev'", specifier = "==3.9.0" },
     { name = "uvicorn", specifier = ">=0.23.2" },
     { name = "websockets", specifier = ">=13" },
 ]
@@ -1026,6 +1030,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pymodbus"
+version = "3.13.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/e4/68aa328d8c07583b1fe382f231d614bc1ebf3a86aa09db1a9c045c33c1df/pymodbus-3.13.1.tar.gz", hash = "sha256:7a74ea0a4eb4895f518b34de32915ba4fde216576e09deaf735a279a9281af4f", size = 166178, upload-time = "2026-06-13T17:02:09.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/84/cdd3f6af834dac9e3bfaeca1f37c4dbfd305943305670c48499950e4e1cd/pymodbus-3.13.1-py3-none-any.whl", hash = "sha256:820167a9c6a13d698d7ff49e8420f8fbbdd8fec3f75aacd46a35f4ab9a000144", size = 166529, upload-time = "2026-06-13T17:02:08.374Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1203,6 +1216,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/68/ee/22a0559283c3cf6048678e787ed5d4959dcd00dedd8ba4567eeae684eeb1/sqlmodel-0.0.39.tar.gz", hash = "sha256:23d8e50a8d8ee936032ed79c55023a5d618dd6bc3c510bbf4909d1a7a605a570", size = 91057, upload-time = "2026-06-25T13:01:38.475Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/7d/b9813a582d4eb310be35e1fc7dfaae71207d7b62e9e53be314ebd251b53b/sqlmodel-0.0.39-py3-none-any.whl", hash = "sha256:90ebe92ce5cc11d7fff8dc7cb594790a102333c8fe7c14865254f6fc5c939795", size = 29680, upload-time = "2026-06-25T13:01:37.494Z" },
+]
+
+[[package]]
+name = "ssh-audit"
+version = "3.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/95/0dc036428ef8d76e2c812cbec9e69c2020230da32ea0e699908735894a2f/ssh_audit-3.9.0.tar.gz", hash = "sha256:f1225d0364b3cb61c7dfb1f5065a6958dbb814d98b2c1dd2a779ba2cdef41f61", size = 133244, upload-time = "2026-07-04T21:57:10.445Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/79/ce022332cf59f0eb2e1b8ff6cdab3f80502449fdf3c053f05191a5a87326/ssh_audit-3.9.0-py3-none-any.whl", hash = "sha256:3dad48d4678e0de31f6332cc7674f9d7dd1805f86babf3796f41c2fd879cb812", size = 131886, upload-time = "2026-07-04T21:57:06.076Z" },
 ]
 
 [[package]]

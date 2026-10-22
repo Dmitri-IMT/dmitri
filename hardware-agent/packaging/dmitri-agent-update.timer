@@ -1,10 +1,11 @@
 [Unit]
-Description=Daily check for a hardware-agent package upgrade
+Description=Daily check for trusted package metadata
 
 [Timer]
 OnCalendar=daily
 Persistent=true
 RandomizedDelaySec=1h
+Unit=dmitri-agent-update-check.service
 
 [Install]
 WantedBy=timers.target

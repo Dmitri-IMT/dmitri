@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ def main() -> None:
         _run_tui()
     elif args[0] == "agent":
         _run_agent(args[1:])
+    elif args == ["health", "--json"]:
+        _run_health()
     elif args == ["provision"]:
         from agent.transport.provision import main as provision
 
@@ -23,10 +26,52 @@ def main() -> None:
     else:
         print(f"Unknown command: {args[0]}", file=sys.stderr)
         print(
-            "Usage: dmitri [start|provision|agent [<mode> [<nspi-submode>] <subnet>]]",
+            "Usage: dmitri [start|health --json|provision|agent "
+            "[<mode> [<nspi-submode>] <subnet>]]",
             file=sys.stderr,
         )
         raise SystemExit(2)
+
+
+def _run_health() -> None:
+    from importlib.metadata import PackageNotFoundError
+
+    result: dict[str, object] = {
+        "ok": False,
+        "imports": False,
+        "version": None,
+        "config_readable": False,
+        "results_directory_accessible": False,
+    }
+    try:
+        from agent import config  # noqa: F401
+        from agent.normalize import contracts  # noqa: F401
+        from agent.paths import default_results_dir, load_config
+        from agent.scanner import runner  # noqa: F401
+        from agent.version import installed_version
+
+        result["imports"] = True
+        try:
+            result["version"] = installed_version()
+        except PackageNotFoundError:
+            result["version"] = "unknown"
+        configured = load_config()
+        result["config_readable"] = True
+        directory = Path(
+            configured.results_dir if configured is not None else default_results_dir()
+        )
+        result["results_directory_accessible"] = directory.is_dir() and os.access(
+            directory, os.R_OK | os.W_OK
+        )
+    except Exception:
+        pass
+    result["ok"] = all(
+        result[key]
+        for key in ("imports", "config_readable", "results_directory_accessible")
+    ) and result["version"] not in (None, "unknown")
+    print(json.dumps(result, separators=(",", ":")))
+    if not result["ok"]:
+        raise SystemExit(20)
 
 
 def _check_nmap() -> bool:

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
+import httpx
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -59,12 +60,59 @@ class AvailableSubnet(BaseModel):
     is_default_route: bool
 
 
+class AgentUpdateHelloContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    update_id: UUID
+    invocation_id: UUID
+
+
 class AgentHello(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["hello"] = "hello"
     agent_version: str
     available_subnets: list[AvailableSubnet]
+    capabilities: list[str] | None = None
+    updater_version: str | None = None
+    package_version: str | None = None
+    os_suite: str | None = None
+    architecture: str | None = None
+    update_context: AgentUpdateHelloContext | None = None
+
+
+class UpdateSession(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["update_session"]
+    session_id: UUID
+    protocol_version: Literal[1]
+    capabilities: list[Literal["scan_finalization_v1", "agent_update_v1"]]
+
+
+class AgentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["agent_update"]
+    update_id: UUID
+    session_id: UUID
+    release_id: UUID
+    target_package_version: constr(min_length=1, max_length=128)
+    sha256: constr(pattern=r"^[0-9a-f]{64}$")
+    expires_at: datetime
+
+    @model_validator(mode="after")
+    def validate_deadline(self) -> AgentUpdate:
+        if self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
+        return self
+
+
+class ScanStatusAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["scan_status_ack"]
+    session_id: UUID
+    command_id: UUID
+    status: Literal["done", "failed", "cancelled", "expired"]
+    has_results: bool
 
 
 class NspiOptions(BaseModel):
@@ -155,7 +203,7 @@ class AgentProgress(BaseModel):
 
 
 InboundCommandFrame = Annotated[
-    AgentCommand | AgentCancel,
+    AgentCommand | AgentCancel | AgentUpdate | UpdateSession | ScanStatusAck,
     Field(discriminator="type"),
 ]
 _INBOUND_COMMAND_FRAME_ADAPTER = TypeAdapter(InboundCommandFrame)
@@ -202,6 +250,10 @@ class CommandChannelClient:
             [], list[AvailableSubnetInfo]
         ] = detect_available_subnets,
         agent_version: str | None = None,
+        protocol_probe: Callable[[], bool] | None = None,
+        update_state_provider: (
+            Callable[[], Awaitable[dict[str, Any] | None]] | None
+        ) = None,
     ) -> None:
         self._device_id = str(config.device_id)
         self._private_key = config.private_key
@@ -211,6 +263,14 @@ class CommandChannelClient:
         self._sleep = sleep
         self._detect_subnets = detect_subnets
         self._agent_version = agent_version or installed_version()
+        self._protocol_probe = protocol_probe
+        self._protocol_supported = False
+        self._protocol_negotiated = False
+        self._probe_capabilities: set[str] = set()
+        self._agent_update_ready = False
+        self._update_state: dict[str, Any] = {}
+        self._update_state_provider = update_state_provider
+        self._session_id: UUID | None = None
         self._send_lock = asyncio.Lock()
         self._socket: Any = None
         self._parked_reason: ParkReason | None = None
@@ -226,6 +286,25 @@ class CommandChannelClient:
     def parked_reason(self) -> ParkReason | None:
         return self._parked_reason
 
+    @property
+    def supports_scan_finalization(self) -> bool:
+        return "scan_finalization_v1" in self._probe_capabilities
+
+    @property
+    def supports_agent_updates(self) -> bool:
+        return (
+            "agent_update_v1" in self._probe_capabilities and self._agent_update_ready
+        )
+
+    def set_update_state_provider(
+        self, provider: Callable[[], Awaitable[dict[str, Any] | None]]
+    ) -> None:
+        self._update_state_provider = provider
+
+    @property
+    def session_id(self) -> UUID | None:
+        return self._session_id
+
     async def run(
         self,
         on_command: Callable[[AgentCommand], Awaitable[None]],
@@ -233,6 +312,8 @@ class CommandChannelClient:
         on_parked: Callable[[], Awaitable[None]] | None = None,
         *,
         on_cancel: Callable[[UUID], Awaitable[None]] | None = None,
+        on_scan_status_ack: Callable[[ScanStatusAck], Awaitable[None]] | None = None,
+        on_agent_update: Callable[[AgentUpdate], Awaitable[None]] | None = None,
     ) -> None:
         attempt = 0
         while not self._closed:
@@ -244,7 +325,13 @@ class CommandChannelClient:
                 continue
             self._ready = False
             try:
-                await self._serve_once(on_command, on_cancel, on_connected)
+                await self._serve_once(
+                    on_command,
+                    on_cancel,
+                    on_connected,
+                    on_scan_status_ack,
+                    on_agent_update,
+                )
             except _TRANSPORT_ERRORS as exc:
                 if reason := _park_reason(exc):
                     self._set_parked(reason)
@@ -294,18 +381,70 @@ class CommandChannelClient:
         on_command: Callable[[AgentCommand], Awaitable[None]],
         on_cancel: Callable[[UUID], Awaitable[None]] | None,
         on_connected: Callable[[], Awaitable[None]] | None,
+        on_scan_status_ack: Callable[[ScanStatusAck], Awaitable[None]] | None,
+        on_agent_update: Callable[[AgentUpdate], Awaitable[None]] | None,
     ) -> None:
+        await asyncio.to_thread(self._probe_protocol)
+        self._protocol_negotiated = bool(self._probe_capabilities)
+        self._session_id = None
+        self._update_state = {}
+        self._agent_update_ready = False
+        if self._update_state_provider is not None:
+            try:
+                state = await self._update_state_provider()
+            except (OSError, ValueError, TypeError):
+                state = None
+            if isinstance(state, dict):
+                self._update_state = state
+                self._agent_update_ready = bool(
+                    "agent_update_v1" in self._probe_capabilities
+                    and state.get("ready") is True
+                    and state.get("supervisor_ready") is True
+                    and type(state.get("updater_version")) is int
+                    and state.get("updater_version") == 1
+                    and state.get("scan_checkpoint_pending") is not True
+                )
         self._socket = await self._connect(self._url, self._proof_headers())
-        await self._send(self._hello())
+        hello = self._hello()
+        advertised_capabilities = set(hello.capabilities or [])
+        await self._send(hello)
         self._ready = True
         LOGGER.info("command channel connected")
+        if self._protocol_negotiated:
+            raw_session = await self._socket.recv()
+            frame = _parse_command(raw_session)
+            if not isinstance(frame, UpdateSession) or not (
+                advertised_capabilities.issubset(set(frame.capabilities))
+            ):
+                LOGGER.warning(
+                    "invalid command session: raw_type=%s frame=%s capabilities=%s",
+                    type(raw_session).__name__,
+                    type(frame).__name__,
+                    sorted(advertised_capabilities),
+                )
+                raise OSError("invalid finalization session")
+            self._session_id = frame.session_id
         if on_connected is not None:
             await on_connected()
         if self._parked_reason is not None:
             return
         while True:
             frame = _parse_command(await self._socket.recv())
-            if isinstance(frame, AgentCancel):
+            if isinstance(frame, UpdateSession):
+                if frame.session_id != self._session_id:
+                    raise OSError("command session changed")
+            elif isinstance(frame, ScanStatusAck):
+                if on_scan_status_ack is not None:
+                    await on_scan_status_ack(frame)
+            elif isinstance(frame, AgentUpdate):
+                if (
+                    self.supports_agent_updates
+                    and frame.session_id == self._session_id
+                    and frame.expires_at > datetime.now(UTC)
+                    and on_agent_update is not None
+                ):
+                    await on_agent_update(frame)
+            elif isinstance(frame, AgentCancel):
                 if on_cancel is not None:
                     await on_cancel(frame.command_id)
             elif frame is not None:
@@ -317,6 +456,27 @@ class CommandChannelClient:
         )
 
     def _hello(self) -> AgentHello:
+        capabilities = []
+        if self.supports_scan_finalization:
+            capabilities.append("scan_finalization_v1")
+        if self.supports_agent_updates:
+            capabilities.append("agent_update_v1")
+        update_fields = {}
+        if (
+            self._protocol_negotiated
+            and self._update_state.get("supervisor_ready") is True
+        ):
+            runtime_version = self._update_state.get("updater_version")
+            context = self._update_state.get("update_context")
+            update_fields = {
+                "updater_version": (
+                    str(runtime_version) if type(runtime_version) is int else None
+                ),
+                "package_version": self._update_state.get("package_version"),
+                "os_suite": self._update_state.get("os_suite"),
+                "architecture": self._update_state.get("architecture"),
+                "update_context": context,
+            }
         return AgentHello(
             agent_version=self._agent_version,
             available_subnets=[
@@ -327,14 +487,77 @@ class CommandChannelClient:
                 )
                 for found in self._detect_subnets()
             ],
+            capabilities=capabilities or None,
+            **update_fields,
         )
+
+    def _probe_protocol(self) -> bool:
+        self._probe_capabilities = set()
+        self._protocol_supported = False
+        if self._protocol_probe is not None:
+            result = self._protocol_probe()
+            self._probe_capabilities = (
+                set(result)
+                if isinstance(result, (list, set, tuple))
+                else ({"scan_finalization_v1"} if result else set())
+            )
+            self._protocol_supported = (
+                "scan_finalization_v1" in self._probe_capabilities
+            )
+            return self._protocol_supported
+        if self._connect is not _default_connect:
+            return False
+        path = f"/api/v1/agents/{self._device_id}/update-protocol"
+        body = b""
+        headers = build_device_signature_headers(
+            "GET", path, body, self._device_id, self._private_key
+        )
+        try:
+            response = httpx.get(
+                self._url.replace("wss://", "https://")
+                .replace("ws://", "http://")
+                .split("/api/v1/agents/", 1)[0]
+                + path,
+                headers=headers,
+                timeout=10.0,
+                follow_redirects=False,
+            )
+        except httpx.TransportError as exc:
+            raise OSError("protocol probe unavailable") from exc
+        if response.status_code == 404:
+            return False
+        if response.status_code != 200:
+            raise OSError("protocol probe unavailable")
+        try:
+            payload = response.json()
+            if (
+                not isinstance(payload, dict)
+                or set(payload) != {"protocol_versions", "capabilities"}
+                or not isinstance(payload["protocol_versions"], list)
+                or any(type(item) is not int for item in payload["protocol_versions"])
+                or not isinstance(payload["capabilities"], list)
+                or any(not isinstance(item, str) for item in payload["capabilities"])
+            ):
+                raise ValueError
+        except (ValueError, TypeError) as exc:
+            raise OSError("invalid protocol probe response") from exc
+        if 1 not in payload["protocol_versions"]:
+            return False
+        self._probe_capabilities = set(payload["capabilities"]) & {
+            "scan_finalization_v1",
+            "agent_update_v1",
+        }
+        self._protocol_supported = "scan_finalization_v1" in self._probe_capabilities
+        return self._protocol_supported
 
     async def _send(self, frame: BaseModel) -> None:
         async with self._send_lock:
             socket = self._socket
             if socket is None:
                 raise _NotConnected("command channel is not connected")
-            await socket.send(frame.model_dump_json())
+            await socket.send(
+                frame.model_dump_json(exclude_none=isinstance(frame, AgentHello))
+            )
 
     async def _drop_socket(self) -> None:
         socket, self._socket = self._socket, None

@@ -28,6 +28,7 @@ def test_list_findings_filtered_by_host_id(
     finding = body["data"][0]
     assert finding["finding_id"] == str(seeded["finding"].finding_id)
     assert finding["host_id"] == str(seeded["host"].id)
+    assert finding["issue_key"] is None
     assert seeded["host"].highest_severity in {f["severity"] for f in body["data"]}
     assert str(seeded["other_host"].id) not in {f["host_id"] for f in body["data"]}
     assert seeded["other_finding"].finding_id not in {

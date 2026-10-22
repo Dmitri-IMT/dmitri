@@ -583,6 +583,30 @@ export const handlers = [
     if (!agent) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(agent)
   }),
+  http.get(`${baseURL}/agents/:agentId/updates/availability`, () =>
+    HttpResponse.json({
+      availability: 'unknown',
+      release: null,
+      catalogue_checked_at: null,
+      catalogue_valid_until: null,
+      device_readiness: 'unknown',
+    } satisfies components['schemas']['AgentUpdateAvailability']),
+  ),
+  http.get(`${baseURL}/agents/:agentId/updates`, () =>
+    HttpResponse.json({
+      data: [],
+    } satisfies components['schemas']['AgentUpdateHistoryPage']),
+  ),
+  http.get(
+    `${baseURL}/agent-updates/:updateId`,
+    () => new HttpResponse(null, { status: 404 }),
+  ),
+  http.post(`${baseURL}/agents/:agentId/updates`, () =>
+    HttpResponse.json(
+      { error: { code: 'unexpected', message: 'unexpected', details: {} } },
+      { status: 500 },
+    ),
+  ),
   http.patch(`${baseURL}/agents/:agentId`, async ({ request, params }) => {
     const agent = agentById(params.agentId as string)
     if (!agent) return new HttpResponse(null, { status: 404 })

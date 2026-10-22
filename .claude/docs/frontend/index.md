@@ -18,7 +18,7 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 
 ## API layer
 
-* [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account and org-administration resource modules.
+* [api](./api.md) — The two Axios instances, required VITE_API_URL base-URL construction, the single-flight 401→refresh interceptor, the session-expiry event bus, the token store, prefix-shaped query keys, and the read, account, org-administration and remote-agent-update resource modules.
 
 ## Engineering guardrails
 
@@ -37,7 +37,9 @@ table. App source lives at `frontend/src/`; the local lint plugin lives at `fron
 * [scan-failure-reasons](./scan-failure-reasons.md) — SCAN_FAILURE_REASONS maps each published ScanErrorCode to one operator sentence; scanFailureReason() falls back to the unknown sentence.
 * [scan-status](./scan-status.md) — scanStatusLabel maps every ScanStatus including cancelled and Stopped early; hidesCounts dashes count cells; bySeverityDesc is the only guaranteed worst-first order.
 * [command-status](./command-status.md) — commandStatusLabel maps every CommandStatus including cancelled; isSettledCommand stops the device-detail command poll once no late results can land.
-* [devices-screen](./devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
+* [devices-screen](./devices-screen.md) — Devices shows Online, Offline or Revoked; DeviceDetail owns scan and remote-update controls, plus admin revoke/restore and readiness-gates update requests.
+* [agent-update-section](./agent-update-section.md) — DeviceDetail's localized update availability, readiness, version, operation-history and confirmed admin request section.
+* [agent-update-hook](./agent-update-hook.md) — Device update queries, active-operation polling, request idempotency, cache reconciliation and deduplicated read-error notifications.
 * [scan-partial-warning](./scan-partial-warning.md) — ScanPartialWarning shows a plain attention line beside scan duration when a scan is partial.
 * [scan-ai](./scan-ai.md) — Scan Detail card that GETs analysis status in the UI language, offers Explain this scan once per language, polls only while pending or processing, and renders the Groq overview in collapsible sections when completed.
 * [context-ai](./context-ai.md) — One-shot "Explain with AI" (finding, host) via ContextChat's presetQuestion mode against `/ai/chat`, askable once per mount. GlobalAssistant (the floating multi-turn assistant) was deleted.

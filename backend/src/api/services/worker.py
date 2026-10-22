@@ -7,13 +7,16 @@ from datetime import UTC, datetime
 
 from api.core.config import get_settings
 from api.db.session import get_session
+from api.services.agent_updates_http import expire_unclaimed_updates
 from api.services.ai.groq import GroqProvider, build_ai_provider
 from api.services.ai.jobs import process_ready_ai_analyses
 from api.services.commands import sweep_stale_commands
 from api.services.enrichment import process_pending_enrichment_jobs
 from api.services.nvd import NvdClient
+from api.services.release_catalog import refresh_release_catalog
 
 logger = logging.getLogger(__name__)
+_last_catalog_refresh = 0.0
 
 
 def _poll_forever(tick: Callable[[], int], interval: float) -> None:
@@ -75,15 +78,35 @@ def run_worker_once(
     nvd_client: NvdClient | None = None,
 ) -> int:
     settings = get_settings()
+    global _last_catalog_refresh
     resolved_batch_size = batch_size or settings.enrichment_batch_size
 
     for session in get_session():
+        if (
+            settings.agent_update_repository_url
+            and time.monotonic() - _last_catalog_refresh
+            >= settings.agent_update_refresh_interval_seconds
+        ):
+            try:
+                refresh_release_catalog(session, settings)
+            except Exception:
+                logger.exception(
+                    "agent release catalogue refresh failed; preserving prior catalogue"
+                )
+                session.rollback()
+            finally:
+                _last_catalog_refresh = time.monotonic()
         try:
             sweep_stale_commands(session, now=datetime.now(UTC))
         except Exception:
             # The sweep is a janitor, not the point of the tick — a failure here
             # must not stop enrichment from draining its queue.
             logger.exception("stale command sweep failed; continuing")
+            session.rollback()
+        try:
+            expire_unclaimed_updates(session, now=datetime.now(UTC), batch_size=100)
+        except Exception:
+            logger.exception("unclaimed agent update expiry failed; continuing")
             session.rollback()
         return process_pending_enrichment_jobs(
             session,

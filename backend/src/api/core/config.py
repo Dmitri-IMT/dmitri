@@ -98,6 +98,22 @@ class Settings(BaseSettings):
         le=3600,
         alias="ENRICHMENT_STALE_AFTER_SECONDS",
     )
+    agent_update_repository_url: str = Field(
+        default="", alias="AGENT_UPDATE_REPOSITORY_URL"
+    )
+    agent_update_keyring_path: str = Field(
+        default="", alias="AGENT_UPDATE_KEYRING_PATH"
+    )
+    agent_update_origin: str = Field(default="", alias="AGENT_UPDATE_ORIGIN")
+    agent_update_suite: str = Field(default="", alias="AGENT_UPDATE_SUITE")
+    agent_update_catalog_max_bytes: int = Field(
+        default=1048576, ge=1024, le=10485760,
+        alias="AGENT_UPDATE_CATALOG_MAX_BYTES",
+    )
+    agent_update_refresh_interval_seconds: float = Field(
+        default=300, gt=0, le=86400,
+        alias="AGENT_UPDATE_REFRESH_INTERVAL_SECONDS",
+    )
     jwt_signing_secret: SecretStr = Field(alias="JWT_SIGNING_SECRET")
     access_token_ttl_minutes: int = Field(
         default=15, alias="ACCESS_TOKEN_TTL_MINUTES"

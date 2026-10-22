@@ -401,6 +401,8 @@ export interface paths {
          *     | `status` | Pi → backend | `AgentStatusFrame` |
          *     | `progress` | Pi → backend, during scan | `AgentProgressFrame` |
          *     | `error` | backend → Pi | `AgentErrorFrame` |
+         *     | `update_session` | backend → Pi, when `scan_finalization_v1` is negotiated | `UpdateSessionFrame` |
+         *     | `scan_status_ack` | backend → Pi, after a terminal command status commits | `ScanStatusAckFrame` |
          *
          *     Scan results are **never** sent on this socket — they go to `POST /api/v1/scans`.
          *
@@ -458,6 +460,118 @@ export interface paths {
          * @description Chooses, from the networks the connected Pi reported, the one its scans use.
          */
         patch: operations["updateAgentTargetSubnet"];
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/update-protocol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read supported device protocol
+         * @description Signed read by the agent itself. Reports implemented protocol versions and capabilities without initiating an update.
+         */
+        get: operations["getAgentUpdateProtocol"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/updates/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read update availability */
+        get: operations["getAgentUpdateAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options: operations["optionsAgentUpdateAvailability"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-updates/{update_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a requested agent update
+         * @description Signed device request. Commits one immutable, deadline-bounded receipt before authorizing preparation; retries return the same receipt.
+         */
+        post: operations["claimAgentUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-updates/{update_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an agent update event
+         * @description Signed device request with a strict increasing sequence. Persists only bounded evidence; identical retries acknowledge the stored sequence.
+         */
+        post: operations["reportAgentUpdateEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List update history */
+        get: operations["listAgentUpdates"];
+        put?: never;
+        /** Request a manual agent update */
+        post: operations["requestAgentUpdate"];
+        delete?: never;
+        options: operations["optionsAgentUpdates"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-updates/{update_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an update operation */
+        get: operations["getAgentUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options: operations["optionsAgentUpdate"];
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/agents/{agent_id}/revoke": {
@@ -1354,9 +1468,337 @@ export interface components {
             /** Format: date-time */
             revoked_at: string | null;
             available_subnets: components["schemas"]["AvailableSubnet"][];
+            observed_version?: string | null;
+            observed_package_version?: string | null;
+            /** Format: date-time */
+            version_observed_at?: string | null;
             target_subnet?: string | null;
             /** Format: uuid */
             active_command_id?: string | null;
+            /** Format: uuid */
+            active_update_id?: string | null;
+        };
+        UpdateSessionFrame: {
+            /** @constant */
+            type: "update_session";
+            /** Format: uuid */
+            session_id: string;
+            /** @constant */
+            protocol_version: 1;
+            capabilities: ("scan_finalization_v1" | "agent_update_v1")[];
+        };
+        ScanStatusAckFrame: {
+            /** @constant */
+            type: "scan_status_ack";
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            command_id: string;
+            /** @enum {string} */
+            status: "done" | "failed" | "cancelled" | "expired";
+            has_results: boolean;
+        };
+        AgentProtocolSupport: {
+            protocol_versions: 1[];
+            capabilities: ("scan_finalization_v1" | "agent_update_v1")[];
+        };
+        AgentUpdateRequest: {
+            /** Format: uuid */
+            release_id: string;
+            expected_observed_version: string;
+        };
+        AgentUpdateClaimRequest: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            release_id: string;
+            target_package_version: string;
+            sha256: string;
+        };
+        AgentUpdateClaimReceipt: {
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            release_id: string;
+            target_package_version: string;
+            sha256: string;
+            required_updater_version: number;
+            /** Format: date-time */
+            authorization_deadline: string;
+        };
+        /** @description Closed, bounded health evidence; logs and configuration are not accepted. */
+        AgentUpdateEvidence: {
+            package_status?: "configured" | null;
+            service_active?: boolean | null;
+            health_check?: ("passed" | "failed") | null;
+        };
+        AgentUpdateEventRequest: {
+            sequence: number;
+            /** @enum {string} */
+            phase: "requested" | "preparing" | "installing" | "verifying" | "awaiting_confirmation" | "recovering" | "succeeded" | "failed" | "expired" | "rolled_back" | "needs_intervention";
+            local_outcome?: ("succeeded" | "failed" | "rolled_back" | "needs_intervention") | null;
+            observed_version?: string | null;
+            package_version?: string | null;
+            invocation_id?: string | null;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: date-time */
+            occurred_at: string;
+            error_code?: ("device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "authorization_expired" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt") | null;
+            evidence?: components["schemas"]["AgentUpdateEvidence"] | null;
+        };
+        AgentUpdateEventAck: {
+            ack_sequence: number;
+        };
+        UpdateProtocolErrorDetail: {
+            /** @enum {string} */
+            code: "not_found" | "device_revoked" | "release_not_allowed" | "artifact_mismatch" | "session_replaced" | "request_expired" | "authorization_expired" | "claim_state_invalid" | "illegal_transition" | "sequence_conflict" | "sequence_out_of_order" | "claim_required" | "local_health_evidence_required" | "hello_confirmation_required" | "recovery_required" | "invalid_event_time" | "invalid_event_combination";
+            message: string;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateProtocolErrorResponse: {
+            error: components["schemas"]["UpdateProtocolErrorDetail"];
+        };
+        ReleaseSummary: {
+            /** Format: uuid */
+            release_id: string;
+            /** @constant */
+            package: "hardware-agent";
+            upstream_version: string;
+            package_version: string;
+            architecture: string;
+            suite: string;
+            sha256: string;
+            size_bytes: number;
+            required_protocol_version: number;
+            required_updater_version: number;
+            /** Format: date-time */
+            published_at: string;
+            release_notes: string;
+        };
+        AgentUpdateAvailability: {
+            /** @enum {string} */
+            availability: "available" | "up_to_date" | "unknown" | "unavailable";
+            release?: components["schemas"]["ReleaseSummary"] | null;
+            /** Format: date-time */
+            catalogue_checked_at: string | null;
+            /** Format: date-time */
+            catalogue_valid_until: string | null;
+            /** @enum {string} */
+            device_readiness: "ready" | "offline" | "revoked" | "bootstrap_required" | "busy" | "unknown";
+        };
+        UpdateOperationView: {
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: uuid */
+            release_id: string;
+            previous_version: string | null;
+            previous_package_version: string | null;
+            target_version: string;
+            target_package_version: string;
+            observed_version: string | null;
+            observed_package_version: string | null;
+            /** @enum {string} */
+            phase: "requested" | "preparing" | "installing" | "verifying" | "awaiting_confirmation" | "recovering" | "succeeded" | "failed" | "expired" | "rolled_back" | "needs_intervention";
+            /** @enum {string|null} */
+            local_outcome: "succeeded" | "failed" | "rolled_back" | "needs_intervention" | null;
+            /** @enum {string|null} */
+            error_code: "device_busy" | "session_replaced" | "request_expired" | "release_not_allowed" | "version_conflict" | "metadata_untrusted" | "metadata_expired" | "artifact_mismatch" | "unsupported_platform" | "prerequisite_missing" | "insufficient_resources" | "package_manager_busy" | "authorization_expired" | "install_failed" | "local_health_failed" | "recovery_failed" | "state_corrupt" | null;
+            actor_display_snapshot: string;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            claimed_at: string | null;
+            /** Format: date-time */
+            local_completed_at: string | null;
+            /** Format: date-time */
+            confirmed_at: string | null;
+            /** Format: date-time */
+            last_contact_at: string | null;
+        };
+        AgentUpdateHistoryPage: {
+            data: components["schemas"]["UpdateOperationView"][];
+            next_cursor?: string | null;
+        };
+        /** UpdateBootstrapRequiredError */
+        UpdateBootstrapRequiredError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "bootstrap_required";
+        };
+        /** UpdateBusyError */
+        UpdateBusyError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "device_busy";
+        };
+        /** UpdateCatalogUnavailableError */
+        UpdateCatalogUnavailableError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "release_check_unavailable";
+        };
+        /** UpdateConflictResponse */
+        UpdateConflictResponse: {
+            /** Error */
+            error: components["schemas"]["UpdateBusyError"] | components["schemas"]["UpdateVersionConflictError"] | components["schemas"]["UpdateReleaseNotAllowedError"] | components["schemas"]["UpdateIdempotencyConflictError"];
+        };
+        /** UpdateForbiddenError */
+        UpdateForbiddenError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "forbidden";
+        };
+        /** UpdateForbiddenResponse */
+        UpdateForbiddenResponse: {
+            /** Error */
+            error: components["schemas"]["UpdateRevokedError"] | components["schemas"]["UpdateForbiddenError"];
+        };
+        /** UpdateIdempotencyConflictError */
+        UpdateIdempotencyConflictError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "idempotency_conflict";
+        };
+        /** UpdateOfflineError */
+        UpdateOfflineError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "device_offline";
+        };
+        /** UpdateReleaseNotAllowedError */
+        UpdateReleaseNotAllowedError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "release_not_allowed";
+        };
+        /** UpdateRevokedError */
+        UpdateRevokedError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "device_revoked";
+        };
+        /** UpdateUnauthorizedError */
+        UpdateUnauthorizedError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * Code
+             * @constant
+             */
+            code: "unauthorized";
+        };
+        /** UpdateUnauthorizedResponse */
+        UpdateUnauthorizedResponse: {
+            error: components["schemas"]["UpdateUnauthorizedError"];
+        };
+        /** UpdateUnavailableResponse */
+        UpdateUnavailableResponse: {
+            /** Error */
+            error: components["schemas"]["UpdateOfflineError"] | components["schemas"]["UpdateBootstrapRequiredError"] | components["schemas"]["UpdateCatalogUnavailableError"];
+        };
+        /** UpdateVersionConflictError */
+        UpdateVersionConflictError: {
+            /** Message */
+            message: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            code: "version_conflict";
+        };
+        /** @description Backend ? Pi. Delivers one committed update intent to the captured WebSocket session. */
+        AgentUpdateFrame: {
+            /** @constant */
+            type: "agent_update";
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            release_id: string;
+            target_package_version: string;
+            sha256: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         AgentSummary: {
             /** Format: uuid */
@@ -1406,6 +1848,19 @@ export interface components {
             /** @example 0.2.0 */
             agent_version: string;
             available_subnets: components["schemas"]["AvailableSubnet"][];
+            package_version?: string | null;
+            updater_version?: string | null;
+            os_suite?: string | null;
+            architecture?: string | null;
+            /** @default [] */
+            capabilities: ("scan_finalization_v1" | "agent_update_v1")[];
+            update_context?: components["schemas"]["AgentUpdateHelloContext"] | null;
+        };
+        AgentUpdateHelloContext: {
+            /** Format: uuid */
+            update_id: string;
+            /** Format: uuid */
+            invocation_id: string;
         };
         /**
          * @description **Backend → Pi.** Delivered on the open socket when an operator triggers "Scan now".
@@ -1608,6 +2063,7 @@ export interface components {
             service?: string | null;
             source?: string | null;
             source_script?: string | null;
+            issue_key?: string | null;
             cve_id?: string | null;
             cvss_score?: number | null;
             severity: components["schemas"]["Severity"];
@@ -2390,6 +2846,42 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The update request conflicts with current device state or prior idempotency-key use. */
+        AgentUpdateConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UpdateConflictResponse"];
+            };
+        };
+        /** @description The device or release catalogue is currently unavailable for an update. */
+        AgentUpdateUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UpdateUnavailableResponse"];
+            };
+        };
+        /** @description The caller lacks permission or the device is revoked. */
+        AgentUpdateForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UpdateForbiddenResponse"];
+            };
+        };
+        /** @description Authentication is required. */
+        AgentUpdateUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UpdateUnauthorizedResponse"];
             };
         };
         /**
@@ -3847,6 +4339,337 @@ export interface operations {
             409: components["responses"]["AgentOfflineConflict"];
             422: components["responses"]["TargetSubnetNotReported"];
             500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAgentUpdateProtocol: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported agent protocol features. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProtocolSupport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    getAgentUpdateAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current catalogue and device readiness projection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateAvailability"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    optionsAgentUpdateAvailability: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    claimAgentUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing or newly committed claim receipt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateClaimReceipt"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Claim rejected or current session replaced. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            /** @description Claim deadline expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reportAgentUpdateEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The calling agent's `agent_id`, issued by the backend at provisioning. (Header name is frozen by ADR-005; the value identifies an **agent**, not a host.) */
+                "X-Device-Id": components["parameters"]["DeviceIdHeader"];
+                /** @description UTC timestamp used in signature validation, ISO 8601 format. */
+                "X-Timestamp": components["parameters"]["TimestampHeader"];
+                /** @description Per-request unique nonce used for anti-replay protection. */
+                "X-Nonce": components["parameters"]["NonceHeader"];
+                /** @description Lowercase hex SHA-256 of the raw request body. */
+                "X-Body-SHA256": components["parameters"]["BodySha256Header"];
+                /** @description Lowercase hex Ed25519 signature (64-byte signature → 128 hex chars) over the canonical string `METHOD\nPATH\nX-Device-Id\nX-Timestamp\nX-Nonce\nX-Body-SHA256`. */
+                "X-Signature": components["parameters"]["SignatureHeader"];
+            };
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Event is durably committed or an identical sequence was already committed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateEventAck"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Event sequence or transition rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            /** @description First mutation authorization deadline expired. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateProtocolErrorResponse"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    listAgentUpdates: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Newest operations first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateHistoryPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    requestAgentUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing operation returned for the same key and body. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateOperationView"];
+                };
+            };
+            /** @description Intent committed and sent once to the captured session. */
+            202: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateOperationView"];
+                };
+            };
+            401: components["responses"]["AgentUpdateUnauthorized"];
+            403: components["responses"]["AgentUpdateForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["AgentUpdateConflict"];
+            422: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalServerError"];
+            503: components["responses"]["AgentUpdateUnavailable"];
+        };
+    };
+    optionsAgentUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Scanner Pi identifier. On the WebSocket upgrade this MUST equal the `X-Device-Id` header — a mismatch is rejected (ADR-011). */
+                agent_id: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
+        };
+    };
+    getAgentUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Update operation state and audit timestamps. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateOperationView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    optionsAgentUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: components["responses"]["CorsPreflightNoContent"];
         };
     };
     revokeAgent: {

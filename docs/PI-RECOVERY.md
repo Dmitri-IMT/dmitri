@@ -69,3 +69,29 @@ command channel parked (<reason>); next attempt at <UTC time>
 
 After a repair, use the log to confirm `command channel connected`. For a parked device, wait until
 the logged next-attempt time; there is no supported “retry now” action.
+
+## Agent update recovery
+
+The update timer only checks signed repository metadata. A package installation starts only after
+an administrator accepts an update from the device page. If an update is reported as failed or
+the device remains unavailable afterward, collect the updater state before retrying:
+
+```bash
+sudo systemctl status dmitri-agent.service dmitri-agent-update.service \
+  dmitri-agent-update.timer --no-pager
+sudo journalctl -u dmitri-agent-update.service -n 100 --no-pager
+sudo journalctl -u dmitri-agent-update-check.service -n 100 --no-pager
+sudo /usr/bin/python3 /usr/lib/dmitri/updater.py --inspect
+```
+
+`--inspect` is read-only. Check the journal for the operation phase and failure code, and retain
+`/var/lib/dmitri/updates/` plus `/var/lib/dmitri/update-gate.json` for recovery. If inspection
+reports `recovery_required` or `needs_intervention`, do not remove the gate or journal and do not
+start another update. Keep the device available for an assisted operator recovery. If the
+metadata check fails, verify the Pi clock, DNS/HTTPS connectivity, and that the backend release
+catalog is refreshing successfully; never bypass signature verification or replace the installed
+archive key with an unverified one.
+
+For a backend-side catalog problem, inspect worker logs and confirm that API and worker use the
+same repository URL, keyring path, origin, and suite. The keyring is baked into the reviewed
+backend image at `/app/agent-release/public-keyring.gpg`; it is not accepted from the request.

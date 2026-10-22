@@ -122,6 +122,6 @@ def test_no_placeholder_org_id_remains() -> None:
         for path in base.rglob("*.py"):
             if path.resolve() == this_file:
                 continue
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             for token in forbidden:
                 assert token not in text, f"{path} contains {token}"

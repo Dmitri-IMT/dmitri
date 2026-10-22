@@ -1,10 +1,10 @@
 ---
 type: Module
 title: Devices list, detail, scan and revocation
-description: Devices shows Online, Offline or Revoked; DeviceDetail owns scanning (including Stop scan), plus admin revoke/restore and hides controls while revoked.
+description: Devices shows Online, Offline or Revoked; DeviceDetail owns scan and remote-update controls, plus admin revoke/restore and readiness-gates update requests.
 resource: frontend/src/pages/Devices.tsx
 tags: [frontend, agents, devices, commands, tanstack-query]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # Devices list, detail, scan and revocation
@@ -13,7 +13,7 @@ timestamp: 2026-10-16T00:00:00Z
 
 The scan trigger moved off a single `/agents` page onto a two-level devices IA: `Devices` lists every
 box in the org; `DeviceDetail` at `/devices/:agentId` owns identity, subnet choice, scan-type
-selection and `[Scan now]`. `useScanCommand()` still latches the followed command id, polls every 5s,
+selection, `[Scan now]` and remote-update status/action. `useScanCommand()` still latches the followed command id, polls every 5s,
 and invalidates read caches on `done` or `cancelled`. Admins can **Stop scan** while the command is
 `delivered`/`running`. Revoked devices replace presence with the revocation time,
 hide scan/network-change controls, and expose admin revoke/restore actions. `readAgentPresence()` is
@@ -32,6 +32,7 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
 | `deviceListColumns(now)` | Box, network, shared presence mode + timestamp, and last report. | `frontend/src/pages/agents/deviceListColumns.tsx:9` |
 | `DeviceDetail` | One `getAgent` read through `ReadDetailGate`; ready view is `DeviceDetailBody`. | `frontend/src/pages/DeviceDetail.tsx:108` |
 | `DeviceDetailBody` | Keeps back link and `AgentIdentity` mounted (so focus survives revoke/restore), then picks one tree from `readAgentPresence`: `RevokedDeviceSections` (read-only network, restore, history) or `LiveDeviceSections` (network + chooser, scan, history, revoke). | `frontend/src/pages/DeviceDetail.tsx:94`, `:31`, `:46` |
+| `AgentUpdateSection` | Shows release availability/readiness, versions, current operation and history. A confirmed mutation is offered only to an admin for a non-revoked, ready device with an available release. | [`agent-update-section`](./agent-update-section.md) |
 | `DeviceRevoke` | Admin-only revoke section. POSTs revoke inside the shared `ConfirmDialog` (which owns pending), invalidates `queryKeys.agents.all`, and raises the success toast. | `frontend/src/pages/agents/DeviceRevoke.tsx:13` |
 | `DeviceRestore` | Revoked banner; viewers get explanation only. Admins get an inline restore button that owns its pending and error state, invalidates `queryKeys.agents.all`, and raises the success toast. | `frontend/src/pages/agents/DeviceRestore.tsx:13` |
 | `ScanTypeTabs` / `ScanTypeReadOnly` | Radix `Tabs` over `SCAN_MODE_ORDER` with per-mode description; read-only shows the default mode label for viewers. | `frontend/src/pages/agents/ScanTypeTabs.tsx:13` |
@@ -48,8 +49,9 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
 
 ## How it connects
 
-- Seven API calls through [api](./api.md)'s `agents.ts` and `commands.ts`; keys from `queryKeys.agents`
-  and `queryKeys.commands`.
+- Device reads/actions use [api](./api.md)'s `agents.ts`, `agentUpdates.ts` and `commands.ts`; scan
+  and update data use separate query-key groups. Update orchestration is in
+  [agent-update-hook](./agent-update-hook.md).
 - Status copy from [command-status](./command-status.md); chrome from [screens](./screens.md) and
   [tables](./tables.md).
 - Routes in [app](./app.md): `/devices` → `Devices`, `/devices/:agentId`
@@ -59,7 +61,7 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
   split across `Devices.test.tsx`, `DeviceDetail.test.tsx`,
   `DeviceDetail.command.test.tsx`, `DeviceDetail.cancel.test.tsx` (Stop scan),
   `DeviceDetail.invalidation.test.tsx`, and
-  `DeviceDetail.revocation.test.tsx`.
+  `DeviceDetail.revocation.test.tsx`, and `DeviceDetail.updates.test.tsx`.
 - Completion invalidates the read surfaces documented in [screens](./screens.md) without those
   screens polling.
 
@@ -80,6 +82,8 @@ in `watchedNetworkLabel.ts`; scan-mode labels and defaults live in `lib/scanMode
 - **`readAgentPresence()` owns lifecycle precedence.** A revoke response may still say
   `online: true` until the socket handler unregisters; callers consume its discriminated mode
   instead of reproducing the `revoked_at` check.
+- Update status comes from persisted backend operation reads, not from scan polling or a fabricated
+  percentage. A local install can await confirmation from the device's later hello.
 
 # Citations
 

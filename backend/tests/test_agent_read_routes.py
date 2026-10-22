@@ -261,7 +261,13 @@ def test_detail_reports_both_subnets_in_order(
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == SUMMARY_KEYS | {"available_subnets"}
+    assert set(body) == SUMMARY_KEYS | {
+        "available_subnets",
+        "observed_version",
+        "observed_package_version",
+        "version_observed_at",
+        "active_update_id",
+    }
     assert body["available_subnets"] == REPORTED_SUBNETS
     assert body["online"] is True
     assert body["target_subnet"] is None
@@ -359,6 +365,48 @@ def test_detail_unknown_and_foreign_agent_return_identical_404(
     assert unknown.status_code == 404
     assert other_org.status_code == 404
     assert unknown.json() == other_org.json()
+
+
+def test_agent_protocol_probe_is_signed_owned_and_read_only(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    path = f"{_detail_path(provisioned_agent.id)}/update-protocol"
+
+    response = client.get(
+        path,
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id, path=path),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "protocol_versions": [1],
+        "capabilities": ["scan_finalization_v1", "agent_update_v1"],
+    }
+    administrative_session.refresh(provisioned_agent)
+    assert provisioned_agent.observed_version is None
+    assert provisioned_agent.version_observed_at is None
+
+
+def test_agent_protocol_probe_does_not_expose_another_device(
+    client: TestClient,
+    administrative_session: Session,
+    provisioned_agent: Agent,
+    agent_keypair,
+):
+    private_key, _public_key = agent_keypair
+    other_agent = _seed_other_org_agent(administrative_session)
+    path = f"{_detail_path(other_agent.id)}/update-protocol"
+
+    response = client.get(
+        path,
+        headers=ws_upgrade_headers(private_key, provisioned_agent.id, path=path),
+    )
+
+    assert response.status_code == 404
 
 
 def test_detail_allows_viewer_and_surfaces_active_command(

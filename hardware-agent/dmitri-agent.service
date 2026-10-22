@@ -1,7 +1,8 @@
 [Unit]
 Description=Dmitri scanner agent
 Documentation=https://github.com/Dmitri-IMT/dmitri
-After=network-online.target
+After=network-online.target dmitri-agent-update.service
+Requires=dmitri-agent-update.service
 Wants=network-online.target
 # The daemon reconnects on its own; never give up restarting it.
 StartLimitIntervalSec=0
@@ -29,6 +30,7 @@ ReadWritePaths=/var/lib/dmitri
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=dmitri-agent
+KillMode=control-group
 
 [Install]
 WantedBy=multi-user.target
