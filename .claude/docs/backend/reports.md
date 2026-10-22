@@ -4,7 +4,7 @@ title: Backend explained and technical scan reports
 description: Localized educational PDF reports with a clickable, page-numbered contents list, complete device inventory, evidence-aware explanations, vector charts, remediation checks and the full finding register.
 resource: backend/src/api/services/reports.py
 tags: [backend, reports, pdf, scans, evidence, accessibility]
-timestamp: 2026-10-06T00:00:00Z
+timestamp: 2026-10-22T00:00:00Z
 ---
 
 # Backend explained and technical scan reports
@@ -17,6 +17,16 @@ risk and optional AI data. The educational explanations work without an AI provi
 English, Brazilian Portuguese and Russian.
 
 ## Key classes / functions
+
+The **Download explained report** action in `frontend/src/pages/scans/ScanReports.tsx`
+calls `GET /api/v1/scans/{scan_id}/reports/explained/download`. This reads existing analysis
+in the requested language; it does not initiate a Groq job or send the full scan to the
+provider. Without completed analysis, the backend renders deterministic educational content.
+All finding records can appear in the PDF while only a bounded subset was analyzed by AI.
+The current limits and deferred review are documented in
+[Scan JSON and explained download](../../../specs/053-targeted-scan-lab/SCAN-JSON-AND-AI.md).
+
+### Symbols
 
 | Name | Responsibility | Source |
 |------|----------------|--------|

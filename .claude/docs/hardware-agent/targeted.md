@@ -4,7 +4,7 @@ title: Service-targeted checks and tool provisioning
 description: Bounded service checks, evidence-aware tool reports, native SSH audit parsing, and Raspberry Pi prerequisites.
 resource: hardware-agent/src/agent/targeted/
 tags: [hardware-agent, targeted, coverage, provisioning]
-timestamp: 2026-10-17T00:00:00Z
+timestamp: 2026-10-22T00:00:00Z
 ---
 
 # Service-targeted checks
@@ -20,7 +20,7 @@ gaps; they are not interpreted as a clean result.
 | Symbol | What it does | Source |
 |--------|--------------|--------|
 | `TargetedExecutor` | Owns bounded subprocesses, reports and cleanup. | `hardware-agent/src/agent/targeted/executor.py` |
-| `run_ffuf` / `run_nikto` | Preserve startup diagnostics and partial findings; native tool time limits are detected in stdout and stderr. Validated ffuf candidates carry a specific-check witness; unsupported Nikto issue text is inconclusive. | `hardware-agent/src/agent/targeted/web.py` |
+| `run_ffuf` / `run_nikto` | Preserve startup diagnostics and partial findings; native tool time limits are detected in stdout and stderr. Validated ffuf candidates carry a specific-check witness; unsupported Nikto issue text is inconclusive. Nikto uses a 700 s host cap and 800 s unit timeout, based on broad-profile HTTP/HTTPS lab measurements near 10 minutes. | `hardware-agent/src/agent/targeted/web.py`, `hardware-agent/src/agent/config.py` |
 | `run_ssh_audit` | Executes the JSON audit with `--skip-rate-test`; parses native 3.9.0 algorithm/notes lists and legacy mapping sections, rejects malformed rows and mismatched targets, and ignores post-quantum-only advice. | `hardware-agent/src/agent/targeted/ssh.py` |
 | `provision-targeted-tools.sh` | Installs pinned ffuf, Nikto, testssl and enum4linux-ng, the DIRB common wordlist and runtime dependencies; verifies those and the agent venv's ssh-audit. `--verify-only` performs local checks without installation or network access. | `hardware-agent/scripts/provision-targeted-tools.sh` |
 | `provision-pi.sh` | Installs the agent package and provisions targeted tools while holding the scan/update lock, before declaring the appliance ready. | `hardware-agent/scripts/provision-pi.sh` |
@@ -49,6 +49,14 @@ same pipeline. The root `install.sh --agent-only` also invokes tool provisioning
   scanProblem/FATAL records also produce execution errors; vulnerability score exits
   50–200 remain supported. Valid findings collected before an error are retained, while
   testssl runtime error records are excluded from findings.
+- Nikto's `-maxtime` is a per-host cap. The broad profile completed the lab HTTP and HTTPS
+  targets in 565 s and 582 s with 5,920 requests each; the 700 s native and 800 s unit
+  limits leave margin for those measured runs. Reaching the native cap still marks the
+  unit timed out, even if Nikto closes a valid partial JSON report. Supported partial
+  findings remain available alongside the coverage gap.
+- testssl failure diagnostics include bounded, sanitized problem lines from its existing
+  stdout/stderr and structured `scanProblem` data; HTTP response headers are excluded.
+  This improves diagnosis without changing JSON parsing or finding policy.
 - ffuf's native maximum-runtime message is a unit timeout even when it exits zero with
   valid partial JSON. Only candidates that pass the existing web validation contribute
   findings; cancellation and stage/overall deadlines retain precedence.

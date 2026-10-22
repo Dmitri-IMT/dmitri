@@ -1,0 +1,72 @@
+services:
+  seed:
+    # A repeated lab-start may recreate services while keeping the DB and shared
+    # volume. Reuse the provisioned agent instead of creating the organization again.
+    command:
+      - /bin/sh
+      - -c
+      - if test -s /shared/agent.env; then echo 'Lab seed already present'; else exec sh /seed.sh; fi
+
+  api:
+    volumes:
+      - ../../backend:/app
+      - venv:/opt/venv
+      - ./verify_targeted_scan.py:/verify_targeted_scan.py:ro
+
+  agent:
+    networks:
+      default: {}
+      targets:
+        ipv4_address: 172.31.13.13
+
+  lab-web:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/web-target.Dockerfile
+    networks:
+      targets:
+        ipv4_address: 172.31.13.2
+
+  lab-ssh:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/ssh-target.Dockerfile
+    networks:
+      targets:
+        ipv4_address: 172.31.13.3
+
+  lab-ftp:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/ftp-target.Dockerfile
+    networks:
+      targets:
+        ipv4_address: 172.31.13.4
+
+  lab-smb:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/target-lab.Dockerfile
+    networks:
+      targets:
+        ipv4_address: 172.31.13.5
+
+  lab-telnet:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/telnet-target.Dockerfile
+    networks:
+      targets:
+        ipv4_address: 172.31.13.6
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${SIMULATOR_APP_SUBNET:-172.31.7.0/24}
+  targets:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.13.0/28
+          gateway: 172.31.13.14

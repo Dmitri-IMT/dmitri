@@ -80,7 +80,7 @@ images).
 | `_fields()` | The single builder behind both agent shapes, including persisted `revoked_at`, registry-derived `online`/`last_seen_at`, target subnet, and active command. | `backend/src/api/services/agents.py:18` |
 | `list_agents()` | Org's agents ordered `created_at, id` → `AgentSummary[]`. Keyword-only `org_id`, filtered in SQL. | `backend/src/api/services/agents.py:31` |
 | `get_agent_detail()` / `_detail()` | Summary fields plus `available_subnets` from `agent_connections.get_hello(...)`; unknown or foreign id → `None`. | `backend/src/api/services/agents.py:54`, `:46` |
-| `set_target_subnet()` | Admin write. Foreign/unknown row → `None`; no `hello` → `AgentOfflineError`; an unreported value → `SubnetNotReportedError`; else commit and return detail. | `backend/src/api/services/agents.py:63` |
+| `set_target_subnet()` | Admin write. Foreign/unknown row → `None`; no `hello` → `AgentOfflineError`; invalid IPv4 or a network outside every reported network → `SubnetNotReportedError`; a subnet contained in a reported network is accepted and committed. | `backend/src/api/services/agents.py:63` |
 | `revoke_agent()` / `restore_agent()` / `_set_revoked_at()` | Org-scoped idempotent writes through one `_set_revoked_at` helper. Revoke keeps the first timestamp and is async: it commits in a threadpool, then closes any registered socket with `4001 revoked`, so the write and the socket kill have one owner (the same shape as `deliver()`). Restore clears the timestamp. Both preserve identity, name and target subnet and return the same detail shape as GET. | `backend/src/api/services/agents.py:94`, `:111`, `:81` |
 | `AgentOfflineError` | "Cannot choose a network for a Pi that is reporting none" — router maps it to `409 device_offline`. Lives here, unlike `SubnetNotReportedError`. | `backend/src/api/services/agents.py:13` |
 | `SubnetNotReportedError` | Declared in `commands.py` beside `AgentNotFoundError`/`DeviceBusyError`/`DeviceOfflineError` and imported by `agents.py`; raised by both `_claim_agent` and `set_target_subnet`, mapped to `422 subnet_not_reported`. | `backend/src/api/services/commands.py:44` |
@@ -127,7 +127,7 @@ images).
 | `cancel_command()` | Admin cancel (DMI-145). Terminal → idempotent `200`. Not in `CANCELLABLE` (`queued`, `uploading`) → `CommandNotCancellableError`. Socket present → send `AgentCancelFrame`, return `202` (Pi confirms later). No socket → retire to `cancelled` + mirror scan/activity, return `200`. | `backend/src/api/services/commands.py:189` |
 | `pending_operator_cancels()` | Reconnect catch-up: command `cancelled`, scan still `cancelled` (no results), inside the mode's max duration (`_mode_deadline`, shared with `sweep_stale_commands`). Fed to `agent_ws` after hello. | `backend/src/api/services/commands.py:91` |
 | `CommandNotCancellableError` | Raised when cancel hits a status outside `CANCELLABLE`; router maps to `409 command_not_cancellable`. | `backend/src/api/services/commands.py` |
-| `_claim_agent()` | The enqueue path's sync DB phase: authorize the agent, sweep, busy-check, then — since DMI-78 — refuse a `subnet` the connected Pi is not reporting, before inserting the row. | `backend/src/api/services/commands.py` |
+| `_claim_agent()` | The enqueue path's sync DB phase: authorize the agent, sweep, busy-check, then refuse an invalid IPv4 `subnet` or one not contained in a network reported by the connected Pi, before inserting the row. | `backend/src/api/services/commands.py` |
 | `get_command_detail()` | Org-scoped `GET /commands/{id}` read via `_load_command_detail`, which outer-joins the scan to set `has_results` (scan `completed`). Wraps stored `error_code` in `normalise_error_code` before building `CommandDetail`, so an off-contract row returns `"unknown"` rather than a pydantic 500. | `backend/src/api/services/commands.py` |
 | `active_command_for()` | The busy check: first `Command` for the agent in any of the four non-terminal statuses (`queued`/`delivered`/`running`/`uploading`), not just running/uploading — otherwise a stuck `queued` would let a second job onto the Pi. | `backend/src/api/services/commands.py` |
 | `apply_status()` / `transition_command()` | `apply_status` commits or rolls back around `transition_command`, which does not commit (ingest calls it directly). One atomic conditional `UPDATE ... WHERE id AND agent_id AND rank(status) < rank(:next) AND scan_id IS NOT NULL RETURNING …`. Mirrors onto the scan through `_mirror_command_on_scan` (shared with `_mirror_retired_commands`): only an unfinished scan changes, and `scan_failed`/`scan_cancelled` activity is appended only when it did. | `backend/src/api/services/commands.py` |
@@ -199,10 +199,11 @@ ML/AI scoring is future work.
   in-process `agent_connections` registry through `_fields`/`_detail`, so a restart forgets them and
   a `last_seen_at` of `null` means exactly "never connected" — after a disconnect it falls back to
   the persisted row value rather than going null again.
-- **The subnet check fails closed on exact string equality.** Both `_claim_agent` and
-  `set_target_subnet` compare against `{entry.cidr for entry in reported}` verbatim; deliberately no
-  `ipaddress.ip_network` parsing, which would accept equivalent spellings and add a failure mode
-  inside the enqueue path.
+- **Subnet choices must be contained in a reported IPv4 network.** Both `_claim_agent` and
+  `set_target_subnet` parse the requested value with `ipaddress.ip_network(..., strict=False)`
+  and require it to be a subnet of a network in the current agent hello. This accepts the lab's
+  `172.31.13.0/29` inside Docker's reported `172.31.13.0/28`, while excluding agent and gateway
+  addresses. Invalid, IPv6, and external values are refused.
 - **Silence is not contradiction.** When `get_hello()` returns `None`, `_claim_agent` falls straight
   through to `enqueue` — it must **not** raise. Today's `503 device_offline` comes from `deliver()`
   *after* the row exists, which is what leaves the command `expired`; refusing earlier would answer

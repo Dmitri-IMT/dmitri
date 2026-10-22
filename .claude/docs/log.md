@@ -3,6 +3,45 @@
 Newest first. Entry conventions: `## YYYY-MM-DD`, then `* **Creation** / **Update** / **Deletion**: …`.
 The [`docs-sync`](../skills/docs-sync/SKILL.md) skill appends here after code changes land.
 
+## 2026-10-22
+
+* **Creation**: Added a target-only Docker Compose project for the physical-Raspberry lab:
+  six LAN-addressed services, including pinned MySQL 5.7.30 and synthetic read-only training
+  data. It requires Docker Engine/macvlan inside a bridged Linux VM; no agent/API/database or
+  result scan was started. Documented the real-Raspberry scan and result-validation sequence.
+
+* **Update**: Documented the exact frontend explained-report download path and its use of
+  existing AI analysis, plus the distinction between the Raspberry scan JSON and bounded
+  Groq context (default 10 findings, maximum 15; chunks cover only that selection and omit
+  raw finding evidence fields). Full-coverage AI review is deferred; no runtime code changed.
+
+* **Update**: Corrected targeted Nikto timing from measured broad-profile runs: HTTP completed
+  in 565 s and HTTPS in 582 s with 5,920 requests each, so the native host cap is 700 s and
+  the per-unit timeout is 800 s. The adapter still marks a native cap as timed out and keeps
+  supported partial findings. Added bounded, sanitized testssl failure diagnostics from its
+  existing output and structured problem records; no parser, evidence policy, or tool-selection
+  behavior changed.
+* **Update**: Shared API subnet validation now accepts requested IPv4 subnets contained in the
+  connected agent's reported networks for enqueue and preferred-subnet writes. This lets the
+  lab select `/29` inside Docker's reported `/28` without including the agent or gateway.
+* **Update**: Git Bash preserves the Linux verifier path for Docker. Focused hardware tests pass
+  (177); focused backend tests pass (36). The full backend suite has 1,770 passed, 1 skipped,
+  with unrelated `gpg`/`dpkg` failures on Windows. Integrated presentation scan
+  `b1dd4b7b-865a-4962-b2e4-df111a4e4a0f` passed the strict verifier: 5 hosts, 90 findings.
+  Its single-scan payload is `../../scan-results/targeted-lab-2026-10-22.json`. Nikto evidence
+  persists on HTTP/HTTPS as inconclusive under existing policy; execution completed on both.
+
+## 2026-10-21
+
+* **Update**: Added a separately scoped targeted-lab Compose project, pinned local tool image,
+  synthetic service fixtures, verifier and runbook. Preserved the original simulator and NSPI path.
+  One integrated scan persisted 83 findings but failed acceptance (Nikto timeouts, partial testssl,
+  FTP chroot configuration); the payload is saved outside the repository under
+  `../../scan-results/targeted-lab-2026-10-21.json`. Follow-up corrections exclude agent/gateway from
+  the scan CIDR and create vsftpd's chroot directory; the rebuilt lab passed an anonymous FTP login
+smoke check. A second scan later failed on the old Nikto limits; the successful 2026-10-22 presentation result is recorded above.
+  Vulners evidence is documented as version correlation with applicability unverified.
+
 ## 2026-10-20
 
 * **Creation**: Added the frontend device update section/hook code-map docs for localized

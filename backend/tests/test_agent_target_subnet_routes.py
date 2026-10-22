@@ -46,8 +46,13 @@ def _register(agent_id, socket) -> None:
     asyncio.run(agent_connections.register(agent_id, socket, now=T0))
 
 
-def _register_with_hello(agent_id, socket) -> None:
-    reported = [AvailableSubnet(**entry) for entry in REPORTED_SUBNETS]
+def _register_with_hello(agent_id, socket, reported_subnets=None) -> None:
+    reported = [
+        AvailableSubnet(**entry)
+        for entry in (
+            REPORTED_SUBNETS if reported_subnets is None else reported_subnets
+        )
+    ]
 
     async def _run() -> None:
         await agent_connections.register(agent_id, socket, now=T0)
@@ -122,6 +127,34 @@ def test_choosing_a_reported_subnet_returns_detail_and_is_readable(
     assert listed[0]["target_subnet"] == WIFI
     detail = client.get(_path(provisioned_agent.id), headers=headers).json()
     assert detail["target_subnet"] == WIFI
+
+
+def test_choosing_a_subnet_within_a_reported_supernet_is_allowed(
+    client: TestClient,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    _register_with_hello(
+        provisioned_agent.id,
+        AsyncMock(),
+        [
+            {
+                "interface": "eth0",
+                "cidr": "172.31.13.0/28",
+                "is_default_route": False,
+            },
+        ],
+    )
+
+    response = client.patch(
+        _path(provisioned_agent.id),
+        json={"target_subnet": "172.31.13.0/29"},
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["target_subnet"] == "172.31.13.0/29"
 
 
 def test_re_choosing_replaces_the_stored_value(

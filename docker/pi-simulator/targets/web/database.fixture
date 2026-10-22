@@ -1,0 +1,3 @@
+-- Synthetic training database; no personal or production data.
+CREATE TABLE lab_demo (id int, label varchar(32));
+INSERT INTO lab_demo VALUES (1, 'training-only');

@@ -5,6 +5,10 @@
 #
 #   ./simulator.sh                        start (no-op if already running)
 #   ./simulator.sh scan [mode] [subnet]   enqueue a scan; defaults nspi 172.31.7.0/24
+#   ./simulator.sh lab-start              start the isolated targeted lab project
+#   ./simulator.sh lab-scan              enqueue one extensive scan of the isolated lab
+#   ./simulator.sh lab-verify <scan-id>  verify and print one persisted lab scan
+#   ./simulator.sh lab-stop               remove only the targeted lab containers/volumes
 #   ./simulator.sh stop                   down -v; nothing survives
 #   ./simulator.sh logs [args...]         passthrough to `docker compose logs`
 #   ./simulator.sh --nspi [verb]          connect-only against the deployed
@@ -20,6 +24,12 @@
 # The API takes port 8000: stop a hand-run backend before starting this.
 set -euo pipefail
 
+# Git Bash rewrites container paths such as /verify_targeted_scan.py into Windows
+# paths before docker can pass them to the Linux container.
+if [[ -n "${MSYSTEM:-}" ]]; then
+  export MSYS_NO_PATHCONV=1
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
@@ -29,6 +39,10 @@ Run a containerized Pi against a local backend.
 
   ./simulator.sh                        start (no-op if already running)
   ./simulator.sh scan [mode] [subnet]   enqueue a scan; defaults nspi 172.31.7.0/24
+  ./simulator.sh lab-start              start the isolated targeted lab project
+  ./simulator.sh lab-scan               enqueue one extensive scan of 172.31.13.0/29
+  ./simulator.sh lab-verify <scan-id>   verify one persisted targeted lab result
+  ./simulator.sh lab-stop               remove the targeted lab containers/volumes
   ./simulator.sh stop                   down -v; nothing survives
   ./simulator.sh logs [args...]         passthrough to `docker compose logs`
   ./simulator.sh --nspi [verb]          connect-only against the deployed environment
@@ -53,8 +67,10 @@ fi
 
 if [[ "$NSPI" -eq 1 ]]; then
   COMPOSE=(docker compose -p dmitri-sim-nspi -f docker/pi-simulator/compose.nspi.yaml)
+  LAB_COMPOSE=()
 else
   COMPOSE=(docker compose -f docker/pi-simulator/compose.yaml)
+  LAB_COMPOSE=(env SIMULATOR_APP_SUBNET=172.31.12.0/24 docker compose --parallel 1 -p dmitri-targeted-lab-demo -f docker/pi-simulator/compose.yaml -f docker/pi-simulator/compose.lab.yaml)
 fi
 
 [[ -f docker/pi-simulator/.env ]] \
@@ -80,14 +96,31 @@ case "${1:-start}" in
     fi
     ;;
 
-  scan)
+  lab-start)
+    if [[ "$NSPI" -eq 1 ]]; then
+      echo "lab-start is available only in local simulator mode." >&2
+      exit 1
+    fi
+    # Reconcile this isolated project on every start so changed image/network
+    # settings take effect without deleting its database volume or old simulator data.
+    "${LAB_COMPOSE[@]}" up -d --build
+    echo "Targeted lab is up. Local API on http://localhost:8000."
+    ;;
+
+  scan|lab-scan)
     if [[ "$NSPI" -eq 1 ]]; then
       echo "scan is refused in --nspi mode: the agent runs on this laptop, so it would" >&2
       echo "record a Docker bridge as a customer network in the deployed environment." >&2
       exit 1
     fi
-    SCAN_MODE="${2:-nspi}"
-    SUBNET="${3:-172.31.7.0/24}"
+    if [[ "$1" == "lab-scan" ]]; then
+      COMPOSE=("${LAB_COMPOSE[@]}")
+      SCAN_MODE="extensive"
+      SUBNET="172.31.13.0/29"
+    else
+      SCAN_MODE="${2:-nspi}"
+      SUBNET="${3:-172.31.7.0/24}"
+    fi
     # Run inside `api`, which already holds BACKEND_URL and the seeded admin
     # credentials, so the host needs no curl, jq or Python of its own.
     "${COMPOSE[@]}" exec -T -e SCAN_MODE="$SCAN_MODE" -e SUBNET="$SUBNET" api python - <<'PY'
@@ -125,7 +158,27 @@ command = call(
     token=token,
 )
 print("command_id=" + command["command_id"])
+if command.get("scan_id"):
+    print("scan_id=" + command["scan_id"])
 PY
+    ;;
+
+  lab-verify)
+    if [[ "$NSPI" -eq 1 ]]; then
+      echo "lab-verify is available only in local simulator mode." >&2
+      exit 1
+    fi
+    SCAN_ID="${2:-}"
+    [[ -n "$SCAN_ID" ]] || { echo "usage: ./simulator.sh lab-verify <scan-id>" >&2; exit 2; }
+    "${LAB_COMPOSE[@]}" exec -T api python /verify_targeted_scan.py "$SCAN_ID"
+    ;;
+
+  lab-stop)
+    if [[ "$NSPI" -eq 1 ]]; then
+      echo "lab-stop is available only in local simulator mode." >&2
+      exit 1
+    fi
+    "${LAB_COMPOSE[@]}" down -v
     ;;
 
   stop)

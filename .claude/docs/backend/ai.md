@@ -4,7 +4,7 @@ title: Backend AI — scan analysis, contextual chat, usage telemetry
 description: Groq-backed scan overviews per language with bounded structured repair and KEV coverage, scoped Q&A on scans/hosts/findings, and org-scoped provider usage rows without storing prompts or answers in ai_usage.
 resource: backend/src/api/services/ai/jobs.py
 tags: [backend, ai, groq, worker, scans, chat, telemetry]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-22T00:00:00Z
 ---
 
 # Backend AI — scan analysis, contextual chat, usage telemetry
@@ -66,6 +66,23 @@ Each language is a separate job and a separate provider run.
    records without making new external advisory requests.
 
 ## Key classes / functions
+
+### Input coverage and explained-report download
+
+The worker passes `settings.ai_max_findings` (`AI_MAX_FINDINGS`, default 10, range 1–15)
+to `build_scan_ai_context()`. It selects `risk.top_findings`; the five-finding chunks in
+`run_bounded_analysis()` partition that selected sample, not the entire persisted scan.
+`AIFindingContext` carries references, CVE/risk metrics and evidence semantics, but omits
+finding descriptions, recommendations, textual evidence, structured observations and
+explicit tool/endpoint fields. Full-scan aggregate counts do not supply those omitted records.
+
+The frontend's explained-report download calls the report GET endpoint, which reads an
+existing completed analysis and renders the PDF with the educational content. Downloading
+does not itself invoke complete Groq analysis. A PDF can contain the full finding register
+without every finding having been analyzed by Groq. See the documented, deferred review in
+[Scan JSON and explained download](../../../specs/053-targeted-scan-lab/SCAN-JSON-AND-AI.md).
+
+### Symbols
 
 | Name | What it does | Ref |
 |------|--------------|-----|

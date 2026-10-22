@@ -1,0 +1,3 @@
+# HELP lab_requests_total Synthetic training request count
+# TYPE lab_requests_total counter
+lab_requests_total 7

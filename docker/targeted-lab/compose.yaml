@@ -1,0 +1,71 @@
+name: dmitri-targeted-lab
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/web-target.Dockerfile
+    networks:
+      lab:
+        ipv4_address: ${LAB_WEB_IP:?set LAB_WEB_IP in .env}
+    restart: unless-stopped
+
+  ssh:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/ssh-target.Dockerfile
+    networks:
+      lab:
+        ipv4_address: ${LAB_SSH_IP:?set LAB_SSH_IP in .env}
+    restart: unless-stopped
+
+  ftp:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/ftp-target.Dockerfile
+    networks:
+      lab:
+        ipv4_address: ${LAB_FTP_IP:?set LAB_FTP_IP in .env}
+    restart: unless-stopped
+
+  smb:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/target-lab.Dockerfile
+    networks:
+      lab:
+        ipv4_address: ${LAB_SMB_IP:?set LAB_SMB_IP in .env}
+    restart: unless-stopped
+
+  telnet:
+    build:
+      context: ../..
+      dockerfile: docker/pi-simulator/telnet-target.Dockerfile
+    networks:
+      lab:
+        ipv4_address: ${LAB_TELNET_IP:?set LAB_TELNET_IP in .env}
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:5.7.30
+    environment:
+      MYSQL_ROOT_PASSWORD: ${LAB_MYSQL_ROOT_PASSWORD:?set a fake lab-only password}
+      MYSQL_DATABASE: corporate_training
+      MYSQL_USER: training_readonly
+      MYSQL_PASSWORD: ${LAB_MYSQL_PASSWORD:?set a fake lab-only password}
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      lab:
+        ipv4_address: ${LAB_MYSQL_IP:?set LAB_MYSQL_IP in .env}
+    restart: unless-stopped
+
+networks:
+  lab:
+    driver: macvlan
+    driver_opts:
+      parent: ${LAB_PARENT_INTERFACE:?set Linux VM interface in .env}
+    ipam:
+      config:
+        - subnet: ${LAB_SUBNET:?set LAN subnet in .env}
+          gateway: ${LAB_GATEWAY:?set LAN gateway in .env}

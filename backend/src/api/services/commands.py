@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timedelta
+from ipaddress import IPv4Network
 from uuid import UUID, uuid4
 
 from sqlalchemy import ColumnElement, case, update
@@ -15,7 +17,11 @@ from api.core.error_codes import normalise_error_code
 from api.models.agent_update import AgentUpdate
 from api.models.command import Agent, Command
 from api.models.persistence import ScanRecord
-from api.schemas.agent_frames import AgentCancelFrame, AgentCommandFrame
+from api.schemas.agent_frames import (
+    AgentCancelFrame,
+    AgentCommandFrame,
+    AvailableSubnet,
+)
 from api.schemas.commands import CommandDetail
 from api.services import agent_connections, agent_presence
 from api.services.activity import append_scan_activity
@@ -47,6 +53,23 @@ class AgentNotFoundError(Exception):
 
 class SubnetNotReportedError(Exception):
     pass
+
+
+def is_subnet_reported(
+    subnet: str, reported: Iterable[AvailableSubnet]
+) -> bool:
+    try:
+        requested_network = IPv4Network(subnet, strict=False)
+    except ValueError:
+        return False
+    for entry in reported:
+        try:
+            available_network = IPv4Network(entry.cidr, strict=False)
+        except ValueError:
+            continue
+        if requested_network.subnet_of(available_network):
+            return True
+    return False
 
 
 class CommandNotCancellableError(Exception):
@@ -605,7 +628,7 @@ def _claim_agent(
     hello = agent_connections.get_hello(agent_id)
     if hello is not None:
         _, reported = hello
-        if subnet not in {entry.cidr for entry in reported}:
+        if not is_subnet_reported(subnet, reported):
             raise SubnetNotReportedError
 
     try:

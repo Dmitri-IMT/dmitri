@@ -7,7 +7,10 @@ import shutil
 from collections.abc import Mapping
 from typing import Any, Iterable
 
-from agent.config import TARGETED_MAX_ISSUES_PER_UNIT
+from agent.config import (
+    TARGETED_DIAGNOSTIC_LIMIT_CHARS,
+    TARGETED_MAX_ISSUES_PER_UNIT,
+)
 from agent.targeted.executor import TargetedExecutor, ToolCommand, ToolExecution
 from agent.targeted.models import (
     TargetedGapReason,
@@ -307,6 +310,54 @@ def _exit_code_is_scan_error(exit_code: int | None) -> bool:
     return exit_code is not None and exit_code != 0 and not 50 <= exit_code <= 200
 
 
+_DIAGNOSTIC_LINE_RE = re.compile(
+    r"\b(error|warning|fatal|problem|failed|failure|unable|cannot|could not|stopped|timeout|timed out)\b",
+    re.IGNORECASE,
+)
+_HEADER_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9-]*):\s*")
+_DIAGNOSTIC_HEADERS = {"error", "warning", "fatal"}
+
+
+def _relevant_diagnostic_lines(value: bytes | str) -> list[str]:
+    text = value.decode(errors="replace") if isinstance(value, bytes) else value
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        header = _HEADER_LINE_RE.match(line)
+        if header and header.group(1).casefold() not in _DIAGNOSTIC_HEADERS:
+            continue
+        if _DIAGNOSTIC_LINE_RE.search(line):
+            lines.append(line)
+    return lines
+
+
+def _failure_diagnostic(
+    execution: ToolExecution, scan_problem: str | None = None
+) -> str | None:
+    parts = [f"report: {scan_problem}"] if scan_problem else []
+    for label, value in (
+        ("diagnostic", execution.diagnostic),
+        ("stdout", execution.stdout),
+        ("stderr", execution.stderr),
+    ):
+        parts.extend(
+            f"{label}: {line}" for line in _relevant_diagnostic_lines(value or b"")
+        )
+    if not parts:
+        parts.append(
+            "testssl exited with code "
+            f"{execution.exit_code}; no recognized diagnostic lines were found."
+        )
+    if execution.stdout_truncated:
+        parts.append("stdout truncated")
+    if execution.stderr_truncated:
+        parts.append("stderr truncated")
+    diagnostic = sanitize_evidence(
+        " | ".join(parts), TARGETED_DIAGNOSTIC_LIMIT_CHARS
+    )
+    return diagnostic or None
+
+
 def run_testssl(
     unit: TargetedUnit, executor: TargetedExecutor, **deadline: Any
 ) -> TargetedUnitResult:
@@ -405,7 +456,7 @@ def run_testssl(
             issues=issues,
             exit_code=execution.exit_code,
             reason_code=TargetedGapReason.EXECUTION_ERROR,
-            diagnostic=execution.diagnostic or scan_problem,
+            diagnostic=_failure_diagnostic(execution, scan_problem),
         )
     return TargetedUnitResult(
         unit,

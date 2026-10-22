@@ -13,7 +13,11 @@ from api.models.command import Agent
 from api.models.identity import Org
 from api.schemas.agents import AgentDetail, AgentSummary
 from api.services import agent_connections
-from api.services.commands import SubnetNotReportedError, active_command_for
+from api.services.commands import (
+    SubnetNotReportedError,
+    active_command_for,
+    is_subnet_reported,
+)
 
 
 class AgentOfflineError(Exception):
@@ -116,7 +120,7 @@ def set_target_subnet(
     hello = agent_connections.get_hello(agent.id)
     if hello is None:
         raise AgentOfflineError
-    if target_subnet not in {entry.cidr for entry in hello[1]}:
+    if not is_subnet_reported(target_subnet, hello[1]):
         raise SubnetNotReportedError
     agent.target_subnet = target_subnet
     session.add(agent)

@@ -127,6 +127,57 @@ def test_testssl_marks_exit_code_with_scan_errors_as_failed() -> None:
     assert executor.commands[0].report_argument_index == 14
 
 
+def test_testssl_failure_diagnostic_includes_sanitized_bounded_stdout() -> None:
+    execution = ToolExecution(
+        TargetedOutcome.COMPLETED,
+        exit_code=1,
+        report=json.dumps({"scanResult": []}).encode(),
+        report_present=True,
+        stdout=(
+            b"Set-Cookie: session=private-value; Secure\n"
+            b"Server: nginx/1.25\n"
+            b"ERROR: scan stopped at https://example.test/private/path password=hunter2"
+        ),
+        stderr=b"OpenSSL warning",
+    )
+
+    result = run_testssl(unit(), FakeExecutor(execution))
+
+    assert result.outcome == TargetedOutcome.FAILED
+    assert result.reason_code == TargetedGapReason.EXECUTION_ERROR
+    assert result.diagnostic is not None
+    assert "stdout:" in result.diagnostic
+    assert "stderr: OpenSSL warning" in result.diagnostic
+    assert "https://example.test/[REDACTED]" in result.diagnostic
+    assert "password=[REDACTED]" in result.diagnostic
+    assert "hunter2" not in result.diagnostic
+    assert "Set-Cookie" not in result.diagnostic
+    assert "private-value" not in result.diagnostic
+    assert "Server: nginx" not in result.diagnostic
+    assert len(result.diagnostic) <= 512
+
+
+def test_testssl_failure_without_recognized_lines_keeps_exit_code_fallback() -> None:
+    execution = ToolExecution(
+        TargetedOutcome.COMPLETED,
+        exit_code=1,
+        report=json.dumps({"scanResult": []}).encode(),
+        report_present=True,
+        stdout=b"Set-Cookie: session=private-value; Secure\nScan phase 4",
+        stderr=b"cipher check finished",
+    )
+
+    result = run_testssl(unit(), FakeExecutor(execution))
+
+    assert result.outcome == TargetedOutcome.FAILED
+    assert result.exit_code == 1
+    assert result.diagnostic == (
+        "testssl exited with code 1; no recognized diagnostic lines were found."
+    )
+    assert "Set-Cookie" not in result.diagnostic
+    assert "private-value" not in result.diagnostic
+
+
 def test_testssl_preserves_partial_findings_when_report_marks_scan_problem() -> None:
     report = {
         "scanResult": [

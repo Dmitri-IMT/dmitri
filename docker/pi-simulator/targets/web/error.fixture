@@ -1,0 +1,2 @@
+2026-10-01 10:00:00 GET /missing HTTP/1.1 404
+2026-10-01 10:00:01 exception: synthetic training event

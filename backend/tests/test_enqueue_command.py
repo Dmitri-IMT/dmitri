@@ -591,7 +591,7 @@ REPORTED = [
 ]
 
 
-def _register_with_hello(agent_id) -> None:
+def _register_with_hello(agent_id, available_subnets=REPORTED) -> None:
     ws = AsyncMock()
 
     async def _run() -> None:
@@ -600,7 +600,7 @@ def _register_with_hello(agent_id) -> None:
             agent_id,
             ws,
             agent_version="0.2.0",
-            available_subnets=REPORTED,
+            available_subnets=available_subnets,
             now=T0,
         )
 
@@ -618,6 +618,33 @@ def test_reported_subnet_is_delivered(
     response = client.post(
         _commands_path(provisioned_agent.id),
         json=REQUEST_BODY,
+        headers=bearer_headers(seeded_org.id, "admin"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "delivered"
+
+
+def test_subnet_within_reported_supernet_is_delivered(
+    client: TestClient,
+    provisioned_agent: Agent,
+    seeded_org: Org,
+    bearer_headers,
+) -> None:
+    _register_with_hello(
+        provisioned_agent.id,
+        [
+            AvailableSubnet(
+                interface="eth0",
+                cidr="172.31.13.0/28",
+                is_default_route=False,
+            ),
+        ],
+    )
+
+    response = client.post(
+        _commands_path(provisioned_agent.id),
+        json={"scan_mode": "standard", "subnet": "172.31.13.0/29"},
         headers=bearer_headers(seeded_org.id, "admin"),
     )
 

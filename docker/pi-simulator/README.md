@@ -1,8 +1,12 @@
 # Local Pi simulator
 
-The simulator runs the real `dmitri agent` daemon, a local backend and database, and a
-Samba target on a fixed Docker bridge. State is deliberately ephemeral: scans accumulate
-until `./simulator.sh stop`, which removes the volumes.
+The simulator runs the real `dmitri agent` daemon, a local backend and database, and
+isolated targets for the targeted-scan demonstration. The vulnerable targets are attached
+only to the internal Docker network `172.31.13.0/28`; their service ports are not published
+on the host. The scan covers `172.31.13.0/29`, containing the five targets; agent `.13` and
+gateway `.14` are outside it. The agent is dual-homed to reach the API and targets.
+State is deliberately ephemeral: the matching `stop` command removes that simulator's
+volumes.
 The local backend image includes DejaVu Sans so API-generated PDF reports support Unicode.
 
 ## Local mode
@@ -20,6 +24,57 @@ A second start is a no-op. Use `./simulator.sh scan` to enqueue the default `nsp
 `172.31.7.0/24`, `./simulator.sh logs agent` to follow the daemon, and
 `./simulator.sh stop` to wipe the session. See `./simulator.sh --help` for optional scan
 mode and subnet arguments.
+
+### Targeted-scan demonstration
+
+The local profile includes HTTP/HTTPS, SSH, anonymous read-only FTP, guest SMB and Telnet
+targets. They expose only synthetic data and intentionally weak configurations. The
+`extensive` profile runs the seven service-targeted tools and NSE scripts for HTTP methods,
+TLS, FTP anonymous access, SSH authentication, SMB protocol/signing and `vulners`. Vulners
+uses the agent's outbound connection to correlate detected CPEs/versions with CVEs; a
+correlation is reported as version evidence, not as proof of exploitation.
+
+Start the lab as its own Compose project. Every start reconciles and rebuilds changed lab
+services while retaining its database volume and the older local simulator data:
+
+```bash
+./simulator.sh lab-start
+```
+
+Use one full Dmitri scan for the presentation result:
+
+```bash
+./simulator.sh lab-scan
+```
+
+The command prints a `command_id` and `scan_id`. After that scan finishes, inspect and
+validate the same persisted scan, replacing the placeholder with the returned scan ID:
+
+```bash
+./simulator.sh lab-verify <scan-id>
+```
+
+The verifier requires all five target hosts, the expected seven-tool unit coverage, the
+expected evidence from each targeted tool, the configured NSE findings, and at least one
+structured positive Vulners CPE/CVE correlation. Nikto is deliberately reported as
+inconclusive by the current production adapter, so the verifier confirms its recorded
+evidence without labeling it a confirmed vulnerability. It prints every persisted finding
+and its available evidence, then returns a
+non-zero exit status if any required evidence is missing. Review its full report before
+using the scan as the presentation result. `./simulator.sh lab-stop` removes only the lab
+database, containers and volumes after the demonstration.
+
+### Recorded rehearsal (2026-10-21)
+
+The [Nikto/testssl remediation record](../../specs/053-targeted-scan-lab/WEB-TOOLS-REMEDIATION.md), dated 2026-10-22, documents the implementation and measurements. Automatic selection in `nspi`/`extensive`, other tools and current evidence policies remain unchanged. Nikto retains the broad `2345789acf` tuning and now uses `-Pause 0.05`, `-maxtime 700s` and an 800 s unit timeout. Direct HTTP/HTTPS runs completed in 565/582 s (5,920 requests each). testssl's command, parser and unit limit are unchanged; its failure diagnostic now includes sanitized, bounded captured problem lines.
+
+The single persisted integrated scan is `8d1fa696-6da0-4289-a959-400fe47fe848`; its raw API payload is saved at `../../scan-results/targeted-lab-2026-10-21.json`. It completed with 7 discovered hosts and 83 findings. It demonstrated ffuf exposures, TLS/NSE signals, SSH algorithm/authentication evidence, SMB enumeration and NSE evidence, Telnet cleartext, and structured Vulners version/CVE correlations. Vulners results are CPE/version matches with applicability unverified; distro backports may affect applicability.
+
+The diagnostic replay on 2026-10-22 (`45039520-8e46-4f92-806f-89c729c63c40`) persisted 80 findings across five hosts and failed acceptance because both Nikto units hit the old 250 s cap. It is not the presentation result and must not be combined with another run. The final integrated scan (`b1dd4b7b-865a-4962-b2e4-df111a4e4a0f`) passed `./simulator.sh lab-verify`: completed, five hosts, 90 findings. Single-scan JSON: `../../scan-results/targeted-lab-2026-10-22.json`. Both Nikto units completed and persisted evidence, which remains inconclusive under current policy.
+
+The agent needs outbound DNS/HTTPS for Vulners lookups. Target containers stay on the
+internal network and have no published host ports. The `smb-vuln-ms17-010` script is not in
+the `extensive` script list; do not attribute that Windows vulnerability to the Samba target.
 
 ## Deployed `nspi` mode
 
@@ -176,19 +231,17 @@ manual because it coordinates a second daemon and validates a failure path.
 ### T7 `[auto]` — production NSE scripts execute
 
 ```bash
-docker compose -f docker/pi-simulator/compose.yaml logs agent | grep 'invoking nmap:' | tail -6
-docker compose -f docker/pi-simulator/compose.yaml exec -T db psql -U postgres -d dmitri_sim -tA -c "select count(*) from findings where cve_id is not null;"
-docker compose -f docker/pi-simulator/compose.yaml exec -T db psql -U postgres -d dmitri_sim -tA -c "select distinct source_script from findings where source_script is not null order by source_script;"
-docker compose -f docker/pi-simulator/compose.yaml exec -T agent nmap -Pn -p 139,445 --script smb-protocols,smb2-security-mode,smb-enum-shares target
+docker compose -p dmitri-targeted-lab-demo -f docker/pi-simulator/compose.yaml -f docker/pi-simulator/compose.lab.yaml logs agent | grep 'invoking nmap:' | tail -6
+docker compose -p dmitri-targeted-lab-demo -f docker/pi-simulator/compose.yaml -f docker/pi-simulator/compose.lab.yaml exec -T db psql -U postgres -d dmitri_sim -tA -c "select count(*) from findings where cve_id is not null;"
+docker compose -p dmitri-targeted-lab-demo -f docker/pi-simulator/compose.yaml -f docker/pi-simulator/compose.lab.yaml exec -T db psql -U postgres -d dmitri_sim -tA -c "select distinct source_script from findings where source_script is not null order by source_script;"
 ```
 
-Pass: the invoked script CSV contains `vulners` and the run has no NSE load error. A zero CVE
-count is valid. Against this SMB2-only target, direct nmap output witnesses both
-`smb-protocols` (dialects 202, 210, 300, 302, 311) and `smb2-security-mode`; persisted
-`source_script` witnesses the actionable `smb2-security-mode` result. Benign SMB2-only
-`smb-protocols` output deliberately creates no finding. `smb-enum-shares` is expected to stay
-silent because it follows the SMB1/MSRPC path. Do not enable NT1 in the target merely to make
-that legacy script speak.
+Pass: the invoked script CSV contains `vulners` and the run has no NSE load error. The
+targeted-lab profile intentionally enables SMBv1 and disables required SMB signing on the
+isolated Samba target; `smb-protocols` and `smb2-security-mode` should therefore produce
+their supported findings in the lab scan. The separate `compose.nspi.yaml` target retains
+its original SMB2-only configuration. Use `lab-verify` to check the NSE evidence; do not
+launch a second scan for the presentation result.
 
 Fail: `NSE: failed to initialize the script engine` means the agent image lacks the full
 nmap script directory. Silence from `smb-enum-shares` alone is not a failure.
