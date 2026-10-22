@@ -148,7 +148,6 @@ class AgentUpdateClaimReceipt(BaseModel):
 
 
 class AgentUpdateEvidence(BaseModel):
-    """Small, closed health evidence allowlist; never accepts logs or config."""
 
     model_config = ConfigDict(extra="forbid")
 

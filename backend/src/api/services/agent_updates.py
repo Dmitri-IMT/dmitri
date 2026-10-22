@@ -92,8 +92,6 @@ def claim_update(
         raise UpdateProtocolError("artifact_mismatch")
 
     if operation.phase == "preparing":
-        # A lost claim response is retriable, including after reconnect. The receipt
-        # is immutable and remains bound to the original session and deadline.
         if body.session_id != operation.session_id:
             session.rollback()
             raise UpdateProtocolError("session_replaced")
@@ -180,7 +178,6 @@ def _event_digest(body: AgentUpdateEventRequest) -> str:
 def _validate_event_combination(
     body: AgentUpdateEventRequest, operation: AgentUpdate
 ) -> None:
-    """Keep phase, outcome and evidence as one coherent local assertion."""
     evidence = body.evidence
     if body.phase == "awaiting_confirmation":
         valid = (
@@ -221,7 +218,6 @@ def _validate_event_combination(
             operation.error_code,
         }
     elif body.phase == "succeeded":
-        # The tuple is locally coherent, but backend success still requires hello.
         valid = body.local_outcome == "succeeded" and body.error_code is None
     elif body.phase == "expired":
         valid = (
@@ -438,8 +434,6 @@ def record_update_event(
         operation.invocation_id = body.invocation_id
         operation.local_completed_at = now
     elif body.phase == "succeeded":
-        # The updater reports local health only. Remote confirmation is synthesized
-        # exclusively after a separately observed matching current-session hello.
         session.rollback()
         raise UpdateProtocolError("hello_confirmation_required")
     elif body.phase == "failed" and operation.mutation_started_at is not None:

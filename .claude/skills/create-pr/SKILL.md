@@ -163,6 +163,34 @@ the default reviewer; this callout is for the post-merge migration step, not a s
 When `ALEMBIC_UPGRADE_NEEDED=false`, add one line under **Database**: `No Alembic upgrade required
 for this PR.`
 
+### 4c. Assess Pi release need
+
+Agent releases are manual. Nothing publishes a Pi package when a PR merges. Decide from the PR
+diff alone whether this PR needs a new Pi release after merge. Do not ask the user.
+
+```bash
+AGENT_FILES=$(git diff --name-only "$TARGET_BRANCH".."$CURRENT_BRANCH" -- \
+  hardware-agent/pyproject.toml hardware-agent/uv.lock \
+  'hardware-agent/src/**' 'hardware-agent/packaging/**')
+AGENT_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' hardware-agent/pyproject.toml)
+```
+
+Set `PI_RELEASE_NEEDED=true` when `AGENT_FILES` is not empty, else `false`.
+
+When `PI_RELEASE_NEEDED=true`, the generated description **must** include a **Pi release**
+subsection (see step 6) that says:
+
+> **Pi release needed** after merge: version `<AGENT_VERSION>`.
+> @rontho14 — please publish it: tag the merge commit on `main` with
+> `git tag -a agent-v<AGENT_VERSION> -m "agent <AGENT_VERSION>" <merge-sha>` and
+> `git push origin agent-v<AGENT_VERSION>`.
+
+Use a real `@rontho14` mention so GitHub notifies them. The tag must be annotated, must point at a
+commit on `main`, and must match `hardware-agent/pyproject.toml`, or the release workflow stops.
+
+When `PI_RELEASE_NEEDED=false`, add one line under **Pi release**: `No Pi release needed for this
+PR.`
+
 ### 5. Generate PR Title
 
 If user didn't provide a title, generate one from commits and files:
@@ -229,6 +257,10 @@ How to test these changes:
 <If ALEMBIC_UPGRADE_NEEDED: list migration revision file(s), alembic upgrade required, @rontho14 please run the migration>
 <Else: No Alembic upgrade required for this PR.>
 
+## Pi release
+<If PI_RELEASE_NEEDED: agent version, Pi release needed, @rontho14 please tag and push agent-v<AGENT_VERSION>>
+<Else: No Pi release needed for this PR.>
+
 ## Checklist
 - [ ] My code follows the project's code style
 - [ ] I have updated relevant documentation
@@ -236,6 +268,7 @@ How to test these changes:
 - [ ] All tests pass locally
 - [ ] I have reviewed the CONTRIBUTING guidelines
 <If ALEMBIC_UPGRADE_NEEDED: - [ ] @rontho14 ran `alembic upgrade head` on the target environment after merge>
+<If PI_RELEASE_NEEDED: - [ ] @rontho14 pushed the `agent-v<AGENT_VERSION>` tag after merge>
 
 ## Additional Notes
 [Any other context or notes]

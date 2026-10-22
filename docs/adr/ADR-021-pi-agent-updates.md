@@ -27,6 +27,10 @@ and backend image consume this same tracked file. Its approved primary fingerpri
 `92BD91D03608EA3AFDB108AAB7EEC4E4E954DA7A`. Private signing material is kept outside the
 repository in protected custody.
 
+Releases are manual. The release workflow builds and publishes a package only when a maintainer
+pushes an annotated `agent-vX.Y.Z` tag on a `main` commit whose `hardware-agent/pyproject.toml`
+version is `X.Y.Z`. A merge to `main` alone does not publish a release.
+
 The selected static repository base is
 `https://dmitri-imt.github.io/dmitri/`. The Pages workflow can publish signed APT metadata and
 packages there. A selected hosting URL does not mean that a release has been published or that
@@ -75,8 +79,7 @@ configuration steps.
 
 ## Rollout status and limits
 
-Implementation tasks 1–14 and local O1–O3 code gates are tracked in
-[`specs/052-remote-agent-updates/ROLLOUT.md`](../../specs/052-remote-agent-updates/ROLLOUT.md).
+Implementation tasks 1–14 and local O1–O3 code gates are complete.
 Protected CI, hosted signing and publication, production migration/configuration, and the
 assisted real-Pi bootstrap/canary are separate gates. Until these are completed, this ADR does
 not assert that a production repository is live, that Railway has been configured, or that a

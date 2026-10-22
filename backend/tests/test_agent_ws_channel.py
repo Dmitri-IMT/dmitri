@@ -378,8 +378,6 @@ def test_matching_current_hello_confirms_durable_local_update_success(
         {
             "agent_version": "0.2.0",
             "package_version": "1.0.7-1",
-            # A blocked companion suppresses agent_update_v1, but still reports
-            # authoritative context for an operation already in progress.
             "capabilities": ["scan_finalization_v1"],
             "update_context": {
                 "update_id": str(update_id),

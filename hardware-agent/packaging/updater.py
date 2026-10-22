@@ -41,7 +41,6 @@ SOCKET_PATH = RUNTIME_DIR / "control.sock"
 MAX_MESSAGE_BYTES = 4096
 CHECK_TIMEOUT_SECONDS = 600
 CLIENT_TIMEOUT_SECONDS = CHECK_TIMEOUT_SECONDS + 30
-# Runtime compatibility level. This is independent of Debian package version.
 UPDATER_COMPAT_LEVEL = 1
 ACTIVE_PHASES = (
     "requested",
@@ -125,7 +124,6 @@ class Updater:
                     )
                     connection.execute("PRAGMA user_version = 1")
         else:
-            # Add companion transaction tables without rewriting the Task 3 journal.
             try:
                 with closing(self._connect()) as connection, connection:
                     if connection.execute("PRAGMA integrity_check").fetchone() != (
@@ -155,7 +153,6 @@ class Updater:
                             "ALTER TABLE update_details ADD COLUMN recovery_attempts INTEGER NOT NULL DEFAULT 0"
                         )
             except (sqlite3.DatabaseError, StateCorrupt):
-                # Preserve a damaged journal; _restore_gate records the fail-closed gate.
                 pass
         os.chmod(self.journal_path, 0o600)
         self._restore_gate()
@@ -282,10 +279,6 @@ class Updater:
         if active:
             self._write_gate("operation_pending", active)
             return
-        # A claim intent is deliberately journaled before the remote request.
-        # Preserve its ordinary operation gate across restarts so the reporter
-        # can reconcile that exact idempotent claim instead of converting it to
-        # a generic recovery gate that blocks all reporting.
         if self.gate_path.exists() and gate.get("reason") == "operation_pending":
             operation_ids = gate["operation_ids"]
             with closing(self._connect()) as connection:
@@ -371,7 +364,6 @@ class Updater:
                 if healthy:
                     self.report_retry_delay = 5
             except (sqlite3.DatabaseError, OSError, StateCorrupt):
-                # Keep the durable event and retry on the next interval.
                 self.report_retry_delay = min(
                     {5: 15, 15: 60, 60: 300}.get(self.report_retry_delay, 300), 300
                 )
@@ -629,7 +621,6 @@ class Updater:
             _verify_package(recovery_package, installed_package_version)
             _verify_apt_origin_suite(installed_package_version, recovery_digest)
             _read_env(AGENT_ENV)
-            # The verifier accepts only the authenticated stable repository suite.
             suite = "stable"
             prepared = True
         except (OSError, subprocess.SubprocessError, UpdateFailure, ValueError):
@@ -685,7 +676,6 @@ class Updater:
             os.close(descriptor)
 
     def accept_update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Claim and apply one verified, cached package; all effects use fixed argv."""
         required = {
             "update_id",
             "session_id",
@@ -741,9 +731,6 @@ class Updater:
                 if scan_fd >= 0:
                     os.close(scan_fd)
                 return {"ok": False, "error": "device_busy"}
-            # These mutable preconditions must be re-read while both exclusion
-            # locks are held; a scan/checkpoint may have started after the first
-            # fast-path check above.
             if self.gate_path.exists() or self.scan_checkpoint_path.exists():
                 return {"ok": False, "error": "device_busy"}
             try:
@@ -780,8 +767,6 @@ class Updater:
             return {"ok": True, "phase": existing[0], "replayed": True}
         package = PACKAGE_CACHE / f"{digest}.deb"
         try:
-            # Refresh and validate signed repository evidence even on cache hits:
-            # a local file alone is not proof of current release authorization.
             if not self._run_metadata_refresh():
                 raise UpdateFailure("metadata_untrusted")
             _verify_apt_origin_suite(target, digest)
@@ -794,7 +779,6 @@ class Updater:
         try:
             _verify_package(package, target)
             prior = self.package_version()
-            # The trusted previously-installed package must already be cached and verified.
             previous = PACKAGE_CACHE / (prior + ".deb")
             if not previous.is_file():
                 return {"ok": False, "error": "previous_package_unavailable"}
@@ -807,7 +791,6 @@ class Updater:
                     update_id, session_id, release_id, target, digest, deadline
                 )
                 return {"ok": False, "error": "authorization_expired"}
-            # Record the idempotent claim intent before contacting the backend.
             with closing(self._connect()) as db, db:
                 db.execute(
                     "INSERT OR IGNORE INTO operations VALUES (?, 'requested')",
@@ -883,9 +866,6 @@ class Updater:
                 self._expire_before_mutation(update_id, session_id)
                 self._clear_gate()
                 return {"ok": False, "error": "authorization_expired"}
-            # The backend's accepted installing event is the transaction
-            # boundary. If the deadline expires while reporting or stopping the
-            # service, perform safety recovery and never start dpkg afterward.
             self._emit(update_id, session_id, "installing", None, None)
             _systemctl("stop", "dmitri-agent.service")
             if datetime.now(timezone.utc) >= deadline:
@@ -938,7 +918,6 @@ class Updater:
                     pass
                 return {"ok": False, "error": code}
             if detail[0] == "claim_pending":
-                # Reporter/startup reconciliation will retry the idempotent claim.
                 return {"ok": False, "error": "claim_pending"}
             return self._recover_update(update_id, session_id, str(exc))
 
@@ -978,9 +957,6 @@ class Updater:
                 )
             return stdout.strip()
         except subprocess.TimeoutExpired as exc:
-            # dpkg must never be killed mid-database transaction. Keep the gate
-            # and wait for its supervised completion; bounded health/query tools
-            # are terminated as a process group and can safely fail closed.
             if Path(argv[0]).name == "dpkg":
                 self._write_gate("operation_pending", self._active_operation_ids())
                 process.communicate()
@@ -1018,8 +994,6 @@ class Updater:
         deadline: datetime,
     ) -> None:
         with closing(self._connect()) as db, db:
-            # Only the backend worker may expire an unclaimed remote request.
-            # Keep a local idempotency tombstone, without an invalid HTTP event.
             db.execute("INSERT INTO operations VALUES (?, 'expired')", (update_id,))
             db.execute(
                 "INSERT INTO update_details(operation_id,session_id,release_id,target_version,sha256,deadline,phase,error_code) "
@@ -1035,7 +1009,6 @@ class Updater:
             )
 
     def _resume_interrupted_update(self) -> None:
-        """Reconcile one journaled package transaction before agent startup."""
         with closing(self._connect()) as db:
             pending = db.execute(
                 "SELECT 1 FROM update_details d JOIN operations o USING(operation_id) "
@@ -1044,8 +1017,6 @@ class Updater:
             ).fetchone()
         if not pending:
             return
-        # Recovery changes the installed tree just like a new install. Keep both
-        # exclusion locks until all local recovery and durable reporting is done.
         with self._exclusive_update_locks():
             self._resume_interrupted_update_locked()
 
@@ -1116,7 +1087,6 @@ class Updater:
                 self._recover_update(update_id, session_id, str(exc))
 
     def _reconcile_pending_claims(self) -> bool:
-        """Retry durable idempotent claims while preserving update/scan exclusion."""
         with closing(self._connect()) as db:
             rows = db.execute(
                 "SELECT d.operation_id,d.session_id,d.target_version,d.release_id,d.sha256 "
@@ -1148,8 +1118,6 @@ class Updater:
                     ):
                         return False
                 if self._active_operations() != [row[0] for row in rows]:
-                    # A pending update itself is expected; any other operation
-                    # makes this retry unsafe.
                     active = set(self._active_operations())
                     if active - {row[0] for row in rows}:
                         return False
@@ -1189,9 +1157,6 @@ class Updater:
                 },
             )
         except Exception as exc:
-            # Only the backend's explicit 410 request_expired response proves
-            # that no claim was admitted. A lost response or 409 can mean the
-            # claim committed; retain and retry the same idempotency key.
             if _is_expired_claim_response(exc):
                 with closing(self._connect()) as db, db:
                     db.execute(
@@ -1216,8 +1181,6 @@ class Updater:
             session_id=session_id,
             release_id=release_id,
         ):
-            # Report a terminal pre-mutation rejection. If the backend cannot
-            # accept it yet, _emit retains the durable event for retry.
             self._emit(
                 update_id,
                 session_id,
@@ -1247,8 +1210,6 @@ class Updater:
                 "UPDATE operations SET phase='preparing' WHERE operation_id=? AND phase='requested'",
                 (update_id,),
             )
-        # The interrupted process cannot prove that its preflight artifacts and
-        # snapshot survived. End the admitted operation safely before mutation.
         self._recover_update(update_id, session_id, "interrupted_before_install")
         return True
 
@@ -1284,10 +1245,6 @@ class Updater:
             or app_version != expected_app_version
         ):
             raise UpdateFailure("local_health_failed")
-        # A daemon may already have completed its one-shot readiness handshake
-        # after starting against this updater. Reuse it only when it still binds
-        # the currently running process and exact target package/application;
-        # an old-version handshake cannot satisfy these checks.
         _systemctl("start", "dmitri-agent.service")
         for _ in range(30):
             try:
@@ -1687,7 +1644,6 @@ def _verify_cache_digest(package: Path, version: str) -> None:
 
 
 def _download_trusted_package(version: str, expected_digest: str) -> Path:
-    """Download only the fixed package/version from the configured signed APT repo."""
     if not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}", version):
         raise UpdateFailure("metadata_untrusted")
     _verify_apt_origin_suite(version, expected_digest)
@@ -1721,7 +1677,6 @@ def _download_trusted_package(version: str, expected_digest: str) -> Path:
 
 
 def _verify_apt_origin_suite(version: str, expected_digest: str | None = None) -> None:
-    """Bind the exact release and optional package digest to the provisioned APT source."""
     uri, _keyring = _verify_dedicated_apt_source()
     _verify_apt_metadata_dates(uri)
     result = subprocess.run(
@@ -1756,7 +1711,6 @@ def _verify_apt_origin_suite(version: str, expected_digest: str | None = None) -
             if source_match:
                 active_uri = source_match.group(1).rstrip("/") == uri.rstrip("/")
                 if active_uri:
-                    # Origin and Suite were checked in the APT-verified InRelease.
                     trusted_version = True
     if not version_found:
         raise UpdateFailure("metadata_unavailable")
@@ -1774,12 +1728,6 @@ def _trusted_apt_package_record(
     package_name: str = "hardware-agent",
     required_architecture: str = "arm64",
 ) -> str | None:
-    """Read the package record only from the Packages index at the pinned URI.
-
-    apt's index target list maps each authenticated index file back to its
-    source URI. `apt-helper cat-file` handles APT's compressed list formats.
-    This avoids accepting a same-version/same-hash record from another origin.
-    """
     index_targets = subprocess.run(
         [
             "/usr/bin/apt-get",
@@ -1840,7 +1788,6 @@ def _trusted_apt_package_record(
 
 
 def _verify_dedicated_apt_source() -> tuple[str, str]:
-    """Require one enabled HTTPS stable source pinned to a root-owned keyring."""
     from urllib.parse import urlsplit
 
     source_files = [
@@ -2042,7 +1989,6 @@ def _apt_record_matches(
 
 
 def _is_expired_claim_response(exc: BaseException) -> bool:
-    """Only the documented backend 410/request_expired closes an unclaimed intent."""
     if getattr(exc, "code", None) != 410:
         return False
     try:
@@ -2235,7 +2181,6 @@ def _systemctl(action: str, unit: str) -> None:
 
 
 def _read_env(path: Path) -> dict[str, str]:
-    """Read a small KEY=value allowlist without shell evaluation or interpolation."""
     allowed = {"BACKEND_URL", "DEVICE_ID", "DEVICE_PRIVATE_KEY"}
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -2293,9 +2238,6 @@ def _failure_code(error: Exception) -> str:
         return "unsupported_platform"
     if "resource" in message or "space" in message or "inode" in message:
         return "insufficient_resources"
-    # A failing dpkg invocation is an installation failure; mentioning the
-    # executable in CalledProcessError does not mean the package manager was
-    # busy. Lock contention is reported explicitly as package_manager_busy.
     if (
         "package_manager_busy" in message
         or "package_plan" in message
@@ -2329,7 +2271,6 @@ def _claim_receipt_matches(
 
 
 def _application_version_for_package(package_version: str) -> str:
-    """Map the immutable Debian release contract to its upstream app version."""
     match = re.fullmatch(r"(\d+\.\d+\.\d+)-1", package_version)
     if not match:
         raise UpdateFailure("artifact_mismatch")

@@ -20,8 +20,8 @@ procedure.
 
 The selected repository URL is `https://dmitri-imt.github.io/dmitri/`, but a selected
 URL alone does not prove that a signed release has been published or that production is
-configured. Check [the rollout ledger](../specs/052-remote-agent-updates/ROLLOUT.md)
-before scheduling a production installation.
+configured. Confirm the publication and production configuration before scheduling a
+production installation.
 
 ## 1. Flash and connect
 

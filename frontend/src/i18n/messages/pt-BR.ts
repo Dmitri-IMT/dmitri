@@ -7,13 +7,6 @@ const SEVERITY: Record<string, string> = {
   low: 'Baixa',
 }
 
-const SEVERITY_LOWER: Record<string, string> = {
-  critical: 'crítica',
-  high: 'alta',
-  medium: 'média',
-  low: 'baixa',
-}
-
 export const catalog: Catalog = {
   'nav.home': 'Início',
   'nav.scans': 'Varreduras',
@@ -268,6 +261,22 @@ export const catalog: Catalog = {
   'evidence.result.inconclusive': 'Resultado inconclusivo',
   'evidence.truncated':
     'Alguns registros de evidência foram omitidos porque o limite de exibição foi atingido.',
+  'common.vulnerabilitiesInScanCaption': 'Vulnerabilidades nesta varredura',
+  'evidence.filter.label': 'Filtrar vulnerabilidades por evidência',
+  'evidence.filter.all': 'Vulnerabilidades',
+  'evidence.filter.confirmed': 'Confirmadas',
+  'evidence.filter.unverified': 'Não verificadas',
+  'evidence.filter.empty.all': 'Nenhuma vulnerabilidade nesta varredura.',
+  'evidence.filter.empty.confirmed':
+    'Nenhuma vulnerabilidade desta varredura foi confirmada por uma verificação direta ou por uma configuração observada.',
+  'evidence.filter.empty.unverified':
+    'Todas as vulnerabilidades desta varredura foram confirmadas.',
+  'evidence.row.confirmed': 'Confirmada',
+  'evidence.row.unverified': 'Não verificada',
+  'evidence.verdict.confirmed': 'Confirmada.',
+  'evidence.verdict.unverified': 'Não verificada.',
+  'evidence.technicalDetails': 'Detalhes técnicos',
+  'evidence.otherChecks': ({ count }) => 'Outras verificações: ' + count,
   'common.exploitabilityIndex': 'Índice de explorabilidade',
   'common.whatItIs': 'O que é',
   'common.whatToDo': 'O que fazer',
@@ -282,10 +291,6 @@ export const catalog: Catalog = {
     ': ' +
     count +
     (count === 1 ? ' vulnerabilidade' : ' vulnerabilidades'),
-  'common.severityGroupToggle': ({ severity }) =>
-    'Alternar vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity],
-  'common.severityGroupCaption': ({ severity }) =>
-    'Vulnerabilidades de gravidade ' + SEVERITY_LOWER[severity] + ' neste scan',
   'common.findingsLoadError':
     'N\u00e3o foi poss\u00edvel carregar as vulnerabilidades deste equipamento.',
   'common.noVulnerabilities': 'Nenhuma vulnerabilidade neste equipamento.',
@@ -499,7 +504,10 @@ export const catalog: Catalog = {
   'ai.unknownLimit':
     'Esta varredura não informa se todas as verificações terminaram.',
   'updates.title': 'Atualização do agente',
-  'updates.availableBadge': 'Atualização disponível',
+  'updates.status': 'Status',
+  'updates.updateTo': ({ version }) => `Atualizar para ${version}`,
+  'updates.whatsNew': ({ version }) => `Novidades da versão ${version}`,
+  'updates.technicalDetails': 'Detalhes técnicos',
   'updates.installedVersion': 'Versão instalada',
   'updates.installedPackageVersion': 'Versão instalada do pacote',
   'updates.availableVersion': 'Versão disponível',
@@ -507,8 +515,6 @@ export const catalog: Catalog = {
   'updates.versionObservedAt': 'Versão observada em',
   'updates.packageVersion': 'Versão observada do pacote',
   'updates.observedVersion': 'Versão observada',
-  'updates.availability': 'Disponibilidade',
-  'updates.readiness': 'Preparação do dispositivo',
   'updates.catalogueCheckedAt': 'Catálogo verificado em',
   'updates.unknownValue': 'Desconhecida',
   'updates.availability.available': 'Atualização disponível',
@@ -522,7 +528,6 @@ export const catalog: Catalog = {
     'É necessária preparação assistida antes de atualizações remotas',
   'updates.readiness.busy': 'Dispositivo ocupado',
   'updates.readiness.unknown': 'Preparação desconhecida',
-  'updates.releaseNotes': 'Notas da versão',
   'updates.updateDevice': 'Atualizar dispositivo',
   'updates.refreshStatus': 'Atualizar status',
   'updates.refreshing': 'Atualizando…',

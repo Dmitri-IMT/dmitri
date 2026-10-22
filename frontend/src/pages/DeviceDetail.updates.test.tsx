@@ -91,7 +91,7 @@ async function renderDeviceDetail(
 }
 
 describe('Device update section', () => {
-  it('starts collapsed, shows an available update badge, and sits between scan and history', async () => {
+  it('starts collapsed, notes an available update, and sits between scan and history', async () => {
     agentDetail({ ...defaultAgent, observed_version: '1.0.5' })
     mockAvailability(available)
     await renderDeviceDetail(undefined, false)
@@ -110,9 +110,9 @@ describe('Device update section', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(
-      screen.getByTestId('agent-update-available-badge'),
-    ).toHaveTextContent('Update available')
+    expect(screen.getByTestId('agent-update-available-note')).toHaveTextContent(
+      'Update available',
+    )
     expect(screen.getByTestId('agent-update-content')).toHaveAttribute(
       'data-state',
       'closed',
@@ -272,7 +272,6 @@ describe('Device update section', () => {
       mockAvailability(available)
       await renderDeviceDetail(60000, false)
 
-      // Let the initial requests settle while advancing fake timers in small steps.
       for (
         let attempt = 0;
         attempt < 100 && operationCalls === 0;
@@ -455,9 +454,11 @@ describe('Device update section', () => {
     const current = await screen.findByTestId('agent-update-current')
     expect(current).toHaveTextContent('Awaiting confirmation')
     expect(current).toHaveTextContent('Installed and healthy locally')
-    expect(current).toHaveTextContent(
-      'Local installation succeeded. Waiting for remote confirmation.',
-    )
+    expect(
+      screen.getByText(
+        'Local installation succeeded. Waiting for remote confirmation.',
+      ),
+    ).toBeInTheDocument()
     expect(current).toHaveTextContent('Device contact has not been reported.')
     expect(current).not.toHaveTextContent('Confirmed')
     expect(current).not.toHaveTextContent('%')
@@ -589,9 +590,11 @@ describe('Device update section', () => {
 
     expect(await screen.findByText('Atualização do agente')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Atualizar dispositivo' }),
+      screen.getByRole('button', { name: 'Atualizar para 1.0.6' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Pronto para atualizar')).toBeInTheDocument()
+    expect(
+      screen.getByText('Pronto para atualizar', { selector: 'dd' }),
+    ).toBeInTheDocument()
   })
 
   it.each([

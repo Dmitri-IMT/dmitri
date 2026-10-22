@@ -34,7 +34,6 @@ def main() -> None:
 
 
 def _run_health() -> None:
-    """Report fixed local checks without exposing configuration values."""
     from importlib.metadata import PackageNotFoundError
 
     result: dict[str, object] = {
@@ -65,7 +64,6 @@ def _run_health() -> None:
             directory, os.R_OK | os.W_OK
         )
     except Exception:
-        # Keep diagnostics and secret-bearing values local.
         pass
     result["ok"] = all(
         result[key]

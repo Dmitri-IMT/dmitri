@@ -62,13 +62,6 @@ def test_admin_update_flows_through_websocket_daemon_companion_and_signed_event_
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Exercise the production protocol across API, WS, daemon, and updater.
-
-    Package installation and systemd are host effects, so this harness replaces
-    only those boundaries. The HTTP request, WS handlers, daemon dispatch, Unix
-    socket protocol, updater journal/claim, signed event routes, and Postgres
-    writes use their real implementations.
-    """
     hardware_src = Path(__file__).resolve().parents[2] / "hardware-agent" / "src"
     packaging_dir = Path(__file__).resolve().parents[2] / "hardware-agent" / "packaging"
     if str(hardware_src) not in sys.path:
@@ -262,8 +255,6 @@ def test_admin_update_flows_through_websocket_daemon_companion_and_signed_event_
         assert not socket_thread.is_alive()
         assert frame_holder["dropped_ack"] is True
 
-    # The updater journal kept sequence 4 after the server committed it but its
-    # acknowledgement was lost. Replaying the exact durable body is idempotent.
     assert updater._flush_events(str(frame.update_id)) is True
     with updater._connect() as journal:
         ack_sequence, event_count = journal.execute(
@@ -290,8 +281,6 @@ def test_admin_update_flows_through_websocket_daemon_companion_and_signed_event_
         == 1
     )
 
-    # The next real WS hello after local health verification confirms the remote
-    # version observation independently of the updater's local-success event.
     monkeypatch.setattr(updater, "_post_json", lambda *_args: {})
     with client.websocket_connect(
         f"/api/v1/agents/{provisioned_agent.id}/commands",
@@ -759,7 +748,6 @@ def test_hello_before_local_event_and_hello_alone_cannot_confirm(
         current_session_id=session_id,
         now=now,
     )
-    # A matching hello without durable local health evidence cannot confirm.
     agent_row = administrative_session.get(Agent, agent.id)
     assert agent_row is not None
     reconcile_update_hello(
@@ -993,7 +981,6 @@ def test_event_phase_outcome_and_rollback_evidence_are_coherent(
     )
     administrative_session.refresh(operation)
     assert operation.phase == "needs_intervention"
-    # A second active operation is rejected by the partial unique reservation.
     another = _operation(org, user, agent, release, key="blocked-by-intervention")
     administrative_session.add(another)
     with pytest.raises(IntegrityError):

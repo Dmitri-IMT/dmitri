@@ -291,13 +291,11 @@ def test_refresh_lifecycle_with_real_sqlmodel_session(
         "1.0.11-1",
     }
 
-    # A same-generation refresh exercises lookups and immutable identity checks.
     assert (
         refresh_release_catalog(administrative_session, settings, client=client()) == 2
     )
     assert len(administrative_session.exec(select(AgentRelease)).all()) == 2
 
-    # Removing a release from a newer signed catalog withdraws it, retaining history.
     catalog["generation"] = 2
     catalog["releases"] = [second]
     files["main/release-catalog.json"] = json.dumps(catalog).encode()
@@ -315,7 +313,6 @@ def test_refresh_lifecycle_with_real_sqlmodel_session(
     assert first_row.withdrawn_at is not None
     assert second_row.withdrawn_at is None
 
-    # A late invalid entry rolls back an earlier withdrawal mutation and generation.
     catalog["generation"] = 3
     withdrawn_second = deepcopy(second)
     withdrawn_second["withdrawn"] = True
@@ -607,9 +604,6 @@ def test_worker_refreshes_only_the_configured_repository(monkeypatch):
     monkeypatch.setattr(
         worker, "process_pending_enrichment_jobs", lambda *_args, **_kwargs: 0
     )
-    # GitHub-hosted runners can have a monotonic clock value below the refresh
-    # interval shortly after boot. Use a definitely stale timestamp so this
-    # test does not depend on runner uptime.
     stale_refresh_time = -settings.agent_update_refresh_interval_seconds
     monkeypatch.setattr(worker, "_last_catalog_refresh", stale_refresh_time)
 

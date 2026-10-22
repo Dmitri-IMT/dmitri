@@ -34,7 +34,6 @@ def _version_line(text: str) -> str:
 
 
 def affected_packages(changed: set[str]) -> tuple[bool, bool]:
-    """Return agent/updater identity effects for paths changed in the checkout."""
     agent_sources = {
         "hardware-agent/packaging/build-deb.sh",
         "hardware-agent/pyproject.toml",

@@ -19,7 +19,6 @@ def test_checkpoint_survives_restart_and_retains_v1_on_legacy_reconnect(tmp_path
 
     restarted_store = ScanFinalizationStore(store.path)
     assert restarted_store.load() == checkpoint
-    # Unsupported capability is deliberately not an operation on this store.
     assert restarted_store.load().protocol == 1
 
 

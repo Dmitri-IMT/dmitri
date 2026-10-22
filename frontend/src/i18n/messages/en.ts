@@ -254,6 +254,22 @@ export const catalog = {
   'evidence.result.inconclusive': 'Inconclusive result',
   'evidence.truncated':
     'Some evidence records were omitted because the display limit was reached.',
+  'common.vulnerabilitiesInScanCaption': 'Vulnerabilities in this scan',
+  'evidence.filter.label': 'Filter vulnerabilities by evidence',
+  'evidence.filter.all': 'Vulnerabilities',
+  'evidence.filter.confirmed': 'Confirmed',
+  'evidence.filter.unverified': 'Unverified',
+  'evidence.filter.empty.all': 'No vulnerabilities in this scan.',
+  'evidence.filter.empty.confirmed':
+    'No vulnerability in this scan was confirmed by a direct check or an observed setting.',
+  'evidence.filter.empty.unverified':
+    'Every vulnerability in this scan was confirmed.',
+  'evidence.row.confirmed': 'Confirmed',
+  'evidence.row.unverified': 'Unverified',
+  'evidence.verdict.confirmed': 'Confirmed.',
+  'evidence.verdict.unverified': 'Unverified.',
+  'evidence.technicalDetails': 'Technical details',
+  'evidence.otherChecks': ({ count }) => 'Other checks: ' + count,
   'common.exploitabilityIndex': 'Exploitability index',
   'common.whatItIs': 'What it is',
   'common.whatToDo': 'What to do',
@@ -268,10 +284,6 @@ export const catalog = {
     ': ' +
     count +
     (count === 1 ? ' vulnerability' : ' vulnerabilities'),
-  'common.severityGroupToggle': ({ severity }) =>
-    'Toggle ' + severity + ' vulnerabilities',
-  'common.severityGroupCaption': ({ severity }) =>
-    severity + ' vulnerabilities in this scan',
   'common.findingsLoadError': "Couldn't load this machine's vulnerabilities.",
   'common.noVulnerabilities': 'No vulnerabilities on this machine.',
   'common.vulnerabilitiesOnMachine': 'Vulnerabilities on this machine',
@@ -469,7 +481,10 @@ export const catalog = {
   'ai.partialLimit': 'Some checks in this scan did not finish.',
   'ai.unknownLimit': 'This scan does not report whether every check finished.',
   'updates.title': 'Agent update',
-  'updates.availableBadge': 'Update available',
+  'updates.status': 'Status',
+  'updates.updateTo': ({ version }) => `Update to ${version}`,
+  'updates.whatsNew': ({ version }) => `What’s new in ${version}`,
+  'updates.technicalDetails': 'Technical details',
   'updates.installedVersion': 'Installed version',
   'updates.installedPackageVersion': 'Installed package version',
   'updates.availableVersion': 'Available version',
@@ -477,8 +492,6 @@ export const catalog = {
   'updates.versionObservedAt': 'Version observed',
   'updates.packageVersion': 'Observed package version',
   'updates.observedVersion': 'Observed version',
-  'updates.availability': 'Availability',
-  'updates.readiness': 'Device readiness',
   'updates.catalogueCheckedAt': 'Catalogue checked',
   'updates.unknownValue': 'Unknown',
   'updates.availability.available': 'Update available',
@@ -492,7 +505,6 @@ export const catalog = {
     'Assisted setup required before remote updates',
   'updates.readiness.busy': 'Device busy',
   'updates.readiness.unknown': 'Readiness unknown',
-  'updates.releaseNotes': 'Release notes',
   'updates.updateDevice': 'Update device',
   'updates.refreshStatus': 'Refresh status',
   'updates.refreshing': 'Refreshing…',

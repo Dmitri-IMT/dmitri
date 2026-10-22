@@ -1,5 +1,3 @@
-"""Durable remote scan finalization checkpoints."""
-
 from __future__ import annotations
 
 import json
@@ -26,7 +24,6 @@ class ScanFinalizationCheckpoint:
 
 
 class ScanFinalizationStore:
-    """One root-owned checkpoint, replaced atomically and fsynced before effects."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -107,8 +104,6 @@ class ScanFinalizationStore:
             try:
                 temp.unlink(missing_ok=True)
             except PermissionError:
-                # Windows does not support POSIX fchmod and may retain an fd
-                # until the interpreter closes it after an early write error.
                 pass
 
     def clear(self) -> None:

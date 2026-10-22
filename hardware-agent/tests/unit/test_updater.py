@@ -930,7 +930,7 @@ def test_lost_event_ack_replays_same_committed_event_after_restart(
     def post(_path: str, body: dict[str, object]) -> dict[str, object]:
         attempts.append(body.copy())
         if not committed:
-            committed.append(body.copy())  # server committed, response/ACK was lost
+            committed.append(body.copy())
             raise OSError("connection closed after server commit")
         assert body == committed[0]
         return {"ack_sequence": body["sequence"]}
@@ -1473,7 +1473,6 @@ def test_apt_package_hash_must_match_signed_index_record(
                 f"{index_file}|Packages|stable|main|arm64\n"
             )
         assert args[1:3] == ["cat-file", str(index_file)]
-        # A competing global apt-cache record must not influence the decision.
         return Result(package_record)
 
     monkeypatch.setattr(updater_module.subprocess, "run", run)

@@ -6439,6 +6439,10 @@ components:
           type: boolean
           title: Evidence Truncated
           default: false
+        demonstrated:
+          type: boolean
+          title: Demonstrated
+          default: false
     FindingListResponse:
       type: object
       additionalProperties: false

@@ -76,6 +76,9 @@ not scale tokens even when the pixels match.
   word** — in a table cell and as a section heading alike. No chip, pill, tag, dot, badge,
   coloured text, coloured side bar or coloured card edge, anywhere. The API `Severity` union has
   four members — `critical`, `high`, `medium`, `low`.
+- **Never add coloured tags.** No chip, pill, tag or badge — a tinted, rounded label — for any
+  state: availability, status, counts, versions, anywhere in the app. State is a plain word or
+  sentence in `--ink` or `--ink-muted`.
 
 ## Spacing
 
@@ -224,7 +227,8 @@ The nav names domains, not actions, and items do not get renamed between release
 ## Cards & sections
 
 - A grouped section on a detail screen is a **white `Card` on the `#FCFCFC` canvas, with its
-  heading inside the card**. On Scan detail each severity group is one such card.
+  heading inside the card**. On Scan detail all vulnerabilities share one such card, as one
+  list sorted worst-first, with Severity as its closing column.
 - **A card never varies with severity.** No coloured outline, no ink eyebrow, no tinted header
   band, no coloured icon. A vulnerability card is a plain white card.
 - **A button may live inside a card**, as a **small outlined button in the card footer** — never

@@ -230,6 +230,7 @@ class FindingRead(BaseModel):
         default_factory=list, max_length=16
     )
     evidence_truncated: bool = False
+    demonstrated: bool = False
 
 
 class ExposureRead(BaseModel):

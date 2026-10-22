@@ -38,10 +38,6 @@ function machineCell(row: HTMLElement) {
   return within(row).getAllByRole('cell')[1]
 }
 
-function scanFirstSeenCell(row: HTMLElement) {
-  return within(row).getAllByRole('cell')[4]
-}
-
 function hostFirstSeenCell(row: HTMLElement) {
   return within(row).getAllByRole('cell')[3]
 }
@@ -75,18 +71,22 @@ describe('scanFindingColumns', () => {
     expect(machineCell(row)).toHaveTextContent('10.0.0.5')
   })
 
-  it('renders First seen from first_seen_at', async () => {
-    renderScanColumns(criticalFinding)
-
-    expect(
-      screen.getByRole('columnheader', { name: 'First seen' }),
-    ).toBeInTheDocument()
+  it('reads Confirmed only for a demonstrated vulnerability', async () => {
+    renderScanColumns({ ...criticalFinding, demonstrated: true })
 
     const row = await screen.findByTestId(
       `column-probe-row-${criticalFinding.finding_id}`,
     )
-    const time = within(scanFirstSeenCell(row)).getByRole('time')
-    expect(time).toHaveAttribute('datetime', criticalFinding.first_seen_at)
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('Confirmed')
+  })
+
+  it('reads Unverified for any other vulnerability', async () => {
+    renderScanColumns(criticalFinding)
+
+    const row = await screen.findByTestId(
+      `column-probe-row-${criticalFinding.finding_id}`,
+    )
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('Unverified')
   })
 })
 

@@ -48,14 +48,12 @@ lock=$lock_expected
 exec 9<>"$lock"
 lock_release() { flock -u 9 || true; }
 lock_acquire() { flock -n -x 9 || die "scan or update in progress; try again later"; }
-# Keep the persistent scan-lock inode locked until package, timer and agent checks finish.
 lock_acquire
 stage_bootstrap_inputs() {
     /usr/bin/python3 - "$public_key" "$agent_input" "$updater_input" <<'PY'
 import os, shutil, stat, sys, tempfile
 from pathlib import Path
 
-# Validate every ancestor before creating or changing anything beneath it.
 for path in (Path('/'), Path('/run')):
     info = path.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
@@ -194,7 +192,6 @@ apt-get -o Dir::Etc::sourcelist="$source_file" -o Dir::Etc::sourceparts=- \
     --repository "$repository" "$agent_deb" "$updater_deb" \
     || die "bootstrap packages do not match authenticated signed metadata"
 
-# Never replace an installed supervisor whose durable state cannot be read.
 if dpkg-query -W -f='${Status}' hardware-agent-updater 2>/dev/null \
     | grep -q 'install ok installed'; then
     systemctl is-active --quiet dmitri-agent-update.service 9>&- \
@@ -231,7 +228,6 @@ if [ -f "$env_file" ] && grep -q '^DEVICE_ID=' "$env_file"; then provisioned=tru
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y "$updater_deb" 9>&- || die "supervisor package installation failed; recovery baseline retained at $baseline"
 systemctl daemon-reload 9>&-
-# This supervisor is static; the enabled agent's Requires= pulls it in on boot.
 systemctl start dmitri-agent-update.service 9>&- || die "could not start supervisor; baseline retained at $baseline"
 
 [ -S /run/dmitri-agent-updater/control.sock ] || die "supervisor control socket is missing"

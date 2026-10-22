@@ -39,7 +39,6 @@ fi
 
 agent_deb_version="${version}-1"
 updater_deb_version="${updater_version}-1"
-# Ownership moved out of the legacy agent at 1.0.5; keep this cutover stable.
 updater_transfer_cutoff=1.0.5-1
 out=${1:-"$root/dist/hardware-agent_${agent_deb_version}_arm64.deb"}
 updater_out=${2:-"$(dirname "$out")/hardware-agent-updater_${updater_deb_version}_all.deb"}

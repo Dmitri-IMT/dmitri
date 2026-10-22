@@ -46,6 +46,7 @@ describe('ScanReports', () => {
               detection_method: 'unknown',
               evidence_status: 'unknown',
               evidence_truncated: false,
+              demonstrated: false,
               description: 'Observed service issue.',
               recommendation: 'Review the service.',
               evidence: 'Service banner.',

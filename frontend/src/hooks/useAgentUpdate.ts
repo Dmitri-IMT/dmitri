@@ -10,7 +10,7 @@ import {
 } from '@/api/agentUpdates'
 import { queryKeys } from '@/api/queryKeys'
 
-const ACTIVE_PHASES: UpdateOperationView['phase'][] = [
+export const ACTIVE_PHASES: UpdateOperationView['phase'][] = [
   'requested',
   'preparing',
   'installing',
