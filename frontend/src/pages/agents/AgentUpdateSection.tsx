@@ -308,7 +308,7 @@ function AgentUpdateSection({ agent }: { agent: AgentDetail }) {
                 >
                   <span
                     aria-hidden="true"
-                    className="size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none"
+                    className="size-2 rounded-full bg-primary"
                   />
                   {t('updates.availableBadge')}
                 </span>
