@@ -48,6 +48,16 @@ SCHEMA_NAMES = (
     "HostSummary",
     "ScanHostView",
     "IndustrialServiceView",
+    "OpcUaServiceView",
+    "OpcUaEndpointPayload",
+    "OpcUaIdentityPayload",
+    "OpcUaPhasePayload",
+    "OpcUaObservationPayload",
+    "OpcUaMappedReferencePayload",
+    "OpcUaMappedNodePayload",
+    "OpcUaSecurityFactPayload",
+    "OpcUaMappingPayload",
+    "OpcUaTcpServicePayload",
     "HostScanHistoryEntry",
     "HostDetailResponse",
     "HostListResponse",
@@ -247,6 +257,20 @@ def test_schema_matches_contract(schema_name: str):
     contract_schema = contract["components"]["schemas"][schema_name]
     assert _schema_fingerprint(contract, contract_schema) == _schema_fingerprint(
         app.openapi(), _app_schema(schema_name)
+    )
+
+
+def test_opcua_read_evidence_source_max_length_matches_contract():
+    contract_schema = _load_contract()["components"]["schemas"]["OpcUaServiceView"]
+    runtime_schema = _app_schema("OpcUaServiceView")
+
+    assert (
+        contract_schema["properties"]["evidence_sources"]["items"]["maxLength"]
+        == 64
+    )
+    assert (
+        runtime_schema["properties"]["evidence_sources"]["items"]["maxLength"]
+        == 64
     )
 
 

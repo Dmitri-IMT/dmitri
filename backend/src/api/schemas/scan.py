@@ -20,7 +20,7 @@ from pydantic import (
 from api.core.machine_type import MachineType
 from api.core.scan_mode import ScanMode
 
-from .industrial import ModbusTcpServicePayload
+from .industrial import IndustrialServicePayload, ModbusTcpServicePayload
 from .operating_system import OperatingSystemDetection
 
 SubnetCIDR = constr(
@@ -152,7 +152,24 @@ class HostPayload(BaseModel):
     vendor: constr(min_length=1)
     operating_system: OperatingSystemDetection | None = None
     ports: list[PortPayload]
-    industrial_services: list[ModbusTcpServicePayload] = Field(default_factory=list)
+    industrial_services: list[IndustrialServicePayload] = Field(default_factory=list)
+
+    @field_validator("industrial_services", mode="before")
+    @classmethod
+    def normalize_legacy_modbus_protocol(cls, value):
+        if not isinstance(value, list):
+            return value
+        normalized = []
+        for item in value:
+            if isinstance(item, dict) and "protocol" not in item:
+                # Validate the whole legacy shape before injecting its default tag.
+                # This accepts defaulted Modbus fields such as omitted ``units``
+                # while rejecting untagged UA and unknown payloads.
+                modbus = ModbusTcpServicePayload.model_validate(item)
+                normalized.append(modbus.model_dump(mode="python"))
+            else:
+                normalized.append(item)
+        return normalized
     machine_type: MachineType | None = None
     device_profile: DeviceProfilePayload | None = None
 

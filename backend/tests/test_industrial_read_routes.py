@@ -5,7 +5,13 @@ from api.models.persistence import HostRecord
 from api.schemas.read import IndustrialServiceView, ModbusUnitView
 from sqlmodel import Session, select
 from starlette.testclient import TestClient
-from test_industrial_persistence import SAMPLE_DIGEST, _host, _persist, _scan
+from test_industrial_persistence import (
+    SAMPLE_DIGEST,
+    _host,
+    _opcua_service,
+    _persist,
+    _scan,
+)
 
 
 def test_host_and_scan_read_match_ingested_industrial_observation(
@@ -56,7 +62,11 @@ def test_industrial_read_is_isolated_by_org(
     seeded_org: Org,
     provisioned_agent,
 ) -> None:
-    scan = _scan([_host()])
+    host_payload = _host()
+    raw_host = host_payload.model_dump(mode="python")
+    raw_host["industrial_services"].append(_opcua_service())
+    host_payload = type(host_payload).model_validate(raw_host)
+    scan = _scan([host_payload])
     _persist(administrative_session, scan, seeded_org, provisioned_agent)
     host = administrative_session.exec(select(HostRecord)).one()
 

@@ -1100,6 +1100,95 @@ export interface components {
             /** @default [] */
             units: components["schemas"]["ModbusUnitPayload"][];
         };
+        OpcUaEndpointPayload: {
+            endpoint_url: string;
+            security_policy_uri: string;
+            /** @enum {string} */
+            security_mode: "None" | "Sign" | "SignAndEncrypt";
+            transport_profile_uri: string;
+            security_level: number;
+            user_token_count: number;
+            user_token_types: ("Anonymous" | "UserName" | "Certificate" | "IssuedToken")[];
+            target_matches: boolean;
+        };
+        OpcUaIdentityPayload: {
+            application_uri?: string | null;
+            product_uri?: string | null;
+            application_name?: string | null;
+            /** @enum {string|null} */
+            application_type?: "Server" | "Client" | "ClientAndServer" | "DiscoveryServer" | null;
+        };
+        OpcUaPhasePayload: {
+            /** @enum {string} */
+            status: "completed" | "partial" | "failed" | "timed_out" | "skipped" | "denied" | "unsupported_security";
+            reason_codes: ("timeout" | "endpoint_discovery_failed" | "endpoint_target_mismatch" | "endpoint_limit" | "message_size_limit" | "request_budget_exhausted" | "service_not_allowed" | "service_error" | "invalid_response" | "helper_unavailable" | "cancelled" | "host_deadline" | "stage_deadline" | "global_deadline" | "decode_limit" | "byte_limit" | "opaque_node_id_omitted" | "observation_size_limit" | "decode_error" | "authentication_required" | "anonymous_denied" | "security_configuration_required" | "external_reference" | "page_limit" | "node_limit" | "depth_limit" | "no_eligible_variables" | "service_limit")[];
+            truncated: boolean;
+            /** Format: date-time */
+            observed_at: string;
+        };
+        OpcUaObservationPayload: {
+            /** @constant */
+            schema_version: 1;
+            inventory_phase: components["schemas"]["OpcUaPhasePayload"];
+            identity?: components["schemas"]["OpcUaIdentityPayload"] | null;
+            certificate_sha256?: string | null;
+            endpoints: components["schemas"]["OpcUaEndpointPayload"][];
+            mapping?: components["schemas"]["OpcUaMappingPayload"] | null;
+        };
+        OpcUaMappedReferencePayload: {
+            source_node_id: string;
+            target_node_id: string;
+            reference_type_id: string;
+            is_forward: boolean;
+        };
+        OpcUaMappedNodePayload: {
+            node_id: string;
+            parent_node_id?: string | null;
+            depth: number;
+            /** @enum {string} */
+            node_class: "Object" | "Variable";
+            browse_name?: string | null;
+            display_name?: string | null;
+            data_type?: string | null;
+            value_rank?: number | null;
+            access_level?: number | null;
+            user_access_level?: number | null;
+            /** @enum {string|null} */
+            value_read_status?: "Good" | "Denied" | "Error" | "Skipped" | null;
+        };
+        OpcUaMappingPayload: {
+            phase: components["schemas"]["OpcUaPhasePayload"];
+            nodes: components["schemas"]["OpcUaMappedNodePayload"][];
+            references?: components["schemas"]["OpcUaMappedReferencePayload"][];
+            references_observed: number;
+            value_reads_attempted: number;
+            selected_endpoint_index: number | null;
+            anonymous_session_activated: boolean | null;
+            browse_succeeded: boolean | null;
+            application_value_read_succeeded: boolean | null;
+            value_good_count: number;
+            security_mode: components["schemas"]["OpcUaSecurityFactPayload"];
+            security_policy: components["schemas"]["OpcUaSecurityFactPayload"];
+        };
+        OpcUaSecurityFactPayload: {
+            value: string;
+            /** @enum {string} */
+            source: "get_endpoints";
+            /** @enum {string} */
+            status: "Good" | "Bad";
+        };
+        OpcUaTcpServicePayload: {
+            /** @constant */
+            protocol: "opcua_tcp";
+            port: number;
+            /** @enum {string} */
+            confidence: "suspected" | "confirmed";
+            /** @default [] */
+            evidence_sources: string[];
+            /** @default 0 */
+            write_requests_sent: number;
+            observation: components["schemas"]["OpcUaObservationPayload"];
+        };
         HostPayload: {
             /** Format: ipv4 */
             ip: string;
@@ -1110,7 +1199,7 @@ export interface components {
             /** @default [] */
             ports: components["schemas"]["PortPayload"][];
             /** @default [] */
-            industrial_services: components["schemas"]["ModbusTcpServicePayload"][];
+            industrial_services: (components["schemas"]["ModbusTcpServicePayload"] | components["schemas"]["OpcUaTcpServicePayload"])[];
             machine_type?: components["schemas"]["MachineType"] | null;
             device_profile?: components["schemas"]["DeviceProfilePayload"] | null;
         };
@@ -1130,7 +1219,7 @@ export interface components {
              * @description Industrial observations retained 180 days from scan ingestion. No pruning job enforces that period yet.
              * @default []
              */
-            industrial_services: components["schemas"]["IndustrialServiceView"][];
+            industrial_services: (components["schemas"]["IndustrialServiceView"] | components["schemas"]["OpcUaServiceView"])[];
             /** @default [] */
             unreadable_fields: string[];
         };
@@ -1146,6 +1235,16 @@ export interface components {
             evidence_sources: string[];
             /** @default [] */
             units: components["schemas"]["ModbusUnitView"][];
+        };
+        OpcUaServiceView: {
+            /** @constant */
+            protocol: "opcua_tcp";
+            port: number;
+            /** @enum {string} */
+            confidence: "suspected" | "confirmed";
+            /** @default [] */
+            evidence_sources: string[];
+            observation: components["schemas"]["OpcUaObservationPayload"] | null;
         };
         ModbusUnitView: {
             id: number;
@@ -1415,7 +1514,7 @@ export interface components {
             highest_severity?: components["schemas"]["Severity"] | null;
             ports: components["schemas"]["HostPort"][];
             /** @default [] */
-            industrial_services: components["schemas"]["IndustrialServiceView"][];
+            industrial_services: (components["schemas"]["IndustrialServiceView"] | components["schemas"]["OpcUaServiceView"])[];
             /** @default [] */
             unreadable_fields: string[];
             scan_history: components["schemas"]["HostScanHistoryEntry"][];

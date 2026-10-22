@@ -1,5 +1,7 @@
 # Design — OPC UA in NSPi
 
+Status: approved for Tasks 5–6 by the user on 2026-10-22 after authorizing resolution of the approval gate. Reuse the existing industrial-services interface described below.
+
 Proposal for `feature/nspi-scan-opcua` at `971ba8d`. Frontend is the primary interface, as clarified by the user on 2026-10-20. TUI work is limited to compatibility. Uses the existing NSPi `inventory` and `read_only_mapping` submodes; adds no mode, credential flow, finding, or severity.
 
 ## Reuse and source paths

@@ -594,4 +594,116 @@ export const catalog: Catalog = {
     'Не удалось подтвердить восстановление. Требуется помощь специалиста.',
   'updates.error.stateCorrupt':
     'Не удалось безопасно прочитать состояние обновления. Требуется помощь специалиста.',
+  'industrial.opcua.title': ({ port }) => 'OPC UA · порт ' + port,
+  'industrial.opcua.confirmed': 'Подтверждён',
+  'industrial.opcua.unconfirmed': 'Служба OPC UA не подтверждена',
+  'industrial.opcua.advertised': 'Анонимный доступ объявлен',
+  'industrial.opcua.session': 'Анонимный сеанс',
+  'industrial.opcua.sessionAccepted': 'Анонимный сеанс принят',
+  'industrial.opcua.sessionDenied': 'В анонимном сеансе отказано',
+  'industrial.opcua.browse': 'Обзор',
+  'industrial.opcua.browseCompleted': 'Обзор завершён · только выборка',
+  'industrial.opcua.browseDenied': 'Обзор не подтверждён',
+  'industrial.opcua.valueReads': 'Узлы с успешным анонимным чтением Value',
+  'industrial.opcua.readSucceeded': 'Анонимное чтение Value подтверждено',
+  'industrial.opcua.readDenied': 'Анонимное чтение Value не подтверждено',
+  'industrial.opcua.endpoints': 'Обнаруженные конечные точки',
+  'industrial.opcua.secureInventory':
+    'Защищённые конечные точки включены в инвентарь',
+  'industrial.opcua.secureOnly':
+    'Объявлена защищённая конечная точка; сопоставление недоступно в этой версии',
+  'industrial.opcua.authenticationRequired':
+    '\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u043d\u0430\u044f \u043a\u043e\u043d\u0435\u0447\u043d\u0430\u044f \u0442\u043e\u0447\u043a\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0430\u0443\u0442\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438',
+  'industrial.opcua.configurationUnknown':
+    '\u041a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044f \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438 \u043a\u043e\u043d\u0435\u0447\u043d\u043e\u0439 \u0442\u043e\u0447\u043a\u0438 \u043d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430 \u0438\u043b\u0438 \u043d\u0435\u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0430',
+  'industrial.opcua.endpointPolicy':
+    '\u041f\u043e\u043b\u0438\u0442\u0438\u043a\u0430 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438',
+  'industrial.opcua.endpointMode':
+    '\u0420\u0435\u0436\u0438\u043c \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438',
+  'industrial.opcua.endpointTokens':
+    '\u0422\u0438\u043f\u044b \u0442\u043e\u043a\u0435\u043d\u043e\u0432 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f',
+  'industrial.opcua.policyNone': '\u041d\u0435\u0442',
+  'industrial.opcua.policyBasic256Sha256': 'Basic256Sha256',
+  'industrial.opcua.unknownPolicy':
+    '\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430\u044f \u043f\u043e\u043b\u0438\u0442\u0438\u043a\u0430',
+  'industrial.opcua.unknownConfiguration':
+    '\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u043e',
+  'industrial.opcua.mode.None': '\u041d\u0435\u0442',
+  'industrial.opcua.mode.Sign': '\u041f\u043e\u0434\u043f\u0438\u0441\u044c',
+  'industrial.opcua.mode.SignAndEncrypt':
+    '\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u0438 \u0448\u0438\u0444\u0440\u043e\u0432\u0430\u043d\u0438\u0435',
+  'industrial.opcua.token.Anonymous':
+    '\u0410\u043d\u043e\u043d\u0438\u043c\u043d\u044b\u0439',
+  'industrial.opcua.token.UserName':
+    '\u0418\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f',
+  'industrial.opcua.token.Certificate':
+    '\u0421\u0435\u0440\u0442\u0438\u0444\u0438\u043a\u0430\u0442',
+  'industrial.opcua.token.IssuedToken':
+    '\u0412\u044b\u0434\u0430\u043d\u043d\u044b\u0439 \u0442\u043e\u043a\u0435\u043d',
+  'industrial.opcua.mapping': 'Сопоставление',
+  'industrial.opcua.inventory': 'Инвентарь',
+  'industrial.opcua.mappingNotRequested': 'Сопоставление не запрашивалось',
+  'industrial.opcua.details': 'Показать наблюдения',
+  'industrial.opcua.partial': 'Частичная выборка',
+  'industrial.opcua.detailsUnavailable': 'Данные OPC UA недоступны',
+  'industrial.opcua.notTested': 'Не проверено',
+  'industrial.opcua.sampleReadNote':
+    'Это подтверждает только возможность анонимного чтения наблюдаемой выборки.',
+  'industrial.opcua.nodes': 'Наблюдаемые узлы',
+  'industrial.opcua.name': 'Имя',
+  'industrial.opcua.nodeId': 'NodeId',
+  'industrial.opcua.dataType': 'Тип данных',
+  'industrial.opcua.readResult': 'Результат чтения',
+  'industrial.opcua.identity.application_name': 'Имя приложения (объявлено)',
+  'industrial.opcua.identity.application_uri': 'URI приложения (объявлен)',
+  'industrial.opcua.identity.product_uri': 'URI продукта (объявлен)',
+  'industrial.opcua.identity.application_type': 'Тип приложения (объявлен)',
+  'industrial.opcua.phase.completed': 'Завершено · только выборка',
+  'industrial.opcua.phase.partial': 'Частичная выборка',
+  'industrial.opcua.phase.failed': 'Не выполнено',
+  'industrial.opcua.phase.timed_out': 'Время ожидания истекло',
+  'industrial.opcua.phase.skipped': 'Пропущено',
+  'industrial.opcua.phase.denied': 'Отказано',
+  'industrial.opcua.phase.unsupported_security': 'Неподдерживаемая защита',
+  'industrial.opcua.reason.timeout': 'превышено время ожидания',
+  'industrial.opcua.reason.endpoint_discovery_failed':
+    'не удалось обнаружить конечные точки',
+  'industrial.opcua.reason.endpoint_target_mismatch':
+    'конечная точка не соответствует цели',
+  'industrial.opcua.reason.endpoint_limit': 'достигнут предел конечных точек',
+  'industrial.opcua.reason.message_size_limit':
+    'достигнут предел размера сообщения',
+  'industrial.opcua.reason.request_budget_exhausted':
+    'исчерпан бюджет запросов',
+  'industrial.opcua.reason.service_not_allowed': 'служба не разрешена',
+  'industrial.opcua.reason.service_error': 'ошибка службы',
+  'industrial.opcua.reason.invalid_response': 'недопустимый ответ',
+  'industrial.opcua.reason.helper_unavailable':
+    'вспомогательный компонент недоступен',
+  'industrial.opcua.reason.cancelled': 'отменено',
+  'industrial.opcua.reason.host_deadline': 'превышен лимит времени узла',
+  'industrial.opcua.reason.stage_deadline': 'превышен лимит времени этапа',
+  'industrial.opcua.reason.global_deadline':
+    'превышен общий лимит времени сканирования',
+  'industrial.opcua.reason.decode_limit': 'достигнут предел декодирования',
+  'industrial.opcua.reason.byte_limit': 'достигнут предел объёма данных',
+  'industrial.opcua.reason.opaque_node_id_omitted':
+    'непрозрачный идентификатор узла пропущен',
+  'industrial.opcua.reason.observation_size_limit':
+    'достигнут предел размера наблюдения',
+  'industrial.opcua.reason.decode_error': 'ошибка декодирования',
+  'industrial.opcua.reason.authentication_required': 'требуется аутентификация',
+  'industrial.opcua.reason.anonymous_denied': 'в анонимном доступе отказано',
+  'industrial.opcua.reason.security_configuration_required':
+    'требуется настройка защиты',
+  'industrial.opcua.reason.external_reference': 'внешняя ссылка пропущена',
+  'industrial.opcua.reason.page_limit': 'достигнут предел страниц',
+  'industrial.opcua.reason.node_limit': 'достигнут предел узлов',
+  'industrial.opcua.reason.depth_limit': 'достигнут предел глубины',
+  'industrial.opcua.reason.no_eligible_variables': 'нет подходящих переменных',
+  'industrial.opcua.reason.service_limit': 'достигнут предел служб',
+  'industrial.opcua.readStatus.Good': 'Успешно',
+  'industrial.opcua.readStatus.Denied': 'Отказано',
+  'industrial.opcua.readStatus.Error': 'Ошибка',
+  'industrial.opcua.readStatus.Skipped': 'Пропущено',
 }

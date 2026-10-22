@@ -4011,7 +4011,9 @@ components:
             Industrial observations retained 180 days from scan ingestion.
             No pruning job enforces that period yet.
           items:
-            $ref: '#/components/schemas/IndustrialServiceView'
+            oneOf:
+              - {$ref: '#/components/schemas/IndustrialServiceView'}
+              - {$ref: '#/components/schemas/OpcUaServiceView'}
           default: []
         unreadable_fields:
           type: array
@@ -4057,6 +4059,22 @@ components:
           items:
             $ref: '#/components/schemas/ModbusUnitView'
           default: []
+    OpcUaServiceView:
+      type: object
+      additionalProperties: false
+      required: [protocol, port, confidence, observation]
+      properties:
+        protocol: {type: string, const: opcua_tcp}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        confidence: {type: string, enum: [suspected, confirmed]}
+        evidence_sources:
+          type: array
+          items: {type: string, minLength: 1, maxLength: 64}
+          default: []
+        observation:
+          anyOf:
+            - {$ref: '#/components/schemas/OpcUaObservationPayload'}
+            - {type: 'null'}
     ModbusUnitView:
       type: object
       additionalProperties: false
@@ -4848,7 +4866,9 @@ components:
         industrial_services:
           type: array
           items:
-            $ref: '#/components/schemas/IndustrialServiceView'
+            oneOf:
+              - {$ref: '#/components/schemas/IndustrialServiceView'}
+              - {$ref: '#/components/schemas/OpcUaServiceView'}
           default: []
         unreadable_fields:
           type: array

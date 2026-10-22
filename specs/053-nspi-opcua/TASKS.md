@@ -1,9 +1,9 @@
 # Tasks — OPC UA integrado ao NSPi (`053-nspi-opcua`)
 
 11 sequential implementation units: original Tasks 1–9 plus migration M1/M2.
-**Tasks 1–4, M1 and M2 are complete and reviewed.** User authorized replacing
+**Tasks 1–6, M1 and M2 are complete and reviewed.** On 2026-10-22 the user authorized Tasks 5 and 6 sequentially and approved the UI design. Tasks 5–6 have reviewer approval; Task 7 awaits a new user command. User authorized replacing
 the C#/.NET helper entirely with Python. Latest scheduling instruction: finish the
-migration, then stop. **Task 5 requires a new explicit user command.**
+migration, then stop. **The user gave the new command for Tasks 5–6 on 2026-10-22.**
 Specs originally approved 2026-10-20. Base: `feature/nspi-scan-opcua` / `971ba8d`.
 Original completed entries and review history below remain unchanged. Their .NET
 targets describe the old implementation; active migration targets supersede them.
@@ -62,8 +62,8 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 - **Target Files**: `backend/src/api/models/persistence.py`, `backend/alembic/versions/20261020_44_opcua_observations.py`, `backend/src/api/schemas/industrial.py`, `backend/src/api/schemas/scan.py`, `backend/src/api/schemas/read.py`, `backend/src/api/routers/scans.py`, `backend/src/api/services/persistence.py`, `backend/src/api/services/industrial.py`, `backend/src/api/services/read.py`, `backend/src/api/services/deletion.py`, `contracts/openapi/openapi.yaml`
 - **Tests**: `backend/tests/test_opcua_observations_migration.py`, `test_industrial_persistence.py`, `test_industrial_observations_migration.py`, `test_ingest_scan.py`, `test_industrial_read_routes.py`, `test_contract_fidelity.py`.
 - **Success Criteria**: upgrade/downgrade preserva dados; downgrade não apaga observações UA silenciosamente; upsert `(scan_host, protocol, port)` é idempotente; JSON corrompido degrada somente observação UA; isolamento org e membro Modbus não mudam.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (reviewer approved 2026-10-22; 1,802 full-suite passes plus the sole environment failure passed after installing the agent package; Ruff and diff check passed)
+- **Review Rejections**: 2 (first: nullable mapping facts and legacy Modbus; second: read evidence-source length parity and stale migration-head tests; full Windows gate also lacks Linux release tools)
 
 ## Task 6: Exibir serviços OPC UA no front
 - **Description**: Gerar tipos e fazer dispatch de protocolo nos detalhes de scan/equipamento e relatórios web, com estados anunciados separados de ações verificadas e cobertura limitada. Não criar UX de TUI detalhada; governam A03–A06, A09–A14.
@@ -71,8 +71,8 @@ Cada tarefa segue coder Luna medium → test engineer Luna medium → reviewer S
 - **Target Files**: `frontend/src/types/openapi.d.ts`, `frontend/src/api/scans.ts`, `frontend/src/api/hosts.ts`, `frontend/src/pages/hosts/IndustrialServices.tsx`, `frontend/src/pages/scans/ScanIndustrialServices.tsx`, `frontend/src/pages/HostDetail.tsx`, `frontend/src/pages/ScanDetail.tsx`, `frontend/src/pages/scans/scanDetailView.ts`, `frontend/src/pages/scans/ScanReports.tsx`, `frontend/src/i18n/messages/en.ts`, `frontend/src/i18n/messages/pt-BR.ts`, `frontend/src/i18n/messages/ru.ts`
 - **Tests**: `frontend/src/pages/hosts/IndustrialServices.test.tsx`, `pages/ScanDetail.test.tsx`, `pages/HostDetail.test.tsx`, `pages/scans/ScanReports.test.tsx`.
 - **Success Criteria**: UA-only, dual, legado, partial/denied/corrupt são distinguíveis; strings não confiáveis são escapadas; labels existem nos três idiomas; download usa rotas atuais.
-- **Status**: PENDING
-- **Review Rejections**: 0
+- **Status**: COMPLETE (reviewer approved; 97 final focused tests, prior full 789 tests/85 files, lint, format, typecheck, build, generated types and diff checks passed)
+- **Review Rejections**: 2 (first: UTF-8, verified Value claim and inventory coverage; second: distinguish transport security from authentication and expose bounded endpoint security inventory)
 
 ## Task 7: Atualizar relatórios e contexto de IA
 - **Description**: Acrescentar resumo industrial por protocolo nas exportações e informações agregadas no contexto de IA, sem NodeIds, URLs, valores de processo ou dados de certificado. Governam A11–A14.
@@ -139,8 +139,8 @@ Task 5 also depends on the completed Task 1 and Task 4 contracts.
 | 4 | Integração do estágio e chamadores | COMPLETE |
 | M1 | Python worker inventory, bounded decoder and transport | COMPLETE |
 | M2 | Python mapping, facade switch and .NET removal | COMPLETE |
-| 5 | Persistência, ingest e read | PENDING |
-| 6 | Interface web | PENDING |
+| 5 | Persistência, ingest e read | COMPLETE |
+| 6 | Interface web | COMPLETE |
 | 7 | Relatórios e IA | PENDING |
 | 8 | Matriz integrada e regressões | PENDING |
 | 9 | Pacote ARM64 e prontidão para validação real | PENDING |
