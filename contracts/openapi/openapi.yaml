@@ -4333,6 +4333,7 @@ components:
           - nmap_ports
           - port_discovery
           - modbus_inspection
+          - opcua_inspection
           - targeted_tool
           - targeted_tool_partial_report
           - not_run

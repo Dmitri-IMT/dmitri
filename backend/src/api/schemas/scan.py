@@ -265,7 +265,8 @@ class CoverageUnitPayload(BaseModel):
     reason_code: constr(min_length=1, max_length=64) | None = None
     evidence_source: Literal[
         "nmap_nse", "service_recovery", "nmap_ports", "port_discovery",
-        "modbus_inspection", "targeted_tool", "targeted_tool_partial_report", "not_run",
+        "modbus_inspection", "opcua_inspection", "targeted_tool",
+        "targeted_tool_partial_report", "not_run",
     ]
     issue_keys: list[constr(min_length=1, max_length=256)] = Field(default_factory=list)
     observations: list[CoverageObservationPayload] = Field(default_factory=list)
