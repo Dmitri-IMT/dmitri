@@ -49,8 +49,7 @@ OS.
 ## Notes / gotchas
 
 - Readiness is capability evidence, not proof of a real deployed Pi. The production systemd,
-  package/repository signing key, hosting and canary still require the human infrastructure gates
-  H1–H6 in `specs/052-remote-agent-updates/TASKS.md`.
+  package/repository signing key, hosting and canary still require human infrastructure gates.
 - The companion does not accept arbitrary shell commands. Its local request vocabulary is closed,
   the socket checks peer identity, and process calls use fixed argument arrays.
 - A local install/health result is distinct from backend confirmation; durable events and a later
@@ -59,4 +58,3 @@ OS.
 # Citations
 
 [1] [ADR-021 — Pi agent updates](../../../docs/adr/ADR-021-pi-agent-updates.md)
-[2] [spec 052 — remote agent updates](../../../specs/052-remote-agent-updates/ARCHITECTURE.md)

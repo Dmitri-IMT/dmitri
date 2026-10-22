@@ -75,8 +75,7 @@ configuration steps.
 
 ## Rollout status and limits
 
-Implementation tasks 1–14 and local O1–O3 code gates are tracked in
-[`specs/052-remote-agent-updates/ROLLOUT.md`](../../specs/052-remote-agent-updates/ROLLOUT.md).
+Implementation tasks 1–14 and local O1–O3 code gates are complete.
 Protected CI, hosted signing and publication, production migration/configuration, and the
 assisted real-Pi bootstrap/canary are separate gates. Until these are completed, this ADR does
 not assert that a production repository is live, that Railway has been configured, or that a
